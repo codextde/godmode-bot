@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Backdrop } from "@/components/brand";
 import { AgentAvatar, Kbd } from "@/components/common";
+import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
+import { Orb } from "@/components/aicss/Orb";
 import { AgentPicker } from "@/components/chat/agent-picker";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { ChatDropZone } from "@/components/chat/thread";
@@ -29,6 +31,16 @@ const SUGGESTIONS = [
   { icon: Bell, text: "Log into GitHub and check my notifications" },
   { icon: Telescope, text: "Research competitors and write a report" },
 ];
+
+/** Chat previews are raw markdown — strip the syntax so cards read as plain sentences. */
+function plainPreview(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^\s*\|?\s*:?-{3,}.*$/gm, " ")
+    .replace(/[|*_`#>]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 function greeting(date: Date): string {
   const h = date.getHours();
@@ -90,26 +102,32 @@ export default function ChatHome() {
   const userName = boot?.settings.general.userName?.trim();
   const now = new Date();
 
+  const ready = available.length;
+
   return (
-    <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="relative min-h-full overflow-hidden">
+    <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="relative min-h-full">
       <Backdrop />
-      <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid [mask-image:radial-gradient(ellipse_at_top,black_20%,transparent_70%)] opacity-60" />
 
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col px-5 pt-[11vh] pb-10 sm:px-8">
-        <motion.p {...fade(0)} className="text-sm font-medium text-muted-foreground">
-          {format(now, "EEEE, MMMM d")}
-        </motion.p>
-        <motion.h1 {...fade(0.05)} className="mt-2 text-4xl leading-tight font-semibold tracking-tight sm:text-5xl">
-          <span className="text-gradient">
-            {greeting(now)}
-            {userName ? `, ${userName}` : ""}
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-5 pt-[12vh] pb-10 text-center sm:px-8">
+        <motion.div {...fade(0)}>
+          <span className="inline-flex items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-2.5 text-xs text-muted-foreground shadow-card">
+            <LiveDot />
+            {format(now, "EEEE, MMMM d")}
+            {ready > 0 && (
+              <>
+                <span className="opacity-40">·</span>
+                {ready === 1 ? "1 agent ready" : `${ready} agents ready`}
+              </>
+            )}
           </span>
+        </motion.div>
+        <motion.h1 {...fade(0.05)} className="heading-display mt-6 text-[40px] sm:text-[52px]">
+          {greeting(now)}
+          {userName ? `, ${userName}` : ""}.{" "}
+          <span className="text-foreground/35">What should we get done today?</span>
         </motion.h1>
-        <motion.p {...fade(0.1)} className="mt-2 text-lg text-muted-foreground">
-          What should we get done today?
-        </motion.p>
 
-        <motion.div {...fade(0.15)} className="mt-8">
+        <motion.div {...fade(0.12)} className="mt-9 w-full text-left">
           <Composer
             ref={composerRef}
             size="lg"
@@ -119,7 +137,7 @@ export default function ChatHome() {
             placeholder={selected ? `Ask ${selected.name} anything, or hand over a task…` : "Ask anything, or hand over a task…"}
             leading={
               agentsLoading ? (
-                <Skeleton className="h-9 w-32 rounded-full" />
+                <Skeleton className="h-8 w-32 rounded-lg" />
               ) : (
                 <AgentPicker agents={available} value={selected?.id ?? null} onChange={setAgentId} />
               )
@@ -135,21 +153,21 @@ export default function ChatHome() {
           />
         </motion.div>
 
-        <motion.div {...fade(0.2)} className="mt-4 flex flex-wrap gap-2">
+        <motion.div {...fade(0.18)} className="mt-4 flex flex-wrap justify-center gap-2">
           {SUGGESTIONS.map(({ icon: Icon, text }) => (
             <button
               key={text}
               type="button"
               onClick={() => composerRef.current?.setText(text)}
-              className="group flex items-center gap-2 rounded-full border bg-card/50 px-3.5 py-1.5 text-[13px] text-muted-foreground backdrop-blur-sm transition hover:-translate-y-px hover:border-primary/30 hover:bg-card hover:text-foreground hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              className="group flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-[13px] text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             >
-              <Icon className="size-3.5 text-primary/80 transition group-hover:text-primary" />
+              <Icon className="size-3.5 transition group-hover:text-foreground" />
               {text}
             </button>
           ))}
         </motion.div>
 
-        <motion.p {...fade(0.25)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground/80 sm:flex">
+        <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
           <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
           <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere
         </motion.p>
@@ -177,13 +195,10 @@ function RunningNow({ agents }: { agents: Agent[] }) {
   if (list.length === 0) return null;
   return (
     <section aria-label="Working now">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
-        <span className="relative flex size-2">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60" />
-          <span className="relative inline-flex size-2 rounded-full bg-success" />
-        </span>
+      <h2 className="eyebrow mb-3 flex items-center gap-2">
+        <LiveDot />
         Working now
-        <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums">{list.length}</span>
+        <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{list.length}</span>
       </h2>
       <div className="-mx-2 flex gap-3 overflow-x-auto px-2 pt-1 pb-3">
         {list.map((r, i) => (
@@ -200,14 +215,20 @@ function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="shrink-0">
       <Link
         to={`/chat/${run.conversationId}`}
-        className="glow-border flex w-72 items-center gap-3 rounded-2xl glass p-3 transition hover:-translate-y-0.5 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+        className="glow-border flex w-72 items-center gap-3 rounded-xl border bg-card p-3 shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
       >
         <AgentAvatar agent={agent ?? { id: run.agentId, avatar: "🤖", color: "violet" }} size="md" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{agent?.name ?? "Agent"}</span>
+          <span className="flex items-center gap-1.5 text-sm font-medium">
+            <span className="truncate">{agent?.name ?? "Agent"}</span>
+            <Orb variant="S3" size={14} label={liveActivityLabel(run)} />
+          </span>
           <span className="text-shimmer block truncate text-xs font-medium">{liveActivityLabel(run)}</span>
         </span>
-        <span className="text-xs text-muted-foreground tabular-nums">{formatElapsed(now - run.startedAt)}</span>
+        <span className="flex flex-col items-end gap-1">
+          <WorkingTicks count={6} className="h-3 text-brand-strong" />
+          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - run.startedAt)}</span>
+        </span>
       </Link>
     </motion.div>
   );
@@ -232,7 +253,7 @@ function RecentChats({ agents }: { agents: Agent[] }) {
         <Skeleton className="mb-3 h-4 w-32" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="h-28 rounded-2xl" />
+            <Skeleton key={i} className="h-28 rounded-xl" />
           ))}
         </div>
       </section>
@@ -243,7 +264,7 @@ function RecentChats({ agents }: { agents: Agent[] }) {
   return (
     <section aria-label="Recent chats">
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-medium text-muted-foreground">Pick up where you left off</h2>
+        <h2 className="eyebrow">Pick up where you left off</h2>
         <Link to="/agents" className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
           Your agents <ArrowRight className="size-3" />
         </Link>
@@ -263,8 +284,8 @@ function RecentCard({ conversation: c, agent, running, index }: { conversation: 
       <Link
         to={`/chat/${c.id}`}
         className={cn(
-          "group flex h-full flex-col gap-2.5 rounded-2xl border bg-card/50 p-4 backdrop-blur-sm transition",
-          "hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card hover:shadow-lg hover:shadow-black/5 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+          "group flex h-full flex-col gap-3 rounded-xl border bg-card p-4 shadow-card transition",
+          "hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
           running && "glow-border",
         )}
       >
@@ -272,7 +293,7 @@ function RecentCard({ conversation: c, agent, running, index }: { conversation: 
           <AgentAvatar agent={agent ?? { avatar: "💬", color: "violet" }} size="sm" />
           <span className="truncate text-xs text-muted-foreground">{agent?.name ?? "Agent"}</span>
           {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
-          <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
+          <span className="ml-auto shrink-0 text-[11px] text-muted-foreground tabular-nums">
             {running ? (
               <span className="text-shimmer font-medium">Working…</span>
             ) : (
@@ -281,8 +302,8 @@ function RecentCard({ conversation: c, agent, running, index }: { conversation: 
           </span>
         </div>
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{c.title || "New chat"}</div>
-          {c.preview && <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-muted-foreground">{c.preview}</p>}
+          <div className="truncate text-[15px] font-medium tracking-[-0.01em]">{c.title || "New chat"}</div>
+          {c.preview && <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-muted-foreground">{plainPreview(c.preview)}</p>}
         </div>
       </Link>
     </motion.div>

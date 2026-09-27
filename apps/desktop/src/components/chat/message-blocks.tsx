@@ -3,23 +3,15 @@ import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Credential, MessageBlock } from "@godmode/shared";
-import {
-  ArrowUpRight,
-  Brain,
-  CheckCircle2,
-  ChevronRight,
-  Circle,
-  CircleDot,
-  Info,
-  Loader2,
-  Lock,
-  ShieldAlert,
-  TriangleAlert,
-} from "lucide-react";
+import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, Info, Lock, ShieldAlert, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AgentAvatar } from "@/components/common";
 import { ThinkingState } from "@/components/aicss/ThinkingState";
+import { ThinkingReasoning } from "@/components/aicss/ThinkingReasoning";
+import { FileDiff, diffLines, type DiffRow } from "@/components/aicss/FileDiff";
+import { DrawCheck, StreamingCaret } from "@/components/aicss/Motion";
+import { Orb } from "@/components/aicss/Orb";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
@@ -149,14 +141,14 @@ export function MessageBlocks({ blocks, streaming = false, compact = false }: { 
             return (
               <div key={item.key} className="min-w-0">
                 <Markdown className={cn(compact && "text-[0.85rem]")}>{item.text}</Markdown>
-                {active && lastBlock?.type === "text" && <span aria-hidden className="ml-0.5 inline-block h-4 w-[3px] translate-y-0.5 animate-pulse rounded-full bg-primary" />}
+                {active && lastBlock?.type === "text" && <StreamingCaret />}
               </div>
             );
           case "thinking":
             return <ThinkingItem key={item.key} text={item.text} active={active} />;
           case "error":
             return (
-              <div key={item.key} role="alert" className="flex gap-2.5 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-sm text-destructive">
+              <div key={item.key} role="alert" className="flex gap-2.5 rounded-lg border border-destructive/25 bg-destructive/[0.06] px-3.5 py-3 text-sm text-destructive">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" />
                 <div className="min-w-0 break-words whitespace-pre-wrap">{item.text}</div>
               </div>
@@ -187,49 +179,19 @@ export function MessageBlocks({ blocks, streaming = false, compact = false }: { 
 /* ------------------------------------------------------------------ */
 
 function ThinkingItem({ text, active }: { text: string; active: boolean }) {
-  const [open, setOpen] = useState(false);
-  const trimmed = text.trim();
-  if (active) {
-    return (
-      <div className="space-y-1.5">
-        <ThinkingState />
-        {trimmed && (
-          <p className="line-clamp-3 border-l-2 border-primary/25 pl-3 text-[13px] leading-relaxed text-muted-foreground/80 italic">
-            {trimmed.length > 360 ? `…${trimmed.slice(-360)}` : trimmed}
-          </p>
-        )}
-      </div>
-    );
-  }
-  if (!trimmed) return null;
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-md py-0.5 text-[13px] text-muted-foreground transition hover:text-foreground"
-      >
-        <Brain className="size-3.5" />
-        Thought process
-        <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
-      </button>
-      <Collapse open={open}>
-        <p className="mt-1.5 border-l-2 border-border pl-3 text-[13px] leading-relaxed whitespace-pre-wrap text-muted-foreground">{trimmed}</p>
-      </Collapse>
-    </div>
-  );
+  if (active && !text.trim()) return <ThinkingState />;
+  return <ThinkingReasoning text={text} active={active} />;
 }
 
 function NoticeItem({ level, text }: { level: "info" | "warning" | "success"; text: string }) {
   const meta = {
-    info: { icon: Info, cls: "border-border bg-muted/40 text-muted-foreground" },
-    warning: { icon: TriangleAlert, cls: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300" },
-    success: { icon: CheckCircle2, cls: "border-success/30 bg-success/10 text-success" },
+    info: { icon: Info, cls: "border-border bg-card text-muted-foreground" },
+    warning: { icon: TriangleAlert, cls: "border-warning/30 bg-warning/[0.07] text-warning" },
+    success: { icon: CheckCircle2, cls: "border-success/25 bg-success/[0.07] text-success" },
   }[level];
   const Icon = meta.icon;
   return (
-    <div className={cn("flex items-start gap-2 rounded-xl border px-3 py-2 text-[13px]", meta.cls)}>
+    <div className={cn("flex items-start gap-2 rounded-lg border px-3 py-2 text-[13px]", meta.cls)}>
       <Icon className="mt-0.5 size-3.5 shrink-0" />
       <span className="min-w-0 break-words">{text}</span>
     </div>
@@ -258,19 +220,32 @@ function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
 /* Tool timeline                                                        */
 /* ------------------------------------------------------------------ */
 
+/** Monochrome by default; the brand green is reserved for vault steps (secrets handled safely). */
 const KIND_TONE: Partial<Record<ToolKind, string>> = {
-  browser: "text-sky-500 bg-sky-500/10 border-sky-500/20",
-  vault: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
-  delegate: "text-violet-500 bg-violet-500/10 border-violet-500/20",
-  agents: "text-violet-500 bg-violet-500/10 border-violet-500/20",
-  subagent: "text-violet-500 bg-violet-500/10 border-violet-500/20",
-  web: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20",
-  plan: "text-amber-500 bg-amber-500/10 border-amber-500/20",
-  notify: "text-fuchsia-500 bg-fuchsia-500/10 border-fuchsia-500/20",
+  vault: "text-brand-strong bg-brand-soft border-brand/25",
 };
 
 function toneFor(kind: ToolKind) {
-  return KIND_TONE[kind] ?? "text-muted-foreground bg-muted/60 border-border";
+  return KIND_TONE[kind] ?? "text-foreground/70 bg-card border-border";
+}
+
+type FileEditInput = { file_path?: string; notebook_path?: string; old_string?: string; new_string?: string; content?: string; edits?: { old_string?: string; new_string?: string }[] };
+
+/** Diff rows for file-editing tools (Edit / MultiEdit / Write), or null for anything else. */
+function fileEditOf(block: ToolUseBlock): { file: string; rows: DiffRow[] } | null {
+  const input = (block.input ?? {}) as FileEditInput;
+  const file = input.file_path ?? input.notebook_path ?? "";
+  if (block.name === "Edit" && typeof input.new_string === "string") return { file, rows: diffLines(input.old_string ?? "", input.new_string) };
+  if (block.name === "Write" && typeof input.content === "string") return { file, rows: diffLines("", input.content) };
+  if (block.name === "MultiEdit" && Array.isArray(input.edits)) {
+    const rows: DiffRow[] = [];
+    input.edits.forEach((e, i) => {
+      if (i > 0) rows.push({ old: null, cur: null, type: "fold", text: "⋯" });
+      rows.push(...diffLines(e.old_string ?? "", e.new_string ?? ""));
+    });
+    return { file, rows };
+  }
+  return null;
 }
 
 function imageSrc(image: string): string {
@@ -310,18 +285,18 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
   }
 
   return (
-    <div className="rounded-2xl border bg-card/40">
+    <div className={cn("rounded-xl border bg-card shadow-card", runningIdx >= 0 && "glow-border")}>
       <button
         type="button"
         onClick={() => setManual(!expanded)}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition hover:bg-accent/30"
+        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent/40"
       >
         <span className="flex -space-x-1.5">
           {uniqueIcons.map((m, i) => {
             const Icon = m.icon;
             return (
-              <span key={i} className={cn("grid size-6 place-items-center rounded-full border bg-background ring-2 ring-background", toneFor(m.kind))}>
+              <span key={i} className={cn("grid size-6 place-items-center rounded-full border ring-2 ring-card", toneFor(m.kind))}>
                 <Icon className="size-3" />
               </span>
             );
@@ -347,7 +322,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
             ))}
           </span>
         )}
-        {runningIdx >= 0 && <Loader2 className="size-4 animate-spin text-primary" />}
+        {runningIdx >= 0 && <Orb variant="S3" size={16} label={current.title} />}
         <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")} />
       </button>
       <Collapse open={expanded}>
@@ -381,7 +356,7 @@ function ThoughtStep({ text, last }: { text: string; last: boolean }) {
   return (
     <li className="relative pl-9">
       {!last && <span aria-hidden className="absolute top-7 bottom-0 left-[13px] w-px bg-border" />}
-      <span className="absolute top-1 left-0 grid size-[27px] place-items-center rounded-full border bg-background text-muted-foreground">
+      <span className="absolute top-1 left-0 grid size-[27px] place-items-center rounded-full border bg-card text-muted-foreground">
         <Brain className="size-3.5" />
       </span>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full py-1.5 text-left">
@@ -416,9 +391,10 @@ function ToolStep({
         failed ? "border-destructive/30 bg-destructive/10 text-destructive" : toneFor(meta.kind),
       )}
     >
-      {running ? <Loader2 className="size-3.5 animate-spin" /> : <Icon className="size-3.5" />}
+      {running ? <Orb variant="B2" size={15} label={meta.title} /> : <Icon className="size-3.5" />}
     </span>
   );
+  const edit = fileEditOf(block);
 
   const header = (
     <button
@@ -436,10 +412,11 @@ function ToolStep({
         {meta.detail && <span className="block truncate text-xs text-muted-foreground">{meta.detail}</span>}
       </span>
       {meta.kind === "vault" && !failed && (
-        <span className="hidden shrink-0 items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10.5px] font-medium text-emerald-600 sm:inline-flex dark:text-emerald-400">
+        <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-0.5 text-[10.5px] font-medium text-brand-strong sm:inline-flex">
           <Lock className="size-3" /> Secret hidden
         </span>
       )}
+      {edit && !running && !failed && <DiffStat rows={edit.rows} />}
       {failed && <span className="shrink-0 text-[11px] font-medium text-destructive">Failed</span>}
       {incomplete && <span className="shrink-0 text-[11px] text-muted-foreground">No result</span>}
       <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground opacity-60 transition group-hover:opacity-100", open && "rotate-90")} />
@@ -450,14 +427,14 @@ function ToolStep({
     <>
       {block.image && <Screenshot image={block.image} alt={meta.title} />}
       <Collapse open={open}>
-        <ToolDetails block={block} />
+        <ToolDetails block={block} edit={edit} />
       </Collapse>
     </>
   );
 
   if (standalone) {
     return (
-      <div className={cn("rounded-2xl border bg-card/40 transition hover:bg-card/60", failed && "border-destructive/30")}>
+      <div className={cn("rounded-xl border bg-card shadow-card transition", failed && "border-destructive/30", running && "glow-border")}>
         {header}
         <div className={cn((block.image || open) && "px-3 pb-3")}>{body}</div>
       </div>
@@ -482,7 +459,7 @@ function Screenshot({ image, alt }: { image: string; alt: string }) {
       <button
         type="button"
         onClick={() => setZoom(true)}
-        className="mt-1 mb-1.5 block overflow-hidden rounded-xl border bg-muted/30 shadow-sm transition hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+        className="mt-1 mb-1.5 block overflow-hidden rounded-lg border bg-muted/30 shadow-card transition hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         aria-label="Enlarge screenshot"
       >
         <img src={src} alt={alt} loading="lazy" className="max-h-56 w-auto max-w-full object-contain object-top" />
@@ -499,8 +476,27 @@ function Screenshot({ image, alt }: { image: string; alt: string }) {
 
 const RESULT_PREVIEW = 1800;
 
-function ToolDetails({ block }: { block: ToolUseBlock }) {
+function DiffStat({ rows }: { rows: DiffRow[] }) {
+  const added = rows.filter((r) => r.type === "add").length;
+  const removed = rows.filter((r) => r.type === "del").length;
+  return (
+    <span className="hidden shrink-0 items-center gap-1.5 font-mono text-[11px] sm:inline-flex">
+      <span className="text-success">+{added}</span>
+      <span className="text-destructive">-{removed}</span>
+    </span>
+  );
+}
+
+function ToolDetails({ block, edit }: { block: ToolUseBlock; edit?: { file: string; rows: DiffRow[] } | null }) {
   const [full, setFull] = useState(false);
+  if (edit) {
+    return (
+      <div className="mt-1 mb-2 space-y-2">
+        <FileDiff file={edit.file || "file"} rows={edit.rows} />
+        {block.isError && block.result && <DetailPanel label="Error" text={block.result} error />}
+      </div>
+    );
+  }
   const todos = todoItems(block.input);
   const input = formatToolInput(block.input);
   const result = block.result ?? "";
@@ -509,13 +505,15 @@ function ToolDetails({ block }: { block: ToolUseBlock }) {
   return (
     <div className="mt-1 mb-2 space-y-2">
       {todos ? (
-        <ul className="space-y-1 rounded-xl border bg-background/40 p-3">
+        <ul className="space-y-1.5 rounded-lg border bg-card p-3">
           {todos.map((t, i) => (
             <li key={i} className="flex items-start gap-2 text-[13px]">
               {t.status === "completed" ? (
-                <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-success" />
+                <span className="mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full bg-brand text-white dark:text-black">
+                  <DrawCheck className="size-2.5" />
+                </span>
               ) : t.status === "in_progress" ? (
-                <CircleDot className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                <CircleDot className="mt-0.5 size-3.5 shrink-0 animate-pulse text-foreground" />
               ) : (
                 <Circle className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
               )}
@@ -550,7 +548,7 @@ function ToolDetails({ block }: { block: ToolUseBlock }) {
 
 function DetailPanel({ label, text, copyText, error, footer }: { label: string; text: string; copyText?: string; error?: boolean; footer?: ReactNode }) {
   return (
-    <div className={cn("overflow-hidden rounded-xl border bg-muted/40 dark:bg-black/25", error && "border-destructive/30 bg-destructive/5")}>
+    <div className={cn("overflow-hidden rounded-lg border bg-paper-2", error && "border-destructive/30 bg-destructive/5")}>
       <div className="flex h-7 items-center justify-between border-b pr-1 pl-3">
         <span className={cn("text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase", error && "text-destructive")}>{label}</span>
         <CopyButton text={copyText ?? text} label={`Copy ${label.toLowerCase()}`} />
@@ -583,28 +581,28 @@ function MissingLoginCard({ block }: { block: ToolUseBlock }) {
     <motion.div
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
-      className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] p-4"
+      className="relative overflow-hidden rounded-xl border border-warning/30 bg-card p-4 shadow-card"
     >
-      <div aria-hidden className="pointer-events-none absolute -top-10 -right-10 size-32 rounded-full bg-amber-500/15 blur-2xl" />
+      <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-warning" />
       <div className="relative flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-warning/12 text-warning">
           <ShieldAlert className="size-[18px]" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h4 className="text-sm font-semibold">I need a login for {service}</h4>
-            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-medium text-amber-700 dark:text-amber-300">
+            <h4 className="text-sm font-medium">I need a login for {service}</h4>
+            <span className="rounded-[5px] bg-warning/12 px-1.5 py-0.5 text-[10.5px] font-medium text-warning">
               {MISSING_KIND_LABEL[kind] ?? MISSING_KIND_LABEL.other}
             </span>
           </div>
           {input.reason && <p className="mt-1 text-[13px] text-muted-foreground">{input.reason}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             {kind === "missing_totp" ? (
-              <Button asChild size="sm" className="bg-amber-500 text-black hover:bg-amber-400">
+              <Button asChild size="sm">
                 <Link to="/vault/2fa?import=1">Add 2FA code</Link>
               </Button>
             ) : (
-              <Button asChild size="sm" className="bg-amber-500 text-black hover:bg-amber-400">
+              <Button asChild size="sm">
                 <Link to={addLogin}>Add login</Link>
               </Button>
             )}
@@ -633,12 +631,12 @@ function DelegateCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
   const running = stepRunning(block, streaming);
   const result = block.result ?? "";
   return (
-    <div className={cn("overflow-hidden rounded-2xl border bg-card/40", running && "glow-border", block.isError && "border-destructive/30")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", running && "glow-border", block.isError && "border-destructive/30")}>
       <div className="flex items-start gap-3 p-3.5">
         {agent ? (
           <AgentAvatar agent={agent} size="md" />
         ) : (
-          <span className="grid size-9 place-items-center rounded-xl bg-violet-500/15 text-violet-500">
+          <span className="grid size-8 place-items-center rounded-lg border bg-secondary text-foreground/70">
             <Brain className="size-4" />
           </span>
         )}
@@ -658,7 +656,7 @@ function DelegateCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
               <span className="text-xs font-medium text-destructive">failed</span>
             ) : block.result !== undefined ? (
               <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
-                <CheckCircle2 className="size-3.5" /> {input.wait === false ? "handed off" : "done"}
+                <DrawCheck className="size-3.5" /> {input.wait === false ? "handed off" : "done"}
               </span>
             ) : null}
           </div>
@@ -699,15 +697,15 @@ function SubagentCard({ block, ctx, childBlocks, streaming }: { block: ToolUseBl
   const Icon = meta.icon;
   const steps = childBlocks.filter((b) => b.type === "tool_use").length;
   return (
-    <div className={cn("rounded-2xl border bg-card/40", running && "glow-border")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", running && "glow-border")}>
       <button
         type="button"
         onClick={() => setOpen(!expanded)}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition hover:bg-accent/30"
+        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent/40"
       >
         <span className={cn("grid size-[27px] place-items-center rounded-full border", toneFor("subagent"))}>
-          {running ? <Loader2 className="size-3.5 animate-spin" /> : <Icon className="size-3.5" />}
+          {running ? <Orb variant="B5" size={15} label={meta.title} /> : <Icon className="size-3.5" />}
         </span>
         <span className="min-w-0 flex-1">
           <span className={cn("block truncate text-sm font-medium", running && "text-shimmer")}>{meta.title}</span>
@@ -721,14 +719,14 @@ function SubagentCard({ block, ctx, childBlocks, streaming }: { block: ToolUseBl
       <Collapse open={expanded}>
         <div className="space-y-3 border-t px-3.5 py-3">
           {childBlocks.length > 0 ? (
-            <div className="border-l-2 border-violet-500/25 pl-3">
+            <div className="border-l border-border pl-3">
               <MessageBlocks blocks={childBlocks} streaming={running} compact />
             </div>
           ) : running ? (
             <ThinkingState />
           ) : null}
           {block.result && (
-            <div className="rounded-xl border bg-background/40 p-3">
+            <div className="rounded-lg border bg-paper-2 p-3">
               <div className="mb-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">Result</div>
               <Markdown className="text-[0.85rem]">{block.result}</Markdown>
             </div>

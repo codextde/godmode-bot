@@ -24,6 +24,7 @@ import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { AttachmentChip, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, readAttachment, type PendingAttachment } from "./attachments";
 import { LevelBars } from "./voice-visuals";
+import { WorkingTicks } from "@/components/aicss/Motion";
 
 export interface ComposerSubmit {
   content: string;
@@ -132,7 +133,8 @@ export function Composer({
   }, [text, size]);
 
   useEffect(() => {
-    if (autoFocus) textareaRef.current?.focus();
+    // preventScroll: focusing must never scroll an ancestor (it used to drag the whole page with it).
+    if (autoFocus) textareaRef.current?.focus({ preventScroll: true });
   }, [autoFocus]);
 
   const dictation = useDictation({
@@ -146,7 +148,7 @@ export function Composer({
       requestAnimationFrame(() => {
         const el = textareaRef.current;
         if (!el) return;
-        el.focus();
+        el.focus({ preventScroll: true });
         el.setSelectionRange(el.value.length, el.value.length);
       });
     },
@@ -177,13 +179,13 @@ export function Composer({
   useImperativeHandle(
     ref,
     () => ({
-      focus: () => textareaRef.current?.focus(),
+      focus: () => textareaRef.current?.focus({ preventScroll: true }),
       setText: (t: string) => {
         setText(t);
         requestAnimationFrame(() => {
           const el = textareaRef.current;
           if (!el) return;
-          el.focus();
+          el.focus({ preventScroll: true });
           el.setSelectionRange(t.length, t.length);
         });
       },
@@ -270,14 +272,15 @@ export function Composer({
 
   const listening = dictation.state === "listening" || dictation.state === "starting";
   const transcribing = dictation.state === "transcribing";
-  const glowing = focused || busy || dictation.active;
+  const working = !!running || !!busy;
 
   return (
     <div
       className={cn(
-        "relative rounded-[26px] glass shadow-xl shadow-black/[0.04] transition-shadow dark:shadow-black/30",
-        glowing && "glow-border",
-        dragOver && "ring-2 ring-primary/60",
+        "relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200",
+        focused && "border-foreground/20 ring-4 ring-foreground/[0.035] dark:border-foreground/25 dark:ring-foreground/[0.05]",
+        working && "glow-border",
+        dragOver && "border-foreground/40 ring-4 ring-foreground/[0.06]",
         className,
       )}
       onDragOver={(e) => {
@@ -332,12 +335,12 @@ export function Composer({
         placeholder={listening ? "Listening…" : placeholder}
         rows={1}
         className={cn(
-          "block w-full resize-none bg-transparent px-5 leading-relaxed outline-none placeholder:text-muted-foreground/70",
-          size === "lg" ? "min-h-[84px] pt-5 pb-2 text-base" : "min-h-[52px] pt-4 pb-1.5 text-[15px]",
+          "block w-full resize-none bg-transparent px-4 leading-relaxed outline-none placeholder:text-muted-foreground/80",
+          size === "lg" ? "min-h-[84px] pt-4 pb-2 text-[15.5px]" : "min-h-[52px] pt-3.5 pb-1.5 text-[15px]",
         )}
       />
 
-      <div className="flex items-center gap-1 px-2.5 pb-2.5">
+      <div className="flex items-center gap-0.5 px-2 pb-2">
         {leading && <div className="mr-1 flex items-center">{leading}</div>}
 
         <input
@@ -358,7 +361,7 @@ export function Composer({
           label={!voiceEnabled ? "Voice is off — enable it in Settings" : dictation.active ? "Stop dictation (Esc)" : "Dictate"}
           onClick={toggleDictation}
           active={dictation.active}
-          className={cn(dictation.active && "bg-rose-500/15 text-rose-500 hover:bg-rose-500/20 hover:text-rose-500 dark:text-rose-400")}
+          className={cn(dictation.active && "bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive")}
         >
           {transcribing ? <Loader2 className="animate-spin" /> : listening ? <LevelBars levelRef={dictation.levelRef} /> : <Mic />}
         </ToolbarButton>
@@ -370,7 +373,7 @@ export function Composer({
             setSpeakReplies(!speakReplies);
           }}
           active={speakReplies}
-          className={cn(speakReplies && "text-primary")}
+          className={cn(speakReplies && "bg-accent text-foreground")}
         >
           {speakReplies ? <Volume2 /> : <VolumeX />}
         </ToolbarButton>
@@ -382,9 +385,10 @@ export function Composer({
                 initial={{ opacity: 0, x: 6 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 6 }}
-                className="hidden truncate pr-1 text-xs text-muted-foreground sm:block"
+                className="hidden min-w-0 items-center gap-2 pr-1.5 text-xs text-muted-foreground sm:flex"
               >
-                {transcribing ? "Transcribing…" : "Working — new messages are queued"}
+                <WorkingTicks count={9} className="text-brand-strong" />
+                <span className="truncate">{transcribing ? "Transcribing…" : "Working — new messages are queued"}</span>
               </motion.span>
             )}
             {!running && !transcribing && focused && text.length > 0 && (
@@ -412,7 +416,7 @@ export function Composer({
                 onClick={() => void submit()}
                 disabled={!canSend}
                 aria-label={running ? "Queue message" : "Send message"}
-                className="size-9 rounded-full bg-gradient-brand text-white shadow-md shadow-glow-a/30 transition hover:opacity-95 hover:shadow-lg disabled:bg-none disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:opacity-100"
+                className="ml-0.5 size-8 rounded-lg transition-[background-color,transform] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-[18px]" strokeWidth={2.4} />}
               </Button>
@@ -450,7 +454,7 @@ function ToolbarButton({
           onClick={onClick}
           aria-label={label}
           aria-pressed={active}
-          className={cn("size-9 rounded-full text-muted-foreground hover:text-foreground [&_svg:not([class*='size-'])]:size-[18px]", className)}
+          className={cn("size-8 rounded-lg text-muted-foreground hover:text-foreground [&_svg:not([class*='size-'])]:size-[17px]", className)}
         >
           {children}
         </Button>

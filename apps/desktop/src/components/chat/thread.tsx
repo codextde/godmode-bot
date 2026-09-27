@@ -50,7 +50,7 @@ export function Thread({ messages, agent, inflight, queuedMessageIds, onStop, st
             return (
               <Fragment key={m.id}>
                 {showDay && (
-                  <div className="flex items-center gap-3 text-[11px] font-medium tracking-wide text-muted-foreground/80 uppercase" role="separator">
+                  <div className="eyebrow flex items-center gap-3 text-[10.5px]" role="separator">
                     <span className="h-px flex-1 bg-border" />
                     {day}
                     <span className="h-px flex-1 bg-border" />
@@ -93,7 +93,7 @@ export function Thread({ messages, agent, inflight, queuedMessageIds, onStop, st
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.96 }}
             onClick={() => scrollToBottom()}
-            className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full glass px-3.5 py-1.5 text-xs font-medium shadow-lg transition hover:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-md glass px-3 py-1.5 text-xs font-medium transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <ArrowDown className="size-3.5" />
             {inflight ? "Jump to live" : "Jump to latest"}
@@ -145,11 +145,11 @@ export function ChatDropZone({ onFiles, children, className }: { onFiles: (files
             exit={{ opacity: 0 }}
             className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-background/70 p-6 backdrop-blur-md"
           >
-            <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-primary/50 bg-card/60 px-12 py-10 text-center">
-              <span className="grid size-12 place-items-center rounded-2xl bg-gradient-brand text-white shadow-lg shadow-glow-a/30">
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-foreground/25 bg-card px-12 py-10 text-center shadow-float">
+              <span className="grid size-11 place-items-center rounded-lg border bg-secondary text-foreground">
                 <Paperclip className="size-5" />
               </span>
-              <div className="text-base font-semibold">Drop files to attach</div>
+              <div className="text-base font-medium">Drop files to attach</div>
               <div className="text-sm text-muted-foreground">Images, PDFs, spreadsheets… up to 25 MB each</div>
             </div>
           </motion.div>

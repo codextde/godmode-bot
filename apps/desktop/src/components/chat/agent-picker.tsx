@@ -38,14 +38,14 @@ export function AgentPicker({
           type="button"
           aria-label={`Agent: ${current?.name ?? "choose"}`}
           className={cn(
-            "flex h-9 max-w-[13rem] items-center gap-2 rounded-full border bg-background/50 pr-2.5 pl-1 text-sm transition hover:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+            "flex h-8 max-w-[13rem] items-center gap-2 rounded-lg border bg-card pr-2 pl-1 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
             className,
           )}
         >
           {current ? (
-            <AgentAvatar agent={current} size="sm" className="size-7 rounded-full text-sm" />
+            <AgentAvatar agent={current} size="sm" />
           ) : (
-            <span className="grid size-7 place-items-center rounded-full bg-muted">
+            <span className="grid size-6 place-items-center rounded-md bg-muted">
               <Bot className="size-4 text-muted-foreground" />
             </span>
           )}
@@ -77,7 +77,7 @@ export function AgentPicker({
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">{a.description || wsName(a.workspaceId)}</span>
                   </span>
-                  {a.id === value && <Check className="size-4 text-primary" />}
+                  {a.id === value && <Check className="size-4 text-foreground" />}
                 </CommandItem>
               ))}
             </CommandGroup>

@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useWorkspaceName } from "@/lib/hooks";
 import { useAgentRunning } from "@/stores/live";
 
-/** Consistent page header used by every screen. */
+/** Consistent page header used by every screen: quiet icon tile, medium-weight title, muted description. */
 export function PageHeader({
   title,
   description,
@@ -24,12 +24,12 @@ export function PageHeader({
     <div className={cn("flex flex-wrap items-start justify-between gap-4 px-8 pt-8 pb-6", className)}>
       <div className="flex min-w-0 items-start gap-3.5">
         {icon && (
-          <div className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl border bg-card text-primary shadow-sm [&_svg]:size-5">
+          <div className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card [&_svg]:size-[18px]">
             {icon}
           </div>
         )}
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="truncate text-[26px] leading-tight font-medium tracking-[-0.03em]">{title}</h1>
           {description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>}
         </div>
       </div>
@@ -60,40 +60,60 @@ export function EmptyState({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        "flex flex-col items-center justify-center rounded-2xl border border-dashed bg-card/40 px-6 py-14 text-center",
+        "flex flex-col items-center justify-center rounded-xl border border-dashed bg-card/50 px-6 py-14 text-center",
         className,
       )}
     >
       {icon && (
-        <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-gradient-brand text-white shadow-lg shadow-glow-a/20 [&_svg]:size-6">
+        <div className="mb-4 grid size-11 place-items-center rounded-lg border bg-card text-foreground shadow-card [&_svg]:size-5">
           {icon}
         </div>
       )}
-      <h3 className="text-base font-semibold">{title}</h3>
+      <h3 className="text-base font-medium tracking-[-0.01em]">{title}</h3>
       {description && <p className="mt-1.5 max-w-md text-sm text-muted-foreground">{description}</p>}
       {action && <div className="mt-5">{action}</div>}
     </motion.div>
   );
 }
 
+/** Flat, softly tinted tiles — an agent's colour is an identity cue, not a light show. */
 const COLOR_CLASSES: Record<string, string> = {
-  violet: "from-violet-500 to-purple-600",
-  indigo: "from-indigo-500 to-blue-600",
-  sky: "from-sky-400 to-blue-500",
-  cyan: "from-cyan-400 to-teal-500",
-  emerald: "from-emerald-400 to-green-600",
-  lime: "from-lime-400 to-green-500",
-  amber: "from-amber-400 to-orange-500",
-  orange: "from-orange-400 to-red-500",
-  rose: "from-rose-400 to-pink-600",
-  fuchsia: "from-fuchsia-400 to-purple-600",
+  violet: "bg-violet-500/12 ring-violet-600/15 dark:bg-violet-400/14",
+  indigo: "bg-indigo-500/12 ring-indigo-600/15 dark:bg-indigo-400/14",
+  sky: "bg-sky-500/12 ring-sky-600/15 dark:bg-sky-400/14",
+  cyan: "bg-cyan-500/12 ring-cyan-600/15 dark:bg-cyan-400/14",
+  emerald: "bg-emerald-500/12 ring-emerald-600/15 dark:bg-emerald-400/14",
+  lime: "bg-lime-500/14 ring-lime-600/15 dark:bg-lime-400/14",
+  amber: "bg-amber-500/14 ring-amber-600/15 dark:bg-amber-400/14",
+  orange: "bg-orange-500/12 ring-orange-600/15 dark:bg-orange-400/14",
+  rose: "bg-rose-500/12 ring-rose-600/15 dark:bg-rose-400/14",
+  fuchsia: "bg-fuchsia-500/12 ring-fuchsia-600/15 dark:bg-fuchsia-400/14",
 };
 
+/** Tile classes for an agent colour (name kept for existing callers). */
 export function colorGradient(color: string | undefined) {
   return COLOR_CLASSES[color ?? "violet"] ?? COLOR_CLASSES.violet;
 }
 
-/** Emoji avatar with gradient tile; glows while the agent is running. */
+const SWATCH_CLASSES: Record<string, string> = {
+  violet: "bg-violet-500",
+  indigo: "bg-indigo-500",
+  sky: "bg-sky-500",
+  cyan: "bg-cyan-500",
+  emerald: "bg-emerald-500",
+  lime: "bg-lime-500",
+  amber: "bg-amber-500",
+  orange: "bg-orange-500",
+  rose: "bg-rose-500",
+  fuchsia: "bg-fuchsia-500",
+};
+
+/** A solid dot of the colour — for colour pickers and tiny identity markers. */
+export function colorSwatch(color: string | undefined) {
+  return SWATCH_CLASSES[color ?? "violet"] ?? SWATCH_CLASSES.violet;
+}
+
+/** Emoji avatar on a flat tinted tile; a live dot and soft pulse while the agent is running. */
 export function AgentAvatar({
   agent,
   size = "md",
@@ -104,19 +124,19 @@ export function AgentAvatar({
   className?: string;
 }) {
   const running = useAgentRunning(agent.id);
-  const sizes = { sm: "size-6 text-sm rounded-md", md: "size-9 text-lg rounded-xl", lg: "size-12 text-2xl rounded-2xl", xl: "size-16 text-3xl rounded-2xl" };
+  const sizes = { sm: "size-6 text-[13px] rounded-md", md: "size-8 text-base rounded-lg", lg: "size-12 text-2xl rounded-xl", xl: "size-16 text-3xl rounded-2xl" };
   return (
     <div
       className={cn(
-        "relative grid shrink-0 place-items-center bg-gradient-to-br shadow-sm ring-1 ring-white/10",
+        "relative grid shrink-0 place-items-center ring-1 ring-inset",
         colorGradient(agent.color),
         sizes[size],
         running && "animate-pulse-ring",
         className,
       )}
     >
-      <span className="drop-shadow-sm">{agent.avatar || "🤖"}</span>
-      {running && <span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-background bg-success" />}
+      <span>{agent.avatar || "🤖"}</span>
+      {running && <span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-background bg-brand" />}
     </div>
   );
 }
@@ -137,14 +157,14 @@ export function StatusDot({ status, className }: { status: "ok" | "warn" | "erro
     warn: "bg-warning",
     error: "bg-destructive",
     idle: "bg-muted-foreground/50",
-    running: "bg-primary animate-pulse",
+    running: "bg-brand animate-live-dot",
   } as const;
   return <span className={cn("inline-block size-2 rounded-full", map[status], className)} />;
 }
 
 export function Kbd({ children }: { children: ReactNode }) {
   return (
-    <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+    <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded-[4px] border bg-card px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
       {children}
     </kbd>
   );
@@ -167,10 +187,10 @@ export function Section({
   className?: string;
 }) {
   return (
-    <section id={id} className={cn("scroll-mt-6 rounded-2xl border bg-card/60 p-5 backdrop-blur-sm", className)}>
+    <section id={id} className={cn("scroll-mt-6 rounded-xl border bg-card p-5 shadow-card", className)}>
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold">{title}</h2>
+          <h2 className="text-sm font-medium">{title}</h2>
           {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
         </div>
         {actions}

@@ -46,7 +46,7 @@ export function UserMessage({ message, queued, pending }: { message: Message; qu
       {message.content && (
         <div
           className={cn(
-            "max-w-[85%] rounded-[22px] rounded-br-md border border-primary/15 bg-gradient-to-br from-primary/[0.14] to-glow-b/[0.08] px-4 py-2.5 text-[0.95rem] leading-relaxed break-words whitespace-pre-wrap shadow-sm",
+            "max-w-[85%] rounded-2xl rounded-br-[6px] border border-foreground/[0.05] bg-secondary px-4 py-2.5 text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap",
             pending && "opacity-70",
           )}
         >
@@ -55,7 +55,7 @@ export function UserMessage({ message, queued, pending }: { message: Message; qu
       )}
       <div className="mt-1 flex h-6 items-center gap-1.5 pr-1 text-[11px] text-muted-foreground">
         {queued && (
-          <span className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2 py-0.5 font-medium">
+          <span className="inline-flex items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 font-medium">
             <Clock3 className="size-3" /> Queued · runs after the current task
           </span>
         )}
@@ -79,7 +79,7 @@ export function UserMessage({ message, queued, pending }: { message: Message; qu
 export function SystemMessage({ message }: { message: Message }) {
   return (
     <div className="flex justify-center">
-      <span className="max-w-[80%] rounded-full border bg-muted/40 px-3 py-1 text-center text-xs text-muted-foreground">{message.content}</span>
+      <span className="max-w-[80%] rounded-md border bg-card px-3 py-1 text-center text-xs text-muted-foreground">{message.content}</span>
     </div>
   );
 }
@@ -90,8 +90,8 @@ export function SystemMessage({ message }: { message: Message }) {
 
 function AgentHeader({ agent, children }: { agent?: Agent; children?: ReactNode }) {
   return (
-    <div className="mb-1.5 flex min-h-7 items-center gap-2 text-sm">
-      <span className="font-semibold">{agent?.name ?? "Assistant"}</span>
+    <div className="mb-1.5 flex min-h-8 items-center gap-2 text-sm">
+      <span className="font-medium tracking-[-0.01em]">{agent?.name ?? "Assistant"}</span>
       {children}
     </div>
   );
@@ -122,7 +122,7 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
                   variant="ghost"
                   size="icon-xs"
                   aria-label={speaking ? "Stop reading" : "Read aloud"}
-                  className={cn("text-muted-foreground hover:text-foreground", speaking && "text-primary")}
+                  className={cn("text-muted-foreground hover:text-foreground", speaking && "text-foreground")}
                   onClick={() => (speaking ? speaker.stop() : void speaker.speak(text, message.id))}
                 >
                   {speaking ? <Square className="fill-current" /> : <Volume2 />}
@@ -246,10 +246,10 @@ export function LiveAssistantMessage({
       <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <AgentHeader agent={agent}>
-          <span className="flex min-w-0 items-center gap-2 rounded-full border bg-card/60 py-0.5 pr-2.5 pl-1.5 text-xs">
+          <span className="flex min-w-0 items-center gap-2 rounded-md border bg-card py-1 pr-2 pl-1.5 text-xs shadow-card">
             <Orb variant={orbVariantFor(label)} size={16} label={label} />
             <span className="text-shimmer truncate font-medium">{label}</span>
-            <span className="text-muted-foreground tabular-nums">{formatElapsed(now - since)}</span>
+            <span className="border-l pl-2 font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - since)}</span>
           </span>
           {onStop && (
             <Button
@@ -258,7 +258,7 @@ export function LiveAssistantMessage({
               size="xs"
               onClick={onStop}
               disabled={stopping}
-              className="ml-auto gap-1.5 rounded-full text-muted-foreground hover:text-destructive"
+              className="ml-auto gap-1.5 text-muted-foreground hover:text-destructive"
             >
               {stopping ? <Loader2 className="animate-spin" /> : <Square className="size-2.5 fill-current" />}
               Stop

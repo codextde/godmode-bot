@@ -36,7 +36,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Wordmark } from "@/components/brand";
-import { Kbd, StatusDot } from "@/components/common";
+import { LiveDot } from "@/components/aicss/Motion";
 import { WorkspaceSwitcher } from "@/components/layout/workspace-switcher";
 import { RecentChats } from "@/components/layout/recent-chats";
 import { CommandPalette } from "@/components/layout/command-palette";
@@ -98,8 +98,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <SidebarProvider open={!collapsed} onOpenChange={(open) => setCollapsed(!open)}>
-      <Sidebar collapsible="icon" variant="sidebar" className="border-r-0">
+    // Fixed viewport height: pages get a definite `h-full`, so the chat thread scrolls inside itself and the
+    // composer stays put (with `min-h-svh` the whole page grew and scrolled the composer away).
+    <SidebarProvider open={!collapsed} onOpenChange={(open) => setCollapsed(!open)} className="h-svh min-h-0 overflow-hidden">
+      <Sidebar collapsible="icon" variant="sidebar">
         <SidebarHeader className={cn("gap-3 px-3 pt-3", isTauri && isMac && "pt-10")} data-tauri-drag-region>
           <div className="flex items-center justify-between px-1 group-data-[collapsible=icon]:justify-center" data-tauri-drag-region>
             <Link to="/" className="no-drag">
@@ -110,14 +112,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex gap-2 group-data-[collapsible=icon]:flex-col">
             <Button
               asChild
-              className="h-9 flex-1 justify-start gap-2 bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+              className="h-9 flex-1 justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
             >
               <Link to="/">
                 <MessageSquarePlus className="size-4" />
                 <span className="group-data-[collapsible=icon]:hidden">New chat</span>
-                <span className="ml-auto opacity-70 group-data-[collapsible=icon]:hidden">
-                  <Kbd>{modKey}N</Kbd>
-                </span>
+                <kbd className="ml-auto font-mono text-[10px] tracking-wide opacity-55 group-data-[collapsible=icon]:hidden">{modKey}N</kbd>
               </Link>
             </Button>
             <Tooltip>
@@ -143,7 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </SidebarGroupContent>
           </SidebarGroup>
           <SidebarGroup>
-            <SidebarGroupLabel>Access</SidebarGroupLabel>
+            <SidebarGroupLabel className="eyebrow text-[10.5px]">Access</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {accessNav.map((item) => (
@@ -161,7 +161,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset className="relative min-h-0 overflow-hidden bg-background">
+      <SidebarInset className="relative h-svh min-h-0 overflow-hidden bg-background">
         {isTauri && isMac && <div className="absolute inset-x-0 top-0 z-50 h-7" data-tauri-drag-region />}
         <div className="h-full overflow-y-auto">{children}</div>
       </SidebarInset>
@@ -175,13 +175,18 @@ function NavMenuItem({ item }: { item: NavItem }) {
   const active = item.end ? location.pathname === item.to || location.pathname.startsWith("/chat/") : location.pathname.startsWith(item.to);
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={active} tooltip={item.label} className="h-9 gap-3 [&>svg]:size-[18px]">
+      <SidebarMenuButton
+        asChild
+        isActive={active}
+        tooltip={item.label}
+        className="h-8 gap-2.5 text-[13.5px] text-sidebar-foreground/85 [&>svg]:size-4 [&>svg]:text-muted-foreground data-[active=true]:bg-card data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border data-[active=true]:[&>svg]:text-foreground"
+      >
         <NavLink to={item.to} end={item.end}>
           {item.icon}
           <span>{item.label}</span>
         </NavLink>
       </SidebarMenuButton>
-      {item.badge ? <SidebarMenuBadge className="rounded-full bg-primary/15 text-primary">{item.badge}</SidebarMenuBadge> : null}
+      {item.badge ? <SidebarMenuBadge className="rounded-[5px] bg-foreground/[0.07] font-mono text-[10.5px] text-foreground/70 tabular-nums">{item.badge}</SidebarMenuBadge> : null}
     </SidebarMenuItem>
   );
 }
@@ -195,11 +200,11 @@ function FooterBar() {
   });
   const location = useLocation();
   return (
-    <div className="flex items-center gap-1 rounded-xl border bg-card/50 p-1 group-data-[collapsible=icon]:flex-col">
+    <div className="flex items-center gap-1 rounded-lg border bg-card p-1 shadow-card group-data-[collapsible=icon]:flex-col">
       <Tooltip>
         <TooltipTrigger asChild>
           <div className="flex h-8 flex-1 items-center gap-2 px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-            <StatusDot status={connected ? "ok" : "warn"} />
+            <LiveDot live={connected} className={cn(!connected && "bg-warning")} />
             {connected ? "Online" : "Reconnecting…"}
           </div>
         </TooltipTrigger>

@@ -28,7 +28,7 @@ export function RecentChats() {
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel>Recent</SidebarGroupLabel>
+      <SidebarGroupLabel className="eyebrow text-[10.5px]">Recent</SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((c) => {
@@ -36,7 +36,11 @@ export function RecentChats() {
             const running = runningConversations.has(c.id) || c.running;
             return (
               <SidebarMenuItem key={c.id}>
-                <SidebarMenuButton asChild isActive={conversationId === c.id} className="h-auto py-1.5">
+                <SidebarMenuButton
+                  asChild
+                  isActive={conversationId === c.id}
+                  className="h-auto py-1.5 data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
+                >
                   <Link to={`/chat/${c.id}`} className="flex items-start gap-2">
                     <span className="mt-0.5 text-sm leading-none">{agent?.avatar ?? "💬"}</span>
                     <span className="min-w-0 flex-1">

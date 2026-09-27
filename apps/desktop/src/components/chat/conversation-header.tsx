@@ -97,7 +97,7 @@ export function ConversationHeader({
   return (
     <header
       className={cn(
-        "relative z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/70 px-3 backdrop-blur-xl sm:px-4",
+        "relative z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3 sm:px-4",
         isTauri && isMac && "h-auto pt-7 pb-2",
       )}
     >
@@ -122,12 +122,12 @@ export function ConversationHeader({
           onSave={(title) => title !== conversation.title && update.mutate({ title })}
         />
         {origin && (
-          <span className="hidden shrink-0 items-center gap-1 rounded-md border bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground sm:inline-flex">
+          <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground sm:inline-flex">
             <origin.icon className="size-3" /> {origin.label}
           </span>
         )}
         {conversation.archived && (
-          <span className="shrink-0 rounded-md border bg-muted/40 px-1.5 py-0.5 text-[11px] text-muted-foreground">Archived</span>
+          <span className="shrink-0 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">Archived</span>
         )}
       </div>
 
@@ -140,7 +140,7 @@ export function ConversationHeader({
               aria-label={conversation.pinned ? "Unpin chat" : "Pin chat"}
               aria-pressed={conversation.pinned}
               onClick={() => update.mutate({ pinned: !conversation.pinned })}
-              className={cn("text-muted-foreground", conversation.pinned && "text-primary")}
+              className={cn("text-muted-foreground", conversation.pinned && "text-foreground")}
             >
               <Pin className={cn(conversation.pinned && "fill-current")} />
             </Button>
@@ -262,7 +262,7 @@ function EditableTitle({
           setEditing(false);
         }
       }}
-      className="h-8 w-full max-w-md min-w-0 rounded-md border bg-background/60 px-2 text-sm font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="h-8 w-full max-w-md min-w-0 rounded-md border bg-card px-2 text-sm font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     />
   );
 }

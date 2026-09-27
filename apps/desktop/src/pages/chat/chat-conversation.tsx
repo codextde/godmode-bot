@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, ConversationWithMessages, Message, SendMessageInput } from "@godmode/shared";
-import { Brain, MessageSquareDashed, Sparkles, Wand2 } from "lucide-react";
+import { ArrowUpRight, Brain, MessageSquareDashed, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -243,19 +243,22 @@ function ConversationWelcome({ agent, onPick }: { agent?: Agent; onPick: (text: 
       ];
   return (
     <div className="flex flex-col items-center pt-[10vh] text-center">
-      {agent && <AgentAvatar agent={agent} size="xl" className="animate-float shadow-xl" />}
-      <h2 className="mt-5 text-2xl font-semibold tracking-tight">Chat with {agent?.name ?? "your agent"}</h2>
-      {agent?.description && <p className="mt-2 max-w-md text-sm text-muted-foreground">{agent.description}</p>}
-      <div className="mt-8 grid w-full max-w-lg gap-2">
+      {agent && <AgentAvatar agent={agent} size="xl" className="animate-float" />}
+      <h2 className="heading-display mt-6 text-[32px]">
+        {agent?.name ?? "Your agent"}. <span className="text-muted-foreground">Ready when you are.</span>
+      </h2>
+      {agent?.description && <p className="mt-3 max-w-md text-sm text-muted-foreground">{agent.description}</p>}
+      <div className="mt-8 grid w-full max-w-lg overflow-hidden rounded-xl border bg-card shadow-card">
         {ideas.map(({ icon: Icon, text }) => (
           <button
             key={text}
             type="button"
             onClick={() => onPick(text)}
-            className="flex items-center gap-3 rounded-2xl border bg-card/50 px-4 py-3 text-left text-sm transition hover:-translate-y-px hover:bg-card hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="group flex items-center gap-3 border-b px-4 py-3 text-left text-sm transition last:border-b-0 hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
           >
-            <Icon className="size-4 shrink-0 text-primary" />
-            {text}
+            <Icon className="size-4 shrink-0 text-muted-foreground transition group-hover:text-foreground" />
+            <span className="flex-1">{text}</span>
+            <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
           </button>
         ))}
       </div>
@@ -271,7 +274,7 @@ function ConversationSkeleton() {
         <Skeleton className="h-4 w-48" />
       </div>
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 pt-8">
-        <Skeleton className="ml-auto h-10 w-2/5 rounded-3xl" />
+        <Skeleton className="ml-auto h-10 w-2/5 rounded-2xl" />
         <div className="flex gap-3">
           <Skeleton className="size-9 rounded-xl" />
           <div className="flex-1 space-y-2.5">
@@ -281,10 +284,10 @@ function ConversationSkeleton() {
             <Skeleton className="h-4 w-2/3" />
           </div>
         </div>
-        <Skeleton className="ml-auto h-10 w-1/3 rounded-3xl" />
+        <Skeleton className="ml-auto h-10 w-1/3 rounded-2xl" />
       </div>
       <div className="mx-auto w-full max-w-3xl px-6 pb-6">
-        <Skeleton className="h-28 w-full rounded-[26px]" />
+        <Skeleton className="h-28 w-full rounded-2xl" />
       </div>
     </div>
   );

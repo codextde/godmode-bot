@@ -36,14 +36,14 @@ export function WorkspaceSwitcher() {
       <DropdownMenuTrigger asChild>
         <button
           className={cn(
-            "flex h-10 w-full items-center gap-2.5 rounded-xl border bg-card/60 px-2.5 text-left text-sm transition hover:bg-accent/60",
+            "flex h-9 w-full items-center gap-2.5 rounded-lg border bg-card px-2 text-left text-sm shadow-card transition hover:bg-accent",
             "group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0",
           )}
         >
           <span
             className={cn(
-              "grid size-6 shrink-0 place-items-center rounded-lg bg-gradient-to-br text-white",
-              current ? colorGradient(current.color) : "from-zinc-500 to-zinc-700",
+              "grid size-6 shrink-0 place-items-center rounded-md text-foreground ring-1 ring-inset",
+              current ? colorGradient(current.color) : "bg-secondary ring-border",
             )}
           >
             {icon}
