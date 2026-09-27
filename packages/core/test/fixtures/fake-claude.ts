@@ -54,6 +54,7 @@ if (argValue("--input-format") === "stream-json") {
           { name: "color", description: "Set the prompt bar color", argumentHint: "[color]", builtin: true },
           { name: "__remote-workflow", description: "internal", argumentHint: "", builtin: true },
           { name: "hello", description: "Say hello to someone (project)", argumentHint: "<name>" },
+          { name: "clear", description: "A project command shadowed by the built-in (project)", argumentHint: "" },
         ],
       },
     },
@@ -110,7 +111,19 @@ if (slash?.[1] === "clear") {
 } else if (slash) {
   const [, name, args] = slash;
   out(init);
-  const text = name === "model" && args === "bogus" ? "Model 'bogus' not found" : `Ran /${name} ${args}`.trim();
+  const effort = args.toLowerCase();
+  const text =
+    name === "model"
+      ? args === "bogus"
+        ? "Model 'bogus' not found"
+        : `Set model to \`${args}\` for this session only`
+      : name === "effort"
+        ? effort === "auto"
+          ? "Effort level set to auto (this session only)"
+          : ["low", "medium", "high", "xhigh", "max"].includes(effort)
+            ? `Set effort level to ${effort} (this session only)`
+            : `Invalid argument: ${args}. Valid options are: low, medium, high, xhigh, max, auto`
+        : `Ran /${name} ${args}`.trim();
   out({
     type: "assistant",
     message: { id: crypto.randomUUID(), model: "<synthetic>", role: "assistant", content: [{ type: "text", text }] },

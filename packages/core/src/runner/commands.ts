@@ -8,7 +8,7 @@ import { ensureAgentRepo } from "../agents/service";
 import { claudeMemPluginDir } from "../memory/claudeMem";
 import { getSettings } from "../services/settings";
 import { HttpError } from "../util";
-import { CLAUDE_NOT_FOUND, buildEnv, resolveClaudeCommand } from "./runner";
+import { CLAUDE_NOT_FOUND, buildEnv, killTree, resolveClaudeCommand } from "./runner";
 
 const TTL_MS = 5 * 60_000;
 const TIMEOUT_MS = 30_000;
@@ -42,12 +42,23 @@ async function probe(agent: Agent): Promise<SlashCommand[]> {
   const pluginDir = getSettings().memory.backend === "claude-mem" ? claudeMemPluginDir() : null;
   if (pluginDir) args.push("--plugin-dir", pluginDir);
 
-  const proc = Bun.spawn({ cmd: [...cmd, ...args], cwd: agent.repoPath, env: buildEnv(agent), stdin: "pipe", stdout: "pipe", stderr: "ignore" });
-  const timer = setTimeout(() => proc.kill(), TIMEOUT_MS);
+  const proc = Bun.spawn({
+    cmd: [...cmd, ...args],
+    cwd: agent.repoPath,
+    env: buildEnv(agent),
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "ignore",
+    detached: process.platform !== "win32",
+  });
+  const reader = proc.stdout.getReader();
+  const timer = setTimeout(() => {
+    killTree(proc);
+    void reader.cancel().catch(() => {});
+  }, TIMEOUT_MS);
   try {
     proc.stdin.write(`${JSON.stringify({ type: "control_request", request_id: REQUEST_ID, request: { subtype: "initialize" } })}\n`);
     await proc.stdin.end();
-    const reader = proc.stdout.getReader();
     const decoder = new TextDecoder();
     let buf = "";
     for (;;) {
@@ -63,28 +74,33 @@ async function probe(agent: Agent): Promise<SlashCommand[]> {
     }
   } finally {
     clearTimeout(timer);
-    proc.kill();
+    killTree(proc);
   }
   throw new HttpError(502, "Claude Code did not list its slash commands", "claude_commands_unavailable");
 }
 
 function commandsFrom(line: string): SlashCommand[] | null {
-  let event: { type?: string; response?: { request_id?: string; response?: { commands?: unknown } } };
+  let event: { type?: string; response?: { subtype?: string; request_id?: string; error?: string; response?: { commands?: unknown } } };
   try {
     event = JSON.parse(line);
   } catch {
     return null;
   }
   if (event?.type !== "control_response" || event.response?.request_id !== REQUEST_ID) return null;
+  if (event.response.subtype !== "success") {
+    throw new HttpError(502, `Claude Code could not list its slash commands: ${event.response.error ?? "unknown error"}`, "claude_commands_unavailable");
+  }
   const raw = event.response.response?.commands;
   if (!Array.isArray(raw)) return [];
-  const out: SlashCommand[] = [];
+  // Names can repeat (a project command shadowing a built-in); Claude Code runs the built-in one.
+  const out = new Map<string, SlashCommand>();
   for (const c of raw as Record<string, unknown>[]) {
     const name = typeof c?.name === "string" ? c.name : "";
     if (!name || name.startsWith("_") || HIDDEN.has(name)) continue;
     const builtin = c.builtin === true;
+    if (out.get(name)?.builtin) continue;
     const description = typeof c.description === "string" ? c.description : "";
-    out.push({
+    out.set(name, {
       name,
       description: builtin ? description : description.replace(/\s*\((?:project|user)\)$/, ""),
       argumentHint: typeof c.argumentHint === "string" ? c.argumentHint : "",
@@ -92,5 +108,5 @@ function commandsFrom(line: string): SlashCommand[] | null {
       builtin,
     });
   }
-  return out;
+  return [...out.values()];
 }

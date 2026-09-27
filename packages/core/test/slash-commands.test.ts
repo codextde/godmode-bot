@@ -7,6 +7,7 @@ import { waitForRun } from "../src/runner/runner";
 import { __clearSlashCommandCache, listSlashCommands } from "../src/runner/commands";
 import { StreamAccumulator } from "../src/runner/stream";
 import { getAccessToken } from "../src/server/auth";
+import { run as sql } from "../src/db";
 
 let env: TestEnv;
 let agent: Agent;
@@ -96,7 +97,7 @@ describe("slash commands in chat runs", () => {
   test("/model and /effort stick to the conversation", async () => {
     const { conv } = await send(conversationId, "/model sonnet");
     expect(conv.model).toBe("sonnet");
-    const effort = await send(conversationId, "/effort max");
+    const effort = await send(conversationId, "/effort Max");
     expect(effort.conv.effort).toBe("max");
     const next = await send(conversationId, "Hi again");
     expect(argValue(next.inv, "--model")).toBe("sonnet");
@@ -108,6 +109,16 @@ describe("slash commands in chat runs", () => {
     expect((await send(conversationId, "/effort extreme")).conv.effort).toBe("max");
     expect((await send(conversationId, "/model default")).conv.model).toBeNull();
     expect((await send(conversationId, "/effort auto")).conv.effort).toBeNull();
+  });
+
+  test("a slash command on a lost session keeps it, so the next message still gets the recap", async () => {
+    const lost = "00000000-1111-4222-8333-444444444444";
+    sql("UPDATE conversations SET claude_session_id = ? WHERE id = ?", lost, conversationId);
+    const { conv } = await send(conversationId, "/context");
+    expect(conv.claudeSessionId).toBe(lost);
+    const next = await send(conversationId, "Where were we?");
+    expect(next.inv.prompt).toContain("could not be restored");
+    expect(next.conv.claudeSessionId).not.toBe(lost);
   });
 
   test("/rename renames the chat", async () => {

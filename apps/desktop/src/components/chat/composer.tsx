@@ -244,7 +244,12 @@ export function Composer({
     });
   };
 
-  const openCommands = () => {
+  const toggleCommands = () => {
+    if (menuOpen) {
+      setMenuDismissed(text);
+      setMenuForced(false);
+      return;
+    }
     if (!text.trim()) setText("/");
     else setMenuForced(true);
     setMenuDismissed(null);
@@ -274,7 +279,7 @@ export function Composer({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (menuOpen) {
+    if (menuOpen && !e.nativeEvent.isComposing) {
       const current = menuItems[menuIndex];
       if ((e.key === "ArrowDown" || e.key === "ArrowUp") && menuItems.length > 0) {
         e.preventDefault();
@@ -461,7 +466,7 @@ export function Composer({
         </ToolbarButton>
 
         {agentId && (
-          <ToolbarButton label="Slash commands" onClick={openCommands} active={menuOpen} className={cn(menuOpen && "bg-accent text-foreground")}>
+          <ToolbarButton label="Slash commands" onClick={toggleCommands} active={menuOpen} keepFocus className={cn(menuOpen && "bg-accent text-foreground")}>
             <SquareSlash />
           </ToolbarButton>
         )}
@@ -545,12 +550,15 @@ function ToolbarButton({
   onClick,
   children,
   active,
+  keepFocus,
   className,
 }: {
   label: string;
   onClick: () => void;
   children: ReactNode;
   active?: boolean;
+  /** Don't take focus from the textarea */
+  keepFocus?: boolean;
   className?: string;
 }) {
   return (
@@ -561,6 +569,7 @@ function ToolbarButton({
           variant="ghost"
           size="icon"
           onClick={onClick}
+          onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}
           aria-label={label}
           aria-pressed={active}
           className={cn("size-8 rounded-lg text-muted-foreground hover:text-foreground [&_svg:not([class*='size-'])]:size-[17px]", className)}
