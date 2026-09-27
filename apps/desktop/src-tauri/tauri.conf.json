@@ -97,5 +97,14 @@
         ]
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgyRDRERkYwRjc2OTVCNEYKUldSUFcybjM4Ti9VZ2g3M0tCZ1d0RjZJbnI4QkFqRTNvanh2WmFmY2dxK0c5eFd1ODNmL0Y0Q0wK",
+      "endpoints": ["https://github.com/codextde/godmode-bot/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

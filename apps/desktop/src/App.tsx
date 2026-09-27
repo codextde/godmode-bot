@@ -6,6 +6,7 @@ import { getCoreInfo, isTauri } from "@/lib/core";
 import { qk } from "@/lib/queryKeys";
 import { startRealtime, onServerEvent } from "@/lib/realtime";
 import { notifyDesktop } from "@/lib/desktop";
+import { syncUpdater } from "@/stores/updater";
 import { AppShell } from "@/components/layout/app-shell";
 import { SplashScreen } from "@/components/layout/splash";
 import { LoginPage } from "@/pages/auth/login";
@@ -38,6 +39,8 @@ export function App() {
       .then(() => setCoreReady(true))
       .catch((e) => setCoreError(e instanceof Error ? e.message : String(e)));
   }, []);
+
+  useEffect(() => syncUpdater(), []);
 
   useEffect(() => {
     setUnauthorizedHandler(() => qc.invalidateQueries({ queryKey: qk.authStatus }));

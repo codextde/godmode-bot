@@ -4,6 +4,7 @@ mod commands;
 mod core;
 mod paths;
 mod tray;
+mod updater;
 
 use std::{
     sync::{
@@ -17,7 +18,7 @@ use tauri::{Manager, RunEvent, Window, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_window_state::StateFlags;
 
-use crate::core::CoreManager;
+use crate::{core::CoreManager, updater::Updater};
 
 /// Passed by the OS login item; the app then starts in the tray instead of opening its window.
 const AUTOSTART_ARG: &str = "--autostart";
@@ -50,19 +51,27 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![AUTOSTART_ARG])))
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::new(CoreManager::new()))
+        .manage(Arc::new(Updater::new()))
         .manage(CloseToTray(AtomicBool::new(true)))
         .invoke_handler(tauri::generate_handler![
             commands::core_info,
             commands::write_file,
             commands::core_logs_path,
-            set_close_to_tray
+            set_close_to_tray,
+            updater::update_state,
+            updater::check_for_updates,
+            updater::install_update
         ])
         .setup(|app| {
             let handle = app.handle();
             core::start(handle.clone());
+            updater::start(handle.clone());
             tray::create(handle)?;
-            let start_hidden = CLOSE_TO_TRAY && std::env::args().any(|arg| arg == AUTOSTART_ARG);
+            let start_hidden = CLOSE_TO_TRAY
+                && std::env::args().any(|arg| arg == AUTOSTART_ARG)
+                && std::env::var_os(updater::RELAUNCHED_ENV).is_none();
             if !start_hidden {
                 tray::show_main_window(handle);
             }

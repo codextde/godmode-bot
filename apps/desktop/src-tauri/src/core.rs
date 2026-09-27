@@ -76,7 +76,7 @@ struct CoreProcess {
     stdin: Mutex<Option<ChildStdin>>,
 }
 
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
@@ -130,7 +130,7 @@ impl CoreManager {
     }
 
     /// Shell messages: terminal + `desktop.log`.
-    fn log(&self, message: &str) {
+    pub(crate) fn log(&self, message: &str) {
         eprintln!("[godmode] {message}");
         self.append_log(&format!("{} [shell] {message}", timestamp()));
     }
