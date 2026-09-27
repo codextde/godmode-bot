@@ -64,19 +64,19 @@ export function SystemSection({ bootstrap }: { bootstrap: Bootstrap | undefined 
           <span className="font-mono text-xs">{bootstrap?.platform ?? "—"}</span>
         </InfoRow>
         <InfoRow label={<span className="flex items-center gap-1.5"><FolderOpen className="size-3.5" /> Data directory</span>}>
-          <code className="truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]" title={dataDir}>
+          <code className="truncate rounded-[4px] bg-secondary px-1.5 py-0.5 font-mono text-[11px]" title={dataDir}>
             {dataDir || "—"}
           </code>
           {dataDir && <CopyButton value={dataDir} label="Copy path" size="icon-xs" toastLabel="Path copied" />}
         </InfoRow>
         <InfoRow label={<span className="flex items-center gap-1.5"><ScrollText className="size-3.5" /> Logs</span>}>
-          <code className="truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]" title={logPath}>
+          <code className="truncate rounded-[4px] bg-secondary px-1.5 py-0.5 font-mono text-[11px]" title={logPath}>
             {logPath || "—"}
           </code>
           {logPath && <CopyButton value={logPath} label="Copy log path" size="icon-xs" toastLabel="Path copied" />}
         </InfoRow>
         <p className="py-3 text-xs text-muted-foreground">
-          Something off? Open the log file in a text editor, or run <code className="rounded bg-muted px-1 font-mono">godmode doctor</code> in a terminal.
+          Something off? Open the log file in a text editor, or run <code className="rounded-[4px] bg-secondary px-1 font-mono">godmode doctor</code> in a terminal.
         </p>
       </SettingsGroup>
 
@@ -89,7 +89,7 @@ export function SystemSection({ bootstrap }: { bootstrap: Bootstrap | undefined 
       </SettingsGroup>
 
       <AlertDialog open={confirmOnboarding} onOpenChange={setConfirmOnboarding}>
-        <AlertDialogContent className="rounded-2xl">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Re-run onboarding?</AlertDialogTitle>
             <AlertDialogDescription>

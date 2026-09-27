@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import { Backdrop, Logo } from "@/components/brand";
+import { Orb } from "@/components/aicss/Orb";
 import { Button } from "@/components/ui/button";
 
 export function SplashScreen({ error }: { error?: string }) {
@@ -7,15 +8,16 @@ export function SplashScreen({ error }: { error?: string }) {
     <div className="relative grid h-full place-items-center overflow-hidden bg-background">
       <Backdrop />
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="relative flex flex-col items-center gap-5 text-center"
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+        className="relative flex flex-col items-center gap-6 text-center"
       >
-        <Logo className="size-16 animate-float drop-shadow-[0_10px_40px_rgba(139,92,246,0.45)]" />
+        <Logo className="size-12" />
         {error ? (
           <>
             <div>
-              <h1 className="text-lg font-semibold">Something went wrong</h1>
+              <h1 className="text-lg font-medium tracking-[-0.02em]">Something went wrong</h1>
               <p className="mt-1 max-w-sm text-sm text-muted-foreground">{error}</p>
             </div>
             <Button variant="outline" onClick={() => window.location.reload()}>
@@ -23,7 +25,12 @@ export function SplashScreen({ error }: { error?: string }) {
             </Button>
           </>
         ) : (
-          <p className="text-shimmer text-sm font-medium">Waking up your coworker…</p>
+          <span className="inline-flex items-center gap-2 rounded-full border bg-card py-1.5 pr-3.5 pl-2.5 shadow-card" role="status">
+            <span aria-hidden className="inline-flex">
+              <Orb variant="S3" size={16} label="Starting Godmode…" />
+            </span>
+            <span className="text-shimmer text-[13px] font-medium">Starting Godmode…</span>
+          </span>
         )}
       </motion.div>
     </div>

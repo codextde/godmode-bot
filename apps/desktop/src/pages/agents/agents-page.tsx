@@ -104,7 +104,7 @@ export default function AgentsPage() {
             <Button variant="outline" onClick={() => navigate(`/?prompt=${encodeURIComponent(CREATE_PROMPT)}`)} className="hidden sm:inline-flex">
               <Sparkles /> Ask Godmode
             </Button>
-            <Button asChild className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95">
+            <Button asChild>
               <Link to="/agents/new">
                 <Plus /> New agent
               </Link>
@@ -129,7 +129,7 @@ export default function AgentsPage() {
               <Kbd>/</Kbd>
             </span>
           </div>
-          <div role="tablist" aria-label="Filter agents" className="flex items-center gap-1 rounded-xl border bg-card/50 p-1">
+          <div role="tablist" aria-label="Filter agents" className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
             {FILTERS.map((f) => (
               <button
                 key={f.id}
@@ -137,12 +137,12 @@ export default function AgentsPage() {
                 aria-selected={filter === f.id}
                 onClick={() => setFilter(f.id)}
                 className={cn(
-                  "relative rounded-lg px-3 py-1 text-sm transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  "relative rounded-md px-3 py-1 text-sm transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
                   filter === f.id ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {filter === f.id && (
-                  <motion.span layoutId="agents-filter" className="absolute inset-0 rounded-lg bg-accent" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
+                  <motion.span layoutId="agents-filter" className="absolute inset-0 rounded-md border bg-card shadow-card" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
                 )}
                 <span className="relative flex items-center gap-1.5">
                   {f.label}
@@ -156,9 +156,9 @@ export default function AgentsPage() {
         {agentsQ.isLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }, (_, i) => (
-              <div key={i} className="rounded-2xl border bg-card/50 p-4">
+              <div key={i} className="rounded-xl border bg-card p-4 shadow-card">
                 <div className="flex items-center gap-3">
-                  <Skeleton className="size-12 rounded-2xl" />
+                  <Skeleton className="size-12 rounded-xl" />
                   <div className="flex-1 space-y-2">
                     <Skeleton className="h-4 w-32" />
                     <Skeleton className="h-3 w-20" />
@@ -187,7 +187,7 @@ export default function AgentsPage() {
             description="Agents are coworkers with their own instructions, memory and schedule — e.g. one that downloads your invoices every month."
             action={
               <div className="flex flex-wrap justify-center gap-2">
-                <Button asChild className="bg-gradient-brand text-white hover:opacity-95">
+                <Button asChild>
                   <Link to="/agents/new">
                     <Plus /> New agent
                   </Link>
@@ -236,10 +236,10 @@ export default function AgentsPage() {
             <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
               <Link
                 to="/agents/new"
-                className="flex h-full min-h-48 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm text-muted-foreground transition hover:border-primary/50 hover:bg-primary/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+                className="flex h-full min-h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground transition hover:border-foreground/25 hover:bg-card hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
-                <span className="grid size-10 place-items-center rounded-xl border bg-background/60">
-                  <Plus className="size-5" />
+                <span className="grid size-9 place-items-center rounded-lg border bg-card text-foreground shadow-card">
+                  <Plus className="size-4" />
                 </span>
                 New agent
               </Link>

@@ -60,13 +60,12 @@
 .trStream {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   transition: transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 .trSentence {
   margin: 0;
-  height: 40px;
   line-height: 20px;
   font-size: 13px;
   color: var(--muted-foreground);
@@ -76,6 +75,11 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   animation: tr-sentence-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.trSentence.isLive {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
 }
 @keyframes tr-sentence-in {
   from { opacity: 0; transform: translateY(4px); }
@@ -92,13 +96,13 @@
   border-left: 1px solid var(--border);
 }
 .trFull::-webkit-scrollbar { display: none; }
-.trFull p {
-  margin: 0 0 6px;
+.trFull {
   font-size: 13px;
   line-height: 20px;
   color: var(--muted-foreground);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
-.trFull p:last-child { margin-bottom: 0; }
 
 /* label-shine: a soft brightness valley sweeps through the text */
 .trShimmer {

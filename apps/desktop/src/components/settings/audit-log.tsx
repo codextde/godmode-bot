@@ -19,9 +19,9 @@ import { SettingsGroup } from "./settings-kit";
 const COMMON_ACTIONS = ["credential.fill", "credential.reveal", "totp.fill", "totp.reveal", "vault.unlock", "vault.lock", "vault.passphrase", "backup.export", "backup.import"];
 
 function actionTone(action: string): string {
-  if (action.includes("reveal")) return "border-warning/40 bg-warning/10 text-warning";
-  if (action.includes("delete") || action.includes("fail")) return "border-destructive/40 bg-destructive/10 text-destructive";
-  if (action.endsWith(".fill")) return "border-primary/40 bg-primary/10 text-primary";
+  if (action.includes("reveal")) return "border-warning/30 bg-warning/[0.08] text-warning";
+  if (action.includes("delete") || action.includes("fail")) return "border-destructive/30 bg-destructive/[0.07] text-destructive";
+  if (action.endsWith(".fill")) return "border-brand/25 bg-brand-soft text-brand-strong";
   if (action.startsWith("vault.")) return "border-border bg-muted text-muted-foreground";
   return "border-border bg-secondary text-secondary-foreground";
 }
@@ -41,7 +41,7 @@ function Actor({ actor, agents }: { actor: string; agents: Map<string, { id: str
   if (actor === "user")
     return (
       <span className="flex items-center gap-2">
-        <span className="grid size-6 place-items-center rounded-md bg-primary/15 text-primary">
+        <span className="grid size-6 place-items-center rounded-md border bg-secondary text-foreground">
           <UserRound className="size-3.5" />
         </span>
         You
@@ -49,7 +49,7 @@ function Actor({ actor, agents }: { actor: string; agents: Map<string, { id: str
     );
   return (
     <span className="flex items-center gap-2 text-muted-foreground">
-      <span className="grid size-6 place-items-center rounded-md bg-muted">
+      <span className="grid size-6 place-items-center rounded-md border bg-paper-2">
         <Cpu className="size-3.5" />
       </span>
       {actor === "system" ? "System" : actor}
@@ -133,7 +133,7 @@ export function AuditLog() {
       ) : (
         <div className="max-h-[520px] overflow-auto">
           <table className="w-full caption-bottom text-sm">
-            <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur">
+            <TableHeader className="sticky top-0 z-10 bg-paper-2">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-8 pl-5" />
                 <TableHead>Time</TableHead>
@@ -205,7 +205,7 @@ function AuditRow({
         <TableRow className="bg-muted/30 hover:bg-muted/30">
           <TableCell />
           <TableCell colSpan={4} className="pr-5">
-            <pre className="max-h-48 overflow-auto rounded-lg border bg-background/60 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
+            <pre className="max-h-48 overflow-auto rounded-lg border bg-card p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap">
               {JSON.stringify(row.details, null, 2)}
             </pre>
           </TableCell>

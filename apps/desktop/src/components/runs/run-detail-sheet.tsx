@@ -26,6 +26,7 @@ import { useAgent } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/common";
 import { Orb } from "@/components/aicss/Orb";
+import { DrawCheck, WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { CopyButton } from "@/components/chat/copy-button";
 import { Button } from "@/components/ui/button";
@@ -127,15 +128,15 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <SheetHeader className="gap-3 border-b bg-card/40 p-5 pr-12">
+      <SheetHeader className="gap-3 border-b bg-paper-2 p-5 pr-12">
         <div className="flex items-center gap-3">
-          {agent ? <AgentAvatar agent={agent} size="lg" /> : <Skeleton className="size-12 rounded-2xl" />}
+          {agent ? <AgentAvatar agent={agent} size="lg" /> : <Skeleton className="size-12 rounded-xl" />}
           <div className="min-w-0">
-            <SheetTitle className="truncate text-lg">{agent?.name ?? "Run"}</SheetTitle>
+            <SheetTitle className="truncate text-lg font-medium tracking-[-0.02em]">{agent?.name ?? "Run"}</SheetTitle>
             <SheetDescription className="flex flex-wrap items-center gap-1.5">
               <RunStatusBadge status={status} />
               <TriggerBadge trigger={run.trigger} />
-              <span title={format(new Date(when), "PPpp")}>{formatDistanceToNowStrict(new Date(when), { addSuffix: true })}</span>
+              <span className="tabular-nums" title={format(new Date(when), "PPpp")}>{formatDistanceToNowStrict(new Date(when), { addSuffix: true })}</span>
             </SheetDescription>
           </div>
         </div>
@@ -171,13 +172,14 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glow-border flex items-center gap-3 rounded-2xl bg-card/70 p-4"
+            className="glow-border flex items-center gap-3 rounded-xl border bg-card p-4 shadow-card"
           >
             <Orb variant="S3" size={28} label="Working" />
             <div className="min-w-0 flex-1">
               <div className="text-shimmer truncate text-sm font-medium">{live?.activity ?? "Working…"}</div>
-              <div className="text-xs text-muted-foreground tabular-nums">{elapsed != null ? formatElapsed(elapsed) : "Starting…"} elapsed</div>
+              <div className="font-mono text-xs text-muted-foreground tabular-nums">{elapsed != null ? formatElapsed(elapsed) : "Starting…"} elapsed</div>
             </div>
+            <WorkingTicks count={8} className="shrink-0 text-brand-strong" />
           </motion.div>
         )}
 
@@ -206,7 +208,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
               <button
                 type="button"
                 onClick={() => onOpenRun(run.parentRunId!)}
-                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-muted-foreground shadow-card transition hover:border-foreground/15 hover:text-foreground"
               >
                 <Share2 className="size-3" /> Delegated from another run <ChevronRight className="size-3" />
               </button>
@@ -214,7 +216,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
             {run.routineId && (
               <Link
                 to={`/agents/${run.agentId}/routines`}
-                className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-muted-foreground shadow-card transition hover:border-foreground/15 hover:text-foreground"
               >
                 <CalendarClock className="size-3" /> Started by a routine <ChevronRight className="size-3" />
               </Link>
@@ -227,7 +229,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
         </Block>
 
         {run.error && (
-          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+          <div className="rounded-xl border border-destructive/25 bg-destructive/[0.06] p-4">
             <div className="mb-1.5 flex items-center gap-2 text-sm font-medium text-destructive">
               <TriangleAlert className="size-4" /> Error
             </div>
@@ -236,7 +238,15 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
         )}
 
         {run.result ? (
-          <Block title="Result" actions={<CopyButton text={run.result} label="Copy result" />}>
+          <Block
+            title={
+              <>
+                {status === "succeeded" && <DrawCheck className="size-3.5 text-success" />}
+                Result
+              </>
+            }
+            actions={<CopyButton text={run.result} label="Copy result" />}
+          >
             <div className="max-h-[28rem] overflow-y-auto">
               <Markdown>{run.result}</Markdown>
             </div>
@@ -244,16 +254,16 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
         ) : (
           !running &&
           !run.error && (
-            <p className="rounded-2xl border border-dashed p-4 text-center text-sm text-muted-foreground">This run didn't produce a final answer.</p>
+            <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">This run didn't produce a final answer.</p>
           )
         )}
 
-        <div className="rounded-2xl border bg-card/40">
+        <div className="rounded-xl border bg-card shadow-card">
           <button
             type="button"
             onClick={() => setLogOpen((o) => !o)}
             aria-expanded={logOpen}
-            className="flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-left text-sm font-medium transition hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="flex w-full items-center gap-2 rounded-xl px-4 py-3 text-left text-sm font-medium transition hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <ScrollText className="size-4 text-muted-foreground" />
             Raw log
@@ -278,21 +288,21 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
 
 function Stat({ icon, label, value, hint }: { icon: ReactNode; label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border bg-card/50 p-3" title={hint}>
+    <div className="rounded-lg border bg-card p-3 shadow-card" title={hint}>
       <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground [&_svg]:size-3.5">
         {icon}
         {label}
       </div>
-      <div className="mt-1 truncate text-sm font-semibold tabular-nums">{value}</div>
+      <div className="mt-1 truncate text-sm font-medium tracking-[-0.01em] tabular-nums">{value}</div>
     </div>
   );
 }
 
-function Block({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
+function Block({ title, actions, children }: { title: ReactNode; actions?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border bg-card/40 p-4">
+    <section className="rounded-xl border bg-card p-4 shadow-card">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</h3>
+        <h3 className="eyebrow flex items-center gap-1.5">{title}</h3>
         {actions}
       </div>
       {children}

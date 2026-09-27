@@ -29,21 +29,26 @@ export function LoginPage({ hasPassword }: { hasPassword: boolean }) {
   return (
     <AuthLayout
       badge={<LockKeyhole />}
-      title="Sign in to Godmode"
+      title={
+        <>
+          Sign in to Godmode.
+          <span className="block text-foreground/35">Your coworker is waiting.</span>
+        </>
+      }
       description="This dashboard controls an AI coworker with access to your logins. Sign in to continue."
       footer={
         <span className="inline-flex items-center gap-1.5">
-          <ShieldCheck className="size-3.5 text-success" />
+          <ShieldCheck className="size-3.5 text-brand-strong" />
           Session is stored in an HttpOnly, same-site cookie. Failed attempts are rate limited.
         </span>
       }
     >
       <Tabs value={tab} onValueChange={(v) => setTab(v as "password" | "token")} className="gap-5">
-        <TabsList className="grid h-10 w-full grid-cols-2 rounded-xl">
-          <TabsTrigger value="password" className="rounded-lg">
+        <TabsList className="grid h-9 w-full grid-cols-2 rounded-lg">
+          <TabsTrigger value="password" className="rounded-md">
             <KeyRound /> Password
           </TabsTrigger>
-          <TabsTrigger value="token" className="rounded-lg">
+          <TabsTrigger value="token" className="rounded-md">
             <Terminal /> Access token
           </TabsTrigger>
         </TabsList>
@@ -51,7 +56,7 @@ export function LoginPage({ hasPassword }: { hasPassword: boolean }) {
           {hasPassword ? (
             <PasswordForm />
           ) : (
-            <div className="rounded-xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed bg-paper-2 p-4 text-sm text-muted-foreground">
               No dashboard password has been set yet. Sign in with an access token — you can set a password afterwards in{" "}
               <span className="font-medium text-foreground">Settings → Security</span>.
               <Button variant="secondary" className="mt-3 w-full" onClick={() => setTab("token")}>

@@ -82,8 +82,8 @@ export function ApiKeysTab({ onOpenComposio }: { onOpenComposio: () => void }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start gap-3 rounded-2xl border border-success/20 bg-success/5 p-4">
-        <ShieldCheck className="mt-0.5 size-5 shrink-0 text-success" />
+      <div className="flex items-start gap-3 rounded-xl border border-brand/25 bg-brand-soft p-4">
+        <ShieldCheck className="mt-0.5 size-5 shrink-0 text-brand-strong" />
         <div className="text-sm">
           <p className="font-medium">Encrypted, write-only</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -98,7 +98,7 @@ export function ApiKeysTab({ onOpenComposio }: { onOpenComposio: () => void }) {
       ) : secrets.isLoading ? (
         <div className="space-y-2">
           {KNOWN_KEYS.map((k) => (
-            <Skeleton key={k.key} className="h-[84px] rounded-2xl" />
+            <Skeleton key={k.key} className="h-[84px] rounded-xl" />
           ))}
         </div>
       ) : (
@@ -157,16 +157,16 @@ function KeyRow({ meta, state, onOpenComposio }: { meta: KeyMeta; state: SecretR
   };
 
   return (
-    <div className="rounded-2xl border bg-card/60 p-4 backdrop-blur-sm transition hover:border-primary/30">
+    <div className="rounded-xl border bg-card p-4 shadow-card transition hover:border-foreground/15">
       <div className="flex flex-wrap items-start gap-3.5">
-        <div className={cn("grid size-10 shrink-0 place-items-center rounded-xl", isSet ? "bg-success/15 text-success" : "bg-muted text-muted-foreground")}>
+        <div className={cn("grid size-10 shrink-0 place-items-center rounded-lg border", isSet ? "bg-card text-foreground shadow-card" : "bg-paper-2 text-muted-foreground")}>
           <meta.icon className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold">{meta.label}</span>
+            <span className="text-sm font-medium tracking-[-0.01em]">{meta.label}</span>
             {isSet ? (
-              <Badge className="h-5 gap-1 bg-success/15 text-[10px] text-success">
+              <Badge variant="outline" className="h-5 gap-1 border-brand/25 bg-brand-soft text-[10px] text-brand-strong">
                 <CircleCheck /> Set{state?.updatedAt ? ` · updated ${formatDistanceToNow(new Date(state.updatedAt), { addSuffix: true })}` : ""}
               </Badge>
             ) : (
@@ -185,7 +185,7 @@ function KeyRow({ meta, state, onOpenComposio }: { meta: KeyMeta; state: SecretR
             <button
               type="button"
               onClick={() => void openExternal(meta.link!.href)}
-              className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground"
             >
               Get a key at {meta.link.label} <ExternalLink className="size-3" />
             </button>

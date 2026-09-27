@@ -103,7 +103,7 @@ export function RoutineDialog({
       <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            <div className="grid size-10 place-items-center rounded-xl bg-gradient-brand text-white shadow-md shadow-glow-a/25">
+            <div className="grid size-10 place-items-center rounded-lg border bg-card text-foreground shadow-card">
               <CalendarClock className="size-5" />
             </div>
             <div>
@@ -160,8 +160,8 @@ export function RoutineDialog({
             </div>
           </div>
 
-          <fieldset className="space-y-3 rounded-xl border bg-muted/20 p-4">
-            <legend className="px-1 text-sm font-medium">Schedule</legend>
+          <fieldset className="space-y-3 rounded-xl border bg-paper-2 p-4">
+            <legend className="eyebrow px-1">Schedule</legend>
             <CronBuilder value={draft.cron} onChange={(c) => set("cron", c)} idPrefix="routine-cron" />
             <div className="space-y-1.5">
               <Label htmlFor="routine-tz" className="text-xs text-muted-foreground">
@@ -213,7 +213,6 @@ export function RoutineDialog({
               <Button
                 type="submit"
                 disabled={save.isPending || (touched && invalid)}
-                className="bg-gradient-brand text-white hover:opacity-95"
               >
                 {save.isPending && <Spinner />}
                 {editing ? "Save changes" : "Create routine"}
@@ -240,7 +239,7 @@ function SwitchCard({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl border bg-background/40 p-3">
+    <div className="flex items-start gap-3 rounded-lg border bg-card p-3 shadow-card">
       <div className="min-w-0 flex-1">
         <Label htmlFor={id} className="cursor-pointer text-sm">
           {title}

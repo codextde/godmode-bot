@@ -35,8 +35,8 @@ export function ConfirmDeleteDialog({
     <AlertDialog open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
       <AlertDialogContent className="rounded-2xl">
         <AlertDialogHeader>
-          <AlertDialogMedia className="size-12 rounded-2xl bg-destructive/10 text-destructive">
-            <Trash2 className="size-6" />
+          <AlertDialogMedia className="size-11 rounded-lg bg-destructive/10 text-destructive">
+            <Trash2 className="size-5" />
           </AlertDialogMedia>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>

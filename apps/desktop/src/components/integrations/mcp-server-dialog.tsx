@@ -167,7 +167,7 @@ export function McpServerDialog({
 
   return (
     <Dialog open={!!state} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl sm:max-w-xl">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{editing ? `Edit ${editing.name}` : preset ? `Add ${preset.name}` : "Add an MCP server"}</DialogTitle>
           <DialogDescription>
@@ -177,8 +177,8 @@ export function McpServerDialog({
 
         <form id="mcp-form" onSubmit={submit(false)} className="space-y-5">
           {preset?.note && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-primary/25 bg-primary/5 p-3 text-xs">
-              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div className="flex items-start gap-2.5 rounded-lg border bg-paper-2 p-3 text-xs">
+              <Info className="mt-0.5 size-4 shrink-0 text-foreground" />
               {preset.note}
             </div>
           )}
@@ -206,7 +206,7 @@ export function McpServerDialog({
 
           <div className="space-y-2">
             <Label id="mcp-transport-label">Transport</Label>
-            <div role="radiogroup" aria-labelledby="mcp-transport-label" className="grid grid-cols-3 gap-1 rounded-xl border bg-muted/40 p-1">
+            <div role="radiogroup" aria-labelledby="mcp-transport-label" className="grid grid-cols-3 gap-1 rounded-lg border bg-secondary p-0.5">
               {TRANSPORTS.map((t) => {
                 const active = form.transport === t.id;
                 return (
@@ -217,14 +217,14 @@ export function McpServerDialog({
                     aria-checked={active}
                     onClick={() => set("transport", t.id)}
                     className={cn(
-                      "relative flex h-9 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-colors",
+                      "relative flex h-8 items-center justify-center gap-1.5 rounded-md text-sm font-medium transition-colors",
                       active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     {active && (
                       <motion.span
                         layoutId="mcp-transport"
-                        className="absolute inset-0 rounded-lg border bg-background shadow-sm dark:bg-input/40"
+                        className="absolute inset-0 rounded-md bg-card shadow-card ring-1 ring-border dark:bg-accent"
                         transition={{ type: "spring", stiffness: 420, damping: 34 }}
                       />
                     )}
@@ -323,7 +323,7 @@ export function McpServerDialog({
             <ScopePicker value={form.scope} onChange={(scope) => set("scope", scope)} />
           </div>
 
-          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border bg-card/40 p-3">
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border bg-paper-2 p-3">
             <span>
               <span className="block text-sm font-medium">Enabled</span>
               <span className="block text-xs text-muted-foreground">Disabled servers are kept but not started for agents.</span>

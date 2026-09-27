@@ -86,8 +86,8 @@ export function McpServersTab() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Server className="size-4 text-primary" /> MCP servers
+          <h2 className="flex items-center gap-2 text-[17px] font-medium tracking-[-0.02em]">
+            <Server className="size-4 text-muted-foreground" /> MCP servers
           </h2>
           <p className="mt-0.5 max-w-xl text-xs text-muted-foreground">
             Any Model Context Protocol server — local commands or remote endpoints. Scope them globally, to a workspace, or to one agent.
@@ -117,7 +117,7 @@ export function McpServersTab() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95" onClick={() => openPreset(null)}>
+          <Button onClick={() => openPreset(null)}>
             <Plus /> Add server
           </Button>
         </div>
@@ -128,7 +128,7 @@ export function McpServersTab() {
       ) : servers.isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-[92px] rounded-2xl" />
+            <Skeleton key={i} className="h-[92px] rounded-xl" />
           ))}
         </div>
       ) : list.length === 0 ? (
@@ -147,9 +147,9 @@ export function McpServersTab() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(i, 12) * 0.03 }}
                 onClick={() => openPreset(p)}
-                className="group flex items-start gap-3 rounded-2xl border bg-card/60 p-4 text-left backdrop-blur-sm transition hover:border-primary/30 hover:shadow-lg hover:shadow-glow-a/5"
+                className="group flex items-start gap-3 rounded-xl border bg-card p-4 text-left shadow-card transition hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
-                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary transition group-hover:bg-primary group-hover:text-primary-foreground">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2 text-foreground transition group-hover:bg-card group-hover:shadow-card">
                   <p.icon className="size-4" />
                 </span>
                 <span className="min-w-0">
@@ -173,7 +173,7 @@ export function McpServersTab() {
           )}
           {managed.length > 0 && (
             <div className="space-y-2">
-              <h3 className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              <h3 className="eyebrow flex items-center gap-1.5">
                 <Boxes className="size-3.5" /> Managed by Composio
               </h3>
               <ServerList servers={managed} onToggle={(s, enabled) => toggle.mutate({ id: s.id, enabled })} onTest={setTesting} onDelete={setDeleting} />
@@ -247,31 +247,31 @@ function ServerRow({
   return (
     <div
       className={cn(
-        "group flex items-start gap-3.5 rounded-2xl border bg-card/60 p-4 backdrop-blur-sm transition hover:border-primary/30 hover:shadow-lg hover:shadow-glow-a/5",
+        "group flex items-start gap-3.5 rounded-xl border bg-card p-4 shadow-card transition hover:border-foreground/15 hover:shadow-float",
         !s.enabled && "opacity-70",
       )}
     >
       <div
         className={cn(
-          "grid size-10 shrink-0 place-items-center rounded-xl",
-          composio ? "bg-gradient-brand text-white shadow-md shadow-glow-a/20" : "bg-primary/10 text-primary",
+          "grid size-10 shrink-0 place-items-center rounded-lg border",
+          composio ? "bg-card text-foreground shadow-card" : "bg-paper-2 text-foreground",
         )}
       >
         {composio ? <Boxes className="size-5" /> : <t.icon className="size-5" />}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate font-mono text-sm font-semibold">{s.name}</span>
+          <span className="truncate font-mono text-sm font-medium">{s.name}</span>
           <Badge variant="outline" className="h-5 gap-1 text-[10px] font-normal">
             <t.icon /> {s.transport}
           </Badge>
-          {composio && <Badge className="h-5 bg-primary/15 text-[10px] text-primary">Composio</Badge>}
+          {composio && <Badge variant="secondary" className="h-5 text-[10px]">Composio</Badge>}
         </div>
         {s.description && <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{s.description}</p>}
         {!composio && target && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <p className="mt-1.5 truncate rounded-md bg-muted/50 px-2 py-1 font-mono text-[11.5px] text-muted-foreground">{target}</p>
+              <p className="mt-1.5 truncate rounded-md border bg-paper-2 px-2 py-1 font-mono text-[11.5px] text-muted-foreground">{target}</p>
             </TooltipTrigger>
             <TooltipContent className="max-w-md font-mono text-[11px] break-all">{target}</TooltipContent>
           </Tooltip>

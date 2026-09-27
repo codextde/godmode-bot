@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { InlineCode } from "@/components/onboarding/doctor-checklist";
+import { WorkingTicks } from "@/components/aicss/Motion";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -59,13 +60,13 @@ export function ProfileUseCard() {
   const s = status.data;
 
   return (
-    <section className="rounded-2xl border bg-card/60 p-5 backdrop-blur-sm">
+    <section className={cn("rounded-xl border bg-card p-5 shadow-card", sync.isPending && "glow-border")}>
       <div className="mb-4 flex items-start gap-3">
-        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 text-white shadow-sm">
+        <div className="grid size-9 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card">
           <CloudUpload className="size-[18px]" />
         </div>
         <div>
-          <h2 className="text-sm font-semibold">browser-use Cloud sync</h2>
+          <h2 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">browser-use Cloud sync</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Syncs your local Chrome cookies to a browser-use Cloud profile so cloud agents are logged in too.
           </p>
@@ -79,9 +80,9 @@ export function ProfileUseCard() {
           <Skeleton className="h-9 rounded-lg" />
         </div>
       ) : notAvailable ? (
-        <p className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">Not available in this version of the core.</p>
+        <p className="rounded-lg border border-dashed bg-paper-2/60 p-4 text-center text-sm text-muted-foreground">Not available in this version of the core.</p>
       ) : status.isError || !s ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+        <div className="rounded-lg border border-destructive/25 bg-destructive/[0.05] p-4 text-sm">
           <p className="font-medium text-destructive">Couldn't check profile-use</p>
           <p className="mt-1 text-muted-foreground">{errorMessage(status.error)}</p>
           <Button size="sm" variant="outline" className="mt-3" onClick={() => status.refetch()}>
@@ -90,7 +91,7 @@ export function ProfileUseCard() {
         </div>
       ) : (
         <div className="space-y-4">
-          <ul className="divide-y rounded-xl border bg-background/40">
+          <ul className="divide-y rounded-lg border bg-paper-2">
             <StatusRow
               ok={s.installed}
               label="profile-use"
@@ -161,7 +162,12 @@ export function ProfileUseCard() {
               {sync.isPending ? "Syncing…" : "Sync to cloud"}
             </Button>
           </div>
-          {sync.isPending && <p className="text-xs text-muted-foreground">This can take a few minutes — you can keep working meanwhile.</p>}
+          {sync.isPending && (
+            <p className="flex items-center gap-2 text-xs">
+              <WorkingTicks count={6} className="h-3 text-brand-strong" />
+              <span className="text-shimmer font-medium">This can take a few minutes — you can keep working meanwhile.</span>
+            </p>
+          )}
 
           {log && (
             <div>
@@ -181,7 +187,7 @@ export function ProfileUseCard() {
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
-                    className="mt-2 max-h-56 overflow-auto rounded-lg border bg-black/80 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-zinc-200"
+                    className="mt-2 max-h-56 overflow-auto rounded-lg border bg-paper-2 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground"
                   >
                     {log.output || "(no output)"}
                   </motion.pre>

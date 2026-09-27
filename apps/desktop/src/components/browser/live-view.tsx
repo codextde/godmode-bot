@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { Globe, Hand, Lock, Maximize2, Minimize2, MousePointerClick, Play, RotateCw, Sparkles } from "lucide-react";
+import { Globe, Hand, Lock, Maximize2, Minimize2, MousePointerClick, Play, RotateCw } from "lucide-react";
 import type { BrowserProfile } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { LiveDot } from "@/components/aicss/Motion";
+import { Orb } from "@/components/aicss/Orb";
 import { Favicon } from "@/components/vault/favicon";
 import { domainFromUrl, normalizeUrl, toastApiError } from "@/components/vault/vault-utils";
 import { useNow } from "@/components/vault/use-now";
@@ -246,7 +248,7 @@ export function LiveView({
         {expanded && (
           <motion.div
             key="backdrop"
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-40 bg-[#1c1b19]/35 dark:bg-black/60"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -258,23 +260,23 @@ export function LiveView({
       <motion.div
         layout
         transition={{ type: "spring", stiffness: 260, damping: 30 }}
-        className={cn("rounded-2xl", expanded ? "fixed inset-4 z-50 flex flex-col md:inset-8" : "relative")}
+        className={cn("rounded-xl", expanded ? "fixed inset-4 z-50 flex flex-col md:inset-8" : "relative")}
       >
-        <div className={cn("rounded-2xl", takeover && "glow-border", expanded && "flex min-h-0 flex-1 flex-col")}>
+        <div className={cn("rounded-xl", takeover && "glow-border", expanded && "flex min-h-0 flex-1 flex-col")}>
         <div
           className={cn(
-            "flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-card/80 shadow-xl shadow-black/10 backdrop-blur-xl",
+            "flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-float",
             expanded && "h-full",
           )}
         >
           {/* Tab strip */}
-          <div className="flex items-center gap-3 border-b bg-muted/40 px-3 pt-2">
+          <div className="flex items-center gap-3 border-b bg-paper-2 px-3 pt-2">
             <div className="flex shrink-0 gap-1.5 pb-2" aria-hidden>
-              <span className="size-3 rounded-full bg-[#ff5f57]" />
-              <span className="size-3 rounded-full bg-[#febc2e]" />
-              <span className="size-3 rounded-full bg-[#28c840]" />
+              <span className="size-2.5 rounded-full bg-foreground/15" />
+              <span className="size-2.5 rounded-full bg-foreground/15" />
+              <span className="size-2.5 rounded-full bg-foreground/15" />
             </div>
-            <div className="-mb-px flex min-w-0 max-w-72 items-center gap-2 rounded-t-lg border border-b-0 bg-card px-3 py-1.5 text-xs">
+            <div className="-mb-px flex min-w-0 max-w-72 items-center gap-2 rounded-t-md border border-b-0 bg-card px-3 py-1.5 text-xs">
               {domain ? <Favicon domain={domain} name={frame?.title || domain} size="sm" className="size-4 rounded-sm" /> : <Globe className="size-3.5 text-muted-foreground" />}
               <span className="truncate font-medium">{running ? frame?.title || domain || "New tab" : profile.name}</span>
             </div>
@@ -282,12 +284,12 @@ export function LiveView({
               {running && (
                 <span
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
-                    live ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground",
+                    "inline-flex items-center gap-1.5 rounded-[5px] border px-1.5 py-0.5 text-[11px] font-medium",
+                    live ? "border-brand/25 bg-brand-soft text-brand-strong" : "bg-card text-muted-foreground",
                   )}
                   title={frame ? `${frame.width}×${frame.height}` : undefined}
                 >
-                  <span className={cn("size-1.5 rounded-full", live ? "animate-pulse bg-destructive" : "bg-muted-foreground/60")} />
+                  <LiveDot live={live} />
                   {live ? "Live" : "Idle"}
                 </span>
               )}
@@ -320,7 +322,7 @@ export function LiveView({
             </Tooltip>
             <form onSubmit={submitUrl} className="relative min-w-0 flex-1">
               <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">
-                {navigate.isPending ? <Spinner className="size-3.5" /> : secure ? <Lock className="size-3.5 text-success" /> : <Globe className="size-3.5" />}
+                {navigate.isPending ? <Spinner className="size-3.5" /> : secure ? <Lock className="size-3.5 text-brand-strong" /> : <Globe className="size-3.5" />}
               </span>
               <input
                 aria-label="Address"
@@ -343,13 +345,13 @@ export function LiveView({
                 spellCheck={false}
                 autoCapitalize="off"
                 autoCorrect="off"
-                className="h-8 w-full rounded-full border bg-muted/50 pr-3 pl-8 font-mono text-xs outline-none transition focus:border-ring focus:bg-background focus:ring-[3px] focus:ring-ring/40 disabled:opacity-60"
+                className="h-8 w-full rounded-md border bg-paper-2 pr-3 pl-8 font-mono text-xs outline-none transition focus:border-ring focus:bg-card focus:ring-[3px] focus:ring-ring/40 disabled:opacity-60"
               />
             </form>
             <label
               className={cn(
-                "flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-full border px-3 text-xs font-medium transition select-none",
-                takeover ? "border-primary/50 bg-primary/10 text-primary shadow-[0_0_24px_-6px] shadow-glow-a/60" : "text-muted-foreground hover:text-foreground",
+                "flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-md border px-3 text-xs font-medium transition select-none",
+                takeover ? "border-foreground/40 bg-secondary text-foreground" : "bg-card text-muted-foreground hover:text-foreground",
                 !running && "pointer-events-none opacity-50",
               )}
             >
@@ -364,10 +366,16 @@ export function LiveView({
             <div
               className={cn(
                 "flex items-center gap-2 border-b px-3 py-1.5 text-xs transition-colors",
-                takeover ? "bg-primary/10 text-primary" : "bg-muted/30 text-muted-foreground",
+                takeover ? "bg-secondary text-foreground" : "bg-paper-2 text-muted-foreground",
               )}
             >
-              {takeover ? <MousePointerClick className="size-3.5 shrink-0" /> : <Sparkles className="size-3.5 shrink-0" />}
+              {takeover ? (
+                <MousePointerClick className="size-3.5 shrink-0" />
+              ) : (
+                <span className="grid size-3.5 shrink-0 place-items-center">
+                  <LiveDot live={live} />
+                </span>
+              )}
               <span className="min-w-0 flex-1">
                 {takeover
                   ? "You're in control — clicks, scrolling and typing go to the page. Turn off Take over when you're done."
@@ -399,7 +407,7 @@ export function LiveView({
               flushText();
             }}
             className={cn(
-              "group/viewport relative w-full overflow-hidden bg-neutral-950 outline-none",
+              "group/viewport relative w-full overflow-hidden bg-secondary outline-none",
               expanded ? "min-h-0 flex-1" : "max-h-[68vh]",
               takeover && "cursor-crosshair",
             )}
@@ -420,7 +428,7 @@ export function LiveView({
                   <div className="absolute inset-0 grid place-items-center bg-black/0 opacity-0 transition group-hover/viewport:bg-black/25 group-hover/viewport:opacity-100">
                     <Button
                       size="sm"
-                      className="rounded-full bg-gradient-brand text-white shadow-lg shadow-glow-a/30 hover:opacity-95"
+                      className="shadow-float"
                       onClick={(e) => {
                         e.stopPropagation();
                         setTakeover(true);
@@ -432,14 +440,14 @@ export function LiveView({
                 )}
                 {takeover && !focused && (
                   <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-                    <span className="rounded-full bg-black/70 px-3 py-1 text-[11px] text-white backdrop-blur">Click the page to send keyboard input</span>
+                    <span className="glass rounded-md px-3 py-1 text-[11px] text-muted-foreground">Click the page to send keyboard input</span>
                   </div>
                 )}
                 <AnimatePresence>
                   {ripples.map((r) => (
                     <motion.span
                       key={r.id}
-                      className="pointer-events-none absolute size-10 rounded-full border-2 border-primary bg-primary/25"
+                      className="pointer-events-none absolute size-10 rounded-full border-2 border-brand bg-brand/20"
                       style={{ left: r.x - 20, top: r.y - 20 }}
                       initial={{ scale: 0.3, opacity: 0.9 }}
                       animate={{ scale: 1.4, opacity: 0 }}
@@ -463,16 +471,16 @@ export function LiveView({
 function NotRunning({ profileName, onLaunch, launching }: { profileName: string; onLaunch: () => void; launching: boolean }) {
   return (
     <div className="absolute inset-0 grid place-items-center overflow-hidden bg-background">
-      <div className="bg-grid absolute inset-0 opacity-60 [mask-image:radial-gradient(ellipse_at_center,black,transparent_70%)]" aria-hidden />
+      <div className="bg-dots absolute inset-0 opacity-70 [mask-image:radial-gradient(ellipse_at_center,black,transparent_70%)]" aria-hidden />
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="relative flex max-w-sm flex-col items-center px-6 text-center">
-        <div className="mb-4 grid size-12 place-items-center rounded-2xl bg-gradient-brand text-white shadow-lg shadow-glow-a/25">
+        <div className="mb-4 grid size-12 place-items-center rounded-lg border bg-card text-foreground shadow-card">
           <Globe className="size-6" />
         </div>
-        <h3 className="text-base font-semibold">{profileName} isn't running</h3>
+        <h3 className="text-base font-medium tracking-[-0.01em]">{profileName} isn't running</h3>
         <p className="mt-1.5 text-sm text-muted-foreground">
           Agents start it automatically when they need the web. Launch it now to watch, log in manually or check your imported sessions.
         </p>
-        <Button className="mt-5 bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95" onClick={onLaunch} disabled={launching}>
+        <Button className="mt-5" onClick={onLaunch} disabled={launching}>
           {launching ? <Spinner /> : <Play />} Launch browser
         </Button>
       </motion.div>
@@ -482,15 +490,12 @@ function NotRunning({ profileName, onLaunch, launching }: { profileName: string;
 
 function WaitingForFrame({ waitedLong }: { waitedLong: boolean }) {
   return (
-    <div className="absolute inset-0 grid place-items-center bg-neutral-950 text-neutral-300">
+    <div className="absolute inset-0 grid place-items-center bg-paper-2 text-muted-foreground">
       <div className="flex max-w-xs flex-col items-center gap-3 px-6 text-center">
-        <div className="relative size-10">
-          <span className="absolute inset-0 animate-ping rounded-full bg-glow-a/30" />
-          <span className="absolute inset-2 rounded-full bg-gradient-brand" />
-        </div>
+        <Orb variant="C3" size={32} label="Waiting for the first frame" />
         <p className="text-shimmer text-sm font-medium">Waiting for the first frame…</p>
         {waitedLong && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-neutral-400">
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-muted-foreground">
             Still nothing? Live view may be turned off in Settings → Browser, or the browser runs without a visible page yet.
           </motion.p>
         )}

@@ -55,10 +55,10 @@ export function RunRow({
       onClick={() => onSelect?.(run)}
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition",
+        "group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition",
         "hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-        selected && "bg-accent/60",
-        running && "bg-primary/5",
+        selected && "bg-accent",
+        running && !selected && "bg-brand-soft/40",
         className,
       )}
     >
@@ -66,7 +66,7 @@ export function RunRow({
       {showAgent && agent && <AgentAvatar agent={agent} size="sm" />}
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          {showAgent && <span className="truncate text-sm font-medium">{agent?.name ?? "Unknown agent"}</span>}
+          {showAgent && <span className="truncate text-sm font-medium tracking-[-0.01em]">{agent?.name ?? "Unknown agent"}</span>}
           <TriggerBadge trigger={run.trigger} />
         </div>
         <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
@@ -75,13 +75,13 @@ export function RunRow({
       </div>
       <div className="hidden shrink-0 items-center gap-4 text-xs text-muted-foreground tabular-nums md:flex">
         <span className="w-16 text-right" title="Duration">
-          {elapsed != null ? <span className="text-primary">{formatElapsed(elapsed)}</span> : formatDuration(run.durationMs)}
+          {elapsed != null ? <span className="font-mono text-brand-strong">{formatElapsed(elapsed)}</span> : formatDuration(run.durationMs)}
         </span>
         <span className="w-14 text-right" title="Cost">
           {formatCost(run.costUsd)}
         </span>
       </div>
-      <span className="w-20 shrink-0 text-right text-xs text-muted-foreground" title={new Date(when).toLocaleString()}>
+      <span className="w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums" title={new Date(when).toLocaleString()}>
         {formatDistanceToNowStrict(new Date(when), { addSuffix: true })}
       </span>
     </button>

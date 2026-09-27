@@ -79,14 +79,14 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
         }
       />
       <PageBody className="space-y-10">
-        <section className="relative overflow-hidden rounded-3xl border bg-card/50 p-6 sm:p-8">
+        <section className="relative overflow-hidden rounded-2xl border bg-paper-2 p-6 sm:p-8">
           <Backdrop className="opacity-60" />
           <div className="relative mx-auto max-w-3xl">
             <div className="mb-4 flex items-center gap-2 text-sm font-medium">
-              <span className="grid size-7 place-items-center rounded-lg bg-gradient-brand text-white shadow-md shadow-glow-a/30">
+              <span className="grid size-7 place-items-center rounded-md border bg-card text-foreground shadow-card">
                 <Wand2 className="size-4" />
               </span>
-              <span className="text-gradient text-base font-semibold">Describe it</span>
+              <span className="text-base font-medium tracking-[-0.01em]">Describe it</span>
               <span className="text-muted-foreground">— Godmode sets it up for you</span>
             </div>
             <form
@@ -94,7 +94,11 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
                 e.preventDefault();
                 if (canDescribe) describe.mutate();
               }}
-              className={cn("glass rounded-2xl p-2 shadow-xl shadow-black/5 transition", (focused || describe.isPending) && "glow-border")}
+              className={cn(
+                "rounded-xl border bg-card p-2 shadow-card transition",
+                focused && "border-foreground/20 shadow-float",
+                describe.isPending && "glow-border",
+              )}
             >
               <textarea
                 value={description}
@@ -120,7 +124,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
                 <Button
                   type="submit"
                   disabled={!canDescribe}
-                  className="ml-auto bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95"
+                  className="ml-auto"
                 >
                   {describe.isPending ? <Spinner /> : <Sparkles />}
                   Create with Godmode
@@ -133,7 +137,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
                   key={ex}
                   type="button"
                   onClick={() => setDescription(ex)}
-                  className="rounded-full border bg-background/50 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur transition hover:border-primary/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="rounded-md border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   {ex}
                 </button>
@@ -145,7 +149,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
         <section>
           <div className="mb-4 flex items-end justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">Or pick a starting point</h2>
+              <h2 className="text-lg font-medium tracking-[-0.02em]">Or pick a starting point</h2>
               <p className="text-sm text-muted-foreground">Templates come with instructions and, where it makes sense, a schedule.</p>
             </div>
           </div>
@@ -155,21 +159,21 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
               onClick={() => onPick("scratch")}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="group flex min-h-44 flex-col items-start justify-between rounded-2xl border border-dashed bg-card/30 p-5 text-left transition hover:border-primary/50 hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+              className="group flex min-h-44 flex-col items-start justify-between rounded-xl border border-dashed p-5 text-left transition hover:border-foreground/25 hover:bg-card focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
-              <span className="grid size-12 place-items-center rounded-2xl border bg-background/70 transition group-hover:scale-105">
-                <Plus className="size-6" />
+              <span className="grid size-10 place-items-center rounded-lg border bg-card text-foreground shadow-card">
+                <Plus className="size-5" />
               </span>
               <span>
-                <span className="block font-semibold">Start from scratch</span>
+                <span className="block font-medium tracking-[-0.01em]">Start from scratch</span>
                 <span className="mt-1 block text-sm text-muted-foreground">Blank agent — you write the instructions.</span>
               </span>
             </motion.button>
 
             {templates.isLoading &&
               Array.from({ length: 5 }, (_, i) => (
-                <div key={i} className="min-h-44 rounded-2xl border bg-card/40 p-5">
-                  <Skeleton className="size-12 rounded-2xl" />
+                <div key={i} className="min-h-44 rounded-xl border bg-card p-5 shadow-card">
+                  <Skeleton className="size-12 rounded-xl" />
                   <Skeleton className="mt-4 h-4 w-40" />
                   <Skeleton className="mt-2 h-3 w-full" />
                   <Skeleton className="mt-1.5 h-3 w-2/3" />
@@ -197,13 +201,13 @@ function TemplateCard({ template, index, onPick }: { template: AgentTemplate; in
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index + 1, 10) * 0.04 }}
-      className="group flex min-h-44 flex-col rounded-2xl border bg-card/60 p-5 text-left backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-foreground/15 hover:shadow-xl hover:shadow-black/5 focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none dark:hover:shadow-black/30"
+      className="group flex min-h-44 flex-col rounded-xl border bg-card p-5 text-left shadow-card transition hover:border-foreground/15 hover:shadow-float focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
     >
-      <AgentAvatar agent={{ avatar: template.avatar, color: template.color }} size="lg" className="transition group-hover:scale-105" />
-      <span className="mt-4 block font-semibold">{template.name}</span>
+      <AgentAvatar agent={{ avatar: template.avatar, color: template.color }} size="lg" />
+      <span className="mt-4 block font-medium tracking-[-0.01em]">{template.name}</span>
       <span className="mt-1 line-clamp-3 block flex-1 text-sm text-muted-foreground">{template.description}</span>
       {template.routine && (
-        <span className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+        <span className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
           <CalendarClock className="size-3 shrink-0" />
           <span className="truncate">{cronToHuman(template.routine.cron)}</span>
         </span>
@@ -273,8 +277,8 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
     return (
       <PageBody className="space-y-4 pt-8">
         <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-64 w-full rounded-2xl" />
-        <Skeleton className="h-48 w-full rounded-2xl" />
+        <Skeleton className="h-64 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
       </PageBody>
     );
   }

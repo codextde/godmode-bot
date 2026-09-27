@@ -1,6 +1,7 @@
 import type { RunStatus, RunTrigger } from "@godmode/shared";
 import { MODEL_OPTIONS } from "@godmode/shared";
-import { Ban, CalendarClock, CheckCircle2, Clock3, Hand, Loader2, MessageSquare, Plug, Share2, XCircle } from "lucide-react";
+import { Ban, CalendarClock, CheckCircle2, Clock3, Hand, MessageSquare, Plug, Share2, XCircle } from "lucide-react";
+import { Orb } from "@/components/aicss/Orb";
 import { cn } from "@/lib/utils";
 
 /** "850ms", "12s", "3m 04s", "1h 12m" */
@@ -46,11 +47,11 @@ export function modelLabel(id: string | null | undefined): string {
 }
 
 const STATUS_META: Record<RunStatus, { label: string; className: string; dot: string }> = {
-  queued: { label: "Queued", className: "bg-muted text-muted-foreground", dot: "bg-muted-foreground/60" },
-  running: { label: "Running", className: "bg-primary/12 text-primary", dot: "bg-primary animate-pulse" },
-  succeeded: { label: "Succeeded", className: "bg-success/12 text-success", dot: "bg-success" },
-  failed: { label: "Failed", className: "bg-destructive/12 text-destructive", dot: "bg-destructive" },
-  cancelled: { label: "Cancelled", className: "bg-muted text-muted-foreground", dot: "bg-muted-foreground/60" },
+  queued: { label: "Queued", className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
+  running: { label: "Running", className: "border-brand/25 bg-brand-soft text-brand-strong", dot: "bg-brand animate-live-dot" },
+  succeeded: { label: "Succeeded", className: "border-success/20 bg-success/[0.08] text-success", dot: "bg-success" },
+  failed: { label: "Failed", className: "border-destructive/20 bg-destructive/[0.06] text-destructive", dot: "bg-destructive" },
+  cancelled: { label: "Cancelled", className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
 };
 
 export function runStatusLabel(status: RunStatus): string {
@@ -61,19 +62,23 @@ export function runStatusLabel(status: RunStatus): string {
 export function RunStatusBadge({ status, className }: { status: RunStatus; className?: string }) {
   const meta = STATUS_META[status] ?? STATUS_META.queued;
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", meta.className, className)}>
+    <span className={cn("inline-flex items-center gap-1.5 rounded-[5px] border px-2 py-0.5 text-[11px] font-medium", meta.className, className)}>
       <span className={cn("size-1.5 rounded-full", meta.dot)} />
       {meta.label}
     </span>
   );
 }
 
-/** Icon-only status (running spins). */
+/** Icon-only status (running shows the working orb). */
 export function RunStatusIcon({ status, className }: { status: RunStatus; className?: string }) {
   const cls = cn("size-4 shrink-0", className);
   switch (status) {
     case "running":
-      return <Loader2 className={cn(cls, "animate-spin text-primary")} aria-label="Running" />;
+      return (
+        <span className={cn(cls, "grid place-items-center")}>
+          <Orb variant="S3" size={16} label="Running" />
+        </span>
+      );
     case "queued":
       return <Clock3 className={cn(cls, "text-muted-foreground")} aria-label="Queued" />;
     case "succeeded":
@@ -99,7 +104,7 @@ export function TriggerBadge({ trigger, className }: { trigger: RunTrigger; clas
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border bg-background/40 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground",
+        "inline-flex items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground",
         className,
       )}
     >

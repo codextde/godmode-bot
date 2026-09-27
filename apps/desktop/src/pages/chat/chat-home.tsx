@@ -36,9 +36,13 @@ const SUGGESTIONS = [
 function plainPreview(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ")
-    .replace(/^\s*\|?\s*:?-{3,}.*$/gm, " ")
-    .replace(/[|*_`#>]+/g, " ")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/(\s*\|?\s*:?-{3,}:?)+/g, " ")
+    .replace(/(^|\s)#{1,6}\s+/g, "$1")
+    .replace(/(\*\*|__|`)/g, "")
+    .replace(/(\s*\|\s*)+/g, " · ")
     .replace(/\s+/g, " ")
+    .replace(/^[\s·]+|[\s·]+$/g, "")
     .trim();
 }
 
@@ -123,8 +127,8 @@ export default function ChatHome() {
         </motion.div>
         <motion.h1 {...fade(0.05)} className="heading-display mt-6 text-[40px] sm:text-[52px]">
           {greeting(now)}
-          {userName ? `, ${userName}` : ""}.{" "}
-          <span className="text-foreground/35">What should we get done today?</span>
+          {userName ? `, ${userName}` : ""}.
+          <span className="block text-foreground/35">What should we get done?</span>
         </motion.h1>
 
         <motion.div {...fade(0.12)} className="mt-9 w-full text-left">

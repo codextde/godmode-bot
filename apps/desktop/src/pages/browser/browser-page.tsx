@@ -81,7 +81,7 @@ export default function BrowserPage() {
             title="No browser profiles yet"
             description="Create a profile to give your agents a browser. The core normally creates a default one on start."
             action={
-              <Button className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95" onClick={() => setCreateOpen(true)}>
+              <Button onClick={() => setCreateOpen(true)}>
                 <Plus /> Create profile
               </Button>
             }
@@ -89,14 +89,14 @@ export default function BrowserPage() {
         ) : (
           <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
             <aside className="space-y-3">
-              <h2 className="px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">Profiles</h2>
+              <h2 className="eyebrow px-1">Profiles</h2>
               <ProfileList profiles={profiles} isLoading={profilesQuery.isLoading} selectedId={selected?.id ?? null} onSelect={select} actions={actions} />
             </aside>
             <div className="min-w-0 space-y-6">
               {selected ? (
                 <LiveView profile={selected} onLaunch={() => actions.launch.mutate(selected)} launching={launching} />
               ) : (
-                <Skeleton className="aspect-[16/10] w-full rounded-2xl" />
+                <Skeleton className="aspect-[16/10] w-full rounded-xl" />
               )}
               <div className="grid gap-6 2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                 <ImportSessionsCard profiles={profiles} targetId={selected?.id ?? null} onTargetChange={select} />

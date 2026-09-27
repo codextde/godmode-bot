@@ -31,38 +31,40 @@ export function WelcomeStep({ userName, onUserName, onNext }: { userName: string
     onNext();
   };
   return (
-    <StepCard>
-      <form onSubmit={submit}>
-        <div className="flex flex-col items-start">
-          <motion.div initial={{ scale: 0.6, opacity: 0, rotate: -12 }} animate={{ scale: 1, opacity: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 220, damping: 16 }}>
-            <Logo className="size-14 drop-shadow-[0_12px_40px_rgba(139,92,246,0.5)]" />
-          </motion.div>
-          <h1 className="mt-6 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Meet your <span className="text-gradient">AI coworker</span>
-          </h1>
-          <p className="mt-3 max-w-lg text-[15px] leading-relaxed text-muted-foreground">
-            Godmode turns Claude into a teammate that can sign in, browse and get real work done across your tools — while you stay in
-            control of every secret.
-          </p>
-        </div>
+    <form onSubmit={submit}>
+      <div className="mb-8 flex flex-col items-start">
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}>
+          <Logo className="size-11" />
+        </motion.div>
+        <p className="eyebrow mt-7">Setup · about a minute</p>
+        <h1 className="heading-display mt-3 text-[40px] sm:text-[48px]">
+          Welcome to Godmode.
+          <span className="block text-foreground/35">Your AI coworker, set up in a minute.</span>
+        </h1>
+        <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground">
+          Godmode turns Claude into a teammate that can sign in, browse and get real work done across your tools — while you stay in
+          control of every secret.
+        </p>
+      </div>
 
-        <div className="mt-8 grid gap-3 sm:grid-cols-3">
+      <StepCard>
+        <div className="grid gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-3">
           {FEATURES.map((f, i) => (
             <motion.div
               key={f.title}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 + i * 0.08 }}
-              className="rounded-2xl border bg-card/60 p-4"
+              transition={{ delay: 0.1 + i * 0.06 }}
+              className="bg-paper-2 p-4"
             >
-              <div className="mb-3 grid size-9 place-items-center rounded-xl bg-primary/10 text-primary [&_svg]:size-[18px]">{f.icon}</div>
-              <p className="text-sm font-medium">{f.title}</p>
+              <div className="mb-3 grid size-8 place-items-center rounded-lg border bg-card text-foreground shadow-card [&_svg]:size-4">{f.icon}</div>
+              <p className="text-sm font-medium tracking-[-0.01em]">{f.title}</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{f.body}</p>
             </motion.div>
           ))}
         </div>
 
-        <div className="mt-8 space-y-2">
+        <div className="mt-7 space-y-2">
           <Label htmlFor="onboarding-name">What should your coworker call you?</Label>
           <Input
             id="onboarding-name"
@@ -71,7 +73,7 @@ export function WelcomeStep({ userName, onUserName, onNext }: { userName: string
             value={userName}
             onChange={(e) => onUserName(e.target.value)}
             placeholder="Your first name"
-            className="h-11 text-base"
+            className="h-10 text-[15px]"
             maxLength={60}
           />
         </div>
@@ -81,7 +83,7 @@ export function WelcomeStep({ userName, onUserName, onNext }: { userName: string
             {userName.trim() ? `Let's go, ${userName.trim().split(/\s+/)[0]}` : "Get started"}
           </SubmitButton>
         </StepFooter>
-      </form>
-    </StepCard>
+      </StepCard>
+    </form>
   );
 }

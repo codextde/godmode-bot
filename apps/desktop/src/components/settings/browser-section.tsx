@@ -81,7 +81,7 @@ export function BrowserSection({ settings }: { settings: Settings }) {
           htmlFor="browser-use-cmd"
           description={
             <>
-              Custom command for the browser tools server. Default: <code className="rounded bg-muted px-1 font-mono text-[11px]">uvx browser-use --mcp</code>
+              Custom command for the browser tools server. Default: <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">uvx browser-use --mcp</code>
             </>
           }
         >

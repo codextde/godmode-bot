@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { DrawCheck } from "@/components/aicss/Motion";
 import { api } from "@/lib/api";
 import { isOtpUri, parseOtpUri } from "@/lib/qr";
 import { qk } from "@/lib/queryKeys";
@@ -139,7 +140,7 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
   return (
     <div className="flex max-h-[min(90vh,860px)] flex-col">
       <div className="flex items-start gap-3.5 px-6 pt-6 pb-4">
-        <div className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-brand text-white shadow-lg shadow-glow-a/25">
+        <div className="grid size-11 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card">
           <ScanQrCode className="size-5" />
         </div>
         <div className="min-w-0 pr-8">
@@ -155,11 +156,11 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
           <ImportResultView result={result} />
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-muted/30 px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-paper-2 px-3 py-2.5">
               <Label htmlFor="totp-import-scope" className="shrink-0 text-xs text-muted-foreground">
                 Save to
               </Label>
-              <WorkspaceSelect id="totp-import-scope" value={workspaceId} onChange={setWorkspaceId} className="h-8 w-56 bg-background/60" />
+              <WorkspaceSelect id="totp-import-scope" value={workspaceId} onChange={setWorkspaceId} className="h-8 w-56 bg-card" />
               <span className="text-[11px] text-muted-foreground">{workspaceId ? "Only agents in this workspace can use them." : "Agents in every workspace can use them."}</span>
             </div>
 
@@ -205,9 +206,9 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
       </div>
 
       {(result || tab !== "manual") && (
-        <div className="flex flex-col-reverse gap-3 border-t bg-muted/30 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col-reverse gap-3 border-t bg-paper-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Lock className="size-3.5 shrink-0" /> QR codes are decoded on this device · secrets go straight into your encrypted vault
+            <Lock className="size-3.5 shrink-0 text-brand-strong" /> QR codes are decoded on this device · secrets go straight into your encrypted vault
           </p>
           <div className="flex justify-end gap-2">
             {result ? (
@@ -248,10 +249,10 @@ function GoogleAuthenticatorGuide({ hasCodes }: { hasCodes: boolean }) {
     "Screenshot every QR code (swipe to the next one) and drop the screenshots here — or point the Camera tab at them.",
   ];
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="rounded-xl border bg-card/50">
+    <Collapsible open={open} onOpenChange={setOpen} className="rounded-xl border bg-card shadow-card">
       <CollapsibleTrigger asChild>
         <button type="button" className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left text-sm font-medium">
-          <Smartphone className="size-4 text-primary" />
+          <Smartphone className="size-4 text-muted-foreground" />
           <span className="flex-1">Moving from Google Authenticator?</span>
           <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
         </button>
@@ -260,7 +261,7 @@ function GoogleAuthenticatorGuide({ hasCodes }: { hasCodes: boolean }) {
         <ol className="space-y-2.5 px-3.5 pb-3.5">
           {steps.map((s, i) => (
             <li key={i} className="flex gap-3 text-sm">
-              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/12 text-[11px] font-semibold text-primary">{i + 1}</span>
+              <span className="grid size-5 shrink-0 place-items-center rounded-[5px] border bg-secondary font-mono text-[11px] font-medium text-foreground tabular-nums">{i + 1}</span>
               <span className="text-foreground/85">{s}</span>
             </li>
           ))}
@@ -287,17 +288,17 @@ function ImportResultView({ result }: { result: TotpImportResult }) {
     <div className="space-y-5">
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center pt-2 text-center">
         <motion.div
-          initial={{ scale: 0.4, rotate: -20 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 260, damping: 14 }}
+          initial={{ scale: 0.85, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 22 }}
           className={cn(
-            "grid size-14 place-items-center rounded-full text-white shadow-lg",
-            ok ? "bg-success shadow-success/30" : "bg-warning shadow-warning/30",
+            "grid size-12 place-items-center rounded-xl border shadow-card",
+            ok ? "border-success/25 bg-success/[0.08] text-success" : "border-warning/30 bg-warning/[0.08] text-warning",
           )}
         >
-          {ok ? <CircleCheck className="size-7" /> : <TriangleAlert className="size-7" />}
+          {ok ? <DrawCheck className="size-6" /> : <TriangleAlert className="size-6" />}
         </motion.div>
-        <h3 className="mt-3 text-base font-semibold">
+        <h3 className="mt-3 text-base font-medium tracking-[-0.01em]">
           {ok ? `Imported ${result.imported.length} ${result.imported.length === 1 ? "account" : "accounts"}` : "Nothing was imported"}
         </h3>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
@@ -306,7 +307,7 @@ function ImportResultView({ result }: { result: TotpImportResult }) {
       </motion.div>
 
       {ok && (
-        <div className="divide-y overflow-hidden rounded-xl border bg-card/60">
+        <div className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
           {result.imported.map((t, i) => (
             <motion.div
               key={t.id}
@@ -328,8 +329,8 @@ function ImportResultView({ result }: { result: TotpImportResult }) {
 
       {result.skipped.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Skipped ({result.skipped.length})</p>
-          <div className="divide-y overflow-hidden rounded-xl border border-warning/25 bg-warning/5">
+          <p className="eyebrow">Skipped ({result.skipped.length})</p>
+          <div className="divide-y overflow-hidden rounded-xl border border-warning/25 bg-warning/[0.05]">
             {result.skipped.map((s, i) => (
               <div key={`${s.uri}-${i}`} className="flex items-start gap-3 px-3 py-2.5">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />

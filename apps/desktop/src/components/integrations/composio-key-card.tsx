@@ -55,7 +55,7 @@ export function ComposioKeyCard({ status, loading }: { status: ComposioStatus | 
     if (key.trim()) save.mutate(key.trim());
   };
 
-  if (loading) return <Skeleton className="h-24 rounded-2xl" />;
+  if (loading) return <Skeleton className="h-24 rounded-xl" />;
 
   const configured = !!status?.configured;
   const invalid = configured && status?.valid === false;
@@ -64,25 +64,25 @@ export function ComposioKeyCard({ status, loading }: { status: ComposioStatus | 
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-2xl border bg-card/60 p-5 backdrop-blur-sm",
+        "relative overflow-hidden rounded-xl border bg-card p-5 shadow-card",
         invalid && "border-destructive/30",
-        configured && !invalid && "border-success/25",
+        configured && !invalid && "border-brand/25",
       )}
       aria-label="Composio API key"
     >
       <div className="flex flex-wrap items-start gap-4">
         <div
           className={cn(
-            "grid size-10 shrink-0 place-items-center rounded-xl",
-            !configured && "bg-gradient-brand text-white shadow-md shadow-glow-a/25",
-            configured && !invalid && "bg-success/15 text-success",
-            invalid && "bg-destructive/15 text-destructive",
+            "grid size-10 shrink-0 place-items-center rounded-lg border",
+            !configured && "bg-card text-foreground shadow-card",
+            configured && !invalid && "border-brand/25 bg-brand-soft text-brand-strong",
+            invalid && "border-destructive/20 bg-destructive/[0.06] text-destructive",
           )}
         >
           {invalid ? <TriangleAlert className="size-5" /> : configured ? <CircleCheck className="size-5" /> : <KeyRound className="size-5" />}
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">
+          <h2 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">
             {!configured ? "Connect your Composio account" : invalid ? "Composio key isn't working" : "Composio is connected"}
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -94,7 +94,7 @@ export function ComposioKeyCard({ status, loading }: { status: ComposioStatus | 
               "Key saved — validation pending."
             ) : (
               <span className="inline-flex items-center gap-1">
-                <ShieldCheck className="size-3.5 text-success" /> API key stored encrypted in your vault · never shown again
+                <ShieldCheck className="size-3.5 text-brand-strong" /> API key stored encrypted in your vault · never shown again
               </span>
             )}
           </p>
@@ -134,7 +134,7 @@ export function ComposioKeyCard({ status, loading }: { status: ComposioStatus | 
                 groupClassName="flex-1"
               />
               <div className="flex gap-2">
-                <Button type="submit" className="h-10 bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95" disabled={!key.trim() || save.isPending}>
+                <Button type="submit" className="h-10" disabled={!key.trim() || save.isPending}>
                   {save.isPending ? <Spinner /> : <CircleCheck />} {save.isPending ? "Checking…" : "Save key"}
                 </Button>
                 {editing && (

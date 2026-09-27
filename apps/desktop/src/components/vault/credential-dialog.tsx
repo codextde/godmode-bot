@@ -240,8 +240,9 @@ function CredentialForm({
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-5">
         {prefill?.missingLoginId && (
-          <div className="flex items-start gap-3 rounded-xl border border-primary/25 bg-primary/5 p-3 text-sm">
-            {missingAgent ? <AgentAvatar agent={missingAgent} size="sm" className="mt-0.5" /> : <Inbox className="mt-0.5 size-4 text-primary" />}
+          <div className="relative flex items-start gap-3 overflow-hidden rounded-lg border border-warning/30 bg-card p-3 pl-4 text-sm shadow-card">
+            <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-warning" />
+            {missingAgent ? <AgentAvatar agent={missingAgent} size="sm" className="mt-0.5" /> : <Inbox className="mt-0.5 size-4 text-warning" />}
             <div className="min-w-0">
               <p className="font-medium">
                 {missingAgent ? `${missingAgent.name} needs this login` : "An agent needs this login"}
@@ -349,8 +350,8 @@ function CredentialForm({
           {notesEditable ? (
             <Textarea id={id("notes")} value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="min-h-20" placeholder="Optional" />
           ) : (
-            <div className="flex min-h-20 flex-wrap items-center justify-center gap-2 rounded-md border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-              <Lock className="size-4" />
+            <div className="flex min-h-20 flex-wrap items-center justify-center gap-2 rounded-md border border-dashed bg-paper-2 p-3 text-sm text-muted-foreground">
+              <Lock className="size-4 text-brand-strong" />
               <span>Notes are hidden.</span>
               <Button type="button" size="xs" variant="outline" onClick={() => revealNotes.mutate()} disabled={revealNotes.isPending}>
                 {revealNotes.isPending ? <Spinner className="size-3" /> : <Eye />} Show notes
@@ -363,9 +364,9 @@ function CredentialForm({
         </FormField>
       </div>
 
-      <div className="flex flex-col-reverse gap-3 border-t bg-muted/30 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col-reverse gap-3 border-t bg-paper-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Lock className="size-3.5 shrink-0" /> Encrypted on this device · agents fill it without seeing it
+          <Lock className="size-3.5 shrink-0 text-brand-strong" /> Encrypted on this device · agents fill it without seeing it
         </p>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={save.isPending}>

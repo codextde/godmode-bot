@@ -53,7 +53,7 @@ export function PasswordGeneratorButton({ onUse }: { onUse: (password: string) =
       </Tooltip>
       <PopoverContent align="end" className="w-80 space-y-4 rounded-xl p-4">
         <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1 rounded-lg border bg-muted/50 px-3 py-2 font-mono text-sm break-all select-all">{pw}</div>
+          <div className="min-w-0 flex-1 rounded-lg border bg-paper-2 px-3 py-2 font-mono text-sm break-all select-all">{pw}</div>
           <div className="flex flex-col gap-1">
             <Button size="icon-sm" variant="ghost" aria-label="Regenerate" onClick={() => setPw(generatePassword(opts))}>
               <RefreshCw />

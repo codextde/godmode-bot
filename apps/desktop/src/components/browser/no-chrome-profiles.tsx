@@ -29,7 +29,7 @@ export function NoChromeProfiles({
 
   if (mac)
     return (
-      <div className={cn("rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm", className)}>
+      <div className={cn("rounded-lg border border-warning/30 bg-warning/[0.07] p-4 text-sm", className)}>
         <div className="flex items-start gap-3">
           <ShieldAlert className="mt-0.5 size-5 shrink-0 text-warning" />
           <div className="min-w-0 space-y-1.5">
@@ -60,7 +60,7 @@ export function NoChromeProfiles({
     );
 
   return (
-    <div className={cn("rounded-2xl border border-dashed bg-card/40 p-5 text-center text-sm", className)}>
+    <div className={cn("rounded-lg border border-dashed bg-paper-2/60 p-5 text-center text-sm", className)}>
       <AppWindow className="mx-auto size-6 text-muted-foreground" />
       <p className="mt-2 font-medium">No Chrome profiles found on this machine</p>
       <p className="mt-1 text-xs text-muted-foreground">
