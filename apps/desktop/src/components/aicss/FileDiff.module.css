@@ -25,7 +25,8 @@
 .diff {
   border-radius: 10px;
   background: var(--card);
-  box-shadow: 0 0 0 1px var(--border), var(--shadow-card);
+  border: 1px solid var(--border);
+  box-shadow: var(--gm-shadow-card);
   overflow: hidden;
   font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
 }

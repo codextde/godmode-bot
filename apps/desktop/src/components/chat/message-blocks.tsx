@@ -393,7 +393,7 @@ function ToolStep({
       {running ? <Orb variant="B2" size={15} label={meta.title} /> : <Icon className="size-3.5" />}
     </span>
   );
-  const edit = fileEditOf(block);
+  const edit = useMemo(() => fileEditOf(block), [block.name, block.input]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const header = (
     <button
