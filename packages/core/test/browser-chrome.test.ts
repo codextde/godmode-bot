@@ -3,6 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  appBundle,
   chromeCandidates,
   clearLaunchMarker,
   defaultChromeArgs,
@@ -82,6 +83,16 @@ describe("Chromium executable detection", () => {
     const bundle = join(tmp, "Custom Browser.app");
     touchExe(join(bundle, "Contents", "MacOS", "Custom Browser"));
     expect(findChrome(bundle)?.path).toBe(join(bundle, "Contents", "MacOS", "Custom Browser"));
+  });
+
+  test("appBundle finds the .app a macOS executable lives in", () => {
+    expect(appBundle("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")).toBe("/Applications/Google Chrome.app");
+    expect(appBundle("/c/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing")).toBe(
+      "/c/chromium-1243/chrome-mac-arm64/Google Chrome for Testing.app",
+    );
+    expect(appBundle("/usr/bin/chromium")).toBeNull();
+    expect(appBundle("/Applications/Google Chrome.app")).toBeNull();
+    expect(appBundle("/Applications/Google Chrome.app/Contents/Frameworks/Helper")).toBeNull();
   });
 
   test("launch switches keep debugging on loopback and add headless only when asked", () => {
