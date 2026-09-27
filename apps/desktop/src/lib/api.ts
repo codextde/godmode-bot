@@ -48,6 +48,8 @@ import type {
   TotpEntry,
   TotpImportInput,
   TotpImportResult,
+  PasswordImportPreview,
+  PasswordImportResult,
   TotpInput,
   VaultStatus,
   Workspace,
@@ -135,6 +137,13 @@ const put = <T>(path: string, body?: unknown) => request<T>("PUT", path, body ??
 const patch = <T>(path: string, body?: unknown) => request<T>("PATCH", path, body ?? {});
 const del = <T>(path: string, query?: Query) => request<T>("DELETE", path + qs(query));
 
+function importForm(file: File, workspaceId: string | null): FormData {
+  const form = new FormData();
+  form.set("file", file);
+  form.set("workspaceId", workspaceId ?? "");
+  return form;
+}
+
 /** Workspace filter: "all" (default), "global" (only global), or a workspace id. */
 export type ScopeFilter = "all" | "global" | string;
 
@@ -200,6 +209,13 @@ export const api = {
     create: (input: CredentialInput) => post<Credential>("/api/credentials", input),
     update: (id: string, input: Partial<CredentialInput>) => patch<Credential>(`/api/credentials/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/credentials/${id}`),
+    importPreview: (file: File, workspaceId: string | null, grant?: string) =>
+      request<PasswordImportPreview>("POST", "/api/credentials/import/preview", importForm(file, workspaceId), withGrant(grant)),
+    import: (file: File, workspaceId: string | null, ids: number[], grant?: string) => {
+      const form = importForm(file, workspaceId);
+      form.set("ids", JSON.stringify(ids));
+      return request<PasswordImportResult>("POST", "/api/credentials/import", form, withGrant(grant));
+    },
   },
 
   totp: {

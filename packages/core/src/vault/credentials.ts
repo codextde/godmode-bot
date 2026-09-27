@@ -249,6 +249,14 @@ export function getCredential(id: string, opts: { reveal?: boolean } = {}): Cred
 }
 
 export function createCredential(input: CredentialInput): Credential {
+  const id = insertCredential(input);
+  bus.changed("credentials");
+  if (input.totpId) bus.changed("totp");
+  return getCredential(id);
+}
+
+/** createCredential without change events, for batch writers that emit once. */
+export function insertCredential(input: CredentialInput): string {
   const name = requireName(input.name);
   const workspaceId = input.workspaceId ?? null;
   assertWorkspace(workspaceId);
@@ -273,12 +281,18 @@ export function createCredential(input: CredentialInput): Credential {
     });
     if (input.totpId) linkCredentialTotp(id, input.totpId);
   });
-  bus.changed("credentials");
-  if (input.totpId) bus.changed("totp");
-  return getCredential(id);
+  return id;
 }
 
 export function updateCredential(id: string, input: Partial<CredentialInput>): Credential {
+  const totpChanged = patchCredential(id, input);
+  bus.changed("credentials");
+  if (totpChanged) bus.changed("totp");
+  return getCredential(id);
+}
+
+/** updateCredential without change events. Returns true if a TOTP entry changed. */
+export function patchCredential(id: string, input: Partial<CredentialInput>): boolean {
   const row = getRow(id);
   const patch: Record<string, string | null | undefined> = { updated_at: now() };
   if (input.name !== undefined) patch.name = requireName(input.name);
@@ -319,9 +333,7 @@ export function updateCredential(id: string, input: Partial<CredentialInput>): C
       }
     }
   });
-  bus.changed("credentials");
-  if (totpChanged) bus.changed("totp");
-  return getCredential(id);
+  return totpChanged;
 }
 
 export function deleteCredential(id: string): void {

@@ -151,6 +151,68 @@ export interface TotpImportResult {
   skipped: { uri: string; reason: string; label?: string }[];
 }
 
+/** Password manager a login export came from, detected from its format and columns. */
+export type PasswordImportSource =
+  | "chrome"
+  | "1password"
+  | "bitwarden"
+  | "apple"
+  | "firefox"
+  | "lastpass"
+  | "dashlane"
+  | "protonpass"
+  | "keepass"
+  | "csv";
+
+export type PasswordImportAction = "new" | "update" | "unchanged";
+
+/** One login of an export, after merging rows for the same site + username + password. Never carries secrets. */
+export interface PasswordImportRow {
+  id: number;
+  name: string;
+  url: string;
+  domains: string[];
+  username: string;
+  action: PasswordImportAction;
+  /** The saved login this row updates or already equals */
+  existingId: ID | null;
+  existingName: string | null;
+  /** What an update changes: "password", "username", "website", "login URL", "notes", "2FA" */
+  changes: string[];
+  /** The update replaces a password the saved login already has */
+  replacesPassword: boolean;
+  hasTotp: boolean;
+  /** Export rows merged into this login */
+  rows: number;
+  /** Rows sharing a key have different passwords for the same site + username; import at most one of them. */
+  conflictKey: string | null;
+  /** Masked password ("a••••••4"), only on rows that share a conflictKey so they can be told apart */
+  passwordHint?: string;
+  warning?: string;
+}
+
+export interface PasswordImportSkipped {
+  name: string;
+  url: string;
+  username: string;
+  reason: string;
+}
+
+export interface PasswordImportPreview {
+  source: PasswordImportSource;
+  /** Entries in the file */
+  total: number;
+  rows: PasswordImportRow[];
+  skipped: PasswordImportSkipped[];
+}
+
+export interface PasswordImportResult {
+  created: number;
+  updated: number;
+  /** 2FA codes created or linked */
+  totp: number;
+}
+
 export interface MissingLoginPatch {
   status?: MissingLoginStatus;
   credentialId?: ID | null;
