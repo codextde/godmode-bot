@@ -41,7 +41,10 @@ try {
   writeFileSync(join(work, "package.json"), JSON.stringify({ name: "godmode-icons", private: true }));
   run(["bun", "add", "--silent", `@resvg/resvg-wasm@${RESVG_VERSION}`], work);
   const pkg = join(work, "node_modules/@resvg/resvg-wasm");
-  const { initWasm, Resvg } = (await import(join(pkg, "index.mjs"))) as typeof import("@resvg/resvg-wasm");
+  const { initWasm, Resvg } = (await import(join(pkg, "index.mjs"))) as {
+    initWasm(wasm: Uint8Array): Promise<void>;
+    Resvg: new (svg: string, opts: object) => { render(): { asPng(): Uint8Array } };
+  };
   await initWasm(readFileSync(join(pkg, "index_bg.wasm")));
 
   const render = (svg: string, width: number) =>
