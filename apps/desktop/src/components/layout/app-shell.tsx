@@ -40,6 +40,7 @@ import { LiveDot } from "@/components/aicss/Motion";
 import { WorkspaceSwitcher } from "@/components/layout/workspace-switcher";
 import { RecentChats } from "@/components/layout/recent-chats";
 import { CommandPalette } from "@/components/layout/command-palette";
+import { UpdateButton } from "@/components/layout/update-button";
 import { useBootstrap } from "@/lib/hooks";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -156,6 +157,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </SidebarContent>
 
         <SidebarFooter className="px-3 pb-3">
+          <UpdateButton />
           <FooterBar />
         </SidebarFooter>
         <SidebarRail />

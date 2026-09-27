@@ -1,10 +1,16 @@
-import { motion } from "motion/react";
-import { AppWindow, Bot, Code, ExternalLink, Globe, Heart, Layers, Plug, Scale } from "lucide-react";
 import type { ReactNode } from "react";
+import { motion } from "motion/react";
+import { formatDistanceToNow } from "date-fns";
+import { AppWindow, ArrowUpRight, Bot, CircleArrowDown, Code, ExternalLink, Globe, Heart, Layers, Plug, RefreshCw, RotateCw, Scale } from "lucide-react";
 import { Backdrop, Logo } from "@/components/brand";
+import { useRestartToUpdate } from "@/components/layout/update-button";
+import { SettingRow, SettingsGroup } from "@/components/settings/settings-kit";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import { Spinner } from "@/components/ui/spinner";
 import { openExternal } from "@/lib/desktop";
+import { checkForUpdates, useUpdater } from "@/stores/updater";
 
 const REPO = "https://github.com/codextde/godmode-bot";
 
@@ -50,6 +56,8 @@ export function AboutSection({ version }: { version: string | undefined }) {
         </div>
       </motion.section>
 
+      <UpdatesCard version={version} />
+
       <section className="rounded-xl border bg-card p-5 shadow-card">
         <h3 className="eyebrow flex items-center gap-2">
           <Heart className="size-3.5" /> Built on the shoulders of
@@ -79,5 +87,101 @@ export function AboutSection({ version }: { version: string | undefined }) {
         <p className="mt-5 text-center text-xs text-muted-foreground">Open source under the MIT License. Made with care for people who'd rather delegate.</p>
       </section>
     </div>
+  );
+}
+
+const MB = 1024 * 1024;
+
+function UpdatesCard({ version }: { version: string | undefined }) {
+  const update = useUpdater((s) => s.update);
+  const { restart, dialog } = useRestartToUpdate();
+  if (update.status === "disabled") return null;
+
+  const checkButton = (
+    <Button variant="outline" size="sm" onClick={() => void checkForUpdates().catch(() => {})}>
+      <RefreshCw /> Check now
+    </Button>
+  );
+
+  let label: ReactNode;
+  let description: ReactNode = null;
+  let action: ReactNode = checkButton;
+  switch (update.status) {
+    case "idle":
+      label = "Automatic updates are on";
+      description = "Godmode looks for a new version every few hours.";
+      break;
+    case "checking":
+      label = "Checking for updates…";
+      action = (
+        <Button variant="outline" size="sm" disabled>
+          <Spinner className="size-3.5" /> Checking
+        </Button>
+      );
+      break;
+    case "upToDate":
+      label = "You're up to date";
+      description = `${version ? `v${version} is the latest version` : "Latest version installed"} · checked ${formatDistanceToNow(update.checkedAt, { addSuffix: true })}`;
+      break;
+    case "downloading": {
+      const pct = update.total ? Math.min(100, Math.round((update.downloaded / update.total) * 100)) : null;
+      label = `Downloading v${update.version}…`;
+      description = (
+        <div className="flex items-center gap-3 pt-1">
+          <Progress value={pct ?? 0} className="h-1 max-w-56 bg-foreground/[0.07] [&>[data-slot=progress-indicator]]:bg-brand" />
+          <span className="shrink-0 font-mono text-[11px] tabular-nums">
+            {pct !== null ? `${pct}%` : `${(update.downloaded / MB).toFixed(1)} MB`}
+          </span>
+        </div>
+      );
+      action = null;
+      break;
+    }
+    case "ready":
+      label = `v${update.version} is ready to install`;
+      description = (
+        <>
+          Downloaded in the background. Restart whenever it suits you — it only takes a few seconds.{" "}
+          <button
+            type="button"
+            onClick={() => void openExternal(`${REPO}/releases/tag/v${update.version}`)}
+            className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-4 hover:underline"
+          >
+            What's new <ArrowUpRight className="size-3" />
+          </button>
+        </>
+      );
+      action = (
+        <Button size="sm" onClick={restart}>
+          <RotateCw /> Restart to update
+        </Button>
+      );
+      break;
+    case "installing":
+      label = `Installing v${update.version}…`;
+      description = "Godmode will reopen in a moment.";
+      action = (
+        <Button size="sm" disabled>
+          <Spinner className="size-3.5" /> Restarting
+        </Button>
+      );
+      break;
+    case "error":
+      label = "Couldn't check for updates";
+      description = <span className="line-clamp-2 break-all" title={update.message}>{update.message}</span>;
+      break;
+  }
+
+  return (
+    <SettingsGroup
+      icon={<CircleArrowDown />}
+      title="Updates"
+      description="New versions download quietly in the background. You decide when to restart."
+    >
+      <SettingRow label={label} description={description}>
+        {action ?? undefined}
+      </SettingRow>
+      {dialog}
+    </SettingsGroup>
   );
 }
