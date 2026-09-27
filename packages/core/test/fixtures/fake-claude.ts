@@ -10,7 +10,9 @@
  *   LOGIN_FAIL  answer with a login-failure sentence
  *   CALL_MCP    call the Godmode MCP gateway from --mcp-config (initialize, tools/list, report_missing_login)
  *   CRASH       print to stderr and exit 3 without a result
+ *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected)
  *
+ * With `--input-format stream-json` it answers the `initialize` control request with a command catalog.
  * Env: FAKE_CLAUDE_STATE — directory for known sessions + an invocation log (invocations.jsonl).
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -37,6 +39,28 @@ appendFileSync(
 
 const out = (event: unknown) => process.stdout.write(JSON.stringify(event) + "\n");
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+if (argValue("--input-format") === "stream-json") {
+  const request = prompt.split("\n").map((l) => (l.trim() ? JSON.parse(l) : null)).find((e) => e?.type === "control_request");
+  out({
+    type: "control_response",
+    response: {
+      subtype: "success",
+      request_id: request?.request_id,
+      response: {
+        commands: [
+          { name: "goal", description: "Set a goal — keep working until the condition is met", argumentHint: "", builtin: true },
+          { name: "clear", description: "Start a new session with empty context", argumentHint: "[name]", aliases: ["reset", "new"], builtin: true },
+          { name: "color", description: "Set the prompt bar color", argumentHint: "[color]", builtin: true },
+          { name: "__remote-workflow", description: "internal", argumentHint: "", builtin: true },
+          { name: "hello", description: "Say hello to someone (project)", argumentHint: "<name>" },
+          { name: "clear", description: "A project command shadowed by the built-in (project)", argumentHint: "" },
+        ],
+      },
+    },
+  });
+  process.exit(0);
+}
 
 if (resume && !existsSync(join(stateDir, "sessions", resume))) {
   const msg = `No conversation found with session ID: ${resume}`;
@@ -77,7 +101,38 @@ function textTurn(text: string) {
   out({ type: "assistant", message: { id: `msg_${crypto.randomUUID()}`, role: "assistant", content: [{ type: "text", text }] }, parent_tool_use_id: null, session_id: sessionId });
 }
 
-if (prompt.includes("CRASH")) {
+const slash = /^\/(\S+)\s*([\s\S]*)$/.exec(prompt.trim());
+
+if (slash?.[1] === "clear") {
+  const fresh = crypto.randomUUID();
+  out({ type: "conversation_reset", new_conversation_id: fresh, trigger: "clear" });
+  out({ ...init, session_id: fresh });
+  result("", { session_id: fresh, num_turns: 0, local_command: "clear" });
+} else if (slash) {
+  const [, name, args] = slash;
+  out(init);
+  const effort = args.toLowerCase();
+  const text =
+    name === "model"
+      ? args === "bogus"
+        ? "Model 'bogus' not found"
+        : `Set model to \`${args}\` for this session only`
+      : name === "effort"
+        ? effort === "auto"
+          ? "Effort level set to auto (this session only)"
+          : ["low", "medium", "high", "xhigh", "max"].includes(effort)
+            ? `Set effort level to ${effort} (this session only)`
+            : `Invalid argument: ${args}. Valid options are: low, medium, high, xhigh, max, auto`
+        : `Ran /${name} ${args}`.trim();
+  out({
+    type: "assistant",
+    message: { id: crypto.randomUUID(), model: "<synthetic>", role: "assistant", content: [{ type: "text", text }] },
+    parent_tool_use_id: null,
+    session_id: sessionId,
+    local_command_run: { command: name, args },
+  });
+  result(text, { num_turns: 0, local_command: name });
+} else if (prompt.includes("CRASH")) {
   process.stderr.write("fatal: something exploded\n");
   process.exit(3);
 } else if (prompt.includes("SLEEP")) {

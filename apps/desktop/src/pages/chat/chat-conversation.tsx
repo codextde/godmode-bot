@@ -223,9 +223,10 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             <Composer
               ref={composerRef}
               draftKey={conversationId}
+              agentId={conv.agentId}
               autoFocus
               running={!!activeRunId}
-              placeholder={agent ? `Message ${agent.name}…` : "Message…"}
+              placeholder={agent ? `Message ${agent.name} — or type / for commands` : "Message…"}
               onSubmit={(input) => send.mutateAsync(input)}
             />
             <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 sm:block">
