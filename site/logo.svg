@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="gm-bg" x1="48" y1="32" x2="464" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="0.55" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+    <radialGradient id="gm-glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(256 210) rotate(90) scale(260)">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gm-bolt" x1="200" y1="96" x2="312" y2="416" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E0E7FF"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="120" fill="url(#gm-bg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="120" fill="url(#gm-glow)"/>
+  <circle cx="256" cy="256" r="150" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="14"/>
+  <circle cx="256" cy="256" r="186" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="6" stroke-dasharray="4 18" stroke-linecap="round"/>
+  <path d="M283 92 158 288h86l-22 132 132-204h-88l17-124Z" fill="url(#gm-bolt)" stroke="#FFFFFF" stroke-width="10" stroke-linejoin="round"/>
+</svg>

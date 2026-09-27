@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - name: Typecheck
+        run: pnpm --filter @godmode/shared --filter @godmode/core --filter @godmode/desktop typecheck
+
+      - name: Core tests
+        working-directory: packages/core
+        run: bun test
+
+      - name: Build web UI
+        run: pnpm --filter @godmode/desktop build
+
+      - name: Build standalone server (UI embedded) and smoke test it
+        working-directory: packages/core
+        run: bun run scripts/build.ts --smoke
+
+  desktop-shell:
+    name: Desktop shell (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: apps/desktop/src-tauri
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf build-essential libssl-dev libxdo-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - name: rustfmt
+        if: runner.os == 'Linux'
+        run: cargo fmt --check
+
+      - name: cargo check
+        run: cargo check --locked --all-targets
+
+      - name: clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: tests
+        run: cargo test --locked
+
+  docker:
+    name: Docker image (linux/amd64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: godmode-bot:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        run: |
+          docker run -d --name godmode -p 7777:7777 godmode-bot:ci
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:7777/api/health; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:7777/ | grep -q '<div id="root">'
+          docker exec godmode godmode version
+          docker exec godmode claude --version
+          docker exec godmode uv --version
+          docker exec godmode chromium --version
+      - name: Container logs
+        if: always()
+        run: docker logs godmode || true

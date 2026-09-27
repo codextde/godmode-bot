@@ -1,0 +1,110 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Godmode Bot",
+  "version": "../package.json",
+  "identifier": "dev.codext.godmode",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build",
+    "devUrl": "http://127.0.0.1:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Godmode Bot",
+        "width": 1320,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true,
+        "visible": false,
+        "backgroundColor": "#faf9f5",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 18,
+          "y": 22
+        },
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "'self' http://127.0.0.1:* ws://127.0.0.1:* http://localhost:* ws://localhost:* ipc: http://ipc.localhost https://api.openai.com https://api.elevenlabs.io",
+        "img-src": "'self' data: blob: https:",
+        "media-src": "'self' blob: data:",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data:",
+        "script-src": "'self' 'wasm-unsafe-eval'"
+      },
+      "dangerousDisableAssetCspModification": [
+        "style-src"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "publisher": "Codext GmbH",
+    "copyright": "Copyright © 2026 Codext GmbH. MIT License.",
+    "license": "MIT",
+    "licenseFile": "../../../LICENSE",
+    "homepage": "https://github.com/codextde/godmode-bot",
+    "category": "Productivity",
+    "shortDescription": "Your AI coworker with real logins, 2FA and a browser.",
+    "longDescription": "Godmode Bot is an open-source AI coworker that runs on your machine. It drives Claude Code as its brain, uses a real browser for web work and keeps website logins and 2FA in an encrypted vault so agents can finish tasks without interrupting you.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/godmode-core"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": true,
+      "entitlements": "Entitlements.plist",
+      "infoPlist": "Info.plist"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      }
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libayatana-appindicator3-1 | libappindicator3-1"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "libayatana-appindicator-gtk3"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgyRDRERkYwRjc2OTVCNEYKUldSUFcybjM4Ti9VZ2g3M0tCZ1d0RjZJbnI4QkFqRTNvanh2WmFmY2dxK0c5eFd1ODNmL0Y0Q0wK",
+      "endpoints": ["https://github.com/codextde/godmode-bot/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

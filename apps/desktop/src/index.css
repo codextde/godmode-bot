@@ -1,0 +1,486 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ------------------------------------------------------------------ */
+/* Godmode design tokens — warm paper + anthracite, one quiet accent   */
+/* ------------------------------------------------------------------ */
+
+:root {
+  --radius: 0.5rem;
+
+  /* Paper */
+  --background: #faf9f5;
+  --foreground: #1a1a1a;
+  --card: #ffffff;
+  --card-foreground: #1a1a1a;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1a;
+  --primary: #1c1c1c;
+  --primary-foreground: #faf9f5;
+  --secondary: #f1eee9;
+  --secondary-foreground: #1a1a1a;
+  --muted: #f1eee9;
+  --muted-foreground: #75716a;
+  --accent: #efebe4;
+  --accent-foreground: #1a1a1a;
+  --destructive: #d4101f;
+  --success: #087f4d;
+  --warning: #9a5a00;
+  --border: rgb(38 32 22 / 0.09);
+  --input: rgb(38 32 22 / 0.13);
+  --ring: rgb(38 32 22 / 0.28);
+
+  /* Brand accent — used sparingly: live states, status, highlights */
+  --brand: #0eca7b;
+  --brand-strong: #087f4d;
+  --brand-soft: rgb(14 202 123 / 0.12);
+  --anthracite: #1c1c1c;
+  --paper-2: #f4f2ed;
+
+  --glow-a: var(--brand);
+  --glow-b: var(--brand);
+  --glow-c: var(--brand);
+
+  --chart-1: #0eca7b;
+  --chart-2: #009588;
+  --chart-3: #104e64;
+  --chart-4: #e3a008;
+  --chart-5: #d9622b;
+
+  --sidebar: #f4f2ed;
+  --sidebar-foreground: #3a3733;
+  --sidebar-primary: #1c1c1c;
+  --sidebar-primary-foreground: #faf9f5;
+  --sidebar-accent: rgb(38 32 22 / 0.055);
+  --sidebar-accent-foreground: #1a1a1a;
+  --sidebar-border: rgb(38 32 22 / 0.08);
+  --sidebar-ring: rgb(38 32 22 / 0.28);
+
+  --gm-shadow-card: 0 1px 2px rgb(38 32 22 / 0.04), 0 0 0 0.5px rgb(38 32 22 / 0.02);
+  --gm-shadow-float: 0 1px 2px rgb(38 32 22 / 0.04), 0 8px 24px -12px rgb(38 32 22 / 0.12);
+}
+
+.dark {
+  /* Anthracite */
+  --background: #1c1b19;
+  --foreground: #f4f2ed;
+  --card: #232220;
+  --card-foreground: #f4f2ed;
+  --popover: #262523;
+  --popover-foreground: #f4f2ed;
+  --primary: #f4f2ed;
+  --primary-foreground: #1c1b19;
+  --secondary: #2a2926;
+  --secondary-foreground: #f4f2ed;
+  --muted: #2a2926;
+  --muted-foreground: #a29e96;
+  --accent: #2e2d2a;
+  --accent-foreground: #f4f2ed;
+  --destructive: #f0525b;
+  --success: #2fd690;
+  --warning: #e8a53a;
+  --border: rgb(255 250 240 / 0.085);
+  --input: rgb(255 250 240 / 0.12);
+  --ring: rgb(255 250 240 / 0.3);
+
+  --brand: #2fd690;
+  --brand-strong: #3ddc97;
+  --brand-soft: rgb(47 214 144 / 0.14);
+  --paper-2: #211f1d;
+
+  --chart-1: #2fd690;
+  --chart-2: #1fb5a6;
+  --chart-3: #e8a53a;
+  --chart-4: #a78bfa;
+  --chart-5: #f07a5a;
+
+  --sidebar: #171614;
+  --sidebar-foreground: #cfcbc3;
+  --sidebar-primary: #f4f2ed;
+  --sidebar-primary-foreground: #1c1b19;
+  --sidebar-accent: rgb(255 250 240 / 0.06);
+  --sidebar-accent-foreground: #f4f2ed;
+  --sidebar-border: rgb(255 250 240 / 0.07);
+  --sidebar-ring: rgb(255 250 240 / 0.3);
+
+  --gm-shadow-card: 0 1px 2px rgb(0 0 0 / 0.25), 0 0 0 0.5px rgb(255 250 240 / 0.02);
+  --gm-shadow-float: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -12px rgb(0 0 0 / 0.55);
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-paper-2: var(--paper-2);
+  --color-glow-a: var(--glow-a);
+  --color-glow-b: var(--glow-b);
+  --color-glow-c: var(--glow-c);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Tight, crisp corners: 4 · 6 · 8 · 12 · 14 · 16 */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 6px);
+  --radius-3xl: calc(var(--radius) + 8px);
+
+  --shadow-card: var(--gm-shadow-card);
+  --shadow-float: var(--gm-shadow-float);
+
+  --animate-shimmer: shimmer 2.2s linear infinite;
+  --animate-spin-slow: spin 6s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-live-dot: live-dot 2s ease-out infinite;
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 45%, transparent); }
+    70% { box-shadow: 0 0 0 8px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  @keyframes live-dot {
+    0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 55%, transparent); }
+    80%, 100% { box-shadow: 0 0 0 6px transparent; }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 26%, transparent);
+  }
+  /* Thin, unobtrusive scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 16%, transparent) transparent;
+  }
+  code,
+  kbd,
+  pre {
+    @apply font-mono;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Surfaces & type                                                      */
+/* ------------------------------------------------------------------ */
+
+/* A solid, quiet surface for floating UI (kept under the old name). */
+@utility glass {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--gm-shadow-float);
+}
+
+/* Legacy names — now flat, never a gradient. */
+@utility text-gradient {
+  color: var(--foreground);
+}
+@utility bg-gradient-brand {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+/* Section eyebrow: tiny tracked caps, like "STEP 1 · KNOW WHERE YOU STAND". */
+@utility eyebrow {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Display headings — medium weight, tight tracking. */
+@utility heading-display {
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 1.06;
+}
+
+/* aicss label shine — a soft brightness valley sweeps through the text. */
+@utility text-shimmer {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 30%,
+    color-mix(in oklab, var(--muted-foreground) 40%, transparent) 45%,
+    color-mix(in oklab, var(--muted-foreground) 40%, transparent) 55%,
+    var(--muted-foreground) 70%,
+    var(--muted-foreground) 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: label-shine 2.25s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
+}
+@keyframes label-shine {
+  0%, 18% { background-position: 100% 0; }
+  82%, 100% { background-position: 0% 0; }
+}
+
+/* ------------------------------------------------------------------ */
+/* AI motion                                                            */
+/* ------------------------------------------------------------------ */
+
+@property --gm-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* "Agent is working": a single thin beam of light travels around the border. */
+@utility glow-border {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from var(--gm-angle),
+      transparent 0deg,
+      transparent 280deg,
+      color-mix(in oklab, var(--brand) 70%, transparent) 330deg,
+      var(--brand) 350deg,
+      transparent 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: gm-rotate 3.2s linear infinite;
+    pointer-events: none;
+    z-index: 1;
+  }
+}
+
+@keyframes gm-rotate {
+  to {
+    --gm-angle: 360deg;
+  }
+}
+
+/* A hairline that sweeps left → right — "working" progress without a number. */
+@utility scan-line {
+  position: relative;
+  overflow: hidden;
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--brand), transparent);
+    transform: translateX(-100%);
+    animation: gm-scan 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    pointer-events: none;
+  }
+}
+@keyframes gm-scan {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Finseo-style dashed guide rails around a content column. */
+@utility guide-rails {
+  position: relative;
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 1px dashed color-mix(in oklab, var(--foreground) 10%, transparent);
+    pointer-events: none;
+  }
+  &::before {
+    left: 0;
+  }
+  &::after {
+    right: 0;
+  }
+}
+
+/* Halftone dot field used as a quiet texture. */
+@utility bg-dots {
+  background-image: radial-gradient(color-mix(in oklab, var(--foreground) 11%, transparent) 1px, transparent 1.2px);
+  background-size: 14px 14px;
+}
+
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--foreground) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 4%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* aicss "Streaming Text" caret (MIT): a solid block riding the end of the text while tokens stream in. */
+.gm-streaming > :is(p, h1, h2, h3, h4, blockquote):last-child::after,
+.gm-streaming > :is(ul, ol):last-child > li:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 3px;
+  border-radius: 1px;
+  background: var(--foreground);
+  opacity: 0.85;
+  vertical-align: text-bottom;
+  animation: gm-caret-in 160ms ease-out;
+}
+@keyframes gm-caret-in {
+  from { opacity: 0; }
+}
+
+/* Markdown prose inside chat bubbles */
+.prose-chat {
+  @apply text-[0.9375rem] leading-[1.65];
+}
+.prose-chat > * + * {
+  @apply mt-3;
+}
+.prose-chat h1 {
+  @apply text-xl font-medium tracking-tight;
+}
+.prose-chat h2 {
+  @apply text-lg font-medium tracking-tight;
+}
+.prose-chat h3 {
+  @apply text-base font-medium;
+}
+.prose-chat strong {
+  @apply font-semibold;
+}
+.prose-chat a {
+  @apply text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground;
+}
+.prose-chat ul {
+  @apply list-disc pl-5 space-y-1 marker:text-muted-foreground;
+}
+.prose-chat ol {
+  @apply list-decimal pl-5 space-y-1 marker:text-muted-foreground;
+}
+.prose-chat blockquote {
+  @apply border-l-2 border-foreground/15 pl-3 text-muted-foreground;
+}
+.prose-chat :not(pre) > code:not([class]) {
+  @apply rounded-[5px] bg-secondary px-1.5 py-0.5 text-[0.85em];
+}
+.prose-chat pre {
+  @apply overflow-x-auto rounded-lg border bg-secondary/60 p-3 text-[0.82rem] leading-relaxed;
+}
+.prose-chat table {
+  @apply w-full border-collapse text-sm;
+}
+.prose-chat th,
+.prose-chat td {
+  @apply border-b px-3 py-2 text-left;
+}
+.prose-chat tr:last-child td {
+  @apply border-b-0;
+}
+.prose-chat th {
+  @apply bg-paper-2 text-xs font-medium text-muted-foreground;
+}
+.prose-chat hr {
+  @apply border-border;
+}
+
+/* Tauri: draggable title bar region */
+.drag-region {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

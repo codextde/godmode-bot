@@ -1,0 +1,273 @@
+/**
+ * Ordered, append-only SQL migrations. Never edit a shipped migration — add a new one.
+ * JSON columns are stored as TEXT. Encrypted columns end with `_enc` and hold vault ciphertext.
+ */
+export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
+  {
+    id: 1,
+    name: "initial",
+    sql: /* sql */ `
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS secrets (
+  key TEXT PRIMARY KEY,
+  value_enc TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS workspaces (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL DEFAULT '',
+  color TEXT NOT NULL DEFAULT 'violet',
+  icon TEXT NOT NULL DEFAULT '🗂️',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agents (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  avatar TEXT NOT NULL DEFAULT '🤖',
+  color TEXT NOT NULL DEFAULT 'violet',
+  description TEXT NOT NULL DEFAULT '',
+  instructions TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  effort TEXT,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'idle',
+  permissions TEXT NOT NULL DEFAULT '{}',
+  browser TEXT NOT NULL DEFAULT '{}',
+  mcp_server_ids TEXT NOT NULL DEFAULT '[]',
+  inherit_mcp INTEGER NOT NULL DEFAULT 1,
+  subagents TEXT NOT NULL DEFAULT '[]',
+  repo_path TEXT NOT NULL,
+  last_run_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agents_workspace ON agents(workspace_id);
+
+CREATE TABLE IF NOT EXISTS routines (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  cron TEXT NOT NULL,
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  prompt TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  reuse_conversation INTEGER NOT NULL DEFAULT 1,
+  conversation_id TEXT,
+  last_run_at TEXT,
+  next_run_at TEXT,
+  last_status TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_routines_agent ON routines(agent_id);
+
+CREATE TABLE IF NOT EXISTS conversations (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  title TEXT NOT NULL DEFAULT 'New chat',
+  origin TEXT NOT NULL DEFAULT 'chat',
+  claude_session_id TEXT,
+  pinned INTEGER NOT NULL DEFAULT 0,
+  archived INTEGER NOT NULL DEFAULT 0,
+  last_message_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_conversations_agent ON conversations(agent_id, last_message_at);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  blocks TEXT NOT NULL DEFAULT '[]',
+  run_id TEXT,
+  attachments TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at);
+
+CREATE TABLE IF NOT EXISTS runs (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  conversation_id TEXT NOT NULL,
+  routine_id TEXT,
+  parent_run_id TEXT,
+  trigger TEXT NOT NULL,
+  status TEXT NOT NULL,
+  prompt TEXT NOT NULL,
+  result TEXT,
+  error TEXT,
+  cost_usd REAL,
+  duration_ms INTEGER,
+  num_turns INTEGER,
+  usage TEXT,
+  model TEXT,
+  started_at TEXT,
+  finished_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_runs_agent ON runs(agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+
+CREATE TABLE IF NOT EXISTS credentials (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL DEFAULT '',
+  domains TEXT NOT NULL DEFAULT '[]',
+  username TEXT NOT NULL DEFAULT '',
+  password_enc TEXT,
+  notes_enc TEXT,
+  totp_id TEXT,
+  tags TEXT NOT NULL DEFAULT '[]',
+  last_used_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_credentials_workspace ON credentials(workspace_id);
+
+CREATE TABLE IF NOT EXISTS totp (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  issuer TEXT NOT NULL DEFAULT '',
+  account_name TEXT NOT NULL DEFAULT '',
+  secret_enc TEXT NOT NULL,
+  algorithm TEXT NOT NULL DEFAULT 'SHA1',
+  digits INTEGER NOT NULL DEFAULT 6,
+  period INTEGER NOT NULL DEFAULT 30,
+  credential_id TEXT,
+  icon TEXT,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_totp_workspace ON totp(workspace_id);
+
+CREATE TABLE IF NOT EXISTS missing_logins (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT,
+  run_id TEXT,
+  workspace_id TEXT,
+  kind TEXT NOT NULL DEFAULT 'missing_credential',
+  service TEXT NOT NULL,
+  url TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open',
+  credential_id TEXT,
+  occurrences INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_missing_logins_status ON missing_logins(status);
+
+CREATE TABLE IF NOT EXISTS mcp_servers (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  agent_id TEXT REFERENCES agents(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'custom',
+  transport TEXT NOT NULL DEFAULT 'stdio',
+  command TEXT NOT NULL DEFAULT '',
+  args TEXT NOT NULL DEFAULT '[]',
+  url TEXT NOT NULL DEFAULT '',
+  env_enc TEXT,
+  headers_enc TEXT,
+  env_keys TEXT NOT NULL DEFAULT '[]',
+  header_keys TEXT NOT NULL DEFAULT '[]',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  composio TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS composio_connections (
+  id TEXT PRIMARY KEY,
+  connected_account_id TEXT NOT NULL,
+  toolkit TEXT NOT NULL,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  agent_id TEXT REFERENCES agents(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'INITIATED',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS browser_profiles (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  user_data_dir TEXT NOT NULL,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  imported_from TEXT,
+  imported_at TEXT,
+  cookie_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  link TEXT,
+  read INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY,
+  ts TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT,
+  details TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  user_agent TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+`,
+  },
+  {
+    id: 2,
+    name: "conversation_overrides",
+    sql: /* sql */ `
+ALTER TABLE conversations ADD COLUMN model TEXT;
+ALTER TABLE conversations ADD COLUMN effort TEXT;
+`,
+  },
+  {
+    id: 3,
+    name: "working_directories",
+    sql: /* sql */ `
+ALTER TABLE agents ADD COLUMN working_directory TEXT;
+ALTER TABLE conversations ADD COLUMN working_directory TEXT;
+`,
+  },
+];

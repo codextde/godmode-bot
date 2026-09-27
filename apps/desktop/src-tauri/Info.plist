@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Godmode uses the microphone for voice mode.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Godmode uses the camera to scan 2FA QR codes.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Godmode turns your dictation into text in voice mode.</string>
+</dict>
+</plist>

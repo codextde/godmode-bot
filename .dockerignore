@@ -1,0 +1,19 @@
+# Keep the build context small and free of local state / secrets.
+**/node_modules
+**/dist
+**/target
+**/.DS_Store
+**/*.log
+**/.env
+**/.env.*
+.git
+.github
+.omc
+.godmode
+*.godmode-backup
+packages/core/bin
+apps/desktop/src-tauri
+docs
+idea.md
+Dockerfile
+docker-compose.yml

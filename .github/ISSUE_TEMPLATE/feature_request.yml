@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest an idea or improvement for Godmode Bot.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the task or workflow you are trying to get done.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should Godmode handle it? UI sketches welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Chat / agents
+        - Routines / scheduler
+        - Browser automation
+        - Vault / logins / 2FA
+        - Integrations (MCP, Composio)
+        - Voice
+        - Desktop app
+        - Web dashboard / server / Docker
+        - Other
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I would like to work on this myself.

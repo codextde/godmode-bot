@@ -1,0 +1,110 @@
+/* aicss "File Diff" — palette mapped to the app's design tokens, with light/dark syntax colours. */
+:global(:root) {
+  --fd-add: #0a9e60;
+  --fd-add-bg: rgb(14 202 123 / 0.1);
+  --fd-del: #d4101f;
+  --fd-del-bg: rgb(212 16 31 / 0.07);
+  --fd-kw: #b3261e;
+  --fd-str: #0a3069;
+  --fd-fn: #6d3fc0;
+  --fd-num: #0550ae;
+  --fd-cm: #8a857c;
+}
+:global(.dark) {
+  --fd-add: #3ddc97;
+  --fd-add-bg: rgb(47 214 144 / 0.12);
+  --fd-del: #f0727a;
+  --fd-del-bg: rgb(240 82 91 / 0.12);
+  --fd-kw: #ff8b80;
+  --fd-str: #a5d6ff;
+  --fd-fn: #d2a8ff;
+  --fd-num: #79c0ff;
+  --fd-cm: #8b877f;
+}
+
+.diff {
+  border-radius: 10px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--gm-shadow-card);
+  overflow: hidden;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+}
+.diffHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.diffFileWrap { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+.diffIcon { display: block; width: 15px; height: 15px; color: var(--muted-foreground); flex: none; }
+.diffFile { color: var(--foreground); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diffStat { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 12px; line-height: 1; flex: none; }
+.diffStat .add { color: var(--fd-add); }
+.diffStat .del { color: var(--fd-del); }
+.diffBody {
+  position: relative;
+  max-height: 420px;
+  overflow: auto;
+  padding: 4px 0;
+  font-size: 12px;
+  line-height: 20px;
+  scrollbar-width: thin;
+}
+.diffLines { position: relative; width: max-content; min-width: 100%; }
+.diffLines::before { content: ""; position: absolute; top: 0; bottom: 0; left: 64px; width: 1px; background: var(--border); z-index: 1; pointer-events: none; }
+.diffRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px 32px 18px 1fr;
+  align-items: stretch;
+  animation: fd-row-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes fd-row-in {
+  from { opacity: 0; transform: translateX(-3px); }
+  to { opacity: 1; transform: none; }
+}
+.diffRow .ln, .diffRow .sign { user-select: none; color: var(--muted-foreground); opacity: 0.7; font-size: 11px; }
+.diffRow .ln { text-align: right; padding: 0 7px; }
+.diffRow .sign { text-align: center; }
+.diffRow code { white-space: pre; padding: 0 12px 0 8px; color: var(--muted-foreground); }
+.diffRow.add::before, .diffRow.del::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 3px; }
+.diffRow.add::before { background: var(--fd-add); }
+.diffRow.del::before { background: repeating-linear-gradient(45deg, var(--fd-del) 0, var(--fd-del) 1.5px, transparent 1.5px, transparent 3px); }
+.diffRow.add { background: var(--fd-add-bg); }
+.diffRow.add .sign, .diffRow.add .new { color: var(--fd-add); opacity: 1; }
+.diffRow.add code { color: var(--foreground); }
+.diffRow.del { background: var(--fd-del-bg); }
+.diffRow.del .sign, .diffRow.del .old { color: var(--fd-del); opacity: 1; }
+.diffRow.del code { color: var(--foreground); }
+.diffRow code .kw { color: var(--fd-kw); }
+.diffRow code .str { color: var(--fd-str); }
+.diffRow code .fn { color: var(--fd-fn); }
+.diffRow code .num { color: var(--fd-num); }
+.diffRow code .cm { color: var(--fd-cm); }
+.diffFold {
+  padding: 2px 12px 2px 72px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--muted) 60%, transparent);
+  user-select: none;
+}
+.diffMore {
+  display: block;
+  width: 100%;
+  padding: 7px 12px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  font-family: var(--font-sans, system-ui);
+  font-size: 12px;
+  color: var(--muted-foreground);
+  text-align: left;
+  cursor: pointer;
+}
+.diffMore:hover { color: var(--foreground); background: color-mix(in oklab, var(--muted) 50%, transparent); }
+@media (prefers-reduced-motion: reduce) {
+  .diffRow { animation: none; }
+}

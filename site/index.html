@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Godmode Bot — the AI coworker that actually logs in and gets work done</title>
+    <meta
+      name="description"
+      content="Open-source AI coworker for macOS, Windows and Linux. Claude Code + browser-use, a secure vault for logins and 2FA, persistent agents with memory and routines. MIT licensed."
+    />
+    <meta property="og:title" content="Godmode Bot — your AI coworker" />
+    <meta property="og:description" content="Claude Code + browser-use + a secure vault for logins & 2FA. Agents that finish the job without interrupting you." />
+    <meta property="og:image" content="https://raw.githubusercontent.com/codextde/godmode-bot/main/docs/assets/social-preview.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="logo.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        --bg: #0b0b12;
+        --panel: rgba(255, 255, 255, 0.04);
+        --border: rgba(255, 255, 255, 0.09);
+        --text: #ececf3;
+        --muted: #a1a1b5;
+        --a: #8b5cf6;
+        --b: #06b6d4;
+        --c: #ec4899;
+        --radius: 18px;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      a { color: inherit; }
+      .wrap { width: min(1160px, 100% - 40px); margin: 0 auto; }
+      .aurora { position: fixed; inset: 0; pointer-events: none; z-index: -1; overflow: hidden; }
+      .aurora span { position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.35; animation: drift 18s ease-in-out infinite alternate; }
+      .aurora span:nth-child(1) { width: 60vw; height: 60vh; left: 20vw; top: -25vh; background: var(--a); }
+      .aurora span:nth-child(2) { width: 45vw; height: 45vh; left: -15vw; top: 30vh; background: var(--b); opacity: 0.2; animation-delay: -6s; }
+      .aurora span:nth-child(3) { width: 40vw; height: 40vh; right: -10vw; bottom: -10vh; background: var(--c); opacity: 0.15; animation-delay: -12s; }
+      @keyframes drift { to { transform: translate3d(6%, 8%, 0) scale(1.12); } }
+      nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.02em; text-decoration: none; }
+      .brand img { width: 34px; height: 34px; }
+      .nav-links { display: flex; gap: 22px; align-items: center; font-size: 14px; color: var(--muted); }
+      .nav-links a { text-decoration: none; }
+      .nav-links a:hover { color: var(--text); }
+      .btn {
+        display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 12px;
+        font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid var(--border); background: var(--panel);
+        transition: transform 0.15s ease, border-color 0.15s ease;
+      }
+      .btn:hover { transform: translateY(-1px); border-color: rgba(255, 255, 255, 0.2); }
+      .btn.primary { background: linear-gradient(135deg, var(--a), var(--b)); border-color: transparent; color: white; box-shadow: 0 10px 40px -10px rgba(139, 92, 246, 0.7); }
+      header.hero { text-align: center; padding: 80px 0 40px; }
+      .pill { display: inline-flex; gap: 8px; align-items: center; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; color: var(--muted); background: var(--panel); }
+      .pill b { color: var(--text); font-weight: 600; }
+      h1 { font-size: clamp(40px, 7vw, 76px); line-height: 1.02; letter-spacing: -0.045em; margin: 22px auto 18px; max-width: 900px; }
+      .grad { background: linear-gradient(100deg, var(--a), var(--b) 55%, var(--c)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .lead { font-size: clamp(17px, 2.2vw, 20px); color: var(--muted); max-width: 720px; margin: 0 auto 32px; }
+      .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+      .shot { margin: 56px auto 0; border-radius: 22px; border: 1px solid var(--border); overflow: hidden; box-shadow: 0 40px 120px -30px rgba(139, 92, 246, 0.45); background: #111118; }
+      .shot img { display: block; width: 100%; height: auto; }
+      section { padding: 80px 0; }
+      h2 { font-size: clamp(30px, 4vw, 44px); letter-spacing: -0.035em; line-height: 1.1; margin: 0 0 14px; }
+      .sub { color: var(--muted); max-width: 680px; margin: 0 0 40px; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+      .card { padding: 24px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); backdrop-filter: blur(12px); }
+      .card .ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(6, 182, 212, 0.2)); border: 1px solid var(--border); margin-bottom: 14px; }
+      .card h3 { margin: 0 0 6px; font-size: 17px; letter-spacing: -0.01em; }
+      .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+      .flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; counter-reset: step; }
+      .flow .card { position: relative; }
+      .flow .card::before { counter-increment: step; content: counter(step); position: absolute; top: 18px; right: 20px; font-weight: 700; color: rgba(255, 255, 255, 0.18); font-size: 28px; }
+      pre { margin: 0; padding: 18px 20px; border-radius: 14px; border: 1px solid var(--border); background: rgba(0, 0, 0, 0.45); overflow-x: auto; font: 13.5px/1.7 ui-monospace, "SF Mono", Menlo, monospace; color: #d7d7e6; }
+      .two { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+      @media (max-width: 860px) { .two { grid-template-columns: 1fr; } .nav-links a.hide-sm { display: none; } }
+      .check { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+      .check li { padding-left: 28px; position: relative; color: var(--muted); }
+      .check li::before { content: "✓"; position: absolute; left: 0; top: 0; color: #34d399; font-weight: 700; }
+      .check li b { color: var(--text); }
+      footer { padding: 50px 0 70px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+      .logos { display: flex; flex-wrap: wrap; gap: 10px; }
+      .logos span { padding: 7px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel); font-size: 13px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="aurora"><span></span><span></span><span></span></div>
+    <div class="wrap">
+      <nav>
+        <a class="brand" href="#"><img src="logo.svg" alt="" /> Godmode Bot</a>
+        <div class="nav-links">
+          <a class="hide-sm" href="#features">Features</a>
+          <a class="hide-sm" href="#security">Security</a>
+          <a class="hide-sm" href="#install">Install</a>
+          <a class="btn" href="https://github.com/codextde/godmode-bot">★ GitHub</a>
+        </div>
+      </nav>
+
+      <header class="hero">
+        <span class="pill"><b>New</b> Open source · MIT · macOS · Windows · Linux</span>
+        <h1>An AI teammate you can <span class="grad">trust to get work done</span></h1>
+        <p class="lead">
+          Godmode Bot gives Claude a real browser, your logins and your 2FA codes — safely — so it can finish tasks end-to-end
+          without pinging you. Chat with it, or spin up persistent agents with their own memory, routines and history.
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/codextde/godmode-bot/releases/latest">⬇ Download</a>
+          <a class="btn" href="https://github.com/codextde/godmode-bot#quick-start">Quick start</a>
+        </div>
+        <div class="shot"><img src="screenshots/chat.png" alt="Godmode Bot chat with an agent working in the browser" /></div>
+      </header>
+
+      <section id="features">
+        <h2>Everything a coworker needs</h2>
+        <p class="sub">Access to your systems, a secure way to log in, memory that sticks, and the judgement to ask only when it matters.</p>
+        <div class="grid">
+          <div class="card"><div class="ico">🧠</div><h3>Claude Code as the brain</h3><p>Runs Claude Code CLI with Opus 5.5 in full-bypass mode — plans, codes, browses and uses tools autonomously.</p></div>
+          <div class="card"><div class="ico">🌐</div><h3>Real browser via browser-use</h3><p>Agents drive a managed Chromium through browser-use. Watch live and take over for a CAPTCHA anytime.</p></div>
+          <div class="card"><div class="ico">🔐</div><h3>Vault for logins</h3><p>AES-256-GCM encrypted credentials. Passwords are typed into the page for the agent — the model never sees them.</p></div>
+          <div class="card"><div class="ico">🔢</div><h3>2FA that just works</h3><p>Import Google Authenticator QR codes from screenshots (even full export batches). Agents enter codes when asked.</p></div>
+          <div class="card"><div class="ico">🍪</div><h3>Continue your Chrome sessions</h3><p>Import cookies from your Chrome profile (profile-use technique) so agents start already signed in.</p></div>
+          <div class="card"><div class="ico">🤖</div><h3>Persistent agents</h3><p>Each agent has its own git repo with memory, logs, conversations and state — fully auditable and versioned.</p></div>
+          <div class="card"><div class="ico">⏰</div><h3>Routines on cron</h3><p>“Every weekday at 8:00 prepare my briefing.” Agents run on schedules and report back.</p></div>
+          <div class="card"><div class="ico">🤝</div><h3>Delegation</h3><p>Agents hand work to peer agents or spin up short-lived subagents — the main Godmode agent can create and manage them all.</p></div>
+          <div class="card"><div class="ico">🧩</div><h3>Composio + MCP</h3><p>Connect hundreds of apps via Composio or any MCP server — globally, per workspace, or per agent.</p></div>
+          <div class="card"><div class="ico">🗂️</div><h3>Workspaces</h3><p>Separate clients or projects with their own agents, logins, 2FA and integrations — plus shared global ones.</p></div>
+          <div class="card"><div class="ico">🎙️</div><h3>Voice mode</h3><p>Dictate tasks and hear replies. Hands-free conversation loop with browser or OpenAI/ElevenLabs voices.</p></div>
+          <div class="card"><div class="ico">📬</div><h3>Missing-login inbox</h3><p>When an agent can't log in, it tells you exactly what's missing so you can add it in one click.</p></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>How it works</h2>
+        <p class="sub">A small local daemon orchestrates Claude Code, a managed browser and your vault. Nothing leaves your machine except what your agents do on the web.</p>
+        <div class="flow">
+          <div class="card"><h3>You ask</h3><p>“Download last month's invoices from our three vendor portals and file them.”</p></div>
+          <div class="card"><h3>Agent plans</h3><p>Claude Code plans the task in the agent's repo, with its memory and instructions.</p></div>
+          <div class="card"><h3>Logs in safely</h3><p>browser-use opens each portal; Godmode fills the password and 2FA code from the vault.</p></div>
+          <div class="card"><h3>Gets it done</h3><p>Files land in the agent's workspace, memory is updated, and you get a concise summary.</p></div>
+        </div>
+      </section>
+
+      <section id="security">
+        <div class="two">
+          <div>
+            <h2>Security by design</h2>
+            <p class="sub">Giving an AI your logins demands a serious security model. Here's ours.</p>
+            <ul class="check">
+              <li><b>Envelope encryption</b> — scrypt-derived key wraps a random 256-bit key; every secret is AES-256-GCM with row binding.</li>
+              <li><b>Fill, don't reveal</b> — secrets are typed into the browser over CDP; the model only learns it worked.</li>
+              <li><b>Redaction</b> — known secrets are masked in transcripts, logs and the UI.</li>
+              <li><b>Audit log</b> — every secret use is recorded with agent and run.</li>
+              <li><b>Local-first</b> — API bound to localhost, per-run MCP tokens, strict CSP, CSRF & DNS-rebinding protection.</li>
+              <li><b>Encrypted backups</b> — export and restore your whole setup with a passphrase.</li>
+            </ul>
+          </div>
+          <div id="install">
+            <h2>Install</h2>
+            <p class="sub">Grab the desktop app from Releases, or run it headless on any device and use the web dashboard.</p>
+            <pre><code># Desktop: download for macOS / Windows / Linux
+https://github.com/codextde/godmode-bot/releases
+
+# Headless server + web dashboard
+curl -fsSL https://raw.githubusercontent.com/codextde/godmode-bot/main/scripts/install.sh | sh
+godmode serve --host 0.0.0.0
+
+# Docker
+docker compose up -d
+
+# From source
+git clone https://github.com/codextde/godmode-bot && cd godmode-bot
+pnpm install && pnpm dev</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Built on great open source</h2>
+        <div class="logos">
+          <span>Claude Code</span><span>browser-use</span><span>Composio</span><span>Model Context Protocol</span><span>Tauri 2</span><span>React 19</span><span>Tailwind CSS v4</span><span>shadcn/ui</span><span>Bun</span><span>aicss</span>
+        </div>
+      </section>
+
+      <footer>
+        <div>© 2026 Codext GmbH & contributors · MIT License</div>
+        <div><a href="https://github.com/codextde/godmode-bot">GitHub</a> · <a href="https://github.com/codextde/godmode-bot/blob/main/SECURITY.md">Security</a> · <a href="https://github.com/codextde/godmode-bot/blob/main/CONTRIBUTING.md">Contribute</a></div>
+      </footer>
+    </div>
+  </body>
+</html>
