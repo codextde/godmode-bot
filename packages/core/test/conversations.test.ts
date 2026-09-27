@@ -8,6 +8,7 @@ import {
   getConversation,
   listConversations,
   safeFileName,
+  sendMessage,
   setConversationState,
   titleFromContent,
   updateConversation,
@@ -73,6 +74,25 @@ describe("conversation list", () => {
     expect(listConversations({ agentId: agent.id, limit: 1 })).toHaveLength(1);
   });
 
+  test("archived chats are listed by last activity, pinned or not", () => {
+    const pinned = createConversation({ agentId: agent.id, title: "Pinned old" });
+    const recent = createConversation({ agentId: agent.id, title: "Recent" });
+    setConversationState(pinned.id, { lastMessageAt: "2031-01-01T00:00:00.000Z" });
+    setConversationState(recent.id, { lastMessageAt: "2031-02-01T00:00:00.000Z" });
+    updateConversation(pinned.id, { pinned: true, archived: true });
+    updateConversation(recent.id, { archived: true });
+    const ids = listConversations({ agentId: agent.id, archived: true }).map((x) => x.id);
+    expect(ids.indexOf(recent.id)).toBeLessThan(ids.indexOf(pinned.id));
+  });
+
+  test("routine runs keep an archived chat archived", async () => {
+    const conv = createConversation({ agentId: agent.id, title: "Morning digest" });
+    updateConversation(conv.id, { archived: true });
+    const { run } = await sendMessage(conv.id, { content: "digest", trigger: "routine" });
+    await waitForRun(run.id, 20_000);
+    expect(getConversation(conv.id).archived).toBe(true);
+  });
+
   test("validation", () => {
     const conv = createConversation({ agentId: agent.id });
     expect(() => updateConversation(conv.id, { title: "  " })).toThrow(/Title/);
@@ -128,6 +148,14 @@ describe("HTTP routes", () => {
     expect(patched.pinned).toBe(true);
     const listed = (await (await api("GET", `/api/conversations?agentId=${defaultAgent.id}&search=week`)).json()) as Conversation[];
     expect(listed.map((c) => c.id)).toEqual([conv.id]);
+
+    const archived = (await (await api("PATCH", `/api/conversations/${conv.id}`, { archived: true })).json()) as Conversation;
+    expect(archived.archived).toBe(true);
+    const archivedList = (await (await api("GET", `/api/conversations?archived=true&agentId=${defaultAgent.id}`)).json()) as Conversation[];
+    expect(archivedList.map((c) => c.id)).toEqual([conv.id]);
+    const reply = (await (await api("POST", `/api/conversations/${conv.id}/messages`, { content: "Back to this" })).json()) as { run: Run };
+    await waitForRun(reply.run.id, 20_000);
+    expect(((await (await api("GET", `/api/conversations/${conv.id}`)).json()) as Conversation).archived).toBe(false);
 
     expect((await api("DELETE", `/api/conversations/${conv.id}`)).status).toBe(200);
     expect((await api("GET", `/api/conversations/${conv.id}`)).status).toBe(404);
