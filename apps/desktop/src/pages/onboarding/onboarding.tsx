@@ -168,7 +168,7 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-background">
-      <Backdrop />
+      <Backdrop rails={false} />
 
       <header
         data-tauri-drag-region

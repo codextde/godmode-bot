@@ -228,6 +228,8 @@ function toneFor(kind: ToolKind) {
   return KIND_TONE[kind] ?? "text-foreground/70 bg-card border-border";
 }
 
+const FILE_EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write"]);
+
 type FileEditInput = { file_path?: string; notebook_path?: string; old_string?: string; new_string?: string; content?: string; edits?: { old_string?: string; new_string?: string }[] };
 
 /** Diff rows for file-editing tools (Edit / MultiEdit / Write), or null for anything else. */
@@ -393,7 +395,9 @@ function ToolStep({
       {running ? <Orb variant="B2" size={15} label={meta.title} /> : <Icon className="size-3.5" />}
     </span>
   );
-  const edit = fileEditOf(block);
+  // Keyed by content: streaming deltas re-create `block` on every token, but the edit itself rarely changes.
+  const editKey = FILE_EDIT_TOOLS.has(block.name) ? JSON.stringify(block.input) : "";
+  const edit = useMemo(() => (editKey ? fileEditOf(block) : null), [editKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const header = (
     <button

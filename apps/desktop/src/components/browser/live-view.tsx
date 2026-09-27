@@ -278,7 +278,7 @@ export function LiveView({
         {expanded && (
           <motion.div
             key="backdrop"
-            className="fixed inset-0 z-40 bg-[#1c1b19]/35"
+            className="fixed inset-0 z-40 bg-[#1c1b19]/35 dark:bg-black/60"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -300,7 +300,7 @@ export function LiveView({
         transition={{ type: "spring", stiffness: 260, damping: 30 }}
         className={cn("rounded-xl outline-none", expanded ? "fixed inset-4 z-50 flex flex-col md:inset-8" : "relative")}
       >
-        <div className={cn("rounded-xl", (live || takeover) && "glow-border", expanded && "flex min-h-0 flex-1 flex-col")}>
+        <div className={cn("rounded-xl", takeover && "glow-border", expanded && "flex min-h-0 flex-1 flex-col")}>
         <div
           className={cn(
             "flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-float",

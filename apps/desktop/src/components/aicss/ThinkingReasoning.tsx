@@ -11,10 +11,11 @@ import styles from "./ThinkingReasoning.module.css";
 const MAX_H = 120; // live viewport grows with content up to this, then rolls
 const FADE = 16;
 
+/** Lines first (lists, plans), then sentences within each line — any script, any capitalisation of digits/quotes. */
 function sentencesOf(text: string): string[] {
   return text
-    .replace(/\s+/g, " ")
-    .split(/(?<=[.!?…])\s+(?=[A-Z0-9"'“(])/)
+    .split(/\n+/)
+    .flatMap((line) => line.replace(/\s+/g, " ").split(/(?<=[.!?…])\s+(?=[\p{Lu}\p{N}"'“„«(])/u))
     .map((s) => s.trim())
     .filter(Boolean);
 }
@@ -66,32 +67,28 @@ export function ThinkingReasoning({ text, active, seconds }: { text: string; act
 
   return (
     <div className={styles.tr}>
-      <button
-        type="button"
-        className={styles.trHeader + (done ? " " + styles.isClickable : "")}
-        aria-expanded={done ? open : true}
-        onClick={done ? () => setOpen((o) => !o) : undefined}
-      >
-        {done ? (
+      {done ? (
+        <button type="button" className={styles.trHeader + " " + styles.isClickable} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           <span className={styles.trLabel}>
             <span className={styles.trVerb}>Thought</span>
             {secs ? ` for ${secs}s` : " process"}
           </span>
-        ) : (
-          <span className={styles.trLabel + " " + styles.trShimmer}>Reasoning…</span>
-        )}
-        {done && (
           <svg className={styles.trChevron} viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
             <path d="m4.5 15.75 7.5-7.5 7.5 7.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-        )}
-      </button>
+        </button>
+      ) : (
+        <div className={styles.trHeader}>
+          <span className={styles.trLabel + " " + styles.trShimmer}>Reasoning…</span>
+        </div>
+      )}
 
       {!done && count > 0 && (
         <div className={styles.trViewport} style={{ height: `${viewH}px`, WebkitMaskImage: liveMask, maskImage: liveMask }}>
           <div ref={streamRef} className={styles.trStream} style={{ transform: `translateY(${translate}px)` }}>
             {sentences.map((line, i) => (
-              <p key={i} className={styles.trSentence}>
+              // The newest sentence is never clamped, so streaming tokens stay visible at the bottom.
+              <p key={i} className={styles.trSentence + (i === count - 1 ? " " + styles.isLive : "")}>
                 {line}
               </p>
             ))}
@@ -100,7 +97,7 @@ export function ThinkingReasoning({ text, active, seconds }: { text: string; act
       )}
 
       {done && (
-        <div className={styles.trCollapsible + (open ? "" : " " + styles.isCollapsed)}>
+        <div className={styles.trCollapsible + (open ? "" : " " + styles.isCollapsed)} inert={!open} aria-hidden={!open}>
           <div className={styles.trInner}>
             <div
               ref={viewportRef}
@@ -108,9 +105,7 @@ export function ThinkingReasoning({ text, active, seconds }: { text: string; act
               style={{ WebkitMaskImage: openMask, maskImage: openMask }}
               onScroll={onScroll}
             >
-              {sentences.map((line, i) => (
-                <p key={i}>{line}</p>
-              ))}
+              {text.trim()}
             </div>
           </div>
         </div>
