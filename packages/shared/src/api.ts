@@ -91,6 +91,18 @@ export interface StartChatInput {
   content: string;
   attachments?: SendMessageInput["attachments"];
   voice?: boolean;
+  /** Model for this chat; omitted = the agent's. */
+  model?: string | null;
+  effort?: Effort | null;
+}
+
+export interface ConversationPatch {
+  title?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  /** null = back to the agent's model / effort. */
+  model?: string | null;
+  effort?: Effort | null;
 }
 
 export interface StartChatResult extends SendMessageResult {

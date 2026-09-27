@@ -3,7 +3,7 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { CalendarClock, Cpu, Ellipsis, History, MessageSquare, Pencil, Play, Power, PowerOff, Trash2 } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { AgentAvatar, ScopeBadge } from "@/components/common";
-import { modelLabel } from "@/components/runs/run-status";
+import { useModelLabel } from "@/components/runs/run-status";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
@@ -28,6 +28,7 @@ export function AgentCard({
   onDelete: (agent: Agent) => void;
 }) {
   const navigate = useNavigate();
+  const modelLabel = useModelLabel();
   const live = useAgentLiveRun(agent.id);
   const running = !!live;
   const chat = useStartAgentChat();

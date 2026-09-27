@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AgentAvatar, EmptyState } from "@/components/common";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { ConversationHeader } from "@/components/chat/conversation-header";
+import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { ChatDropZone, Thread } from "@/components/chat/thread";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -125,6 +126,19 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     },
   });
 
+  const choose = useMutation({
+    mutationFn: (patch: Partial<ModelChoice>) => api.conversations.update(conversationId, patch),
+    onMutate: (patch) => {
+      const old = qc.getQueryData<ConversationWithMessages>(key);
+      qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...patch } : c));
+      return { prev: { model: old?.model ?? null, effort: old?.effort ?? null } };
+    },
+    onError: (err, _patch, ctx) => {
+      if (ctx) qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...ctx.prev } : c));
+      toast.error("Couldn't switch the model", { description: errorMessage(err) });
+    },
+  });
+
   const cancel = useMutation({
     mutationFn: (runId: string) => api.runs.cancel(runId),
     onSuccess: () => toast("Stopping the agent…"),
@@ -207,6 +221,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             autoFocus
             running={!!activeRunId}
             placeholder={agent ? `Message ${agent.name}…` : "Message…"}
+            trailing={
+              <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(choice) => choose.mutate(choice)} />
+            }
             onSubmit={(input) => send.mutateAsync(input)}
           />
           <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 sm:block">

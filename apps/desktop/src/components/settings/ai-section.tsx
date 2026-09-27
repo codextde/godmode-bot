@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { Cpu, Gauge, ShieldAlert, SlidersHorizontal, Sparkles, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
-import { EFFORT_OPTIONS, MODEL_OPTIONS, type Effort, type Settings } from "@godmode/shared";
+import { EFFORT_LABELS, EFFORT_OPTIONS, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
 import { ReasoningEffort } from "@/components/aicss/ReasoningEffort";
-
-const EFFORT_LABELS: Record<Effort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra High", max: "Max" };
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,9 +14,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { InlineCode } from "@/components/onboarding/doctor-checklist";
+import { useModelCatalog } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import {
   Callout,
@@ -35,7 +34,18 @@ import {
 const CUSTOM = "__custom__";
 const NONE = "__none__";
 
-/** Model picker: curated list + "Custom…" for any Claude CLI model id/alias. */
+function ModelItem({ model }: { model: ClaudeModel }) {
+  return (
+    <SelectItem value={model.id}>
+      <span className="flex flex-col items-start gap-0.5">
+        <span className="font-medium">{model.label}</span>
+        {model.description && <span className="text-xs text-muted-foreground">{model.description}</span>}
+      </span>
+    </SelectItem>
+  );
+}
+
+/** Model picker: the models Claude Code offers + "Custom…" for any Claude CLI model id/alias. */
 function ModelSelect({
   id,
   value,
@@ -47,10 +57,13 @@ function ModelSelect({
   onChange: (v: string) => void;
   allowNone?: boolean;
 }) {
-  const known = MODEL_OPTIONS.some((m) => m.id === value);
-  const [custom, setCustom] = useState(!known && !(allowNone && !value));
-  const selectValue = custom ? CUSTOM : allowNone && !value ? NONE : value;
-  const display = custom ? "Custom model id" : selectValue === NONE ? "None" : (MODEL_OPTIONS.find((m) => m.id === value)?.label ?? value);
+  const { catalog, isPending } = useModelCatalog();
+  const known = findModel(catalog.models, value);
+  const [customMode, setCustom] = useState(false);
+  const custom = customMode || (!isPending && !known && !(allowNone && !value));
+  const selectValue = custom ? CUSTOM : allowNone && !value ? NONE : (known?.id ?? value);
+  const display = custom ? "Custom model id" : selectValue === NONE ? "None" : (known?.label ?? value);
+  const older = catalog.models.filter((m) => !m.latest);
 
   return (
     <div className="flex w-full flex-col items-stretch gap-2 sm:w-72">
@@ -75,14 +88,22 @@ function ModelSelect({
               <SelectSeparator />
             </>
           )}
-          {MODEL_OPTIONS.map((m) => (
-            <SelectItem key={m.id} value={m.id}>
-              <span className="flex flex-col items-start gap-0.5">
-                <span className="font-medium">{m.label}</span>
-                <span className="text-xs text-muted-foreground">{m.hint}</span>
-              </span>
-            </SelectItem>
-          ))}
+          {catalog.models
+            .filter((m) => m.latest)
+            .map((m) => (
+              <ModelItem key={m.id} model={m} />
+            ))}
+          {older.length > 0 && (
+            <>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel>Older models</SelectLabel>
+                {older.map((m) => (
+                  <ModelItem key={m.id} model={m} />
+                ))}
+              </SelectGroup>
+            </>
+          )}
           <SelectSeparator />
           <SelectItem value={CUSTOM}>Custom model id…</SelectItem>
         </SelectContent>
@@ -90,7 +111,7 @@ function ModelSelect({
       {custom && (
         <CommitInput
           aria-label="Custom model id"
-          autoFocus={!value || known}
+          autoFocus={!value || !!known}
           className="font-mono text-[13px]"
           placeholder="e.g. claude-opus-5-5 or opus"
           value={known ? "" : value}
@@ -103,6 +124,7 @@ function ModelSelect({
 
 export function AiSection({ settings }: { settings: Settings }) {
   const { patch } = useSettingsPatch();
+  const { catalog } = useModelCatalog();
   const r = settings.runner;
   const [confirmBypass, setConfirmBypass] = useState(false);
 
@@ -132,7 +154,7 @@ export function AiSection({ settings }: { settings: Settings }) {
         <SettingRow label="Reasoning effort" description="Higher effort thinks longer before acting — better results, more tokens.">
           <ReasoningEffort
             aria-label="Reasoning effort"
-            label={MODEL_OPTIONS.find((m) => m.id === r.model)?.label ?? "Effort"}
+            label={findModel(catalog.models, r.model)?.label ?? "Effort"}
             stops={EFFORT_OPTIONS.map((e) => EFFORT_LABELS[e])}
             value={Math.max(0, EFFORT_OPTIONS.indexOf(r.effort))}
             onChange={(i) => {

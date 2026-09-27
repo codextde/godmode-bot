@@ -18,6 +18,7 @@ import type {
   ComposioStatus,
   ComposioToolkit,
   Conversation,
+  ConversationPatch,
   ConversationWithMessages,
   Credential,
   CredentialInput,
@@ -29,6 +30,7 @@ import type {
   McpServerInput,
   MissingLogin,
   MissingLoginPatch,
+  ModelCatalog,
   Routine,
   RoutineInput,
   Run,
@@ -158,6 +160,10 @@ export const api = {
     list: (q: { limit?: number; action?: string } = {}) => get<AuditEntry[]>("/api/audit", q),
   },
 
+  models: {
+    get: (refresh = false) => get<ModelCatalog>("/api/models", { refresh: refresh ? 1 : undefined }),
+  },
+
   doctor: {
     get: (refresh = false) => get<DoctorReport>("/api/doctor", { refresh: refresh ? 1 : undefined }),
     install: (id: DependencyId) => post<{ ok: boolean; output: string }>("/api/doctor/install", { id }),
@@ -234,8 +240,7 @@ export const api = {
       get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
     create: (input: { agentId: string; title?: string }) => post<Conversation>("/api/conversations", input),
-    update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean }) =>
-      patch<Conversation>(`/api/conversations/${id}`, input),
+    update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     send: (id: string, input: SendMessageInput) => post<SendMessageResult>(`/api/conversations/${id}/messages`, input),
   },

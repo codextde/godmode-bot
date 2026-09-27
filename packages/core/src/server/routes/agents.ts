@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { EFFORT_OPTIONS } from "@godmode/shared";
+import { EFFORT_OPTIONS, isModelId } from "@godmode/shared";
 import {
   createAgent,
   deleteAgent,
@@ -20,6 +20,11 @@ import { requireGrant } from "../grants";
 import { body, z } from "../validate";
 
 const id = z.string().min(1).max(64);
+const modelId = z
+  .string()
+  .trim()
+  .refine((v) => v === "" || isModelId(v), "Invalid model id")
+  .optional();
 
 const permissionsSchema = z
   .object({
@@ -50,7 +55,7 @@ const subagentSchema = z.object({
     .regex(/^[a-z0-9][a-z0-9-]*$/, "Use lowercase letters, digits and hyphens"),
   description: z.string().trim().min(1).max(1000),
   prompt: z.string().trim().min(1).max(20_000),
-  model: z.string().trim().max(100).optional(),
+  model: modelId,
 });
 
 export const agentSchema = z.object({
@@ -60,7 +65,7 @@ export const agentSchema = z.object({
   color: z.string().trim().max(32).optional(),
   description: z.string().max(2000).optional(),
   instructions: z.string().max(50_000).optional(),
-  model: z.string().trim().max(100).optional(),
+  model: modelId,
   effort: z.enum(EFFORT_OPTIONS).nullable().optional(),
   enabled: z.boolean().optional(),
   permissions: permissionsSchema.optional(),

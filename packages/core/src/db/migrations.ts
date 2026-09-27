@@ -254,4 +254,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 `,
   },
+  {
+    id: 2,
+    name: "conversation_model",
+    sql: /* sql */ `
+ALTER TABLE conversations ADD COLUMN model TEXT;
+ALTER TABLE conversations ADD COLUMN effort TEXT;
+`,
+  },
 ];

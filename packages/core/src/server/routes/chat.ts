@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
 import { existsSync, readFileSync } from "node:fs";
+import { EFFORT_OPTIONS, isModelId } from "@godmode/shared";
 import {
   createConversation,
   deleteConversation,
@@ -19,6 +20,17 @@ const attachmentSchema = z.object({
   mime: z.string().max(255).default("application/octet-stream"),
   data: z.string().min(1),
 });
+
+/** Per-chat model/effort. null or "" = use the agent's. */
+const modelChoice = {
+  model: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || isModelId(v), "Invalid model id")
+    .nullable()
+    .optional(),
+  effort: z.enum(EFFORT_OPTIONS).nullable().optional(),
+};
 
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
@@ -50,8 +62,8 @@ export function registerChatRoutes(app: Hono): void {
   );
 
   app.post("/api/conversations", async (c) => {
-    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional() }));
-    return c.json(createConversation({ agentId: input.agentId, title: input.title, origin: "chat" }), 201);
+    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), ...modelChoice }));
+    return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
   app.get("/api/conversations/:id", (c) => c.json(getConversation(c.req.param("id"))));
@@ -59,7 +71,12 @@ export function registerChatRoutes(app: Hono): void {
   app.patch("/api/conversations/:id", async (c) => {
     const patch = await body(
       c,
-      z.object({ title: z.string().min(1).max(200).optional(), pinned: z.boolean().optional(), archived: z.boolean().optional() }),
+      z.object({
+        title: z.string().min(1).max(200).optional(),
+        pinned: z.boolean().optional(),
+        archived: z.boolean().optional(),
+        ...modelChoice,
+      }),
     );
     return c.json(updateConversation(c.req.param("id"), patch));
   });
@@ -77,7 +94,7 @@ export function registerChatRoutes(app: Hono): void {
   });
 
   app.post("/api/chat", async (c) => {
-    const input = await body(c, sendSchema.extend({ agentId: z.string().min(1).optional() }));
+    const input = await body(c, sendSchema.extend({ agentId: z.string().min(1).optional(), ...modelChoice }));
     return c.json(await startChat({ ...input, origin: "chat" }), 201);
   });
 

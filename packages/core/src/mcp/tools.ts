@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import type { Agent, Credential, MissingLoginKind, Run } from "@godmode/shared";
+import { isModelId } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
 import { logger } from "../log";
@@ -182,7 +183,12 @@ const agentFields = {
   color: z.string().max(32).optional(),
   description: z.string().max(2000).optional().describe("One-line description of what the agent does"),
   instructions: z.string().max(20000).optional().describe("Standing instructions / role (goes into the agent's CLAUDE.md)"),
-  model: z.string().max(100).optional().describe("Claude model id; empty = global default"),
+  model: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || isModelId(v), "Invalid model id")
+    .optional()
+    .describe("Claude model id or alias (opus, sonnet, haiku…); empty = global default"),
   effort: effortSchema.nullable().optional(),
   enabled: z.boolean().optional(),
   permissions: z

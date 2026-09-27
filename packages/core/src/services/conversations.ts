@@ -10,6 +10,7 @@ import type {
   Attachment,
   Conversation,
   ConversationOrigin,
+  Effort,
   Message,
   MessageBlock,
   MessageRole,
@@ -40,6 +41,8 @@ interface ConversationRow {
   title: string;
   origin: ConversationOrigin;
   claude_session_id: string | null;
+  model: string | null;
+  effort: Effort | null;
   pinned: number;
   archived: number;
   last_message_at: string | null;
@@ -87,6 +90,8 @@ function toConversation(r: ConversationRow): Conversation {
     title: r.title,
     origin: r.origin,
     claudeSessionId: r.claude_session_id,
+    model: r.model || null,
+    effort: r.effort || null,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
     lastMessageAt: r.last_message_at,
@@ -150,7 +155,13 @@ export function titleFromContent(content: string): string {
   return t.length > TITLE_MAX ? `${t.slice(0, TITLE_MAX - 1).trimEnd()}…` : t;
 }
 
-export function createConversation(input: { agentId: string; title?: string; origin?: ConversationOrigin }): Conversation {
+export interface ModelChoice {
+  /** `claude --model` value; null/empty = the agent's model. */
+  model?: string | null;
+  effort?: Effort | null;
+}
+
+export function createConversation(input: { agentId: string; title?: string; origin?: ConversationOrigin } & ModelChoice): Conversation {
   getAgent(input.agentId); // 404 if the agent doesn't exist
   const ts = now();
   const id = newId("cnv");
@@ -161,6 +172,8 @@ export function createConversation(input: { agentId: string; title?: string; ori
     title,
     origin: input.origin ?? "chat",
     claude_session_id: null,
+    model: input.model?.trim() || null,
+    effort: input.effort ?? null,
     pinned: 0,
     archived: 0,
     last_message_at: null,
@@ -202,7 +215,10 @@ export function listConversations(opts: { agentId?: string; search?: string; lim
   return rows.map(toConversation);
 }
 
-export function updateConversation(id: string, patch: { title?: string; pinned?: boolean; archived?: boolean }): Conversation {
+export function updateConversation(
+  id: string,
+  patch: { title?: string; pinned?: boolean; archived?: boolean } & ModelChoice,
+): Conversation {
   requireConversationRow(id);
   const title = patch.title === undefined ? undefined : patch.title.trim().slice(0, 200);
   if (title !== undefined && !title) throw badRequest("Title must not be empty");
@@ -210,6 +226,8 @@ export function updateConversation(id: string, patch: { title?: string; pinned?:
     title,
     pinned: int(patch.pinned),
     archived: int(patch.archived),
+    model: patch.model === undefined ? undefined : patch.model?.trim() || null,
+    effort: patch.effort,
     updated_at: now(),
   });
   const conversation = getConversationSummary(id);
@@ -407,14 +425,16 @@ export async function sendMessage(
 }
 
 /** Create a conversation for the agent (default agent if omitted) and send the first message. */
-export async function startChat(input: {
-  agentId?: string;
-  content: string;
-  origin?: ConversationOrigin;
-  title?: string;
-  attachments?: SendMessageInput["attachments"];
-  voice?: boolean;
-}): Promise<StartChatResult> {
+export async function startChat(
+  input: {
+    agentId?: string;
+    content: string;
+    origin?: ConversationOrigin;
+    title?: string;
+    attachments?: SendMessageInput["attachments"];
+    voice?: boolean;
+  } & ModelChoice,
+): Promise<StartChatResult> {
   const agentId = input.agentId || getDefaultAgentId();
   if (!agentId) throw badRequest("No agent given and no default agent exists");
   const agent = getAgent(agentId);
@@ -422,7 +442,7 @@ export async function startChat(input: {
   const title =
     input.title?.trim() ||
     (input.content?.trim() ? titleFromContent(input.content) : input.attachments?.[0]?.name ? titleFromContent(input.attachments[0].name) : DEFAULT_CONVERSATION_TITLE);
-  const conversation = createConversation({ agentId, title, origin: input.origin ?? "chat" });
+  const conversation = createConversation({ agentId, title, origin: input.origin ?? "chat", model: input.model, effort: input.effort });
   try {
     const result = await sendMessage(conversation.id, { content: input.content, attachments: input.attachments, voice: input.voice });
     return { ...result, conversation: getConversationSummary(conversation.id) };

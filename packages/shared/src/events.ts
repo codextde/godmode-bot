@@ -68,7 +68,8 @@ export type EntityName =
   | "missing-logins"
   | "notifications"
   | "settings"
-  | "runs";
+  | "runs"
+  | "models";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =
