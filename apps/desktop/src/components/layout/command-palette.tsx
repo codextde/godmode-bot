@@ -2,6 +2,7 @@ import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  Archive,
   Bot,
   CalendarClock,
   Globe,
@@ -99,6 +100,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => go("/inbox")}>
             <Inbox /> Inbox
+          </CommandItem>
+          <CommandItem onSelect={() => go("/archived")}>
+            <Archive /> Archived chats
           </CommandItem>
           <CommandItem onSelect={() => go("/vault/logins")}>
             <KeyRound /> Logins
