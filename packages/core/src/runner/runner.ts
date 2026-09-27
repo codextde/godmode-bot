@@ -14,14 +14,13 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { FileSink, Subprocess } from "bun";
 import type { Agent, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
-import { BROWSER_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, parseSlashCommand } from "@godmode/shared";
+import { BROWSER_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
-import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson, which } from "../util";
-import { getAppSecret, isUnlocked, redact } from "../vault/vault";
+import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson } from "../util";
+import { redact } from "../vault/vault";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentStatus, touchAgentRun } from "../agents/service";
-import { resolveClaudeBinary } from "../services/doctor";
 import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
@@ -40,7 +39,9 @@ import {
 } from "../services/conversations";
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
+import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
+import { effortFor } from "./models";
 import { buildSystemPrompt, resumeContextPrefix } from "./prompt";
 import { StreamAccumulator, detectLoginFailure, redactBlocks } from "./stream";
 
@@ -70,21 +71,7 @@ const KILL_GRACE_MS = 5000;
 const SESSION_MISSING = /no conversation found|session(?: id)? [^\n]{0,80}not found|could not find session|no such session/i;
 const AUTH_PROBLEM = /not logged in|please run \/login|invalid api key|authentication_error|oauth token (?:has )?expired|credit balance is too low/i;
 
-/** Environment variables of the parent that must not leak into agent runs. */
-const STRIP_ENV = [
-  "GODMODE_TOKEN",
-  "CLAUDECODE",
-  "CLAUDE_CODE_ENTRYPOINT",
-  "CLAUDE_CODE_SSE_PORT",
-  "CLAUDE_CODE_SESSION_ID",
-  "CLAUDE_CODE_CHILD_SESSION",
-  "CLAUDE_CODE_SESSION_ATTENDED",
-  "CLAUDE_CODE_MESSAGING_SOCKET",
-  "CLAUDE_CODE_MESSAGING_TOKEN",
-  "CLAUDE_CODE_EXECPATH",
-  "CLAUDE_PID",
-  "CLAUDE_EFFORT",
-];
+export { __setClaudeBinaryForTests } from "./claude";
 
 /* ------------------------------------------------------------------ */
 /* Rows                                                                */
@@ -220,6 +207,8 @@ interface Job {
   done: Promise<void> | null;
   /** Browser profile this run drives (undefined = not resolved yet, null = no browser). */
   browserProfileId?: string | null;
+  /** `--model` value the run was started with. */
+  model?: string;
   /** A slash command ran in a replacement session: keep the lost one so the next message still gets the recap. */
   keepSessionId?: string;
 }
@@ -228,15 +217,6 @@ const jobs = new Map<string, Job>();
 const queue: string[] = [];
 const missingLoginReported = new Set<string>();
 let shuttingDown = false;
-let claudeCommandOverride: string[] | false | null = null;
-
-/**
- * Tests: run this command (prefix) instead of the resolved claude binary; `false` simulates a missing
- * CLI; `null` restores normal resolution.
- */
-export function __setClaudeBinaryForTests(command: string | string[] | false | null) {
-  claudeCommandOverride = command === null || command === false ? command : Array.isArray(command) ? command : [command];
-}
 
 /** Called by the MCP gateway when the agent reported a missing login itself (disables the heuristic). */
 export function markMissingLoginReported(runId: string) {
@@ -534,22 +514,6 @@ interface Resources {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
-export function resolveClaudeCommand(): string[] | null {
-  if (claudeCommandOverride === false) return null;
-  if (claudeCommandOverride) return claudeCommandOverride;
-  let bin: string | null;
-  try {
-    bin = resolveClaudeBinary();
-  } catch {
-    // Doctor unavailable: honor the configured path, then PATH.
-    const configured = getSettings().runner.claudePath.trim();
-    bin = configured && existsSync(configured) ? configured : which("claude");
-  }
-  if (!bin) return null;
-  if (process.platform === "win32" && /\.(cmd|bat)$/i.test(bin)) return ["cmd.exe", "/d", "/c", bin];
-  return [bin];
-}
-
 function writeTempFile(res: Resources, name: string, content: string): string {
   const path = join(tmpdir(), name);
   writeFileSync(path, content, { mode: 0o600 });
@@ -563,19 +527,9 @@ function writeTempFile(res: Resources, name: string, content: string): string {
 }
 
 export function buildEnv(agent: Agent, inFolder = false): Record<string, string | undefined> {
-  const env: Record<string, string | undefined> = { ...process.env };
-  for (const key of STRIP_ENV) delete env[key];
-  env.DISABLE_AUTOUPDATER = "1";
+  const env = claudeEnv();
   // Load the agent's CLAUDE.md from its repo (passed with --add-dir) when the cwd is an attached folder.
   if (inFolder) env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
-  if (isUnlocked()) {
-    try {
-      const key = getAppSecret("anthropic_api_key");
-      if (key) env.ANTHROPIC_API_KEY = key;
-    } catch (err) {
-      log.warn("could not read the Anthropic API key from the vault", err);
-    }
-  }
   if (getSettings().memory.backend === "claude-mem" && claudeMemPluginDir()) Object.assign(env, claudeMemEnv(agent));
   return env;
 }
@@ -620,39 +574,6 @@ function scheduleDelta(job: Job) {
   const interval = imageBytes(job) > 1_000_000 ? DELTA_INTERVAL_HEAVY_MS : DELTA_INTERVAL_MS;
   const wait = Math.max(0, interval - (Date.now() - job.lastDeltaAt));
   job.deltaTimer = setTimeout(() => emitDelta(job), wait);
-}
-
-export function killTree(proc: Subprocess, force = false) {
-  if (proc.exitCode !== null || proc.signalCode !== null) return;
-  const pid = proc.pid;
-  if (process.platform === "win32") {
-    try {
-      Bun.spawnSync(["taskkill", "/pid", String(pid), "/T", "/F"], { stdout: "ignore", stderr: "ignore" });
-    } catch (err) {
-      log.warn(`taskkill ${pid} failed`, err);
-      try {
-        proc.kill();
-      } catch {
-        /* already gone */
-      }
-    }
-    return;
-  }
-  const signal = force ? "SIGKILL" : "SIGTERM";
-  try {
-    process.kill(-pid, signal); // whole process group (claude + MCP servers + tool subprocesses)
-  } catch {
-    try {
-      proc.kill(signal);
-    } catch {
-      /* already gone */
-    }
-  }
-  if (!force) {
-    setTimeout(() => {
-      if (proc.exitCode === null && proc.signalCode === null) killTree(proc, true);
-    }, KILL_GRACE_MS).unref?.();
-  }
 }
 
 async function* chunksOf(stream: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
@@ -849,7 +770,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   });
 
   const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
-  const effort = conv.effort || agent.effort || settings.runner.effort || null;
+  const effort = effortFor(model, conv.effort || agent.effort || settings.runner.effort || null);
+  job.model = model;
+  if (!isModelId(model)) return { status: "failed", error: `Invalid model id "${model}"` };
   const fallback = settings.runner.fallbackModel?.trim();
   const budget = agent.permissions.maxBudgetUsd ?? settings.runner.defaultMaxBudgetUsd;
   // cmd.exe cannot pass multi-line arguments: use the file variants for Windows .cmd shims.
@@ -857,7 +780,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 
   const baseArgs = ["-p", "--input-format", "text", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", model];
   if (effort) baseArgs.push("--effort", effort);
-  if (fallback && fallback !== model) baseArgs.push("--fallback-model", fallback);
+  if (fallback && fallback !== model && isModelId(fallback)) baseArgs.push("--fallback-model", fallback);
   if (settings.runner.bypassPermissions) baseArgs.push("--dangerously-skip-permissions");
   else {
     // Non-bypass mode: allow Godmode-provided MCP tools without prompts (print mode cannot ask).
@@ -1018,7 +941,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
       final?.durationMs ?? (wasRunning ? Date.now() - startedMs : null),
       final?.numTurns ?? null,
       final?.usage ? JSON.stringify(final.usage) : null,
-      acc.model ?? (agent ? agent.model || getSettings().runner.model || null : null),
+      acc.model ?? job.model ?? (agent ? agent.model || getSettings().runner.model || null : null),
       ts,
       job.runId,
     ),

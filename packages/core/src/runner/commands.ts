@@ -8,7 +8,8 @@ import { ensureAgentRepo } from "../agents/service";
 import { claudeMemPluginDir } from "../memory/claudeMem";
 import { getSettings } from "../services/settings";
 import { HttpError } from "../util";
-import { CLAUDE_NOT_FOUND, buildEnv, killTree, resolveClaudeCommand } from "./runner";
+import { killTree, resolveClaudeCommand } from "./claude";
+import { CLAUDE_NOT_FOUND, buildEnv } from "./runner";
 
 const TTL_MS = 5 * 60_000;
 const TIMEOUT_MS = 30_000;

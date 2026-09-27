@@ -32,7 +32,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { modelLabel } from "@/components/runs/run-status";
+import { useModelLabel } from "@/components/runs/run-status";
 import { folderName, useShortPath } from "@/components/chat/folder-picker";
 import {
   AgentStatus,
@@ -121,6 +121,7 @@ export default function AgentDetailPage() {
 }
 
 function AgentHeader({ agent }: { agent: Agent }) {
+  const modelLabel = useModelLabel();
   const navigate = useNavigate();
   const chat = useStartAgentChat();
   const toggle = useToggleAgent();

@@ -31,6 +31,7 @@ import type {
   McpServerInput,
   MissingLogin,
   MissingLoginPatch,
+  ModelCatalog,
   Routine,
   RoutineInput,
   Run,
@@ -159,6 +160,10 @@ export const api = {
 
   audit: {
     list: (q: { limit?: number; action?: string } = {}) => get<AuditEntry[]>("/api/audit", q),
+  },
+
+  models: {
+    get: (refresh = false) => get<ModelCatalog>("/api/models", { refresh: refresh ? 1 : undefined }),
   },
 
   doctor: {
