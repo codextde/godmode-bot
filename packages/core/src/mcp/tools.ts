@@ -16,9 +16,10 @@ import { listMissingLogins, reportMissingLogin } from "../services/missingLogins
 import { createRoutine, deleteRoutine, getRoutine, listRoutines, updateRoutine } from "../services/routines";
 import { listWorkspaces } from "../services/workspaces";
 import { createAgent, deleteAgent, getAgent, listAgents, peersFor, updateAgent } from "../agents/service";
-import { credentialsForAgent, findCredentialsForAgent, getCredential, listCredentials, markCredentialUsed, revealForAgent } from "../vault/credentials";
+import { addCredentialDomain, credentialsForAgent, findCredentialsForAgent, getCredential, listCredentials, markCredentialUsed, revealForAgent } from "../vault/credentials";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
-import { fillIntoPage, resolveProfileForAgent } from "../browser/manager";
+import { nameGuessMatchesHost } from "../vault/match";
+import { currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { loginFillScope } from "../browser/fill";
 import { createConversation, sendMessage } from "../services/conversations";
@@ -170,6 +171,21 @@ function requireBrowser(agent: Agent) {
   return resolveProfileForAgent(agent);
 }
 
+/**
+ * Fill binding for a login, extended to the page the agent is on when that site is not one of the login's own
+ * but its brand name matches it exactly (e.g. a login named "Bitpanda" on bitpanda.com it never listed). This is
+ * the only way a name guess widens where a secret may be typed; `guessHost` (the host that was added) is returned
+ * so the caller can remember it on the login after a successful fill. The scope stays https-only.
+ */
+async function fillScopeFor(profileId: string, login: Credential): Promise<{ scope: { allowedHosts: string[]; httpHosts: string[] }; guessHost: string | null }> {
+  const scope = loginFillScope(login);
+  const host = hostnameOf((await currentPage(profileId))?.url ?? "");
+  if (!host || scope.allowedHosts.some((d) => domainMatches(host, d)) || !nameGuessMatchesHost(login, host, { strict: true })) {
+    return { scope, guessHost: null };
+  }
+  return { scope: { allowedHosts: [...scope.allowedHosts, host], httpHosts: scope.httpHosts }, guessHost: host };
+}
+
 /* ------------------------------------------------------------------ */
 /* Schemas                                                             */
 /* ------------------------------------------------------------------ */
@@ -234,15 +250,18 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "vault_list_logins",
     description:
-      "List the website logins saved in the Godmode vault that you may use (never includes passwords). Pass the site's domain or URL to filter. Use the returned id with vault_fill_login / vault_fill_totp.",
+      'List the website logins saved in the Godmode vault that you may use (never includes passwords). Pass the site\'s domain or URL to filter: results match by domain first, then fall back to a best-effort guess by the login\'s name (marked "match": "name") — sanity-check a name guess before relying on it. Use the returned id with vault_fill_login / vault_fill_totp.',
     schema: z.object({ domain: z.string().optional().describe('Domain or URL of the site, e.g. "github.com"') }),
     run: ({ domain }, { agent }) => {
-      const creds = domain?.trim() ? findCredentialsForAgent(agent, domain) : credentialsForAgent(agent);
+      const query = domain?.trim() ? hostnameOf(domain) : "";
+      const creds = query ? findCredentialsForAgent(agent, domain!) : credentialsForAgent(agent);
       if (!creds.length) {
         return domain
-          ? `No saved login for ${hostnameOf(domain) || domain}. If the task needs one, call report_missing_login and continue with other work.`
+          ? `No saved login for ${query || domain}. If the task needs one, call report_missing_login and continue with other work.`
           : "No saved logins are available to you.";
       }
+      const matchedByDomain = (c: Credential) =>
+        [...c.domains, ...(c.url ? [hostnameOf(c.url)] : [])].some((d) => d && domainMatches(query, d));
       return json(
         creds.map((c) => ({
           id: c.id,
@@ -252,6 +271,7 @@ const TOOLS: ToolDef[] = [
           username: c.username,
           hasPassword: c.hasPassword,
           has2fa: c.totpId !== null,
+          ...(query ? { match: matchedByDomain(c) ? "domain" : "name" } : {}),
         })),
       );
     },
@@ -260,7 +280,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "vault_fill_login",
     description:
-      "Type the username or password of a saved login into the browser page — Godmode fills it directly, you never see the value. Only works on the login's own site (its domains/URL, https unless the saved URL is http) — the field's page or frame must belong to it, otherwise the fill is refused. Passwords only go into real password inputs (input[type=password]). The right input is found automatically (focused field, or the best username/password field on the page, incl. iframes); pass a CSS selector only if that picks the wrong field. Use submit:true on the last field to press Enter.",
+      "Type the username or password of a saved login into the browser page — Godmode fills it directly, you never see the value. Only works on the login's own site (its domains/URL, https unless the saved URL is http) — the field's page or frame must belong to it, otherwise the fill is refused; the one exception is a login whose name matches the current site exactly (e.g. a login named \"Bitpanda\" on bitpanda.com), which is filled and remembers that site. Passwords only go into real password inputs (input[type=password]). The right input is found automatically (focused field, or the best username/password field on the page, incl. iframes); pass a CSS selector only if that picks the wrong field. Use submit:true on the last field to press Enter.",
     schema: z.object({
       credentialId: z.string().describe("Login id from vault_list_logins"),
       field: z.enum(["username", "password"]),
@@ -277,11 +297,14 @@ const TOOLS: ToolDef[] = [
         );
       }
       const login = getCredential(credentialId);
-      const result = await fillIntoPage(profile.id, { text: value, kind: field, selector, submit, ...loginFillScope(login) });
-      audit(`agent:${agent.id}`, "credential.fill", credentialId, { field, runId: ctx.runId, ok: result.ok });
+      const { scope, guessHost } = await fillScopeFor(profile.id, login);
+      const result = await fillIntoPage(profile.id, { text: value, kind: field, selector, submit, ...scope });
+      audit(`agent:${agent.id}`, "credential.fill", credentialId, { field, runId: ctx.runId, ok: result.ok, ...(guessHost ? { guessedSite: guessHost } : {}) });
       if (!result.ok) return fail(`Could not fill the ${field}: ${scrub(result.detail, value)}`);
       markCredentialUsed(credentialId);
-      return `Filled ${field} for "${login.name}" into ${result.url}${submit ? " and submitted" : ""}.`;
+      const remembered = guessHost && addCredentialDomain(credentialId, guessHost);
+      if (remembered) audit(`agent:${agent.id}`, "credential.autofix_domain", credentialId, { domain: guessHost, runId: ctx.runId });
+      return `Filled ${field} for "${login.name}" into ${result.url}${submit ? " and submitted" : ""}.${remembered ? ` Added ${guessHost} to this login (its name matched the site).` : ""}`;
     },
   }),
 
@@ -326,10 +349,13 @@ const TOOLS: ToolDef[] = [
         await sleep(code.remaining * 1000 + 300);
         code = codeForAgent(agent, id);
       }
-      const result = await fillIntoPage(profile.id, { text: code.code, kind: "totp", selector, submit, ...loginFillScope(site) });
-      audit(`agent:${agent.id}`, "totp.fill", id, { field: "totp", runId: ctx.runId, credentialId: credentialId ?? null, ok: result.ok });
+      const { scope, guessHost } = await fillScopeFor(profile.id, site);
+      const result = await fillIntoPage(profile.id, { text: code.code, kind: "totp", selector, submit, ...scope });
+      audit(`agent:${agent.id}`, "totp.fill", id, { field: "totp", runId: ctx.runId, credentialId: credentialId ?? null, ok: result.ok, ...(guessHost ? { guessedSite: guessHost } : {}) });
       if (!result.ok) return fail(`Could not fill the 2FA code: ${scrub(result.detail, code.code)}`);
-      return `Filled the current 2FA code into ${result.url}${submit ? " and submitted" : ""}.`;
+      const remembered = guessHost && addCredentialDomain(site.id, guessHost);
+      if (remembered) audit(`agent:${agent.id}`, "credential.autofix_domain", site.id, { domain: guessHost, runId: ctx.runId });
+      return `Filled the current 2FA code into ${result.url}${submit ? " and submitted" : ""}.${remembered ? ` Added ${guessHost} to "${site.name}" (its name matched the site).` : ""}`;
     },
   }),
 

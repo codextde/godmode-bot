@@ -16,6 +16,7 @@ import { toast } from "sonner";
 
 const ChatHome = lazy(() => import("@/pages/chat/chat-home"));
 const ChatConversation = lazy(() => import("@/pages/chat/chat-conversation"));
+const ArchivedPage = lazy(() => import("@/pages/chat/archived-page"));
 const AgentsPage = lazy(() => import("@/pages/agents/agents-page"));
 const AgentNewPage = lazy(() => import("@/pages/agents/agent-new"));
 const AgentDetailPage = lazy(() => import("@/pages/agents/agent-detail"));
@@ -94,6 +95,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<ChatHome />} />
           <Route path="/chat/:conversationId" element={<ChatConversation />} />
+          <Route path="/archived" element={<ArchivedPage />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/agents/new" element={<AgentNewPage />} />
           <Route path="/agents/:agentId/*" element={<AgentDetailPage />} />

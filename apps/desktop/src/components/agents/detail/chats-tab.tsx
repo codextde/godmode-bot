@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Archive, CalendarClock, MessageSquare, MessagesSquare, Pin, Plug, Plus, Search, Share2 } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarClock, MessageSquare, MessagesSquare, Pin, Plug, Plus, Search, Share2 } from "lucide-react";
 import type { Agent, Conversation, ConversationOrigin } from "@godmode/shared";
-import { api, errorMessage } from "@/lib/api";
-import { qk } from "@/lib/queryKeys";
-import { useConversations } from "@/lib/hooks";
+import { errorMessage } from "@/lib/api";
+import { useArchivedConversations, useConversations } from "@/lib/hooks";
 import { useLive } from "@/stores/live";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/common";
@@ -18,6 +16,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useArchiveChat } from "@/components/chat/chat-actions";
 import { useStartAgentChat } from "../agent-actions";
 
 const ORIGIN: Record<ConversationOrigin, { icon: typeof MessageSquare; label: string }> = {
@@ -41,17 +41,17 @@ export function ChatsTab({ agent }: { agent: Agent }) {
   const [showArchived, setShowArchived] = useState(false);
   const q = useDebounced(search.trim());
   const active = useConversations(agent.id, q);
-  const archived = useQuery({
-    queryKey: [...qk.conversations(agent.id, q), "archived"],
-    queryFn: () => api.conversations.list({ agentId: agent.id, search: q, limit: 100, archived: true }),
-    enabled: showArchived,
-  });
+  const archived = useArchivedConversations(agent.id, q, { enabled: showArchived, limit: 100 });
   const chat = useStartAgentChat();
+  const { setArchived } = useArchiveChat();
   const runningConversations = useLive((s) => Object.values(s.runs).map((r) => r.conversationId).join(","));
 
   const list = ((showArchived ? archived.data : active.data) ?? [])
     .filter((c) => showArchived || !c.archived)
-    .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt));
+    .sort(
+      (a, b) =>
+        (showArchived ? 0 : Number(b.pinned) - Number(a.pinned)) || (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt),
+    );
   const query = showArchived ? archived : active;
 
   return (
@@ -102,7 +102,13 @@ export function ChatsTab({ agent }: { agent: Agent }) {
       ) : (
         <div className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
           {list.map((c, i) => (
-            <ConversationRow key={c.id} conversation={c} index={i} running={!!c.running || runningConversations.split(",").includes(c.id)} />
+            <ConversationRow
+              key={c.id}
+              conversation={c}
+              index={i}
+              running={!!c.running || runningConversations.split(",").includes(c.id)}
+              onToggleArchive={() => setArchived(c, !c.archived)}
+            />
           ))}
         </div>
       )}
@@ -110,16 +116,26 @@ export function ChatsTab({ agent }: { agent: Agent }) {
   );
 }
 
-function ConversationRow({ conversation: c, index, running }: { conversation: Conversation; index: number; running: boolean }) {
+function ConversationRow({
+  conversation: c,
+  index,
+  running,
+  onToggleArchive,
+}: {
+  conversation: Conversation;
+  index: number;
+  running: boolean;
+  onToggleArchive: () => void;
+}) {
   const origin = ORIGIN[c.origin] ?? ORIGIN.chat;
   const Icon = origin.icon;
   const when = c.lastMessageAt ?? c.createdAt;
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(index, 15) * 0.02 }}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(index, 15) * 0.02 }} className="group relative">
       <Link
         to={`/chat/${c.id}`}
         className={cn(
-          "flex items-center gap-3 px-4 py-3 transition hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none",
+          "flex items-center gap-3 px-4 py-3 transition group-hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none",
           running && "bg-brand-soft/40",
         )}
       >
@@ -136,10 +152,29 @@ function ConversationRow({ conversation: c, index, running }: { conversation: Co
             {running ? <span className="text-shimmer font-medium">Working…</span> : c.preview || origin.label}
           </span>
         </span>
-        <span className="shrink-0 text-xs text-muted-foreground tabular-nums" title={new Date(when).toLocaleString()}>
+        <span
+          className="shrink-0 text-xs text-muted-foreground tabular-nums transition-opacity group-focus-within:opacity-0 group-hover:opacity-0"
+          title={new Date(when).toLocaleString()}
+        >
           {formatDistanceToNowStrict(new Date(when), { addSuffix: true })}
         </span>
       </Link>
+      <div className="absolute inset-y-0 right-3 flex items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon-xs"
+              variant="outline"
+              aria-label={c.archived ? "Unarchive chat" : "Archive chat"}
+              onClick={onToggleArchive}
+              className="bg-card text-muted-foreground hover:text-foreground"
+            >
+              {c.archived ? <ArchiveRestore /> : <Archive />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{c.archived ? "Unarchive" : "Archive"}</TooltipContent>
+        </Tooltip>
+      </div>
     </motion.div>
   );
 }

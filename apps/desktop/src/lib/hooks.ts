@@ -39,6 +39,14 @@ export function useConversations(agentId?: string, search = "") {
   });
 }
 
+export function useArchivedConversations(agentId?: string, search = "", { enabled = true, limit = 200 } = {}) {
+  return useQuery({
+    queryKey: [...qk.archivedConversations(agentId ?? "all", search), limit],
+    queryFn: () => api.conversations.list({ agentId, search, limit, archived: true }),
+    enabled,
+  });
+}
+
 export function useConversation(id: string | undefined) {
   return useQuery({ queryKey: qk.conversation(id ?? ""), queryFn: () => api.conversations.get(id!), enabled: !!id });
 }
