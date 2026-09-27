@@ -85,10 +85,24 @@ describe("helpers", () => {
 describe("transcribe", () => {
   const audio = new Blob([new Uint8Array([1, 2, 3, 4])], { type: "audio/webm;codecs=opus" });
 
-  test("browser provider is handled in the app", async () => {
+  test("browser provider without an OpenAI key → actionable 400 (no upstream call)", async () => {
     updateSettings({ voice: { sttProvider: "browser" } });
     const err = await expectHttpError(() => transcribe(audio), 400);
-    expect(err.message).toBe("Speech recognition runs in the app for the browser provider");
+    expect(err.message).toContain("Add an OpenAI API key");
+    expect(captured).toHaveLength(0);
+  });
+
+  test("browser provider falls back to OpenAI when the app uploads a recording and a key exists", async () => {
+    updateSettings({ voice: { sttProvider: "browser" } });
+    vault.setAppSecret("openai_api_key", "sk-openai-test");
+    respond = () => Response.json({ text: " hallo welt " });
+    try {
+      const { text } = await transcribe(audio);
+      expect(text).toBe("hallo welt");
+      expect(captured.at(-1)?.url).toContain("/audio/transcriptions");
+    } finally {
+      vault.setAppSecret("openai_api_key", null);
+    }
   });
 
   test("openai without a key → helpful 400", async () => {

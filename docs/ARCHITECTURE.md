@@ -88,7 +88,8 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
-       <prompt>
+       [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key]
+       (prompt is written to stdin)
 cwd = agent repo
 ```
 
@@ -130,8 +131,13 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
 
 * One managed Chromium per **browser profile** (global default + optional per workspace/agent), launched with
   `--remote-debugging-port=<free port> --user-data-dir=~/.godmode/browser/<id>` on 127.0.0.1.
-* Agents get browser tools from the **browser-use MCP server** (`uvx browser-use --mcp`) configured via
-  `BROWSER_USE_CONFIG_DIR` → `config.json` with `browser_profile.cdp_url` pointing at that Chromium.
+* Agents get browser tools from the **browser-use MCP server** (`uvx --from browser-use==0.13.10 browser-use --mcp`)
+  configured via `BROWSER_USE_CONFIG_DIR` → `<data>/browser-use/<profile>/<agent>/config.json` with
+  `browser_profile.cdp_url` pointing at that Chromium; downloads land in the agent's `workspace/downloads`.
+  LLM-backed browser-use tools (`browser_extract_content`, `retry_with_browser_use_agent`) are only offered when an
+  OpenAI key is in the vault (passed via env, never written to disk); otherwise the runner disallows them.
+* One profile = one Chromium: runs that share a profile take turns (delegated child runs may use their parent's
+  browser while the parent waits).
 * **Session import** (“continue where Chrome left off”): the importer uses the same technique as browser-use’s
   `profile-use` — copy the Chrome profile’s cookie store to a temp dir, start the real Chrome binary headless on it
   with CDP, read decrypted cookies via `Storage.getCookies`, inject them into the Godmode profile with

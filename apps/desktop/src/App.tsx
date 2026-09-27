@@ -61,10 +61,12 @@ export function App() {
         const n = event.notification;
         const fn = n.kind === "error" ? toast.error : n.kind === "warning" || n.kind === "missing_login" ? toast.warning : n.kind === "success" ? toast.success : toast;
         fn(n.title, { description: n.body || undefined });
-        if (!document.hasFocus()) void notifyDesktop(n.title, n.body);
+        const desktopOn = qc.getQueryData<{ settings?: { general?: { desktopNotifications?: boolean } } }>(qk.bootstrap)?.settings?.general
+          ?.desktopNotifications;
+        if (desktopOn !== false && !document.hasFocus()) void notifyDesktop(n.title, n.body);
       }
     });
-  }, [authed]);
+  }, [authed, qc]);
 
   if (coreError) return <SplashScreen error={coreError} />;
   if (!coreReady || auth.isLoading) return <SplashScreen />;

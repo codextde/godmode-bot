@@ -5,6 +5,7 @@
  * binary is also looked up in the locations its official installer uses.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { CLAUDE_MEM_VERSION, claudeMemStatus, installClaudeMem } from "../memory/claudeMem";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import type { DependencyId, DependencyStatus, DoctorReport } from "@godmode/shared";
@@ -336,6 +337,19 @@ async function checkGit(): Promise<Check> {
   return { id: "git", name: "git", ok: true, version: versionFrom(res.stdout), path, detail: stripAnsi(res.stdout).trim() };
 }
 
+function checkClaudeMem(): Check {
+  const s = claudeMemStatus();
+  if (s.installed) return { id: "claude-mem", name: "claude-mem (memory)", ok: true, version: s.version, path: s.path, detail: "Optional memory backend" };
+  return {
+    id: "claude-mem",
+    name: "claude-mem (memory)",
+    ok: false,
+    version: null,
+    path: null,
+    detail: s.nodeAvailable ? "Not installed — optional memory backend" : "Needs Node.js 20+ — optional memory backend",
+  };
+}
+
 function installHint(id: DependencyId): string {
   const win = isWin();
   switch (id) {
@@ -353,6 +367,8 @@ function installHint(id: DependencyId): string {
       return "Install Google Chrome, or install Playwright's Chromium: uvx playwright install chromium --no-shell";
     case "git":
       return process.platform === "darwin" ? "Run: xcode-select --install" : win ? "Install Git for Windows from https://git-scm.com" : "Install git with your package manager";
+    case "claude-mem":
+      return `Optional. Godmode downloads claude-mem ${CLAUDE_MEM_VERSION} from npm (needs Node.js 20+); then pick it in Settings → Memory.`;
   }
 }
 
@@ -376,7 +392,7 @@ async function buildReport(refresh: boolean): Promise<DoctorReport> {
   const browserEnabled = settingsOrNull()?.browser.enabled ?? true;
   const claudePath = resolveClaudeBinary();
   const uvx = resolveUvx();
-  const checks = await Promise.all([checkClaude(), checkClaudeAuth(claudePath), checkUv(), checkBrowserUse(uvx, refresh), checkChrome(), checkGit()]);
+  const checks = await Promise.all([checkClaude(), checkClaudeAuth(claudePath), checkUv(), checkBrowserUse(uvx, refresh), checkChrome(), checkGit(), checkClaudeMem()]);
   const required: Record<DependencyId, boolean> = {
     claude: true,
     "claude-auth": true,
@@ -384,6 +400,7 @@ async function buildReport(refresh: boolean): Promise<DoctorReport> {
     "browser-use": browserEnabled,
     chrome: browserEnabled,
     git: false,
+    "claude-mem": settingsOrNull()?.memory.backend === "claude-mem",
   };
   const installable: Record<DependencyId, boolean> = {
     claude: true,
@@ -392,6 +409,7 @@ async function buildReport(refresh: boolean): Promise<DoctorReport> {
     "browser-use": !!uvx,
     chrome: !!uvx,
     git: false,
+    "claude-mem": claudeMemStatus().nodeAvailable,
   };
   const dependencies: DependencyStatus[] = checks.map((c) => ({ ...c, required: required[c.id], installable: installable[c.id], installHint: installHint(c.id) }));
   const report: DoctorReport = {
@@ -432,12 +450,19 @@ function installCommand(id: DependencyId): string[] | { error: string } {
       return { error: installHint("claude-auth") };
     case "git":
       return { error: installHint("git") };
+    case "claude-mem":
+      return { error: "handled separately" };
   }
 }
 
 export async function installDependency(id: DependencyId): Promise<{ ok: boolean; output: string }> {
-  const valid: DependencyId[] = ["claude", "claude-auth", "uv", "browser-use", "chrome", "git"];
+  const valid: DependencyId[] = ["claude", "claude-auth", "uv", "browser-use", "chrome", "git", "claude-mem"];
   if (!valid.includes(id)) return { ok: false, output: `Unknown dependency: ${String(id)}` };
+  if (id === "claude-mem") {
+    const result = await installClaudeMem();
+    cachedReport = null;
+    return result;
+  }
   const cmd = installCommand(id);
   if (!Array.isArray(cmd)) return { ok: false, output: cmd.error };
   log.info(`installing ${id}: ${cmd.join(" ")}`);

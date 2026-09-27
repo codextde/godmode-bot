@@ -24,7 +24,9 @@ memory, routines and history.
 
 <br />
 
-<img src="docs/screenshots/chat.png" alt="Godmode Bot — chatting with the main agent while it works in the browser" width="100%" />
+<img src="docs/screenshots/chat.png" alt="Godmode logging into a portal with a password and 2FA code from the vault — never shown to the AI" width="100%" />
+
+<sub>Godmode logs into a portal: the password and the 2FA code are filled from the vault — the AI never sees them.</sub>
 
 </div>
 
@@ -65,16 +67,24 @@ needs to be useful:
 
 <table>
   <tr>
-    <td><img src="docs/screenshots/agents.png" alt="Agents" /></td>
-    <td><img src="docs/screenshots/agent-detail.png" alt="Agent detail with routines and memory" /></td>
+    <td width="50%"><img src="docs/screenshots/home.png" alt="Home — start a chat with your AI coworker" /><br /><sub><b>Chat first</b> — hand over a task, pick up where you left off</sub></td>
+    <td width="50%"><img src="docs/screenshots/agents.png" alt="Agents" /><br /><sub><b>Agents</b> — persistent coworkers with memory, schedules and tools</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/vault-2fa.png" alt="2FA codes with QR import" /></td>
-    <td><img src="docs/screenshots/integrations.png" alt="Composio and MCP integrations" /></td>
+    <td><img src="docs/screenshots/agent-detail.png" alt="Agent detail with routines and memory" /><br /><sub><b>Agent detail</b> — runs, routines, memory (git), history, settings</sub></td>
+    <td><img src="docs/screenshots/agent-new.png" alt="Create an agent by describing it" /><br /><sub><b>New agent</b> — describe it in plain words or start from a template</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/browser.png" alt="Managed browser with live view" /></td>
-    <td><img src="docs/screenshots/settings.png" alt="Settings" /></td>
+    <td><img src="docs/screenshots/logins.png" alt="Vault logins" /><br /><sub><b>Logins</b> — encrypted, scoped per workspace, filled for agents</sub></td>
+    <td><img src="docs/screenshots/vault-2fa.png" alt="2FA codes with QR import" /><br /><sub><b>2FA codes</b> — import Google Authenticator QR screenshots</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/browser.png" alt="Managed browser with live view" /><br /><sub><b>Browser</b> — live view of the agent's Chromium, take over anytime</sub></td>
+    <td><img src="docs/screenshots/integrations.png" alt="Composio and MCP integrations" /><br /><sub><b>Integrations</b> — Composio toolkits and custom MCP servers</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/inbox.png" alt="Missing-login inbox" /><br /><sub><b>Inbox</b> — agents report missing or broken logins</sub></td>
+    <td><img src="docs/screenshots/activity.png" alt="Activity across agents" /><br /><sub><b>Activity</b> — every run, its cost, duration and result</sub></td>
   </tr>
 </table>
 
@@ -125,6 +135,18 @@ docker compose up -d   # dashboard on http://localhost:7777
 4. **Create agents** — *“Create an agent that checks our competitors' pricing every Monday and sends me a summary.”*
    Godmode creates the agent, its instructions and its routine.
 5. **Check the inbox** — if an agent couldn't log in, it tells you what's missing.
+
+### Good to know
+
+- **macOS — Chrome session import** reads your Chrome profile, which macOS protects: grant Godmode
+  *Full Disk Access* (System Settings → Privacy & Security) and retry. Nothing is uploaded — cookies go straight
+  into Godmode's own browser profile.
+- **browser-use content extraction** (`browser_extract_content`) needs an OpenAI API key (Settings → Integrations →
+  API keys). Without one, Godmode hides that tool and agents read pages via page state and screenshots instead.
+- **Unsigned builds**: until code signing is configured for releases, macOS may ask you to confirm opening the app
+  (right-click → Open) and Windows SmartScreen may warn on first launch.
+- **Claude Code sign-in**: agents use your Claude Code login (`claude` → `/login`) or an Anthropic API key stored
+  in the vault.
 
 ## 🧠 How it works
 

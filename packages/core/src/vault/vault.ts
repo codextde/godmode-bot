@@ -4,6 +4,7 @@ import type { VaultStatus } from "@godmode/shared";
 import { config } from "../config";
 import { getMeta, setMeta, deleteMeta, get, run, all, tx } from "../db";
 import { bus } from "../events/bus";
+import { getSettings } from "../services/settings";
 import { logger } from "../log";
 import { badRequest, locked, now } from "../util";
 import { decrypt, deriveKey, encrypt, newKdfParams, randomKey, sha256, type KdfParams } from "./crypto";
@@ -320,7 +321,7 @@ function loadKnownSecrets() {
 
 /** Replace every known secret value in `text` with a mask. */
 export function redact(text: string): string {
-  if (!text || knownSecrets.size === 0) return text;
+  if (!text || knownSecrets.size === 0 || !getSettings().security.redactSecrets) return text;
   let out = text;
   for (const secret of knownSecrets) {
     if (out.includes(secret)) out = out.split(secret).join("••••••••");

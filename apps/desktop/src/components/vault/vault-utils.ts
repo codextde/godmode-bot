@@ -51,6 +51,22 @@ export function normalizeUrl(url: string): string {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
 }
 
+/** Local / private-network hosts have no public icon — never send them to a third-party icon service. */
+export function isPrivateHost(domain: string): boolean {
+  const h = domain.toLowerCase().replace(/^\[|\]$/g, "");
+  return (
+    h === "localhost" ||
+    h.endsWith(".localhost") ||
+    h.endsWith(".local") ||
+    h.endsWith(".internal") ||
+    h.endsWith(".lan") ||
+    /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.)/.test(h) ||
+    h === "::1" ||
+    /^f[cd][0-9a-f]{2}:/.test(h) ||
+    /^\d+\.\d+\.\d+\.\d+$/.test(h)
+  );
+}
+
 export function faviconUrl(domain: string, size = 64): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${size}`;
 }

@@ -126,8 +126,16 @@ async function providerFetch(provider: Provider, url: string, init: RequestInit,
 
 export async function transcribe(audio: Blob, opts: { language?: string | null; filename?: string | null } = {}): Promise<{ text: string }> {
   const voice = getSettings().voice;
-  if (voice.sttProvider === "browser") throw badRequest("Speech recognition runs in the app for the browser provider");
-  if (voice.sttProvider !== "openai") throw badRequest(`Unsupported speech recognition provider: ${String(voice.sttProvider)}`);
+  if (voice.sttProvider !== "openai" && voice.sttProvider !== "browser") {
+    throw badRequest(`Unsupported speech recognition provider: ${String(voice.sttProvider)}`);
+  }
+  // "browser" normally transcribes inside the app. The app only records and uploads audio when this window has no
+  // speech service (e.g. WebView2/WebKitGTK) — transcribe it with OpenAI when a key is available.
+  if (voice.sttProvider === "browser" && !vault.hasAppSecret(OPENAI_API_KEY_SECRET)) {
+    throw badRequest(
+      "Speech recognition isn't available in this window. Add an OpenAI API key (Settings → Integrations → API keys) so Godmode can transcribe your dictation, or switch Voice → Speech recognition to OpenAI.",
+    );
+  }
   if (!audio || audio.size === 0) throw badRequest("The recording is empty");
   if (audio.size > MAX_AUDIO_BYTES) throw new HttpError(413, "Recordings are limited to 25 MB", "too_large");
 

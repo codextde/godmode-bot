@@ -156,6 +156,13 @@ export function SecuritySection({ settings }: { settings: Settings }) {
         >
           <Switch id="redact" checked={sec.redactSecrets} onCheckedChange={(redactSecrets) => patch({ security: { redactSecrets } })} />
         </SettingRow>
+        <SettingRow
+          label="Load website icons"
+          htmlFor="site-icons"
+          description="Show login icons from Google's favicon service. This tells Google which sites you have saved; turn off for maximum privacy."
+        >
+          <Switch id="site-icons" checked={sec.fetchSiteIcons} onCheckedChange={(fetchSiteIcons) => patch({ security: { fetchSiteIcons } })} />
+        </SettingRow>
         <SettingRow label="Keep audit log for" htmlFor="audit-retention" description="Older entries are pruned automatically.">
           <NumberField
             id="audit-retention"

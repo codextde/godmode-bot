@@ -503,6 +503,8 @@ export interface SecuritySettings {
   defaultSecretAccess: SecretAccessMode;
   /** Redact known secret values from transcripts and logs */
   redactSecrets: boolean;
+  /** Load website icons for logins from Google's favicon service (reveals the domains to Google). */
+  fetchSiteIcons: boolean;
   /** Require confirmation in UI before an agent reveals a secret */
   auditRetentionDays: number;
 }
@@ -540,7 +542,7 @@ export interface Settings {
 /* Doctor (dependency checks)                                           */
 /* ------------------------------------------------------------------ */
 
-export type DependencyId = "claude" | "claude-auth" | "uv" | "browser-use" | "chrome" | "git";
+export type DependencyId = "claude" | "claude-auth" | "uv" | "browser-use" | "chrome" | "git" | "claude-mem";
 
 export interface DependencyStatus {
   id: DependencyId;

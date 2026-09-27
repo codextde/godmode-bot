@@ -19,7 +19,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson, which } from "../util";
 import { getAppSecret, isUnlocked, redact } from "../vault/vault";
-import { commitAgentRepo, ensureAgentRepo, getAgent, peersFor, setAgentStatus, touchAgentRun } from "../agents/service";
+import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentStatus, touchAgentRun } from "../agents/service";
 import { resolveClaudeBinary } from "../services/doctor";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
@@ -37,6 +37,7 @@ import {
   updateMessage,
 } from "../services/conversations";
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
+import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
 import { buildMcpConfig, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { buildSystemPrompt, resumeContextPrefix } from "./prompt";
 import { StreamAccumulator, detectLoginFailure, redactBlocks } from "./stream";
@@ -431,6 +432,11 @@ export async function shutdownRunner(): Promise<void> {
     Promise.allSettled(running.map((j) => j.done ?? Promise.resolve())),
     new Promise((r) => setTimeout(r, KILL_GRACE_MS + 2000)),
   ]);
+  try {
+    await stopClaudeMemWorkers(listAgents({ workspaceId: "all" }));
+  } catch (err) {
+    log.warn("could not stop claude-mem workers", err);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -564,7 +570,7 @@ function buildEnv(agent: Agent): Record<string, string | undefined> {
       log.warn("could not read the Anthropic API key from the vault", err);
     }
   }
-  if (getSettings().memory.backend === "claude-mem") env.CLAUDE_MEM_DATA_DIR = join(agent.repoPath, ".claude-mem");
+  if (getSettings().memory.backend === "claude-mem" && claudeMemPluginDir()) Object.assign(env, claudeMemEnv(agent));
   return env;
 }
 
@@ -858,6 +864,16 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     if (Object.keys(defs).length) {
       const json = JSON.stringify(defs);
       baseArgs.push("--agents", viaFiles ? writeTempFile(res, `godmode-agents-${job.runId}.json`, json) : json);
+    }
+  }
+  if (settings.memory.backend === "claude-mem") {
+    const pluginDir = claudeMemPluginDir();
+    if (pluginDir) baseArgs.push("--plugin-dir", pluginDir);
+    else {
+      job.acc.addNotice(
+        "warning",
+        "The claude-mem memory backend is selected but not installed — install it in Settings → System. Using file memory (MEMORY.md) for now.",
+      );
     }
   }
   const extraArgs = (settings.runner.extraArgs ?? []).filter((a) => typeof a === "string" && a.length > 0);

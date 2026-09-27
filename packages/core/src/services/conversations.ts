@@ -63,8 +63,20 @@ interface MessageRow {
 /* Mapping                                                             */
 /* ------------------------------------------------------------------ */
 
+/** Markdown → plain text for one-line previews (links keep their label, formatting marks are dropped). */
+export function plainPreview(text: string): string {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, "")
+    .replace(/(\*\*|__|~~|`)/g, "")
+    .replace(/(^|\s)[*_]([^*_\s][^*_]*?)[*_](?=\s|$|[.,!?;:])/g, "$1$2")
+    .replace(/\|/g, " ");
+}
+
 function previewOf(text: string | null | undefined): string {
-  const t = (text ?? "").replace(/\s+/g, " ").trim();
+  const t = plainPreview(text ?? "").replace(/\s+/g, " ").trim();
   return t.length > PREVIEW_MAX ? `${t.slice(0, PREVIEW_MAX - 1)}…` : t;
 }
 

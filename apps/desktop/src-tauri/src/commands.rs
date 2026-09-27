@@ -166,7 +166,9 @@ pub fn validate_write_target(raw: &Path, protected: &ProtectedPaths) -> Result<P
     if !raw.is_absolute() {
         return Err(format!("path must be absolute: {}", raw.display()));
     }
-    if raw.components().any(|c| matches!(c, Component::ParentDir)) {
+    // Check the raw string too: in Windows verbatim paths (`\\?\C:\…`) `..` is not parsed as a parent component.
+    let has_parent_segment = raw.to_string_lossy().split(['/', '\\']).any(|segment| segment == "..");
+    if has_parent_segment || raw.components().any(|c| matches!(c, Component::ParentDir)) {
         return Err("path must not contain '..'".into());
     }
     let file_name = raw.file_name().ok_or("path must name a file")?;

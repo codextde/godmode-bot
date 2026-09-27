@@ -52,6 +52,7 @@ export const DEFAULT_SETTINGS: Settings = {
     autoLockMinutes: 0,
     defaultSecretAccess: "fill",
     redactSecrets: true,
+    fetchSiteIcons: true,
     auditRetentionDays: 180,
   },
   server: {

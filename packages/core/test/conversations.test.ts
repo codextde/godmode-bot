@@ -146,3 +146,14 @@ describe("HTTP routes", () => {
     expect((await api("GET", "/api/runs/run_nope/log")).status).toBe(404);
   });
 });
+
+describe("plainPreview", () => {
+  test("strips markdown formatting for one-line previews", async () => {
+    const { plainPreview } = await import("../src/services/conversations");
+    const md = "I created the **📰 HN AI Digest** agent.\n\n| Agent | Next |\n|---|---|\n- [Docs](https://example.com) and `code` _here_\n```ts\nconst x = 1;\n```";
+    const out = plainPreview(md).replace(/\s+/g, " ").trim();
+    expect(out).toContain("I created the 📰 HN AI Digest agent.");
+    expect(out).toContain("Docs and code here");
+    expect(out).not.toMatch(/\*\*|`|\]\(|const x/);
+  });
+});

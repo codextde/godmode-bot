@@ -1,7 +1,12 @@
-import { BrainCircuit, ExternalLink, FileText, GitCommitHorizontal, Sparkles } from "lucide-react";
+import { BrainCircuit, CheckCircle2, Download, ExternalLink, FileText, GitCommitHorizontal, Loader2, Sparkles } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { Settings } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { api, errorMessage } from "@/lib/api";
+import { qk } from "@/lib/queryKeys";
 import { openExternal } from "@/lib/desktop";
 import { ChoiceCards, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
@@ -64,6 +69,7 @@ export function MemorySection({ settings }: { settings: Settings }) {
             },
           ]}
         />
+        {m.backend === "claude-mem" && <ClaudeMemStatus />}
       </SettingsGroup>
 
       <SettingsGroup title="Housekeeping" icon={<GitCommitHorizontal />}>
@@ -82,6 +88,42 @@ export function MemorySection({ settings }: { settings: Settings }) {
           <Switch id="reflect" checked={m.reflectAfterRun} onCheckedChange={(reflectAfterRun) => patch({ memory: { reflectAfterRun } })} />
         </SettingRow>
       </SettingsGroup>
+    </div>
+  );
+}
+
+/** Install state of the optional claude-mem plugin (managed by Godmode, per-agent stores). */
+function ClaudeMemStatus() {
+  const qc = useQueryClient();
+  const doctor = useQuery({ queryKey: qk.doctor, queryFn: () => api.doctor.get() });
+  const dep = doctor.data?.dependencies.find((d) => d.id === "claude-mem");
+  const install = useMutation({
+    mutationFn: () => api.doctor.install("claude-mem"),
+    onSuccess: (res) => {
+      if (res.ok) toast.success("claude-mem installed", { description: "Agents use it from their next run." });
+      else toast.error("claude-mem could not be installed", { description: res.output.split("\n").at(-1) });
+      void qc.invalidateQueries({ queryKey: qk.doctor });
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  if (doctor.isLoading) return null;
+  return (
+    <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border bg-muted/30 px-4 py-3 text-sm">
+      {dep?.ok ? (
+        <p className="flex items-center gap-2 text-muted-foreground">
+          <CheckCircle2 className="size-4 text-success" /> claude-mem {dep.version} is installed. Each agent keeps its own isolated store.
+        </p>
+      ) : (
+        <>
+          <p className="text-muted-foreground">
+            claude-mem isn't installed yet — until it is, agents keep using <code className="font-mono text-[11px]">MEMORY.md</code>.{" "}
+            {dep?.detail?.includes("Node.js") && "It needs Node.js 20+."}
+          </p>
+          <Button size="sm" onClick={() => install.mutate()} disabled={install.isPending || dep?.installable === false}>
+            {install.isPending ? <Loader2 className="animate-spin" /> : <Download />} Install
+          </Button>
+        </>
+      )}
     </div>
   );
 }
