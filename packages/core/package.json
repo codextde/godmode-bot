@@ -1,0 +1,30 @@
+{
+  "name": "@godmode/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Godmode Bot core daemon: agents, runner (Claude Code CLI), vault, browser, scheduler, MCP gateway and HTTP/WebSocket API.",
+  "bin": {
+    "godmode": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "GODMODE_DEV=1 bun --watch src/index.ts serve",
+    "start": "bun src/index.ts serve",
+    "build": "bun run scripts/build.ts",
+    "build:sidecar": "bun run scripts/build.ts --sidecar",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@godmode/shared": "workspace:*",
+    "croner": "^10.0.1",
+    "fflate": "^0.8.3",
+    "hono": "^4.13.9",
+    "isomorphic-git": "^1.42.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "^5.9.3"
+  }
+}

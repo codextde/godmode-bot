@@ -1,0 +1,25 @@
+{
+  "name": "godmode-bot",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Godmode Bot — an open-source AI coworker that works in your browser with your logins, 2FA and tools. Powered by Claude Code + browser-use.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.3"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @godmode/core --filter @godmode/desktop dev",
+    "dev:core": "pnpm --filter @godmode/core dev",
+    "dev:ui": "pnpm --filter @godmode/desktop dev",
+    "dev:app": "pnpm --filter @godmode/desktop tauri dev",
+    "build": "pnpm --filter @godmode/desktop build && pnpm --filter @godmode/core build",
+    "build:app": "pnpm --filter @godmode/desktop build && pnpm --filter @godmode/core build:sidecar && pnpm --filter @godmode/desktop tauri build",
+    "start": "pnpm --filter @godmode/core start",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint"
+  }
+}

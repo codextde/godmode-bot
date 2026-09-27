@@ -1,0 +1,99 @@
+import type { ServerWebSocket } from "bun";
+import type { ClientEvent, ServerEvent } from "@godmode/shared";
+import { bus } from "../events/bus";
+import { VERSION } from "../config";
+import { logger } from "../log";
+
+const log = logger("ws");
+
+export interface WsData {
+  id: string;
+  subscriptions: Set<string>;
+}
+
+const clients = new Set<ServerWebSocket<WsData>>();
+const browserSubscribers = new Map<string, number>();
+
+/** Hooks invoked when the first/last UI subscribes to a browser live view. */
+let onBrowserSubscribe: ((profileId: string, subscribed: boolean) => void) | null = null;
+
+export function setBrowserSubscriptionHandler(fn: (profileId: string, subscribed: boolean) => void) {
+  onBrowserSubscribe = fn;
+}
+
+export function hasBrowserSubscribers(profileId: string): boolean {
+  return (browserSubscribers.get(profileId) ?? 0) > 0;
+}
+
+function send(ws: ServerWebSocket<WsData>, event: ServerEvent) {
+  try {
+    ws.send(JSON.stringify(event));
+  } catch {
+    /* ignore */
+  }
+}
+
+bus.on((event) => {
+  if (event.type === "browser.frame") {
+    for (const ws of clients) if (ws.data.subscriptions.has(`browser:${event.profileId}`)) send(ws, event);
+    return;
+  }
+  const payload = JSON.stringify(event);
+  for (const ws of clients) {
+    try {
+      ws.send(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+});
+
+function changeSubscription(ws: ServerWebSocket<WsData>, profileId: string, subscribe: boolean) {
+  const key = `browser:${profileId}`;
+  const has = ws.data.subscriptions.has(key);
+  if (subscribe === has) return;
+  if (subscribe) ws.data.subscriptions.add(key);
+  else ws.data.subscriptions.delete(key);
+  const count = (browserSubscribers.get(profileId) ?? 0) + (subscribe ? 1 : -1);
+  browserSubscribers.set(profileId, Math.max(0, count));
+  if ((subscribe && count === 1) || (!subscribe && count <= 0)) onBrowserSubscribe?.(profileId, subscribe);
+}
+
+export const websocketHandler = {
+  open(ws: ServerWebSocket<WsData>) {
+    clients.add(ws);
+    send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString() });
+  },
+  message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
+    let msg: ClientEvent;
+    try {
+      msg = JSON.parse(typeof raw === "string" ? raw : raw.toString("utf8"));
+    } catch {
+      return;
+    }
+    switch (msg.type) {
+      case "ping":
+        ws.send(JSON.stringify({ type: "pong" }));
+        break;
+      case "browser.subscribe":
+        changeSubscription(ws, msg.profileId, true);
+        break;
+      case "browser.unsubscribe":
+        changeSubscription(ws, msg.profileId, false);
+        break;
+    }
+  },
+  close(ws: ServerWebSocket<WsData>) {
+    for (const key of ws.data.subscriptions) {
+      if (key.startsWith("browser:")) changeSubscription(ws, key.slice(8), false);
+    }
+    clients.delete(ws);
+  },
+  error(_ws: ServerWebSocket<WsData>, err: Error) {
+    log.warn("websocket error", err);
+  },
+};
+
+export function clientCount() {
+  return clients.size;
+}

@@ -1,0 +1,205 @@
+#!/usr/bin/env bun
+/**
+ * Godmode Bot core daemon.
+ *
+ *   godmode serve [--host 127.0.0.1] [--port 7777] [--data-dir ~/.godmode] [--ui ./dist]
+ *   godmode token            print the access token for the web dashboard
+ *   godmode password <pw>    set the web dashboard password
+ *   godmode doctor           check dependencies (claude, uv, chrome)
+ *   godmode version
+ */
+import { parseArgs } from "node:util";
+import { loadConfig, config, VERSION, isLoopbackHost } from "./config";
+import { logger, setLogDir } from "./log";
+import { openDb, closeDb } from "./db";
+import { createApp } from "./server/app";
+import { websocketHandler, type WsData } from "./server/ws";
+import { authenticate, getAccessToken, setDashboardPassword } from "./server/auth";
+import { getSettings, updateSettings } from "./services/settings";
+import { applyRuntimeSettings } from "./services/runtime";
+import * as vault from "./vault/vault";
+import { ensureDefaultAgent } from "./agents/service";
+import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
+import { startScheduler, stopScheduler } from "./scheduler/scheduler";
+import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
+import { runDoctor } from "./services/doctor";
+import { newId } from "./util";
+
+const log = logger("core");
+
+function parseCli() {
+  const { values, positionals } = parseArgs({
+    args: Bun.argv.slice(2),
+    options: {
+      host: { type: "string" },
+      port: { type: "string" },
+      "data-dir": { type: "string" },
+      ui: { type: "string" },
+      mode: { type: "string" },
+      help: { type: "boolean", short: "h" },
+    },
+    allowPositionals: true,
+    strict: false,
+  });
+  return { values, positionals };
+}
+
+async function serve(values: Record<string, unknown>) {
+  const cfg = loadConfig({
+    ...(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {}),
+    ...(values.ui ? { uiDir: String(values.ui) } : {}),
+    ...(values.mode ? { mode: values.mode as "desktop" | "server" } : {}),
+  });
+  setLogDir(cfg.logsDir);
+  openDb(cfg.dbPath);
+
+  const settings = getSettings();
+  // CLI flags > env > settings
+  cfg.host = (values.host as string) || process.env.GODMODE_HOST || settings.server.host || cfg.host;
+  cfg.port = Number(values.port || process.env.GODMODE_PORT || settings.server.port || cfg.port);
+  if (!isLoopbackHost(cfg.host) && !settings.server.remoteAccess) {
+    log.warn(`binding to ${cfg.host} enables remote dashboard access`);
+    updateSettings({ server: { remoteAccess: true } });
+  }
+
+  applyRuntimeSettings(getSettings());
+  await vault.tryAutoUnlock();
+  ensureDefaultProfile();
+  await ensureDefaultAgent();
+  recoverInterruptedRuns();
+  startScheduler();
+
+  const app = createApp();
+  const token = getAccessToken();
+
+  const serveOpts = {
+    hostname: cfg.host,
+    idleTimeout: 120,
+    fetch(req: Request, server: import("bun").Server<WsData>) {
+      const url = new URL(req.url);
+      if (url.pathname === "/api/ws") {
+        // Reuse Hono-compatible auth on a minimal context shim
+        const shim = {
+          req: {
+            header: (n: string) => req.headers.get(n) ?? undefined,
+            query: (n: string) => url.searchParams.get(n) ?? undefined,
+            raw: req,
+            url: req.url,
+          },
+        };
+        if (!authenticate(shim as never)) return new Response("Unauthorized", { status: 401 });
+        const ok = server.upgrade(req, { data: { id: newId("ws"), subscriptions: new Set<string>() } });
+        return ok ? undefined : new Response("Upgrade failed", { status: 400 });
+      }
+      return app.fetch(req, { server });
+    },
+    websocket: websocketHandler,
+  };
+
+  let server: import("bun").Server<WsData>;
+  try {
+    server = Bun.serve<WsData>({ ...serveOpts, port: cfg.port } as never);
+  } catch (err) {
+    if (cfg.mode === "desktop") {
+      log.warn(`port ${cfg.port} unavailable, picking a random port`);
+      server = Bun.serve<WsData>({ ...serveOpts, port: 0 } as never);
+    } else {
+      throw err;
+    }
+  }
+  cfg.port = server.port ?? cfg.port;
+
+  const displayHost = isLoopbackHost(cfg.host) ? "127.0.0.1" : cfg.host;
+  const url = `http://${displayHost}:${cfg.port}`;
+  // Machine-readable ready line for the desktop shell.
+  console.log(`GODMODE_READY ${JSON.stringify({ url, port: cfg.port, version: VERSION })}`);
+  log.info(`Godmode core ${VERSION} listening on ${url} (mode=${cfg.mode}, data=${cfg.dataDir})`);
+  if (cfg.mode === "server") {
+    log.info(`Dashboard: ${url}  — access token: ${token.slice(0, 6)}… (run \`godmode token\` to print it)`);
+  }
+
+  // Background doctor check so the UI has fresh dependency info.
+  runDoctor(true).catch((err) => log.warn("doctor failed", err));
+
+  let stopping = false;
+  const shutdown = async (signal: string) => {
+    if (stopping) return;
+    stopping = true;
+    log.info(`received ${signal}, shutting down`);
+    stopScheduler();
+    await shutdownRunner();
+    await shutdownBrowsers();
+    server.stop(true);
+    closeDb();
+    process.exit(0);
+  };
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  // Desktop shell closes our stdin when it exits — treat as shutdown signal.
+  if (cfg.mode === "desktop") {
+    process.stdin.on("end", () => void shutdown("stdin-closed"));
+    process.stdin.resume();
+  }
+}
+
+async function main() {
+  const { values, positionals } = parseCli();
+  const cmd = positionals[0] ?? "serve";
+  if (values.help || cmd === "help") {
+    console.log(`Godmode Bot ${VERSION}
+
+Usage:
+  godmode serve [--host 127.0.0.1] [--port 7777] [--data-dir ~/.godmode] [--ui <dir>]
+  godmode token              Print the dashboard access token
+  godmode password <new>     Set the web dashboard password
+  godmode doctor             Check dependencies
+  godmode version`);
+    return;
+  }
+  switch (cmd) {
+    case "serve":
+      await serve(values);
+      return;
+    case "version":
+      console.log(VERSION);
+      return;
+    case "token": {
+      const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
+      openDb(cfg.dbPath);
+      console.log(getAccessToken());
+      return;
+    }
+    case "password": {
+      const pw = positionals[1];
+      if (!pw) throw new Error("usage: godmode password <new-password>");
+      const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
+      openDb(cfg.dbPath);
+      setDashboardPassword(pw);
+      updateSettings({ server: { hasDashboardPassword: true } });
+      console.log("Dashboard password updated.");
+      return;
+    }
+    case "doctor": {
+      const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
+      openDb(cfg.dbPath);
+      const report = await runDoctor(true);
+      for (const d of report.dependencies) {
+        console.log(`${d.ok ? "✅" : d.required ? "❌" : "⚠️ "} ${d.name.padEnd(22)} ${d.version ?? ""} ${d.ok ? "" : "— " + d.installHint}`);
+      }
+      process.exit(report.ok ? 0 : 1);
+    }
+    default:
+      console.error(`Unknown command: ${cmd}`);
+      process.exit(2);
+  }
+}
+
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : err);
+  try {
+    config();
+  } catch {
+    /* config not loaded */
+  }
+  process.exit(1);
+});

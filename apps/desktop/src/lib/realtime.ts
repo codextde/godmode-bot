@@ -1,0 +1,190 @@
+import type { QueryClient } from "@tanstack/react-query";
+import type { ClientEvent, EntityName, ServerEvent } from "@godmode/shared";
+import { wsUrl } from "./core";
+import { useLive } from "@/stores/live";
+import { qk } from "./queryKeys";
+
+type Listener = (event: ServerEvent) => void;
+const listeners = new Set<Listener>();
+
+let socket: WebSocket | null = null;
+let retry = 0;
+let stopped = false;
+let pingTimer: ReturnType<typeof setInterval> | null = null;
+const pendingSends: ClientEvent[] = [];
+
+/** Subscribe to raw server events (returns unsubscribe). */
+export function onServerEvent(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function sendClientEvent(event: ClientEvent) {
+  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event));
+  else pendingSends.push(event);
+}
+
+const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
+  workspaces: [qk.workspaces],
+  agents: [qk.agents],
+  routines: [qk.routines],
+  credentials: [qk.credentials],
+  totp: [qk.totp],
+  "mcp-servers": [qk.mcpServers],
+  composio: [qk.composio],
+  "browser-profiles": [qk.browserProfiles],
+  "missing-logins": [qk.missingLogins, qk.bootstrap],
+  notifications: [qk.notifications, qk.bootstrap],
+  settings: [qk.settings, qk.bootstrap],
+  runs: [qk.runs],
+};
+
+export function startRealtime(queryClient: QueryClient) {
+  stopped = false;
+  void connect(queryClient);
+  return () => {
+    stopped = true;
+    socket?.close();
+    socket = null;
+    if (pingTimer) clearInterval(pingTimer);
+  };
+}
+
+async function connect(queryClient: QueryClient) {
+  if (stopped) return;
+  let url: string;
+  try {
+    url = await wsUrl();
+  } catch {
+    scheduleReconnect(queryClient);
+    return;
+  }
+  const ws = new WebSocket(url);
+  socket = ws;
+  ws.onopen = () => {
+    retry = 0;
+    useLive.getState().setConnected(true);
+    while (pendingSends.length) ws.send(JSON.stringify(pendingSends.shift()));
+    // Resubscribe live views
+    for (const profileId of useLive.getState().browserSubscriptions) {
+      ws.send(JSON.stringify({ type: "browser.subscribe", profileId } satisfies ClientEvent));
+    }
+    if (pingTimer) clearInterval(pingTimer);
+    pingTimer = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: "ping" })), 25_000);
+    // Refresh everything after a reconnect — we may have missed events.
+    void queryClient.invalidateQueries();
+  };
+  ws.onmessage = (msg) => {
+    let event: ServerEvent;
+    try {
+      event = JSON.parse(msg.data as string);
+    } catch {
+      return;
+    }
+    handle(queryClient, event);
+    for (const l of listeners) {
+      try {
+        l(event);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+  ws.onclose = () => {
+    useLive.getState().setConnected(false);
+    if (pingTimer) clearInterval(pingTimer);
+    if (socket === ws) socket = null;
+    scheduleReconnect(queryClient);
+  };
+  ws.onerror = () => ws.close();
+}
+
+function scheduleReconnect(queryClient: QueryClient) {
+  if (stopped) return;
+  const delay = Math.min(10_000, 500 * 2 ** retry++);
+  setTimeout(() => void connect(queryClient), delay);
+}
+
+function handle(qc: QueryClient, event: ServerEvent) {
+  const live = useLive.getState();
+  switch (event.type) {
+    case "run.started":
+      live.runStarted(event.run);
+      qc.invalidateQueries({ queryKey: qk.runs });
+      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      break;
+    case "run.delta":
+      live.runDelta(event.runId, event.conversationId, event.messageId, event.blocks);
+      break;
+    case "run.activity":
+      live.runActivity(event.runId, event.label);
+      break;
+    case "run.finished":
+      live.runFinished(event.run);
+      qc.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
+      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries({ queryKey: qk.runs });
+      qc.invalidateQueries({ queryKey: qk.agents });
+      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      break;
+    case "message.created":
+    case "message.updated":
+      qc.invalidateQueries({ queryKey: qk.conversation(event.message.conversationId) });
+      break;
+    case "conversation.updated":
+      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
+      break;
+    case "conversation.deleted":
+      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      break;
+    case "agent.updated":
+    case "agent.deleted":
+      qc.invalidateQueries({ queryKey: qk.agents });
+      break;
+    case "routine.updated":
+    case "routine.deleted":
+      qc.invalidateQueries({ queryKey: qk.routines });
+      break;
+    case "missing-login.created":
+    case "missing-login.updated":
+      qc.invalidateQueries({ queryKey: qk.missingLogins });
+      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      break;
+    case "notification":
+      qc.invalidateQueries({ queryKey: qk.notifications });
+      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      break;
+    case "vault.status":
+      qc.setQueryData(qk.vaultStatus, event.status);
+      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      break;
+    case "browser.updated":
+      qc.invalidateQueries({ queryKey: qk.browserProfiles });
+      break;
+    case "browser.frame":
+      live.browserFrame(event.profileId, {
+        data: event.data,
+        url: event.url,
+        title: event.title,
+        width: event.width,
+        height: event.height,
+        at: Date.now(),
+      });
+      break;
+    case "entity.changed":
+      for (const key of ENTITY_KEYS[event.entity] ?? []) qc.invalidateQueries({ queryKey: key });
+      break;
+  }
+}
+
+/** Subscribe to the live view of a browser profile (reference counted by the core). */
+export function subscribeBrowser(profileId: string): () => void {
+  useLive.getState().addBrowserSubscription(profileId);
+  sendClientEvent({ type: "browser.subscribe", profileId });
+  return () => {
+    useLive.getState().removeBrowserSubscription(profileId);
+    sendClientEvent({ type: "browser.unsubscribe", profileId });
+  };
+}
