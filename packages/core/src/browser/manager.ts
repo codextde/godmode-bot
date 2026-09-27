@@ -15,13 +15,13 @@ import { getSettings } from "../services/settings";
 import { getAppSecret, isUnlocked } from "../vault/vault";
 import { onSettingsApplied } from "../services/runtime";
 import { resolveUvx, toolPath } from "../services/doctor";
-import { hasBrowserSubscribers } from "../server/ws";
+import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
 import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type PageSession } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillOnPage, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
-import { initLiveView } from "./screencast";
+import { initLiveView, startLiveView, stopLiveView } from "./screencast";
 import * as importer from "./importer";
 
 const log = logger("browser");
@@ -437,33 +437,34 @@ export async function sweepIdleBrowsers(): Promise<void> {
   if (!keepAlive || keepAlive <= 0) return;
   for (const rb of allRunning()) {
     if (rb.stopping || launching.has(rb.profileId)) continue;
-    if (hasBrowserSubscribers(rb.profileId)) {
+    if (hasBrowserWatchers(rb.profileId)) {
       rb.lastUsedAt = Date.now();
       continue;
     }
     if (Date.now() - rb.lastUsedAt < keepAlive * 60_000) continue;
-    try {
-      // Another CDP client (e.g. a browser-use MCP server of a running agent) attached to a tab = in use.
-      const { targetInfos } = await rb.client.send<{ targetInfos: { type: string; url: string; attached: boolean }[] }>("Target.getTargets");
-      if (targetInfos.some((t) => isUserPage(t) && t.attached)) {
-        rb.lastUsedAt = Date.now();
-        continue;
-      }
-      // A visible window the human is focused on is in use too.
-      if (!rb.headless) {
-        const page = await pickActivePage(rb.client, { port: rb.port });
-        if (page && (await pageHasFocus(rb, page.targetId))) {
-          rb.lastUsedAt = Date.now();
-          continue;
-        }
-      }
-    } catch {
-      /* browser going away — the exit handler cleans up */
+    // Passive previews attach our own screencast to the tab; pause it so it doesn't look like another CDP client.
+    const previewing = hasBrowserSubscribers(rb.profileId);
+    if (previewing) await stopLiveView(rb.profileId);
+    // An error means the browser is going away — the exit handler cleans up.
+    const inUse = await browserInUse(rb).catch(() => true);
+    if (inUse) {
+      rb.lastUsedAt = Date.now();
+      if (previewing && hasBrowserSubscribers(rb.profileId)) void startLiveView(rb.profileId);
       continue;
     }
     log.info(`stopping idle browser for profile ${rb.profileId} (unused for ${keepAlive} min)`);
     await stopBrowser(rb.profileId).catch((err) => log.warn("idle stop failed", err));
   }
+}
+
+async function browserInUse(rb: RunningBrowser): Promise<boolean> {
+  // Another CDP client (e.g. a browser-use MCP server of a running agent) attached to a tab = in use.
+  const { targetInfos } = await rb.client.send<{ targetInfos: { type: string; url: string; attached: boolean }[] }>("Target.getTargets");
+  if (targetInfos.some((t) => isUserPage(t) && t.attached)) return true;
+  // A visible window the human is focused on is in use too.
+  if (rb.headless) return false;
+  const page = await pickActivePage(rb.client, { port: rb.port });
+  return !!page && (await pageHasFocus(rb, page.targetId));
 }
 
 async function pageHasFocus(rb: RunningBrowser, targetId: string): Promise<boolean> {
