@@ -2,7 +2,7 @@
 :global(:root) {
   --cb-bg: var(--card);
   --cb-ring: var(--border);
-  --cb-shadow: 0 0 0 1px var(--border), var(--shadow-card);
+  --cb-shadow: 0 0 0 1px var(--border), var(--gm-shadow-card);
   --cb-fg: var(--foreground);
   --cb-muted: var(--muted-foreground);
   --cb-copy-hover-fg: var(--foreground);

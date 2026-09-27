@@ -36,9 +36,13 @@ const SUGGESTIONS = [
 function plainPreview(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/(\s*\|?\s*:?-{3,}:?)+/g, " ")
-    .replace(/[|*_`#>]+/g, " ")
+    .replace(/(^|\s)#{1,6}\s+/g, "$1")
+    .replace(/(\*\*|__|`)/g, "")
+    .replace(/(\s*\|\s*)+/g, " · ")
     .replace(/\s+/g, " ")
+    .replace(/^[\s·]+|[\s·]+$/g, "")
     .trim();
 }
 

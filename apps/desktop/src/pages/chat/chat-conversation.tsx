@@ -199,7 +199,6 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       />
 
       <div className="relative shrink-0 px-3 pb-3 sm:px-6 sm:pb-4">
-        <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />
         <div className="mx-auto w-full max-w-3xl">
           <Composer
             ref={composerRef}
