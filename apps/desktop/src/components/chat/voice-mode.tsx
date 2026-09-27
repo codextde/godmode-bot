@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Backdrop } from "@/components/brand";
 import { AgentAvatar, Kbd } from "@/components/common";
+import { LiveDot } from "@/components/aicss/Motion";
 import { useDictation, useVoiceSettings } from "@/hooks/use-voice";
 import { speak, stopSpeaking, useVoiceSession, voiceInputSupported } from "@/lib/voice";
 import { useUi } from "@/stores/ui";
@@ -234,22 +235,25 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="fixed inset-0 z-[70] flex flex-col overflow-hidden bg-background/85 backdrop-blur-2xl"
+      className="fixed inset-0 z-[70] flex flex-col overflow-hidden bg-background"
     >
-      <Backdrop className="opacity-80" />
+      <Backdrop />
       <div className="relative flex items-center justify-between gap-3 px-5 pt-5 sm:px-8 sm:pt-7">
         <div className="flex min-w-0 items-center gap-2.5">
           {agent && <AgentAvatar agent={agent} size="md" />}
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-sm font-semibold">{agent?.name ?? "Godmode"}</div>
-            <div className="text-xs text-muted-foreground">Voice mode</div>
+            <div className="truncate text-sm font-medium tracking-[-0.01em]">{agent?.name ?? "Godmode"}</div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <LiveDot live={shownPhase === "listening"} />
+              Voice mode
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
             <Kbd>Esc</Kbd> to exit
           </span>
-          <Button variant="ghost" size="icon" onClick={close} aria-label="Exit voice mode" className="rounded-full">
+          <Button variant="ghost" size="icon" onClick={close} aria-label="Exit voice mode">
             <X />
           </Button>
         </div>
@@ -277,7 +281,12 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
             </motion.p>
           </AnimatePresence>
           {transcript && (
-            <p className={cn("text-2xl leading-snug font-medium tracking-tight text-balance sm:text-3xl", shownPhase !== "listening" && "text-foreground/70")}>
+            <p
+              className={cn(
+                "text-[26px] leading-[1.2] font-medium tracking-[-0.03em] text-balance sm:text-[32px]",
+                shownPhase !== "listening" && "text-foreground/40",
+              )}
+            >
               “{transcript}”
             </p>
           )}
@@ -298,20 +307,20 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
             disabled={!supported || !(phase === "paused" || phase === "listening" || phase === "waiting")}
             aria-label={muted ? "Resume listening" : "Pause listening"}
             aria-pressed={muted}
-            className={cn("size-14 rounded-full glass", muted && "border-rose-500/40 text-rose-500")}
+            className={cn("size-12 rounded-xl shadow-card", muted && "border-destructive/30 bg-destructive/[0.06] text-destructive hover:bg-destructive/10 hover:text-destructive")}
           >
             {muted ? <MicOff className="size-5" /> : <Mic className="size-5" />}
           </Button>
           {busy && onStop && (
-            <Button variant="outline" size="icon-lg" onClick={onStop} aria-label="Stop the agent" className="size-14 rounded-full glass">
+            <Button variant="outline" size="icon-lg" onClick={onStop} aria-label="Stop the agent" className="size-12 rounded-xl shadow-card">
               <Square className="size-4 fill-current" />
             </Button>
           )}
-          <Button size="icon-lg" onClick={close} aria-label="End voice mode" className="size-14 rounded-full bg-rose-500 text-white shadow-lg shadow-rose-500/30 hover:bg-rose-500/90">
+          <Button variant="destructive" size="icon-lg" onClick={close} aria-label="End voice mode" className="size-12 rounded-xl">
             <X className="size-5" />
           </Button>
         </div>
-        <p className="hidden text-xs text-muted-foreground sm:block">
+        <p className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
           <Kbd>Space</Kbd> talk / interrupt · <Kbd>Esc</Kbd> exit
         </p>
       </div>

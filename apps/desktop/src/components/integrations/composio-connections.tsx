@@ -40,10 +40,10 @@ export function ConnectionStatusBadge({ status }: { status: string }) {
     <Badge
       className={cn(
         "h-5 gap-1.5 text-[10px]",
-        tone === "ok" && "bg-success/15 text-success",
-        tone === "pending" && "bg-warning/15 text-warning",
-        tone === "error" && "bg-destructive/15 text-destructive",
-        tone === "neutral" && "bg-muted text-muted-foreground",
+        tone === "ok" && "border-brand/25 bg-brand-soft text-brand-strong",
+        tone === "pending" && "border-warning/25 bg-warning/[0.08] text-warning",
+        tone === "error" && "border-destructive/25 bg-destructive/[0.07] text-destructive",
+        tone === "neutral" && "border-border bg-secondary text-muted-foreground",
       )}
     >
       <span className={cn("size-1.5 rounded-full bg-current", tone === "pending" && "animate-pulse")} />
@@ -125,13 +125,13 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
 
   return (
     <section aria-label="Connected accounts" className="space-y-3">
-      <h2 className="flex items-center gap-2 text-base font-semibold">
-        <Link2 className="size-4 text-primary" /> Connected accounts
-        <span className="text-sm font-normal text-muted-foreground">{connections.length}</span>
+      <h2 className="eyebrow flex items-center gap-2">
+        <Link2 className="size-3.5" /> Connected accounts
+        <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{connections.length}</span>
       </h2>
       <div className="grid gap-3 lg:grid-cols-2">
         {groups.map((g) => (
-          <div key={g.key} className="rounded-2xl border bg-card/60 p-2 backdrop-blur-sm">
+          <div key={g.key} className="rounded-xl border bg-card p-2 shadow-card">
             <div className="flex items-center gap-2 px-2.5 pt-1.5 pb-2 text-xs font-medium text-muted-foreground">
               <span className="grid size-6 place-items-center">{g.icon}</span>
               {g.label}
@@ -148,7 +148,7 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="group flex items-center gap-3 rounded-xl px-2.5 py-2 transition hover:bg-accent/40"
+                      className="group flex items-center gap-3 rounded-lg px-2.5 py-2 transition hover:bg-accent"
                     >
                       <ToolkitLogo src={tk?.logo ?? `https://logos.composio.dev/api/${c.toolkit}`} name={name} size="sm" />
                       <div className="min-w-0 flex-1">

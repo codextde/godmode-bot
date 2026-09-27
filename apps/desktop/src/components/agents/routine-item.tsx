@@ -104,17 +104,17 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
   return (
     <div
       className={cn(
-        "group glass flex flex-col gap-3 rounded-2xl p-4 transition hover:border-foreground/15 md:flex-row md:items-center",
+        "group flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-card transition hover:border-foreground/15 hover:shadow-float md:flex-row md:items-center",
         !routine.enabled && "opacity-70",
       )}
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">
         {agent ? (
-          <Link to={`/agents/${agent.id}/routines`} aria-label={`Open ${agent.name}`} className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+          <Link to={`/agents/${agent.id}/routines`} aria-label={`Open ${agent.name}`} className="rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
             <AgentAvatar agent={agent} size="md" />
           </Link>
         ) : (
-          <div className="grid size-9 shrink-0 place-items-center rounded-xl border bg-primary/10 text-primary">
+          <div className="grid size-9 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card">
             <CalendarClock className="size-4.5" />
           </div>
         )}
@@ -123,15 +123,15 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
             <button
               type="button"
               onClick={() => onEdit(routine)}
-              className="truncate text-left font-medium hover:underline focus-visible:underline focus-visible:outline-none"
+              className="truncate text-left font-medium tracking-[-0.01em] hover:underline focus-visible:underline focus-visible:outline-none"
             >
               {routine.name}
             </button>
             {agent && <span className="truncate text-xs text-muted-foreground">· {agent.name}</span>}
-            {!routine.enabled && <span className="rounded-full bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Paused</span>}
+            {!routine.enabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">Paused</span>}
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-sm text-foreground/80">
-            <CalendarClock className="size-3.5 text-primary" />
+            <CalendarClock className="size-3.5 text-muted-foreground" />
             <span>{cronToHuman(routine.cron)}</span>
             {tz && <span className="text-xs text-muted-foreground">({tz})</span>}
           </div>
@@ -141,7 +141,7 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pl-12 md:pl-0">
         <div className="min-w-24 text-xs">
-          <div className="text-muted-foreground">Next run</div>
+          <div className="eyebrow">Next run</div>
           {routine.enabled && next ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -156,7 +156,7 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
           )}
         </div>
         <div className="min-w-28 text-xs">
-          <div className="text-muted-foreground">Last run</div>
+          <div className="eyebrow">Last run</div>
           {routine.lastStatus && last ? (
             <Tooltip>
               <TooltipTrigger asChild>

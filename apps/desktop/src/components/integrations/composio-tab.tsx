@@ -57,7 +57,7 @@ export function ComposioTab() {
       ) : (
         <>
           {connections.isLoading ? (
-            <Skeleton className="h-28 rounded-2xl" />
+            <Skeleton className="h-28 rounded-xl" />
           ) : connections.isError ? (
             <QueryError error={connections.error} onRetry={() => connections.refetch()} title="Couldn't load connected accounts" />
           ) : (

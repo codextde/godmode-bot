@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Bot, EllipsisVertical, Globe2, KeyRound, Layers, Pencil, Plug, Plus, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { Workspace } from "@godmode/shared";
-import { colorGradient, PageBody, PageHeader } from "@/components/common";
+import { PageBody, PageHeader } from "@/components/common";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -129,7 +129,7 @@ export default function WorkspacesPage() {
         title="Workspaces"
         description="Separate clients, projects or areas of your life. Each workspace has its own agents, logins, 2FA codes and integrations — global items are shared with all of them."
         actions={
-          <Button onClick={openCreate} className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95">
+          <Button onClick={openCreate}>
             <Plus /> New workspace
           </Button>
         }
@@ -138,11 +138,11 @@ export default function WorkspacesPage() {
         {isLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-64 rounded-2xl" />
+              <Skeleton key={i} className="h-64 rounded-xl" />
             ))}
           </div>
         ) : isError ? (
-          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-sm">
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm">
             <p className="font-medium text-destructive">Couldn't load workspaces</p>
             <p className="mt-1 text-muted-foreground">{errorMessage(error)}</p>
             <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>
@@ -155,11 +155,10 @@ export default function WorkspacesPage() {
               index={0}
               current={scope === "global"}
               tile={
-                <WorkspaceTile color="zinc" size="lg" className="from-zinc-500 to-zinc-700 text-white">
-                  <Globe2 className="size-7 text-white drop-shadow-sm" />
-                </WorkspaceTile>
+                <div aria-hidden className="grid size-14 shrink-0 place-items-center rounded-xl bg-secondary text-foreground ring-1 ring-border ring-inset">
+                  <Globe2 className="size-6" />
+                </div>
               }
-              wash="from-zinc-400 to-zinc-600"
               title="Global"
               subtitle="Shared with every workspace"
               description="Logins, 2FA codes, integrations and agents here are available everywhere — perfect for your personal accounts and the main Godmode assistant."
@@ -174,7 +173,6 @@ export default function WorkspacesPage() {
                   index={i + 1}
                   current={scope === ws.id}
                   tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="lg" />}
-                  wash={colorGradient(ws.color)}
                   title={ws.name}
                   description={ws.description}
                   counts={counts.get(ws.id)}
@@ -208,10 +206,10 @@ export default function WorkspacesPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(list.length + 1, 12) * 0.03 }}
-              className="group flex min-h-64 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 text-center transition hover:border-primary/40 hover:bg-primary/5 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              className="group flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-foreground/15 p-6 text-center transition hover:border-foreground/25 hover:bg-card focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             >
-              <span className="grid size-12 place-items-center rounded-2xl bg-muted text-muted-foreground transition group-hover:bg-gradient-brand group-hover:text-white group-hover:shadow-lg group-hover:shadow-glow-a/25">
-                <Plus className="size-6" />
+              <span className="grid size-11 place-items-center rounded-lg border bg-card text-muted-foreground shadow-card transition group-hover:text-foreground group-hover:shadow-float">
+                <Plus className="size-5" />
               </span>
               <span className="text-sm font-medium">{list.length ? "New workspace" : "Create your first workspace"}</span>
               <span className="max-w-60 text-xs text-muted-foreground">
@@ -319,7 +317,6 @@ function ScopeCard({
   index,
   current,
   tile,
-  wash,
   title,
   subtitle,
   description,
@@ -331,7 +328,6 @@ function ScopeCard({
   index: number;
   current: boolean;
   tile: ReactNode;
-  wash: string;
   title: string;
   subtitle?: string;
   description?: string;
@@ -354,23 +350,16 @@ function ScopeCard({
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ delay: Math.min(index, 12) * 0.03 }}
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-2xl border bg-card/60 p-5 backdrop-blur-sm transition hover:border-primary/30 hover:shadow-lg hover:shadow-glow-a/5",
-        current && "border-primary/40 ring-1 ring-primary/25",
+        "group relative flex flex-col overflow-hidden rounded-xl border bg-card p-5 shadow-card transition hover:shadow-float",
+        current ? "border-brand/35 ring-1 ring-brand/15" : "hover:border-foreground/15",
       )}
     >
-      <div
-        className={cn(
-          "pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-br opacity-[0.14] transition-opacity [mask-image:linear-gradient(to_bottom,black_20%,transparent)] group-hover:opacity-25",
-          wash,
-        )}
-      />
       <div className="relative flex items-start justify-between gap-3">
-        <motion.div whileHover={{ rotate: -4, scale: 1.04 }} transition={{ type: "spring", stiffness: 300, damping: 15 }}>
-          {tile}
-        </motion.div>
+        {tile}
         <div className="flex items-center gap-1">
           {current && (
-            <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary">
+            <Badge variant="outline" className="gap-1.5 border-brand/25 bg-brand-soft text-brand-strong">
+              <span aria-hidden className="size-1.5 rounded-full bg-brand" />
               Current
             </Badge>
           )}
@@ -378,8 +367,8 @@ function ScopeCard({
         </div>
       </div>
       <div className="relative mt-4 min-w-0">
-        <h3 className="truncate text-base font-semibold tracking-tight">{title}</h3>
-        {subtitle && <p className="text-xs font-medium text-muted-foreground">{subtitle}</p>}
+        <h3 className="truncate text-base font-medium tracking-[-0.015em]">{title}</h3>
+        {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
         <p className={cn("mt-1.5 line-clamp-2 min-h-10 text-sm text-muted-foreground", !description && "italic opacity-70")}>
           {description || "No description yet."}
         </p>
@@ -390,12 +379,12 @@ function ScopeCard({
           return (
             <Tooltip key={s.key}>
               <TooltipTrigger asChild>
-                <div className="flex flex-col items-center gap-1 rounded-xl border bg-background/40 px-1 py-2 [&_svg]:size-3.5 [&_svg]:text-muted-foreground">
+                <div className="flex flex-col items-center gap-1 rounded-lg border bg-paper-2 px-1 py-2 [&_svg]:size-3.5 [&_svg]:text-muted-foreground">
                   {s.icon}
                   {countsLoading && n === null ? (
                     <Skeleton className="h-4 w-5" />
                   ) : (
-                    <span className="text-sm font-semibold tabular-nums">{n ?? "–"}</span>
+                    <span className="font-mono text-sm font-medium tabular-nums">{n ?? "–"}</span>
                   )}
                 </div>
               </TooltipTrigger>

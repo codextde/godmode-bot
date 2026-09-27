@@ -22,24 +22,25 @@ export function AboutSection({ version }: { version: string | undefined }) {
       <motion.section
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-2xl border bg-card/60 px-6 py-12 text-center backdrop-blur-sm"
+        className="relative overflow-hidden rounded-xl border bg-card px-6 py-12 text-center shadow-card"
       >
         <Backdrop className="opacity-70" />
         <div className="relative flex flex-col items-center">
-          <motion.div initial={{ scale: 0.8, rotate: -8 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 200, damping: 14 }}>
-            <Logo className="size-20 animate-float drop-shadow-[0_12px_48px_rgba(139,92,246,0.55)]" />
+          <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}>
+            <Logo className="size-16" />
           </motion.div>
-          <h2 className="mt-5 text-3xl font-semibold tracking-tight">
-            Godmode <span className="text-gradient">Bot</span>
+          <p className="eyebrow mt-6">Open source · MIT</p>
+          <h2 className="heading-display mt-2 text-[36px]">
+            Godmode <span className="text-foreground/35">Bot</span>
           </h2>
           {version && (
-            <Badge variant="secondary" className="mt-2 font-mono text-[11px] font-normal">
+            <Badge variant="secondary" className="mt-3 font-mono text-[11px] font-normal tabular-nums">
               v{version}
             </Badge>
           )}
           <p className="mt-3 max-w-md text-balance text-muted-foreground">An AI teammate you can trust to get work done.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <Button className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95" onClick={() => void openExternal(REPO)}>
+            <Button onClick={() => void openExternal(REPO)}>
               <Code /> Source on GitHub
             </Button>
             <Button variant="outline" onClick={() => void openExternal(`${REPO}/blob/main/LICENSE`)}>
@@ -49,9 +50,9 @@ export function AboutSection({ version }: { version: string | undefined }) {
         </div>
       </motion.section>
 
-      <section className="rounded-2xl border bg-card/60 p-5 backdrop-blur-sm">
-        <h3 className="flex items-center gap-2 text-sm font-semibold">
-          <Heart className="size-4 text-glow-c" /> Built on the shoulders of
+      <section className="rounded-xl border bg-card p-5 shadow-card">
+        <h3 className="eyebrow flex items-center gap-2">
+          <Heart className="size-3.5" /> Built on the shoulders of
         </h3>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {CREDITS.map((c, i) => (
@@ -62,9 +63,9 @@ export function AboutSection({ version }: { version: string | undefined }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(i, 12) * 0.03 }}
               onClick={() => void openExternal(c.url)}
-              className="group flex items-start gap-3 rounded-xl border bg-background/40 p-3.5 text-left transition hover:border-primary/30 hover:shadow-lg hover:shadow-glow-a/5"
+              className="group flex items-start gap-3 rounded-lg border bg-card p-3.5 text-left transition hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             >
-              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary [&_svg]:size-4">{c.icon}</span>
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2 text-foreground [&_svg]:size-4">{c.icon}</span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5 text-sm font-medium">
                   {c.name}

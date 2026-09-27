@@ -3,6 +3,7 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { CalendarClock, Cpu, Ellipsis, History, MessageSquare, Pencil, Play, Power, PowerOff, Trash2 } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { AgentAvatar, ScopeBadge } from "@/components/common";
+import { WorkingTicks } from "@/components/aicss/Motion";
 import { useModelLabel } from "@/components/runs/run-status";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -38,9 +39,9 @@ export function AgentCard({
   return (
     <div
       className={cn(
-        "group relative flex h-full flex-col rounded-2xl border bg-card/70 p-4 backdrop-blur-sm transition-[transform,box-shadow,border-color] duration-200",
-        "hover:-translate-y-0.5 hover:border-foreground/15 hover:shadow-xl hover:shadow-black/5 dark:hover:shadow-black/30",
-        running && "glow-border border-transparent",
+        "group relative flex h-full flex-col rounded-xl border bg-card p-4 shadow-card transition-[box-shadow,border-color] duration-200",
+        "hover:border-foreground/15 hover:shadow-float",
+        running && "glow-border",
         !agent.enabled && "opacity-65",
       )}
     >
@@ -50,16 +51,17 @@ export function AgentCard({
           <div className="flex items-center gap-1.5">
             <Link
               to={`/agents/${agent.id}`}
-              className="truncate font-semibold tracking-tight after:absolute after:inset-0 after:rounded-2xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring/60"
+              className="truncate text-[15px] font-medium tracking-[-0.01em] after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50"
             >
               {agent.name}
             </Link>
             {agent.isDefault && (
-              <span className="shrink-0 rounded-full bg-gradient-brand px-1.5 py-px text-[10px] font-semibold text-white">Built-in</span>
+              <span className="shrink-0 rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">Built-in</span>
             )}
           </div>
           <AgentStatus agent={agent} className="mt-0.5 max-w-full" />
         </div>
+        {running && <WorkingTicks count={6} className="mt-1 h-3 shrink-0 text-brand-strong" />}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-sm" className="relative z-10 -mt-1 -mr-1 text-muted-foreground" aria-label={`Actions for ${agent.name}`}>

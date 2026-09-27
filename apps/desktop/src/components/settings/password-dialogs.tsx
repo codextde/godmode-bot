@@ -70,11 +70,11 @@ export function ChangePassphraseDialog({ open, onOpenChange }: { open: boolean; 
         onOpenChange(o);
       }}
     >
-      <DialogContent className="rounded-2xl sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} className="space-y-5">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <LockKeyhole className="size-5 text-primary" /> Change vault passphrase
+              <LockKeyhole className="size-5 text-foreground" /> Change vault passphrase
             </DialogTitle>
             <DialogDescription>Your logins and 2FA secrets stay encrypted — only the key that protects them is re-wrapped.</DialogDescription>
           </DialogHeader>
@@ -175,7 +175,7 @@ export function DashboardPasswordDialog({
         onOpenChange(o);
       }}
     >
-      <DialogContent className="rounded-2xl sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <form
           className="space-y-5"
           onSubmit={(e) => {
@@ -186,10 +186,10 @@ export function DashboardPasswordDialog({
         >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <KeyRound className="size-5 text-primary" /> {hasPassword ? "Change dashboard password" : "Set dashboard password"}
+              <KeyRound className="size-5 text-foreground" /> {hasPassword ? "Change dashboard password" : "Set dashboard password"}
             </DialogTitle>
             <DialogDescription>
-              Protects the browser dashboard served by <code className="rounded bg-muted px-1 font-mono text-[11px]">godmode serve</code>. This is
+              Protects the browser dashboard served by <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">godmode serve</code>. This is
               separate from your vault passphrase — use a different one.
             </DialogDescription>
           </DialogHeader>

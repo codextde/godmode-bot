@@ -174,10 +174,10 @@ export function AiSection({ settings }: { settings: Settings }) {
             variant="outline"
             className={cn(
               "gap-1.5 font-normal",
-              r.bypassPermissions ? "border-warning/40 text-warning" : "border-success/40 text-success",
+              r.bypassPermissions ? "border-warning/30 bg-warning/[0.07] text-warning" : "border-brand/25 bg-brand-soft text-brand-strong",
             )}
           >
-            <span className={cn("size-1.5 rounded-full", r.bypassPermissions ? "bg-warning" : "bg-success")} />
+            <span className={cn("size-1.5 rounded-full", r.bypassPermissions ? "bg-warning" : "bg-brand")} />
             {r.bypassPermissions ? "Full bypass" : "Ask for permission"}
           </Badge>
         }
@@ -187,7 +187,7 @@ export function AiSection({ settings }: { settings: Settings }) {
           htmlFor="bypass"
           description={
             <>
-              Runs Claude Code with <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">--dangerously-skip-permissions</code>.
+              Runs Claude Code with <code className="rounded-[4px] bg-secondary px-1 py-0.5 font-mono text-[11px]">--dangerously-skip-permissions</code>.
             </>
           }
         >
@@ -269,7 +269,7 @@ export function AiSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <AlertDialog open={confirmBypass} onOpenChange={setConfirmBypass}>
-        <AlertDialogContent className="rounded-2xl">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Cpu className="size-5 text-warning" /> Turn on full bypass mode?

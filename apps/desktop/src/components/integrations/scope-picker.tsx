@@ -61,13 +61,13 @@ export function ScopePicker({ value, onChange, className, disabled }: { value: I
             key={o.id}
             htmlFor={`scope-${o.id}`}
             className={cn(
-              "relative flex cursor-pointer flex-col items-start gap-1.5 rounded-xl border bg-card/40 p-3 font-normal transition",
-              "hover:border-primary/30 has-[[data-state=checked]]:border-primary/60 has-[[data-state=checked]]:bg-primary/5 has-[[data-state=checked]]:shadow-sm has-[[data-state=checked]]:shadow-glow-a/10",
+              "relative flex cursor-pointer flex-col items-start gap-1.5 rounded-lg border bg-card p-3 font-normal transition-colors",
+              "hover:border-foreground/15 has-[[data-state=checked]]:border-foreground/40 has-[[data-state=checked]]:bg-paper-2 has-[[data-state=checked]]:ring-1 has-[[data-state=checked]]:ring-foreground/10",
               o.disabled && "cursor-not-allowed opacity-50",
             )}
           >
             <RadioGroupItem id={`scope-${o.id}`} value={o.id} disabled={o.disabled} className="absolute top-3 right-3" />
-            <o.icon className="size-4 text-primary" />
+            <o.icon className="size-4 text-foreground" />
             <span className="text-sm font-medium">{o.title}</span>
             <span className="text-xs leading-snug text-muted-foreground">{o.hint}</span>
           </Label>
@@ -125,8 +125,8 @@ export function ScopeChip({ workspaceId, agentId, agents, className }: Integrati
   const agent = agentId ? (agents ?? all).find((a) => a.id === agentId) : undefined;
   if (agentId)
     return (
-      <span className={cn("inline-flex h-5 items-center gap-1.5 rounded-full bg-secondary pr-2 pl-0.5 text-xs text-secondary-foreground", className)}>
-        {agent ? <AgentAvatar agent={agent} size="sm" className="size-4 rounded-full text-[9px]" /> : <Bot className="ml-1 size-3" />}
+      <span className={cn("inline-flex h-5 items-center gap-1.5 rounded-[5px] border bg-secondary pr-2 pl-0.5 text-xs text-secondary-foreground", className)}>
+        {agent ? <AgentAvatar agent={agent} size="sm" className="size-4 rounded-[4px] text-[9px]" /> : <Bot className="ml-1 size-3" />}
         {agent?.name ?? "Agent"}
       </span>
     );

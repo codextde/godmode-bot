@@ -24,7 +24,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { isTauri } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
-import { AgentAvatar, colorGradient, EmptyState, PageBody, ScopeBadge } from "@/components/common";
+import { AgentAvatar, EmptyState, PageBody, ScopeBadge } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -128,9 +128,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <div className="relative overflow-hidden border-b">
-      {/* Soft agent-colored wash */}
-      <div aria-hidden className={cn("pointer-events-none absolute -top-24 -left-16 h-64 w-[36rem] rounded-full bg-gradient-to-br opacity-20 blur-3xl", colorGradient(agent.color))} />
+    <div className="relative border-b">
       <div className="relative px-8 pt-6 pb-6">
         <Link to="/agents" className="mb-4 inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
           <ArrowLeft className="size-3.5" /> Agents
@@ -141,8 +139,10 @@ function AgentHeader({ agent }: { agent: Agent }) {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-2xl font-semibold tracking-tight">{agent.name}</h1>
-              {agent.isDefault && <span className="rounded-full bg-gradient-brand px-2 py-0.5 text-[11px] font-semibold text-white">Built-in</span>}
+              <h1 className="truncate text-[26px] leading-tight font-medium tracking-[-0.03em]">{agent.name}</h1>
+              {agent.isDefault && (
+                <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Built-in</span>
+              )}
             </div>
             {agent.description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{agent.description}</p>}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
@@ -162,7 +162,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
           <div className="flex flex-wrap items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <label className="mr-1 flex cursor-pointer items-center gap-2 rounded-lg border bg-card/60 px-2.5 py-1.5 text-xs text-muted-foreground">
+                <label className="mr-1 flex cursor-pointer items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-xs text-muted-foreground shadow-card">
                   <Switch
                     checked={agent.enabled}
                     onCheckedChange={(enabled) => toggle.mutate({ id: agent.id, enabled })}
@@ -177,11 +177,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
             <Button variant="outline" onClick={() => setRunTask(true)} disabled={!agent.enabled}>
               <Play /> Run task
             </Button>
-            <Button
-              onClick={() => chat.mutate(agent.id)}
-              disabled={chat.isPending}
-              className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95"
-            >
+            <Button onClick={() => chat.mutate(agent.id)} disabled={chat.isPending}>
               {chat.isPending ? <Spinner /> : <MessageSquare />} Chat
             </Button>
             {!agent.isDefault && (
@@ -215,7 +211,7 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
     <nav
       aria-label="Agent sections"
       // Clear the macOS title-bar drag region in the desktop shell
-      className={cn("sticky z-20 border-b bg-background/80 px-6 backdrop-blur-xl", isTauri && isMac ? "top-7" : "top-0")}
+      className={cn("sticky z-20 border-b bg-background px-6", isTauri && isMac ? "top-7" : "top-0")}
     >
       <div className="flex gap-1 overflow-x-auto py-2 [scrollbar-width:none]">
         {TABS.map((t) => {
@@ -228,14 +224,14 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
               end
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "relative flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                "relative flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
                 isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground",
               )}
             >
               {isActive && (
                 <motion.span
                   layoutId="agent-tab"
-                  className="absolute inset-0 rounded-lg bg-accent"
+                  className="absolute inset-0 rounded-md border bg-card shadow-card"
                   transition={{ type: "spring", bounce: 0.18, duration: 0.4 }}
                 />
               )}
@@ -254,7 +250,7 @@ function HeaderSkeleton() {
     <div>
       <div className="border-b px-8 pt-12 pb-6">
         <div className="flex items-start gap-5">
-          <Skeleton className="size-16 rounded-2xl" />
+          <Skeleton className="size-16 rounded-xl" />
           <div className="flex-1 space-y-2.5">
             <Skeleton className="h-7 w-56" />
             <Skeleton className="h-4 w-96 max-w-full" />
@@ -264,13 +260,13 @@ function HeaderSkeleton() {
       </div>
       <div className="flex gap-2 border-b px-6 py-2">
         {Array.from({ length: 6 }, (_, i) => (
-          <Skeleton key={i} className="h-8 w-24 rounded-lg" />
+          <Skeleton key={i} className="h-8 w-24 rounded-md" />
         ))}
       </div>
       <PageBody className="pt-6">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} className="h-24 rounded-2xl" />
+            <Skeleton key={i} className="h-24 rounded-xl" />
           ))}
         </div>
       </PageBody>

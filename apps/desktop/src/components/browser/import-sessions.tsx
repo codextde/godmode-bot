@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { AppWindow, ArrowLeft, ArrowRight, Check, CircleCheck, Cookie, FileJson, KeyRound, Plus, RefreshCw, ShieldCheck, Upload } from "lucide-react";
+import { AppWindow, ArrowLeft, ArrowRight, Check, Cookie, FileJson, KeyRound, Plus, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 import type { BrowserProfile, ChromeImportResult, LocalChromeProfile } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoChromeProfiles } from "./no-chrome-profiles";
+import { DrawCheck } from "@/components/aicss/Motion";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ChipInput } from "@/components/vault/chip-input";
-import { domainFromUrl, hueFor, toastApiError } from "@/components/vault/vault-utils";
+import { domainFromUrl, toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -25,14 +26,14 @@ const SUGGESTED_DOMAINS = ["google.com", "github.com", "linkedin.com", "notion.s
 export function ImportSessionsCard({ profiles, targetId, onTargetChange }: { profiles: BrowserProfile[]; targetId: string | null; onTargetChange: (id: string) => void }) {
   const target = profiles.find((p) => p.id === targetId) ?? null;
   return (
-    <section className="rounded-2xl border bg-card/60 p-5 backdrop-blur-sm">
+    <section className="rounded-xl border bg-card p-5 shadow-card">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-sm">
+          <div className="grid size-9 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card">
             <Cookie className="size-[18px]" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold">Import sessions</h2>
+            <h2 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">Import sessions</h2>
             <p className="mt-0.5 max-w-md text-xs text-muted-foreground">
               Continue where Chrome left off — copy your logged-in sessions so agents don't have to sign in again.
             </p>
@@ -61,7 +62,7 @@ export function ImportSessionsCard({ profiles, targetId, onTargetChange }: { pro
       </div>
 
       {!target ? (
-        <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Create a browser profile first.</p>
+        <p className="rounded-lg border border-dashed bg-paper-2/60 p-6 text-center text-sm text-muted-foreground">Create a browser profile first.</p>
       ) : (
         <Tabs defaultValue="chrome">
           <TabsList variant="line" className="mb-3">
@@ -129,7 +130,7 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
                 ))}
               </div>
             ) : chrome.isError ? (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+              <div className="rounded-lg border border-destructive/25 bg-destructive/[0.05] p-4 text-sm">
                 <p className="font-medium text-destructive">Couldn't look for Chrome profiles</p>
                 <p className="mt-1 text-muted-foreground">{errorMessage(chrome.error)}</p>
                 <Button size="sm" variant="outline" className="mt-3" onClick={() => chrome.refetch()}>
@@ -176,15 +177,15 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
                     key={d}
                     type="button"
                     onClick={() => setDomains((cur) => [...cur, d])}
-                    className="inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+                    className="inline-flex h-6 items-center gap-1 rounded-md border bg-card px-2 text-xs text-muted-foreground transition hover:border-foreground/25 hover:text-foreground"
                   >
                     <Plus className="size-3" /> {d}
                   </button>
                 ))}
               </div>
             </div>
-            <div className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
-              <KeyRound className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div className="flex items-start gap-3 rounded-lg border bg-paper-2 p-3 text-xs text-muted-foreground">
+              <KeyRound className="mt-0.5 size-4 shrink-0 text-foreground" />
               <p>
                 On macOS you may see a Keychain prompt — allow access so Godmode can decrypt Chrome cookies. Cookies stay on this machine and are only
                 copied into <span className="font-medium text-foreground">{target.name}</span>.
@@ -194,7 +195,7 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
               <Button variant="ghost" onClick={() => setStep(1)}>
                 <ArrowLeft /> Back
               </Button>
-              <Button className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95" onClick={() => importMut.mutate()} disabled={importMut.isPending}>
+              <Button onClick={() => importMut.mutate()} disabled={importMut.isPending}>
                 {importMut.isPending ? <Spinner /> : <Upload />}
                 {importMut.isPending ? "Importing…" : domains.length ? `Import ${domains.length} site${domains.length === 1 ? "" : "s"}` : "Import all sessions"}
               </Button>
@@ -224,8 +225,8 @@ function Stepper({ step }: { step: Step }) {
           <li key={label} className="flex items-center gap-2" aria-current={active ? "step" : undefined}>
             <span
               className={cn(
-                "grid size-5 place-items-center rounded-full border text-[10px] font-semibold transition-colors",
-                done && "border-transparent bg-success text-white",
+                "grid size-5 place-items-center rounded-[5px] border font-mono text-[10px] font-medium transition-colors",
+                done && "border-brand/25 bg-brand-soft text-brand-strong",
                 active && "border-primary bg-primary text-primary-foreground",
                 !done && !active && "text-muted-foreground",
               )}
@@ -233,7 +234,7 @@ function Stepper({ step }: { step: Step }) {
               {done ? <Check className="size-3" /> : n}
             </span>
             <span className={cn("hidden sm:inline", active ? "font-medium text-foreground" : "text-muted-foreground")}>{label}</span>
-            {i < steps.length - 1 && <span className={cn("h-px w-6 bg-border", done && "bg-success/60")} />}
+            {i < steps.length - 1 && <span className={cn("h-px w-6 bg-border", done && "bg-brand/50")} />}
           </li>
         );
       })}
@@ -242,7 +243,6 @@ function Stepper({ step }: { step: Step }) {
 }
 
 function ChromeProfileCard({ profile: p, index, selected, onSelect }: { profile: LocalChromeProfile; index: number; selected: boolean; onSelect: () => void }) {
-  const hue = hueFor(p.browser);
   return (
     <motion.button
       type="button"
@@ -253,15 +253,12 @@ function ChromeProfileCard({ profile: p, index, selected, onSelect }: { profile:
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index, 12) * 0.03 }}
       className={cn(
-        "relative flex items-center gap-3 rounded-xl border bg-card/60 p-3 text-left transition outline-none",
-        "hover:border-primary/30 hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        selected && "border-primary/50 bg-primary/[0.06] ring-1 ring-primary/30",
+        "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-left shadow-card transition outline-none",
+        "hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        selected && "border-foreground/40 bg-paper-2 ring-1 ring-foreground/10 hover:border-foreground/40",
       )}
     >
-      <div
-        className="grid size-9 shrink-0 place-items-center rounded-xl text-white shadow-sm"
-        style={{ background: `linear-gradient(135deg, oklch(0.7 0.15 ${hue}), oklch(0.55 0.18 ${(hue + 50) % 360}))` }}
-      >
+      <div className={cn("grid size-9 shrink-0 place-items-center rounded-lg border text-foreground", selected ? "bg-card shadow-card" : "bg-paper-2")}>
         <AppWindow className="size-[18px]" />
       </div>
       <div className="min-w-0 flex-1">
@@ -291,17 +288,17 @@ function ImportResultView({ result, source, onAgain }: { result: ChromeImportRes
   return (
     <div className="flex flex-col items-center py-2 text-center">
       <motion.div
-        initial={{ scale: 0.4, opacity: 0 }}
+        initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 320, damping: 18 }}
+        transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
         className={cn(
-          "grid size-14 place-items-center rounded-full text-white shadow-lg",
-          ok ? "bg-gradient-to-br from-emerald-400 to-green-600 shadow-emerald-500/30" : "bg-gradient-to-br from-zinc-400 to-zinc-600",
+          "grid size-14 place-items-center rounded-xl border",
+          ok ? "border-brand/25 bg-brand-soft text-brand-strong" : "bg-paper-2 text-muted-foreground",
         )}
       >
-        {ok ? <CircleCheck className="size-7" /> : <Cookie className="size-7" />}
+        {ok ? <DrawCheck className="size-7" /> : <Cookie className="size-7" />}
       </motion.div>
-      <h3 className="mt-3 text-base font-semibold">
+      <h3 className="mt-3 text-base font-medium tracking-[-0.01em]">
         {ok ? `Imported ${result.imported.toLocaleString()} cookie${result.imported === 1 ? "" : "s"}` : "No cookies imported"}
       </h3>
       <p className="mt-1 text-xs text-muted-foreground">
@@ -319,17 +316,17 @@ function ImportResultView({ result, source, onAgain }: { result: ChromeImportRes
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.15 + Math.min(i, 20) * 0.02 }}
-              className="inline-flex h-6 items-center rounded-full bg-primary/10 px-2.5 text-xs text-primary"
+              className="inline-flex h-6 items-center rounded-[5px] border bg-card px-2 text-xs text-foreground"
             >
               {d}
             </motion.span>
           ))}
-          {more > 0 && <span className="inline-flex h-6 items-center rounded-full bg-muted px-2.5 text-xs text-muted-foreground">+{more} more</span>}
+          {more > 0 && <span className="inline-flex h-6 items-center rounded-[5px] bg-secondary px-2 text-xs text-muted-foreground">+{more} more</span>}
         </div>
       )}
       {ok && (
         <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <ShieldCheck className="size-3.5 text-success" /> Agents using this profile are now signed in to these sites.
+          <ShieldCheck className="size-3.5 text-brand-strong" /> Agents using this profile are now signed in to these sites.
         </p>
       )}
       <Button variant="outline" size="sm" className="mt-4" onClick={onAgain}>

@@ -7,7 +7,7 @@ import type { Credential } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
-import { EmptyState, PageBody, PageHeader } from "@/components/common";
+import { EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
 import { CredentialDialog, type CredentialPrefill } from "@/components/vault/credential-dialog";
 import { CREDENTIAL_GRID, CredentialRow } from "@/components/vault/credential-row";
 import { ConfirmDeleteDialog } from "@/components/vault/confirm-dialog";
@@ -106,7 +106,7 @@ export default function LoginsPage() {
         title="Logins"
         description="Website logins your agents can use — encrypted in your local vault."
         actions={
-          <Button onClick={openCreate} className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95">
+          <Button onClick={openCreate}>
             <Plus /> Add login
           </Button>
         }
@@ -126,7 +126,7 @@ export default function LoginsPage() {
                   <X />
                 </InputGroupButton>
               ) : (
-                <kbd className="rounded border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">/</kbd>
+                <Kbd>/</Kbd>
               )}
             </InputGroupAddon>
           </InputGroup>
@@ -177,12 +177,12 @@ export default function LoginsPage() {
               description="Add the website logins your agents need. They're encrypted on this device and typed into the browser for the agent — the AI never sees them."
               action={
                 <div className="flex flex-col items-center gap-3">
-                  <Button onClick={openCreate} className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95">
+                  <Button onClick={openCreate}>
                     <Plus /> Add your first login
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     When an agent hits a login it doesn't have, it lands in your{" "}
-                    <Link to="/inbox" className="text-primary underline-offset-2 hover:underline">
+                    <Link to="/inbox" className="text-foreground underline decoration-foreground/25 underline-offset-2 hover:decoration-foreground">
                       Inbox
                     </Link>
                     .
@@ -192,8 +192,8 @@ export default function LoginsPage() {
             />
           )
         ) : (
-          <div className={cn("@container overflow-hidden rounded-2xl border bg-card/60 backdrop-blur-sm transition-opacity", list.isFetching && list.isPlaceholderData && "opacity-70")}>
-            <div className={cn(CREDENTIAL_GRID, "hidden border-b bg-muted/30 px-4 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase @3xl:grid")}>
+          <div className={cn("@container overflow-hidden rounded-xl border bg-card shadow-card transition-opacity", list.isFetching && list.isPlaceholderData && "opacity-70")}>
+            <div className={cn(CREDENTIAL_GRID, "eyebrow hidden border-b bg-paper-2 px-4 py-2 @3xl:grid")}>
               <span className="pl-12">Login</span>
               <span>Username</span>
               <span>Password</span>
@@ -239,10 +239,10 @@ function TrustStrip() {
     { icon: <ScrollText />, title: "Every use is audited", text: "See who used what in Settings → Security." },
   ];
   return (
-    <div className="grid gap-px overflow-hidden rounded-2xl border bg-border sm:grid-cols-3">
+    <div className="grid gap-px overflow-hidden rounded-xl border bg-border shadow-card sm:grid-cols-3">
       {items.map((it) => (
-        <div key={it.title} className="flex items-start gap-3 bg-card/80 px-4 py-3 backdrop-blur-sm">
-          <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary [&_svg]:size-4">{it.icon}</div>
+        <div key={it.title} className="flex items-start gap-3 bg-card px-4 py-3">
+          <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md bg-brand-soft text-brand-strong [&_svg]:size-4">{it.icon}</div>
           <div className="min-w-0">
             <p className="text-xs font-medium">{it.title}</p>
             <p className="text-[11px] leading-snug text-muted-foreground">{it.text}</p>
@@ -255,10 +255,10 @@ function TrustStrip() {
 
 function ListSkeleton() {
   return (
-    <div className="overflow-hidden rounded-2xl border bg-card/60">
+    <div className="overflow-hidden rounded-xl border bg-card shadow-card">
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 border-b px-4 py-3 last:border-0">
-          <Skeleton className="size-9 rounded-xl" />
+          <Skeleton className="size-9 rounded-lg" />
           <div className="flex-1 space-y-1.5">
             <Skeleton className="h-3.5 w-40" />
             <Skeleton className="h-3 w-24" />

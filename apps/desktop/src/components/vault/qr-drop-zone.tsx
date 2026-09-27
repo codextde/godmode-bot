@@ -108,23 +108,22 @@ export function QrDropZone({ items, onFiles, onRemove }: { items: QrImage[]; onF
         }}
         onDrop={onDrop}
         className={cn(
-          "group relative flex cursor-pointer flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl border-2 border-dashed px-6 py-8 text-center transition-all outline-none",
+          "group relative flex cursor-pointer flex-col items-center justify-center gap-3 overflow-hidden rounded-xl border border-dashed px-6 py-8 text-center transition-colors outline-none",
           "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-          dragging ? "scale-[1.01] border-primary bg-primary/8" : "border-border bg-muted/20 hover:border-primary/40 hover:bg-primary/4",
+          dragging ? "border-foreground/40 bg-accent" : "border-foreground/15 bg-paper-2 hover:border-foreground/25 hover:bg-accent/50",
         )}
       >
-        {dragging && <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-glow-a/15 via-transparent to-glow-b/15" />}
         <motion.div
-          animate={dragging ? { y: -4, scale: 1.08 } : { y: 0, scale: 1 }}
-          className="relative grid size-12 place-items-center rounded-2xl bg-gradient-brand text-white shadow-lg shadow-glow-a/25"
+          animate={dragging ? { y: -2 } : { y: 0 }}
+          className="relative grid size-11 place-items-center rounded-lg border bg-card text-foreground shadow-card"
         >
-          <ImagePlus className="size-6" />
+          <ImagePlus className="size-5" />
         </motion.div>
         <div className="relative">
           <p className="text-sm font-medium">{dragging ? "Drop to scan" : "Drop QR code screenshots here"}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Several at once is fine · or <span className="text-primary underline-offset-2 group-hover:underline">browse files</span> · or paste with{" "}
-            <kbd className="rounded border bg-muted px-1 font-mono text-[10px]">{modKey}V</kbd>
+            Several at once is fine · or <span className="font-medium text-foreground underline-offset-2 group-hover:underline">browse files</span> · or paste with{" "}
+            <kbd className="rounded-[4px] border bg-card px-1 font-mono text-[10px]">{modKey}V</kbd>
           </p>
         </div>
         <input
@@ -151,12 +150,12 @@ export function QrDropZone({ items, onFiles, onRemove }: { items: QrImage[]; onF
                 initial={{ opacity: 0, scale: 0.92 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.92 }}
-                className="group/img relative flex items-center gap-2.5 rounded-xl border bg-card/70 p-2"
+                className="group/img relative flex items-center gap-2.5 rounded-lg border bg-card p-2 shadow-card"
               >
                 <div className="relative size-11 shrink-0 overflow-hidden rounded-lg border bg-muted">
                   <img src={it.url} alt="" className="size-full object-cover" />
                   {it.status === "decoding" && (
-                    <div className="absolute inset-0 grid place-items-center bg-background/60 backdrop-blur-[1px]">
+                    <div className="absolute inset-0 grid place-items-center bg-background/70">
                       <Spinner className="size-4" />
                     </div>
                   )}
@@ -171,7 +170,7 @@ export function QrDropZone({ items, onFiles, onRemove }: { items: QrImage[]; onF
                   size="icon-xs"
                   variant="ghost"
                   aria-label={`Remove ${it.name}`}
-                  className="absolute -top-1.5 -right-1.5 rounded-full border bg-background opacity-0 shadow-sm group-hover/img:opacity-100 focus-visible:opacity-100"
+                  className="absolute -top-1.5 -right-1.5 rounded-md border bg-card opacity-0 shadow-card group-hover/img:opacity-100 focus-visible:opacity-100"
                   onClick={() => onRemove(it.id)}
                 >
                   <X />

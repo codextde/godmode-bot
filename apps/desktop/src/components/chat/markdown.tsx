@@ -9,7 +9,7 @@ import { CodeBlock as AicssCodeBlock } from "@/components/aicss/CodeBlock";
 /** Fenced code in chat — aicss code block (line numbers + copy), height-capped for long snippets. */
 export function CodeBlock({ lang, code, className }: { lang: string; code: string; className?: string }) {
   return (
-    <div className={cn("max-h-[32rem] overflow-y-auto rounded-xl", className)}>
+    <div className={cn("max-h-[32rem] overflow-y-auto rounded-[10px]", className)}>
       <AicssCodeBlock lang={lang || "text"} code={code} />
     </div>
   );
@@ -53,7 +53,7 @@ const components: Components = {
   },
   table({ children }) {
     return (
-      <div className="overflow-x-auto rounded-lg">
+      <div className="overflow-x-auto rounded-lg border bg-card shadow-card">
         <table>{children}</table>
       </div>
     );

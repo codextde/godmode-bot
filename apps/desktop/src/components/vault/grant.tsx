@@ -134,7 +134,7 @@ export function VaultGrantDialog() {
         <form onSubmit={submit} className="space-y-5">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ShieldCheck className="size-5 text-primary" /> Confirm it's you
+              <ShieldCheck className="size-5 text-brand-strong" /> Confirm it's you
             </DialogTitle>
             <DialogDescription>Enter your vault passphrase to show secrets in plain text. You won't be asked again for 10 minutes.</DialogDescription>
           </DialogHeader>

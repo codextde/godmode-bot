@@ -48,9 +48,9 @@ function saveSession(v: { step: StepId; userName: string }) {
 }
 
 const variants = {
-  enter: (dir: number) => ({ opacity: 0, x: dir * 40, filter: "blur(6px)" }),
-  center: { opacity: 1, x: 0, filter: "blur(0px)" },
-  exit: (dir: number) => ({ opacity: 0, x: dir * -40, filter: "blur(6px)" }),
+  enter: (dir: number) => ({ opacity: 0, x: dir * 20 }),
+  center: { opacity: 1, x: 0 },
+  exit: (dir: number) => ({ opacity: 0, x: dir * -20 }),
 };
 
 export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
@@ -168,15 +168,14 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-background">
-      <Backdrop />
-      <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black_10%,transparent_65%)]" />
+      <Backdrop rails={false} />
 
       <header
         data-tauri-drag-region
         className={cn("relative z-10 flex shrink-0 items-center justify-between px-6 pt-5 pb-2 lg:px-10", isTauri && isMac && "pt-10")}
       >
         <Wordmark />
-        <p className="text-xs text-muted-foreground" aria-live="polite">
+        <p className="font-mono text-[11px] text-muted-foreground tabular-nums" aria-live="polite">
           Step {index + 1} of {steps.length}
         </p>
       </header>
@@ -184,12 +183,12 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
       <div className="relative z-10 flex min-h-0 flex-1 gap-10 px-6 lg:px-10">
         <aside className="hidden w-60 shrink-0 pt-10 lg:block">
           <StepRail steps={meta} current={index} />
-          <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-8 border-t border-dashed pt-5 text-xs leading-relaxed text-muted-foreground">
             Everything stays on this machine. You can change any of this later in Settings.
           </p>
         </aside>
         <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-2xl pt-6 pb-12 lg:pt-10">
+          <div className="mx-auto w-full max-w-2xl pt-8 pb-14 lg:pt-14">
             <StepProgress steps={meta} current={index} />
             <AnimatePresence mode="wait" custom={direction} initial={false}>
               <motion.div

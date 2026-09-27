@@ -133,8 +133,8 @@ export function VoiceSection({ settings }: { settings: Settings }) {
                   type="button"
                   onClick={() => patch({ voice: { language: l } })}
                   className={cn(
-                    "h-7 rounded-full border px-2.5 font-mono text-[11px] transition hover:border-primary/40 hover:text-foreground",
-                    v.language === l ? "border-primary/50 bg-primary/10 text-primary" : "text-muted-foreground",
+                    "h-7 rounded-md border px-2.5 font-mono text-[11px] transition hover:border-foreground/25 hover:text-foreground",
+                    v.language === l ? "border-foreground/40 bg-secondary text-foreground" : "bg-card text-muted-foreground",
                   )}
                 >
                   {l}
@@ -292,7 +292,7 @@ export function VoiceSection({ settings }: { settings: Settings }) {
       )}
 
       {(usesOpenAi || v.ttsProvider === "elevenlabs") && (
-        <Callout tone="info" icon={<KeyRound className="text-primary" />} title="API keys live in the vault">
+        <Callout tone="info" icon={<KeyRound className="text-brand-strong" />} title="API keys live in the vault">
           Add your {[usesOpenAi && "OpenAI", v.ttsProvider === "elevenlabs" && "ElevenLabs"].filter(Boolean).join(" and ")} key under{" "}
           <Link to="/integrations?tab=api-keys" className="font-medium text-primary underline-offset-2 hover:underline">
             Integrations → API keys

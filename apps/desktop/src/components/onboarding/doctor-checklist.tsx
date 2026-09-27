@@ -62,13 +62,13 @@ export function DoctorChecklist({
     return (
       <div className={cn("space-y-2", className)}>
         {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-16 rounded-xl" />
+          <Skeleton key={i} className="h-16 rounded-lg" />
         ))}
       </div>
     );
   if (isError || !data)
     return (
-      <div className={cn("rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm", className)}>
+      <div className={cn("rounded-lg border border-destructive/25 bg-destructive/[0.05] p-4 text-sm", className)}>
         <p className="font-medium text-destructive">Could not run the system check</p>
         <p className="mt-1 text-muted-foreground">{errorMessage(error)}</p>
         <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>
@@ -83,7 +83,7 @@ export function DoctorChecklist({
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex items-center justify-between gap-2 pb-1 text-xs text-muted-foreground">
-        <span>
+        <span className="font-mono text-[11px]">
           {data.platform} · {data.arch}
         </span>
         <Button size="xs" variant="ghost" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
@@ -123,9 +123,9 @@ function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint
   return (
     <div
       className={cn(
-        "rounded-xl border bg-card/60 p-3.5 transition-colors",
-        state === "error" && "border-destructive/30",
-        state === "warn" && "border-warning/30",
+        "rounded-lg border bg-card p-3.5 transition-colors",
+        state === "error" && "border-destructive/25",
+        state === "warn" && "border-warning/25",
       )}
     >
       <div className="flex items-start gap-3">
@@ -143,7 +143,7 @@ function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint
             <span className="text-sm font-medium">{dep.name}</span>
             {dep.version && <span className="font-mono text-xs text-muted-foreground">{dep.version}</span>}
             {!dep.required && (
-              <Badge variant="outline" className="h-5 text-[10px] font-normal text-muted-foreground">
+              <Badge variant="outline" className="h-5 rounded-[5px] text-[10px] font-normal text-muted-foreground">
                 optional
               </Badge>
             )}
@@ -186,7 +186,7 @@ function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="mt-2 max-h-56 overflow-auto rounded-lg border bg-black/80 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-zinc-200"
+                className="mt-2 max-h-56 overflow-auto rounded-md border bg-paper-2 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85"
               >
                 {log.output || "(no output)"}
               </motion.pre>
@@ -205,7 +205,7 @@ export function InlineCode({ text }: { text: string }) {
     <>
       {parts.map((p, i) =>
         p.startsWith("`") && p.endsWith("`") ? (
-          <code key={i} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.92em]">
+          <code key={i} className="rounded-[4px] bg-secondary px-1 py-0.5 font-mono text-[0.92em]">
             {p.slice(1, -1)}
           </code>
         ) : (

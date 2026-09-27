@@ -3,13 +3,6 @@ import { cn } from "@/lib/utils";
 import styles from "./Motion.module.css";
 
 /**
- * aicss "Streaming Text" caret (MIT): a solid block while tokens stream in, blinking once idle.
- */
-export function StreamingCaret({ streaming = true, className }: { streaming?: boolean; className?: string }) {
-  return <span aria-hidden className={cn(styles.caret, streaming && styles.caretSteady, className)} />;
-}
-
-/**
  * Tick bars — a row of hairline ticks that rise and settle like a quiet equaliser.
  * Used as the "agent is working" signature next to live runs.
  */

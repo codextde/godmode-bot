@@ -46,14 +46,14 @@ export function RemoteStep({
   };
 
   return (
-    <StepCard>
-      <form onSubmit={submit}>
-        <StepHeader
-          eyebrow="Remote dashboard"
-          title="Protect your dashboard"
-          description="Godmode is running as a server. Set a password so you can sign in from a browser without copying access tokens around."
-        />
-        <div className="mb-5 flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-3.5 text-sm">
+    <form onSubmit={submit}>
+      <StepHeader
+        eyebrow="Remote dashboard"
+        title="Protect your dashboard."
+        description="Godmode is running as a server. Set a password so you can sign in from a browser without copying access tokens around."
+      />
+      <StepCard>
+        <div className="mb-5 flex items-start gap-3 rounded-lg border border-warning/25 bg-warning/[0.07] p-3.5 text-sm">
           <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
           <p className="text-muted-foreground">
             <span className="font-medium text-foreground">Anyone with this password controls your agents and their logins.</span> Use a long,
@@ -74,9 +74,9 @@ export function RemoteStep({
             autoFocus
           />
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-success/30 bg-success/10 p-4 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand/25 bg-brand-soft p-4 text-sm">
             <span className="flex items-center gap-2">
-              <CircleCheck className="size-5 text-success" /> A dashboard password is already set.
+              <CircleCheck className="size-5 text-brand-strong" /> A dashboard password is already set.
             </span>
             <Button type="button" size="sm" variant="outline" onClick={() => setChanging(true)}>
               Change it
@@ -104,7 +104,7 @@ export function RemoteStep({
             </SubmitButton>
           )}
         </StepFooter>
-      </form>
-    </StepCard>
+      </StepCard>
+    </form>
   );
 }

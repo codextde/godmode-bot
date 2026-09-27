@@ -8,6 +8,7 @@ import { useRoutines, useRuns } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Orb } from "@/components/aicss/Orb";
+import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -79,9 +80,9 @@ export function OverviewTab({ agent }: { agent: Agent }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="glass min-w-0 rounded-2xl p-2">
+        <section className="min-w-0 rounded-xl border bg-card p-2 shadow-card">
           <div className="flex items-center justify-between px-3 pt-2 pb-1">
-            <h2 className="text-sm font-semibold">Recent runs</h2>
+            <h2 className="text-sm font-medium tracking-[-0.01em]">Recent runs</h2>
             <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
               <Link to={`/activity?agent=${agent.id}`}>
                 All activity <ArrowRight />
@@ -91,7 +92,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
           {runsQ.isLoading ? (
             <div className="space-y-1 p-2">
               {Array.from({ length: 4 }, (_, i) => (
-                <Skeleton key={i} className="h-12 w-full rounded-xl" />
+                <Skeleton key={i} className="h-12 w-full rounded-lg" />
               ))}
             </div>
           ) : runsQ.isError ? (
@@ -110,9 +111,9 @@ export function OverviewTab({ agent }: { agent: Agent }) {
         </section>
 
         <div className="space-y-6">
-          <section className="glass rounded-2xl p-4">
+          <section className="rounded-xl border bg-card p-4 shadow-card">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Up next</h2>
+              <h2 className="text-sm font-medium tracking-[-0.01em]">Up next</h2>
               <Button variant="ghost" size="xs" asChild className="text-muted-foreground">
                 <Link to={`/agents/${agent.id}/routines`}>Routines</Link>
               </Button>
@@ -120,7 +121,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
             {upcoming.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Nothing scheduled.{" "}
-                <Link to={`/agents/${agent.id}/routines`} className="text-primary hover:underline">
+                <Link to={`/agents/${agent.id}/routines`} className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
                   Add a routine
                 </Link>{" "}
                 to run it automatically.
@@ -129,7 +130,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
               <ul className="space-y-3">
                 {upcoming.map((r) => (
                   <li key={r.id} className="flex items-start gap-2.5">
-                    <CalendarClock className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <CalendarClock className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">{r.name}</div>
                       <div className="text-xs text-muted-foreground">
@@ -142,9 +143,9 @@ export function OverviewTab({ agent }: { agent: Agent }) {
             )}
           </section>
 
-          <section className="glass rounded-2xl p-4">
+          <section className="rounded-xl border bg-card p-4 shadow-card">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Instructions</h2>
+              <h2 className="text-sm font-medium tracking-[-0.01em]">Instructions</h2>
               <Button variant="ghost" size="icon-xs" asChild className="text-muted-foreground">
                 <Link to={`/agents/${agent.id}/settings`} aria-label="Edit instructions">
                   <Pencil />
@@ -152,9 +153,8 @@ export function OverviewTab({ agent }: { agent: Agent }) {
               </Button>
             </div>
             {agent.instructions.trim() ? (
-              <div className="relative max-h-56 overflow-hidden">
+              <div className="relative max-h-56 overflow-hidden [mask-image:linear-gradient(to_bottom,#000_calc(100%-3rem),transparent)]">
                 <Markdown className="text-[13px] text-muted-foreground">{agent.instructions}</Markdown>
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-card to-transparent" />
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">No instructions yet — it works from your messages alone.</p>
@@ -177,14 +177,19 @@ function LiveCard({ agent }: { agent: Agent }) {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="glow-border flex flex-wrap items-center gap-4 rounded-2xl bg-card/80 p-4"
+      className="glow-border flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4 shadow-card"
     >
       <Orb variant="B3" size={32} label="Working" />
       <div className="min-w-0 flex-1">
-        <div className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Working right now</div>
-        <div className="text-shimmer truncate font-medium">{live.activity ?? "Thinking…"}</div>
+        <div className="eyebrow flex items-center gap-2">
+          <LiveDot /> Working right now
+        </div>
+        <div className="text-shimmer mt-0.5 truncate font-medium">{live.activity ?? "Thinking…"}</div>
       </div>
-      <span className="font-mono text-sm text-muted-foreground tabular-nums">{formatElapsed(now - live.startedAt)}</span>
+      <span className="flex items-center gap-2.5">
+        <WorkingTicks count={8} className="text-brand-strong" />
+        <span className="font-mono text-sm text-muted-foreground tabular-nums">{formatElapsed(now - live.startedAt)}</span>
+      </span>
       <div className="flex gap-2">
         <Button size="sm" variant="secondary" asChild>
           <Link to={`/chat/${live.conversationId}`}>Watch live</Link>
@@ -219,8 +224,8 @@ function Kpi({
   tone?: "warn";
 }) {
   return (
-    <div className="glass relative overflow-hidden rounded-2xl p-4">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground [&_svg]:size-3.5">
+    <div className="relative overflow-hidden rounded-xl border bg-card p-4 shadow-card">
+      <div className="eyebrow flex items-center gap-2 [&_svg]:size-3.5">
         {icon}
         {label}
       </div>
@@ -228,7 +233,7 @@ function Kpi({
         {value == null ? (
           <Skeleton className="h-7 w-16" />
         ) : (
-          <span className={cn("text-2xl font-semibold tracking-tight tabular-nums", tone === "warn" && "text-warning")}>{value}</span>
+          <span className={cn("text-2xl font-medium tracking-[-0.03em] tabular-nums", tone === "warn" && "text-warning")}>{value}</span>
         )}
         {extra}
       </div>
@@ -245,8 +250,8 @@ function Sparkbars({ values }: { values: number[] }) {
       {values.map((v, i) => (
         <span
           key={i}
-          className={cn("w-1.5 rounded-sm", v ? "bg-gradient-to-t from-glow-a to-glow-b" : "bg-muted")}
-          style={{ height: `${Math.max(12, (v / max) * 100)}%`, opacity: v ? 0.55 + 0.45 * (v / max) : 1 }}
+          className={cn("w-1.5 rounded-[2px]", v ? "bg-foreground" : "bg-muted")}
+          style={{ height: `${Math.max(12, (v / max) * 100)}%`, opacity: v ? 0.35 + 0.5 * (v / max) : 1 }}
         />
       ))}
     </div>
