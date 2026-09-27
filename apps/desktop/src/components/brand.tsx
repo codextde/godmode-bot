@@ -31,11 +31,11 @@ export function Wordmark({ className }: { className?: string }) {
  * Quiet paper backdrop for hero areas: dashed guide rails and a halftone dot field that fades out.
  * (Replaces the old aurora glow — no colour, no gradients.)
  */
-export function Backdrop({ className }: { className?: string }) {
+export function Backdrop({ className, rails = true }: { className?: string; rails?: boolean }) {
   return (
     <div aria-hidden className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)}>
       <div className="absolute inset-x-0 top-0 h-[420px] bg-dots [mask-image:radial-gradient(ellipse_60%_70%_at_50%_0%,#000_10%,transparent_75%)] opacity-70" />
-      <div className="guide-rails absolute inset-y-0 left-1/2 w-[min(100%-2rem,56rem)] -translate-x-1/2" />
+      {rails && <div className="guide-rails absolute inset-y-0 left-1/2 w-[min(100%-2rem,56rem)] -translate-x-1/2" />}
     </div>
   );
 }

@@ -44,15 +44,22 @@ interface Ripple {
 /**
  * Live view of a Godmode browser profile (CDP screencast frames over the WebSocket) with optional human takeover:
  * clicks, scrolling and typing on the image are forwarded to the page.
+ * Pass `expanded` + `onExpandedChange` to control the focus view from outside (e.g. the chat's browser panel).
  */
 export function LiveView({
   profile,
   onLaunch,
   launching,
+  expanded: expandedProp,
+  onExpandedChange,
+  defaultTakeover = false,
 }: {
   profile: BrowserProfile;
   onLaunch: () => void;
   launching: boolean;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+  defaultTakeover?: boolean;
 }) {
   const qc = useQueryClient();
   const running = profile.running;
@@ -60,14 +67,26 @@ export function LiveView({
   const hasFrame = !!frame;
   const now = useNow(1000);
 
-  const [takeover, setTakeover] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [takeover, setTakeover] = useState(defaultTakeover);
+  const [expandedState, setExpandedState] = useState(false);
+  const controlled = expandedProp !== undefined;
+  const expanded = expandedProp ?? expandedState;
+  const onExpandedChangeRef = useRef(onExpandedChange);
+  onExpandedChangeRef.current = onExpandedChange;
+  const setExpanded = useCallback(
+    (next: boolean) => {
+      if (!controlled) setExpandedState(next);
+      onExpandedChangeRef.current?.(next);
+    },
+    [controlled],
+  );
   const [focused, setFocused] = useState(false);
   const [waitedLong, setWaitedLong] = useState(false);
   const [ripples, setRipples] = useState<Ripple[]>([]);
   const [urlDraft, setUrlDraft] = useState("");
   const [editingUrl, setEditingUrl] = useState(false);
 
+  const rootRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const frameSize = useRef({ width: 0, height: 0 });
@@ -80,7 +99,10 @@ export function LiveView({
   }, [profile.id, running]);
 
   // Reset per-profile UI state.
+  const shownProfileId = useRef(profile.id);
   useEffect(() => {
+    if (shownProfileId.current === profile.id) return;
+    shownProfileId.current = profile.id;
     setTakeover(false);
     setEditingUrl(false);
     setRipples([]);
@@ -106,11 +128,19 @@ export function LiveView({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [expanded, takeover]);
+  }, [expanded, takeover, setExpanded]);
 
   useEffect(() => {
     if (takeover) viewportRef.current?.focus();
   }, [takeover]);
+
+  // The focus view sits on top of the page: pull keyboard focus into it and hand it back when it closes.
+  useEffect(() => {
+    if (!expanded) return;
+    const previous = document.activeElement as HTMLElement | null;
+    if (!rootRef.current?.contains(previous)) rootRef.current?.focus();
+    return () => previous?.focus();
+  }, [expanded]);
 
   /* ---------------------------- input forwarding ---------------------------- */
 
@@ -244,11 +274,11 @@ export function LiveView({
 
   return (
     <>
-      <AnimatePresence>
+      <AnimatePresence propagate>
         {expanded && (
           <motion.div
             key="backdrop"
-            className="fixed inset-0 z-40 bg-[#1c1b19]/35"
+            className="fixed inset-0 z-40 bg-[#1c1b19]/35 dark:bg-black/60"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -258,11 +288,19 @@ export function LiveView({
       </AnimatePresence>
 
       <motion.div
+        ref={rootRef}
         layout
+        role={expanded ? "dialog" : undefined}
+        aria-modal={expanded || undefined}
+        aria-label={expanded ? `${profile.name} browser` : undefined}
+        tabIndex={-1}
+        initial={controlled ? { opacity: 0, scale: 0.98 } : false}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.15 } }}
         transition={{ type: "spring", stiffness: 260, damping: 30 }}
-        className={cn("rounded-xl", expanded ? "fixed inset-4 z-50 flex flex-col md:inset-8" : "relative")}
+        className={cn("rounded-xl outline-none", expanded ? "fixed inset-4 z-50 flex flex-col md:inset-8" : "relative")}
       >
-        <div className={cn("rounded-xl", (live || takeover) && "glow-border", expanded && "flex min-h-0 flex-1 flex-col")}>
+        <div className={cn("rounded-xl", takeover && "glow-border", expanded && "flex min-h-0 flex-1 flex-col")}>
         <div
           className={cn(
             "flex min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-float",
@@ -295,7 +333,7 @@ export function LiveView({
               )}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon-xs" onClick={() => setExpanded((v) => !v)} aria-label={expanded ? "Exit focus view" : "Expand"}>
+                  <Button variant="ghost" size="icon-xs" onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Exit focus view" : "Expand"}>
                     {expanded ? <Minimize2 /> : <Maximize2 />}
                   </Button>
                 </TooltipTrigger>

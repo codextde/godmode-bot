@@ -73,5 +73,6 @@ export type EntityName =
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =
   | { type: "ping" }
-  | { type: "browser.subscribe"; profileId: ID }
+  /** `passive` viewers (e.g. the chat preview) get frames without keeping an idle browser running. */
+  | { type: "browser.subscribe"; profileId: ID; passive?: boolean }
   | { type: "browser.unsubscribe"; profileId: ID };
