@@ -33,7 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { formatCost, formatDuration, formatElapsed, formatTokens, modelLabel, RunStatusBadge, TriggerBadge } from "./run-status";
+import { formatCost, formatDuration, formatElapsed, formatTokens, RunStatusBadge, TriggerBadge, useModelLabel } from "./run-status";
 import { useRunLiveState } from "./run-row";
 import { RunLogViewer } from "./run-log-viewer";
 
@@ -119,6 +119,7 @@ function RunDetail({ runId, placeholder, onOpenRun }: { runId: string; placehold
 }
 
 function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) => void }) {
+  const modelLabel = useModelLabel();
   const { data: agent } = useAgent(run.agentId);
   const { live, status, running, elapsed } = useRunLiveState(run);
   const cancel = useCancelRun();

@@ -10,12 +10,13 @@ import {
   updateCredential,
 } from "../../vault/credentials";
 import { createTotp, currentCodes, deleteTotp, importTotpUris, listTotp, updateTotp } from "../../vault/totp";
+import { importPasswords, MAX_IMPORT_BYTES, previewPasswordImport } from "../../vault/passwordImport";
 import { audit } from "../../services/audit";
 import { updateSettings } from "../../services/settings";
 import { rateLimitLogin, resetLoginAttempts, setDashboardPassword } from "../auth";
 import { issueGrant, requireGrant, verifyVaultPassphrase } from "../grants";
 import { body, z } from "../validate";
-import { badRequest } from "../../util";
+import { badRequest, HttpError } from "../../util";
 
 /** App-level secrets the UI always lists (set or not). */
 const WELL_KNOWN_SECRETS = ["anthropic_api_key", "openai_api_key", "elevenlabs_api_key", "composio_api_key", "browser_use_api_key"];
@@ -75,6 +76,28 @@ const totpSchema = z.object({
 });
 
 const nullToEmpty = (v: string | null | undefined) => (v === null ? "" : v);
+
+/** Multipart upload of a password export: `file`, optional `workspaceId` (empty = global). */
+async function passwordExportUpload(c: Context): Promise<{ data: Uint8Array; workspaceId: string | null; form: FormData }> {
+  const tooLarge = () => new HttpError(413, "The export is larger than 512 MB", "too_large");
+  if (Number(c.req.header("content-length") ?? 0) > MAX_IMPORT_BYTES + 1024 * 1024) throw tooLarge();
+  if (!(c.req.header("content-type") ?? "").includes("multipart/form-data")) {
+    throw badRequest("Upload the export as multipart/form-data with a `file` field");
+  }
+  let form: FormData;
+  try {
+    form = await c.req.raw.formData();
+  } catch {
+    throw badRequest("Could not read the uploaded file");
+  }
+  const file = form.get("file");
+  if (!(file instanceof Blob)) throw badRequest("Choose an export file to import");
+  if (file.size > MAX_IMPORT_BYTES) throw tooLarge();
+  const workspaceId = form.get("workspaceId");
+  return { data: new Uint8Array(await file.arrayBuffer()), workspaceId: typeof workspaceId === "string" && workspaceId ? workspaceId : null, form };
+}
+
+const importIdsSchema = z.array(z.number().int().min(0)).max(100_000);
 
 export function registerVaultRoutes(app: Hono): void {
   /* ---------------------------------------------------------------- */
@@ -203,6 +226,29 @@ export function registerVaultRoutes(app: Hono): void {
   /* ---------------------------------------------------------------- */
   /* Credentials (website logins)                                      */
   /* ---------------------------------------------------------------- */
+
+  // Comparing an export with saved passwords would answer "is this the password?", so both steps need a grant.
+  app.post("/api/credentials/import/preview", async (c) => {
+    requireGrant(c);
+    const { data, workspaceId } = await passwordExportUpload(c);
+    return c.json(previewPasswordImport(data, workspaceId));
+  });
+
+  app.post("/api/credentials/import", async (c) => {
+    requireGrant(c);
+    const { data, workspaceId, form } = await passwordExportUpload(c);
+    let raw: unknown;
+    try {
+      raw = JSON.parse(String(form.get("ids") ?? "[]"));
+    } catch {
+      throw badRequest("`ids` must be a JSON array of row ids");
+    }
+    const ids = importIdsSchema.safeParse(raw);
+    if (!ids.success) throw badRequest("`ids` must be a JSON array of row ids");
+    const { source, ...result } = importPasswords(data, workspaceId, ids.data);
+    audit("user", "credential.import", null, { ...result, source, workspaceId });
+    return c.json(result);
+  });
 
   app.get("/api/credentials", (c) => c.json(listCredentials({ workspaceId: scopeParam(c), search: c.req.query("search") || undefined })));
 

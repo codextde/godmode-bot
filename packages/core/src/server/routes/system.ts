@@ -8,6 +8,8 @@ import { getSettings, updateSettings } from "../../services/settings";
 import { listNotifications, markRead, clearNotifications, unreadCount } from "../../services/notifications";
 import { listAudit } from "../../services/audit";
 import { runDoctor, installDependency } from "../../services/doctor";
+import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
+import { getModelCatalog } from "../../runner/models";
 import { getDefaultAgentId } from "../../agents/service";
 import { applyRuntimeSettings } from "../../services/runtime";
 import { hasDashboardPassword } from "../auth";
@@ -75,8 +77,11 @@ export function registerSystemRoutes(app: Hono) {
   app.get("/api/audit", (c) => c.json(listAudit(Number(c.req.query("limit") ?? 200), c.req.query("action") || undefined)));
 
   app.get("/api/doctor", async (c) => c.json(await runDoctor(c.req.query("refresh") === "1")));
+  app.get("/api/models", async (c) => c.json(await getModelCatalog({ refresh: c.req.query("refresh") === "1" })));
   app.post("/api/doctor/install", async (c) => {
     const { id } = await body(c, z.object({ id: z.string() }));
     return c.json(await installDependency(id as never));
   });
+  app.get("/api/doctor/claude-update", async (c) => c.json(await claudeUpdateStatus(c.req.query("refresh") === "1")));
+  app.post("/api/doctor/claude-update", async (c) => c.json(await updateClaude()));
 }

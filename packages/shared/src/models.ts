@@ -140,8 +140,9 @@ export interface Conversation {
   origin: ConversationOrigin;
   /** Claude CLI session id used with --resume. */
   claudeSessionId: string | null;
-  /** Per-chat overrides set with /model and /effort. */
+  /** Per-chat override from the model picker or /model. null = the agent's model. */
   model: string | null;
+  /** Per-chat override from the effort control or /effort. null = the agent's effort. */
   effort: Effort | null;
   /** Folder this conversation works in, overriding the agent's. null = the agent's default. */
   workingDirectory: string | null;
@@ -558,6 +559,32 @@ export interface Settings {
 }
 
 /* ------------------------------------------------------------------ */
+/* Models (as offered by the installed Claude Code CLI)                 */
+/* ------------------------------------------------------------------ */
+
+export interface ClaudeModel {
+  /** Value for `claude --model`: an alias ("opus") or a full model id. */
+  id: string;
+  /** Model id the value currently resolves to, e.g. "claude-opus-5-5". */
+  resolvedModel: string;
+  label: string;
+  description: string;
+  /** Effort levels the model accepts, low → high. Empty = no effort control. */
+  efforts: Effort[];
+  /** Newest model of its family; the others are older versions. */
+  latest: boolean;
+}
+
+export interface ModelCatalog {
+  models: ClaudeModel[];
+  /** "claude" = reported by the installed Claude Code CLI, "builtin" = static list (CLI missing or unreachable). */
+  source: "claude" | "builtin";
+  claudeVersion: string | null;
+  fetchedAt: ISODate;
+  error: string | null;
+}
+
+/* ------------------------------------------------------------------ */
 /* Doctor (dependency checks)                                           */
 /* ------------------------------------------------------------------ */
 
@@ -581,6 +608,24 @@ export interface DoctorReport {
   arch: string;
   checkedAt: ISODate;
   dependencies: DependencyStatus[];
+}
+
+/** Claude Code's release channel (`autoUpdatesChannel` in ~/.claude/settings.json). */
+export type ClaudeReleaseChannel = "latest" | "stable";
+
+export interface ClaudeUpdateStatus {
+  current: string | null;
+  latest: string | null;
+  channel: ClaudeReleaseChannel;
+  updateAvailable: boolean;
+  checkedAt: ISODate;
+}
+
+export interface ClaudeUpdateResult {
+  ok: boolean;
+  previous: string | null;
+  version: string | null;
+  output: string;
 }
 
 /* ------------------------------------------------------------------ */

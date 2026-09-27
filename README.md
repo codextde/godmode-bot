@@ -24,9 +24,9 @@ memory, routines and history.
 
 <br />
 
-<img src="docs/screenshots/chat.png" alt="Godmode logging into a portal with a password and 2FA code from the vault — never shown to the AI" width="100%" />
+<img src="docs/screenshots/chat.png" alt="Godmode logging into a portal with a password and 2FA code from the vault — never shown to the AI — next to a live preview of its browser" width="100%" />
 
-<sub>Godmode logs into a portal: the password and the 2FA code are filled from the vault — the AI never sees them.</sub>
+<sub>Godmode logs into a portal: the password and the 2FA code are filled from the vault — the AI never sees them. The live browser preview on the right shows where it is; <b>Take control</b> jumps in anytime.</sub>
 
 </div>
 
@@ -55,9 +55,11 @@ needs to be useful:
 | 📁 **Working folders** | Optionally point a chat or an agent at any folder on your machine — it works on the files there and keeps its memory in its own repo. |
 | ⏰ **Routines** | Cron schedules with a friendly builder: “weekdays at 08:00”, “1st of every month”… |
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
-| 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live and *take over* for CAPTCHAs. |
+| ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
+| 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
 | 🔐 **Vault** | Logins with password generator, per-workspace or global, AES-256-GCM encrypted, fully audited. |
+| 📥 **Password import** | Bring logins over from Chrome (and Edge, Brave, Arc), 1Password (.1pux or CSV), Bitwarden, Apple Passwords, Firefox and more — with a preview that updates saved logins instead of duplicating them. |
 | 🔢 **2FA / TOTP** | Import Google Authenticator QR codes from screenshots — including multi-account *export* QR codes — or scan with your camera. |
 | 📬 **Missing-login inbox** | Agents report missing or broken logins, accounts and 2FA; add them in one click. |
 | 🧩 **Integrations** | Composio toolkits (Gmail, Slack, GitHub, Notion…) and custom MCP servers — globally, per workspace, or per agent. |
@@ -76,16 +78,28 @@ needs to be useful:
     <td><img src="docs/screenshots/agent-new.png" alt="Create an agent by describing it" /><br /><sub><b>New agent</b> — describe it in plain words or start from a template</sub></td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/routines.png" alt="Routines on a schedule" /><br /><sub><b>Routines</b> — everything your agents do on a schedule, at a glance</sub></td>
+    <td><img src="docs/screenshots/folder.png" alt="Pick a working folder for a chat" /><br /><sub><b>Working folders</b> — point a chat or an agent at any folder on your machine</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/commands.png" alt="Claude Code slash commands in the composer" /><br /><sub><b>Slash commands</b> — every Claude Code command, right in the composer</sub></td>
+    <td><img src="docs/screenshots/browser.png" alt="Managed browser with live view" /><br /><sub><b>Browser</b> — live view of the agent's Chromium, take over anytime</sub></td>
+  </tr>
+  <tr>
     <td><img src="docs/screenshots/logins.png" alt="Vault logins" /><br /><sub><b>Logins</b> — encrypted, scoped per workspace, filled for agents</sub></td>
     <td><img src="docs/screenshots/vault-2fa.png" alt="2FA codes with QR import" /><br /><sub><b>2FA codes</b> — import Google Authenticator QR screenshots</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/browser.png" alt="Managed browser with live view" /><br /><sub><b>Browser</b> — live view of the agent's Chromium, take over anytime</sub></td>
-    <td><img src="docs/screenshots/integrations.png" alt="Composio and MCP integrations" /><br /><sub><b>Integrations</b> — Composio toolkits and custom MCP servers</sub></td>
+    <td><img src="docs/screenshots/password-import.png" alt="Import passwords from Chrome, 1Password or another password manager" /><br /><sub><b>Password import</b> — Chrome, 1Password, Bitwarden, Apple Passwords and more</sub></td>
+    <td><img src="docs/screenshots/password-import-review.png" alt="Review which logins an import adds or updates" /><br /><sub><b>Import review</b> — new, updated and already saved logins at a glance</sub></td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/integrations.png" alt="Custom MCP servers and Composio integrations" /><br /><sub><b>Integrations</b> — custom MCP servers and Composio toolkits, scoped per workspace</sub></td>
     <td><img src="docs/screenshots/inbox.png" alt="Missing-login inbox" /><br /><sub><b>Inbox</b> — agents report missing or broken logins</sub></td>
+  </tr>
+  <tr>
     <td><img src="docs/screenshots/activity.png" alt="Activity across agents" /><br /><sub><b>Activity</b> — every run, its cost, duration and result</sub></td>
+    <td><img src="docs/screenshots/settings.png" alt="Security settings" /><br /><sub><b>Security</b> — fill-only secrets, device keychain and auto-lock</sub></td>
   </tr>
 </table>
 
@@ -133,7 +147,7 @@ docker compose up -d   # dashboard on http://localhost:7777
 ## ⚡ Quick start
 
 1. **Onboarding** — pick a vault passphrase (enable *Remember on this device* so routines run unattended).
-2. **Add access** — import your Chrome sessions, add logins in **Vault → Logins**, and import 2FA QR codes in
+2. **Add access** — import your Chrome sessions, import or add logins in **Vault → Logins**, and import 2FA QR codes in
    **Vault → 2FA Codes** (Google Authenticator → *Transfer accounts* → *Export* → screenshot).
 3. **Chat** — ask Godmode anything: *“Log into our billing portal and download September's invoice.”*
 4. **Create agents** — *“Create an agent that checks our competitors' pricing every Monday and sends me a summary.”*
@@ -226,9 +240,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## 🗺️ Roadmap
 
 - [x] Chat, persistent agents, routines, delegation, subagents
-- [x] Vault (logins + TOTP with QR import), Chrome session import, missing-login inbox
+- [x] Vault (logins with Chrome / 1Password import + TOTP with QR import), Chrome session import, missing-login inbox
 - [x] Composio + custom MCP servers, workspaces, voice mode, backup/restore
 - [x] Desktop app (macOS/Windows/Linux) + headless web dashboard
+- [x] Working folders, Claude Code slash commands, live browser preview in chat, desktop auto-update
 - [ ] Full computer use: agents working in a dedicated macOS / Windows / Linux VM
 - [ ] Mobile companion app & push notifications
 - [ ] Team mode: shared workspaces and approvals
