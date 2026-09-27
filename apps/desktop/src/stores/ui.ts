@@ -9,11 +9,14 @@ interface UiState {
   sidebarCollapsed: boolean;
   /** Show the live browser preview next to chats while the agent's browser is open. */
   browserPanel: boolean;
+  /** Claude Code version whose update prompt was dismissed; a newer release shows it again. */
+  skippedClaudeVersion: string | null;
   setWorkspace: (id: string) => void;
   setCommandOpen: (open: boolean) => void;
   setVoiceMode: (on: boolean) => void;
   setSidebarCollapsed: (v: boolean) => void;
   setBrowserPanel: (v: boolean) => void;
+  skipClaudeVersion: (version: string | null) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -24,15 +27,23 @@ export const useUi = create<UiState>()(
       voiceMode: false,
       sidebarCollapsed: false,
       browserPanel: true,
+      skippedClaudeVersion: null,
       setWorkspace: (workspace) => set({ workspace }),
       setCommandOpen: (commandOpen) => set({ commandOpen }),
       setVoiceMode: (voiceMode) => set({ voiceMode }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setBrowserPanel: (browserPanel) => set({ browserPanel }),
+      skipClaudeVersion: (skippedClaudeVersion) => set({ skippedClaudeVersion }),
     }),
     {
       name: "godmode-ui",
-      partialize: (s) => ({ workspace: s.workspace, sidebarCollapsed: s.sidebarCollapsed, voiceMode: s.voiceMode, browserPanel: s.browserPanel }),
+      partialize: (s) => ({
+        workspace: s.workspace,
+        sidebarCollapsed: s.sidebarCollapsed,
+        voiceMode: s.voiceMode,
+        browserPanel: s.browserPanel,
+        skippedClaudeVersion: s.skippedClaudeVersion,
+      }),
     },
   ),
 );

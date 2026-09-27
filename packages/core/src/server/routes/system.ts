@@ -8,6 +8,7 @@ import { getSettings, updateSettings } from "../../services/settings";
 import { listNotifications, markRead, clearNotifications, unreadCount } from "../../services/notifications";
 import { listAudit } from "../../services/audit";
 import { runDoctor, installDependency } from "../../services/doctor";
+import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
 import { getModelCatalog } from "../../runner/models";
 import { getDefaultAgentId } from "../../agents/service";
 import { applyRuntimeSettings } from "../../services/runtime";
@@ -81,4 +82,6 @@ export function registerSystemRoutes(app: Hono) {
     const { id } = await body(c, z.object({ id: z.string() }));
     return c.json(await installDependency(id as never));
   });
+  app.get("/api/doctor/claude-update", async (c) => c.json(await claudeUpdateStatus(c.req.query("refresh") === "1")));
+  app.post("/api/doctor/claude-update", async (c) => c.json(await updateClaude()));
 }

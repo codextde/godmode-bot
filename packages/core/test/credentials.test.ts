@@ -9,6 +9,7 @@ import { closeDb, get, insert, openDb, run } from "../src/db";
 import { resetSettingsCache } from "../src/services/settings";
 import { HttpError } from "../src/util";
 import {
+  addCredentialDomain,
   createCredential,
   credentialsForAgent,
   deleteCredential,
@@ -306,6 +307,35 @@ describe("agent access", () => {
     expect(findCredentialsForAgent(agent, "gitlab.com")).toEqual([]);
     expect(findCredentialsForAgent(agent, "")).toEqual([]);
     expect(findCredentialsForAgent(makeAgent("ws_a", { credentialIds: [globalLogin] }), "github.com").map((c) => c.id)).toEqual([globalLogin]);
+  });
+
+  test("find by name when nothing matches by domain (guess), ranked below domain matches", () => {
+    const agent = makeAgent("ws_a");
+    const bitpanda = createCredential({ name: "Bitpanda", domains: ["bitpanda.com"], username: "me", workspaceId: "ws_a" }).id;
+    try {
+      // An exact domain match is still the only result when one exists.
+      expect(findCredentialsForAgent(agent, "bitpanda.com").map((c) => c.id)).toEqual([bitpanda]);
+      // Different TLD: no domain matches, but the login's name guesses the site.
+      expect(findCredentialsForAgent(agent, "https://bitpanda.io/login").map((c) => c.id)).toEqual([bitpanda]);
+      // An unrelated site matches neither by domain nor by name.
+      expect(findCredentialsForAgent(agent, "coinbase.com")).toEqual([]);
+      // A real domain match never brings in an unrelated name.
+      expect(findCredentialsForAgent(agent, "github.com").map((c) => c.id)).not.toContain(bitpanda);
+    } finally {
+      deleteCredential(bitpanda);
+    }
+  });
+
+  test("addCredentialDomain remembers a new host once", () => {
+    const c = createCredential({ name: "Kraken", url: "https://kraken.com/login" }).id;
+    try {
+      expect(addCredentialDomain(c, "https://kraken.io/")).toBe(true);
+      expect(getCredential(c).domains).toEqual(["kraken.com", "kraken.io"]);
+      expect(addCredentialDomain(c, "kraken.io")).toBe(false); // already covered
+      expect(addCredentialDomain(c, "kraken.com")).toBe(false);
+    } finally {
+      deleteCredential(c);
+    }
   });
 
   test("revealForAgent returns secrets only in scope", () => {

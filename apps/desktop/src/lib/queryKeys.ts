@@ -6,6 +6,7 @@ export const qk = {
   notifications: ["notifications"] as unknown[],
   audit: ["audit"] as unknown[],
   doctor: ["doctor"] as unknown[],
+  claudeUpdate: ["doctor", "claude-update"] as unknown[],
   models: ["models"] as unknown[],
   vaultStatus: ["vault", "status"] as unknown[],
   appSecrets: ["vault", "secrets"] as unknown[],
