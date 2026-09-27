@@ -4,14 +4,14 @@
  * cookie round-trips and importing sessions from another profile's cookie store.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ServerEvent } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 import { bus } from "../src/events/bus";
-import { findChrome } from "../src/browser/chrome";
+import { appBundle, findChrome, isProcessAlive, launchChrome, type ChromeProcess } from "../src/browser/chrome";
 import { CdpClient, attachToPage, getCookies, listPages, type PageSession } from "../src/browser/cdp";
 import { getRunning, unregisterBrowser } from "../src/browser/state";
 import { updateSettings } from "../src/services/settings";
@@ -21,6 +21,7 @@ import { loginFillScope, originRefusal } from "../src/browser/fill";
 
 const chrome = findChrome();
 const suite = chrome && !process.env.GODMODE_SKIP_BROWSER_TESTS ? describe : describe.skip;
+const macVisible = chrome && !process.env.GODMODE_SKIP_BROWSER_TESTS && process.platform === "darwin" && appBundle(realpathSync(chrome.path)) ? describe : describe.skip;
 
 const LOGIN = `<!doctype html><title>Login</title>
 <form id="f" onsubmit="event.preventDefault(); window.__submitted = (window.__submitted || 0) + 1;">
@@ -468,4 +469,49 @@ suite("managed Chromium (CDP integration)", () => {
     expect(manager.getProfile(target.id).importedFrom).toBeTruthy();
     await manager.stopBrowser(target.id);
   }, 90_000);
+});
+
+function frontmostPid(): number | null {
+  const asn = Bun.spawnSync(["lsappinfo", "front"]).stdout.toString().trim();
+  const m = /pid = (\d+)/.exec(Bun.spawnSync(["lsappinfo", "info", "-only", "pid", asn]).stdout.toString());
+  return m ? Number(m[1]) : null;
+}
+
+macVisible("visible Chromium on macOS", () => {
+  test("starts in the background: never frontmost, one normal window, tracked by its own pid", async () => {
+    if (frontmostPid() === null) return; // no GUI session (e.g. over SSH)
+    const dir = mkdtempSync(join(tmpdir(), "godmode-visible-test-"));
+    let proc: ChromeProcess | null = null;
+    try {
+      proc = await launchChrome({ executable: chrome!.path, userDataDir: dir, headless: false, startUrl: "about:blank#godmode" });
+      expect(proc.pid).not.toBe(proc.proc.pid);
+      const client = await CdpClient.connect(proc.wsUrl);
+      try {
+        const pages = await listPages(client);
+        expect(pages.map((p) => p.url)).toEqual(["about:blank#godmode"]);
+        const { bounds } = await client.send<{ bounds: { windowState: string } }>("Browser.getWindowForTarget", { targetId: pages[0]!.targetId });
+        expect(bounds.windowState).toBe("normal");
+        await client.send("Target.createTarget", { url: "about:blank" });
+        await Bun.sleep(500);
+      } finally {
+        client.close();
+      }
+      expect(frontmostPid()).not.toBe(proc.pid);
+
+      // Losing `open` (e.g. Ctrl-C in a terminal) must not lose track of the browser.
+      proc.proc.kill("SIGKILL");
+      await proc.proc.exited;
+      expect(proc.isAlive()).toBe(true);
+      proc.kill();
+      await Promise.race([proc.exited, Bun.sleep(8000)]);
+      expect(proc.isAlive()).toBe(false);
+      expect(isProcessAlive(proc.pid)).toBe(false);
+    } finally {
+      if (proc?.isAlive()) {
+        proc.kill("SIGKILL");
+        await Promise.race([proc.exited, Bun.sleep(3000)]);
+      }
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
+  }, 60_000);
 });

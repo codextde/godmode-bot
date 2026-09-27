@@ -67,7 +67,7 @@ const BROWSER_SKIP_DIRS = new Set([
   "DawnWebGPUCache",
   "Crashpad",
 ]);
-const BROWSER_SKIP_FILES = new Set(["DevToolsActivePort", "Godmode-DevTools.json", "lockfile", "LOCK"]);
+const BROWSER_SKIP_FILES = new Set(["DevToolsActivePort", "Godmode-DevTools.json", "Godmode-stderr.log", "lockfile", "LOCK"]);
 
 const ALL_ENTITIES: EntityName[] = [
   "workspaces",
