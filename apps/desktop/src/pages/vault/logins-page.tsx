@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence } from "motion/react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Bot, FileKey, KeyRound, Lock, Plus, ScrollText, Search, SearchX, X } from "lucide-react";
-import type { Credential } from "@godmode/shared";
+import type { Credential, TotpEntry } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
+import { usePageScroll } from "@/components/layout/page-scroll";
 import { CredentialDialog, type CredentialPrefill } from "@/components/vault/credential-dialog";
 import { CREDENTIAL_GRID, CredentialRow } from "@/components/vault/credential-row";
 import { ConfirmDeleteDialog } from "@/components/vault/confirm-dialog";
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const PREFILL_PARAMS = ["new", "domain", "service", "missingLoginId"];
+const byName = new Intl.Collator(undefined, { sensitivity: "base" });
 
 export default function LoginsPage() {
   const qc = useQueryClient();
@@ -45,7 +47,7 @@ export default function LoginsPage() {
     if (list.error && isVaultLocked(list.error)) toastApiError(list.error, "Vault locked", qc);
   }, [list.error, qc]);
 
-  const credentials = useMemo(() => [...(list.data ?? [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })), [list.data]);
+  const credentials = useMemo(() => [...(list.data ?? [])].sort((a, b) => byName.compare(a.name, b.name)), [list.data]);
 
   // Dialog state (+ deep links: ?new=1, ?domain=&service=&missingLoginId=)
   const [params, setParams] = useSearchParams();
@@ -83,6 +85,7 @@ export default function LoginsPage() {
   };
 
   const [toDelete, setToDelete] = useState<Credential | null>(null);
+  const openEdit = useCallback((credential: Credential) => setDialog({ open: true, credential }), []);
   const del = useMutation({
     mutationFn: (id: string) => api.credentials.delete(id),
     onSuccess: (_r, id) => {
@@ -216,7 +219,7 @@ export default function LoginsPage() {
             />
           )
         ) : (
-          <div className={cn("@container overflow-hidden rounded-xl border bg-card shadow-card transition-opacity", list.isFetching && list.isPlaceholderData && "opacity-70")}>
+          <div className={cn("@container animate-in overflow-hidden rounded-xl border bg-card shadow-card transition-opacity fade-in-0", list.isFetching && list.isPlaceholderData && "opacity-70")}>
             <div className={cn(CREDENTIAL_GRID, "eyebrow hidden border-b bg-paper-2 px-4 py-2 @3xl:grid")}>
               <span className="pl-12">Login</span>
               <span>Username</span>
@@ -224,20 +227,7 @@ export default function LoginsPage() {
               <span>Scope</span>
               <span className="w-8" />
             </div>
-            <div className="divide-y">
-              <AnimatePresence initial={false}>
-                {credentials.map((c, i) => (
-                  <CredentialRow
-                    key={c.id}
-                    credential={c}
-                    totp={c.totpId ? totpById.get(c.totpId) : undefined}
-                    index={i}
-                    onEdit={() => setDialog({ open: true, credential: c })}
-                    onDelete={() => setToDelete(c)}
-                  />
-                ))}
-              </AnimatePresence>
-            </div>
+            <CredentialList credentials={credentials} totpById={totpById} onEdit={openEdit} onDelete={setToDelete} />
           </div>
         )}
       </PageBody>
@@ -253,6 +243,60 @@ export default function LoginsPage() {
         pending={del.isPending}
         onConfirm={() => toDelete && del.mutate(toDelete.id)}
       />
+    </div>
+  );
+}
+
+function CredentialList({
+  credentials,
+  totpById,
+  onEdit,
+  onDelete,
+}: {
+  credentials: Credential[];
+  totpById: Map<string, TotpEntry>;
+  onEdit: (credential: Credential) => void;
+  onDelete: (credential: Credential) => void;
+}) {
+  const scrollEl = usePageScroll();
+  const listRef = useRef<HTMLDivElement>(null);
+  const [scrollMargin, setScrollMargin] = useState(0);
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!scrollEl || !list) return;
+    const measure = () => setScrollMargin(list.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top + scrollEl.scrollTop);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(scrollEl.firstElementChild ?? scrollEl);
+    return () => ro.disconnect();
+  }, [scrollEl]);
+
+  const virtualizer = useVirtualizer({
+    count: credentials.length,
+    getScrollElement: () => scrollEl,
+    getItemKey: (i) => credentials[i].id,
+    estimateSize: () => 68,
+    overscan: 8,
+    scrollMargin,
+  });
+
+  return (
+    <div ref={listRef} className="relative" style={{ height: virtualizer.getTotalSize() }}>
+      {virtualizer.getVirtualItems().map((item) => {
+        const c = credentials[item.index];
+        return (
+          <div
+            key={item.key}
+            ref={virtualizer.measureElement}
+            data-index={item.index}
+            className={cn("absolute inset-x-0 top-0", item.index > 0 && "border-t")}
+            style={{ transform: `translateY(${item.start - scrollMargin}px)` }}
+          >
+            <CredentialRow credential={c} totp={c.totpId ? totpById.get(c.totpId) : undefined} onEdit={onEdit} onDelete={onDelete} />
+          </div>
+        );
+      })}
     </div>
   );
 }

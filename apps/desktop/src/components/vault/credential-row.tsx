@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -32,23 +32,23 @@ const REVEAL_SECONDS = 20;
 export const CREDENTIAL_GRID =
   "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 @3xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,0.9fr)_auto]";
 
-export function CredentialRow({
+export const CredentialRow = memo(function CredentialRow({
   credential: c,
   totp,
-  index,
-  onEdit,
-  onDelete,
+  onEdit: onEditCredential,
+  onDelete: onDeleteCredential,
 }: {
   credential: Credential;
   totp?: TotpEntry;
-  index: number;
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit: (credential: Credential) => void;
+  onDelete: (credential: Credential) => void;
 }) {
   const qc = useQueryClient();
   const [revealed, setRevealed] = useState<{ password: string | null; at: number } | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const domain = c.domains[0] ?? domainFromUrl(c.url);
+  const onEdit = () => onEditCredential(c);
+  const onDelete = () => onDeleteCredential(c);
 
   const hide = () => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -138,14 +138,7 @@ export function CredentialRow({
   );
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, x: -16, transition: { duration: 0.18 } }}
-      transition={{ delay: Math.min(index, 12) * 0.03 }}
-      className={cn(CREDENTIAL_GRID, "group gap-y-2 px-4 py-3 transition-colors hover:bg-accent/40")}
-    >
+    <div className={cn(CREDENTIAL_GRID, "group gap-y-2 px-4 py-3 transition-colors hover:bg-accent/40")}>
       {/* Login */}
       <button type="button" onClick={onEdit} className="flex min-w-0 items-center gap-3 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
         <Favicon domain={domain} name={c.name} />
@@ -248,6 +241,6 @@ export function CredentialRow({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-    </motion.div>
+    </div>
   );
-}
+});
