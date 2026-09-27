@@ -185,6 +185,7 @@ impl CoreProcess {
     fn kill_tree(&self) {
         #[cfg(unix)]
         // SAFETY: the core runs in its own process group (see `spawn_core`), so this reaches Chromium, claude, …
+        // (not a visible Chromium on macOS: LaunchServices starts it, and the next core adopts it)
         unsafe {
             libc::kill(-(self.pid as libc::pid_t), libc::SIGKILL);
         }
