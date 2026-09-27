@@ -28,15 +28,15 @@
   --accent: #efebe4;
   --accent-foreground: #1a1a1a;
   --destructive: #d4101f;
-  --success: #0a9e60;
-  --warning: #c77a0a;
+  --success: #087f4d;
+  --warning: #9a5a00;
   --border: rgb(38 32 22 / 0.09);
   --input: rgb(38 32 22 / 0.13);
   --ring: rgb(38 32 22 / 0.28);
 
   /* Brand accent — used sparingly: live states, status, highlights */
   --brand: #0eca7b;
-  --brand-strong: #0a9e60;
+  --brand-strong: #087f4d;
   --brand-soft: rgb(14 202 123 / 0.12);
   --anthracite: #1c1c1c;
   --paper-2: #f4f2ed;
