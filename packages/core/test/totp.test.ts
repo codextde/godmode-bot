@@ -490,6 +490,11 @@ describe("TOTP service", () => {
     expect(otherScope.imported[0]!.credentialId).toBeNull(); // credential lives in ws_b
 
     expect(httpStatus(() => importTotpUris({ workspaceId: "ws_missing", uris: [] }))).toBe(404);
+
+    // A URI without any label still imports, under a placeholder name.
+    const unnamed = importTotpUris({ workspaceId: "ws_b", uris: ["otpauth://totp?secret=MFRGGZDFMZTWQ2LK"] });
+    expect(unnamed.imported[0]).toMatchObject({ issuer: "", accountName: "Unnamed account" });
+    expect(importTotpUris({ workspaceId: "ws_b", uris: ["otpauth://totp/?secret=MFRGGZDFMZTWQ2LK"] }).skipped[0]!.reason).toBe("already exists");
   });
 
   test("agent access: scope, permissions, lastUsedAt", () => {

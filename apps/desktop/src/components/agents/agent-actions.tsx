@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -66,8 +66,26 @@ export function useToggleAgent() {
   });
 }
 
+/** Holds on to the last non-null value so dialogs don't go blank while animating out. */
+function useLatest<T>(value: T | null): T | null {
+  const [latest, setLatest] = useState(value);
+  useEffect(() => {
+    if (value) setLatest(value);
+  }, [value]);
+  return value ?? latest;
+}
+
 /** Quick "give this agent a task" dialog → new conversation with the task running. */
-export function RunTaskDialog({ agent, open, onOpenChange }: { agent: Agent | null; open: boolean; onOpenChange: (open: boolean) => void }) {
+export function RunTaskDialog({
+  agent: agentProp,
+  open,
+  onOpenChange,
+}: {
+  agent: Agent | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const agent = useLatest(agentProp);
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [prompt, setPrompt] = useState("");
@@ -140,7 +158,7 @@ export function RunTaskDialog({ agent, open, onOpenChange }: { agent: Agent | nu
 }
 
 export function DeleteAgentDialog({
-  agent,
+  agent: agentProp,
   open,
   onOpenChange,
   onDeleted,
@@ -150,6 +168,7 @@ export function DeleteAgentDialog({
   onOpenChange: (open: boolean) => void;
   onDeleted?: () => void;
 }) {
+  const agent = useLatest(agentProp);
   const qc = useQueryClient();
   const del = useMutation({
     mutationFn: () => api.agents.delete(agent!.id),

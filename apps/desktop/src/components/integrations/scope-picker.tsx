@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Bot, Globe2, Layers } from "lucide-react";
 import type { Agent } from "@godmode/shared";
@@ -36,10 +35,10 @@ export function useDefaultScope(): IntegrationScope {
 export function ScopePicker({ value, onChange, className, disabled }: { value: IntegrationScope; onChange: (v: IntegrationScope) => void; className?: string; disabled?: boolean }) {
   const { data: workspaces = [] } = useWorkspaces();
   const { data: agents = [] } = useAllAgents();
-  const [mode, setMode] = useState<Mode>(() => modeOf(value));
+  // Workspace/agent modes always carry an id (the options are disabled when none exist), so the value alone defines the mode.
+  const mode = modeOf(value);
 
   const pick = (m: Mode) => {
-    setMode(m);
     if (m === "global") onChange({ workspaceId: null, agentId: null });
     else if (m === "workspace") onChange({ workspaceId: value.workspaceId ?? workspaces[0]?.id ?? null, agentId: null });
     else {

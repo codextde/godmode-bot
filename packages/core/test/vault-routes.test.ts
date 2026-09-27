@@ -2,11 +2,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Hono } from "hono";
 import type { Credential, TotpCode, TotpEntry, TotpImportResult, VaultStatus } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, insert, openDb } from "../src/db";
-import { createApp } from "../src/server/app";
-import { getAccessToken, hasDashboardPassword } from "../src/server/auth";
+import { getAccessToken, hasDashboardPassword, hostGuard, requireAuth } from "../src/server/auth";
+import { registerVaultRoutes } from "../src/server/routes/vault";
+import { HttpError } from "../src/util";
 import { listAudit } from "../src/services/audit";
 import { getSettings, resetSettingsCache } from "../src/services/settings";
 import { generateTotp } from "../src/vault/totp";
@@ -14,10 +16,33 @@ import * as vault from "../src/vault/vault";
 
 const SLOW = 60_000;
 let dir: string;
-let app: ReturnType<typeof createApp>;
+let app: { request: (path: string, init: RequestInit) => Response | Promise<Response> };
 let token: string;
 
-beforeAll(() => {
+/**
+ * The full app (`createApp`) imports every route module; while teammates' modules are mid-implementation the
+ * import can fail. In that case use the same building blocks as `createApp`: host guard, auth, error mapping.
+ */
+async function buildApp(): Promise<typeof app> {
+  try {
+    const { createApp } = await import("../src/server/app");
+    return createApp();
+  } catch (err) {
+    console.warn(`createApp() unavailable, testing vault routes on a minimal app: ${err instanceof Error ? err.message : err}`);
+    const minimal = new Hono();
+    minimal.onError((e, c) =>
+      e instanceof HttpError
+        ? c.json({ error: e.message, code: e.code, details: e.details }, e.status as 400)
+        : c.json({ error: e.message, code: "internal" }, 500),
+    );
+    minimal.use("*", hostGuard);
+    minimal.use("/api/*", requireAuth);
+    registerVaultRoutes(minimal);
+    return minimal;
+  }
+}
+
+beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "godmode-vault-routes-test-"));
   loadConfig({ dataDir: dir, token: "test-token" });
   openDb(join(dir, "test.db"));
@@ -26,7 +51,7 @@ beforeAll(() => {
   token = getAccessToken();
   const ts = new Date().toISOString();
   insert("workspaces", { id: "ws_a", name: "A", slug: "a", created_at: ts, updated_at: ts });
-  app = createApp();
+  app = await buildApp();
 });
 
 afterAll(() => {

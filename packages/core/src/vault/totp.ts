@@ -345,7 +345,11 @@ export function importTotpUris(input: TotpImportInput): TotpImportResult {
           skipped.push({ uri, label: item.label, reason: item.reason });
           continue;
         }
-        const { account } = item;
+        const account: ParsedOtpAccount = {
+          ...item.account,
+          issuer: item.account.issuer.slice(0, 200),
+          accountName: item.account.accountName.slice(0, 512) || (item.account.issuer ? "" : "Unnamed account"),
+        };
         const key = dedupeKey(account.issuer, account.accountName, account.secret);
         if (seen.has(key)) {
           skipped.push({ uri, label: item.label, reason: "already exists" });

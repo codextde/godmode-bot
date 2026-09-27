@@ -279,10 +279,13 @@ async function syncRepoFiles(agent: Agent, regenerate: boolean): Promise<void> {
 
 /**
  * Ensure the repository of an agent exists with all generated files (never overwrites CLAUDE.md or MEMORY.md).
- * Safe to call before every run, e.g. after a backup restore without agent repositories.
+ * Cheap when everything is in place, so it is safe to call before every run (e.g. after a backup restore
+ * without agent repositories).
  */
 export async function ensureAgentRepo(agentOrId: Agent | string): Promise<void> {
   const agent = typeof agentOrId === "string" ? getAgent(agentOrId) : agentOrId;
+  const essentials = [".git", "CLAUDE.md", "MEMORY.md", join("state", "agent.json")];
+  if (essentials.every((p) => existsSync(join(agent.repoPath, p)))) return;
   const fresh = !existsSync(join(agent.repoPath, ".git"));
   await syncRepoFiles(agent, false);
   await repo.commitAll(agent.repoPath, fresh ? `Create agent ${agent.name}` : "Restore generated files");
@@ -372,7 +375,14 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
   assertBrowserProfile(browser.profileId);
   const settings = getSettings();
   const enabled = isDefault ? true : input.enabled !== false;
-  const slug = uniqueSlug(preferredSlug ?? name);
+  // A fresh database next to an existing agents/godmode (e.g. after a reset) re-attaches the default agent's
+  // repository so its memory and history are kept.
+  const adopt =
+    isDefault &&
+    !!preferredSlug &&
+    !get<{ id: string }>("SELECT id FROM agents WHERE slug = ?", preferredSlug) &&
+    existsSync(join(repoPathFor(preferredSlug), ".git"));
+  const slug = adopt ? preferredSlug! : uniqueSlug(preferredSlug ?? name);
   const ts = now();
   const agent: Agent = {
     id: newId("agt"),
@@ -401,11 +411,11 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
   insert("agents", toRow(agent));
   try {
     await syncRepoFiles(agent, true);
-    await repo.commitAll(agent.repoPath, `Create agent ${agent.name}`);
+    await repo.commitAll(agent.repoPath, adopt ? `Re-attach agent ${agent.name}` : `Create agent ${agent.name}`);
   } catch (err) {
     run("DELETE FROM agents WHERE id = ?", agent.id);
-    // The directory did not exist before (uniqueSlug guarantees it), so removing it cannot lose user data.
-    await rm(agent.repoPath, { recursive: true, force: true }).catch(() => undefined);
+    // A new directory did not exist before (uniqueSlug guarantees it), so removing it cannot lose user data.
+    if (!adopt) await rm(agent.repoPath, { recursive: true, force: true }).catch(() => undefined);
     log.error(`failed to initialize repository for agent ${agent.slug}`, err);
     throw err;
   }

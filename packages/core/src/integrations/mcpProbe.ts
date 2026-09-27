@@ -145,6 +145,20 @@ export async function* sseEvents(stream: ReadableStream<Uint8Array>): AsyncGener
   }
 }
 
+/** Iterate a byte stream (DOM lib typings lack ReadableStream async iteration). */
+async function* chunks(stream: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
+  const reader = stream.getReader();
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      if (value) yield value;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 function parseMessages(text: string): JsonRpcMessage[] {
   try {
     const parsed = JSON.parse(text) as JsonRpcMessage | JsonRpcMessage[];
@@ -184,7 +198,7 @@ async function probeStdio(target: ProbeTarget, signal: AbortSignal): Promise<str
   let stderr = "";
   const stderrDone = (async () => {
     const decoder = new TextDecoder();
-    for await (const chunk of proc.stderr) {
+    for await (const chunk of chunks(proc.stderr)) {
       stderr = (stderr + decoder.decode(chunk, { stream: true })).slice(-STDERR_TAIL);
     }
   })().catch(() => undefined);
@@ -206,7 +220,7 @@ async function probeStdio(target: ProbeTarget, signal: AbortSignal): Promise<str
   const readerDone = (async () => {
     const decoder = new TextDecoder();
     let buf = "";
-    for await (const chunk of proc.stdout) {
+    for await (const chunk of chunks(proc.stdout)) {
       buf += decoder.decode(chunk, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf("\n")) >= 0) {
