@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AgentAvatar, EmptyState } from "@/components/common";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { ConversationHeader } from "@/components/chat/conversation-header";
+import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { ChatDropZone, Thread } from "@/components/chat/thread";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -125,6 +126,19 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     },
   });
 
+  const setFolder = useMutation({
+    mutationFn: (workingDirectory: string | null) => api.conversations.update(conversationId, { workingDirectory }),
+    onSuccess: (updated) => {
+      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
+      qc.invalidateQueries({ queryKey: qk.recentFolders });
+      const folder = updated.workingDirectory ?? agent?.workingDirectory ?? null;
+      toast.success(folder ? `Working in ${folderName(folder)}` : "Folder removed", {
+        description: folder ? "The next messages run in this folder." : `${agent?.name ?? "The agent"} works in its own repository again.`,
+      });
+    },
+    onError: (err) => toast.error("Couldn't change the folder", { description: errorMessage(err) }),
+  });
+
   const cancel = useMutation({
     mutationFn: (runId: string) => api.runs.cancel(runId),
     onSuccess: () => toast("Stopping the agent…"),
@@ -206,6 +220,15 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             draftKey={conversationId}
             autoFocus
             running={!!activeRunId}
+            leading={
+              <FolderChip
+                chatFolder={conv.workingDirectory}
+                agentFolder={agent?.workingDirectory ?? null}
+                agentName={agent?.name}
+                onChange={(path) => setFolder.mutate(path)}
+                busy={setFolder.isPending}
+              />
+            }
             placeholder={agent ? `Message ${agent.name}…` : "Message…"}
             onSubmit={(input) => send.mutateAsync(input)}
           />

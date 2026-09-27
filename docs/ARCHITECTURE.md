@@ -60,6 +60,16 @@ workspace/         scratch space for files the agent produces (downloads, report
 
 Claude runs with `cwd = agents/<slug>/`, so the agent sees its own memory and files.
 
+### Working folders
+
+An agent can have a default folder (`agents.working_directory`) and every conversation can override it
+(`conversations.working_directory`, `null` = the agent's default). With a folder, Claude runs with `cwd = <folder>`
+and `--add-dir <agent repo>` plus `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1`, so both the folder's own
+CLAUDE.md and the agent's identity/memory load. Resumed turns restate the working directory because the session's
+system prompt is a snapshot of its first turn. Folders must exist, be absolute and lie outside the data directory;
+only the human sets them (agent-made changes are ignored). The UI picks them via `GET /api/folders?path=` (subfolders on
+the core's machine) and `GET /api/folders/recent`.
+
 ## Security model
 
 * **Vault**: passphrase → scrypt (N=2^17) → KEK → unwraps a random 256-bit DEK. Every secret column is
@@ -98,7 +108,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        --setting-sources project,local
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key]
        (prompt is written to stdin)
-cwd = agent repo
+cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <agent repo>)
 ```
 
 Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + result) and pushed as

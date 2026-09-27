@@ -1,7 +1,8 @@
 /**
  * Runs Claude Code CLI for an agent turn and streams the results (owner: runner).
  *
- * One run = one `claude -p` process (prompt on stdin, stream-json on stdout) in the agent's repo, resuming
+ * One run = one `claude -p` process (prompt on stdin, stream-json on stdout) in the agent's repo (or the folder
+ * attached to the chat, with the repo added via --add-dir), resuming
  * the conversation's Claude session. Runs are queued (settings.runner.maxConcurrentRuns, re-read on every
  * dequeue) with strictly one active run per conversation (FIFO). Output is parsed by StreamAccumulator into
  * one assistant message, pushed live as `run.delta` events, persisted (redacted) to SQLite, the agent repo
@@ -21,6 +22,7 @@ import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, pars
 import { getAppSecret, isUnlocked, redact } from "../vault/vault";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentStatus, touchAgentRun } from "../agents/service";
 import { resolveClaudeBinary } from "../services/doctor";
+import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
 import { BROWSER_LLM_TOOLS, browserLlmKey, currentPage, resolveProfileForAgent } from "../browser/manager";
@@ -558,10 +560,12 @@ function writeTempFile(res: Resources, name: string, content: string): string {
   return path;
 }
 
-function buildEnv(agent: Agent): Record<string, string | undefined> {
+function buildEnv(agent: Agent, inFolder: boolean): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { ...process.env };
   for (const key of STRIP_ENV) delete env[key];
   env.DISABLE_AUTOUPDATER = "1";
+  // Load the agent's CLAUDE.md from its repo (passed with --add-dir) when the cwd is an attached folder.
+  if (inFolder) env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
   if (isUnlocked()) {
     try {
       const key = getAppSecret("anthropic_api_key");
@@ -705,14 +709,14 @@ async function spawnClaude(
   cmd: string[],
   args: string[],
   prompt: string,
-  agent: Agent,
+  cwd: string,
   env: Record<string, string | undefined>,
   logSink: FileSink,
 ): Promise<Attempt> {
   const noise: string[] = [];
   const proc = Bun.spawn({
     cmd: [...cmd, ...args],
-    cwd: agent.repoPath,
+    cwd,
     env,
     stdin: "pipe",
     stdout: "pipe",
@@ -796,11 +800,21 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const settings = getSettings();
   const cmd = resolveClaudeCommand();
   if (!cmd) return { status: "failed", error: CLAUDE_NOT_FOUND };
-  // Claude runs with cwd = the agent repo; rebuild it if it went missing (e.g. restored backup without repos).
+  // Every run needs the agent repo (cwd or --add-dir); rebuild it if it went missing (e.g. restored backup without repos).
   await ensureAgentRepo(agent);
 
-  const conv = get<{ claude_session_id: string | null }>("SELECT claude_session_id FROM conversations WHERE id = ?", job.conversationId);
+  const conv = get<{ claude_session_id: string | null; working_directory: string | null }>(
+    "SELECT claude_session_id, working_directory FROM conversations WHERE id = ?",
+    job.conversationId,
+  );
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
+  const folder = conv.working_directory ?? agent.workingDirectory;
+  const problem = folder && (isDirectory(folder) ? workingDirectoryProblem(folder) : `The folder ${folder} doesn't exist anymore.`);
+  if (problem) {
+    const fix = conv.working_directory ? "Pick another folder for this chat." : `Change the default folder in ${agent.name}'s settings.`;
+    return { status: "failed", error: `${problem} ${fix}` };
+  }
+  const cwd = folder ?? agent.repoPath;
 
   res.token = issueRunToken({
     runId: job.runId,
@@ -829,6 +843,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     peers,
     browserAvailable: "browser" in mcp.mcpServers,
     voice: job.voice,
+    workingDirectory: folder,
   });
 
   const model = agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
@@ -854,6 +869,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   if (viaFiles) baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));
   else baseArgs.push("--append-system-prompt", systemPrompt);
   baseArgs.push("--setting-sources", "project,local");
+  if (folder) baseArgs.push("--add-dir", agent.repoPath);
   if (budget != null && budget > 0) baseArgs.push("--max-budget-usd", String(budget));
   if (agent.subagents.length) {
     const defs: Record<string, { description: string; prompt: string; model?: string }> = {};
@@ -878,7 +894,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   }
   const extraArgs = (settings.runner.extraArgs ?? []).filter((a) => typeof a === "string" && a.length > 0);
 
-  const env = buildEnv(agent);
+  const env = buildEnv(agent, !!folder);
   const logPath = runLogPath(agent, getRun(job.runId));
   mkdirSync(join(logPath, ".."), { recursive: true });
   const logSink = Bun.file(logPath).writer();
@@ -901,8 +917,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     }
     if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
     const sessionArgs = resuming ? ["--resume", sessionId] : ["--session-id", sessionId];
-    const prompt = resuming ? resumeContextPrefix() + job.prompt : job.prompt;
-    let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, agent, env, logSink);
+    const prompt = resuming ? resumeContextPrefix(folder, agent.repoPath) + job.prompt : job.prompt;
+    let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 
     const lostSession =
       resuming &&
@@ -922,7 +938,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         cmd,
         [...baseArgs, "--session-id", sessionId, ...extraArgs],
         recapPrefix(job) + job.prompt,
-        agent,
+        cwd,
         env,
         logSink,
       );

@@ -254,4 +254,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 `,
   },
+  {
+    id: 2,
+    name: "working_directories",
+    sql: /* sql */ `
+ALTER TABLE agents ADD COLUMN working_directory TEXT;
+ALTER TABLE conversations ADD COLUMN working_directory TEXT;
+`,
+  },
 ];

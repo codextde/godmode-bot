@@ -52,6 +52,7 @@ needs to be useful:
 |---|---|
 | 💬 **Chat first** | Start with one conversation with *Godmode*, your main AI coworker. It can answer, act, and create other agents for you. |
 | 🤖 **Persistent agents** | Bots with their own instructions, conversations, memory (`MEMORY.md`), routines and history — each in its own git repo. |
+| 📁 **Working folders** | Optionally point a chat or an agent at any folder on your machine — it works on the files there and keeps its memory in its own repo. |
 | ⏰ **Routines** | Cron schedules with a friendly builder: “weekdays at 08:00”, “1st of every month”… |
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live and *take over* for CAPTCHAs. |

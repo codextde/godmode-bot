@@ -13,6 +13,7 @@ import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
 import { Orb } from "@/components/aicss/Orb";
 import { AgentPicker } from "@/components/chat/agent-picker";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
+import { FolderChip } from "@/components/chat/folder-picker";
 import { ChatDropZone } from "@/components/chat/thread";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -66,6 +67,7 @@ export default function ChatHome() {
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
   const composerRef = useRef<ComposerHandle>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
+  const [folder, setFolder] = useState<string | null>(null);
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
   const selected =
@@ -139,7 +141,15 @@ export default function ChatHome() {
               agentsLoading ? (
                 <Skeleton className="h-8 w-32 rounded-lg" />
               ) : (
-                <AgentPicker agents={available} value={selected?.id ?? null} onChange={setAgentId} />
+                <>
+                  <AgentPicker agents={available} value={selected?.id ?? null} onChange={setAgentId} />
+                  <FolderChip
+                    chatFolder={folder}
+                    agentFolder={selected?.workingDirectory ?? null}
+                    agentName={selected?.name}
+                    onChange={setFolder}
+                  />
+                </>
               )
             }
             onSubmit={(input) =>
@@ -148,6 +158,7 @@ export default function ChatHome() {
                 content: input.content,
                 attachments: input.attachments.length ? input.attachments : undefined,
                 voice: input.voice || undefined,
+                workingDirectory: folder ?? undefined,
               })
             }
           />
@@ -182,7 +193,7 @@ export default function ChatHome() {
         agent={selected}
         busy={start.isPending}
         onSend={async (text) => {
-          await start.mutateAsync({ agentId: selected?.id, content: text, voice: true });
+          await start.mutateAsync({ agentId: selected?.id, content: text, voice: true, workingDirectory: folder ?? undefined });
         }}
       />
     </ChatDropZone>

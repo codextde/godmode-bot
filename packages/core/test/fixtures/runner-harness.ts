@@ -126,7 +126,7 @@ export interface Invocation {
   args: string[];
   prompt: string;
   cwd: string;
-  env: { ANTHROPIC_API_KEY: string | null; GODMODE_TOKEN: string | null };
+  env: { ANTHROPIC_API_KEY: string | null; GODMODE_TOKEN: string | null; CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: string | null };
 }
 
 export function invocations(env: TestEnv): Invocation[] {

@@ -139,6 +139,7 @@ describe("triggering", () => {
         title: input.title ?? "New chat",
         origin: input.origin ?? "chat",
         claudeSessionId: null,
+        workingDirectory: null,
         pinned: false,
         archived: false,
         lastMessageAt: null,

@@ -68,6 +68,7 @@ export const agentSchema = z.object({
   mcpServerIds: z.array(id).max(200).optional(),
   inheritMcp: z.boolean().optional(),
   subagents: z.array(subagentSchema).max(20).optional(),
+  workingDirectory: z.string().trim().max(4096).nullable().optional(),
 });
 
 export const routineSchema = z.object({

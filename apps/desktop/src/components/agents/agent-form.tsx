@@ -5,6 +5,7 @@ import {
   Bot,
   BrainCircuit,
   Eye,
+  FolderOpen,
   Globe,
   KeyRound,
   Plug,
@@ -37,6 +38,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AvatarPicker, ColorSwatches } from "./avatar-picker";
 import { MultiSelect } from "./multi-select";
 import { useVaultGrant } from "@/components/vault/grant";
+import { FolderPickerDialog, folderName, useShortPath } from "@/components/chat/folder-picker";
 
 export interface AgentFormValues {
   name: string;
@@ -58,6 +60,7 @@ export interface AgentFormValues {
   inheritMcp: boolean;
   mcpServerIds: string[];
   subagents: SubagentDefinition[];
+  workingDirectory: string | null;
 }
 
 /** Seed values for the form from an existing agent, a template, or nothing. */
@@ -85,6 +88,7 @@ export function agentToValues(
     inheritMcp: source?.inheritMcp ?? true,
     mcpServerIds: source?.mcpServerIds ?? [],
     subagents: source?.subagents ?? [],
+    workingDirectory: source?.workingDirectory ?? null,
   };
 }
 
@@ -112,6 +116,7 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
     subagents: v.subagents
       .map((s) => ({ ...s, name: slugify(s.name), description: s.description.trim(), prompt: s.prompt, model: s.model || undefined }))
       .filter((s) => s.name),
+    workingDirectory: v.workingDirectory,
   };
 }
 
@@ -147,6 +152,7 @@ const SECTIONS = [
   { id: "identity", label: "Identity" },
   { id: "instructions", label: "Instructions" },
   { id: "brain", label: "Model" },
+  { id: "folder", label: "Folder" },
   { id: "permissions", label: "Permissions" },
   { id: "browser", label: "Browser" },
   { id: "tools", label: "Tools" },
@@ -368,6 +374,14 @@ export function AgentForm({
             </div>
           </FormSection>
 
+          <FormSection
+            id="folder"
+            title="Working folder"
+            description="Optional. Its chats and routines run inside this folder and can read and edit the files there. Memory stays in the agent's own repository."
+          >
+            <FolderField value={values.workingDirectory} onChange={(v) => set("workingDirectory", v)} />
+          </FormSection>
+
           <FormSection id="permissions" title="Permissions" description="What this agent is allowed to do on your behalf.">
             <div className="space-y-5">
               <div className="space-y-2">
@@ -554,6 +568,12 @@ export function AgentForm({
               <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
                 <span className="rounded-md border px-1.5 py-0.5">{MODEL_OPTIONS.find((m) => m.id === values.model)?.label ?? (values.model || "Default model")}</span>
                 {values.browserEnabled && <span className="rounded-md border px-1.5 py-0.5">Browser</span>}
+                {values.workingDirectory && (
+                  <span className="flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5">
+                    <FolderOpen className="size-3 shrink-0" />
+                    <span className="truncate">{folderName(values.workingDirectory)}</span>
+                  </span>
+                )}
                 <span className="rounded-md border px-1.5 py-0.5">{values.secretAccess === "fill" ? "Fill-only secrets" : "Reveals secrets"}</span>
               </div>
             </div>
@@ -686,6 +706,57 @@ function RadioCard({
         <span className="block text-xs leading-relaxed text-muted-foreground">{description}</span>
       </span>
     </Label>
+  );
+}
+
+function FolderField({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const short = useShortPath();
+  return (
+    <>
+      {value ? (
+        <div className="flex items-center gap-3 rounded-xl border bg-background/40 p-3">
+          <div className="grid size-9 shrink-0 place-items-center rounded-lg border bg-card text-muted-foreground">
+            <FolderOpen className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{folderName(value)}</div>
+            <div className="truncate font-mono text-xs text-muted-foreground" title={value}>
+              {short(value)}
+            </div>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+            Change
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Remove folder"
+            onClick={() => onChange(null)}
+            className="text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 />
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed px-4 py-4">
+          <FolderOpen className="size-5 shrink-0 text-muted-foreground" />
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">No folder — the agent works in its own repository. A single chat can still pick a folder.</p>
+          <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+            Choose folder…
+          </Button>
+        </div>
+      )}
+      <FolderPickerDialog
+        open={open}
+        onOpenChange={setOpen}
+        value={value}
+        onPick={onChange}
+        title="Default folder"
+        description="New chats and routines of this agent run inside this folder. Each chat can still switch to another one."
+      />
+    </>
   );
 }
 

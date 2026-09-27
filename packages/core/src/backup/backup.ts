@@ -30,6 +30,7 @@ import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/s
 import { startScheduler, stopScheduler } from "../scheduler/scheduler";
 import { shutdownBrowsers } from "../browser/manager";
 import { resetComposioState } from "../integrations/composio";
+import { workingDirectoryProblem } from "../services/folders";
 import * as vault from "../vault/vault";
 import { assertSafeKdf, openWithPassphrase, sealWithPassphrase } from "../vault/crypto";
 import { badRequest, conflict, HttpError, slugify } from "../util";
@@ -377,6 +378,15 @@ function sanitizeDump(dump: DbDump): string[] {
     row.slug = next;
     warnings.push(`Agent "${String(row.name ?? next)}" had an unsafe folder name and was renamed to "${next}"; its files were not restored.`);
   }
+
+  let clearedFolders = 0;
+  for (const row of [...rowsOf("agents"), ...rowsOf("conversations")]) {
+    if (row.working_directory == null) continue;
+    if (typeof row.working_directory === "string" && !workingDirectoryProblem(row.working_directory)) continue;
+    row.working_directory = null;
+    clearedFolders++;
+  }
+  if (clearedFolders) warnings.push(`Cleared ${clearedFolders} working folder(s) that don't exist on this machine or aren't allowed.`);
 
   const profiles = rowsOf("browser_profiles");
   const safeProfiles = profiles.filter((row) => typeof row.id === "string" && SAFE_ID.test(row.id));
