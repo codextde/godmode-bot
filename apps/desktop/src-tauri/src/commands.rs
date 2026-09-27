@@ -49,37 +49,64 @@ impl ProtectedPaths {
     pub fn new(home: Option<PathBuf>, data_dir: Option<PathBuf>) -> Self {
         #[cfg(unix)]
         let system: Vec<PathBuf> = [
-            "/bin", "/sbin", "/usr", "/etc", "/boot", "/dev", "/proc", "/sys", "/lib", "/lib32", "/lib64", "/libx32",
-            "/opt", "/var", "/snap", "/System", "/Library", "/Applications", "/private/etc", "/private/var", "/cores",
+            "/bin",
+            "/sbin",
+            "/usr",
+            "/etc",
+            "/boot",
+            "/dev",
+            "/proc",
+            "/sys",
+            "/lib",
+            "/lib32",
+            "/lib64",
+            "/libx32",
+            "/opt",
+            "/var",
+            "/snap",
+            "/System",
+            "/Library",
+            "/Applications",
+            "/private/etc",
+            "/private/var",
+            "/cores",
         ]
         .iter()
         .map(PathBuf::from)
         .collect();
         #[cfg(windows)]
-        let system: Vec<PathBuf> = ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"]
-            .iter()
-            .filter_map(std::env::var_os)
-            .map(PathBuf::from)
-            .collect();
+        let system: Vec<PathBuf> =
+            ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"]
+                .iter()
+                .filter_map(std::env::var_os)
+                .map(PathBuf::from)
+                .collect();
 
         // Places where a written file could run code or leak credentials.
         let sensitive = [
-            ".ssh", ".gnupg", ".aws", ".kube", ".docker", ".claude", ".config/autostart", ".config/systemd",
-            ".config/environment.d", ".local/bin", ".local/share/applications", ".cargo/bin", ".bun/bin",
-            "Library/LaunchAgents", "Library/LaunchDaemons", "AppData/Roaming/Microsoft/Windows/Start Menu",
+            ".ssh",
+            ".gnupg",
+            ".aws",
+            ".kube",
+            ".docker",
+            ".claude",
+            ".config/autostart",
+            ".config/systemd",
+            ".config/environment.d",
+            ".local/bin",
+            ".local/share/applications",
+            ".cargo/bin",
+            ".bun/bin",
+            "Library/LaunchAgents",
+            "Library/LaunchDaemons",
+            "AppData/Roaming/Microsoft/Windows/Start Menu",
         ];
         let home = home.map(|h| h.canonicalize().unwrap_or(h));
-        let mut home_entries: Vec<PathBuf> = home
-            .iter()
-            .flat_map(|h| sensitive.iter().map(move |rel| h.join(rel)))
-            .collect();
+        let mut home_entries: Vec<PathBuf> =
+            home.iter().flat_map(|h| sensitive.iter().map(move |rel| h.join(rel))).collect();
         home_entries.extend(data_dir);
 
-        Self {
-            system_roots: with_canonical(system),
-            home,
-            home_entries: with_canonical(home_entries),
-        }
+        Self { system_roots: with_canonical(system), home, home_entries: with_canonical(home_entries) }
     }
 
     fn check(&self, target: &Path) -> Result<(), String> {
@@ -144,9 +171,8 @@ pub fn validate_write_target(raw: &Path, protected: &ProtectedPaths) -> Result<P
     }
     let file_name = raw.file_name().ok_or("path must name a file")?;
     let parent = raw.parent().ok_or("path must name a file")?;
-    let parent = parent
-        .canonicalize()
-        .map_err(|err| format!("folder {} is not accessible: {err}", parent.display()))?;
+    let parent =
+        parent.canonicalize().map_err(|err| format!("folder {} is not accessible: {err}", parent.display()))?;
     if !parent.is_dir() {
         return Err(format!("{} is not a folder", parent.display()));
     }
@@ -203,7 +229,8 @@ mod tests {
     #[test]
     fn writes_regular_files_atomically() {
         let dir = scratch("ok");
-        let target = validate_write_target(&dir.join("export.json"), &protected(Path::new("/nonexistent-home"))).unwrap();
+        let target =
+            validate_write_target(&dir.join("export.json"), &protected(Path::new("/nonexistent-home"))).unwrap();
         write_atomically(&target, b"{}").unwrap();
         write_atomically(&target, b"[1]").unwrap();
         assert_eq!(fs::read(&target).unwrap(), b"[1]");

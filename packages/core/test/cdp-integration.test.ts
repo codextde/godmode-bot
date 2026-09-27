@@ -12,8 +12,9 @@ import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 import { bus } from "../src/events/bus";
 import { findChrome } from "../src/browser/chrome";
-import { attachToPage, getCookies, listPages, type PageSession } from "../src/browser/cdp";
-import { getRunning } from "../src/browser/state";
+import { CdpClient, attachToPage, getCookies, listPages, type PageSession } from "../src/browser/cdp";
+import { getRunning, unregisterBrowser } from "../src/browser/state";
+import { updateSettings } from "../src/services/settings";
 import { startLiveView, stopLiveView, dispatchInput } from "../src/browser/screencast";
 import * as manager from "../src/browser/manager";
 
@@ -295,8 +296,51 @@ suite("managed Chromium (CDP integration)", () => {
     expect(manager.getProfile(profileId).cookieCount).toBe(cookies.length);
   });
 
+  test("idle browsers are stopped unless another CDP client (e.g. browser-use) is attached", async () => {
+    updateSettings({ browser: { keepAliveMinutes: 1 } });
+    try {
+      const rb = getRunning(profileId)!;
+      const external = await CdpClient.connect(rb.wsUrl);
+      const [page] = await listPages(external);
+      await external.send("Target.attachToTarget", { targetId: page!.targetId, flatten: true });
+      rb.lastUsedAt = Date.now() - 5 * 60_000;
+      await manager.sweepIdleBrowsers();
+      expect(getRunning(profileId)).toBe(rb);
+      expect(Date.now() - rb.lastUsedAt).toBeLessThan(5000);
+
+      external.close();
+      await waitFor(async () => {
+        const { targetInfos } = await rb.client.send<{ targetInfos: { type: string; attached: boolean }[] }>("Target.getTargets");
+        return targetInfos.every((t) => t.type !== "page" || !t.attached);
+      });
+      rb.lastUsedAt = Date.now() - 5 * 60_000;
+      await manager.sweepIdleBrowsers();
+      expect(getRunning(profileId)).toBeNull();
+      expect(manager.getProfile(profileId).running).toBe(false);
+    } finally {
+      updateSettings({ browser: { keepAliveMinutes: 15 } });
+    }
+    await manager.launchBrowser(profileId, { headless: true });
+  }, 60_000);
+
+  test("adopts a Chromium left running by a previous core process", async () => {
+    const rb = getRunning(profileId)!;
+    // Simulate a core restart: forget the browser without stopping it.
+    unregisterBrowser(rb);
+    rb.client.close();
+    expect(manager.getProfile(profileId).running).toBe(false);
+    const { port } = await manager.launchBrowser(profileId);
+    expect(port).toBe(rb.port);
+    const adopted = getRunning(profileId)!;
+    expect(adopted.process).toBeNull();
+    expect(adopted.headless).toBe(true);
+    await manager.stopBrowser(profileId);
+    await Promise.race([rb.process!.exited, Bun.sleep(8000)]);
+    expect(rb.process!.isAlive()).toBe(false);
+  }, 60_000);
+
   test("imports sessions from another profile's cookie store (profile-use technique)", async () => {
-    // Stop the source browser so its cookie store is flushed to disk, then import it into a fresh profile.
+    // The source browser is stopped (cookie store flushed to disk); import it into a fresh profile.
     await manager.stopBrowser(profileId);
     expect(manager.getProfile(profileId).running).toBe(false);
     const source = manager.getProfile(profileId);

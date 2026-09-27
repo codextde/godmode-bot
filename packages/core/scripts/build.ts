@@ -57,9 +57,10 @@ const RUST_TRIPLES: Record<string, string> = {
   "windows-arm64": "aarch64-pc-windows-msvc",
 };
 
+class BuildError extends Error {}
+
 function fail(message: string): never {
-  console.error(`\n✖ ${message}\n`);
-  process.exit(1);
+  throw new BuildError(message);
 }
 
 function parseTarget(bun: string): Target {
@@ -303,4 +304,9 @@ async function main() {
   }
 }
 
-await main();
+try {
+  await main();
+} catch (err) {
+  console.error(`\n✖ ${err instanceof BuildError ? err.message : err instanceof Error ? (err.stack ?? err.message) : err}\n`);
+  process.exit(1);
+}

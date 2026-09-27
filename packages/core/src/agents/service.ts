@@ -117,7 +117,7 @@ function toModel(r: AgentRow): Agent {
     status: enabled ? (r.status as AgentStatus) : "disabled",
     permissions: normalizePermissions({ ...BASE_PERMISSIONS, ...parseJson<Partial<AgentPermissions>>(r.permissions, {}) }),
     browser: normalizeBrowser({ ...DEFAULT_BROWSER, ...parseJson<Partial<AgentBrowserConfig>>(r.browser, {}) }),
-    mcpServerIds: stringList(parseJson<unknown>(r.mcp_server_ids, [])),
+    mcpServerIds: existingMcpServerIds(stringList(parseJson<unknown>(r.mcp_server_ids, []))),
     inheritMcp: bool(r.inherit_mcp),
     subagents: normalizeSubagents(parseJson<unknown>(r.subagents, [])),
     // Derived from the slug so the data dir can move (backup restore, GODMODE_HOME change).
@@ -158,6 +158,15 @@ function toRow(a: Agent): Record<string, string | number | null> {
 function stringList(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return [...new Set(v.filter((x): x is string => typeof x === "string" && x.length > 0))];
+}
+
+/** Drop ids of MCP servers that were deleted since they were attached (they are pruned on the next update). */
+function existingMcpServerIds(ids: string[]): string[] {
+  if (!ids.length) return ids;
+  const found = new Set(
+    all<{ id: string }>(`SELECT id FROM mcp_servers WHERE id IN (${ids.map(() => "?").join(", ")})`, ...ids).map((r) => r.id),
+  );
+  return ids.filter((id) => found.has(id));
 }
 
 function normalizePermissions(p: AgentPermissions): AgentPermissions {
@@ -535,6 +544,8 @@ function registerSettingsHook() {
     lastUserName = name;
     void (async () => {
       for (const agent of listAgents()) {
+        // Missing repositories are created lazily (ensureAgentRepo) with the current name anyway.
+        if (!existsSync(join(agent.repoPath, ".git"))) continue;
         await refreshAgentFiles(agent.id, "Update user name").catch((err) =>
           log.warn(`failed to refresh CLAUDE.md of agent ${agent.slug}`, err),
         );
@@ -555,6 +566,16 @@ export function ensureDefaultAgent(): Promise<Agent> {
 
 async function ensureDefaultAgentOnce(): Promise<Agent> {
   registerSettingsHook();
+  const agent = await ensureDefaultRecord();
+  // Startup repair for every other agent too, e.g. after a backup was restored without agent repositories.
+  for (const other of listAgents()) {
+    if (other.id === agent.id) continue;
+    await ensureAgentRepo(other).catch((err) => log.error(`failed to repair the repository of agent ${other.slug}`, err));
+  }
+  return agent;
+}
+
+async function ensureDefaultRecord(): Promise<Agent> {
   const row = get<AgentRow>("SELECT * FROM agents WHERE is_default = 1 ORDER BY created_at LIMIT 1");
   if (!row) return createAgentRecord(DEFAULT_AGENT_INPUT, true, "system", DEFAULT_AGENT_SLUG);
 
@@ -608,7 +629,7 @@ export async function commitAgentRepo(agentId: string, message: string): Promise
   if (!row || !getSettings().memory.autoCommit) return;
   const agent = toModel(row);
   try {
-    if (!existsSync(join(agent.repoPath, ".git"))) await syncRepoFiles(agent, false);
+    if (!existsSync(join(agent.repoPath, ".git"))) await ensureAgentRepo(agent);
     await repo.commitAll(agent.repoPath, message);
   } catch (err) {
     log.warn(`commit failed for agent ${agent.slug}`, err);
@@ -619,24 +640,28 @@ export async function commitAgentRepo(agentId: string, message: string): Promise
 /* Repository browsing (file explorer in the UI)                        */
 /* ------------------------------------------------------------------ */
 
-export async function listAgentFiles(id: string, path = ""): Promise<AgentFileEntry[]> {
+/** The agent, with its repository created first if it is missing (e.g. restored from a backup without repos). */
+async function withRepo(id: string): Promise<Agent> {
   const agent = getAgent(id);
-  if (!existsSync(agent.repoPath)) await ensureAgentRepo(agent);
-  return repo.listFiles(agent.repoPath, path);
+  if (!existsSync(join(agent.repoPath, ".git"))) await ensureAgentRepo(agent);
+  return agent;
+}
+
+export async function listAgentFiles(id: string, path = ""): Promise<AgentFileEntry[]> {
+  return repo.listFiles((await withRepo(id)).repoPath, path);
 }
 
 export async function readAgentFile(id: string, path: string): Promise<{ path: string; content: string }> {
-  return repo.readRepoFile(getAgent(id).repoPath, path);
+  return repo.readRepoFile((await withRepo(id)).repoPath, path);
 }
 
 /** Write a file as the user and commit it ("Edit <path>"). CLAUDE.md edits last until the next settings update. */
 export async function writeAgentFile(id: string, path: string, content: string): Promise<void> {
-  const agent = getAgent(id);
-  if (!existsSync(agent.repoPath)) await ensureAgentRepo(agent);
+  const agent = await withRepo(id);
   const rel = await repo.writeRepoFile(agent.repoPath, path, content);
   await repo.commitAll(agent.repoPath, `Edit ${rel}`);
 }
 
 export async function listAgentCommits(id: string, limit = 50): Promise<GitCommit[]> {
-  return repo.log(getAgent(id).repoPath, limit);
+  return repo.log((await withRepo(id)).repoPath, limit);
 }

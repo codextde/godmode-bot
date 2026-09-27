@@ -51,7 +51,7 @@ const subagentSchema = z.object({
   model: z.string().trim().max(100).optional(),
 });
 
-const agentSchema = z.object({
+export const agentSchema = z.object({
   workspaceId: id.nullable().optional(),
   name: z.string().trim().min(1, "Name is required").max(80),
   avatar: z.string().trim().max(32).optional(),
@@ -68,7 +68,7 @@ const agentSchema = z.object({
   subagents: z.array(subagentSchema).max(20).optional(),
 });
 
-const routineSchema = z.object({
+export const routineSchema = z.object({
   agentId: id,
   name: z.string().trim().min(1, "Name is required").max(120),
   cron: z.string().trim().min(1, "Cron expression is required").max(120),

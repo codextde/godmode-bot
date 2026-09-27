@@ -174,6 +174,9 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
   tx(() => {
     // The default agent is always global; never let a cascade take it down.
     run("UPDATE agents SET workspace_id = NULL WHERE workspace_id = ? AND is_default = 1", id);
+    // Global logins/2FA entries must not keep links to items the cascade is about to delete.
+    run("UPDATE totp SET credential_id = NULL WHERE credential_id IN (SELECT id FROM credentials WHERE workspace_id = ?)", id);
+    run("UPDATE credentials SET totp_id = NULL WHERE totp_id IN (SELECT id FROM totp WHERE workspace_id = ?)", id);
     run("DELETE FROM workspaces WHERE id = ?", id);
     removeFromDelegateLists(agents.map((a) => a.id));
   });

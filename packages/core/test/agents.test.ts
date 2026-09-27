@@ -99,10 +99,11 @@ describe("agent creation", () => {
     const claudeMd = readFileSync(join(agent.repoPath, "CLAUDE.md"), "utf8");
     expect(claudeMd).toContain("# 🤖 Invoice Bot");
     expect(claudeMd).toContain("Collect invoices from vendor portals.");
-    expect(claudeMd).toContain("report_missing_login");
-    expect(claudeMd).toContain("vault_fill_login");
-    expect(claudeMd).not.toContain("vault_get_login");
-    expect(claudeMd).not.toContain("## Managing agents");
+    expect(claudeMd).toContain("## Your files");
+    expect(claudeMd).toContain("## Ground rules");
+    // The tool guide and login procedure come from the runner's appended system prompt, not CLAUDE.md.
+    expect(claudeMd).not.toContain("vault_fill_login");
+    expect(claudeMd).not.toContain("report_missing_login");
     expect(claudeMd.split("\n").length).toBeLessThan(150);
     expect(readFileSync(join(agent.repoPath, ".gitignore"), "utf8")).toContain("workspace/tmp/");
     expect(readFileSync(join(agent.repoPath, ".git/HEAD"), "utf8")).toContain("refs/heads/main");
@@ -134,7 +135,6 @@ describe("agent creation", () => {
     try {
       const agent = await createAgent({ name: "Api Bot" });
       expect(agent.permissions.secretAccess).toBe("reveal");
-      expect(readFileSync(join(agent.repoPath, "CLAUDE.md"), "utf8")).toContain("vault_get_login");
       expect(events.some((e) => e.type === "agent.updated" && e.agent.id === agent.id)).toBe(true);
     } finally {
       off();
@@ -168,7 +168,6 @@ describe("agent updates", () => {
     expect(claudeMd).toContain("# 🤖 Senior Writer");
     expect(claudeMd).toContain("British English");
     expect(claudeMd).not.toContain("Write blog posts.");
-    expect(claudeMd).not.toContain("## Teamwork");
     expect(claudeMd).toContain("**editor** — Proofreads drafts");
     expect(claudeMd).toContain("$5");
     expect(JSON.parse(readFileSync(join(agent.repoPath, "state/agent.json"), "utf8")).name).toBe("Senior Writer");
@@ -206,8 +205,8 @@ describe("default agent", () => {
     expect(agent.permissions.allowDelegation).toBe(true);
     expect(getDefaultAgentId()).toBe(agent.id);
     const claudeMd = readFileSync(join(agent.repoPath, "CLAUDE.md"), "utf8");
-    expect(claudeMd).toContain("## Managing agents");
     expect(claudeMd).toContain("orchestrator");
+    expect(claudeMd).toContain("Your main AI coworker");
 
     const again = await ensureDefaultAgent();
     expect(again.id).toBe(agent.id);

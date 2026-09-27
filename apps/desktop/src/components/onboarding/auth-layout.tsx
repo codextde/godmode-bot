@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { Aurora, Logo } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { ApiRequestError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /** Full-screen centered glass card over the aurora — used by login and unlock screens. */
@@ -105,4 +106,13 @@ export function SubmitButton({
       {!busy && <ArrowRight className="transition-transform group-hover:translate-x-0.5" />}
     </Button>
   );
+}
+
+/** Friendly message for a failed vault unlock. */
+export function unlockError(err: unknown): string {
+  if (err instanceof ApiRequestError) {
+    if (err.status === 429) return "Too many attempts — wait a minute and try again.";
+    if (err.status === 400 || err.status === 401 || err.status === 403) return "That passphrase isn't right.";
+  }
+  return errorMessage(err);
 }

@@ -28,6 +28,8 @@ const realBrowser: BrowserModule = { ...browserManager };
 export const FAKE_PROFILE_ID = "prof_runner_test";
 export const testAgentIds = new Set<string>();
 export const fills: { profileId: string; text: string; kind?: string; selector?: string; submit?: boolean }[] = [];
+/** When set, the fake fill fails with an error message that echoes the typed text (leak test). */
+export const fillFailure = { echoText: false };
 
 const fakeProfile: BrowserProfile = {
   id: FAKE_PROFILE_ID,
@@ -51,6 +53,7 @@ mock.module("../../src/browser/manager", () => ({
   fillIntoPage: async (profileId: string, opts: Parameters<BrowserModule["fillIntoPage"]>[1]) => {
     if (profileId !== FAKE_PROFILE_ID) return realBrowser.fillIntoPage(profileId, opts);
     fills.push({ profileId, text: opts.text, kind: opts.kind, selector: opts.selector, submit: opts.submit });
+    if (fillFailure.echoText) return { ok: false, url: "https://example.com/login", detail: `Typing failed near "${opts.text}"` };
     return { ok: true, url: "https://example.com/login", detail: "filled" };
   },
   currentPage: async (profileId: string) =>

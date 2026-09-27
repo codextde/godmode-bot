@@ -75,6 +75,8 @@ async function serve(values: Record<string, unknown>) {
   const serveOpts = {
     hostname: cfg.host,
     idleTimeout: 120,
+    // Backups can be large (agent repos + browser profiles); the import route enforces its own 2 GB limit.
+    maxRequestBodySize: 2 * 1024 ** 3 + 1024 ** 2,
     fetch(req: Request, server: import("bun").Server<WsData>) {
       const url = new URL(req.url);
       if (url.pathname === "/api/ws") {

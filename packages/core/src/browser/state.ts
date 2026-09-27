@@ -15,6 +15,9 @@ export interface RunningBrowser {
   client: CdpClient;
   /** null when we adopted a browser left running by a previous core process. */
   process: ChromeProcess | null;
+  /** Browser process id (known for adopted browsers too). */
+  pid: number | null;
+  userDataDir: string;
   startedAt: number;
   lastUsedAt: number;
   stopping: boolean;

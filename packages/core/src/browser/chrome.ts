@@ -1,7 +1,7 @@
 /**
  * Chromium-family executable detection (per OS) and process launch with remote debugging on loopback.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { Subprocess } from "bun";
@@ -186,15 +186,50 @@ export function findFreePort(): number {
   return port;
 }
 
-/** Port + browser path Chrome writes to `<user-data-dir>/DevToolsActivePort` while remote debugging is on. */
-export function readDevToolsActivePort(userDataDir: string): { port: number; path: string } | null {
+/**
+ * Written into the user-data-dir while Godmode runs a browser on it, so a restarted core can find (and adopt)
+ * a browser the previous process left running. Chrome itself only writes DevToolsActivePort for port 0.
+ */
+export const LAUNCH_MARKER = "Godmode-DevTools.json";
+
+export interface LaunchMarker {
+  pid: number;
+  port: number;
+  headless: boolean;
+}
+
+export function writeLaunchMarker(userDataDir: string, marker: LaunchMarker) {
   try {
-    const [portLine, pathLine] = readFileSync(join(userDataDir, "DevToolsActivePort"), "utf8").split(/\r?\n/);
-    const port = Number(portLine);
-    if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
-    return { port, path: pathLine ?? "" };
+    writeFileSync(join(userDataDir, LAUNCH_MARKER), JSON.stringify(marker), { mode: 0o600 });
+  } catch {
+    /* adoption is best effort */
+  }
+}
+
+export function readLaunchMarker(userDataDir: string): LaunchMarker | null {
+  try {
+    const m = JSON.parse(readFileSync(join(userDataDir, LAUNCH_MARKER), "utf8")) as Partial<LaunchMarker>;
+    const valid = Number.isInteger(m.pid) && m.pid! > 0 && Number.isInteger(m.port) && m.port! > 0 && m.port! <= 65535;
+    return valid ? { pid: m.pid!, port: m.port!, headless: !!m.headless } : null;
   } catch {
     return null;
+  }
+}
+
+export function clearLaunchMarker(userDataDir: string) {
+  try {
+    rmSync(join(userDataDir, LAUNCH_MARKER), { force: true });
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
@@ -316,8 +351,8 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
       continue;
     }
     const code = await exited;
-    if (code === 0) {
-      // Chrome hands the command line to an existing instance using the same user-data-dir and exits.
+    // 0: handed the command line to an existing instance; 21: RESULT_CODE_PROFILE_IN_USE.
+    if (code === 0 || code === 21) {
       throw new ChromeLaunchError(`The profile directory is already in use by another browser process (${opts.userDataDir}).`);
     }
     lastError = new ChromeLaunchError(`Chromium exited during startup (code ${code}).${formatTail(tail)}`);

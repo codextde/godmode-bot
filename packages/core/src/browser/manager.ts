@@ -17,7 +17,7 @@ import { resolveUvx, toolPath } from "../services/doctor";
 import { notify } from "../services/notifications";
 import { hasBrowserSubscribers } from "../server/ws";
 import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type PageSession } from "./cdp";
-import { findChrome, launchChrome, readDevToolsActivePort, type ChromeProcess } from "./chrome";
+import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillOnPage, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
@@ -233,19 +233,22 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
   ensureDir(profile.user_data_dir);
   const settings = getSettings();
 
-  // A Chromium left running by a previous core process still owns this profile dir — adopt it.
   let proc: ChromeProcess | null = null;
+  let pid: number;
   let port: number;
   let wsUrl: string;
   let headless: boolean;
-  const orphan = readDevToolsActivePort(profile.user_data_dir);
-  const orphanVersion = orphan ? await probeCdp(orphan.port) : null;
-  if (orphan && orphanVersion) {
-    port = orphan.port;
-    wsUrl = orphanVersion.webSocketDebuggerUrl;
-    headless = /HeadlessChrome/.test(orphanVersion["User-Agent"] ?? "");
-    log.info(`adopting running browser for profile ${profileId} on port ${port}`);
+  // A Chromium left running by a previous core process still owns this profile dir — adopt it.
+  const marker = readLaunchMarker(profile.user_data_dir);
+  const orphan = marker && isProcessAlive(marker.pid) ? await probeCdp(marker.port) : null;
+  if (marker && orphan) {
+    pid = marker.pid;
+    port = marker.port;
+    wsUrl = orphan.webSocketDebuggerUrl;
+    headless = marker.headless;
+    log.info(`adopting running browser for profile ${profileId} (pid ${pid}, port ${port})`);
   } else {
+    if (marker) clearLaunchMarker(profile.user_data_dir);
     const chrome = findChrome(settings.browser.chromePath);
     if (!chrome) {
       throw new HttpError(
@@ -260,9 +263,11 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
     } catch (err) {
       throw new HttpError(500, `Could not start ${chrome.browser}: ${err instanceof Error ? err.message : String(err)}`, "browser_launch_failed");
     }
+    pid = proc.pid;
     port = proc.port;
     wsUrl = proc.wsUrl;
-    log.info(`started ${chrome.browser} for profile ${profileId} (pid ${proc.pid}, port ${port}, ${headless ? "headless" : "headed"})`);
+    writeLaunchMarker(profile.user_data_dir, { pid, port, headless });
+    log.info(`started ${chrome.browser} for profile ${profileId} (pid ${pid}, port ${port}, ${headless ? "headless" : "headed"})`);
   }
 
   let client: CdpClient;
@@ -282,6 +287,8 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
     headless,
     client,
     process: proc,
+    pid,
+    userDataDir: profile.user_data_dir,
     startedAt: Date.now(),
     lastUsedAt: Date.now(),
     stopping: false,
@@ -301,19 +308,54 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
   return rb;
 }
 
+function pidAlive(rb: RunningBrowser): boolean {
+  if (rb.process) return rb.process.isAlive();
+  return rb.pid !== null && isProcessAlive(rb.pid);
+}
+
+/** Wait up to `ms` for the browser process to exit. */
+async function waitForExit(rb: RunningBrowser, ms: number) {
+  if (rb.process) {
+    await Promise.race([rb.process.exited, sleep(ms)]);
+    return;
+  }
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline && pidAlive(rb)) await sleep(100);
+}
+
+function killBrowser(rb: RunningBrowser, signal: NodeJS.Signals) {
+  if (rb.process) rb.process.kill(signal);
+  else if (rb.pid !== null) {
+    try {
+      process.kill(rb.pid, signal);
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+/** Make sure the process is gone: SIGTERM, then SIGKILL. */
+async function terminate(rb: RunningBrowser) {
+  if (!pidAlive(rb)) return;
+  killBrowser(rb, "SIGTERM");
+  await waitForExit(rb, 3000);
+  if (pidAlive(rb)) killBrowser(rb, "SIGKILL");
+}
+
+function forget(rb: RunningBrowser) {
+  rb.client.close();
+  if (unregisterBrowser(rb)) clearLaunchMarker(rb.userDataDir);
+  emitProfile(rb.profileId);
+}
+
 /** The browser went away without us stopping it (crash, user closed the window, lost connection). */
 async function onBrowserGone(rb: RunningBrowser, reason: string) {
   if (rb.stopping || getRegistered(rb.profileId) !== rb) return;
   rb.stopping = true;
   log.warn(`browser for profile ${rb.profileId} stopped unexpectedly (${reason})`);
   rb.client.close();
-  if (rb.process?.isAlive()) {
-    rb.process.kill("SIGTERM");
-    await Promise.race([rb.process.exited, sleep(3000)]);
-    if (rb.process.isAlive()) rb.process.kill("SIGKILL");
-  }
-  unregisterBrowser(rb);
-  emitProfile(rb.profileId);
+  await terminate(rb);
+  forget(rb);
 }
 
 export async function stopBrowser(profileId: string): Promise<void> {
@@ -337,20 +379,9 @@ async function shutdownOne(rb: RunningBrowser) {
   } catch {
     /* connection already gone */
   }
-  if (rb.process) {
-    await Promise.race([rb.process.exited, sleep(5000)]);
-    if (rb.process.isAlive()) {
-      rb.process.kill("SIGTERM");
-      await Promise.race([rb.process.exited, sleep(3000)]);
-      if (rb.process.isAlive()) rb.process.kill("SIGKILL");
-    }
-  } else {
-    const deadline = Date.now() + 5000;
-    while (Date.now() < deadline && (await probeCdp(rb.port, 500))) await sleep(200);
-  }
-  rb.client.close();
-  unregisterBrowser(rb);
-  emitProfile(rb.profileId);
+  await waitForExit(rb, 5000);
+  await terminate(rb);
+  forget(rb);
   log.info(`stopped browser for profile ${rb.profileId}`);
 }
 
@@ -367,7 +398,7 @@ let idleTimer: ReturnType<typeof setInterval> | null = null;
 
 function startIdleWatcher() {
   if (idleTimer) return;
-  idleTimer = setInterval(() => void idleSweep(), 60_000);
+  idleTimer = setInterval(() => void sweepIdleBrowsers(), 60_000);
   (idleTimer as unknown as { unref?: () => void }).unref?.();
 }
 
@@ -377,11 +408,11 @@ function stopIdleWatcher() {
 }
 
 onSettingsApplied(() => {
-  if (idleTimer) void idleSweep();
+  if (idleTimer) void sweepIdleBrowsers();
 });
 
 /** Stop browsers unused for `settings.browser.keepAliveMinutes` (0 = never). */
-async function idleSweep() {
+export async function sweepIdleBrowsers(): Promise<void> {
   let keepAlive: number;
   try {
     keepAlive = getSettings().browser.keepAliveMinutes;

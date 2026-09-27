@@ -14,6 +14,7 @@
  * Env: FAKE_CLAUDE_STATE — directory for known sessions + an invocation log (invocations.jsonl).
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const args = process.argv.slice(2);
@@ -22,7 +23,7 @@ const argValue = (flag: string): string | null => {
   return i >= 0 && i + 1 < args.length ? args[i + 1]! : null;
 };
 
-const stateDir = process.env.FAKE_CLAUDE_STATE ?? join(import.meta.dir, ".fake-claude-state");
+const stateDir = process.env.FAKE_CLAUDE_STATE ?? join(tmpdir(), "godmode-fake-claude");
 mkdirSync(join(stateDir, "sessions"), { recursive: true });
 
 const prompt = await new Response(Bun.stdin.stream()).text();

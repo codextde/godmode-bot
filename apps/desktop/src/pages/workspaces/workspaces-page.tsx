@@ -44,7 +44,7 @@ function useScopeCounts(): { get: (workspaceId: string | null) => Counts; loadin
   const agents = useQuery({ queryKey: qk.agentList("all"), queryFn: () => api.agents.list({ workspaceId: "all" }), ...opts });
   const creds = useQuery({ queryKey: qk.credentialList("all", ""), queryFn: () => api.credentials.list({ workspaceId: "all" }), ...opts });
   const totp = useQuery({ queryKey: qk.totpList("all"), queryFn: () => api.totp.list({ workspaceId: "all" }), ...opts });
-  const mcp = useQuery({ queryKey: [...qk.mcpServers, "list", "all"], queryFn: () => api.mcpServers.list({ workspaceId: "all" }), ...opts });
+  const mcp = useQuery({ queryKey: qk.mcpServers, queryFn: () => api.mcpServers.list({ workspaceId: "all" }), ...opts });
   const composio = useQuery({ queryKey: qk.composioConnections, queryFn: api.composio.connections, ...opts });
 
   const get = useMemo(() => {

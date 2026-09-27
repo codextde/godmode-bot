@@ -11,6 +11,7 @@ import fs from "node:fs";
 import { lstat, mkdir, readdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { AgentFileEntry, GitCommit } from "@godmode/shared";
+import { config } from "../config";
 import { HttpError, badRequest, forbidden, notFound } from "../util";
 
 export const GIT_AUTHOR = { name: "Godmode Bot", email: "bot@godmode.local" };
@@ -22,8 +23,22 @@ export const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 const locks = new Map<string, Promise<void>>();
 
+/** Git repositories managed here always live inside the Godmode data directory — never anywhere else. */
+function assertManagedDir(dir: string) {
+  const root = resolve(config().dataDir);
+  const rel = relative(root, resolve(dir));
+  if (!rel || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new Error(`Refusing repository operation outside the Godmode data directory: ${resolve(dir)}`);
+  }
+}
+
 /** Run `fn` exclusively for the repository at `dir` (FIFO per repository). */
 export function withRepoLock<T>(dir: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    assertManagedDir(dir);
+  } catch (err) {
+    return Promise.reject(err);
+  }
   const key = resolve(dir);
   const previous = locks.get(key) ?? Promise.resolve();
   const result = previous.then(fn);

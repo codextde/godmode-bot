@@ -36,11 +36,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec![AUTOSTART_ARG])))
         .manage(Arc::new(CoreManager::new()))
-        .invoke_handler(tauri::generate_handler![
-            commands::core_info,
-            commands::write_file,
-            commands::core_logs_path
-        ])
+        .invoke_handler(tauri::generate_handler![commands::core_info, commands::write_file, commands::core_logs_path])
         .setup(|app| {
             let handle = app.handle();
             core::start(handle.clone());

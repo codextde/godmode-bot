@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent, Credential } from "@godmode/shared";
-import { fills, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
+import { fillFailure, fills, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import * as vault from "../src/vault/vault";
 import { createCredential } from "../src/vault/credentials";
 import { createTotp } from "../src/vault/totp";
@@ -228,6 +228,27 @@ describe("vault tools", () => {
     expect(listAudit(50, "totp.fill").length).toBeGreaterThan(0);
   });
 
+  test("fill errors never echo the filled value", async () => {
+    fillFailure.echoText = true;
+    try {
+      for (const field of ["username", "password"] as const) {
+        const r = await call(tokens[worker.id]!, "vault_fill_login", { credentialId: cred.id, field });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("Could not fill");
+        expect(r.content[0]!.text).not.toContain(PASSWORD);
+        expect(r.content[0]!.text).not.toContain("alice");
+      }
+      fills.length = 0;
+      const t = await call(tokens[worker.id]!, "vault_fill_totp", { credentialId: cred.id });
+      expect(t.isError).toBe(true);
+      expect(t.content[0]!.text).not.toContain(fills[0]!.text);
+    } finally {
+      fillFailure.echoText = false;
+    }
+    const audits = listAudit(200).filter((a) => ["credential.fill", "totp.fill"].includes(a.action));
+    expect(audits.every((a) => typeof a.details.field === "string" && typeof a.details.runId === "string")).toBe(true);
+  });
+
   test("filling needs the browser", async () => {
     const r = await call(tokens[revealer.id]!, "vault_fill_login", { credentialId: cred.id, field: "username" });
     expect(r.isError).toBe(true);
@@ -237,9 +258,11 @@ describe("vault tools", () => {
   test("reveal mode returns secrets and audits them", async () => {
     const r = await call(tokens[revealer.id]!, "vault_get_login", { credentialId: cred.id });
     expect(JSON.parse(r.content[0]!.text)).toEqual({ username: "alice", password: PASSWORD, url: "https://example.com/login" });
-    expect(listAudit(50, "credential.reveal").some((a) => a.target === cred.id && a.actor === `agent:${revealer.id}`)).toBe(true);
+    const reveal = listAudit(50, "credential.reveal").find((a) => a.target === cred.id && a.actor === `agent:${revealer.id}`)!;
+    expect(reveal.details).toEqual({ field: "username+password", runId: `run_mcp_${revealer.slug}_0` });
     const code = await call(tokens[revealer.id]!, "vault_get_totp", { credentialId: cred.id });
     expect(JSON.parse(code.content[0]!.text).code).toMatch(/^\d{6}$/);
+    expect(listAudit(50, "totp.reveal")[0]!.details).toEqual({ field: "totp", runId: `run_mcp_${revealer.slug}_0` });
   });
 
   test("locked vault gives a helpful error", async () => {

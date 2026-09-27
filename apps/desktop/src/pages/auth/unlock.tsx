@@ -7,21 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import { AuthLayout, FormError, SubmitButton, shake } from "@/components/onboarding/auth-layout";
+import { AuthLayout, FormError, SubmitButton, shake, unlockError } from "@/components/onboarding/auth-layout";
 import { CopyButton } from "@/components/vault/copy-button";
 import { PasswordInput } from "@/components/vault/password-input";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { useBootstrap } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-
-export function unlockError(err: unknown): string {
-  if (err instanceof ApiRequestError) {
-    if (err.status === 429) return "Too many attempts — wait a minute and try again.";
-    if (err.status === 400 || err.status === 401 || err.status === 403) return "That passphrase isn't right.";
-  }
-  return errorMessage(err);
-}
 
 /** Shown when the vault is initialized but locked (auto-lock, manual lock or restart without "remember device"). */
 export function UnlockPage() {

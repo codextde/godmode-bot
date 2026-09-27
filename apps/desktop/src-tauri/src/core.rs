@@ -289,18 +289,13 @@ fn spawn_core(
     if manager.is_shutting_down() {
         return Err("not starting the core: app is shutting down".into());
     }
-    let mut child = cmd
-        .spawn()
-        .map_err(|err| format!("failed to start the core ({description}): {err}"))?;
+    let mut child = cmd.spawn().map_err(|err| format!("failed to start the core ({description}): {err}"))?;
     manager.log(&format!("started core ({description}), pid {}", child.id()));
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
-    let process = Arc::new(CoreProcess {
-        pid: child.id(),
-        stdin: Mutex::new(child.stdin.take()),
-        child: Mutex::new(child),
-    });
+    let process =
+        Arc::new(CoreProcess { pid: child.id(), stdin: Mutex::new(child.stdin.take()), child: Mutex::new(child) });
     *slot = Some(process.clone());
     drop(slot);
 
@@ -386,11 +381,7 @@ fn core_command(app: &AppHandle) -> Result<(Command, String), String> {
         }
     }
 
-    let mut cmd: Command = app
-        .shell()
-        .sidecar(SIDECAR)
-        .map_err(|err| format!("core sidecar not found: {err}"))?
-        .into();
+    let mut cmd: Command = app.shell().sidecar(SIDECAR).map_err(|err| format!("core sidecar not found: {err}"))?.into();
     if let Some(home) = &home {
         cmd.current_dir(home);
     }
@@ -499,10 +490,7 @@ fn login_shell_path() -> Option<String> {
     };
     let _ = child.wait();
     let (_, env) = output.split_once(MARKER)?;
-    env.lines()
-        .find_map(|line| line.strip_prefix("PATH="))
-        .map(str::to_owned)
-        .filter(|p| !p.is_empty())
+    env.lines().find_map(|line| line.strip_prefix("PATH=")).map(str::to_owned).filter(|p| !p.is_empty())
 }
 
 /// 32 random bytes, base64url without padding.

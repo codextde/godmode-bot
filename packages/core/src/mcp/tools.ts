@@ -110,6 +110,12 @@ function requireReachable(agent: Agent, targetId: string): Agent {
   return target;
 }
 
+/** Browser error text with the filled value removed (redact() only knows passwords, not usernames/codes). */
+function scrub(detail: string, value: string): string {
+  const masked = value ? detail.split(value).join("••••••••") : detail;
+  return redact(masked);
+}
+
 function requireBrowser(agent: Agent) {
   if (!agent.browser.enabled) throw new HttpError(409, "The browser is disabled for this agent, so nothing can be filled into a page.");
   return resolveProfileForAgent(agent);
@@ -219,7 +225,7 @@ const TOOLS: ToolDef[] = [
       const name = getCredential(credentialId).name;
       const result = await fillIntoPage(profile.id, { text: value, kind: field, selector, submit });
       audit(`agent:${agent.id}`, "credential.fill", credentialId, { field, runId: ctx.runId, ok: result.ok });
-      if (!result.ok) return fail(`Could not fill the ${field}: ${redact(result.detail)}`);
+      if (!result.ok) return fail(`Could not fill the ${field}: ${scrub(result.detail, value)}`);
       markCredentialUsed(credentialId);
       return `Filled ${field} for "${name}" into ${result.url}${submit ? " and submitted" : ""}.`;
     },
@@ -256,8 +262,8 @@ const TOOLS: ToolDef[] = [
         code = codeForAgent(agent, id);
       }
       const result = await fillIntoPage(profile.id, { text: code.code, kind: "totp", selector, submit });
-      audit(`agent:${agent.id}`, "totp.fill", id, { runId: ctx.runId, credentialId: credentialId ?? null, ok: result.ok });
-      if (!result.ok) return fail(`Could not fill the 2FA code: ${redact(result.detail)}`);
+      audit(`agent:${agent.id}`, "totp.fill", id, { field: "totp", runId: ctx.runId, credentialId: credentialId ?? null, ok: result.ok });
+      if (!result.ok) return fail(`Could not fill the 2FA code: ${scrub(result.detail, code.code)}`);
       return `Filled the current 2FA code into ${result.url}${submit ? " and submitted" : ""}.`;
     },
   }),
@@ -270,7 +276,7 @@ const TOOLS: ToolDef[] = [
     when: canReveal,
     run: ({ credentialId }, { agent, ctx }) => {
       const secret = revealForAgent(agent, credentialId);
-      audit(`agent:${agent.id}`, "credential.reveal", credentialId, { runId: ctx.runId });
+      audit(`agent:${agent.id}`, "credential.reveal", credentialId, { field: "username+password", runId: ctx.runId });
       markCredentialUsed(credentialId);
       return json({ username: secret.username, password: secret.password, url: secret.url });
     },
@@ -289,7 +295,7 @@ const TOOLS: ToolDef[] = [
       }
       if (!id) return fail("No 2FA entry found. Pass a totpId or a credentialId with linked 2FA.");
       const code = codeForAgent(agent, id);
-      audit(`agent:${agent.id}`, "totp.reveal", id, { runId: ctx.runId });
+      audit(`agent:${agent.id}`, "totp.reveal", id, { field: "totp", runId: ctx.runId });
       return json({ code: code.code, secondsRemaining: code.remaining });
     },
   }),

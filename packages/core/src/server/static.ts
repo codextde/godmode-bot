@@ -31,11 +31,11 @@ async function loadEmbedded(): Promise<Map<string, Blob>> {
   if (embedded) return embedded;
   embedded = new Map();
   try {
-    const { embeddedFiles } = await import("bun");
-    for (const file of embeddedFiles as Blob[]) {
+    // Not `await import("bun")`: Bun's minifier emits `awaitPromise.resolve(globalThis.Bun)` for it.
+    for (const file of Bun.embeddedFiles as Blob[]) {
       const name = (file as Blob & { name?: string }).name;
       if (!name) continue;
-      // assets are embedded as ui/<path>
+      // scripts/build.ts embeds the UI as bin/.embed/ui/<path>
       const idx = name.indexOf("ui/");
       if (idx >= 0) embedded.set(name.slice(idx + 3), file);
     }
