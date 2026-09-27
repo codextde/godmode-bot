@@ -1,8 +1,9 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { HttpError } from "../util";
 import { logger } from "../log";
-import { hostGuard, requireAuth } from "./auth";
+import { hostGuard, isAllowedOrigin, requireAuth } from "./auth";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerSystemRoutes } from "./routes/system";
 import { registerVaultRoutes } from "./routes/vault";
@@ -27,11 +28,23 @@ export function createApp() {
     secureHeaders({
       xFrameOptions: "DENY",
       referrerPolicy: "no-referrer",
-      crossOriginResourcePolicy: "same-origin",
+      // The desktop webview (tauri://localhost) is cross-origin to the core; CORS below governs access.
+      crossOriginResourcePolicy: false,
       crossOriginOpenerPolicy: "same-origin",
     }),
   );
   app.use("*", hostGuard);
+  // Strict CORS allowlist: desktop webview origins, the dev UI and user-configured dashboard origins.
+  app.use(
+    "/api/*",
+    cors({
+      origin: (origin, c) => (origin && isAllowedOrigin(origin, c.req.header("host")) ? origin : null),
+      allowHeaders: ["Authorization", "Content-Type"],
+      allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      exposeHeaders: ["Content-Disposition"],
+      maxAge: 600,
+    }),
+  );
 
   app.onError((err, c) => {
     if (err instanceof HttpError) {

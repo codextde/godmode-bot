@@ -274,6 +274,13 @@ export const api = {
         | { type: "key"; key: string }
         | { type: "text"; text: string },
     ) => post<{ ok: true }>(`/api/browser/profiles/${id}/input`, event),
+    /** browser-use `profile-use` (sync local Chrome cookies to a browser-use Cloud profile) */
+    profileUse: () =>
+      get<{ installed: boolean; version: string | null; apiKeySet: boolean; lastSyncAt: string | null; detail: string }>(
+        "/api/browser/profile-use",
+      ),
+    profileUseSync: (input: { sourcePath?: string; profileName?: string } = {}) =>
+      post<{ ok: boolean; output: string; cloudProfileId: string | null }>("/api/browser/profile-use/sync", input),
   },
 
   backup: {

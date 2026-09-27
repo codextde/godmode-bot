@@ -130,7 +130,8 @@ export interface TotpImportInput {
 
 export interface TotpImportResult {
   imported: TotpEntry[];
-  skipped: { uri: string; reason: string }[];
+  /** `label` ("Issuer:account") identifies the account when known, e.g. one entry of a multi-account migration export. */
+  skipped: { uri: string; reason: string; label?: string }[];
 }
 
 export interface MissingLoginPatch {

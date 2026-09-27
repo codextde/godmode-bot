@@ -30,3 +30,6 @@ export const AGENT_COLORS = [
 /** Name of the MCP server Godmode injects into every agent run. */
 export const GODMODE_MCP_NAME = "godmode";
 export const BROWSER_MCP_NAME = "browser";
+
+/** Placeholder the API returns/accepts for stored secret values (MCP env/headers): sending it back keeps the stored value. */
+export const SECRET_MASK = "********";

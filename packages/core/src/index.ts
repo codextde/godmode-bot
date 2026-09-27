@@ -14,7 +14,7 @@ import { logger, setLogDir } from "./log";
 import { openDb, closeDb } from "./db";
 import { createApp } from "./server/app";
 import { websocketHandler, type WsData } from "./server/ws";
-import { authenticate, getAccessToken, setDashboardPassword } from "./server/auth";
+import { authenticate, getAccessToken, isAllowedOrigin, setDashboardPassword } from "./server/auth";
 import { getSettings, updateSettings } from "./services/settings";
 import { applyRuntimeSettings } from "./services/runtime";
 import * as vault from "./vault/vault";
@@ -87,6 +87,11 @@ async function serve(values: Record<string, unknown>) {
             url: req.url,
           },
         };
+        // Block cross-site WebSocket hijacking: browsers always send Origin on WS handshakes.
+        const origin = req.headers.get("origin");
+        if (origin && !isAllowedOrigin(origin, req.headers.get("host") ?? undefined)) {
+          return new Response("Origin not allowed", { status: 403 });
+        }
         if (!authenticate(shim as never)) return new Response("Unauthorized", { status: 401 });
         const ok = server.upgrade(req, { data: { id: newId("ws"), subscriptions: new Set<string>() } });
         return ok ? undefined : new Response("Upgrade failed", { status: 400 });

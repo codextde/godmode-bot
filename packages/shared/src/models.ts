@@ -152,8 +152,18 @@ export type MessageRole = "user" | "assistant" | "system";
 
 /** Structured content blocks for rich rendering of assistant turns. */
 export type MessageBlock =
-  | { type: "text"; text: string }
-  | { type: "thinking"; text: string }
+  | {
+      type: "text";
+      text: string;
+      /** Set when the text was produced by a subagent (Task tool) — nest it under that tool_use block. */
+      parentToolUseId?: string | null;
+    }
+  | {
+      type: "thinking";
+      /** May be empty when the model's thinking is redacted — still shown as a "thinking" indicator. */
+      text: string;
+      parentToolUseId?: string | null;
+    }
   | {
       type: "tool_use";
       id: string;

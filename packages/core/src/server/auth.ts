@@ -105,6 +105,26 @@ export function authenticate(c: Context): AuthKind {
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1", "tauri.localhost"]);
 
+/** Origins of the Tauri webview on macOS/Linux (tauri://localhost) and Windows (http(s)://tauri.localhost). */
+const DESKTOP_ORIGINS = new Set(["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]);
+
+/**
+ * May a browser page from `origin` call the API? Same-origin (dashboard served by the core), the desktop webview,
+ * the Vite dev server (dev mode only) and explicitly configured origins.
+ */
+export function isAllowedOrigin(origin: string, host: string | undefined): boolean {
+  if (DESKTOP_ORIGINS.has(origin)) return true;
+  let parsed: URL;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (host && parsed.host === host) return true;
+  if (config().dev && ["127.0.0.1:1420", "localhost:1420"].includes(parsed.host)) return true;
+  return getSettings().server.allowedOrigins.includes(origin);
+}
+
 /** Protect against DNS rebinding: when not in remote mode, only accept loopback Host headers. */
 export const hostGuard: MiddlewareHandler = async (c, next) => {
   const settings = getSettings();
