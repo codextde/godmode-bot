@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { MessageBlocks } from "./message-blocks";
 import { AttachmentChip } from "./attachments";
 import { CopyButton } from "./copy-button";
+import { CommandText } from "./slash-commands";
 import { describeTool } from "./tool-meta";
 
 const FALLBACK_AGENT = { avatar: "🤖", color: "violet" };
@@ -50,7 +51,7 @@ export function UserMessage({ message, queued, pending }: { message: Message; qu
             pending && "opacity-70",
           )}
         >
-          {message.content}
+          <CommandText text={message.content} />
         </div>
       )}
       <div className="mt-1 flex h-6 items-center gap-1.5 pr-1 text-[11px] text-muted-foreground">

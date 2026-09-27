@@ -1,8 +1,10 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
@@ -13,8 +15,10 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, Volume2, VolumeX } from "lucide-react";
+import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, SquareSlash, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
+import type { SlashCommand } from "@godmode/shared";
+import { parseSlashCommand } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/common";
@@ -25,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { AttachmentChip, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, readAttachment, type PendingAttachment } from "./attachments";
 import { LevelBars } from "./voice-visuals";
 import { WorkingTicks } from "@/components/aicss/Motion";
+import { SlashHint, SlashMenu, findCommand, rankCommands, slashOptionId, useSlashCommands } from "./slash-commands";
 
 export interface ComposerSubmit {
   content: string;
@@ -52,6 +57,8 @@ interface ComposerProps {
   size?: "md" | "lg";
   /** Persist an unsent draft (sessionStorage) under this key */
   draftKey?: string;
+  /** Agent whose Claude Code slash commands are offered after typing "/" */
+  agentId?: string;
   className?: string;
   ref?: Ref<ComposerHandle>;
 }
@@ -90,6 +97,7 @@ export function Composer({
   leading,
   size = "md",
   draftKey,
+  agentId,
   className,
   ref,
 }: ComposerProps) {
@@ -102,6 +110,13 @@ export function Composer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef(false);
   const baseRef = useRef("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+  const [menuRoom, setMenuRoom] = useState({ below: false, maxHeight: 352 });
+  const [menuActive, setMenuActive] = useState(0);
+  const [menuDismissed, setMenuDismissed] = useState<string | null>(null);
+  const [menuForced, setMenuForced] = useState(false);
+  const commands = useSlashCommands(agentId);
 
   const voiceSettings = useVoiceSettings();
   const voiceEnabled = voiceSettings?.enabled ?? true;
@@ -196,12 +211,53 @@ export function Composer({
 
   const canSend = (text.trim().length > 0 || attachments.length > 0) && !busy;
 
+  // Slash commands: the menu lists matches while only the command name is typed; afterwards a hint shows its arguments.
+  const slashToken = /^\/([\w:.-]*)$/.exec(text)?.[1] ?? null;
+  const menuQuery = slashToken ?? (menuForced ? "" : null);
+  const menuItems = useMemo(
+    () => (menuQuery === null ? [] : rankCommands(commands.data ?? [], menuQuery)),
+    [menuQuery, commands.data],
+  );
+  const menuOpen = !!agentId && menuQuery !== null && focused && menuDismissed !== text;
+  const menuIndex = Math.min(menuActive, Math.max(0, menuItems.length - 1));
+  const typed = parseSlashCommand(text);
+  const hint = !menuOpen && slashToken === null && typed ? findCommand(commands.data, typed.name) : undefined;
+  useEffect(() => setMenuActive(0), [menuQuery]);
+  useLayoutEffect(() => {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!menuOpen || !rect) return;
+    const above = rect.top - 60;
+    const below = window.innerHeight - rect.bottom - 60;
+    const down = above < 240 && below > above;
+    setMenuRoom({ below: down, maxHeight: Math.max(144, Math.min(352, down ? below : above)) });
+  }, [menuOpen]);
+
+  const pickCommand = (c: SlashCommand) => {
+    const next = `/${c.name} ${typed ? typed.args : text.trim()}`;
+    setMenuForced(false);
+    setText(next);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      el.setSelectionRange(next.length, next.length);
+    });
+  };
+
+  const openCommands = () => {
+    if (!text.trim()) setText("/");
+    else setMenuForced(true);
+    setMenuDismissed(null);
+    textareaRef.current?.focus({ preventScroll: true });
+  };
+
   const submit = async () => {
     if (!canSend) return;
     if (dictation.active) dictation.cancel();
     const content = text.trim();
     const sent = attachments;
     const voice = voiceRef.current;
+    setMenuForced(false);
     setText("");
     setAttachments([]);
     voiceRef.current = false;
@@ -218,6 +274,27 @@ export function Composer({
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (menuOpen) {
+      const current = menuItems[menuIndex];
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && menuItems.length > 0) {
+        e.preventDefault();
+        setMenuActive((menuIndex + (e.key === "ArrowDown" ? 1 : -1) + menuItems.length) % menuItems.length);
+        return;
+      }
+      const enter = e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing;
+      // Tab / Enter complete the name; Enter on an already complete command sends it.
+      if (current && (e.key === "Tab" || enter) && !(enter && text.trim() === `/${current.name}`)) {
+        e.preventDefault();
+        pickCommand(current);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMenuDismissed(text);
+        setMenuForced(false);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void submit();
@@ -276,6 +353,7 @@ export function Composer({
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         "relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200",
         focused && "border-foreground/20 ring-4 ring-foreground/[0.035] dark:border-foreground/25 dark:ring-foreground/[0.05]",
@@ -293,6 +371,23 @@ export function Composer({
       }}
       onDrop={onDrop}
     >
+      <AnimatePresence>
+        {menuOpen && (
+          <SlashMenu
+            id={menuId}
+            items={menuItems}
+            active={menuIndex}
+            grouped={!menuQuery}
+            loading={commands.isLoading}
+            error={commands.error}
+            below={menuRoom.below}
+            maxHeight={menuRoom.maxHeight}
+            onHover={setMenuActive}
+            onPick={pickCommand}
+          />
+        )}
+      </AnimatePresence>
+
       <AnimatePresence initial={false}>
         {attachments.length > 0 && (
           <motion.div
@@ -320,6 +415,8 @@ export function Composer({
         )}
       </AnimatePresence>
 
+      <AnimatePresence initial={false}>{hint && <SlashHint key="slash-hint" command={hint} />}</AnimatePresence>
+
       <label htmlFor={draftKey ? `composer-${draftKey}` : "composer"} className="sr-only">
         Message
       </label>
@@ -327,8 +424,14 @@ export function Composer({
         id={draftKey ? `composer-${draftKey}` : "composer"}
         ref={textareaRef}
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          setMenuForced(false);
+        }}
         onKeyDown={onKeyDown}
+        aria-autocomplete={agentId ? "list" : undefined}
+        aria-controls={menuOpen ? menuId : undefined}
+        aria-activedescendant={menuOpen && menuItems[menuIndex] ? slashOptionId(menuId, menuItems[menuIndex].name) : undefined}
         onPaste={onPaste}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -356,6 +459,12 @@ export function Composer({
         <ToolbarButton label="Attach files" onClick={() => fileInputRef.current?.click()}>
           <Paperclip />
         </ToolbarButton>
+
+        {agentId && (
+          <ToolbarButton label="Slash commands" onClick={openCommands} active={menuOpen} className={cn(menuOpen && "bg-accent text-foreground")}>
+            <SquareSlash />
+          </ToolbarButton>
+        )}
 
         <ToolbarButton
           label={!voiceEnabled ? "Voice is off — enable it in Settings" : dictation.active ? "Stop dictation (Esc)" : "Dictate"}

@@ -12,8 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { FileSink, Subprocess } from "bun";
-import type { Agent, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
-import { BROWSER_MCP_NAME, DEFAULT_MODEL } from "@godmode/shared";
+import type { Agent, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
+import { BROWSER_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -530,7 +530,7 @@ interface Resources {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
-function resolveClaudeCommand(): string[] | null {
+export function resolveClaudeCommand(): string[] | null {
   if (claudeCommandOverride === false) return null;
   if (claudeCommandOverride) return claudeCommandOverride;
   let bin: string | null;
@@ -558,7 +558,7 @@ function writeTempFile(res: Resources, name: string, content: string): string {
   return path;
 }
 
-function buildEnv(agent: Agent): Record<string, string | undefined> {
+export function buildEnv(agent: Agent): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { ...process.env };
   for (const key of STRIP_ENV) delete env[key];
   env.DISABLE_AUTOUPDATER = "1";
@@ -799,7 +799,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // Claude runs with cwd = the agent repo; rebuild it if it went missing (e.g. restored backup without repos).
   await ensureAgentRepo(agent);
 
-  const conv = get<{ claude_session_id: string | null }>("SELECT claude_session_id FROM conversations WHERE id = ?", job.conversationId);
+  const conv = get<{ claude_session_id: string | null; model: string | null; effort: Effort | null }>(
+    "SELECT claude_session_id, model, effort FROM conversations WHERE id = ?",
+    job.conversationId,
+  );
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
 
   res.token = issueRunToken({
@@ -831,8 +834,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     voice: job.voice,
   });
 
-  const model = agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
-  const effort = agent.effort || settings.runner.effort || null;
+  const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
+  const effort = conv.effort || agent.effort || settings.runner.effort || null;
   const fallback = settings.runner.fallbackModel?.trim();
   const budget = agent.permissions.maxBudgetUsd ?? settings.runner.defaultMaxBudgetUsd;
   // cmd.exe cannot pass multi-line arguments: use the file variants for Windows .cmd shims.
@@ -901,7 +904,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     }
     if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
     const sessionArgs = resuming ? ["--resume", sessionId] : ["--session-id", sessionId];
-    const prompt = resuming ? resumeContextPrefix() + job.prompt : job.prompt;
+    // Claude Code only recognizes a slash command at the very start of the prompt.
+    const command = parseSlashCommand(job.prompt) !== null;
+    const prompt = resuming && !command ? resumeContextPrefix() + job.prompt : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, agent, env, logSink);
 
     const lostSession =
@@ -921,7 +926,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         job,
         cmd,
         [...baseArgs, "--session-id", sessionId, ...extraArgs],
-        recapPrefix(job) + job.prompt,
+        command ? job.prompt : recapPrefix(job) + job.prompt,
         agent,
         env,
         logSink,
@@ -1014,9 +1019,11 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
       const title =
         row?.title === DEFAULT_CONVERSATION_TITLE && job.userMessageId ? autoTitle(job.userMessageId) : undefined;
       setConversationState(job.conversationId, {
-        ...(acc.sessionId ? { claudeSessionId: acc.sessionId } : {}),
+        // After /clear the next turn starts a brand-new session instead of resuming the old one.
+        ...(acc.contextCleared ? { claudeSessionId: null } : acc.sessionId ? { claudeSessionId: acc.sessionId } : {}),
         lastMessageAt: ts,
         ...(title && title !== DEFAULT_CONVERSATION_TITLE ? { title } : {}),
+        ...(outcome.status === "succeeded" ? commandOverrides(acc.localCommand) : {}),
       });
     });
   }
@@ -1055,6 +1062,28 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
     const title = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", job.conversationId)?.title ?? job.trigger;
     const message = `Run ${job.runId.slice(-6)}: ${title}`;
     commitAgentRepo(job.agentId, message).catch((err) => log.warn(`auto-commit for agent ${job.agentId} failed`, err));
+  }
+}
+
+const COMMAND_REJECTED = /not found|invalid|unknown|unavailable|not available|usage:/i;
+
+/**
+ * Session settings from local slash commands. Claude Code keeps `/model` and `/effort` for its process only,
+ * but every Godmode turn is a new process — so they are stored on the conversation. `/rename` renames the chat.
+ */
+function commandOverrides(cmd: StreamAccumulator["localCommand"]): { model?: string | null; effort?: Effort | null; title?: string } {
+  if (!cmd?.args || COMMAND_REJECTED.test(cmd.output)) return {};
+  const arg = cmd.args.trim();
+  switch (cmd.name) {
+    case "model":
+      return { model: arg === "default" ? null : arg };
+    case "effort":
+      if (arg === "auto") return { effort: null };
+      return (EFFORT_OPTIONS as readonly string[]).includes(arg) ? { effort: arg as Effort } : {};
+    case "rename":
+      return { title: arg.slice(0, 200) };
+    default:
+      return {};
   }
 }
 

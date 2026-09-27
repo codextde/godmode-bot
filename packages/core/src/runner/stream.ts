@@ -9,6 +9,8 @@
  *  - `user` tool results (matched to their tool_use block)
  *  - the final `result`
  * Subagent output (events with `parent_tool_use_id`) is kept but flagged with `parentToolUseId`.
+ * Slash commands that Claude Code runs locally (`/context`, `/model sonnet`…) become `command` blocks;
+ * `/clear` and `/compact` become notices.
  */
 import type { MessageBlock, RunUsage } from "@godmode/shared";
 
@@ -66,6 +68,10 @@ function num(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
+function kTokens(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
 /** "mcp__browser__browser_navigate" → "browser_navigate" */
 export function displayToolName(name: string): string {
   const m = /^mcp__.+?__(.+)$/.exec(name);
@@ -117,6 +123,11 @@ export class StreamAccumulator {
   readonly toolsCalled = new Set<string>();
   /** Set when the CLI reports a rejected rate limit (the CLI waits and retries by itself). */
   rateLimited = false;
+  /** A slash command Claude Code handled locally, without a model turn (e.g. `/model sonnet`). */
+  localCommand: { name: string; args: string; output: string } | null = null;
+  /** `/clear` replaced the Claude session with an empty one. */
+  contextCleared = false;
+  private compacting = false;
 
   private streams = new Map<string, StreamState>();
   private messages = new Map<string, BlockRef[]>();
@@ -136,6 +147,10 @@ export class StreamAccumulator {
         return this.onUser(event);
       case "result":
         this.onResult(event);
+        return true;
+      case "conversation_reset":
+        this.contextCleared = true;
+        this.addNotice("info", "Context cleared — your next message starts a fresh session.");
         return true;
       case "rate_limit_event": {
         const info = isObj(event.rate_limit_info) ? event.rate_limit_info : null;
@@ -160,6 +175,7 @@ export class StreamAccumulator {
   activityLabel(): string {
     if (this.final) return this.final.isError ? "Failed" : "Done";
     if (this.rateLimited) return "Waiting for rate limit…";
+    if (this.compacting) return "Compacting conversation…";
     const last = this.blocks[this.blocks.length - 1];
     if (!last) return "Starting…";
     switch (last.type) {
@@ -195,6 +211,14 @@ export class StreamAccumulator {
     if (e.subtype === "init") {
       this.sessionId = str(e.session_id) ?? this.sessionId;
       this.model = str(e.model) ?? this.model;
+    } else if (e.subtype === "status") {
+      this.compacting = e.status === "compacting";
+    } else if (e.subtype === "compact_boundary") {
+      const meta = isObj(e.compact_metadata) ? e.compact_metadata : {};
+      const pre = num(meta.pre_tokens);
+      const post = num(meta.post_tokens);
+      this.addNotice("success", `Conversation compacted${pre !== null && post !== null ? ` · ${kTokens(pre)} → ${kTokens(post)} tokens` : ""}`);
+      return true;
     }
     return false;
   }
@@ -316,6 +340,16 @@ export class StreamAccumulator {
     if (!msg || !Array.isArray(msg.content)) return false;
     const parent = str(e.parent_tool_use_id);
     const messageId = str(msg.id);
+    const local = isObj(e.local_command_run) ? e.local_command_run : null;
+    if (local) {
+      const output = msg.content
+        .map((c) => (isObj(c) && c.type === "text" ? (str(c.text) ?? "") : ""))
+        .join("\n")
+        .trim();
+      this.localCommand = { name: str(local.command) ?? "", args: str(local.args) ?? "", output };
+      this.blocks.push({ type: "command", ...this.localCommand });
+      return true;
+    }
     if (str(msg.model)) this.model = str(msg.model);
     let changed = false;
 
@@ -462,6 +496,8 @@ export function redactBlocks(blocks: MessageBlock[], redact: (s: string) => stri
       case "error":
       case "notice":
         return { ...b, text: redact(b.text) };
+      case "command":
+        return { ...b, args: redact(b.args), output: redact(b.output) };
       default:
         return b;
     }

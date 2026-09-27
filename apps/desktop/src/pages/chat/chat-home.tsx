@@ -133,6 +133,7 @@ export default function ChatHome() {
             size="lg"
             autoFocus
             draftKey="home"
+            agentId={selected?.id}
             busy={start.isPending}
             placeholder={selected ? `Ask ${selected.name} anything, or hand over a task…` : "Ask anything, or hand over a task…"}
             leading={
@@ -169,7 +170,7 @@ export default function ChatHome() {
 
         <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
           <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
-          <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere
+          <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>/</Kbd> commands <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere
         </motion.p>
       </div>
 
