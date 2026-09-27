@@ -24,6 +24,7 @@ import type {
   CredentialInput,
   DependencyId,
   DoctorReport,
+  FolderListing,
   GitCommit,
   LocalChromeProfile,
   McpServer,
@@ -251,6 +252,12 @@ export const api = {
   chat: {
     /** Create a conversation and send the first message in one call. */
     start: (input: StartChatInput) => post<StartChatResult>("/api/chat", input),
+  },
+
+  folders: {
+    /** Subfolders on the machine running the core; no path = home. */
+    list: (path?: string, hidden = false) => get<FolderListing>("/api/folders", { path, hidden: hidden ? 1 : undefined }),
+    recent: () => get<string[]>("/api/folders/recent"),
   },
 
   runs: {

@@ -4,6 +4,7 @@
  * the tool guide (browser, vault login procedure, missing logins, delegation, management) and policies.
  */
 import { arch, platform } from "node:os";
+import { join } from "node:path";
 import type { Agent, Settings } from "@godmode/shared";
 
 export interface PromptContext {
@@ -15,6 +16,8 @@ export interface PromptContext {
   browserAvailable: boolean;
   /** The message was dictated — answer in speakable prose. */
   voice?: boolean;
+  /** Folder attached to the chat (Claude's cwd). null = the agent's own repository. */
+  workingDirectory?: string | null;
   now?: Date;
 }
 
@@ -58,7 +61,14 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   const perms = agent.permissions;
   const userName = settings.general.userName.trim();
   const human = userName || "the user";
+  const folder = ctx.workingDirectory ?? null;
+  const repo = agent.repoPath;
   const out: string[] = [];
+
+  const workplace = folder
+    ? `- Working directory: \`${folder}\` — a folder ${human} attached to this chat. Work on the files there and follow its conventions (and its own CLAUDE.md, if any). Godmode never commits anything in it: only use git there when asked.
+- Your own git repository: \`${repo}\`. Its \`CLAUDE.md\` holds your identity and standing instructions; \`MEMORY.md\` (and \`memory/\`) is your long-term memory — read it at the start of a task when it may be relevant. Put scratch files and downloads in \`${join(repo, "workspace")}\`. Files the human attaches are saved under \`${join(repo, "workspace", "uploads")}\`.`
+    : `- Working directory: your own git repository. \`CLAUDE.md\` holds your identity and standing instructions; \`MEMORY.md\` (and \`memory/\`) is your long-term memory — read it at the start of a task when it may be relevant. Put files you produce (downloads, reports, exports) in \`workspace/\`. Files the human attaches are saved under \`workspace/uploads/\`.`;
 
   out.push(`# Godmode runtime
 You are "${agent.name}", an autonomous AI coworker running inside Godmode Bot on ${human}'s computer. You work independently: finish tasks end to end, use your tools, and only stop to ask ${human} when a decision genuinely needs them.
@@ -66,7 +76,7 @@ You are "${agent.name}", an autonomous AI coworker running inside Godmode Bot on
 - Current date/time: ${describeNow(ctx.now)}
 - Operating system: ${osName()}
 - ${userName ? `The human you work for: ${userName}` : "The human you work for has not set a name."}
-- Working directory: your own git repository. \`CLAUDE.md\` holds your identity and standing instructions; \`MEMORY.md\` (and \`memory/\`) is your long-term memory — read it at the start of a task when it may be relevant. Put files you produce (downloads, reports, exports) in \`workspace/\`. Files the human attaches are saved under \`workspace/uploads/\`.`);
+${workplace}`);
 
   out.push(`## Tools
 Godmode tools come from the \`godmode\` MCP server (vault logins and 2FA, missing-login reports, notifications${perms.allowDelegation || perms.canManageAgents ? ", other agents" : ""}).`);
@@ -113,7 +123,7 @@ Use \`notify_user({ title, body, level })\` for things ${human} should see even 
 
   const reflect = settings.memory.reflectAfterRun;
   out.push(`## Memory
-${reflect ? "At the end of every task" : "When you learn something durable"}, update \`MEMORY.md\` with learnings worth keeping: facts and preferences about ${human}, how specific websites and accounts work, recurring procedures, and open follow-ups. Keep it concise and organized (edit or remove stale entries instead of appending duplicates). Never store passwords, 2FA codes, tokens or other secrets in any file. Godmode commits your repository after each run.`);
+${reflect ? "At the end of every task" : "When you learn something durable"}, update \`${folder ? join(repo, "MEMORY.md") : "MEMORY.md"}\` with learnings worth keeping: facts and preferences about ${human}, how specific websites and accounts work, recurring procedures, and open follow-ups. Keep it concise and organized (edit or remove stale entries instead of appending duplicates). Never store passwords, 2FA codes, tokens or other secrets in any file. Godmode commits your repository after each run.`);
 
   out.push(`## Safety
 - Never make payments, purchases, transfers, cancellations or other irreversible or destructive changes (deleting data, closing accounts, sending messages on ${human}'s behalf to new people) unless ${human} explicitly asked for exactly that in this task. When in doubt, prepare everything and ask for confirmation in your final answer.
@@ -126,7 +136,7 @@ ${human} is talking to you by voice and your answer will be read aloud: reply in
   }
 
   out.push(`## Final answer
-End with a concise markdown summary: what you did, the results (numbers, findings, links, file paths in your repo), anything that failed or was skipped and why, and exactly what ${human} needs to do next (if anything). Don't narrate every step.`);
+End with a concise markdown summary: what you did, the results (numbers, findings, links, file paths), anything that failed or was skipped and why, and exactly what ${human} needs to do next (if anything). Don't narrate every step.`);
 
   const extra = settings.runner.appendSystemPrompt?.trim();
   if (extra) out.push(`## Additional instructions\n${extra}`);
@@ -134,7 +144,13 @@ End with a concise markdown summary: what you did, the results (numbers, finding
   return out.join("\n\n");
 }
 
-/** Prefix for resumed sessions (the session's system prompt may be a snapshot from an earlier turn). */
-export function resumeContextPrefix(now = new Date()): string {
-  return `<godmode-context>Current date/time: ${describeNow(now)}</godmode-context>\n\n`;
+/**
+ * Prefix for resumed sessions: the session's system prompt is a snapshot of its first turn, so the date and a
+ * working directory that changed since then are restated on every turn.
+ */
+export function resumeContextPrefix(folder: string | null, repoPath: string, now = new Date()): string {
+  const where = folder
+    ? `Working directory: \`${folder}\` (the folder attached to this chat). Your own repository with CLAUDE.md and MEMORY.md: \`${repoPath}\`.`
+    : `Working directory: your own repository \`${repoPath}\`.`;
+  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}</godmode-context>\n\n`;
 }

@@ -17,7 +17,7 @@ import type {
   Run,
   RunTrigger,
 } from "@godmode/shared";
-import type { ConversationWithMessages, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
+import type { ConversationPatch, ConversationWithMessages, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
 import { all, bool, get, insert, int, run as sql, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -26,6 +26,7 @@ import { redact } from "../vault/vault";
 import { getAgent, getDefaultAgentId } from "../agents/service";
 import { activeRunForConversation, cancelRun, listActiveRuns, startRun, waitForRun } from "../runner/runner";
 import { displayToolName } from "../runner/stream";
+import { normalizeWorkingDirectory } from "./folders";
 import { getSettings } from "./settings";
 
 const log = logger("chat");
@@ -43,6 +44,7 @@ interface ConversationRow {
   claude_session_id: string | null;
   model: string | null;
   effort: Effort | null;
+  working_directory: string | null;
   pinned: number;
   archived: number;
   last_message_at: string | null;
@@ -92,6 +94,7 @@ function toConversation(r: ConversationRow): Conversation {
     claudeSessionId: r.claude_session_id,
     model: r.model || null,
     effort: r.effort || null,
+    workingDirectory: r.working_directory,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
     lastMessageAt: r.last_message_at,
@@ -161,8 +164,11 @@ export interface ModelChoice {
   effort?: Effort | null;
 }
 
-export function createConversation(input: { agentId: string; title?: string; origin?: ConversationOrigin } & ModelChoice): Conversation {
+export function createConversation(
+  input: { agentId: string; title?: string; origin?: ConversationOrigin; workingDirectory?: string | null } & ModelChoice,
+): Conversation {
   getAgent(input.agentId); // 404 if the agent doesn't exist
+  const workingDirectory = normalizeWorkingDirectory(input.workingDirectory);
   const ts = now();
   const id = newId("cnv");
   const title = input.title?.trim() ? input.title.trim().slice(0, 200) : DEFAULT_CONVERSATION_TITLE;
@@ -174,6 +180,7 @@ export function createConversation(input: { agentId: string; title?: string; ori
     claude_session_id: null,
     model: input.model?.trim() || null,
     effort: input.effort ?? null,
+    working_directory: workingDirectory,
     pinned: 0,
     archived: 0,
     last_message_at: null,
@@ -215,10 +222,7 @@ export function listConversations(opts: { agentId?: string; search?: string; lim
   return rows.map(toConversation);
 }
 
-export function updateConversation(
-  id: string,
-  patch: { title?: string; pinned?: boolean; archived?: boolean } & ModelChoice,
-): Conversation {
+export function updateConversation(id: string, patch: ConversationPatch): Conversation {
   requireConversationRow(id);
   const title = patch.title === undefined ? undefined : patch.title.trim().slice(0, 200);
   if (title !== undefined && !title) throw badRequest("Title must not be empty");
@@ -228,6 +232,7 @@ export function updateConversation(
     archived: int(patch.archived),
     model: patch.model === undefined ? undefined : patch.model?.trim() || null,
     effort: patch.effort,
+    working_directory: patch.workingDirectory === undefined ? undefined : normalizeWorkingDirectory(patch.workingDirectory),
     updated_at: now(),
   });
   const conversation = getConversationSummary(id);
@@ -399,8 +404,9 @@ export async function sendMessage(
 
   const attachments = files.length ? saveAttachments(agent, files) : [];
   const message = addMessage({ conversationId, role: "user", content: redact(content), attachments });
+  // Absolute: the run's cwd is not the agent repo when the chat works in a folder.
   let prompt = content;
-  if (attachments.length) prompt += `${prompt ? "\n\n" : ""}Attached files: ${attachments.map((a) => a.path).join(", ")}`;
+  if (attachments.length) prompt += `${prompt ? "\n\n" : ""}Attached files: ${attachments.map((a) => join(agent.repoPath, a.path)).join(", ")}`;
 
   let started: Run;
   try {
@@ -435,6 +441,7 @@ export async function startChat(
     title?: string;
     attachments?: SendMessageInput["attachments"];
     voice?: boolean;
+    workingDirectory?: string | null;
   } & ModelChoice,
 ): Promise<StartChatResult> {
   const agentId = input.agentId || getDefaultAgentId();
@@ -444,7 +451,14 @@ export async function startChat(
   const title =
     input.title?.trim() ||
     (input.content?.trim() ? titleFromContent(input.content) : input.attachments?.[0]?.name ? titleFromContent(input.attachments[0].name) : DEFAULT_CONVERSATION_TITLE);
-  const conversation = createConversation({ agentId, title, origin: input.origin ?? "chat", model: input.model, effort: input.effort });
+  const conversation = createConversation({
+    agentId,
+    title,
+    origin: input.origin ?? "chat",
+    workingDirectory: input.workingDirectory,
+    model: input.model,
+    effort: input.effort,
+  });
   try {
     const result = await sendMessage(conversation.id, { content: input.content, attachments: input.attachments, voice: input.voice });
     return { ...result, conversation: getConversationSummary(conversation.id) };

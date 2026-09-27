@@ -346,6 +346,23 @@ describe("untrusted backup contents", () => {
     expect(get<{ enabled: number }>("SELECT enabled FROM mcp_servers WHERE id = 'mcp_http'")!.enabled).toBe(1);
     expect(warnings.some((w) => w.includes("evil-stdio"))).toBe(true);
   });
+
+  test("keeps usable working folders and clears missing or data-dir-overlapping ones", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "godmode-backup-folder-"));
+    const evil = tamper((dump) => {
+      const base = dump.tables.agents![0]!;
+      dump.tables.agents!.push({ ...base, id: "agt_folder_ok", name: "Folder OK", slug: "folder-ok", working_directory: folder });
+      dump.tables.agents!.push({ ...base, id: "agt_folder_root", name: "Folder Root", slug: "folder-root", working_directory: "/" });
+      dump.tables.agents!.push({ ...base, id: "agt_folder_gone", name: "Folder Gone", slug: "folder-gone", working_directory: join(folder, "gone") });
+    });
+    const result = await importBackup(evil, BACKUP_PASSPHRASE);
+    const dirOf = (id: string) => get<{ working_directory: string | null }>("SELECT working_directory FROM agents WHERE id = ?", id)!.working_directory;
+    expect(dirOf("agt_folder_ok")).toBe(folder);
+    expect(dirOf("agt_folder_root")).toBeNull();
+    expect(dirOf("agt_folder_gone")).toBeNull();
+    expect((result.warnings ?? []).some((w) => w.includes("Cleared 2 working folder(s)"))).toBe(true);
+    rmSync(folder, { recursive: true, force: true });
+  });
 });
 
 describe("routes", () => {

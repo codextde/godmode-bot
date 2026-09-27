@@ -141,6 +141,7 @@ describe("triggering", () => {
         claudeSessionId: null,
         model: null,
         effort: null,
+        workingDirectory: null,
         pinned: false,
         archived: false,
         lastMessageAt: null,

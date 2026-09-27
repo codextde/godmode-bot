@@ -15,6 +15,7 @@ import { registerIntegrationRoutes } from "./routes/integrations";
 import { registerBrowserRoutes } from "./routes/browser";
 import { registerBackupRoutes } from "./routes/backup";
 import { registerVoiceRoutes } from "./routes/voice";
+import { registerFolderRoutes } from "./routes/folders";
 import { registerMcpRoutes } from "../mcp/http";
 import { serveStatic } from "./static";
 
@@ -78,6 +79,7 @@ export function createApp() {
   registerBrowserRoutes(app);
   registerBackupRoutes(app);
   registerVoiceRoutes(app);
+  registerFolderRoutes(app);
 
   app.all("/api/*", (c) => c.json({ error: "Not found", code: "not_found" }, 404));
 

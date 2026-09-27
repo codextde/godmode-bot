@@ -9,6 +9,7 @@ import {
   CalendarClock,
   Cpu,
   Ellipsis,
+  FolderOpen,
   GitCommitHorizontal,
   Globe,
   LayoutGrid,
@@ -32,6 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useModelLabel } from "@/components/runs/run-status";
+import { folderName, useShortPath } from "@/components/chat/folder-picker";
 import {
   AgentStatus,
   DeleteAgentDialog,
@@ -124,6 +126,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
   const chat = useStartAgentChat();
   const toggle = useToggleAgent();
   const live = useAgentLiveRun(agent.id);
+  const shortPath = useShortPath();
   const [runTask, setRunTask] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -155,6 +158,11 @@ function AgentHeader({ agent }: { agent: Agent }) {
               {agent.browser.enabled && (
                 <span className="flex items-center gap-1">
                   <Globe className="size-3.5" /> Browser
+                </span>
+              )}
+              {agent.workingDirectory && (
+                <span className="flex min-w-0 items-center gap-1" title={shortPath(agent.workingDirectory)}>
+                  <FolderOpen className="size-3.5 shrink-0" /> <span className="truncate">{folderName(agent.workingDirectory)}</span>
                 </span>
               )}
             </div>

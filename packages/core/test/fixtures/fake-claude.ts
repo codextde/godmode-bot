@@ -99,7 +99,16 @@ const sessionId = resume ?? argValue("--session-id") ?? crypto.randomUUID();
 
 appendFileSync(
   join(stateDir, "invocations.jsonl"),
-  JSON.stringify({ args, prompt, cwd: process.cwd(), env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? null, GODMODE_TOKEN: process.env.GODMODE_TOKEN ?? null } }) + "\n",
+  JSON.stringify({
+    args,
+    prompt,
+    cwd: process.cwd(),
+    env: {
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? null,
+      GODMODE_TOKEN: process.env.GODMODE_TOKEN ?? null,
+      CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: process.env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD ?? null,
+    },
+  }) + "\n",
 );
 
 const out = (event: unknown) => process.stdout.write(JSON.stringify(event) + "\n");

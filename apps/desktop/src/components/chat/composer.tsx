@@ -452,7 +452,7 @@ export function Composer({
       />
 
       <div className="flex items-center gap-0.5 px-2 pb-2">
-        {leading && <div className="mr-1 flex items-center">{leading}</div>}
+        {leading && <div className="mr-1 flex min-w-0 items-center gap-1">{leading}</div>}
 
         <input
           ref={fileInputRef}

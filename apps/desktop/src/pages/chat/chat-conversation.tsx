@@ -12,6 +12,7 @@ import { BrowserFocus, BrowserPanel, BrowserToggle, useChatBrowser, type Browser
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
+import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { ChatDropZone, Thread } from "@/components/chat/thread";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -149,6 +150,19 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     },
   });
 
+  const setFolder = useMutation({
+    mutationFn: (workingDirectory: string | null) => api.conversations.update(conversationId, { workingDirectory }),
+    onSuccess: (updated) => {
+      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
+      qc.invalidateQueries({ queryKey: qk.recentFolders });
+      const folder = updated.workingDirectory ?? agent?.workingDirectory ?? null;
+      toast.success(folder ? `Working in ${folderName(folder)}` : "Folder removed", {
+        description: folder ? "The next messages run in this folder." : `${agent?.name ?? "The agent"} works in its own repository again.`,
+      });
+    },
+    onError: (err) => toast.error("Couldn't change the folder", { description: errorMessage(err) }),
+  });
+
   const cancel = useMutation({
     mutationFn: (runId: string) => api.runs.cancel(runId),
     onSuccess: () => toast("Stopping the agent…"),
@@ -240,6 +254,15 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               agentId={conv.agentId}
               autoFocus
               running={!!activeRunId}
+              leading={
+                <FolderChip
+                  chatFolder={conv.workingDirectory}
+                  agentFolder={agent?.workingDirectory ?? null}
+                  agentName={agent?.name}
+                  onChange={(path) => setFolder.mutate(path)}
+                  busy={setFolder.isPending}
+                />
+              }
               placeholder={agent ? `Message ${agent.name} — or type / for commands` : "Message…"}
               trailing={
                 <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(patch) => choose.mutate(patch)} />
