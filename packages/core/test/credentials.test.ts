@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Agent, AgentPermissions } from "@godmode/shared";
 import { bus } from "../src/events/bus";
 import { loadConfig } from "../src/config";
-import { closeDb, get, insert, openDb } from "../src/db";
+import { closeDb, get, insert, openDb, run } from "../src/db";
 import { resetSettingsCache } from "../src/services/settings";
 import { HttpError } from "../src/util";
 import {
@@ -133,10 +133,15 @@ describe("credential CRUD", () => {
   test("explicit domains are normalized and deduplicated", () => {
     const c = createCredential({ name: "Google", url: "https://accounts.google.com", domains: ["*.google.com", "https://www.Google.com/x", "youtube.com", " "] });
     expect(c.domains).toEqual(["google.com", "youtube.com"]);
+    expect(createCredential({ name: "Local", url: "localhost:3000/login" }).url).toBe("https://localhost:3000/login");
+    for (const url of ["javascript://alert(1)", "javascript:alert(1)", "file:///etc/passwd", "ftp://files.example.com", "http://exa mple.com"]) {
+      expect(httpStatus(() => createCredential({ name: "Bad", url }))).toBe(400);
+    }
     const noUrl = createCredential({ name: "Bare" });
     expect(noUrl).toMatchObject({ url: "", domains: [], hasPassword: false, username: "" });
     deleteCredential(c.id);
     deleteCredential(noUrl.id);
+    deleteCredential(listCredentials({ search: "Local" })[0]!.id);
   });
 
   test("validation", () => {
@@ -240,6 +245,20 @@ describe("TOTP link from the credential side", () => {
 
     deleteCredential(other.id);
     deleteCredential(wsCred.id);
+  });
+
+  test("a link left dangling by a workspace cascade is not reported", () => {
+    insert("workspaces", { id: "ws_gone", name: "Gone", slug: "gone", created_at: ts, updated_at: ts });
+    const t = createTotp({ issuer: "Cascade", accountName: "c", secret: "JBSWY3DPEHPK3PXP" });
+    const c = createCredential({ name: "Cascade", url: "https://cascade.example", workspaceId: "ws_gone", totpId: t.id });
+    expect(getTotp(t.id).credentialId).toBe(c.id);
+    run("DELETE FROM workspaces WHERE id = ?", "ws_gone"); // cascades to the credential only
+    expect(get("SELECT id FROM credentials WHERE id = ?", c.id)).toBeNull();
+    expect(getTotp(t.id).credentialId).toBeNull();
+    // The entry can be linked again normally.
+    const replacement = createCredential({ name: "Cascade 2", url: "https://cascade.example", totpId: t.id });
+    expect(getTotp(t.id).credentialId).toBe(replacement.id);
+    deleteCredential(replacement.id);
   });
 });
 

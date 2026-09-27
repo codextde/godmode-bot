@@ -6,7 +6,7 @@
  *    (a base64 protobuf, decoded with a tiny hand-written reader — no protobuf dependency).
  */
 import type { TotpAlgorithm } from "@godmode/shared";
-import { badRequest } from "../util";
+import { badRequest, truncate } from "../util";
 
 /* ------------------------------------------------------------------ */
 /* Base32 (RFC 4648)                                                    */
@@ -100,6 +100,12 @@ function safeDecode(s: string): string {
   } catch {
     return s;
   }
+}
+
+/** A form of an import input that is safe to echo back: `secret`/`data` values are masked, anything else is shortened. */
+export function redactOtpUri(uri: string): string {
+  if (/^otpauth(-migration)?:/i.test(uri)) return truncate(uri.replace(/([?&](?:secret|data)=)[^&#]*/gi, "$1•••"), 300);
+  return truncate(uri, 24);
 }
 
 /** Parse one URI. `otpauth://` yields one item, `otpauth-migration://` yields one item per exported account. Throws 400 when malformed. */

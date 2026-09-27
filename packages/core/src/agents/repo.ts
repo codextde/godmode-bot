@@ -71,7 +71,12 @@ export function commitAll(dir: string, message: string): Promise<string | null> 
 export async function commitAllInLock(dir: string, message: string): Promise<string | null> {
   await ensureGit(dir);
   const cache = {};
-  const matrix = await git.statusMatrix({ fs, dir, cache });
+  const indexSecond = await stat(join(dir, ".git", "index")).then(
+    (s) => Math.floor(s.mtimeMs / 1000),
+    () => null,
+  );
+  let matrix: StatusRow[] = await git.statusMatrix({ fs, dir, cache });
+  if (indexSecond !== null) matrix = await recheckRacyFiles(dir, matrix, indexSecond, cache);
   const toAdd: string[] = [];
   const toRemove: string[] = [];
   let changed = false;
@@ -86,6 +91,26 @@ export async function commitAllInLock(dir: string, message: string): Promise<str
   if (toAdd.length) await git.add({ fs, dir, filepath: toAdd, cache });
   if (!changed) return null;
   return git.commit({ fs, dir, message: message.trim() || "Update", author: GIT_AUTHOR, cache });
+}
+
+type StatusRow = [string, number, number, number];
+
+/**
+ * isomorphic-git trusts the index stat cache at one-second granularity and has no racy-git handling, so a file
+ * rewritten with the same size in the same second the index was written looks unchanged. Re-hash such
+ * "racily clean" files (mtime second >= index mtime second) and refresh their status rows.
+ */
+async function recheckRacyFiles(dir: string, matrix: StatusRow[], indexSecond: number, cache: object): Promise<StatusRow[]> {
+  const racy: string[] = [];
+  for (const [filepath, head, workdir, stage] of matrix) {
+    if (head !== 1 || workdir !== 1 || stage !== 1) continue;
+    const s = await lstat(join(dir, filepath)).catch(() => null);
+    if (s && Math.floor(s.mtimeMs / 1000) >= indexSecond) racy.push(filepath);
+  }
+  if (!racy.length) return matrix;
+  await git.add({ fs, dir, filepath: racy, cache });
+  const fresh = new Map((await git.statusMatrix({ fs, dir, filepaths: racy, cache })).map((row) => [row[0], row]));
+  return matrix.map((row) => fresh.get(row[0]) ?? row);
 }
 
 /** Most recent commits on HEAD (newest first). Empty for a repository without commits. */

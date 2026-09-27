@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api, errorMessage } from "@/lib/api";
 import { useAllAgents } from "@/lib/hooks";
@@ -132,7 +132,7 @@ export function AuditLog() {
         </div>
       ) : (
         <div className="max-h-[520px] overflow-auto">
-          <Table>
+          <table className="w-full caption-bottom text-sm">
             <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-8 pl-5" />
@@ -153,7 +153,7 @@ export function AuditLog() {
                 />
               ))}
             </TableBody>
-          </Table>
+          </table>
         </div>
       )}
     </SettingsGroup>

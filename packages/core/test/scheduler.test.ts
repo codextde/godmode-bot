@@ -82,6 +82,28 @@ describe("scheduling", () => {
     expect(scheduledRoutines()).toEqual([]);
     await repo.repoIdle(offAgent.repoPath);
   });
+
+  test("startup repairs routine statuses left behind by an interrupted process", () => {
+    const routine = createRoutine({ agentId: agent.id, name: "Interrupted", cron: "0 5 * * *", prompt: "x" });
+    const ts = now();
+    insert("runs", {
+      id: newId("run"),
+      agent_id: agent.id,
+      conversation_id: "cnv_gone",
+      routine_id: routine.id,
+      trigger: "routine",
+      status: "cancelled",
+      prompt: "x",
+      created_at: ts,
+    });
+    exec("UPDATE routines SET last_status = 'running' WHERE id = ?", routine.id);
+    const orphan = createRoutine({ agentId: agent.id, name: "Orphan", cron: "0 5 * * *", prompt: "x" });
+    exec("UPDATE routines SET last_status = 'queued' WHERE id = ?", orphan.id);
+
+    startScheduler();
+    expect(getRoutine(routine.id).lastStatus).toBe("cancelled");
+    expect(getRoutine(orphan.id).lastStatus).toBe("failed");
+  });
 });
 
 describe("triggering", () => {

@@ -4,7 +4,7 @@
  * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management.
  */
 import { z } from "zod";
-import type { Agent, MissingLoginKind } from "@godmode/shared";
+import type { Agent, MissingLoginKind, Run } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
 import { logger } from "../log";
@@ -429,10 +429,9 @@ const TOOLS: ToolDef[] = [
       timeoutSeconds: z.number().int().min(1).max(3600).optional(),
     }),
     when: canDelegate,
-    run: async ({ runId, wait, timeoutSeconds }, { agent }) => {
+    run: async ({ runId, wait, timeoutSeconds }, { agent, ctx }) => {
       let r = getRun(runId);
-      const parent = r.parentRunId ? getRun(r.parentRunId) : null;
-      if (!isManager(agent) && parent?.agentId !== agent.id) return fail("That run was not delegated by you.");
+      if (!isManager(agent) && !delegatedBy(r, agent, ctx)) return fail("That run was not delegated by you.");
       if (wait && !TERMINAL.has(r.status)) r = await waitForRun(runId, (timeoutSeconds ?? 300) * 1000);
       let name = r.agentId;
       try {
@@ -650,7 +649,18 @@ const TOOLS: ToolDef[] = [
 
 const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
 
-function delegationReport(agentName: string, r: import("@godmode/shared").Run): ToolOutput {
+/** The run was delegated by this agent (in this run or an earlier one). */
+function delegatedBy(r: Run, agent: Agent, ctx: RunContext): boolean {
+  if (!r.parentRunId) return false;
+  if (r.parentRunId === ctx.runId) return true;
+  try {
+    return getRun(r.parentRunId).agentId === agent.id;
+  } catch {
+    return false;
+  }
+}
+
+function delegationReport(agentName: string, r: Run): ToolOutput {
   const ids = `(run ${r.id}, conversation ${r.conversationId})`;
   if (r.status === "succeeded") return `${agentName} finished the task ${ids}:\n\n${r.result ?? "(no answer)"}`;
   if (r.status === "failed") return fail(`${agentName} failed ${ids}: ${r.error ?? "unknown error"}${r.result ? `\n\n${r.result}` : ""}`);

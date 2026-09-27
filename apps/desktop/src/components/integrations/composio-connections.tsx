@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
@@ -45,7 +45,7 @@ export function ConnectionStatusBadge({ status }: { status: string }) {
 interface Group {
   key: string;
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   items: ComposioConnection[];
 }
 

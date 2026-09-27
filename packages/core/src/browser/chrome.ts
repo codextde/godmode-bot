@@ -268,9 +268,12 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
     // Chrome logs a lot to stderr; drain it continuously (a full pipe would block the browser).
     void (async () => {
       try {
+        const reader = (proc.stderr as ReadableStream<Uint8Array>).getReader();
         const decoder = new TextDecoder();
-        for await (const chunk of proc.stderr as ReadableStream<Uint8Array>) {
-          tail = (tail + decoder.decode(chunk, { stream: true })).slice(-4000);
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          tail = (tail + decoder.decode(value, { stream: true })).slice(-4000);
         }
       } catch {
         /* stream closed */

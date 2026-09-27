@@ -109,7 +109,7 @@ export function McpServerDialog({
   const [form, setForm] = useState<FormState>(() => fromPreset(null, defaultScope));
   const [touched, setTouched] = useState(false);
   // Keep the last target so the closing animation doesn't flash an empty form; reset when a new target opens.
-  const [target, setTarget] = useState<McpDialogState>(state);
+  const [target, setTarget] = useState<McpDialogState>(null);
   if (state && state !== target) {
     setTarget(state);
     setTouched(false);

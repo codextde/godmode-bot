@@ -595,8 +595,13 @@ export async function importChromeSession(profileId: string, input: ChromeImport
   requireRow(profileId);
   const { cookies, skipped, source, method } = await importer.collectCookies(input);
   if (cookies.length === 0) {
+    const domains = (input.domains ?? []).filter((d) => d.trim());
     throw badRequest(
-      skipped > 0 ? `None of the ${skipped} cookies could be imported (expired, invalid or filtered out).` : "No cookies found to import.",
+      domains.length && skipped > 0
+        ? `No cookies match ${domains.join(", ")}.`
+        : skipped > 0
+          ? `None of the ${skipped} cookies could be imported (expired or invalid).`
+          : "No cookies found to import.",
     );
   }
 

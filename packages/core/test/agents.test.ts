@@ -394,6 +394,23 @@ describe("git helpers", () => {
     expect((await repo.log(dir)).map((c) => c.message)).toEqual(["second", "first"]);
   });
 
+  test("commitAll detects same-size rewrites within the same second (racy git)", async () => {
+    const dir = join(dataDir, "racy-repo");
+    await repo.initRepo(dir);
+    writeFileSync(join(dir, "state.json"), '{"cron":"0 8 * * *"}');
+    expect(await repo.commitAll(dir, "v0")).not.toBeNull();
+    const git = (await import("isomorphic-git")).default;
+    const fs = await import("node:fs");
+    for (let i = 1; i <= 5; i++) {
+      const content = `{"cron":"0 ${i} * * *"}`;
+      writeFileSync(join(dir, "state.json"), content);
+      expect(await repo.commitAll(dir, `v${i}`)).not.toBeNull();
+      const { blob } = await git.readBlob({ fs, dir, oid: await git.resolveRef({ fs, dir, ref: "HEAD" }), filepath: "state.json" });
+      expect(new TextDecoder().decode(blob)).toBe(content);
+    }
+    expect(await repo.commitAll(dir, "clean")).toBeNull();
+  });
+
   test("operations on the same repository are serialized", async () => {
     const dir = join(dataDir, "serial-repo");
     await repo.initRepo(dir);

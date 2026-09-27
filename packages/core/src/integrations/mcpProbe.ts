@@ -422,16 +422,22 @@ async function probeSse(target: ProbeTarget, signal: AbortSignal): Promise<strin
   const url = target.url ?? "";
   const streamHeaders = new Headers(target.headers ?? {});
   streamHeaders.set("accept", "text/event-stream");
-  const res = await fetchSameOrigin(url, { method: "GET", headers: streamHeaders, signal });
-  if (!res.ok) throw await httpFailure(res, "sse");
-  if (!(res.headers.get("content-type") ?? "").includes("text/event-stream") || !res.body) {
-    throw new ProbeError("The server did not open an event stream. Check the URL, or switch the transport to HTTP.");
-  }
-  const events = sseEvents(res.body);
+  // The event stream gets its own abort switch: a generator blocked in read() can only be released by aborting.
+  const stream = new AbortController();
+  const onAbort = () => stream.abort();
+  signal.addEventListener("abort", onAbort, { once: true });
+  let events: AsyncGenerator<SseEvent> | null = null;
   try {
+    const res = await fetchSameOrigin(url, { method: "GET", headers: streamHeaders, signal: stream.signal });
+    if (!res.ok) throw await httpFailure(res, "sse");
+    if (!(res.headers.get("content-type") ?? "").includes("text/event-stream") || !res.body) {
+      throw new ProbeError("The server did not open an event stream. Check the URL, or switch the transport to HTTP.");
+    }
+    events = sseEvents(res.body);
+    const ev = events;
     let endpoint: string | null = null;
     while (!endpoint) {
-      const next = await events.next();
+      const next = await ev.next();
       if (next.done) throw new ProbeError("The event stream closed before the server announced its message endpoint");
       if (next.value.event === "endpoint") endpoint = new URL(next.value.data.trim(), url).toString();
     }
@@ -443,7 +449,7 @@ async function probeSse(target: ProbeTarget, signal: AbortSignal): Promise<strin
     const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void; method: string }>();
     void (async () => {
       for (;;) {
-        const next = await events.next();
+        const next = await ev.next();
         if (next.done) break;
         if (next.value.event !== "message") continue;
         for (const msg of parseMessages(next.value.data)) {
@@ -482,7 +488,9 @@ async function probeSse(target: ProbeTarget, signal: AbortSignal): Promise<strin
     const { tools } = await handshake(request, notify);
     return tools;
   } finally {
-    await events.return(undefined).catch(() => undefined);
+    signal.removeEventListener("abort", onAbort);
+    stream.abort();
+    events?.return(undefined).catch(() => undefined);
   }
 }
 
@@ -490,9 +498,10 @@ async function probeSse(target: ProbeTarget, signal: AbortSignal): Promise<strin
 /* Entry points                                                         */
 /* ------------------------------------------------------------------ */
 
+/** Mask env/header values in error text (same minimum length as the vault's redaction). */
 function redactValues(text: string, secrets: string[]): string {
   let out = text;
-  for (const s of secrets) if (s && s.length >= 4) out = out.split(s).join("••••••••");
+  for (const s of secrets) if (s && s.length >= 6) out = out.split(s).join("••••••••");
   return out;
 }
 

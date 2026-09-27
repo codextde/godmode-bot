@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { getConnInfo } from "hono/bun";
 import { all } from "../../db";
 import * as vault from "../../vault/vault";
 import {
@@ -19,8 +20,16 @@ import { badRequest } from "../../util";
 const WELL_KNOWN_SECRETS = ["anthropic_api_key", "openai_api_key", "elevenlabs_api_key", "composio_api_key", "browser_use_api_key"];
 const SECRET_KEY = /^[a-z0-9_]{2,64}$/;
 
+/**
+ * Peer address of the connection, used to key passphrase rate limiting. Deliberately ignores X-Forwarded-For,
+ * which any client can set to get a fresh rate-limit bucket per request. In-process requests have no peer.
+ */
 function clientIp(c: Context): string {
-  return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "local";
+  try {
+    return getConnInfo(c).remote.address ?? "local";
+  } catch {
+    return "local";
+  }
 }
 
 /** `workspaceId` query param: "all" (default) | "global" | <workspace id>. */
@@ -121,6 +130,7 @@ export function registerVaultRoutes(app: Hono): void {
     rateLimitLogin(limitKey);
     const { current, next } = await body(c, z.object({ current: z.string().min(1).max(1024), next: z.string().min(8).max(1024) }));
     if (!vault.isInitialized()) throw badRequest("Vault not initialized");
+    const wasUnlocked = vault.isUnlocked();
     await vault.changePassphrase(current, next).catch((err: unknown) => {
       audit("user", "vault.passphrase_change_failed", null, { ip });
       throw err;
@@ -128,6 +138,8 @@ export function registerVaultRoutes(app: Hono): void {
     resetLoginAttempts(limitKey);
     // Refresh the device key so auto-unlock keeps working with the new passphrase.
     if (vault.status().rememberDevice) await vault.setRememberDevice(true);
+    // changePassphrase leaves the data key in memory; a vault that was locked stays locked.
+    if (!wasUnlocked) vault.lock();
     audit("user", "vault.passphrase_changed", null, { ip });
     return c.json({ ok: true as const });
   });

@@ -470,8 +470,10 @@ describe("TOTP service", () => {
       "Not an otpauth:// or otpauth-migration:// URI",
       "HOTP counters are not supported",
     ]);
-    expect(result.skipped[0]).toMatchObject({ label: "ACME:john@acme.io", uri: expect.stringContaining("otpauth://totp/ACME") });
-    expect(result.skipped[3]).toMatchObject({ label: "Nobody:none", uri: expect.stringContaining("otpauth-migration://") });
+    expect(result.skipped[0]).toMatchObject({ label: "ACME:john@acme.io", uri: "otpauth://totp/ACME:john@acme.io?secret=•••&issuer=ACME" });
+    expect(result.skipped[3]).toMatchObject({ label: "Nobody:none", uri: "otpauth-migration://offline?data=•••" });
+    // Secrets are never echoed back.
+    expect(JSON.stringify(result.skipped)).not.toContain("JBSWY3DPEHPK3PXP");
 
     // Auto-link: ACME via domain label + username; GitLab "two" via username among two candidates;
     // GitLab "three" has no username match and more than one candidate left → not linked.
@@ -525,6 +527,33 @@ describe("TOTP service", () => {
     expect(httpStatus(() => codeForAgent(agentA, inB.id))).toBe(403);
     expect(httpStatus(() => codeForAgent(restricted, global.id))).toBe(403);
     expect(httpStatus(() => codeForAgent(agentA, "totp_missing"))).toBe(404);
+  });
+
+  test("agent access: credentialIds restricts TOTP when totpIds is null", () => {
+    const allowedCred = createCredential({ name: "Allowed", url: "https://allowed.example", workspaceId: "ws_a" });
+    const otherCred = createCredential({ name: "Other", url: "https://other.example", workspaceId: "ws_a" });
+    const linkedAllowed = createTotp({ issuer: "Allowed", accountName: "x", secret: "JBSWY3DPEHPK3PXP", workspaceId: "ws_a", credentialId: allowedCred.id });
+    const linkedGlobal = createTotp({ issuer: "AllowedGlobal", accountName: "y", secret: "GEZDGNBVGY3TQOJQ" });
+    updateTotp(linkedGlobal.id, { credentialId: allowedCred.id }); // re-link: now the allowed credential's entry
+    updateTotp(linkedAllowed.id, { credentialId: otherCred.id });
+    const unlinked = createTotp({ issuer: "Unlinked", accountName: "z", secret: "GEZDGNBVGY3TQOJQ", workspaceId: "ws_a" });
+
+    // totpIds null + credentialIds set → only entries linked to an allowed credential.
+    const byCredential = makeAgent("ws_a", { credentialIds: [allowedCred.id], totpIds: null });
+    expect(totpForAgent(byCredential).map((e) => e.id)).toEqual([linkedGlobal.id]);
+    expect(codeForAgent(byCredential, linkedGlobal.id).id).toBe(linkedGlobal.id);
+    expect(httpStatus(() => codeForAgent(byCredential, linkedAllowed.id))).toBe(403); // linked to a non-allowed credential
+    expect(httpStatus(() => codeForAgent(byCredential, unlinked.id))).toBe(403);
+    expect(totpForAgent(makeAgent("ws_a", { credentialIds: [], totpIds: null }))).toEqual([]);
+
+    // totpIds set → exactly those, regardless of credentialIds.
+    const explicit = makeAgent("ws_a", { credentialIds: [allowedCred.id], totpIds: [unlinked.id] });
+    expect(totpForAgent(explicit).map((e) => e.id)).toEqual([unlinked.id]);
+    expect(httpStatus(() => codeForAgent(explicit, linkedGlobal.id))).toBe(403);
+
+    // Both null → everything in scope.
+    const open = totpForAgent(makeAgent("ws_a")).map((e) => e.id);
+    expect(open).toEqual(expect.arrayContaining([linkedAllowed.id, linkedGlobal.id, unlinked.id]));
   });
 
   test("locked vault → 423 for secrets, metadata still listable", async () => {

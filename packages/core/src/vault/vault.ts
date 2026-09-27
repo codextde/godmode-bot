@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync, chmodSync } from "
 import { join } from "node:path";
 import type { VaultStatus } from "@godmode/shared";
 import { config } from "../config";
-import { getMeta, setMeta, deleteMeta, get, run, all } from "../db";
+import { getMeta, setMeta, deleteMeta, get, run, all, tx } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, locked, now } from "../util";
@@ -121,9 +121,14 @@ export async function changePassphrase(current: string, next: string) {
     throw badRequest("Current passphrase is wrong");
   }
   const newKdf = newKdfParams();
-  setMeta("vault.kdf", JSON.stringify(newKdf));
-  setMeta("vault.wrapped_dek", encrypt(deriveKey(next, newKdf), unwrapped.toString("base64"), "vault.dek"));
-  dek = unwrapped;
+  const wrapped = encrypt(deriveKey(next, newKdf), unwrapped.toString("base64"), "vault.dek");
+  // Both values must change together — a crash in between would make the vault unrecoverable.
+  tx(() => {
+    setMeta("vault.kdf", JSON.stringify(newKdf));
+    setMeta("vault.wrapped_dek", wrapped);
+  });
+  // Never implicitly unlock a locked vault; only refresh the in-memory key if it was already unlocked.
+  if (!dek) unwrapped.fill(0);
 }
 
 /** Store (or forget) the DEK in the OS keychain so the vault unlocks automatically on this device. */
@@ -292,6 +297,13 @@ function loadKnownSecrets() {
         } catch {
           /* ignore */
         }
+      }
+    }
+    for (const row of all<{ id: string; secret_enc: string }>("SELECT id, secret_enc FROM totp")) {
+      try {
+        rememberSecret(decrypt(dek, row.secret_enc, `totp.secret:${row.id}`));
+      } catch {
+        /* ignore */
       }
     }
     for (const row of all<{ key: string; value_enc: string }>("SELECT key, value_enc FROM secrets")) {

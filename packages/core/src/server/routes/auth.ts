@@ -6,6 +6,7 @@ import { audit } from "../../services/audit";
 import { updateSettings } from "../../services/settings";
 import {
   authenticate,
+  clientIp,
   checkDashboardPassword,
   createSession,
   destroySession,
@@ -18,10 +19,6 @@ import {
 } from "../auth";
 import { body, z } from "../validate";
 import { HttpError } from "../../util";
-
-function clientIp(c: { req: { header: (n: string) => string | undefined } }): string {
-  return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || c.req.header("x-real-ip") || "local";
-}
 
 export function registerAuthRoutes(app: Hono) {
   app.get("/api/auth/status", (c) => {

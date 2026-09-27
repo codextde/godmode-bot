@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
@@ -76,7 +77,7 @@ export default function IntegrationsPage() {
   );
 }
 
-function FadeIn({ children }: { children: React.ReactNode }) {
+function FadeIn({ children }: { children: ReactNode }) {
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
       {children}
@@ -84,7 +85,7 @@ function FadeIn({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TabTrigger({ value, icon, label, count }: { value: Tab; icon: React.ReactNode; label: string; count: number | undefined }) {
+function TabTrigger({ value, icon, label, count }: { value: Tab; icon: ReactNode; label: string; count: number | undefined }) {
   return (
     <TabsTrigger value={value} className="gap-2 rounded-lg px-3.5">
       {icon}

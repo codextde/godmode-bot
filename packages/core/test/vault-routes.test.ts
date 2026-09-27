@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import type { Credential, TotpCode, TotpEntry, TotpImportResult, VaultStatus } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, insert, openDb } from "../src/db";
-import { getAccessToken, hasDashboardPassword, hostGuard, requireAuth } from "../src/server/auth";
+import { getAccessToken, hasDashboardPassword, hostGuard, requireAuth, resetLoginAttempts } from "../src/server/auth";
 import { registerVaultRoutes } from "../src/server/routes/vault";
 import { HttpError } from "../src/util";
 import { listAudit } from "../src/services/audit";
@@ -135,6 +135,16 @@ describe("vault routes", () => {
     await call("POST", "/api/vault/lock", {});
     expect((await call("POST", "/api/vault/unlock", { passphrase: "long enough passphrase" })).status).toBe(400);
     expect((await call("POST", "/api/vault/unlock", { passphrase: "brand new passphrase" })).status).toBe(200);
+  }, SLOW);
+
+  test("changing the passphrase keeps a locked vault locked", async () => {
+    await call("POST", "/api/vault/lock", {});
+    const ok = await call("POST", "/api/vault/passphrase", { current: "brand new passphrase", next: "third passphrase!" });
+    expect(ok.status).toBe(200);
+    expect((await call<VaultStatus>("GET", "/api/vault/status")).data.unlocked).toBe(false);
+    expect((await call("POST", "/api/vault/unlock", { passphrase: "third passphrase!" })).status).toBe(200);
+    expect((await call("POST", "/api/vault/passphrase", { current: "third passphrase!", next: "brand new passphrase" })).status).toBe(200);
+    expect((await call<VaultStatus>("GET", "/api/vault/status")).data.unlocked).toBe(true);
   }, SLOW);
 
   test("remember device (off)", async () => {
@@ -328,4 +338,20 @@ describe("totp routes", () => {
     expect(res.data.skipped.map((s) => s.reason)).toEqual(["already exists", "HOTP counters are not supported"]);
     expect(listAudit(10, "totp.import")[0]!.details).toMatchObject({ imported: 1, skipped: 2, workspaceId: "ws_a" });
   });
+});
+
+describe("passphrase rate limiting", () => {
+  test("too many unlock attempts → 429, spoofed X-Forwarded-For does not help", async () => {
+    try {
+      for (let i = 0; i < 10; i++) expect((await call("POST", "/api/vault/unlock", { passphrase: `wrong ${i}` })).status).toBe(400);
+      const res = await app.request("/api/vault/unlock", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "x-forwarded-for": "203.0.113.7" },
+        body: JSON.stringify({ passphrase: "brand new passphrase" }),
+      });
+      expect(res.status).toBe(429);
+    } finally {
+      resetLoginAttempts("vault:local");
+    }
+  }, SLOW);
 });

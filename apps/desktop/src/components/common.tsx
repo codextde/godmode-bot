@@ -152,12 +152,14 @@ export function Kbd({ children }: { children: ReactNode }) {
 
 /** Section card with title — used across settings/detail pages. */
 export function Section({
+  id,
   title,
   description,
   children,
   actions,
   className,
 }: {
+  id?: string;
   title: ReactNode;
   description?: ReactNode;
   children: ReactNode;
@@ -165,7 +167,7 @@ export function Section({
   className?: string;
 }) {
   return (
-    <section className={cn("rounded-2xl border bg-card/60 p-5 backdrop-blur-sm", className)}>
+    <section id={id} className={cn("scroll-mt-6 rounded-2xl border bg-card/60 p-5 backdrop-blur-sm", className)}>
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-sm font-semibold">{title}</h2>

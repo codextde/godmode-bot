@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { InlineCode } from "@/components/onboarding/doctor-checklist";
 import { cn } from "@/lib/utils";
 import {
   Callout,
@@ -203,7 +204,7 @@ export function AiSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup title="Claude Code CLI" icon={<TerminalSquare />}>
-        <SettingRow label="CLI path" htmlFor="claude-path" description="Leave empty to auto-detect the `claude` binary on your PATH.">
+        <SettingRow label="CLI path" htmlFor="claude-path" description={<InlineCode text="Leave empty to auto-detect the `claude` binary on your PATH." />}>
           <CommitInput
             id="claude-path"
             className="w-72 font-mono text-[13px]"
@@ -215,7 +216,7 @@ export function AiSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup title="Advanced" icon={<SlidersHorizontal />} description="For power users — mistakes here can break every run.">
-        <SettingRow stacked label="Extra CLI arguments" htmlFor="extra-args" description="One argument per line, appended to every `claude` invocation.">
+        <SettingRow stacked label="Extra CLI arguments" htmlFor="extra-args" description={<InlineCode text="One argument per line, appended to every `claude` invocation." />}>
           <LinesTextarea
             id="extra-args"
             placeholder={"--verbose\n--add-dir\n/Users/me/projects"}

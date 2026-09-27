@@ -221,11 +221,14 @@ const jobs = new Map<string, Job>();
 const queue: string[] = [];
 const missingLoginReported = new Set<string>();
 let shuttingDown = false;
-let claudeCommandOverride: string[] | null = null;
+let claudeCommandOverride: string[] | false | null = null;
 
-/** Tests: run this command (prefix) instead of the resolved claude binary. `null` restores resolution. */
-export function __setClaudeBinaryForTests(command: string | string[] | null) {
-  claudeCommandOverride = command === null ? null : Array.isArray(command) ? command : [command];
+/**
+ * Tests: run this command (prefix) instead of the resolved claude binary; `false` simulates a missing
+ * CLI; `null` restores normal resolution.
+ */
+export function __setClaudeBinaryForTests(command: string | string[] | false | null) {
+  claudeCommandOverride = command === null || command === false ? command : Array.isArray(command) ? command : [command];
 }
 
 /** Called by the MCP gateway when the agent reported a missing login itself (disables the heuristic). */
@@ -479,6 +482,7 @@ interface Resources {
 }
 
 function resolveClaudeCommand(): string[] | null {
+  if (claudeCommandOverride === false) return null;
   if (claudeCommandOverride) return claudeCommandOverride;
   let bin: string | null;
   try {
@@ -895,11 +899,9 @@ async function execute(job: Job): Promise<void> {
     if (res.timer) clearTimeout(res.timer);
     if (res.token) revokeRunToken(res.token);
     for (const f of res.files) removeMcpConfigFile(f);
-    if (job.deltaTimer) {
-      clearTimeout(job.deltaTimer);
-      job.deltaTimer = null;
-    }
   }
+  // Always push the final streamed state (a throttled delta may still be pending).
+  if (job.status === "running") safely("emit final delta", () => emitDelta(job));
   if (job.cancelReason && outcome.status !== "cancelled") outcome = { status: "cancelled", error: job.cancelReason };
   await finalize(job, outcome, agent, startedMs);
 }

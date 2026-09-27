@@ -19,7 +19,7 @@ import {
   scopeCondition,
   unlinkTotp,
 } from "./credentials";
-import { base32Decode, normalizeBase32Secret, parseOtpUri, type ParsedOtpAccount, type ParsedOtpItem } from "./otpauth";
+import { base32Decode, normalizeBase32Secret, parseOtpUri, redactOtpUri, type ParsedOtpAccount, type ParsedOtpItem } from "./otpauth";
 
 const log = logger("totp");
 
@@ -33,11 +33,19 @@ interface TotpRow {
   digits: number;
   period: number;
   credential_id: string | null;
+  /** credential_id, or null when it points at a credential that no longer exists (see ROW_SELECT) */
+  linked_credential_id: string | null;
   icon: string | null;
   last_used_at: string | null;
   created_at: string;
   updated_at: string;
 }
+
+/**
+ * Columns to read. The link is resolved against the credentials table so a reference left dangling by an
+ * out-of-band delete (e.g. a workspace cascade removing the linked login) never surfaces as a link.
+ */
+const ROW_SELECT = "*, (SELECT c.id FROM credentials c WHERE c.id = totp.credential_id) AS linked_credential_id";
 
 const secretContext = (id: string) => `totp.secret:${id}`;
 
@@ -94,7 +102,7 @@ function toModel(r: TotpRow): TotpEntry {
     algorithm: r.algorithm,
     digits: r.digits,
     period: r.period,
-    credentialId: r.credential_id,
+    credentialId: r.linked_credential_id,
     icon: r.icon,
     lastUsedAt: r.last_used_at,
     createdAt: r.created_at,
@@ -103,15 +111,22 @@ function toModel(r: TotpRow): TotpEntry {
 }
 
 function getRow(id: string): TotpRow {
-  const row = get<TotpRow>("SELECT * FROM totp WHERE id = ?", id);
+  const row = get<TotpRow>(`SELECT ${ROW_SELECT} FROM totp WHERE id = ?`, id);
   if (!row) throw notFound("TOTP entry");
   return row;
 }
 
+/**
+ * totpIds set → exactly those entries. totpIds null but credentialIds set → only entries linked to an allowed
+ * credential. Both null → everything in scope.
+ */
 function agentMayUse(agent: Agent, r: TotpRow): boolean {
   if (!inAgentScope(agent, r.workspace_id)) return false;
-  const allowed = agent.permissions?.totpIds ?? null;
-  return allowed === null || allowed.includes(r.id);
+  const totpIds = agent.permissions?.totpIds ?? null;
+  if (totpIds !== null) return totpIds.includes(r.id);
+  const credentialIds = agent.permissions?.credentialIds ?? null;
+  if (credentialIds !== null) return r.linked_credential_id !== null && credentialIds.includes(r.linked_credential_id);
+  return true;
 }
 
 function requireLabel(issuer: string, accountName: string): void {
@@ -147,7 +162,7 @@ function codeFor(r: TotpRow, time: number): TotpCode {
 
 export function listTotp(opts: { workspaceId?: string | null | "all"; search?: string } = {}): TotpEntry[] {
   const scope = scopeCondition(opts.workspaceId);
-  return all<TotpRow>(`SELECT * FROM totp WHERE ${scope.sql} ORDER BY issuer COLLATE NOCASE, account_name COLLATE NOCASE`, ...scope.params)
+  return all<TotpRow>(`SELECT ${ROW_SELECT} FROM totp WHERE ${scope.sql} ORDER BY issuer COLLATE NOCASE, account_name COLLATE NOCASE`, ...scope.params)
     .filter((r) => matchesSearch(opts.search, [r.issuer, r.account_name]))
     .map(toModel);
 }
@@ -242,7 +257,7 @@ export function currentCodes(ids?: string[]): TotpCode[] {
   const wanted = ids ? new Set(ids) : null;
   const time = Date.now() / 1000;
   const out: TotpCode[] = [];
-  for (const row of all<TotpRow>("SELECT * FROM totp ORDER BY issuer COLLATE NOCASE, account_name COLLATE NOCASE")) {
+  for (const row of all<TotpRow>(`SELECT ${ROW_SELECT} FROM totp ORDER BY issuer COLLATE NOCASE, account_name COLLATE NOCASE`)) {
     if (wanted && !wanted.has(row.id)) continue;
     try {
       out.push(codeFor(row, time));
@@ -268,7 +283,7 @@ const exactScope = (workspaceId: string | null) =>
 function existingKeys(workspaceId: string | null): Set<string> {
   const scope = exactScope(workspaceId);
   const keys = new Set<string>();
-  for (const r of all<TotpRow>(`SELECT * FROM totp WHERE ${scope.sql}`, ...scope.params)) {
+  for (const r of all<TotpRow>(`SELECT ${ROW_SELECT} FROM totp WHERE ${scope.sql}`, ...scope.params)) {
     try {
       keys.add(dedupeKey(r.issuer, r.account_name, vault.open(r.secret_enc, secretContext(r.id))));
     } catch (err) {
@@ -308,7 +323,8 @@ function credentialForImport(workspaceId: string | null, account: ParsedOtpAccou
   if (!account.issuer) return null;
   const scope = exactScope(workspaceId);
   const candidates = all<{ id: string; name: string; url: string; domains: string; username: string; totp_id: string | null }>(
-    `SELECT id, name, url, domains, username, totp_id FROM credentials WHERE ${scope.sql} ORDER BY created_at`,
+    `SELECT id, name, url, domains, username, (SELECT t.id FROM totp t WHERE t.id = credentials.totp_id) AS totp_id
+     FROM credentials WHERE ${scope.sql} ORDER BY created_at`,
     ...scope.params,
   ).filter((c) => issuerMatchesCredential(account.issuer, c));
   const accountName = account.accountName.trim().toLowerCase();
@@ -332,10 +348,12 @@ export function importTotpUris(input: TotpImportInput): TotpImportResult {
 
   tx(() => {
     const seen = existingKeys(workspaceId);
-    for (const uri of uris) {
+    for (const raw of uris) {
+      // Echo inputs back without their secrets.
+      const uri = redactOtpUri(raw);
       let items: ParsedOtpItem[];
       try {
-        items = parseOtpUri(uri);
+        items = parseOtpUri(raw);
       } catch (err) {
         skipped.push({ uri, reason: err instanceof HttpError ? err.message : "Could not parse URI" });
         continue;
@@ -379,12 +397,16 @@ export function importTotpUris(input: TotpImportInput): TotpImportResult {
 /** TOTP entries an agent may use (global + its workspace, filtered by permissions.totpIds). */
 export function totpForAgent(agent: Agent): TotpEntry[] {
   const scope = agentScopeCondition(agent);
-  return all<TotpRow>(`SELECT * FROM totp WHERE ${scope.sql} ORDER BY issuer COLLATE NOCASE, account_name COLLATE NOCASE`, ...scope.params)
+  return all<TotpRow>(`SELECT ${ROW_SELECT} FROM totp WHERE ${scope.sql} ORDER BY issuer COLLATE NOCASE, account_name COLLATE NOCASE`, ...scope.params)
     .filter((r) => agentMayUse(agent, r))
     .map(toModel);
 }
 
-/** Current code for an entry the agent may use (throws 403 otherwise). Updates lastUsedAt. Caller audits. */
+/**
+ * Current code for an entry the agent may use (throws 403 otherwise). Updates lastUsedAt. Caller audits, and
+ * only returns the code to the model when agent.permissions.secretAccess === "reveal" (otherwise it is typed
+ * into the page by Godmode).
+ */
 export function codeForAgent(agent: Agent, totpId: string): TotpCode {
   const row = getRow(totpId);
   if (!agentMayUse(agent, row)) throw forbidden("This 2FA entry is not available to this agent");

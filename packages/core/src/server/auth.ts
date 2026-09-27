@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 import type { Context, MiddlewareHandler } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
+import { getConnInfo } from "hono/bun";
 import { config, isLoopbackHost } from "../config";
 import { get, getMeta, insert, run, setMeta } from "../db";
 import { getSettings } from "../services/settings";
@@ -162,13 +163,26 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
   await next();
 };
 
+/** Client address from the TCP connection (not spoofable headers). */
+export function clientIp(c: Context): string {
+  try {
+    return getConnInfo(c).remote.address || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 /* Simple in-memory login rate limiter */
 const attempts = new Map<string, { count: number; first: number }>();
+const RATE_WINDOW_MS = 15 * 60_000;
 
 export function rateLimitLogin(ip: string): void {
-  const windowMs = 15 * 60_000;
+  const windowMs = RATE_WINDOW_MS;
   const entry = attempts.get(ip);
   const t = Date.now();
+  if (attempts.size > 1000) {
+    for (const [key, value] of attempts) if (t - value.first > windowMs) attempts.delete(key);
+  }
   if (!entry || t - entry.first > windowMs) {
     attempts.set(ip, { count: 1, first: t });
     return;

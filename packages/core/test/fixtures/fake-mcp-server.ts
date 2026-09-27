@@ -7,6 +7,8 @@
  *                     "hang" → never answer
  *                     "init-error" → answer initialize with a JSON-RPC error
  */
+export {};
+
 const prefix = process.env.FAKE_TOOL_PREFIX ?? "tool";
 const mode = process.env.FAKE_MODE ?? "";
 

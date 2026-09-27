@@ -199,10 +199,21 @@ export function reloadSchedules(): void {
   }
 }
 
+/** Routines left "queued"/"running" by a previous process take the status of their latest run (or failed). */
+function repairStaleStatuses() {
+  exec(
+    `UPDATE routines SET last_status = COALESCE(
+       (SELECT status FROM runs WHERE runs.routine_id = routines.id ORDER BY created_at DESC LIMIT 1), 'failed')
+     WHERE last_status IN ('queued', 'running')
+       AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.routine_id = routines.id AND runs.status IN ('queued', 'running'))`,
+  );
+}
+
 export function startScheduler(): void {
   if (started) return;
   started = true;
   ensureListener();
+  repairStaleStatuses();
   reloadSchedules();
   log.info(`scheduler started with ${jobs.size} routine(s)`);
 }

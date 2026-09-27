@@ -310,9 +310,7 @@ export async function updateMcpServer(id: string, patch: Partial<McpServerInput>
     secretChanges.headerKeys = Object.keys(headers);
   }
 
-  // `update` skips undefined but must be able to set NULL (cleared secrets / scope).
-  const sets = Object.keys(changes).filter((k) => changes[k] !== undefined);
-  run(`UPDATE mcp_servers SET ${sets.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`, ...sets.map((k) => changes[k] as string | number | null), id);
+  update("mcp_servers", id, changes);
 
   audit(actor, "mcp_server.update", id, { name: (changes.name as string | undefined) ?? current.name, ...secretChanges });
   bus.changed("mcp-servers");
@@ -324,13 +322,6 @@ export function deleteMcpServer(id: string, actor = "user"): void {
   run("DELETE FROM mcp_servers WHERE id = ?", id);
   audit(actor, "mcp_server.delete", id, { name: row.name });
   bus.changed("mcp-servers");
-}
-
-export function setMcpServerEnabled(id: string, enabled: boolean): McpServer {
-  getRow(id);
-  update("mcp_servers", id, { enabled: enabled ? 1 : 0, updated_at: now() });
-  bus.changed("mcp-servers");
-  return getMcpServer(id);
 }
 
 /* ------------------------------------------------------------------ */

@@ -79,8 +79,11 @@ export async function runCommand(
     let out = "";
     const decoder = new TextDecoder();
     try {
-      for await (const chunk of stream) {
-        out += decoder.decode(chunk, { stream: true });
+      const reader = stream.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        out += decoder.decode(value, { stream: true });
         if (out.length > maxOutput * 2) out = out.slice(-maxOutput);
       }
     } catch {

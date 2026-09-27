@@ -100,6 +100,23 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
     return () => window.removeEventListener("paste", onPaste);
   }, [result, tab, images.addFiles]);
 
+  // Files dropped anywhere on the dialog (outside the drop zone) must not navigate the webview.
+  useEffect(() => {
+    if (result) return;
+    const onDragOver = (e: DragEvent) => e.preventDefault();
+    const onDrop = (e: DragEvent) => {
+      if (e.defaultPrevented) return;
+      e.preventDefault();
+      if (e.dataTransfer?.files?.length && images.addFiles(e.dataTransfer.files) > 0) setTab("images");
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [result, images.addFiles]);
+
   const doImport = useMutation({
     mutationFn: () => api.totp.import({ workspaceId, uris }),
     onSuccess: (res) => {

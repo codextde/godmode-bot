@@ -22,11 +22,19 @@ interface CredentialRow {
   password_enc: string | null;
   notes_enc: string | null;
   totp_id: string | null;
+  /** totp_id, or null when it points at a TOTP entry that no longer exists (see ROW_SELECT) */
+  linked_totp_id: string | null;
   tags: string;
   last_used_at: string | null;
   created_at: string;
   updated_at: string;
 }
+
+/**
+ * Columns to read. The link is resolved against the totp table so a reference left dangling by an
+ * out-of-band delete (e.g. a workspace cascade) never surfaces as a link.
+ */
+const ROW_SELECT = "*, (SELECT t.id FROM totp t WHERE t.id = credentials.totp_id) AS linked_totp_id";
 
 const passwordContext = (id: string) => `credentials.password:${id}`;
 const notesContext = (id: string) => `credentials.notes:${id}`;
@@ -135,10 +143,19 @@ export function dropIncompatibleLinks(opts: { credentialId?: string; totpId?: st
 /* Normalization                                                        */
 /* ------------------------------------------------------------------ */
 
+/** Login URLs are opened by the UI and the browser agent, so only http(s) is accepted. */
 function normalizeUrl(url: string | undefined): string {
   const u = (url ?? "").trim();
   if (!u) return "";
-  return u.includes("://") ? u : `https://${u}`;
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(u) ? u : `https://${u}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(withScheme);
+  } catch {
+    throw badRequest("Login URL is not a valid URL");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw badRequest("Login URL must be an http:// or https:// address");
+  return withScheme;
 }
 
 function normalizeDomains(domains: string[] | undefined, url: string): string[] {
@@ -185,7 +202,7 @@ function toModel(r: CredentialRow, reveal = false): Credential {
     domains: parseJson<string[]>(r.domains, []),
     username: r.username,
     hasPassword: !!r.password_enc,
-    totpId: r.totp_id,
+    totpId: r.linked_totp_id,
     tags: parseJson<string[]>(r.tags, []),
     lastUsedAt: r.last_used_at,
     createdAt: r.created_at,
@@ -201,7 +218,7 @@ function toModel(r: CredentialRow, reveal = false): Credential {
 }
 
 function getRow(id: string): CredentialRow {
-  const row = get<CredentialRow>("SELECT * FROM credentials WHERE id = ?", id);
+  const row = get<CredentialRow>(`SELECT ${ROW_SELECT} FROM credentials WHERE id = ?`, id);
   if (!row) throw notFound("Credential");
   return row;
 }
@@ -219,7 +236,7 @@ function agentMayUse(agent: Agent, r: CredentialRow): boolean {
 /** List credentials. workspaceId: undefined/"all" = everything, null = global only, id = that workspace only. Never includes secrets. */
 export function listCredentials(opts: { workspaceId?: string | null | "all"; search?: string } = {}): Credential[] {
   const scope = scopeCondition(opts.workspaceId);
-  return all<CredentialRow>(`SELECT * FROM credentials WHERE ${scope.sql} ORDER BY name COLLATE NOCASE, created_at`, ...scope.params)
+  return all<CredentialRow>(`SELECT ${ROW_SELECT} FROM credentials WHERE ${scope.sql} ORDER BY name COLLATE NOCASE, created_at`, ...scope.params)
     .filter((r) => matchesSearch(opts.search, searchFields(r)))
     .map((r) => toModel(r));
 }
@@ -321,7 +338,7 @@ export function deleteCredential(id: string): void {
 /** Credentials an agent may use: global + agent's workspace, filtered by agent.permissions.credentialIds. No secrets. */
 export function credentialsForAgent(agent: Agent): Credential[] {
   const scope = agentScopeCondition(agent);
-  return all<CredentialRow>(`SELECT * FROM credentials WHERE ${scope.sql} ORDER BY name COLLATE NOCASE, created_at`, ...scope.params)
+  return all<CredentialRow>(`SELECT ${ROW_SELECT} FROM credentials WHERE ${scope.sql} ORDER BY name COLLATE NOCASE, created_at`, ...scope.params)
     .filter((r) => agentMayUse(agent, r))
     .map((r) => toModel(r));
 }
@@ -345,7 +362,11 @@ export function findCredentialsForAgent(agent: Agent, urlOrDomain: string): Cred
     .map((r) => r.credential);
 }
 
-/** Decrypt username/password for a credential the agent may use. Throws 403 if not in agent scope. */
+/**
+ * Decrypt username/password for a credential the agent may use. Throws 403 if not in agent scope.
+ * The plaintext is for Godmode itself (typing into the page); the caller must only hand it to the model
+ * when agent.permissions.secretAccess === "reveal", and must audit the access.
+ */
 export function revealForAgent(agent: Agent, credentialId: string): { username: string; password: string | null; url: string; totpId: string | null } {
   const row = getRow(credentialId);
   if (!agentMayUse(agent, row)) throw forbidden("This login is not available to this agent");
@@ -354,7 +375,7 @@ export function revealForAgent(agent: Agent, credentialId: string): { username: 
     username: row.username,
     password: vault.openOptional(row.password_enc, passwordContext(row.id)),
     url: row.url,
-    totpId: row.totp_id,
+    totpId: row.linked_totp_id,
   };
 }
 
