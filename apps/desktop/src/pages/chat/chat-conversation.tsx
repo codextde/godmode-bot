@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence } from "motion/react";
 import type { Agent, ConversationWithMessages, Message, SendMessageInput } from "@godmode/shared";
 import { ArrowUpRight, Brain, MessageSquareDashed, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AgentAvatar, EmptyState } from "@/components/common";
+import { BrowserFocus, BrowserPanel, BrowserToggle, useChatBrowser, type BrowserFocusMode } from "@/components/chat/browser-panel";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { ChatDropZone, Thread } from "@/components/chat/thread";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useVoiceSettings } from "@/hooks/use-voice";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -41,6 +44,13 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const composerRef = useRef<ComposerHandle>(null);
   const [queued, setQueued] = useState<Record<string, string>>({});
   const mountedAt = useRef(Date.now());
+  const browser = useChatBrowser(agent);
+  const browserPanel = useUi((s) => s.browserPanel);
+  const setBrowserPanel = useUi((s) => s.setBrowserPanel);
+  const wide = useMediaQuery("(min-width: 1024px)");
+  const [browserFocus, setBrowserFocus] = useState<BrowserFocusMode | null>(null);
+  const showBrowserPanel = !!browser?.running && !!agent && wide && browserPanel;
+  useEffect(() => setBrowserFocus(null), [browser?.id]);
 
   const messages = useMemo(() => conv?.messages ?? [], [conv?.messages]);
   const activeRunId = live?.runId ?? conv?.activeRunId ?? null;
@@ -183,48 +193,72 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const lastMessage = messages[messages.length - 1] ?? null;
 
   return (
-    <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="flex h-full flex-col">
-      <ConversationHeader conversation={conv} agent={agent} onVoiceMode={onVoiceMode} />
+    <div className="flex h-full min-h-0">
+      <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="flex h-full min-w-0 flex-1 flex-col">
+        <ConversationHeader
+          conversation={conv}
+          agent={agent}
+          onVoiceMode={onVoiceMode}
+          browserToggle={
+            browser?.running && !showBrowserPanel ? (
+              <BrowserToggle working={!!activeRunId} onClick={() => (wide ? setBrowserPanel(true) : setBrowserFocus("watch"))} />
+            ) : undefined
+          }
+        />
 
-      <Thread
-        messages={visibleMessages}
-        agent={agent}
-        inflight={inflight}
-        queuedMessageIds={queuedIds}
-        onStop={() => activeRunId && cancel.mutate(activeRunId)}
-        stopping={cancel.isPending}
-        empty={
-<ConversationWelcome agent={agent} onPick={(text) => composerRef.current?.setText(text)} />
-        }
-      />
+        <Thread
+          messages={visibleMessages}
+          agent={agent}
+          inflight={inflight}
+          queuedMessageIds={queuedIds}
+          onStop={() => activeRunId && cancel.mutate(activeRunId)}
+          stopping={cancel.isPending}
+          empty={
+            <ConversationWelcome agent={agent} onPick={(text) => composerRef.current?.setText(text)} />
+          }
+        />
 
-      <div className="relative shrink-0 px-3 pb-3 sm:px-6 sm:pb-4">
-        <div className="mx-auto w-full max-w-3xl">
-          <Composer
-            ref={composerRef}
-            draftKey={conversationId}
-            autoFocus
-            running={!!activeRunId}
-            placeholder={agent ? `Message ${agent.name}…` : "Message…"}
-            onSubmit={(input) => send.mutateAsync(input)}
-          />
-          <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 sm:block">
-            Agents act for you with your saved logins — secrets are filled into the browser, never shown to the AI.
-          </p>
+        <div className="relative shrink-0 px-3 pb-3 sm:px-6 sm:pb-4">
+          <div className="mx-auto w-full max-w-3xl">
+            <Composer
+              ref={composerRef}
+              draftKey={conversationId}
+              autoFocus
+              running={!!activeRunId}
+              placeholder={agent ? `Message ${agent.name}…` : "Message…"}
+              onSubmit={(input) => send.mutateAsync(input)}
+            />
+            <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 sm:block">
+              Agents act for you with your saved logins — secrets are filled into the browser, never shown to the AI.
+            </p>
+          </div>
         </div>
-      </div>
 
-      <VoiceMode
-        agent={agent}
-        busy={!!activeRunId || send.isPending}
-        activity={live ? liveActivityLabel(live) : null}
-        lastMessage={lastMessage}
-        onSend={async (text) => {
-          await send.mutateAsync({ content: text, voice: true });
-        }}
-        onStop={activeRunId ? () => cancel.mutate(activeRunId) : undefined}
-      />
-    </ChatDropZone>
+        <VoiceMode
+          agent={agent}
+          busy={!!activeRunId || send.isPending}
+          activity={live ? liveActivityLabel(live) : null}
+          lastMessage={lastMessage}
+          onSend={async (text) => {
+            await send.mutateAsync({ content: text, voice: true });
+          }}
+          onStop={activeRunId ? () => cancel.mutate(activeRunId) : undefined}
+        />
+      </ChatDropZone>
+      <AnimatePresence initial={false}>
+        {showBrowserPanel && (
+          <BrowserPanel
+            key={browser.id}
+            profile={browser}
+            agent={agent}
+            activity={activeRunId ? liveActivityLabel(live) : null}
+            onHide={() => setBrowserPanel(false)}
+            onFocus={setBrowserFocus}
+          />
+        )}
+      </AnimatePresence>
+      <BrowserFocus profile={browser} mode={browserFocus} onClose={() => setBrowserFocus(null)} />
+    </div>
   );
 }
 

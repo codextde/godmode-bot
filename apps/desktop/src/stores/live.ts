@@ -25,15 +25,13 @@ interface LiveState {
   connected: boolean;
   runs: Record<string, LiveRun>;
   frames: Record<string, BrowserFrame>;
-  browserSubscriptions: string[];
   setConnected: (v: boolean) => void;
   runStarted: (run: Run) => void;
   runDelta: (runId: string, conversationId: string, messageId: string, blocks: MessageBlock[]) => void;
   runActivity: (runId: string, label: string) => void;
   runFinished: (run: Run) => void;
   browserFrame: (profileId: string, frame: BrowserFrame) => void;
-  addBrowserSubscription: (profileId: string) => void;
-  removeBrowserSubscription: (profileId: string) => void;
+  dropBrowserFrame: (profileId: string) => void;
 }
 
 /** Realtime state fed by the WebSocket (in-flight runs, streaming blocks, browser frames). */
@@ -41,7 +39,6 @@ export const useLive = create<LiveState>((set) => ({
   connected: false,
   runs: {},
   frames: {},
-  browserSubscriptions: [],
   setConnected: (connected) => set({ connected }),
   runStarted: (run) =>
     set((s) => ({
@@ -87,10 +84,13 @@ export const useLive = create<LiveState>((set) => ({
       return { runs: next };
     }),
   browserFrame: (profileId, frame) => set((s) => ({ frames: { ...s.frames, [profileId]: frame } })),
-  addBrowserSubscription: (profileId) =>
-    set((s) => ({ browserSubscriptions: Array.from(new Set([...s.browserSubscriptions, profileId])) })),
-  removeBrowserSubscription: (profileId) =>
-    set((s) => ({ browserSubscriptions: s.browserSubscriptions.filter((p) => p !== profileId) })),
+  dropBrowserFrame: (profileId) =>
+    set((s) => {
+      if (!s.frames[profileId]) return s;
+      const frames = { ...s.frames };
+      delete frames[profileId];
+      return { frames };
+    }),
 }));
 
 /** Live run currently streaming into a conversation (if any). */

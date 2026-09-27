@@ -66,9 +66,7 @@ async function connect(queryClient: QueryClient) {
     useLive.getState().setConnected(true);
     while (pendingSends.length) ws.send(JSON.stringify(pendingSends.shift()));
     // Resubscribe live views
-    for (const profileId of useLive.getState().browserSubscriptions) {
-      ws.send(JSON.stringify({ type: "browser.subscribe", profileId } satisfies ClientEvent));
-    }
+    for (const [profileId, viewers] of browserViewers) ws.send(JSON.stringify(subscribeEvent(profileId, viewers)));
     if (pingTimer) clearInterval(pingTimer);
     pingTimer = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: "ping" })), 25_000);
     // Refresh everything after a reconnect — we may have missed events.
@@ -162,6 +160,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "browser.updated":
       qc.invalidateQueries({ queryKey: qk.browserProfiles });
+      if (!event.profile.running) live.dropBrowserFrame(event.profile.id);
       break;
     case "browser.frame":
       live.browserFrame(event.profileId, {
@@ -179,12 +178,40 @@ function handle(qc: QueryClient, event: ServerEvent) {
   }
 }
 
-/** Subscribe to the live view of a browser profile (reference counted by the core). */
-export function subscribeBrowser(profileId: string): () => void {
-  useLive.getState().addBrowserSubscription(profileId);
-  sendClientEvent({ type: "browser.subscribe", profileId });
+interface BrowserViewers {
+  watching: number;
+  passive: number;
+}
+
+/** Live view subscribers per profile in this UI; the core only hears about the first/last and passive changes. */
+const browserViewers = new Map<string, BrowserViewers>();
+
+function subscribeEvent(profileId: string, viewers: BrowserViewers): ClientEvent {
+  return { type: "browser.subscribe", profileId, passive: viewers.watching === 0 };
+}
+
+/**
+ * Subscribe to the live view of a browser profile. Passive viewers (glanceable previews) get frames without
+ * keeping an idle browser running.
+ */
+export function subscribeBrowser(profileId: string, { passive = false }: { passive?: boolean } = {}): () => void {
+  const kind = passive ? "passive" : "watching";
+  const viewers = browserViewers.get(profileId) ?? { watching: 0, passive: 0 };
+  const wasPassive = viewers.watching === 0;
+  const isFirst = viewers.watching + viewers.passive === 0;
+  viewers[kind]++;
+  browserViewers.set(profileId, viewers);
+  if (isFirst || wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(profileId, viewers));
+
+  let active = true;
   return () => {
-    useLive.getState().removeBrowserSubscription(profileId);
-    sendClientEvent({ type: "browser.unsubscribe", profileId });
+    if (!active) return;
+    active = false;
+    const wasPassive = viewers.watching === 0;
+    viewers[kind]--;
+    if (viewers.watching + viewers.passive === 0) {
+      browserViewers.delete(profileId);
+      sendClientEvent({ type: "browser.unsubscribe", profileId });
+    } else if (wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(profileId, viewers));
   };
 }
