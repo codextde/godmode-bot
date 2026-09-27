@@ -25,3 +25,19 @@ export async function updateAgent(_id: string, _patch: Partial<AgentInput>): Pro
 export async function deleteAgent(_id: string): Promise<void> {
   throw new Error("not implemented");
 }
+/** Update runtime status (idle/running/error). Emits agent.updated. */
+export function setAgentStatus(_id: string, _status: import("@godmode/shared").AgentStatus): void {
+  throw new Error("not implemented");
+}
+/** Set lastRunAt = now. */
+export function touchAgentRun(_id: string): void {
+  throw new Error("not implemented");
+}
+/** Commit all changes in the agent repo (serialized per repo). No-op if nothing changed. */
+export async function commitAgentRepo(_agentId: string, _message: string): Promise<void> {
+  throw new Error("not implemented");
+}
+/** Agents visible to `agent` for delegation (same workspace + global), excluding itself, respecting delegateTo. */
+export function peersFor(_agent: Agent): Agent[] {
+  throw new Error("not implemented");
+}

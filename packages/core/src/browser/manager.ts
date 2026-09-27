@@ -48,7 +48,14 @@ export async function browserMcpServer(_agent: Agent): Promise<McpServerJson | n
  */
 export async function fillIntoPage(
   _profileId: string,
-  _opts: { text: string; selector?: string; urlContains?: string; submit?: boolean },
+  _opts: {
+    text: string;
+    /** Field kind — used to auto-locate the input when nothing suitable is focused and no selector is given. */
+    kind?: "username" | "password" | "totp" | "text";
+    selector?: string;
+    urlContains?: string;
+    submit?: boolean;
+  },
 ): Promise<{ ok: boolean; url: string; detail: string }> {
   throw new Error("not implemented");
 }
