@@ -583,6 +583,24 @@ export interface DoctorReport {
   dependencies: DependencyStatus[];
 }
 
+/** Claude Code's release channel (`autoUpdatesChannel` in ~/.claude/settings.json). */
+export type ClaudeReleaseChannel = "latest" | "stable";
+
+export interface ClaudeUpdateStatus {
+  current: string | null;
+  latest: string | null;
+  channel: ClaudeReleaseChannel;
+  updateAvailable: boolean;
+  checkedAt: ISODate;
+}
+
+export interface ClaudeUpdateResult {
+  ok: boolean;
+  previous: string | null;
+  version: string | null;
+  output: string;
+}
+
 /* ------------------------------------------------------------------ */
 /* Bootstrap                                                            */
 /* ------------------------------------------------------------------ */

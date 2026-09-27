@@ -12,6 +12,8 @@ import type {
   BrowserProfile,
   ChromeImportInput,
   ChromeImportResult,
+  ClaudeUpdateResult,
+  ClaudeUpdateStatus,
   ComposioConnectInput,
   ComposioConnectResult,
   ComposioConnection,
@@ -164,6 +166,8 @@ export const api = {
   doctor: {
     get: (refresh = false) => get<DoctorReport>("/api/doctor", { refresh: refresh ? 1 : undefined }),
     install: (id: DependencyId) => post<{ ok: boolean; output: string }>("/api/doctor/install", { id }),
+    claudeUpdate: (refresh = false) => get<ClaudeUpdateStatus>("/api/doctor/claude-update", { refresh: refresh ? 1 : undefined }),
+    updateClaude: () => post<ClaudeUpdateResult>("/api/doctor/claude-update"),
   },
 
   vault: {

@@ -194,7 +194,7 @@ export function toolPath(): string {
   return [...new Set(dirs.filter(Boolean))].join(delimiter);
 }
 
-function versionFrom(text: string): string | null {
+export function versionFrom(text: string): string | null {
   return text.match(/\d+\.\d+(?:\.\d+)*/)?.[0] ?? null;
 }
 
@@ -378,6 +378,10 @@ function installHint(id: DependencyId): string {
 
 let cachedReport: { at: number; report: DoctorReport } | null = null;
 let inflight: Promise<DoctorReport> | null = null;
+
+export function resetDoctorCache() {
+  cachedReport = null;
+}
 
 export async function runDoctor(refresh = false): Promise<DoctorReport> {
   if (!refresh && cachedReport && Date.now() - cachedReport.at < REPORT_TTL_MS) return cachedReport.report;
