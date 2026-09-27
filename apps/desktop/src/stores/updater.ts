@@ -14,7 +14,6 @@ export const useUpdater = create<{ update: UpdateState }>(() => ({ update: { sta
 
 const set = (update: UpdateState) => useUpdater.setState({ update });
 
-/** Desktop only: follows the shell's background updater. */
 export function syncUpdater() {
   if (!isTauri) return () => {};
   let stop: (() => void) | undefined;

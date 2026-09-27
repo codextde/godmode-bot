@@ -69,9 +69,8 @@ pub fn run() {
             core::start(handle.clone());
             updater::start(handle.clone());
             tray::create(handle)?;
-            let start_hidden = CLOSE_TO_TRAY
-                && std::env::args().any(|arg| arg == AUTOSTART_ARG)
-                && std::env::var_os(updater::RELAUNCHED_ENV).is_none();
+            let after_update = updater::take_relaunch_marker(handle);
+            let start_hidden = CLOSE_TO_TRAY && !after_update && std::env::args().any(|arg| arg == AUTOSTART_ARG);
             if !start_hidden {
                 tray::show_main_window(handle);
             }

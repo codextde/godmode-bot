@@ -10,7 +10,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useLive } from "@/stores/live";
 import { installUpdate, useUpdater } from "@/stores/updater";
 
-/** Installs the downloaded update, asking first when agents are still working. */
 export function useRestartToUpdate() {
   const running = useLive((s) => Object.keys(s.runs).length);
   const [confirming, setConfirming] = useState(false);

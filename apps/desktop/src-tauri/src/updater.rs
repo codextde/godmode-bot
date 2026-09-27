@@ -2,7 +2,12 @@
 //! user clicks "Restart to update". The webview only sees the state and two commands, never the updater itself.
 
 use std::{
-    sync::{Arc, Mutex},
+    fs,
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -12,7 +17,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
-use crate::core::{lock, CoreManager};
+use crate::{
+    core::{lock, CoreManager},
+    paths,
+};
 
 const FIRST_CHECK_DELAY: Duration = Duration::from_secs(15);
 const CHECK_INTERVAL: Duration = Duration::from_secs(4 * 60 * 60);
@@ -25,35 +33,21 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
 const PROGRESS_THROTTLE: Duration = Duration::from_millis(200);
 const STATE_EVENT: &str = "update-state";
-/// Set for the relaunched app, which inherits the original arguments: after an update it must show its window even
-/// when the first launch was a hidden `--autostart`.
-pub const RELAUNCHED_ENV: &str = "GODMODE_UPDATED";
+/// The relaunched app gets the original arguments: after an update it must show its window even when the first
+/// launch was a hidden `--autostart`.
+const RELAUNCH_MARKER: &str = "show-after-update";
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum UpdateState {
-    /// Debug builds: installing over a dev binary makes no sense.
     Disabled,
     Idle,
     Checking,
-    UpToDate {
-        checked_at: u64,
-    },
-    Downloading {
-        version: String,
-        downloaded: u64,
-        total: Option<u64>,
-    },
-    Ready {
-        version: String,
-        notes: Option<String>,
-    },
-    Installing {
-        version: String,
-    },
-    Error {
-        message: String,
-    },
+    UpToDate { checked_at: u64 },
+    Downloading { version: String, downloaded: u64, total: Option<u64> },
+    Ready { version: String, notes: Option<String> },
+    Installing { version: String },
+    Error { message: String },
 }
 
 impl UpdateState {
@@ -65,12 +59,14 @@ impl UpdateState {
 pub struct Updater {
     state: Mutex<UpdateState>,
     downloaded: Mutex<Option<(Update, Vec<u8>)>>,
+    /// Windows: the pre-exit hook stopped the core and removed the tray.
+    exiting: AtomicBool,
 }
 
 impl Updater {
     pub fn new() -> Self {
         let state = if cfg!(debug_assertions) { UpdateState::Disabled } else { UpdateState::Idle };
-        Self { state: Mutex::new(state), downloaded: Mutex::new(None) }
+        Self { state: Mutex::new(state), downloaded: Mutex::new(None), exiting: AtomicBool::new(false) }
     }
 
     fn set(&self, app: &AppHandle, state: UpdateState) {
@@ -78,7 +74,6 @@ impl Updater {
         let _ = app.emit(STATE_EVENT, state);
     }
 
-    /// Claims the updater for a check; `false` while another check, a download or a pending install is running.
     fn begin_check(&self, app: &AppHandle) -> bool {
         let mut state = lock(&self.state);
         if state.is_busy() || matches!(*state, UpdateState::Disabled) {
@@ -145,13 +140,14 @@ async fn find_and_download(
     updater: &Updater,
     core: &Arc<CoreManager>,
 ) -> Result<Option<(Update, Vec<u8>)>, String> {
-    let (core, handle) = (core.clone(), app.clone());
+    let (core, handle, shared) = (core.clone(), app.clone(), app.state::<Arc<Updater>>().inner().clone());
     let checker = app
         .updater_builder()
         .configure_client(|client| client.connect_timeout(CONNECT_TIMEOUT).read_timeout(READ_TIMEOUT))
         // Windows only: the installer replaces godmode-core.exe, so the core has to be gone before it starts.
         .on_before_exit(move || {
-            std::env::set_var(RELAUNCHED_ENV, "1");
+            shared.exiting.store(true, Ordering::SeqCst);
+            mark_relaunch(&handle);
             let _ = handle.save_window_state(StateFlags::all() & !StateFlags::VISIBLE);
             core.shutdown();
             handle.cleanup_before_exit();
@@ -181,6 +177,20 @@ async fn find_and_download(
     Ok(Some((update, bytes)))
 }
 
+fn relaunch_marker(app: &AppHandle) -> Option<PathBuf> {
+    paths::data_dir(app).map(|dir| dir.join(RELAUNCH_MARKER))
+}
+
+fn mark_relaunch(app: &AppHandle) {
+    if let Some(marker) = relaunch_marker(app) {
+        let _ = fs::write(marker, b"");
+    }
+}
+
+pub fn take_relaunch_marker(app: &AppHandle) -> bool {
+    relaunch_marker(app).is_some_and(|marker| fs::remove_file(marker).is_ok())
+}
+
 fn now_millis() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
@@ -190,13 +200,12 @@ pub fn update_state(updater: State<'_, Arc<Updater>>) -> UpdateState {
     lock(&updater.state).clone()
 }
 
-/// Progress arrives through `update-state` events.
 #[tauri::command]
 pub async fn check_for_updates(app: AppHandle) {
     check_and_download(&app).await;
 }
 
-/// Installs the downloaded update and relaunches. On Windows the installer takes over and restarts the app itself.
+/// On Windows the installer takes over and restarts the app itself.
 #[tauri::command]
 pub async fn install_update(app: AppHandle, updater: State<'_, Arc<Updater>>) -> Result<(), String> {
     let (update, bytes) = lock(&updater.downloaded).take().ok_or("No update has been downloaded yet")?;
@@ -204,26 +213,33 @@ pub async fn install_update(app: AppHandle, updater: State<'_, Arc<Updater>>) ->
     let version = update.version.clone();
     core.log(&format!("installing update {version}"));
     updater.set(&app, UpdateState::Installing { version: version.clone() });
-    let (update, bytes, result) = tauri::async_runtime::spawn_blocking(move || {
+    let installed = tauri::async_runtime::spawn_blocking(move || {
         let result = update.install(&bytes);
         (update, bytes, result)
     })
-    .await
-    .map_err(|err| err.to_string())?;
+    .await;
 
-    if let Err(err) = result {
-        let message = err.to_string();
-        core.log(&format!("update install failed: {message}"));
-        if cfg!(windows) {
-            // The pre-exit hook already stopped the core and removed the tray: only a relaunch recovers.
-            tauri::process::restart(&app.env());
+    let message = match installed {
+        Ok((_, _, Ok(()))) => {
+            mark_relaunch(&app);
+            app.request_restart();
+            return Ok(());
         }
-        let notes = update.body.clone();
-        *lock(&updater.downloaded) = Some((update, bytes));
-        updater.set(&app, UpdateState::Ready { version, notes });
-        return Err(message);
+        Ok((update, bytes, Err(err))) => {
+            let notes = update.body.clone();
+            *lock(&updater.downloaded) = Some((update, bytes));
+            updater.set(&app, UpdateState::Ready { version, notes });
+            err.to_string()
+        }
+        Err(err) => {
+            updater.set(&app, UpdateState::Error { message: err.to_string() });
+            err.to_string()
+        }
+    };
+    core.log(&format!("update install failed: {message}"));
+    if updater.exiting.load(Ordering::SeqCst) {
+        // Only a relaunch brings the core and the tray back.
+        tauri::process::restart(&app.env());
     }
-    std::env::set_var(RELAUNCHED_ENV, "1");
-    app.request_restart();
-    Ok(())
+    Err(message)
 }
