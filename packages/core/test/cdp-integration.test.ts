@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { ServerWebSocket } from "bun";
 import type { ServerEvent } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
@@ -15,6 +16,7 @@ import { findChrome } from "../src/browser/chrome";
 import { CdpClient, attachToPage, getCookies, listPages, type PageSession } from "../src/browser/cdp";
 import { getRunning, unregisterBrowser } from "../src/browser/state";
 import { updateSettings } from "../src/services/settings";
+import { websocketHandler, type WsData } from "../src/server/ws";
 import { startLiveView, stopLiveView, dispatchInput } from "../src/browser/screencast";
 import * as manager from "../src/browser/manager";
 import { loginFillScope, originRefusal } from "../src/browser/fill";
@@ -423,6 +425,35 @@ suite("managed Chromium (CDP integration)", () => {
       expect(getRunning(profileId)).toBeNull();
       expect(manager.getProfile(profileId).running).toBe(false);
     } finally {
+      updateSettings({ browser: { keepAliveMinutes: 15 } });
+    }
+    await manager.launchBrowser(profileId, { headless: true });
+  }, 60_000);
+
+  test("a passive live preview doesn't keep an idle browser running", async () => {
+    updateSettings({ browser: { keepAliveMinutes: 1 } });
+    const ws = { data: { id: "ws_preview", subscriptions: new Set<string>() }, send: () => 0, close: () => {} } as unknown as ServerWebSocket<WsData>;
+    websocketHandler.open(ws);
+    try {
+      const rb = getRunning(profileId)!;
+      websocketHandler.message(ws, JSON.stringify({ type: "browser.subscribe", profileId, passive: true }));
+      const pageAttached = async () => {
+        const { targetInfos } = await rb.client.send<{ targetInfos: { type: string; attached: boolean }[] }>("Target.getTargets");
+        return targetInfos.some((t) => t.type === "page" && t.attached);
+      };
+      await waitFor(pageAttached);
+
+      websocketHandler.message(ws, JSON.stringify({ type: "browser.subscribe", profileId }));
+      rb.lastUsedAt = Date.now() - 5 * 60_000;
+      await manager.sweepIdleBrowsers();
+      expect(getRunning(profileId)).toBe(rb);
+
+      websocketHandler.message(ws, JSON.stringify({ type: "browser.subscribe", profileId, passive: true }));
+      rb.lastUsedAt = Date.now() - 5 * 60_000;
+      await manager.sweepIdleBrowsers();
+      expect(getRunning(profileId)).toBeNull();
+    } finally {
+      websocketHandler.close(ws);
       updateSettings({ browser: { keepAliveMinutes: 15 } });
     }
     await manager.launchBrowser(profileId, { headless: true });
