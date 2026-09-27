@@ -10,6 +10,7 @@ import type { Agent, Credential, CredentialInput } from "@godmode/shared";
 import { all, get, insert, run, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { badRequest, domainMatches, forbidden, hostnameOf, locked, newId, notFound, now, parseJson } from "../util";
+import { nameGuessMatchesHost } from "./match";
 import * as vault from "./vault";
 
 interface CredentialRow {
@@ -356,8 +357,10 @@ export function credentialsForAgent(agent: Agent): Credential[] {
 }
 
 /**
- * Credentials for agent whose domains/url match the given url or domain (subdomains match).
- * Best matches first: exact host before subdomain match, workspace before global, then most recently used.
+ * Credentials for agent whose domains/url match the given url or domain (subdomains match). When nothing matches
+ * by domain, credentials whose name looks like the site's brand are returned as a fallback guess (e.g. a login
+ * named "Bitpanda" for bitpanda.com) — always ranked below every real domain match.
+ * Best matches first: exact host, subdomain, then name guess; within each, workspace before global, then most recently used.
  */
 export function findCredentialsForAgent(agent: Agent, urlOrDomain: string): Credential[] {
   const host = hostnameOf(urlOrDomain);
@@ -365,13 +368,31 @@ export function findCredentialsForAgent(agent: Agent, urlOrDomain: string): Cred
   const ranked: { credential: Credential; rank: number }[] = [];
   for (const credential of credentialsForAgent(agent)) {
     const targets = [...credential.domains, ...(credential.url ? [hostnameOf(credential.url)] : [])].filter(Boolean);
-    if (!targets.some((d) => domainMatches(host, d))) continue;
-    const exact = targets.some((d) => hostnameOf(d) === host);
-    ranked.push({ credential, rank: (exact ? 0 : 2) + (credential.workspaceId ? 0 : 1) });
+    if (targets.some((d) => domainMatches(host, d))) {
+      const exact = targets.some((d) => hostnameOf(d) === host);
+      ranked.push({ credential, rank: (exact ? 0 : 2) + (credential.workspaceId ? 0 : 1) });
+    } else if (nameGuessMatchesHost(credential, host)) {
+      ranked.push({ credential, rank: 10 + (credential.workspaceId ? 0 : 1) });
+    }
   }
   return ranked
     .sort((a, b) => a.rank - b.rank || (b.credential.lastUsedAt ?? "").localeCompare(a.credential.lastUsedAt ?? ""))
     .map((r) => r.credential);
+}
+
+/**
+ * Add a host to a credential's domains — e.g. after a name-guessed login was successfully filled on a site the
+ * human had not tagged, so next time it matches by domain. No-op (returns false) if the host is already covered.
+ */
+export function addCredentialDomain(id: string, hostOrUrl: string): boolean {
+  const host = hostnameOf(hostOrUrl);
+  if (!host) return false;
+  const row = getRow(id);
+  const domains = parseJson<string[]>(row.domains, []);
+  if (domains.some((d) => hostnameOf(d) === host)) return false;
+  update("credentials", id, { domains: JSON.stringify([...domains, host]), updated_at: now() });
+  bus.changed("credentials");
+  return true;
 }
 
 /**

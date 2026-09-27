@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent, Credential, TotpEntry } from "@godmode/shared";
 import { fillFailure, fills, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import * as vault from "../src/vault/vault";
-import { createCredential } from "../src/vault/credentials";
+import { createCredential, deleteCredential, getCredential } from "../src/vault/credentials";
 import { createTotp } from "../src/vault/totp";
 import { listAudit } from "../src/services/audit";
 import { listMissingLogins } from "../src/services/missingLogins";
@@ -256,6 +256,34 @@ describe("vault tools", () => {
     const bound = await call(tokens[worker.id]!, "vault_fill_totp", { totpId: looseTotp.id, credentialId: other.id });
     expect(bound.isError).toBeUndefined();
     expect([fills[2]!.allowedHosts, fills[2]!.httpHosts]).toEqual([["127.0.0.1"], ["127.0.0.1"]]);
+  });
+
+  test("a name-guessed login is filled on its real site and remembers it", async () => {
+    fills.length = 0;
+    // Saved only for example.io, but the agent is on app.example.com (fake currentPage) — only the name "Example" matches this site.
+    const guess = createCredential({ name: "Example", url: "https://example.io/login", username: "bob", password: "io-pass-1234" });
+    try {
+      const r = await call(tokens[worker.id]!, "vault_fill_login", { credentialId: guess.id, field: "password" });
+      expect(r.isError).toBeUndefined();
+      // The site the agent is on was added to the login's scope for the fill …
+      expect(fills[0]!.allowedHosts).toEqual(["example.io", "app.example.com"]);
+      expect(r.content[0]!.text).toContain("Added app.example.com");
+      // … and remembered on the login so it matches by domain next time.
+      expect(getCredential(guess.id).domains).toContain("app.example.com");
+      const remembered = listAudit(50, "credential.autofix_domain").find((a) => a.target === guess.id);
+      expect(remembered?.details).toMatchObject({ domain: "app.example.com" });
+    } finally {
+      deleteCredential(guess.id);
+    }
+  });
+
+  test("a login whose name does not match the site is still bound to its own site", async () => {
+    fills.length = 0;
+    // "Local dev" does not match app.example.com by name, so its scope is not widened and the fill is refused.
+    const r = await call(tokens[worker.id]!, "vault_fill_login", { credentialId: other.id, field: "username" });
+    expect(fills[0]!.allowedHosts).toEqual(["127.0.0.1"]);
+    expect(getCredential(other.id).domains).not.toContain("app.example.com");
+    expect(r.isError).toBeUndefined(); // fake fillIntoPage does not enforce scope; the point is the scope stays narrow
   });
 
   test("fill errors never echo the filled value", async () => {
