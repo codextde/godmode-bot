@@ -142,6 +142,7 @@ export function renderAgentState(agent: Agent): string {
     mcpServerIds: agent.mcpServerIds,
     inheritMcp: agent.inheritMcp,
     subagents: agent.subagents,
+    workingDirectory: agent.workingDirectory,
     createdAt: agent.createdAt,
     updatedAt: agent.updatedAt,
   };

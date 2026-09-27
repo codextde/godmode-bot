@@ -18,11 +18,13 @@ import type {
   ComposioStatus,
   ComposioToolkit,
   Conversation,
+  ConversationPatch,
   ConversationWithMessages,
   Credential,
   CredentialInput,
   DependencyId,
   DoctorReport,
+  FolderListing,
   GitCommit,
   LocalChromeProfile,
   McpServer,
@@ -237,8 +239,7 @@ export const api = {
       get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
     create: (input: { agentId: string; title?: string }) => post<Conversation>("/api/conversations", input),
-    update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean }) =>
-      patch<Conversation>(`/api/conversations/${id}`, input),
+    update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     send: (id: string, input: SendMessageInput) => post<SendMessageResult>(`/api/conversations/${id}/messages`, input),
   },
@@ -246,6 +247,12 @@ export const api = {
   chat: {
     /** Create a conversation and send the first message in one call. */
     start: (input: StartChatInput) => post<StartChatResult>("/api/chat", input),
+  },
+
+  folders: {
+    /** Subfolders on the machine running the core; no path = home. */
+    list: (path?: string, hidden = false) => get<FolderListing>("/api/folders", { path, hidden: hidden ? 1 : undefined }),
+    recent: () => get<string[]>("/api/folders/recent"),
   },
 
   runs: {

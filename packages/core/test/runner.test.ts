@@ -314,7 +314,7 @@ describe("runner end-to-end with fake claude", () => {
     expect(readFileSync(join(agent.repoPath, att.path), "utf8")).toBe("hello");
     await waitForRun(run.id, 20_000);
     const inv = invocations(env).at(-1)!;
-    expect(inv.prompt).toBe(`Summarize this\n\nAttached files: ${att.path}`);
+    expect(inv.prompt).toBe(`Summarize this\n\nAttached files: ${join(agent.repoPath, att.path)}`);
   });
 
   test("deleting a conversation cancels its run first", async () => {

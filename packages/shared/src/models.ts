@@ -95,6 +95,8 @@ export interface Agent {
   /** Whether to inherit global/workspace MCP servers. */
   inheritMcp: boolean;
   subagents: SubagentDefinition[];
+  /** Folder the agent works in by default (Claude's cwd). null = its own repository. */
+  workingDirectory: string | null;
   /** Absolute path of the agent's git repository. */
   repoPath: string;
   lastRunAt: ISODate | null;
@@ -141,6 +143,8 @@ export interface Conversation {
   /** Per-chat overrides set with /model and /effort. */
   model: string | null;
   effort: Effort | null;
+  /** Folder this conversation works in, overriding the agent's. null = the agent's default. */
+  workingDirectory: string | null;
   pinned: boolean;
   archived: boolean;
   lastMessageAt: ISODate | null;
@@ -587,6 +591,8 @@ export interface Bootstrap {
   version: string;
   mode: "desktop" | "server";
   dataDir: string;
+  /** Home directory of the machine running the core (paths in the UI are shown relative to it). */
+  homeDir: string;
   platform: string;
   vault: VaultStatus;
   settings: Settings;

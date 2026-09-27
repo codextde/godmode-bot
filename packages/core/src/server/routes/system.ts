@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { homedir } from "node:os";
 import type { Bootstrap } from "@godmode/shared";
 import { config } from "../../config";
 import { get } from "../../db";
@@ -25,6 +26,7 @@ export function registerSystemRoutes(app: Hono) {
       version: cfg.version,
       mode: cfg.mode,
       dataDir: cfg.dataDir,
+      homeDir: homedir(),
       platform: cfg.platform,
       vault: vault.status(),
       settings: { ...settings, server: { ...settings.server, hasDashboardPassword: hasDashboardPassword() } },

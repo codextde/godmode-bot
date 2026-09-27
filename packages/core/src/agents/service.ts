@@ -22,6 +22,7 @@ import { all, bool, get, insert, int, json, run, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
+import { normalizeWorkingDirectory } from "../services/folders";
 import { onSettingsApplied } from "../services/runtime";
 import { getSettings } from "../services/settings";
 import { cancelRun, waitForRun } from "../runner/runner";
@@ -58,6 +59,7 @@ interface AgentRow {
   mcp_server_ids: string;
   inherit_mcp: number;
   subagents: string;
+  working_directory: string | null;
   repo_path: string;
   last_run_at: string | null;
   created_at: string;
@@ -127,6 +129,7 @@ function toModel(r: AgentRow): Agent {
     mcpServerIds: existingMcpServerIds(stringList(parseJson<unknown>(r.mcp_server_ids, []))),
     inheritMcp: bool(r.inherit_mcp),
     subagents: normalizeSubagents(parseJson<unknown>(r.subagents, [])),
+    workingDirectory: r.working_directory,
     // Derived from the slug so the data dir can move (backup restore, GODMODE_HOME change).
     repoPath: repoPathFor(r.slug),
     lastRunAt: r.last_run_at,
@@ -155,6 +158,7 @@ function toRow(a: Agent): Record<string, string | number | null> {
     mcp_server_ids: json(a.mcpServerIds)!,
     inherit_mcp: int(a.inheritMcp)!,
     subagents: json(a.subagents)!,
+    working_directory: a.workingDirectory,
     repo_path: a.repoPath,
     last_run_at: a.lastRunAt,
     created_at: a.createdAt,
@@ -462,6 +466,8 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     mcpServerIds: existingMcpServerIds(stringList(input.mcpServerIds ?? [])),
     inheritMcp: input.inheritMcp !== false,
     subagents: normalizeSubagents(input.subagents ?? []),
+    // Human-only: without bypass mode the working directory is where Claude may edit files.
+    workingDirectory: isAgentActor(actor) ? null : normalizeWorkingDirectory(input.workingDirectory),
     repoPath: repoPathFor(slug),
     lastRunAt: null,
     createdAt: ts,
@@ -524,6 +530,9 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   if (patch.mcpServerIds !== undefined) next.mcpServerIds = existingMcpServerIds(stringList(patch.mcpServerIds));
   if (patch.inheritMcp !== undefined) next.inheritMcp = patch.inheritMcp;
   if (patch.subagents !== undefined) next.subagents = normalizeSubagents(patch.subagents);
+  if (patch.workingDirectory !== undefined && patch.workingDirectory !== current.workingDirectory && !isAgentActor(actor)) {
+    next.workingDirectory = normalizeWorkingDirectory(patch.workingDirectory);
+  }
 
   next.status = !next.enabled ? "disabled" : current.status === "disabled" ? "idle" : current.status;
   next.updatedAt = now();

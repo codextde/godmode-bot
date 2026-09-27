@@ -20,6 +20,8 @@ const attachmentSchema = z.object({
   data: z.string().min(1),
 });
 
+const folder = z.string().trim().max(4096).nullable().optional();
+
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
   attachments: z.array(attachmentSchema).max(20).optional(),
@@ -50,8 +52,8 @@ export function registerChatRoutes(app: Hono): void {
   );
 
   app.post("/api/conversations", async (c) => {
-    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional() }));
-    return c.json(createConversation({ agentId: input.agentId, title: input.title, origin: "chat" }), 201);
+    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder }));
+    return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
   app.get("/api/conversations/:id", (c) => c.json(getConversation(c.req.param("id"))));
@@ -59,7 +61,12 @@ export function registerChatRoutes(app: Hono): void {
   app.patch("/api/conversations/:id", async (c) => {
     const patch = await body(
       c,
-      z.object({ title: z.string().min(1).max(200).optional(), pinned: z.boolean().optional(), archived: z.boolean().optional() }),
+      z.object({
+        title: z.string().min(1).max(200).optional(),
+        pinned: z.boolean().optional(),
+        archived: z.boolean().optional(),
+        workingDirectory: folder,
+      }),
     );
     return c.json(updateConversation(c.req.param("id"), patch));
   });
@@ -77,7 +84,7 @@ export function registerChatRoutes(app: Hono): void {
   });
 
   app.post("/api/chat", async (c) => {
-    const input = await body(c, sendSchema.extend({ agentId: z.string().min(1).optional() }));
+    const input = await body(c, sendSchema.extend({ agentId: z.string().min(1).optional(), workingDirectory: folder }));
     return c.json(await startChat({ ...input, origin: "chat" }), 201);
   });
 

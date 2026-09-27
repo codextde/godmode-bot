@@ -46,6 +46,7 @@ export interface AgentInput {
   mcpServerIds?: ID[];
   inheritMcp?: boolean;
   subagents?: SubagentDefinition[];
+  workingDirectory?: string | null;
 }
 
 export interface AgentTemplate {
@@ -91,6 +92,16 @@ export interface StartChatInput {
   content: string;
   attachments?: SendMessageInput["attachments"];
   voice?: boolean;
+  /** Work in this folder instead of the agent's default. */
+  workingDirectory?: string | null;
+}
+
+export interface ConversationPatch {
+  title?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  /** null = back to the agent's default folder. */
+  workingDirectory?: string | null;
 }
 
 export interface StartChatResult extends SendMessageResult {
@@ -141,6 +152,20 @@ export interface MissingLoginPatch {
 
 export interface RunWithEvents extends Run {
   logPath: string | null;
+}
+
+/** GET /api/folders — subfolders of a directory on the machine running the core. */
+export interface FolderListing {
+  path: string;
+  parent: string | null;
+  home: string;
+  /** Filesystem roots ("/" or the available drive letters on Windows). */
+  roots: string[];
+  /** Why this folder can't be used as a working folder (it overlaps Godmode's data directory), or null. */
+  blocked: string | null;
+  entries: { name: string; path: string; git: boolean; blocked: boolean }[];
+  /** More subfolders exist than were returned. */
+  truncated: boolean;
 }
 
 export interface AgentFileEntry {

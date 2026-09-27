@@ -96,6 +96,7 @@ function agentSummary(a: Agent, names: Map<string, string>) {
     status: a.status,
     enabled: a.enabled,
     lastRunAt: a.lastRunAt,
+    ...(a.workingDirectory ? { workingDirectory: a.workingDirectory } : {}),
     ...(a.isDefault ? { isDefault: true } : {}),
   };
 }

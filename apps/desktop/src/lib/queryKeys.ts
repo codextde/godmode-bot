@@ -38,4 +38,7 @@ export const qk = {
   composioConnections: ["composio", "connections"] as unknown[],
   browserProfiles: ["browser-profiles"] as unknown[],
   chromeProfiles: ["chrome-profiles"] as unknown[],
+  folders: ["folders"] as unknown[],
+  folderList: (path: string, hidden: boolean) => ["folders", "list", path, hidden],
+  recentFolders: ["folders", "recent"] as unknown[],
 };
