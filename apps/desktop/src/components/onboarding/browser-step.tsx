@@ -9,6 +9,7 @@ import { api, errorMessage } from "@/lib/api";
 import { isMac } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { NoChromeProfiles } from "@/components/browser/no-chrome-profiles";
 import { FormError, SubmitButton } from "./auth-layout";
 import { StepCard, StepFooter, StepHeader } from "./step-kit";
 
@@ -75,17 +76,16 @@ export function BrowserStep({ onDone, onBack }: { onDone: (imported: number | nu
                 <Skeleton className="h-[72px] rounded-xl" />
                 <Skeleton className="h-[72px] rounded-xl" />
               </div>
-            ) : profiles.length === 0 ? (
+            ) : chrome.isError ? (
               <div className="flex items-start gap-3 rounded-2xl border border-dashed bg-card/40 p-5 text-sm">
                 <AppWindow className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
                 <div>
-                  <p className="font-medium">{chrome.isError ? "Couldn't look for Chrome profiles" : "No Chrome profiles found"}</p>
-                  <p className="mt-1 text-muted-foreground">
-                    {chrome.isError ? errorMessage(chrome.error) : "Chrome, Edge, Brave or Chromium weren't found on this machine."} You can import
-                    sessions or a cookies file later from the Browser page.
-                  </p>
+                  <p className="font-medium">Couldn't look for Chrome profiles</p>
+                  <p className="mt-1 text-muted-foreground">{errorMessage(chrome.error)} You can import sessions later from the Browser page.</p>
                 </div>
               </div>
+            ) : profiles.length === 0 ? (
+              <NoChromeProfiles onRetry={() => chrome.refetch()} retrying={chrome.isFetching} footer="Or skip — you can import sessions later from the Browser page." />
             ) : (
               <div role="radiogroup" aria-label="Chrome profile" className="grid gap-2 sm:grid-cols-2">
                 {profiles.map((p, i) => {

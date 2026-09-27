@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NoChromeProfiles } from "./no-chrome-profiles";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -136,13 +137,11 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
                 </Button>
               </div>
             ) : !chrome.data?.length ? (
-              <div className="rounded-xl border border-dashed p-6 text-center">
-                <AppWindow className="mx-auto size-6 text-muted-foreground" />
-                <p className="mt-2 text-sm font-medium">No Chrome profiles found on this machine</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Google Chrome, Chromium, Edge and Brave are supported. You can still import a cookie export in the “Cookies JSON” tab.
-                </p>
-              </div>
+              <NoChromeProfiles
+                onRetry={() => chrome.refetch()}
+                retrying={chrome.isFetching}
+                footer="You can also import a cookie export in the “Cookies JSON” tab."
+              />
             ) : (
               <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Chrome profile to import from">
                 {chrome.data.map((p, i) => (

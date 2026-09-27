@@ -62,9 +62,11 @@ jobs:
         run: |
           id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
           if [ -z "$id" ]; then
+            prerelease=false
+            if [[ "$TAG" == *-* ]]; then prerelease=true; fi
             id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
               -f tag_name="$TAG" -f name="Godmode Bot $TAG" \
-              -F draft=true -F prerelease=$([[ "$TAG" == *-* ]] && echo true || echo false) \
+              -F draft=true -F prerelease="$prerelease" \
               -F generate_release_notes=true --jq .id)
           fi
           echo "id=$id" >> "$GITHUB_OUTPUT"

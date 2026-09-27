@@ -6,7 +6,5 @@
   <string>Godmode uses the microphone for voice mode.</string>
   <key>NSCameraUsageDescription</key>
   <string>Godmode uses the camera to scan 2FA QR codes.</string>
-  <key>LSApplicationCategoryType</key>
-  <string>public.app-category.productivity</string>
 </dict>
 </plist>

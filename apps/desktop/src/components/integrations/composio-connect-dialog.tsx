@@ -68,7 +68,8 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
     const { connectedAccountId } = phase.result;
     const started = Date.now();
     let timer: ReturnType<typeof setTimeout> | null = null;
-    let connectionId: string | null = null;
+    // Newer cores return the Godmode connection id directly; older ones need a lookup by Composio account id.
+    let connectionId: string | null = phase.result.connectionId ?? null;
     let stop = false;
 
     const tick = async () => {

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { CircleCheck, ExternalLink, KeyRound, Pencil, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { CircleCheck, ExternalLink, KeyRound, Pencil, RefreshCw, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import type { ComposioStatus } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -38,6 +38,16 @@ export function ComposioKeyCard({ status, loading }: { status: ComposioStatus | 
       else toast.success("Composio connected", { description: "Browse apps below and connect your accounts." });
     },
     onError: (e) => toastApiError(e, "Couldn't save the Composio key", qc),
+  });
+
+  const recheck = useMutation({
+    mutationFn: api.composio.recheck,
+    onSuccess: (s) => {
+      qc.setQueryData(qk.composioStatus, s);
+      if (s.valid === false) toast.error("Composio rejected this key", { description: s.error ?? undefined });
+      else if (s.valid) toast.success("Key is valid");
+    },
+    onError: (e) => toastApiError(e, "Couldn't check the key", qc),
   });
 
   const onSubmit = (e: FormEvent) => {
@@ -91,6 +101,9 @@ export function ComposioKeyCard({ status, loading }: { status: ComposioStatus | 
         </div>
         {configured && !editing && (
           <div className="flex shrink-0 items-center gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => recheck.mutate()} disabled={recheck.isPending} aria-label="Re-check Composio key">
+              {recheck.isPending ? <Spinner /> : <RefreshCw />} Re-check
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
               <Pencil /> Replace
             </Button>

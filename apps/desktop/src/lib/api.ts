@@ -246,6 +246,8 @@ export const api = {
 
   composio: {
     status: () => get<ComposioStatus>("/api/composio/status"),
+    /** Force the core to re-validate the stored key */
+    recheck: () => get<ComposioStatus>("/api/composio/status", { refresh: 1 }),
     setKey: (apiKey: string | null) => put<ComposioStatus>("/api/composio/key", { apiKey }),
     toolkits: (q: { search?: string; category?: string; cursor?: string } = {}) =>
       get<{ items: ComposioToolkit[]; nextCursor: string | null }>("/api/composio/toolkits", q),
@@ -275,12 +277,12 @@ export const api = {
         | { type: "text"; text: string },
     ) => post<{ ok: true }>(`/api/browser/profiles/${id}/input`, event),
     /** browser-use `profile-use` (sync local Chrome cookies to a browser-use Cloud profile) */
-    profileUse: () =>
-      get<{ installed: boolean; version: string | null; apiKeySet: boolean; lastSyncAt: string | null; detail: string }>(
-        "/api/browser/profile-use",
-      ),
-    profileUseSync: (input: { sourcePath?: string; profileName?: string } = {}) =>
-      post<{ ok: boolean; output: string; cloudProfileId: string | null }>("/api/browser/profile-use/sync", input),
+    profileUse: () => get<import("@godmode/shared").ProfileUseStatus>("/api/browser/profile-use"),
+    /** Downloads the profile-use binary into <dataDir>/bin */
+    profileUseInstall: () => post<import("@godmode/shared").ProfileUseStatus>("/api/browser/profile-use/install"),
+    /** Can take several minutes. No input = sync every detected local profile. */
+    profileUseSync: (input: import("@godmode/shared").ProfileUseSyncInput = {}) =>
+      post<import("@godmode/shared").ProfileUseSyncResult>("/api/browser/profile-use/sync", input),
   },
 
   backup: {

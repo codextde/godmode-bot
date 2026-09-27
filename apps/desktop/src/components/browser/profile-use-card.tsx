@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
-import { ChevronDown, CircleCheck, CircleX, CloudUpload, KeyRound, RefreshCw, Terminal } from "lucide-react";
+import { ChevronDown, CircleCheck, CircleX, CloudUpload, Download, KeyRound, RefreshCw, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -17,12 +17,12 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
 const PROFILE_USE_KEY = ["browser", "profile-use"];
-const DEFAULT_SOURCE = "__default__";
+const ALL_SOURCES = "__all__";
 
 /** browser-use `profile-use`: sync local Chrome cookies to a browser-use Cloud profile. */
 export function ProfileUseCard() {
   const qc = useQueryClient();
-  const [source, setSource] = useState(DEFAULT_SOURCE);
+  const [source, setSource] = useState(ALL_SOURCES);
   const [log, setLog] = useState<{ ok: boolean; output: string } | null>(null);
   const [logOpen, setLogOpen] = useState(false);
 
@@ -30,7 +30,7 @@ export function ProfileUseCard() {
   const chrome = useQuery({ queryKey: qk.chromeProfiles, queryFn: api.browser.chromeProfiles, staleTime: 60_000, enabled: status.isSuccess });
 
   const sync = useMutation({
-    mutationFn: () => api.browser.profileUseSync(source === DEFAULT_SOURCE ? {} : { sourcePath: source }),
+    mutationFn: () => api.browser.profileUseSync(source === ALL_SOURCES ? {} : { sourcePath: source }),
     onSuccess: (res) => {
       setLog({ ok: res.ok, output: res.output });
       setLogOpen(!res.ok);
@@ -43,6 +43,16 @@ export function ProfileUseCard() {
       setLogOpen(true);
       toastApiError(e, "Sync failed", qc);
     },
+  });
+
+  const install = useMutation({
+    mutationFn: api.browser.profileUseInstall,
+    onSuccess: (next) => {
+      qc.setQueryData(PROFILE_USE_KEY, next);
+      if (next.installed) toast.success("profile-use installed");
+      else toast.error("Install didn't finish", { description: next.detail || undefined });
+    },
+    onError: (e) => toastApiError(e, "Couldn't install profile-use", qc),
   });
 
   const notAvailable = status.error instanceof ApiRequestError && (status.error.status === 404 || status.error.status === 501);
@@ -81,12 +91,30 @@ export function ProfileUseCard() {
       ) : (
         <div className="space-y-4">
           <ul className="divide-y rounded-xl border bg-background/40">
-            <StatusRow ok={s.installed} label="profile-use" value={s.installed ? (s.version ?? "Installed") : "Not installed"} />
             <StatusRow
-              ok={s.apiKeySet}
+              ok={s.installed}
+              label="profile-use"
+              value={
+                s.installed ? (
+                  <span className="font-mono text-[11px] text-muted-foreground" title={s.path ?? undefined}>
+                    {s.path ?? "Installed"}
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-between gap-2">
+                    Not installed
+                    <Button size="xs" variant="outline" onClick={() => install.mutate()} disabled={install.isPending}>
+                      {install.isPending ? <Spinner className="size-3" /> : <Download />}
+                      {install.isPending ? "Installing…" : "Install"}
+                    </Button>
+                  </span>
+                )
+              }
+            />
+            <StatusRow
+              ok={s.hasApiKey}
               label="API key"
               value={
-                s.apiKeySet ? (
+                s.hasApiKey ? (
                   "browser_use_api_key set"
                 ) : (
                   <Link to="/integrations?tab=api-keys" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
@@ -102,7 +130,7 @@ export function ProfileUseCard() {
               value={s.lastSyncAt ? formatDistanceToNow(new Date(s.lastSyncAt), { addSuffix: true }) : "Never"}
             />
           </ul>
-          {!s.installed && s.detail && (
+          {(!s.installed || !s.hasApiKey) && s.detail && (
             <p className="text-xs text-muted-foreground">
               <InlineCode text={s.detail} />
             </p>
@@ -118,7 +146,7 @@ export function ProfileUseCard() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={DEFAULT_SOURCE}>Default Chrome profile</SelectItem>
+                  <SelectItem value={ALL_SOURCES}>All detected profiles</SelectItem>
                   {chrome.data?.map((p) => (
                     <SelectItem key={p.path} value={p.path}>
                       {p.browser} — {p.name}
@@ -128,11 +156,12 @@ export function ProfileUseCard() {
                 </SelectContent>
               </Select>
             </div>
-            <Button size="sm" onClick={() => sync.mutate()} disabled={!s.installed || !s.apiKeySet || sync.isPending}>
+            <Button size="sm" onClick={() => sync.mutate()} disabled={!s.installed || !s.hasApiKey || sync.isPending}>
               {sync.isPending ? <Spinner /> : <CloudUpload />}
               {sync.isPending ? "Syncing…" : "Sync to cloud"}
             </Button>
           </div>
+          {sync.isPending && <p className="text-xs text-muted-foreground">This can take a few minutes — you can keep working meanwhile.</p>}
 
           {log && (
             <div>

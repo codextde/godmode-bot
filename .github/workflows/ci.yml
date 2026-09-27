@@ -98,7 +98,7 @@ jobs:
       - name: Smoke test
         run: |
           docker run -d --name godmode -p 7777:7777 godmode-bot:ci
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:7777/api/health; then break; fi
             sleep 1
           done

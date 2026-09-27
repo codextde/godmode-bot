@@ -43,6 +43,9 @@ RUN case "$TARGETARCH" in \
     && cd packages/core \
     && bun run scripts/build.ts --target="$target" \
     && install -D -m 0755 "bin/godmode-${target#bun-}" /out/godmode
+# The browser-use version the core pins, so the runtime image can pre-install exactly that one.
+RUN bun -e 'const { BROWSER_USE_SPEC } = await import("./packages/core/src/browser/browserUse.ts"); console.log(BROWSER_USE_SPEC)' \
+      > /out/browser-use-spec
 
 # ---------------------------------------------------------------------------------------------------------------
 # Runtime
@@ -78,6 +81,10 @@ ENV HOME=/home/godmode \
 # Claude Code CLI (official native installer) → ~/.local/bin/claude
 RUN curl -fsSL https://claude.ai/install.sh | bash \
     && claude --version
+
+# Pre-install the pinned browser-use MCP server (and its Python) so the first agent run does not wait for it.
+COPY --from=build /out/browser-use-spec /tmp/browser-use-spec
+RUN uvx --from "$(cat /tmp/browser-use-spec)" browser-use --version
 
 COPY --from=build /out/godmode /usr/local/bin/godmode
 

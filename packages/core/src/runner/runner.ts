@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { FileSink, Subprocess } from "bun";
 import type { Agent, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
-import { DEFAULT_MODEL } from "@godmode/shared";
+import { BROWSER_MCP_NAME, DEFAULT_MODEL } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -23,7 +23,7 @@ import { commitAgentRepo, ensureAgentRepo, getAgent, peersFor, setAgentStatus, t
 import { resolveClaudeBinary } from "../services/doctor";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
-import { currentPage, resolveProfileForAgent } from "../browser/manager";
+import { BROWSER_LLM_TOOLS, browserLlmKey, currentPage, resolveProfileForAgent } from "../browser/manager";
 import {
   addMessage,
   appendTranscript,
@@ -215,6 +215,8 @@ interface Job {
   lastPersistAt: number;
   deltaTimer: ReturnType<typeof setTimeout> | null;
   done: Promise<void> | null;
+  /** Browser profile this run drives (undefined = not resolved yet, null = no browser). */
+  browserProfileId?: string | null;
 }
 
 const jobs = new Map<string, Job>();
@@ -458,6 +460,15 @@ function pump() {
       blocked.add(job.conversationId);
       continue;
     }
+    // One browser profile = one Chromium: two independent runs driving it at once would fight over tabs and
+    // focus. A run waits while another run holds its profile — unless that run is its own ancestor in the
+    // delegation chain (the parent is idle, waiting for this child).
+    const holder = browserHolder(job);
+    if (holder) {
+      emitActivity(job, `Waiting for the browser (in use by another run)`);
+      blocked.add(job.conversationId);
+      continue;
+    }
     queue.splice(queue.indexOf(runId), 1);
     job.status = "running";
     running++;
@@ -469,6 +480,38 @@ function pump() {
         pump();
       });
   }
+}
+
+function browserProfileOf(job: Job): string | null {
+  if (job.browserProfileId !== undefined) return job.browserProfileId;
+  try {
+    const agent = getAgent(job.agentId);
+    job.browserProfileId =
+      getSettings().browser.enabled && agent.browser.enabled ? resolveProfileForAgent(agent).id : null;
+  } catch {
+    job.browserProfileId = null;
+  }
+  return job.browserProfileId;
+}
+
+function isAncestor(candidate: Job, job: Job): boolean {
+  let parentId = job.parentRunId;
+  for (let hops = 0; parentId && hops < 16; hops++) {
+    if (parentId === candidate.runId) return true;
+    parentId = jobs.get(parentId)?.parentRunId ?? null;
+  }
+  return false;
+}
+
+/** The running job currently holding `job`'s browser profile (excluding its own ancestors), if any. */
+function browserHolder(job: Job): Job | null {
+  const profileId = browserProfileOf(job);
+  if (!profileId) return null;
+  for (const other of jobs.values()) {
+    if (other === job || other.status !== "running") continue;
+    if (browserProfileOf(other) === profileId && !isAncestor(other, job)) return other;
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -798,6 +841,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     baseArgs.push("--permission-mode", "acceptEdits", "--allowedTools", Object.keys(mcp.mcpServers).map((n) => `mcp__${n}`).join(","));
   }
   baseArgs.push("--mcp-config", mcpPath, "--strict-mcp-config");
+  // Hide browser-use tools that need their own LLM key when none is configured (they would only error).
+  if (mcp.mcpServers[BROWSER_MCP_NAME] && !browserLlmKey()) {
+    baseArgs.push("--disallowedTools", BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`).join(","));
+  }
   if (viaFiles) baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));
   else baseArgs.push("--append-system-prompt", systemPrompt);
   baseArgs.push("--setting-sources", "project,local");

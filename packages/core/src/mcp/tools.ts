@@ -206,7 +206,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "vault_fill_login",
     description:
-      "Type the username or password of a saved login into the browser page — Godmode fills it directly, you never see the value. First focus/click the target input (or pass a CSS selector). Use submit:true on the last field to press Enter.",
+      "Type the username or password of a saved login into the browser page — Godmode fills it directly, you never see the value. The right input is found automatically (focused field, or the best username/password field on the page, incl. iframes); pass a CSS selector only if that picks the wrong field. Use submit:true on the last field to press Enter.",
     schema: z.object({
       credentialId: z.string().describe("Login id from vault_list_logins"),
       field: z.enum(["username", "password"]),
@@ -234,7 +234,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "vault_fill_totp",
     description:
-      "Type the current 2FA (TOTP / authenticator) code into the browser page — Godmode fills it, you never see it. Pass the login's credentialId (its linked 2FA is used) or a totpId. Focus the code input first (or pass a selector).",
+      "Type the current 2FA (TOTP / authenticator) code into the browser page — Godmode fills it, you never see it. Pass the login's credentialId (its linked 2FA is used) or a totpId. The code input is found automatically (incl. one-digit-per-box inputs); pass a selector only if needed.",
     schema: z.object({
       credentialId: z.string().optional().describe("Login id whose linked 2FA should be used"),
       totpId: z.string().optional().describe("2FA entry id (alternative to credentialId)"),

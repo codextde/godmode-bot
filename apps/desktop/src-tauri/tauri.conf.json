@@ -71,9 +71,10 @@
     ],
     "macOS": {
       "minimumSystemVersion": "13.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": true,
       "entitlements": "Entitlements.plist",
-      "infoPlist": "Info.plist",
-      "hardenedRuntime": true
+      "infoPlist": "Info.plist"
     },
     "windows": {
       "webviewInstallMode": {

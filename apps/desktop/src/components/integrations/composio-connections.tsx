@@ -17,16 +17,25 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "./confirm-dialog";
 import { prettySlug, ToolkitLogo } from "./toolkit-logo";
 
-export function connectionTone(status: string): "ok" | "pending" | "error" {
+export function connectionTone(status: string): "ok" | "pending" | "error" | "neutral" {
   const s = status.toUpperCase();
   if (s === "ACTIVE") return "ok";
   if (s === "INITIATED" || s === "INITIALIZING" || s === "PENDING") return "pending";
-  return "error";
+  if (s === "FAILED" || s === "EXPIRED" || s === "REVOKED") return "error";
+  return "neutral";
 }
 
 export function ConnectionStatusBadge({ status }: { status: string }) {
   const tone = connectionTone(status);
-  const label = tone === "ok" ? "Active" : tone === "pending" ? "Waiting for sign-in" : status.charAt(0) + status.slice(1).toLowerCase();
+  const upper = status.toUpperCase();
+  const label =
+    tone === "ok"
+      ? "Active"
+      : tone === "pending"
+        ? "Waiting for sign-in"
+        : upper === "DELETED"
+          ? "Deleted upstream"
+          : status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
   return (
     <Badge
       className={cn(
@@ -34,6 +43,7 @@ export function ConnectionStatusBadge({ status }: { status: string }) {
         tone === "ok" && "bg-success/15 text-success",
         tone === "pending" && "bg-warning/15 text-warning",
         tone === "error" && "bg-destructive/15 text-destructive",
+        tone === "neutral" && "bg-muted text-muted-foreground",
       )}
     >
       <span className={cn("size-1.5 rounded-full bg-current", tone === "pending" && "animate-pulse")} />

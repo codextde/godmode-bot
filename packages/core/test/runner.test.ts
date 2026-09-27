@@ -207,6 +207,24 @@ describe("runner end-to-end with fake claude", () => {
     }
   });
 
+  test("runs sharing a browser profile take turns; delegated children may use the parent's browser", async () => {
+    const browserA = await makeAgent({ name: "Browser A", browser: { enabled: true } });
+    const browserB = await makeAgent({ name: "Browser B", browser: { enabled: true } });
+    const a = await startChat({ agentId: browserA.id, content: "SLEEP a" });
+    await until(() => getRun(a.run.id).status === "running", 10_000, "run a");
+
+    // Independent run on the same profile waits…
+    const b = await startChat({ agentId: browserB.id, content: "hello b" });
+    // …but a run delegated by the holder may use the browser while the parent waits for it.
+    const childConv = createConversation({ agentId: browserB.id, origin: "delegation" });
+    const child = await sendMessage(childConv.id, { content: "hello child", trigger: "delegation", parentRunId: a.run.id, depth: 1 });
+    expect((await waitForRun(child.run.id, 20_000)).status).toBe("succeeded");
+    expect(getRun(b.run.id).status).toBe("queued");
+
+    await cancelRun(a.run.id);
+    expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
+  });
+
   test("cancelling a queued run never starts it", async () => {
     const conv = createConversation({ agentId: agent.id });
     const first = await sendMessage(conv.id, { content: "SLEEP" });

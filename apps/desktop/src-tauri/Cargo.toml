@@ -41,3 +41,7 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = true
+
+# Proc-macro dylibs are loaded by rustc itself; stripping them makes `tauri_macros` unloadable on macOS.
+[profile.release.build-override]
+strip = false

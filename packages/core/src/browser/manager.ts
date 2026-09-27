@@ -12,6 +12,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, conflict, HttpError, newId, notFound, now, sleep } from "../util";
 import { getSettings } from "../services/settings";
+import { getAppSecret, isUnlocked } from "../vault/vault";
 import { onSettingsApplied } from "../services/runtime";
 import { resolveUvx, toolPath } from "../services/doctor";
 import { hasBrowserSubscribers } from "../server/ws";
@@ -604,8 +605,25 @@ export async function browserMcpServer(agent: Agent): Promise<McpServerJson | nu
     fileSystemPath: join(cfg.dataDir, "browser-use", profile.id, agent.id, "files"),
   });
   touchBrowser(profile.id);
-  return { command: command.command, args: command.args, env: browserUseEnv(configDir, toolPath()) };
+  const env = browserUseEnv(configDir, toolPath());
+  // browser-use's content extraction tools need an OpenAI-compatible LLM. Pass the key via env only (never into
+  // browser-use's config file); without one, the runner hides those tools from Claude.
+  const llmKey = browserLlmKey();
+  if (llmKey) env.OPENAI_API_KEY = llmKey;
+  return { command: command.command, args: command.args, env };
 }
+
+/** OpenAI API key for browser-use's LLM-backed tools (extract_content, retry agent), if configured. */
+export function browserLlmKey(): string | null {
+  try {
+    return isUnlocked() ? getAppSecret("openai_api_key") : null;
+  } catch {
+    return null;
+  }
+}
+
+/** browser-use MCP tools that only work with an LLM key configured. */
+export const BROWSER_LLM_TOOLS = ["browser_extract_content", "retry_with_browser_use_agent"];
 
 /* ------------------------------------------------------------------ */
 /* Chrome session import                                                */

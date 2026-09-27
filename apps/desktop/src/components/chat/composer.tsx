@@ -236,7 +236,6 @@ export function Composer({
   const onDrop = (e: DragEvent) => {
     if (!e.dataTransfer.types.includes("Files")) return;
     e.preventDefault();
-    e.stopPropagation();
     setDragOver(false);
     void addFiles(Array.from(e.dataTransfer.files));
   };
