@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, Conversation, ConversationWithMessages } from "@godmode/shared";
@@ -41,10 +41,12 @@ export function ConversationHeader({
   conversation,
   agent,
   onVoiceMode,
+  browserToggle,
 }: {
   conversation: Conversation;
   agent?: Agent;
   onVoiceMode?: () => void;
+  browserToggle?: ReactNode;
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -144,6 +146,7 @@ export function ConversationHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-0.5">
+        {browserToggle}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

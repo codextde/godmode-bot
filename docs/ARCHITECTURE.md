@@ -151,7 +151,8 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
   with CDP, read decrypted cookies via `Storage.getCookies`, inject them into the Godmode profile with
   `Storage.setCookies`. `profile-use` itself is supported for syncing to browser-use Cloud profiles.
 * **Live view**: CDP `Page.startScreencast` frames streamed to subscribed UIs; the human can take over
-  (click/type) e.g. to solve a CAPTCHA.
+  (click/type) e.g. to solve a CAPTCHA. Chats show a *passive* preview of their agent's browser next to the thread:
+  passive subscribers get frames but don't keep an idle browser running.
 
 ## Integrations
 
