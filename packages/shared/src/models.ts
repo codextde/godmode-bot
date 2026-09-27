@@ -140,6 +140,9 @@ export interface Conversation {
   origin: ConversationOrigin;
   /** Claude CLI session id used with --resume. */
   claudeSessionId: string | null;
+  /** Per-chat overrides set with /model and /effort. */
+  model: string | null;
+  effort: Effort | null;
   /** Folder this conversation works in, overriding the agent's. null = the agent's default. */
   workingDirectory: string | null;
   pinned: boolean;
@@ -181,7 +184,19 @@ export type MessageBlock =
       parentToolUseId?: string | null;
     }
   | { type: "error"; text: string }
-  | { type: "notice"; level: "info" | "warning" | "success"; text: string };
+  | { type: "notice"; level: "info" | "warning" | "success"; text: string }
+  /** Output of a Claude Code slash command that ran locally (e.g. /context, /usage, /model). */
+  | { type: "command"; name: string; args: string; output: string };
+
+/** A slash command offered by the installed Claude Code CLI for an agent. */
+export interface SlashCommand {
+  name: string;
+  description: string;
+  argumentHint: string;
+  aliases: string[];
+  /** Shipped with Claude Code (false = project command or skill in the agent repo). */
+  builtin: boolean;
+}
 
 export interface Attachment {
   name: string;

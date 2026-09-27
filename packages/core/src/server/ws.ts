@@ -9,12 +9,15 @@ const log = logger("ws");
 export interface WsData {
   id: string;
   subscriptions: Set<string>;
+  /** Subscriptions that only watch — they don't keep an idle browser running. */
+  passive?: Set<string>;
   /** How the socket authenticated; cookie sessions are closed when sessions are revoked. */
   auth?: "token" | "session";
 }
 
 const clients = new Set<ServerWebSocket<WsData>>();
 const browserSubscribers = new Map<string, number>();
+const browserWatchers = new Map<string, number>();
 
 /** Hooks invoked when the first/last UI subscribes to a browser live view. */
 let onBrowserSubscribe: ((profileId: string, subscribed: boolean) => void) | null = null;
@@ -25,6 +28,18 @@ export function setBrowserSubscriptionHandler(fn: (profileId: string, subscribed
 
 export function hasBrowserSubscribers(profileId: string): boolean {
   return (browserSubscribers.get(profileId) ?? 0) > 0;
+}
+
+/** A non-passive viewer is watching the live view, so the browser counts as in use. */
+export function hasBrowserWatchers(profileId: string): boolean {
+  return (browserWatchers.get(profileId) ?? 0) > 0;
+}
+
+function bump(counts: Map<string, number>, profileId: string, by: number): number {
+  const next = Math.max(0, (counts.get(profileId) ?? 0) + by);
+  if (next) counts.set(profileId, next);
+  else counts.delete(profileId);
+  return next;
 }
 
 function send(ws: ServerWebSocket<WsData>, event: ServerEvent) {
@@ -50,15 +65,20 @@ bus.on((event) => {
   }
 });
 
-function changeSubscription(ws: ServerWebSocket<WsData>, profileId: string, subscribe: boolean) {
+function changeSubscription(ws: ServerWebSocket<WsData>, profileId: string, subscribe: boolean, passive = false) {
   const key = `browser:${profileId}`;
   const has = ws.data.subscriptions.has(key);
+  const wasWatching = has && !ws.data.passive?.has(key);
+  const watching = subscribe && !passive;
+  if (wasWatching !== watching) bump(browserWatchers, profileId, watching ? 1 : -1);
+  if (subscribe && passive) (ws.data.passive ??= new Set()).add(key);
+  else ws.data.passive?.delete(key);
+
   if (subscribe === has) return;
   if (subscribe) ws.data.subscriptions.add(key);
   else ws.data.subscriptions.delete(key);
-  const count = (browserSubscribers.get(profileId) ?? 0) + (subscribe ? 1 : -1);
-  browserSubscribers.set(profileId, Math.max(0, count));
-  if ((subscribe && count === 1) || (!subscribe && count <= 0)) onBrowserSubscribe?.(profileId, subscribe);
+  const count = bump(browserSubscribers, profileId, subscribe ? 1 : -1);
+  if ((subscribe && count === 1) || (!subscribe && count === 0)) onBrowserSubscribe?.(profileId, subscribe);
 }
 
 export const websocketHandler = {
@@ -78,7 +98,7 @@ export const websocketHandler = {
         ws.send(JSON.stringify({ type: "pong" }));
         break;
       case "browser.subscribe":
-        changeSubscription(ws, msg.profileId, true);
+        changeSubscription(ws, msg.profileId, true, msg.passive === true);
         break;
       case "browser.unsubscribe":
         changeSubscription(ws, msg.profileId, false);

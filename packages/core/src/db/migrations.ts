@@ -256,6 +256,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   },
   {
     id: 2,
+    name: "conversation_overrides",
+    sql: /* sql */ `
+ALTER TABLE conversations ADD COLUMN model TEXT;
+ALTER TABLE conversations ADD COLUMN effort TEXT;
+`,
+  },
+  {
+    id: 3,
     name: "working_directories",
     sql: /* sql */ `
 ALTER TABLE agents ADD COLUMN working_directory TEXT;

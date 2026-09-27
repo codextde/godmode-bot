@@ -10,6 +10,7 @@ import type {
   Attachment,
   Conversation,
   ConversationOrigin,
+  Effort,
   Message,
   MessageBlock,
   MessageRole,
@@ -41,6 +42,8 @@ interface ConversationRow {
   title: string;
   origin: ConversationOrigin;
   claude_session_id: string | null;
+  model: string | null;
+  effort: Effort | null;
   working_directory: string | null;
   pinned: number;
   archived: number;
@@ -89,6 +92,8 @@ function toConversation(r: ConversationRow): Conversation {
     title: r.title,
     origin: r.origin,
     claudeSessionId: r.claude_session_id,
+    model: r.model ?? null,
+    effort: r.effort ?? null,
     workingDirectory: r.working_directory,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
@@ -231,10 +236,12 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
 /** Internal fields maintained by the runner. Does not emit. */
 export function setConversationState(
   id: string,
-  patch: { claudeSessionId?: string | null; lastMessageAt?: string; title?: string },
+  patch: { claudeSessionId?: string | null; lastMessageAt?: string; title?: string; model?: string | null; effort?: Effort | null },
 ) {
   update("conversations", id, {
     claude_session_id: patch.claudeSessionId,
+    model: patch.model,
+    effort: patch.effort,
     last_message_at: patch.lastMessageAt,
     title: patch.title,
     updated_at: now(),

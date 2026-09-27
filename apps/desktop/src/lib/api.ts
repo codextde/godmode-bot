@@ -38,6 +38,7 @@ import type {
   SendMessageResult,
   Settings,
   SetupInput,
+  SlashCommand,
   StartChatInput,
   StartChatResult,
   TotpCode,
@@ -221,6 +222,8 @@ export const api = {
     readFile: (id: string, path: string) => get<{ path: string; content: string }>(`/api/agents/${id}/file`, { path }),
     writeFile: (id: string, path: string, content: string) => put<{ ok: true }>(`/api/agents/${id}/file`, { path, content }),
     commits: (id: string) => get<GitCommit[]>(`/api/agents/${id}/commits`),
+    /** Slash commands of the installed Claude Code CLI, as this agent's runs see them */
+    commands: (id: string) => get<SlashCommand[]>(`/api/agents/${id}/commands`),
   },
 
   routines: {

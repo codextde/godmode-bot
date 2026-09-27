@@ -12,6 +12,7 @@ import {
   writeAgentFile,
 } from "../../agents/service";
 import { AGENT_TEMPLATES } from "../../agents/templates";
+import { listSlashCommands } from "../../runner/commands";
 import { createRoutine, deleteRoutine, listRoutines, runRoutineNow, updateRoutine } from "../../services/routines";
 import { startChat } from "../../services/conversations";
 import { getSettings } from "../../services/settings";
@@ -121,6 +122,8 @@ export function registerAgentRoutes(app: Hono): void {
     if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
     return c.json(await startChat({ agentId: agent.id, content: prompt, origin: "api" }));
   });
+
+  app.get("/api/agents/:id/commands", async (c) => c.json(await listSlashCommands(getAgent(c.req.param("id")))));
 
   /* Repository browser ------------------------------------------------ */
 

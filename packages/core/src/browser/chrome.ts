@@ -1,12 +1,12 @@
 /**
  * Chromium-family executable detection (per OS) and process launch with remote debugging on loopback.
  */
-import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { Subprocess } from "bun";
 import { sleep, which } from "../util";
-import { probeCdp } from "./cdp";
+import { CdpClient, probeCdp } from "./cdp";
 
 export interface ChromeCandidate {
   browser: string;
@@ -166,6 +166,11 @@ function resolveCustomPath(path: string): string | null {
   return onPath && isExecutableFile(onPath) ? onPath : null;
 }
 
+/** macOS: the .app bundle an executable lives in (LaunchServices starts bundles, not bare binaries). */
+export function appBundle(executable: string): string | null {
+  return /^(.+\.app)\/Contents\/MacOS\/[^/]+$/.exec(executable)?.[1] ?? null;
+}
+
 /** First existing Chromium-family executable: `customPath` (settings) first, then auto-detection. */
 export function findChrome(customPath?: string, opts: DetectOptions = {}): ChromeCandidate | null {
   if (customPath && customPath.trim()) {
@@ -191,6 +196,9 @@ export function findFreePort(): number {
  * a browser the previous process left running. Chrome itself only writes DevToolsActivePort for port 0.
  */
 export const LAUNCH_MARKER = "Godmode-DevTools.json";
+
+/** Chromium's stderr when LaunchServices starts it (it isn't our child, so there is no pipe). */
+const STDERR_LOG = "Godmode-stderr.log";
 
 export interface LaunchMarker {
   pid: number;
@@ -249,6 +257,7 @@ export interface ChromeProcess {
   port: number;
   wsUrl: string;
   browserVersion: string;
+  /** The browser, or `open` when LaunchServices started it (macOS, visible). */
   proc: Subprocess;
   /** Resolves with the exit code once the process is gone. */
   exited: Promise<number | null>;
@@ -277,16 +286,32 @@ export function defaultChromeArgs(port: number, userDataDir: string, headless: b
   ];
 }
 
-/** Spawn Chromium with remote debugging on a free loopback port and wait until CDP answers. */
+/**
+ * Spawn Chromium with remote debugging on a free loopback port and wait until CDP answers.
+ *
+ * On macOS a visible browser started directly jumps to the front and takes focus. It is started in the background
+ * through LaunchServices instead (`open -g` also keeps later tabs from activating it), without a startup window,
+ * and its first window opens behind the active app. Hidden or minimized windows would stop rendering.
+ */
 export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> {
   const timeoutMs = opts.timeoutMs ?? 30_000;
+  const bundle = backgroundBundle(opts);
+  const stderrLog = join(opts.userDataDir, STDERR_LOG);
   let lastError: Error | null = null;
   // One retry covers the (rare) race where another process grabs the port we picked.
   for (let attempt = 0; attempt < 2; attempt++) {
     const port = findFreePort();
     const args = [...defaultChromeArgs(port, opts.userDataDir, opts.headless), ...(opts.extraArgs ?? [])];
-    if (opts.startUrl) args.push(opts.startUrl);
-    const proc = Bun.spawn([opts.executable, ...args], { stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+    const startedAt = Date.now();
+    let cmd: string[];
+    if (bundle) {
+      writeFileSync(stderrLog, "", { mode: 0o600 });
+      // `open` is not the browser; -W keeps it around until the browser exits so an early exit is noticed.
+      cmd = ["open", "-n", "-g", "-W", "--stderr", stderrLog, "-a", bundle, "--args", ...args, "--no-startup-window"];
+    } else {
+      cmd = [opts.executable, ...args, ...(opts.startUrl ? [opts.startUrl] : [])];
+    }
+    const proc = Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "pipe" });
 
     let tail = "";
     let alive = true;
@@ -314,24 +339,62 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
         /* stream closed */
       }
     })();
+    const stderrTail = () => (bundle ? readTail(stderrLog) : "") + tail;
 
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (!alive) break;
       const version = await probeCdp(port, 1000);
       if (version) {
+        if (!bundle) {
+          return {
+            pid: proc.pid,
+            port,
+            wsUrl: version.webSocketDebuggerUrl,
+            browserVersion: version.Browser,
+            proc,
+            exited,
+            isAlive: () => alive,
+            stderrTail,
+            kill: (signal: NodeJS.Signals = "SIGTERM") => {
+              try {
+                proc.kill(signal);
+              } catch {
+                /* already exited */
+              }
+            },
+          };
+        }
+        let pid: number;
+        try {
+          pid = await openBackgroundWindow(version.webSocketDebuggerUrl, opts.startUrl ?? "about:blank");
+        } catch (err) {
+          killLockHolder(opts.userDataDir, startedAt);
+          await Promise.race([exited, sleep(3000)]);
+          try {
+            proc.kill("SIGKILL");
+          } catch {
+            /* already exited */
+          }
+          throw new ChromeLaunchError(`Could not open the browser window: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        // `open` can go away first (e.g. Ctrl-C in a terminal); the browser's own pid is what counts.
+        const isAlive = () => isProcessAlive(pid);
         return {
-          pid: proc.pid,
+          pid,
           port,
           wsUrl: version.webSocketDebuggerUrl,
           browserVersion: version.Browser,
           proc,
-          exited,
-          isAlive: () => alive,
-          stderrTail: () => tail,
+          exited: exited.then(async () => {
+            while (isAlive()) await sleep(250);
+            return null;
+          }),
+          isAlive,
+          stderrTail,
           kill: (signal: NodeJS.Signals = "SIGTERM") => {
             try {
-              proc.kill(signal);
+              if (isAlive()) process.kill(pid, signal);
             } catch {
               /* already exited */
             }
@@ -347,18 +410,74 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
       } catch {
         /* ignore */
       }
-      lastError = new ChromeLaunchError(`Chromium did not open its DevTools endpoint within ${Math.round(timeoutMs / 1000)} s.${formatTail(tail)}`);
+      // A browser LaunchServices is still starting takes the profile lock only now.
+      for (let i = 0; bundle && i < 10 && !killLockHolder(opts.userDataDir, startedAt); i++) await sleep(200);
+      lastError = new ChromeLaunchError(`Chromium did not open its DevTools endpoint within ${Math.round(timeoutMs / 1000)} s.${formatTail(stderrTail())}`);
       continue;
     }
     const code = await exited;
-    // 0: handed the command line to an existing instance; 21: RESULT_CODE_PROFILE_IN_USE.
-    if (code === 0 || code === 21) {
+    // 0: handed the command line to an existing instance; 21: RESULT_CODE_PROFILE_IN_USE. `open` exits 0 either way.
+    if (bundle ? profileLockPid(opts.userDataDir) !== null : code === 0 || code === 21) {
       throw new ChromeLaunchError(`The profile directory is already in use by another browser process (${opts.userDataDir}).`);
     }
-    lastError = new ChromeLaunchError(`Chromium exited during startup (code ${code}).${formatTail(tail)}`);
-    if (!/address already in use|bind\(\) failed/i.test(tail)) break;
+    lastError = new ChromeLaunchError(`Chromium exited during startup${bundle ? "" : ` (code ${code})`}.${formatTail(stderrTail())}`);
+    if (!/address already in use|bind\(\) failed/i.test(stderrTail())) break;
   }
   throw lastError ?? new ChromeLaunchError("Chromium failed to start");
+}
+
+/** The app bundle to start through LaunchServices, for a visible browser on macOS. */
+function backgroundBundle(opts: LaunchOptions): string | null {
+  if (opts.headless || process.platform !== "darwin") return null;
+  try {
+    return appBundle(realpathSync(opts.executable));
+  } catch {
+    return null;
+  }
+}
+
+/** The browser `open` started isn't our child: read its pid over CDP, then open its first window without activating it. */
+async function openBackgroundWindow(wsUrl: string, url: string): Promise<number> {
+  const client = await CdpClient.connect(wsUrl);
+  try {
+    const { processInfo } = await client.send<{ processInfo: { type: string; id: number }[] }>("SystemInfo.getProcessInfo", {}, undefined, 10_000);
+    const pid = processInfo.find((p) => p.type === "browser")?.id;
+    if (!pid) throw new Error("the browser did not report its process id");
+    await client.send("Target.createTarget", { url, newWindow: true, background: true }, undefined, 10_000);
+    return pid;
+  } finally {
+    client.close();
+  }
+}
+
+/** Pid of the running browser holding the profile's singleton lock (a "<host>-<pid>" symlink). */
+function profileLockPid(userDataDir: string): number | null {
+  try {
+    const pid = Number(readlinkSync(join(userDataDir, "SingletonLock")).split("-").pop());
+    return Number.isInteger(pid) && pid > 0 && pid !== process.pid && isProcessAlive(pid) ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Kill the browser that took the profile lock since `since` (an older lock may name a reused pid). */
+function killLockHolder(userDataDir: string, since: number): boolean {
+  try {
+    if (lstatSync(join(userDataDir, "SingletonLock")).mtimeMs < since - 1000) return false;
+    const pid = profileLockPid(userDataDir);
+    if (pid) process.kill(pid, "SIGKILL");
+    return !!pid;
+  } catch {
+    return false;
+  }
+}
+
+function readTail(path: string): string {
+  try {
+    return readFileSync(path, "utf8").slice(-4000);
+  } catch {
+    return "";
+  }
 }
 
 function formatTail(tail: string): string {
