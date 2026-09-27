@@ -23,6 +23,7 @@ import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
 import { runDoctor } from "./services/doctor";
+import { getModelCatalog } from "./runner/models";
 import { newId } from "./util";
 
 const log = logger("core");
@@ -170,6 +171,7 @@ async function serve(values: Record<string, unknown>) {
 
   // Background doctor check so the UI has fresh dependency info.
   runDoctor(true).catch((err) => log.warn("doctor failed", err));
+  getModelCatalog().catch((err) => log.warn("model catalog failed", err));
 
   let stopping = false;
   const shutdown = async (signal: string) => {

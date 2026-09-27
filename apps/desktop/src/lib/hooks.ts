@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { BUILTIN_MODELS, type ModelCatalog } from "@godmode/shared";
 import { api, type ScopeFilter } from "./api";
 import { qk } from "./queryKeys";
 import { useUi } from "@/stores/ui";
@@ -40,6 +41,14 @@ export function useConversations(agentId?: string, search = "") {
 
 export function useConversation(id: string | undefined) {
   return useQuery({ queryKey: qk.conversation(id ?? ""), queryFn: () => api.conversations.get(id!), enabled: !!id });
+}
+
+const BUILTIN_CATALOG: ModelCatalog = { models: BUILTIN_MODELS, source: "builtin", claudeVersion: null, fetchedAt: "", error: null };
+
+/** Models offered by the installed Claude Code; the built-in list until it answers. */
+export function useModelCatalog() {
+  const { data, isPending } = useQuery({ queryKey: qk.models, queryFn: () => api.models.get(), staleTime: 5 * 60_000 });
+  return { catalog: data ?? BUILTIN_CATALOG, isPending };
 }
 
 export function useVaultStatus() {

@@ -12,6 +12,7 @@ import { AgentAvatar, Kbd } from "@/components/common";
 import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
 import { Orb } from "@/components/aicss/Orb";
 import { AgentPicker } from "@/components/chat/agent-picker";
+import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { FolderChip } from "@/components/chat/folder-picker";
 import { ChatDropZone } from "@/components/chat/thread";
@@ -71,6 +72,7 @@ export default function ChatHome() {
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
   const composerRef = useRef<ComposerHandle>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
+  const [choice, setChoice] = useState<ModelChoice>({ model: null, effort: null });
   const [folder, setFolder] = useState<string | null>(null);
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
@@ -157,12 +159,14 @@ export default function ChatHome() {
                 </>
               )
             }
+            trailing={<ModelPicker agent={selected} value={choice} onChange={(patch) => setChoice((c) => ({ ...c, ...patch }))} />}
             onSubmit={(input) =>
               start.mutateAsync({
                 agentId: selected?.id,
                 content: input.content,
                 attachments: input.attachments.length ? input.attachments : undefined,
                 voice: input.voice || undefined,
+                ...choice,
                 workingDirectory: folder ?? undefined,
               })
             }
@@ -198,7 +202,7 @@ export default function ChatHome() {
         agent={selected}
         busy={start.isPending}
         onSend={async (text) => {
-          await start.mutateAsync({ agentId: selected?.id, content: text, voice: true, workingDirectory: folder ?? undefined });
+          await start.mutateAsync({ agentId: selected?.id, content: text, voice: true, workingDirectory: folder ?? undefined, ...choice });
         }}
       />
     </ChatDropZone>

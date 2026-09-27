@@ -1,10 +1,12 @@
+import type { ClaudeModel, Effort } from "./models";
+
 export const APP_NAME = "Godmode Bot";
 export const APP_SLUG = "godmode";
 export const DEFAULT_PORT = 7777;
 export const DEFAULT_MODEL = "claude-opus-5-5";
 export const DEFAULT_AGENT_SLUG = "godmode";
 
-/** Models offered in the UI model picker. Any Claude CLI model id/alias is accepted. */
+/** Fallback model list, used until (or when) the installed Claude Code CLI reports its own. */
 export const MODEL_OPTIONS: { id: string; label: string; hint: string }[] = [
   { id: "claude-opus-5-5", label: "Opus 5.5", hint: "Best for autonomous multi-step work (default)" },
   { id: "claude-fable-5-1", label: "Fable 5.1", hint: "Frontier model, highest capability" },
@@ -13,6 +15,46 @@ export const MODEL_OPTIONS: { id: string; label: string; hint: string }[] = [
 ];
 
 export const EFFORT_OPTIONS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+export const BUILTIN_MODELS: ClaudeModel[] = MODEL_OPTIONS.map((m) => ({
+  id: m.id,
+  resolvedModel: m.id,
+  label: m.label,
+  description: m.hint,
+  efforts: [...EFFORT_OPTIONS],
+  latest: true,
+}));
+
+export const EFFORT_LABELS: Record<Effort, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
+};
+
+const MODEL_ID = /^[A-Za-z0-9][\w.:@/[\]-]{0,199}$/;
+
+/** A `--model` value: alias, model id or provider id (e.g. "us.anthropic.claude-…-v1:0", "claude-opus-4-6[1m]"). */
+export function isModelId(value: string): boolean {
+  return MODEL_ID.test(value);
+}
+
+/** Catalog entry for a `--model` value (alias or full id), matching either form. */
+export function findModel<T extends { id: string; resolvedModel: string }>(models: readonly T[], value: string | null | undefined): T | undefined {
+  const v = value?.trim();
+  if (!v) return undefined;
+  return models.find((m) => m.id === v) ?? models.find((m) => m.resolvedModel === v);
+}
+
+/** The effort to pass for a model: null when it has none, else the closest supported level at or below `effort` (or its lowest). */
+export function effortForModel(efforts: readonly Effort[], effort: Effort | null): Effort | null {
+  if (!effort || efforts.length === 0) return null;
+  if (efforts.includes(effort)) return effort;
+  const rank = EFFORT_OPTIONS.indexOf(effort);
+  const below = efforts.filter((e) => EFFORT_OPTIONS.indexOf(e) < rank);
+  return below.length ? below[below.length - 1]! : efforts[0]!;
+}
 
 /** `/goal ship it` → { name: "goal", args: "ship it" }; null for plain text and paths like `/Users/me`. */
 export function parseSlashCommand(text: string): { name: string; args: string } | null {

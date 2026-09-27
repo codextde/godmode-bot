@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ClaudeReleaseChannel, ClaudeUpdateResult, ClaudeUpdateStatus } from "@godmode/shared";
 import { logger } from "../log";
+import { getModelCatalog } from "../runner/models";
 import { childEnv, now } from "../util";
 import { resetDoctorCache, resolveClaudeBinary, runCommand, stripAnsi, toolPath, versionFrom } from "./doctor";
 
@@ -109,6 +110,7 @@ async function runUpdate(): Promise<ClaudeUpdateResult> {
   const output = stripAnsi(`${res.stdout}${res.stderr ? `\n${res.stderr}` : ""}`).trim();
   if (!ok) log.warn(`claude update did not upgrade (exit ${res.code}${res.timedOut ? ", timed out" : ""})`);
   else log.info(`claude is now ${version}`);
+  if (upgraded) getModelCatalog({ refresh: true }).catch((err) => log.warn("model refresh after update failed", err));
   return {
     ok,
     previous,

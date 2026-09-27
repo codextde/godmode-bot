@@ -12,7 +12,7 @@
  *   CRASH       print to stderr and exit 3 without a result
  *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected)
  *
- * With `--input-format stream-json` it answers the `initialize` control request with a command catalog.
+ * With `--input-format stream-json` it answers the `initialize` control request with a command and model catalog.
  * Env: FAKE_CLAUDE_STATE — directory for known sessions + an invocation log (invocations.jsonl).
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -27,6 +27,71 @@ const argValue = (flag: string): string | null => {
 
 const stateDir = process.env.FAKE_CLAUDE_STATE ?? join(tmpdir(), "godmode-fake-claude");
 mkdirSync(join(stateDir, "sessions"), { recursive: true });
+
+if (args.includes("--version")) {
+  process.stdout.write("9.9.9 (Claude Code)\n");
+  process.exit(0);
+}
+
+/**
+ * Catalog probe (`initialize` over stream-json), logged to invocations.jsonl and probes.jsonl.
+ * FAKE_CLAUDE_MODELS=error answers with an error, =silent exits without answering, =hang never answers and keeps a
+ * child holding stdout (its pid goes to hang.pid).
+ */
+if (argValue("--input-format") === "stream-json") {
+  const logged = JSON.stringify({ args, prompt: "", cwd: process.cwd(), env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? null, GODMODE_TOKEN: process.env.GODMODE_TOKEN ?? null } });
+  appendFileSync(join(stateDir, "invocations.jsonl"), logged + "\n");
+  appendFileSync(join(stateDir, "probes.jsonl"), logged + "\n");
+  const mode = process.env.FAKE_CLAUDE_MODELS ?? "";
+  if (mode === "silent") {
+    process.stderr.write("probe: not today\n");
+    process.exit(1);
+  }
+  if (mode === "hang") {
+    const child = Bun.spawn(["sleep", "60"], { stdout: "inherit", stderr: "inherit" });
+    writeFileSync(join(stateDir, "hang.pid"), String(child.pid));
+    process.stdin.on("end", () => {});
+    await new Promise(() => {});
+  }
+  const effort = (levels: string[]) => ({ supportsEffort: true, supportedEffortLevels: levels });
+  const all = ["low", "medium", "high", "xhigh", "max"];
+  const models = [
+    { value: "default", resolvedModel: "claude-opus-9", displayName: "Default (recommended)", description: "Opus 9", ...effort(all) },
+    { value: "opus", resolvedModel: "claude-opus-9", displayName: "Opus 9", description: "Most capable", ...effort(all) },
+    { value: "sonnet", resolvedModel: "claude-sonnet-9", displayName: "Sonnet 9", description: "Efficient", ...effort(all) },
+    { value: "haiku", resolvedModel: "claude-haiku-9", displayName: "Haiku 9", description: "Fastest" },
+    { value: "claude-opus-8", resolvedModel: "claude-opus-8", displayName: "Opus 8", description: "Older", ...effort(["low", "medium", "high", "max"]) },
+  ];
+  const commands = [
+    { name: "goal", description: "Set a goal — keep working until the condition is met", argumentHint: "", builtin: true },
+    { name: "clear", description: "Start a new session with empty context", argumentHint: "[name]", aliases: ["reset", "new"], builtin: true },
+    { name: "color", description: "Set the prompt bar color", argumentHint: "[color]", builtin: true },
+    { name: "__remote-workflow", description: "internal", argumentHint: "", builtin: true },
+    { name: "hello", description: "Say hello to someone (project)", argumentHint: "<name>" },
+    { name: "clear", description: "A project command shadowed by the built-in (project)", argumentHint: "" },
+  ];
+  const decoder = new TextDecoder();
+  const reader = Bun.stdin.stream().getReader();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const msg = JSON.parse(buf.slice(0, nl)) as { type: string; request_id: string; request: { subtype: string } };
+      buf = buf.slice(nl + 1);
+      if (msg.type !== "control_request" || msg.request.subtype !== "initialize") continue;
+      process.stdout.write(JSON.stringify({ type: "system", subtype: "hook_started" }) + "\n");
+      const response =
+        mode === "error"
+          ? { subtype: "error", request_id: msg.request_id, error: "initialize failed" }
+          : { subtype: "success", request_id: msg.request_id, response: { commands, models } };
+      process.stdout.write(JSON.stringify({ type: "control_response", response }) + "\n");
+    }
+  }
+  process.exit(0);
+}
 
 const prompt = await new Response(Bun.stdin.stream()).text();
 const resume = argValue("--resume");
@@ -48,28 +113,6 @@ appendFileSync(
 
 const out = (event: unknown) => process.stdout.write(JSON.stringify(event) + "\n");
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-if (argValue("--input-format") === "stream-json") {
-  const request = prompt.split("\n").map((l) => (l.trim() ? JSON.parse(l) : null)).find((e) => e?.type === "control_request");
-  out({
-    type: "control_response",
-    response: {
-      subtype: "success",
-      request_id: request?.request_id,
-      response: {
-        commands: [
-          { name: "goal", description: "Set a goal — keep working until the condition is met", argumentHint: "", builtin: true },
-          { name: "clear", description: "Start a new session with empty context", argumentHint: "[name]", aliases: ["reset", "new"], builtin: true },
-          { name: "color", description: "Set the prompt bar color", argumentHint: "[color]", builtin: true },
-          { name: "__remote-workflow", description: "internal", argumentHint: "", builtin: true },
-          { name: "hello", description: "Say hello to someone (project)", argumentHint: "<name>" },
-          { name: "clear", description: "A project command shadowed by the built-in (project)", argumentHint: "" },
-        ],
-      },
-    },
-  });
-  process.exit(0);
-}
 
 if (resume && !existsSync(join(stateDir, "sessions", resume))) {
   const msg = `No conversation found with session ID: ${resume}`;
