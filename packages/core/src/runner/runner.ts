@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { FileSink, Subprocess } from "bun";
 import type { Agent, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
-import { BROWSER_MCP_NAME, DEFAULT_MODEL, isModelId } from "@godmode/shared";
+import { BROWSER_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -207,6 +207,8 @@ interface Job {
   browserProfileId?: string | null;
   /** `--model` value the run was started with. */
   model?: string;
+  /** A slash command ran in a replacement session: keep the lost one so the next message still gets the recap. */
+  keepSessionId?: string;
 }
 
 const jobs = new Map<string, Job>();
@@ -522,7 +524,7 @@ function writeTempFile(res: Resources, name: string, content: string): string {
   return path;
 }
 
-function buildEnv(agent: Agent): Record<string, string | undefined> {
+export function buildEnv(agent: Agent): Record<string, string | undefined> {
   const env = claudeEnv();
   if (getSettings().memory.backend === "claude-mem" && claudeMemPluginDir()) Object.assign(env, claudeMemEnv(agent));
   return env;
@@ -827,7 +829,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     }
     if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
     const sessionArgs = resuming ? ["--resume", sessionId] : ["--session-id", sessionId];
-    const prompt = resuming ? resumeContextPrefix() + job.prompt : job.prompt;
+    // Claude Code only recognizes a slash command at the very start of the prompt.
+    const command = parseSlashCommand(job.prompt) !== null;
+    const prompt = resuming && !command ? resumeContextPrefix() + job.prompt : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, agent, env, logSink);
 
     const lostSession =
@@ -841,13 +845,14 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       const notices = job.acc.blocks.filter((b) => b.type === "notice");
       job.acc = new StreamAccumulator();
       for (const n of notices) if (n.type === "notice") job.acc.addNotice(n.level, n.text);
+      if (command) job.keepSessionId = sessionId;
       sessionId = randomUUID();
       setConversationState(job.conversationId, { claudeSessionId: sessionId });
       attempt = await spawnClaude(
         job,
         cmd,
         [...baseArgs, "--session-id", sessionId, ...extraArgs],
-        recapPrefix(job) + job.prompt,
+        command ? job.prompt : recapPrefix(job) + job.prompt,
         agent,
         env,
         logSink,
@@ -940,9 +945,17 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
       const title =
         row?.title === DEFAULT_CONVERSATION_TITLE && job.userMessageId ? autoTitle(job.userMessageId) : undefined;
       setConversationState(job.conversationId, {
-        ...(acc.sessionId ? { claudeSessionId: acc.sessionId } : {}),
+        // After /clear the next turn starts a brand-new session instead of resuming the old one.
+        ...(acc.contextCleared
+          ? { claudeSessionId: null }
+          : job.keepSessionId
+            ? { claudeSessionId: job.keepSessionId }
+            : acc.sessionId
+              ? { claudeSessionId: acc.sessionId }
+              : {}),
         lastMessageAt: ts,
         ...(title && title !== DEFAULT_CONVERSATION_TITLE ? { title } : {}),
+        ...(outcome.status === "succeeded" ? commandOverrides(acc.localCommand) : {}),
       });
     });
   }
@@ -981,6 +994,30 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
     const title = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", job.conversationId)?.title ?? job.trigger;
     const message = `Run ${job.runId.slice(-6)}: ${title}`;
     commitAgentRepo(job.agentId, message).catch((err) => log.warn(`auto-commit for agent ${job.agentId} failed`, err));
+  }
+}
+
+/**
+ * Session settings from local slash commands. Claude Code keeps `/model` and `/effort` for its process only,
+ * but every Godmode turn is a new process — so they are stored on the conversation. `/rename` renames the chat.
+ * Only what Claude Code confirmed is stored: a rejected model would break every later turn of the chat.
+ */
+function commandOverrides(cmd: StreamAccumulator["localCommand"]): { model?: string | null; effort?: Effort | null; title?: string } {
+  const arg = cmd?.args.trim();
+  if (!cmd || !arg) return {};
+  switch (cmd.name) {
+    case "model":
+      if (!/^Set model to /.test(cmd.output)) return {};
+      return { model: arg.toLowerCase() === "default" ? null : arg };
+    case "effort": {
+      const level = /effort level (?:set )?to (\w+)/i.exec(cmd.output)?.[1]?.toLowerCase();
+      if (level === "auto") return { effort: null };
+      return level && (EFFORT_OPTIONS as readonly string[]).includes(level) ? { effort: level as Effort } : {};
+    }
+    case "rename":
+      return { title: redact(arg).slice(0, 200) };
+    default:
+      return {};
   }
 }
 

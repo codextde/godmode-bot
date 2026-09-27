@@ -10,7 +10,9 @@
  *   LOGIN_FAIL  answer with a login-failure sentence
  *   CALL_MCP    call the Godmode MCP gateway from --mcp-config (initialize, tools/list, report_missing_login)
  *   CRASH       print to stderr and exit 3 without a result
+ *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected)
  *
+ * With `--input-format stream-json` it answers the `initialize` control request with a command and model catalog.
  * Env: FAKE_CLAUDE_STATE — directory for known sessions + an invocation log (invocations.jsonl).
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -32,12 +34,14 @@ if (args.includes("--version")) {
 }
 
 /**
- * Model catalog probe: stream-json input, answers the `initialize` control request with a model list.
+ * Catalog probe (`initialize` over stream-json), logged to invocations.jsonl and probes.jsonl.
  * FAKE_CLAUDE_MODELS=error answers with an error, =silent exits without answering, =hang never answers and keeps a
- * child holding stdout (its pid goes to hang.pid). Logged to probes.jsonl.
+ * child holding stdout (its pid goes to hang.pid).
  */
 if (argValue("--input-format") === "stream-json") {
-  appendFileSync(join(stateDir, "probes.jsonl"), JSON.stringify({ args, cwd: process.cwd() }) + "\n");
+  const logged = JSON.stringify({ args, prompt: "", cwd: process.cwd(), env: { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? null, GODMODE_TOKEN: process.env.GODMODE_TOKEN ?? null } });
+  appendFileSync(join(stateDir, "invocations.jsonl"), logged + "\n");
+  appendFileSync(join(stateDir, "probes.jsonl"), logged + "\n");
   const mode = process.env.FAKE_CLAUDE_MODELS ?? "";
   if (mode === "silent") {
     process.stderr.write("probe: not today\n");
@@ -58,6 +62,14 @@ if (argValue("--input-format") === "stream-json") {
     { value: "haiku", resolvedModel: "claude-haiku-9", displayName: "Haiku 9", description: "Fastest" },
     { value: "claude-opus-8", resolvedModel: "claude-opus-8", displayName: "Opus 8", description: "Older", ...effort(["low", "medium", "high", "max"]) },
   ];
+  const commands = [
+    { name: "goal", description: "Set a goal — keep working until the condition is met", argumentHint: "", builtin: true },
+    { name: "clear", description: "Start a new session with empty context", argumentHint: "[name]", aliases: ["reset", "new"], builtin: true },
+    { name: "color", description: "Set the prompt bar color", argumentHint: "[color]", builtin: true },
+    { name: "__remote-workflow", description: "internal", argumentHint: "", builtin: true },
+    { name: "hello", description: "Say hello to someone (project)", argumentHint: "<name>" },
+    { name: "clear", description: "A project command shadowed by the built-in (project)", argumentHint: "" },
+  ];
   const decoder = new TextDecoder();
   const reader = Bun.stdin.stream().getReader();
   let buf = "";
@@ -74,7 +86,7 @@ if (argValue("--input-format") === "stream-json") {
       const response =
         mode === "error"
           ? { subtype: "error", request_id: msg.request_id, error: "initialize failed" }
-          : { subtype: "success", request_id: msg.request_id, response: { commands: [], models } };
+          : { subtype: "success", request_id: msg.request_id, response: { commands, models } };
       process.stdout.write(JSON.stringify({ type: "control_response", response }) + "\n");
     }
   }
@@ -132,7 +144,38 @@ function textTurn(text: string) {
   out({ type: "assistant", message: { id: `msg_${crypto.randomUUID()}`, role: "assistant", content: [{ type: "text", text }] }, parent_tool_use_id: null, session_id: sessionId });
 }
 
-if (prompt.includes("CRASH")) {
+const slash = /^\/(\S+)\s*([\s\S]*)$/.exec(prompt.trim());
+
+if (slash?.[1] === "clear") {
+  const fresh = crypto.randomUUID();
+  out({ type: "conversation_reset", new_conversation_id: fresh, trigger: "clear" });
+  out({ ...init, session_id: fresh });
+  result("", { session_id: fresh, num_turns: 0, local_command: "clear" });
+} else if (slash) {
+  const [, name, args] = slash;
+  out(init);
+  const effort = args.toLowerCase();
+  const text =
+    name === "model"
+      ? args === "bogus"
+        ? "Model 'bogus' not found"
+        : `Set model to \`${args}\` for this session only`
+      : name === "effort"
+        ? effort === "auto"
+          ? "Effort level set to auto (this session only)"
+          : ["low", "medium", "high", "xhigh", "max"].includes(effort)
+            ? `Set effort level to ${effort} (this session only)`
+            : `Invalid argument: ${args}. Valid options are: low, medium, high, xhigh, max, auto`
+        : `Ran /${name} ${args}`.trim();
+  out({
+    type: "assistant",
+    message: { id: crypto.randomUUID(), model: "<synthetic>", role: "assistant", content: [{ type: "text", text }] },
+    parent_tool_use_id: null,
+    session_id: sessionId,
+    local_command_run: { command: name, args },
+  });
+  result(text, { num_turns: 0, local_command: name });
+} else if (prompt.includes("CRASH")) {
   process.stderr.write("fatal: something exploded\n");
   process.exit(3);
 } else if (prompt.includes("SLEEP")) {

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, Conversation, ConversationWithMessages } from "@godmode/shared";
-import { Archive, ArchiveRestore, AudioLines, CalendarClock, ChevronRight, Ellipsis, Pencil, Pin, PinOff, Share2, Trash2, Plug } from "lucide-react";
+import { EFFORT_LABELS } from "@godmode/shared";
+import { Archive, ArchiveRestore, AudioLines, CalendarClock, ChevronRight, Cpu, Ellipsis, Pencil, Pin, PinOff, Share2, Trash2, Plug } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
+import { useModelLabel } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { isTauri } from "@/lib/core";
@@ -49,6 +51,7 @@ export function ConversationHeader({
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const modelLabel = useModelLabel();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const id = conversation.id;
@@ -127,6 +130,17 @@ export function ConversationHeader({
           <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground sm:inline-flex">
             <origin.icon className="size-3" /> {origin.label}
           </span>
+        )}
+        {(conversation.model || conversation.effort) && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground sm:inline-flex">
+                <Cpu className="size-3" />
+                {[conversation.model && modelLabel(conversation.model), conversation.effort && EFFORT_LABELS[conversation.effort]].filter(Boolean).join(" · ")}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Set for this chat in the model picker or with /model and /effort</TooltipContent>
+          </Tooltip>
         )}
         {conversation.archived && (
           <span className="shrink-0 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">Archived</span>

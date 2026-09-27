@@ -56,6 +56,12 @@ export function effortForModel(efforts: readonly Effort[], effort: Effort | null
   return below.length ? below[below.length - 1]! : efforts[0]!;
 }
 
+/** `/goal ship it` → { name: "goal", args: "ship it" }; null for plain text and paths like `/Users/me`. */
+export function parseSlashCommand(text: string): { name: string; args: string } | null {
+  const m = /^\/([\w][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(text.trim());
+  return m ? { name: m[1]!, args: (m[2] ?? "").trim() } : null;
+}
+
 export const AGENT_COLORS = [
   "violet",
   "indigo",

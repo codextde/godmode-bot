@@ -237,9 +237,10 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             <Composer
               ref={composerRef}
               draftKey={conversationId}
+              agentId={conv.agentId}
               autoFocus
               running={!!activeRunId}
-              placeholder={agent ? `Message ${agent.name}…` : "Message…"}
+              placeholder={agent ? `Message ${agent.name} — or type / for commands` : "Message…"}
               trailing={
                 <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(patch) => choose.mutate(patch)} />
               }

@@ -21,6 +21,7 @@ export const qk = {
   agentFiles: (id: string, path: string) => ["agents", "files", id, path],
   agentFile: (id: string, path: string) => ["agents", "file", id, path],
   agentCommits: (id: string) => ["agents", "commits", id],
+  agentCommands: (id: string) => ["agents", "commands", id],
   agentTemplates: ["agent-templates"] as unknown[],
   routines: ["routines"] as unknown[],
   routineList: (agentId: string) => ["routines", "list", agentId],

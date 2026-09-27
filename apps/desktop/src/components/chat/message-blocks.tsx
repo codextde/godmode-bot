@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Credential, MessageBlock } from "@godmode/shared";
-import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, Info, Lock, ShieldAlert, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, Info, Lock, ShieldAlert, SquareSlash, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AgentAvatar } from "@/components/common";
@@ -30,6 +30,7 @@ type Item =
   | { kind: "thinking"; key: string; text: string }
   | { kind: "error"; key: string; text: string }
   | { kind: "notice"; key: string; level: "info" | "warning" | "success"; text: string }
+  | { kind: "command"; key: string; name: string; args: string; output: string }
   | { kind: "tools"; key: string; steps: Step[] }
   | { kind: "missing-login"; key: string; block: ToolUseBlock }
   | { kind: "delegate"; key: string; block: ToolUseBlock }
@@ -96,6 +97,7 @@ function buildItems(blocks: MessageBlock[]): Item[] {
       if (b.text.trim()) items.push({ kind: "text", key, text: b.text });
     } else if (b.type === "error") items.push({ kind: "error", key, text: b.text });
     else if (b.type === "notice") items.push({ kind: "notice", key, level: b.level, text: b.text });
+    else if (b.type === "command") items.push({ kind: "command", key, name: b.name, args: b.args, output: b.output });
   });
   return items;
 }
@@ -154,6 +156,8 @@ export function MessageBlocks({ blocks, streaming = false, compact = false }: { 
             );
           case "notice":
             return <NoticeItem key={item.key} level={item.level} text={item.text} />;
+          case "command":
+            return <CommandOutput key={item.key} name={item.name} args={item.args} output={item.output} />;
           case "tools":
             return <ToolGroup key={item.key} steps={item.steps} ctx={ctx} streaming={active} />;
           case "missing-login":
@@ -193,6 +197,48 @@ function NoticeItem({ level, text }: { level: "info" | "warning" | "success"; te
     <div className={cn("flex items-start gap-2 rounded-lg border px-3 py-2 text-[13px]", meta.cls)}>
       <Icon className="mt-0.5 size-3.5 shrink-0" />
       <span className="min-w-0 break-words">{text}</span>
+    </div>
+  );
+}
+
+const MARKDOWN_HINT = /^\s{0,3}(#{1,6}\s|[-*]\s|\|)|\*\*|`/m;
+const PREFORMATTED = /\n[ \t]{2,}\S/;
+
+/** Output of a slash command Claude Code ran locally — markdown when it is markdown, aligned text stays monospace. */
+function CommandOutput({ name, args, output }: { name: string; args: string; output: string }) {
+  const long = output.length > 1200 || output.split("\n").length > 24;
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card shadow-card" data-command={name}>
+      <div className="flex items-center gap-2 border-b px-3 py-2 text-xs">
+        <SquareSlash className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="shrink-0 font-mono font-medium">/{name}</span>
+        {args && <span className="min-w-0 truncate font-mono text-muted-foreground">{args}</span>}
+        <span className="ml-auto shrink-0 text-muted-foreground">Claude Code</span>
+      </div>
+      <div className={cn("relative px-3.5 py-3", long && !expanded && "max-h-80 overflow-hidden")}>
+        {!output ? (
+          <p className="text-sm text-muted-foreground">Done.</p>
+        ) : MARKDOWN_HINT.test(output) ? (
+          <Markdown className="text-[0.9rem]">{output}</Markdown>
+        ) : PREFORMATTED.test(output) ? (
+          <pre className="font-mono text-[12.5px] leading-relaxed break-words whitespace-pre-wrap text-foreground/85">{output}</pre>
+        ) : (
+          <p className="text-[0.9rem] leading-relaxed break-words whitespace-pre-wrap">{output}</p>
+        )}
+        {long && !expanded && <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-card to-transparent" />}
+      </div>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          className="flex w-full items-center justify-center gap-1 border-t py-1.5 text-xs text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
+        >
+          {expanded ? "Show less" : "Show all"}
+          <ChevronRight className={cn("size-3 transition-transform", expanded ? "-rotate-90" : "rotate-90")} />
+        </button>
+      )}
     </div>
   );
 }

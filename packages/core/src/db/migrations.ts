@@ -256,7 +256,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   },
   {
     id: 2,
-    name: "conversation_model",
+    name: "conversation_overrides",
     sql: /* sql */ `
 ALTER TABLE conversations ADD COLUMN model TEXT;
 ALTER TABLE conversations ADD COLUMN effort TEXT;

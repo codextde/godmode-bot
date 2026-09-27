@@ -238,10 +238,12 @@ export function updateConversation(
 /** Internal fields maintained by the runner. Does not emit. */
 export function setConversationState(
   id: string,
-  patch: { claudeSessionId?: string | null; lastMessageAt?: string; title?: string },
+  patch: { claudeSessionId?: string | null; lastMessageAt?: string; title?: string; model?: string | null; effort?: Effort | null },
 ) {
   update("conversations", id, {
     claude_session_id: patch.claudeSessionId,
+    model: patch.model,
+    effort: patch.effort,
     last_message_at: patch.lastMessageAt,
     title: patch.title,
     updated_at: now(),
