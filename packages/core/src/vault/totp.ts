@@ -300,21 +300,21 @@ function issuerMatchesCredential(issuer: string, cred: { name: string; url: stri
 }
 
 /**
- * Pick the unlinked credential (same scope) an imported entry belongs to: its site matches the issuer and
- * either its username equals the account name, or it is the only matching credential.
+ * Pick the credential (same scope) an imported entry belongs to: its site matches the issuer and either its
+ * username equals the account name, or it is the only matching credential. Ambiguity is judged over all
+ * matching credentials, but a credential that already has a 2FA entry is never re-linked.
  */
 function credentialForImport(workspaceId: string | null, account: ParsedOtpAccount): string | null {
   if (!account.issuer) return null;
   const scope = exactScope(workspaceId);
-  const candidates = all<{ id: string; name: string; url: string; domains: string; username: string }>(
-    `SELECT id, name, url, domains, username FROM credentials WHERE ${scope.sql} AND totp_id IS NULL ORDER BY created_at`,
+  const candidates = all<{ id: string; name: string; url: string; domains: string; username: string; totp_id: string | null }>(
+    `SELECT id, name, url, domains, username, totp_id FROM credentials WHERE ${scope.sql} ORDER BY created_at`,
     ...scope.params,
   ).filter((c) => issuerMatchesCredential(account.issuer, c));
   const accountName = account.accountName.trim().toLowerCase();
   const byUsername = accountName ? candidates.filter((c) => c.username.trim().toLowerCase() === accountName) : [];
-  if (byUsername.length === 1) return byUsername[0]!.id;
-  if (byUsername.length === 0 && candidates.length === 1) return candidates[0]!.id;
-  return null;
+  const pick = byUsername.length === 1 ? byUsername[0] : byUsername.length === 0 && candidates.length === 1 ? candidates[0] : undefined;
+  return pick && pick.totp_id === null ? pick.id : null;
 }
 
 /** Parse otpauth:// and otpauth-migration:// (Google Authenticator export) URIs and store them. */

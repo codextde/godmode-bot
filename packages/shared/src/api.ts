@@ -181,6 +181,8 @@ export interface ComposioConnectResult {
   redirectUrl: string | null;
   connectedAccountId: string;
   status: string;
+  /** Godmode connection id (`ComposioConnection.id`) — use it with `/api/composio/connections/:id/refresh`. */
+  connectionId?: ID;
 }
 
 export interface ChromeImportInput {
@@ -197,6 +199,38 @@ export interface ChromeImportResult {
   skipped: number;
   domains: string[];
   method: "profile-use" | "json" | "cdp";
+}
+
+/** Human takeover in the browser live view. x/y are in the coordinate space of the last `browser.frame` (width × height). */
+export type BrowserInputEvent =
+  | { type: "click"; x: number; y: number }
+  | { type: "scroll"; x: number; y: number; deltaY: number }
+  | { type: "key"; key: string }
+  | { type: "text"; text: string };
+
+/** GET /api/browser/profile-use — browser-use's `profile-use` CLI (sync local Chrome cookies to browser-use Cloud). */
+export interface ProfileUseStatus {
+  installed: boolean;
+  path: string | null;
+  /** A browser-use Cloud API key is stored in the vault (app secret `browser_use_api_key`) or set in the environment. */
+  hasApiKey: boolean;
+}
+
+/** POST /api/browser/profile-use/sync */
+export interface ProfileUseSyncInput {
+  /** Browser name as shown by `profile-use list`, e.g. "Google Chrome". */
+  browser?: string;
+  /** Profile name, e.g. "Default" or "Profile 1". Omitted = every profile (of `browser`, if given). */
+  profile?: string;
+  /** Only sync cookies for these domains (and subdomains). */
+  domains?: string[];
+  /** Sync into an existing browser-use Cloud profile instead of creating a new one. */
+  cloudProfileId?: string;
+}
+
+export interface ProfileUseSyncResult {
+  ok: boolean;
+  output: string;
 }
 
 export interface DashboardLoginInput {

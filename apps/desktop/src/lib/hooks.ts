@@ -56,3 +56,24 @@ export function useWorkspaceName(id: string | null | undefined): string {
   if (!id) return "Global";
   return data?.find((w) => w.id === id)?.name ?? "Workspace";
 }
+
+/** Routines, optionally for a single agent ("all" = every agent). */
+export function useRoutines(agentId: string = "all") {
+  return useQuery({
+    queryKey: qk.routineList(agentId),
+    queryFn: () => api.routines.list(agentId === "all" ? {} : { agentId }),
+  });
+}
+
+/** Recent runs filtered by agent / status ("all" = no filter). */
+export function useRuns(agentId: string = "all", status: string = "all", limit = 200) {
+  return useQuery({
+    queryKey: qk.runList(agentId, status),
+    queryFn: () =>
+      api.runs.list({ agentId: agentId === "all" ? undefined : agentId, status: status === "all" ? undefined : status, limit }),
+  });
+}
+
+export function useAgentTemplates() {
+  return useQuery({ queryKey: qk.agentTemplates, queryFn: api.agents.templates, staleTime: 5 * 60_000 });
+}

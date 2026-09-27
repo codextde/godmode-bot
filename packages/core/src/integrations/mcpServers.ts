@@ -156,7 +156,7 @@ function cleanArgs(args: unknown): string[] {
   return args as string[];
 }
 
-async function assertScopeExists(workspaceId: string | null, agentId: string | null) {
+function assertScopeExists(workspaceId: string | null, agentId: string | null) {
   if (workspaceId && !get<{ id: string }>("SELECT id FROM workspaces WHERE id = ?", workspaceId)) {
     throw badRequest(`Workspace ${workspaceId} does not exist`);
   }
@@ -232,7 +232,7 @@ export async function createMcpServer(input: McpServerInput, actor = "user"): Pr
   const transport = cleanTransport(input.transport);
   const workspaceId = input.workspaceId ?? null;
   const agentId = input.agentId ?? null;
-  await assertScopeExists(workspaceId, agentId);
+  assertScopeExists(workspaceId, agentId);
 
   const command = transport === "stdio" ? cleanCommand(input.command) : "";
   const args = transport === "stdio" ? cleanArgs(input.args) : [];
@@ -274,7 +274,7 @@ export async function updateMcpServer(id: string, patch: Partial<McpServerInput>
   const transport = patch.transport !== undefined ? cleanTransport(patch.transport) : current.transport;
   const workspaceId = patch.workspaceId !== undefined ? patch.workspaceId : current.workspaceId;
   const agentId = patch.agentId !== undefined ? patch.agentId : current.agentId;
-  if (patch.workspaceId !== undefined || patch.agentId !== undefined) await assertScopeExists(workspaceId, agentId);
+  if (patch.workspaceId !== undefined || patch.agentId !== undefined) assertScopeExists(workspaceId, agentId);
 
   const changes: Record<string, string | number | null | undefined> = {
     workspace_id: workspaceId,

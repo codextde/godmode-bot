@@ -3,10 +3,10 @@
  */
 import type { Workspace } from "@godmode/shared";
 import type { WorkspaceInput } from "@godmode/shared";
-import { all, get, insert, run, update } from "../db";
+import { all, get, insert, run, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
-import { refreshAgentFiles, removeFromDelegateLists, stopAgentRuns, trashAgentRepo } from "../agents/service";
+import { listAgents, refreshAgentFiles, removeFromDelegateLists, stopAgentRuns, trashAgentRepo } from "../agents/service";
 import { deleteProfile } from "../browser/manager";
 import { reloadSchedules } from "../scheduler/scheduler";
 import { HttpError, badRequest, newId, notFound, now, slugify } from "../util";
@@ -158,7 +158,7 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
     );
   }
 
-  const agents = all<{ id: string; slug: string }>("SELECT id, slug FROM agents WHERE workspace_id = ? AND is_default = 0", id);
+  const agents = listAgents({ workspaceId: id }).filter((a) => a.workspaceId === id && !a.isDefault);
   for (const agent of agents) await stopAgentRuns(agent.id);
 
   // Let the browser manager stop Chromium and clean up each profile; the cascade below removes leftovers.
@@ -171,21 +171,16 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
     }
   }
 
-  const repoPaths = all<{ id: string; slug: string }>("SELECT id, slug FROM agents WHERE workspace_id = ?", id);
-  // The default agent is always global; never let a cascade take it down.
-  run("UPDATE agents SET workspace_id = NULL WHERE workspace_id = ? AND is_default = 1", id);
-  const removed = repoPaths.filter((a) => agents.some((x) => x.id === a.id));
-  const agentIds = removed.map((a) => a.id);
-
-  const { tx } = await import("../db");
   tx(() => {
+    // The default agent is always global; never let a cascade take it down.
+    run("UPDATE agents SET workspace_id = NULL WHERE workspace_id = ? AND is_default = 1", id);
     run("DELETE FROM workspaces WHERE id = ?", id);
-    removeFromDelegateLists(agentIds);
+    removeFromDelegateLists(agents.map((a) => a.id));
   });
 
-  for (const agent of removed) {
+  for (const agent of agents) {
     try {
-      const moved = await trashAgentRepo({ slug: agent.slug, repoPath: agentRepoPath(agent.slug) });
+      const moved = await trashAgentRepo(agent);
       if (moved) log.info(`moved repository of agent ${agent.slug} to ${moved}`);
     } catch (err) {
       log.error(`failed to move repository of agent ${agent.slug} to trash`, err);

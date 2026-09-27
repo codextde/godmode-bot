@@ -64,25 +64,28 @@ export function initRepo(dir: string): Promise<void> {
  * Returns the new commit oid, or null when the working tree already matches HEAD.
  */
 export function commitAll(dir: string, message: string): Promise<string | null> {
-  return withRepoLock(dir, async () => {
-    await ensureGit(dir);
-    const cache = {};
-    const matrix = await git.statusMatrix({ fs, dir, cache });
-    const toAdd: string[] = [];
-    const toRemove: string[] = [];
-    let changed = false;
-    for (const [filepath, head, workdir, stage] of matrix) {
-      if (head === 1 && workdir === 1 && stage === 1) continue;
-      const matchesHead = (head === 1 && workdir === 1) || (head === 0 && workdir === 0);
-      if (!matchesHead) changed = true;
-      if (workdir === 0) toRemove.push(filepath);
-      else toAdd.push(filepath);
-    }
-    for (const filepath of toRemove) await git.remove({ fs, dir, filepath, cache });
-    if (toAdd.length) await git.add({ fs, dir, filepath: toAdd, cache });
-    if (!changed) return null;
-    return git.commit({ fs, dir, message: message.trim() || "Update", author: GIT_AUTHOR, cache });
-  });
+  return withRepoLock(dir, () => commitAllInLock(dir, message));
+}
+
+/** Same as commitAll, for callers that already hold the lock via withRepoLock(dir, …). */
+export async function commitAllInLock(dir: string, message: string): Promise<string | null> {
+  await ensureGit(dir);
+  const cache = {};
+  const matrix = await git.statusMatrix({ fs, dir, cache });
+  const toAdd: string[] = [];
+  const toRemove: string[] = [];
+  let changed = false;
+  for (const [filepath, head, workdir, stage] of matrix) {
+    if (head === 1 && workdir === 1 && stage === 1) continue;
+    const matchesHead = (head === 1 && workdir === 1) || (head === 0 && workdir === 0);
+    if (!matchesHead) changed = true;
+    if (workdir === 0) toRemove.push(filepath);
+    else toAdd.push(filepath);
+  }
+  for (const filepath of toRemove) await git.remove({ fs, dir, filepath, cache });
+  if (toAdd.length) await git.add({ fs, dir, filepath: toAdd, cache });
+  if (!changed) return null;
+  return git.commit({ fs, dir, message: message.trim() || "Update", author: GIT_AUTHOR, cache });
 }
 
 /** Most recent commits on HEAD (newest first). Empty for a repository without commits. */
