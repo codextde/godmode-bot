@@ -288,6 +288,15 @@ export function rememberSecret(value: string | null | undefined) {
   if (value && value.length >= 6) knownSecrets.add(value);
 }
 
+/** Remember every value of an env/header map, plus the token of "Bearer <token>"-style auth values. */
+export function rememberSecretValues(values: Record<string, unknown>) {
+  for (const value of Object.values(values)) {
+    if (typeof value !== "string") continue;
+    rememberSecret(value);
+    rememberSecret(/^(?:bearer|basic|token|bot|key|apikey)\s+(\S+)$/i.exec(value.trim())?.[1]);
+  }
+}
+
 function loadKnownSecrets() {
   if (!dek) return;
   try {
@@ -312,6 +321,21 @@ function loadKnownSecrets() {
         rememberSecret(decrypt(dek, row.value_enc, `secrets:${row.key}`));
       } catch {
         /* ignore */
+      }
+    }
+    // Custom MCP servers: env + headers are sealed as one JSON object each (see integrations/mcpServers.ts).
+    for (const row of all<{ id: string; env_enc: string | null; headers_enc: string | null }>("SELECT id, env_enc, headers_enc FROM mcp_servers")) {
+      for (const [enc, context] of [
+        [row.env_enc, `mcp_servers.env:${row.id}`],
+        [row.headers_enc, `mcp_servers.headers:${row.id}`],
+      ] as const) {
+        if (!enc) continue;
+        try {
+          const parsed: unknown = JSON.parse(decrypt(dek, enc, context));
+          if (parsed && typeof parsed === "object") rememberSecretValues(parsed as Record<string, unknown>);
+        } catch {
+          /* ignore */
+        }
       }
     }
   } catch (err) {

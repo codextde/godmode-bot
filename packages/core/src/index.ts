@@ -2,7 +2,7 @@
 /**
  * Godmode Bot core daemon.
  *
- *   godmode serve [--host 127.0.0.1] [--port 7777] [--data-dir ~/.godmode] [--ui ./dist]
+ *   godmode serve [--host 127.0.0.1] [--port 7777] [--data-dir ~/.godmode] [--ui ./dist] [--token-stdin]
  *   godmode token            print the access token for the web dashboard
  *   godmode password <pw>    set the web dashboard password
  *   godmode doctor           check dependencies (claude, uv, chrome)
@@ -36,6 +36,7 @@ function parseCli() {
       "data-dir": { type: "string" },
       ui: { type: "string" },
       mode: { type: "string" },
+      "token-stdin": { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
     allowPositionals: true,
@@ -44,12 +45,53 @@ function parseCli() {
   return { values, positionals };
 }
 
+const TOKEN_STDIN_TIMEOUT_MS = 10_000;
+
+/**
+ * Read the access token from the first line of stdin (`--token-stdin`, used by the desktop shell). Unlike an
+ * environment variable, it can't be read later from `ps eww` / /proc/<pid>/environ by other processes of the user.
+ * stdin stays open afterwards: in desktop mode its EOF is the shutdown signal.
+ */
+function readTokenFromStdin(timeoutMs = TOKEN_STDIN_TIMEOUT_MS): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let buffered = "";
+    const finish = (err: Error | null, token?: string) => {
+      clearTimeout(timer);
+      process.stdin.off("data", onData);
+      process.stdin.off("end", onEnd);
+      process.stdin.pause();
+      if (err) reject(err);
+      else resolve(token!);
+    };
+    const onData = (chunk: Buffer | string) => {
+      buffered += chunk.toString();
+      const nl = buffered.indexOf("\n");
+      if (nl === -1) {
+        if (buffered.length > 4096) finish(new Error("--token-stdin: the token line is too long"));
+        return;
+      }
+      const token = buffered.slice(0, nl).trim();
+      if (token) finish(null, token);
+      else finish(new Error("--token-stdin: received an empty token"));
+    };
+    const onEnd = () => finish(new Error("--token-stdin: stdin closed before the token was received"));
+    const timer = setTimeout(() => finish(new Error(`--token-stdin: no token received within ${timeoutMs / 1000}s`)), timeoutMs);
+    process.stdin.on("data", onData);
+    process.stdin.on("end", onEnd);
+    process.stdin.resume();
+  });
+}
+
 async function serve(values: Record<string, unknown>) {
+  const stdinToken = values["token-stdin"] ? await readTokenFromStdin() : null;
   const cfg = loadConfig({
     ...(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {}),
     ...(values.ui ? { uiDir: String(values.ui) } : {}),
     ...(values.mode ? { mode: values.mode as "desktop" | "server" } : {}),
+    ...(stdinToken ? { token: stdinToken } : {}),
   });
+  // The token now lives in the config; don't let any child process (agents, MCP servers, installers) inherit it.
+  delete process.env.GODMODE_TOKEN;
   setLogDir(cfg.logsDir);
   openDb(cfg.dbPath);
 
@@ -94,8 +136,9 @@ async function serve(values: Record<string, unknown>) {
         if (origin && !isAllowedOrigin(origin, req.headers.get("host") ?? undefined)) {
           return new Response("Origin not allowed", { status: 403 });
         }
-        if (!authenticate(shim as never)) return new Response("Unauthorized", { status: 401 });
-        const ok = server.upgrade(req, { data: { id: newId("ws"), subscriptions: new Set<string>() } });
+        const auth = authenticate(shim as never);
+        if (!auth) return new Response("Unauthorized", { status: 401 });
+        const ok = server.upgrade(req, { data: { id: newId("ws"), subscriptions: new Set<string>(), auth } });
         return ok ? undefined : new Response("Upgrade failed", { status: 400 });
       }
       return app.fetch(req, { server });
@@ -156,7 +199,7 @@ async function main() {
     console.log(`Godmode Bot ${VERSION}
 
 Usage:
-  godmode serve [--host 127.0.0.1] [--port 7777] [--data-dir ~/.godmode] [--ui <dir>]
+  godmode serve [--host 127.0.0.1] [--port 7777] [--data-dir ~/.godmode] [--ui <dir>] [--token-stdin]
   godmode token              Print the dashboard access token
   godmode password <new>     Set the web dashboard password
   godmode doctor             Check dependencies

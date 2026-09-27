@@ -171,6 +171,13 @@ export interface BackupManifest {
   counts: Record<string, number>;
 }
 
+export interface BackupImportResult {
+  ok: true;
+  counts: Record<string, number>;
+  /** Things the import changed or skipped for safety (reset settings, disabled MCP servers, renamed agents). */
+  warnings?: string[];
+}
+
 export interface ComposioConnectInput {
   toolkit: string;
   workspaceId: ID | null;

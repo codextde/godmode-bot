@@ -2,6 +2,9 @@ import { useState } from "react";
 import { Cpu, Gauge, ShieldAlert, SlidersHorizontal, Sparkles, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
 import { EFFORT_OPTIONS, MODEL_OPTIONS, type Effort, type Settings } from "@godmode/shared";
+import { ReasoningEffort } from "@/components/aicss/ReasoningEffort";
+
+const EFFORT_LABELS: Record<Effort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra High", max: "Max" };
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +26,6 @@ import {
   CommitTextarea,
   LinesTextarea,
   NumberField,
-  Segmented,
   SectionHeading,
   SettingRow,
   SettingsGroup,
@@ -128,11 +130,15 @@ export function AiSection({ settings }: { settings: Settings }) {
           <ModelSelect id="fallback-model" allowNone value={r.fallbackModel} onChange={(fallbackModel) => patch({ runner: { fallbackModel } })} />
         </SettingRow>
         <SettingRow label="Reasoning effort" description="Higher effort thinks longer before acting — better results, more tokens.">
-          <Segmented<Effort>
+          <ReasoningEffort
             aria-label="Reasoning effort"
-            value={r.effort}
-            onChange={(effort) => patch({ runner: { effort } })}
-            options={EFFORT_OPTIONS.map((e) => ({ value: e, label: e === "xhigh" ? "x-high" : e }))}
+            label={MODEL_OPTIONS.find((m) => m.id === r.model)?.label ?? "Effort"}
+            stops={EFFORT_OPTIONS.map((e) => EFFORT_LABELS[e])}
+            value={Math.max(0, EFFORT_OPTIONS.indexOf(r.effort))}
+            onChange={(i) => {
+              const effort: Effort = EFFORT_OPTIONS[i] ?? "high";
+              if (effort !== r.effort) patch({ runner: { effort } });
+            }}
           />
         </SettingRow>
       </SettingsGroup>

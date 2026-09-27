@@ -4,8 +4,13 @@
  * code), focused, cleared and then filled with `Input.insertText`, which behaves like real typing.
  *
  * Never log or return the text: results only describe *which* field was filled.
+ *
+ * Fills are bound to the login's sites: the document that owns the target field (main page, same-origin
+ * iframe or out-of-process iframe) must be https on one of `allowedHosts` (or plain http on one of
+ * `httpHosts`, i.e. the login's own http:// URL) — checked when the field is found and again right before
+ * typing — so a prompt-injected page cannot get a secret typed into a foreign site.
  */
-import { randomToken } from "../util";
+import { domainMatches, hostnameOf, randomToken } from "../util";
 import { PageSession, type CdpClient } from "./cdp";
 
 export type FillKind = "username" | "password" | "totp" | "text";
@@ -15,6 +20,42 @@ export interface FillOptions {
   kind?: FillKind;
   selector?: string;
   submit?: boolean;
+  /** Sites (and their subdomains) the field may belong to; only over https. Empty = refuse everything. */
+  allowedHosts: string[];
+  /** Hosts additionally allowed over plain http (exact host match). */
+  httpHosts?: string[];
+}
+
+/** Fill binding for a saved login: its domains + URL host (https), and the URL host over http if the URL is http://. */
+export function loginFillScope(login: { url: string; domains: string[] }): { allowedHosts: string[]; httpHosts: string[] } {
+  const urlHost = login.url ? hostnameOf(login.url) : "";
+  const allowedHosts = [...new Set([...login.domains.map((d) => hostnameOf(d)), urlHost].filter(Boolean))];
+  const httpHosts = urlHost && /^http:\/\//i.test(login.url.trim()) ? [urlHost] : [];
+  return { allowedHosts, httpHosts };
+}
+
+/** Why a field in a document of `origin` may not receive the secret, or null when it may. */
+export function originRefusal(origin: string, opts: Pick<FillOptions, "allowedHosts" | "httpHosts">): string | null {
+  let url: URL | null = null;
+  try {
+    url = origin && origin !== "null" ? new URL(origin) : null;
+  } catch {
+    url = null;
+  }
+  const sites = opts.allowedHosts.length ? opts.allowedHosts.join(", ") : "none";
+  if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) {
+    return `Refusing to fill: the field is in a document without a web origin (${origin || "unknown"}). This login may only be filled on ${sites}.`;
+  }
+  const host = url.hostname;
+  if (url.protocol === "http:") {
+    if ((opts.httpHosts ?? []).some((h) => hostnameOf(h) === hostnameOf(host))) return null;
+    const onSite = opts.allowedHosts.some((d) => domainMatches(host, d));
+    return onSite
+      ? `Refusing to fill over an insecure connection (${url.origin}); this login's saved URL is https. Open the https:// page instead.`
+      : `Refusing to fill: the field is on ${url.origin}, which is not a site of this login (${sites}). Navigate to the login's own site first.`;
+  }
+  if (opts.allowedHosts.some((d) => domainMatches(host, d))) return null;
+  return `Refusing to fill: the field is on ${url.origin}, which is not a site of this login (${sites}). Navigate to the login's own site first.`;
 }
 
 export interface FillResult {
@@ -29,6 +70,8 @@ interface LocateResult {
   count?: number;
   via?: "selector" | "focused" | "auto";
   desc?: string;
+  /** Origin of the document that owns the field (or the first box). */
+  origin?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -40,7 +83,6 @@ const LOCATE = String.raw`(args) => {
   const TEXT_TYPES = new Set(["", "text", "email", "password", "tel", "number", "search", "url"]);
   const USER_RE = /user|e-?mail|login|account|identifier|benutzer|nutzer|anmelde|usuario|utilisateur/;
   const OTP_RE = /one[-_ ]?time|otp|totp|2fa|mfa|two[-_ ]?factor|verification|verify|security[-_ ]?code|auth(entication)?[-_ ]?code|\bcode\b|token|\bpin\b/;
-  const PASS_RE = /pass(word|wd)?|kennwort|passwort|mot de passe|contrase/;
   const typeOf = (el) => (el.getAttribute("type") || "text").toLowerCase();
   const isEditable = (el) => {
     if (!el || el.nodeType !== 1 || el.disabled || el.readOnly) return false;
@@ -68,9 +110,13 @@ const LOCATE = String.raw`(args) => {
     else if (el.getAttribute("name")) d += "[name=" + el.getAttribute("name") + "]";
     return d.slice(0, 80);
   };
+  const originOf = (el) => {
+    try { const w = el.ownerDocument.defaultView; return w ? String(w.origin) : "null"; } catch { return "null"; }
+  };
   const kindOk = (el, k) => {
     const t = el.tagName === "INPUT" ? typeOf(el) : "";
-    if (k === "password") return t === "password" || (el.tagName === "INPUT" && PASS_RE.test(attrText(el)) && !OTP_RE.test(attrText(el)));
+    // Passwords only ever go into real password inputs (a visible text input named "password" could be read back).
+    if (k === "password") return el.tagName === "INPUT" && t === "password";
     if (k === "username") return el.tagName === "INPUT" && ["", "text", "email", "tel"].includes(t);
     if (k === "totp") return el.tagName === "INPUT" && (t !== "password" || OTP_RE.test(attrText(el)) || el.getAttribute("autocomplete") === "one-time-code");
     return true;
@@ -108,7 +154,7 @@ const LOCATE = String.raw`(args) => {
   };
   const found = (el, via) => {
     globalThis[stateKey] = { el, boxes: null };
-    return { status: "ok", mode: "single", via, desc: describe(el) };
+    return { status: "ok", mode: "single", via, desc: describe(el), origin: originOf(el) };
   };
 
   if (selector) {
@@ -122,7 +168,7 @@ const LOCATE = String.raw`(args) => {
       if (inner && isEditable(inner)) el = inner;
       else return { status: "not_editable", desc: describe(el) };
     }
-    if (kind === "password" && !kindOk(el, "password")) return { status: "incompatible", desc: describe(el) };
+    if ((kind === "password" || kind === "totp") && !kindOk(el, kind)) return { status: "incompatible", desc: describe(el) };
     return found(el, "selector");
   }
 
@@ -144,7 +190,7 @@ const LOCATE = String.raw`(args) => {
     const boxes = splitBoxes();
     if (boxes) {
       globalThis[stateKey] = { el: boxes[0], boxes };
-      return { status: "ok", mode: "split", count: boxes.length, via: "auto", desc: describe(boxes[0]) };
+      return { status: "ok", mode: "split", count: boxes.length, via: "auto", desc: describe(boxes[0]), origin: originOf(boxes[0]) };
     }
   }
 
@@ -215,7 +261,9 @@ const PREPARE = String.raw`(args) => {
 const FOCUS_CLEAR = String.raw`(args) => {
   const s = globalThis[args.stateKey];
   const el = s && (args.index == null ? s.el : s.boxes[args.index]);
-  if (!el || !el.isConnected) return { focused: false };
+  if (!el || !el.isConnected) return { focused: false, origin: "null" };
+  let origin = "null";
+  try { origin = String(el.ownerDocument.defaultView.origin); } catch {}
   el.focus({ preventScroll: true });
   if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
     const proto = el.tagName === "INPUT" ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
@@ -235,7 +283,7 @@ const FOCUS_CLEAR = String.raw`(args) => {
   }
   let a = el.ownerDocument.activeElement;
   while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
-  return { focused: a === el };
+  return { focused: a === el, origin };
 }`;
 
 /** Fire change events, compare lengths (never values) and forget the target. */
@@ -299,7 +347,9 @@ function locateFailure(loc: LocateResult, opts: FillOptions): string {
     case "not_editable":
       return `The element ${loc.desc ?? ""} is not an editable text field.`;
     case "incompatible":
-      return `Refusing to type a password into ${loc.desc ?? "a non-password field"}. Target the password input instead.`;
+      return opts.kind === "totp"
+        ? `Refusing to type a 2FA code into ${loc.desc ?? "that element"}; only input fields can receive it.`
+        : `Refusing to type a password into ${loc.desc ?? "a non-password field"}; only input[type=password] fields can receive it.`;
     case "nothing_focused":
       return "No text field is focused. Click into the field first or pass a CSS selector.";
     default:
@@ -344,6 +394,11 @@ export async function fillOnPage(page: PageSession, opts: FillOptions): Promise<
   };
 
   if (loc.status !== "ok") return { ok: false, url: await currentUrl(), detail: locateFailure(loc, opts) };
+  const refusal = originRefusal(loc.origin ?? "", opts);
+  if (refusal) {
+    await call(ctx, FINISH, { stateKey, length: 0, split: false }).catch(() => {});
+    return { ok: false, url: await currentUrl(), detail: refusal };
+  }
 
   const fillOne = async (index: number | null, value: string) => {
     const pos = await call<{ ok: boolean; clickable?: boolean; x?: number; y?: number }>(ctx, PREPARE, {
@@ -353,9 +408,12 @@ export async function fillOnPage(page: PageSession, opts: FillOptions): Promise<
     });
     if (!pos.ok) throw new Error("The field disappeared from the page.");
     if (pos.clickable && typeof pos.x === "number" && typeof pos.y === "number") await page.click(pos.x, pos.y);
-    const focus = await call<{ focused: boolean }>(ctx, FOCUS_CLEAR, { stateKey, index });
+    const focus = await call<{ focused: boolean; origin: string }>(ctx, FOCUS_CLEAR, { stateKey, index });
     // Never type a secret unless our field has focus — it would land wherever the page put the caret.
     if (!focus.focused) throw new Error("Could not focus the field (the page moved focus elsewhere).");
+    // Re-check the binding right before typing (the frame may have navigated since the field was located).
+    const late = originRefusal(focus.origin, opts);
+    if (late) throw new Error(late);
     await ctx.session.insertText(value);
   };
 

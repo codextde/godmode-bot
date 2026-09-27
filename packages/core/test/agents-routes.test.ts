@@ -6,9 +6,10 @@ import type { Agent, AgentFileEntry, AgentTemplate, GitCommit, MissingLogin, Rou
 import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 import { setLogLevel } from "../src/log";
-import { resetSettingsCache } from "../src/services/settings";
+import { getSettings, resetSettingsCache, updateSettings } from "../src/services/settings";
 import { createApp } from "../src/server/app";
 import { getAccessToken } from "../src/server/auth";
+import { clearGrants, issueGrant } from "../src/server/grants";
 import { reportMissingLogin } from "../src/services/missingLogins";
 import * as repo from "../src/agents/repo";
 
@@ -32,8 +33,9 @@ afterAll(() => {
   rmSync(dataDir, { recursive: true, force: true });
 });
 
-async function call<T = unknown>(method: string, path: string, body?: unknown): Promise<{ status: number; data: T }> {
+async function call<T = unknown>(method: string, path: string, body?: unknown, grant?: string): Promise<{ status: number; data: T }> {
   const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+  if (grant) headers["x-godmode-grant"] = grant;
   if (body !== undefined) headers["content-type"] = "application/json";
   const res = await app.request(`http://127.0.0.1${path}`, {
     method,
@@ -182,5 +184,52 @@ describe("missing login routes", () => {
     const dismissed = await call<MissingLogin>("PATCH", `/api/missing-logins/${item.id}`, { status: "dismissed" });
     expect(dismissed.data.status).toBe("dismissed");
     expect((await call("PATCH", `/api/missing-logins/${item.id}`, { status: "nope" })).status).toBe(400);
+  });
+});
+
+describe("secret access \"reveal\" needs a vault grant", () => {
+  test("agents: create / switch to reveal → 403 without grant, 200 with; unchanged reveal needs none", async () => {
+    clearGrants();
+    const denied = await call<{ code: string }>("POST", "/api/agents", { name: "Reveal Bot", permissions: { secretAccess: "reveal" } });
+    expect(denied.status).toBe(403);
+    expect(denied.data.code).toBe("grant_required");
+
+    const fill = await call<Agent>("POST", "/api/agents", { name: "Grant Bot", permissions: { secretAccess: "fill" } });
+    expect(fill.status).toBe(200);
+    const toReveal = await call<{ code: string }>("PATCH", `/api/agents/${fill.data.id}`, { permissions: { secretAccess: "reveal" } });
+    expect(toReveal.status).toBe(403);
+    expect(toReveal.data.code).toBe("grant_required");
+    expect((await call<Agent>("GET", `/api/agents/${fill.data.id}`)).data.permissions.secretAccess).toBe("fill");
+
+    const { grant } = issueGrant();
+    const granted = await call<Agent>("PATCH", `/api/agents/${fill.data.id}`, { permissions: { secretAccess: "reveal" } }, grant);
+    expect(granted.status).toBe(200);
+    expect(granted.data.permissions.secretAccess).toBe("reveal");
+    // Saving an agent that already reveals (the form always sends secretAccess) doesn't ask again.
+    expect((await call("PATCH", `/api/agents/${fill.data.id}`, { description: "x", permissions: { secretAccess: "reveal" } })).status).toBe(200);
+
+    const created = await call<Agent>("POST", "/api/agents", { name: "Reveal Bot", permissions: { secretAccess: "reveal" } }, grant);
+    expect(created.status).toBe(200);
+    expect(created.data.permissions.secretAccess).toBe("reveal");
+    expect((await call("POST", "/api/agents", { name: "Bogus", permissions: { secretAccess: "reveal" } }, "bogus")).status).toBe(403);
+  });
+
+  test("settings: default secret access reveal → 403 without grant, 200 with", async () => {
+    clearGrants();
+    try {
+      const denied = await call<{ code: string }>("PUT", "/api/settings", { security: { defaultSecretAccess: "reveal" } });
+      expect(denied.status).toBe(403);
+      expect(denied.data.code).toBe("grant_required");
+      expect(getSettings().security.defaultSecretAccess).toBe("fill");
+      expect((await call("PUT", "/api/settings", { security: { defaultSecretAccess: "fill" } })).status).toBe(200);
+
+      const ok = await call("PUT", "/api/settings", { security: { defaultSecretAccess: "reveal" } }, issueGrant().grant);
+      expect(ok.status).toBe(200);
+      expect(getSettings().security.defaultSecretAccess).toBe("reveal");
+      // Once reveal is the default, creating an agent with it (as the form does) needs no extra grant.
+      expect((await call("POST", "/api/agents", { name: "Default Reveal", permissions: { secretAccess: "reveal" } })).status).toBe(200);
+    } finally {
+      updateSettings({ security: { defaultSecretAccess: "fill" } });
+    }
   });
 });

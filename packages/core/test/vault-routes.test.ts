@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setSystemTime, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import { loadConfig } from "../src/config";
 import { closeDb, insert, openDb } from "../src/db";
 import { getAccessToken, hasDashboardPassword, hostGuard, requireAuth, resetLoginAttempts } from "../src/server/auth";
 import { registerVaultRoutes } from "../src/server/routes/vault";
+import { clearGrants, GRANT_TTL_MS } from "../src/server/grants";
 import { HttpError } from "../src/util";
 import { listAudit } from "../src/services/audit";
 import { getSettings, resetSettingsCache } from "../src/services/settings";
@@ -60,8 +61,14 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-async function call<T = unknown>(method: string, path: string, body?: unknown, auth = true): Promise<{ status: number; data: T; text: string }> {
-  const headers: Record<string, string> = {};
+async function call<T = unknown>(
+  method: string,
+  path: string,
+  body?: unknown,
+  auth = true,
+  extraHeaders: Record<string, string> = {},
+): Promise<{ status: number; data: T; text: string }> {
+  const headers: Record<string, string> = { ...extraHeaders };
   if (auth) headers.authorization = `Bearer ${token}`;
   if (body !== undefined) headers["content-type"] = "application/json";
   const res = await app.request(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -73,6 +80,13 @@ async function call<T = unknown>(method: string, path: string, body?: unknown, a
     data = text;
   }
   return { status: res.status, data: data as T, text };
+}
+
+/** Headers carrying a fresh reveal grant (the vault passphrase is "brand new passphrase" after the lifecycle tests). */
+async function grantHeaders(): Promise<Record<string, string>> {
+  const res = await call<{ grant: string }>("POST", "/api/vault/grant", { passphrase: "brand new passphrase" });
+  expect(res.status).toBe(200);
+  return { "x-godmode-grant": res.data.grant };
 }
 
 describe("vault routes", () => {
@@ -234,7 +248,7 @@ describe("credential routes", () => {
   });
 
   test("reveal is audited", async () => {
-    const res = await call<{ password: string | null; notes: string | null }>("POST", `/api/credentials/${id}/reveal`, {});
+    const res = await call<{ password: string | null; notes: string | null }>("POST", `/api/credentials/${id}/reveal`, {}, true, await grantHeaders());
     expect(res.status).toBe(200);
     expect(res.data).toEqual({ password: "gh-secret-pw", notes: "backup codes: 1234" });
     const entries = listAudit(10, "credential.reveal");
@@ -243,22 +257,24 @@ describe("credential routes", () => {
   });
 
   test("patch keeps, changes and clears secrets", async () => {
+    const grant = await grantHeaders();
     const renamed = await call<Credential>("PATCH", `/api/credentials/${id}`, { name: "GitHub (personal)" });
     expect(renamed.data).toMatchObject({ name: "GitHub (personal)", hasPassword: true });
     await call("PATCH", `/api/credentials/${id}`, { password: "new-pw" });
-    expect((await call<{ password: string }>("POST", `/api/credentials/${id}/reveal`, {})).data.password).toBe("new-pw");
+    expect((await call<{ password: string }>("POST", `/api/credentials/${id}/reveal`, {}, true, grant)).data.password).toBe("new-pw");
     const cleared = await call<Credential>("PATCH", `/api/credentials/${id}`, { password: null, notes: null });
     expect(cleared.data.hasPassword).toBe(false);
-    expect((await call("POST", `/api/credentials/${id}/reveal`, {})).data).toEqual({ password: null, notes: null });
+    expect((await call("POST", `/api/credentials/${id}/reveal`, {}, true, grant)).data).toEqual({ password: null, notes: null });
     expect((await call("PATCH", `/api/credentials/${id}`, { name: "" })).status).toBe(400);
     expect((await call("PATCH", "/api/credentials/cred_missing", { name: "x" })).status).toBe(404);
   });
 
   test("locked vault → 423 on reveal and secret writes", async () => {
+    const grant = await grantHeaders();
     await call("POST", "/api/vault/lock", {});
     try {
       expect((await call("GET", "/api/credentials")).status).toBe(200);
-      const reveal = await call<{ code: string }>("POST", `/api/credentials/${id}/reveal`, {});
+      const reveal = await call<{ code: string }>("POST", `/api/credentials/${id}/reveal`, {}, true, grant);
       expect(reveal.status).toBe(423);
       expect(reveal.data.code).toBe("vault_locked");
       expect((await call("PATCH", `/api/credentials/${id}`, { password: "x" })).status).toBe(423);
@@ -267,6 +283,32 @@ describe("credential routes", () => {
     } finally {
       expect((await call("POST", "/api/vault/unlock", { passphrase: "brand new passphrase" })).status).toBe(200);
     }
+  }, SLOW);
+
+  test("reveal requires a grant: none/bogus → 403, valid → 200, expired → 403", async () => {
+    expect((await call("POST", `/api/credentials/${id}/reveal`, {}, false)).status).toBe(401);
+    const none = await call<{ code: string }>("POST", `/api/credentials/${id}/reveal`, {});
+    expect(none.status).toBe(403);
+    expect(none.data.code).toBe("grant_required");
+    const bogus = await call<{ code: string }>("POST", `/api/credentials/${id}/reveal`, {}, true, { "x-godmode-grant": "not-a-grant" });
+    expect(bogus.status).toBe(403);
+    expect(bogus.data.code).toBe("grant_required");
+
+    const grant = await grantHeaders();
+    expect((await call("POST", `/api/credentials/${id}/reveal`, {}, true, grant)).status).toBe(200);
+    // Reusable until it expires.
+    expect((await call("POST", `/api/credentials/${id}/reveal`, {}, true, grant)).status).toBe(200);
+
+    setSystemTime(new Date(Date.now() + GRANT_TTL_MS + 1000));
+    try {
+      const expired = await call<{ code: string }>("POST", `/api/credentials/${id}/reveal`, {}, true, grant);
+      expect(expired.status).toBe(403);
+      expect(expired.data.code).toBe("grant_required");
+    } finally {
+      setSystemTime();
+    }
+    clearGrants();
+    expect((await call("POST", `/api/credentials/${id}/reveal`, {}, true, grant)).status).toBe(403);
   }, SLOW);
 
   test("delete", async () => {
@@ -340,6 +382,47 @@ describe("totp routes", () => {
   });
 });
 
+describe("reveal grant endpoint", () => {
+  test("wrong passphrase → 400 (audited), right → grant; lock state unchanged", async () => {
+    expect((await call("POST", "/api/vault/grant", { passphrase: "brand new passphrase" }, false)).status).toBe(401);
+    expect((await call("POST", "/api/vault/grant", {})).status).toBe(400);
+    const wrong = await call<{ error: string }>("POST", "/api/vault/grant", { passphrase: "not the passphrase" });
+    expect(wrong.status).toBe(400);
+    expect(wrong.data.error).toBe("Wrong passphrase");
+    expect(listAudit(10, "vault.grant_failed").length).toBeGreaterThan(0);
+
+    await call("POST", "/api/vault/lock", {});
+    try {
+      const before = Date.now();
+      const ok = await call<{ grant: string; expiresAt: string }>("POST", "/api/vault/grant", { passphrase: "brand new passphrase" });
+      expect(ok.status).toBe(200);
+      expect(ok.data.grant.length).toBeGreaterThanOrEqual(32);
+      const ttl = Date.parse(ok.data.expiresAt) - before;
+      expect(ttl).toBeGreaterThan(GRANT_TTL_MS - 5000);
+      expect(ttl).toBeLessThanOrEqual(GRANT_TTL_MS + 5000);
+      expect((await call<VaultStatus>("GET", "/api/vault/status")).data.unlocked).toBe(false);
+      expect(listAudit(10, "vault.grant").length).toBeGreaterThan(0);
+    } finally {
+      expect((await call("POST", "/api/vault/unlock", { passphrase: "brand new passphrase" })).status).toBe(200);
+    }
+  }, SLOW);
+
+  test("remembering the device needs a grant (turning it off does not)", async () => {
+    const none = await call<{ code: string }>("POST", "/api/vault/remember", { remember: true });
+    expect(none.status).toBe(403);
+    expect(none.data.code).toBe("grant_required");
+    expect((await call("POST", "/api/vault/remember", { remember: false })).status).toBe(200);
+    // With a grant the request gets past the check; a locked vault then refuses (so the OS keychain isn't touched).
+    const grant = await grantHeaders();
+    await call("POST", "/api/vault/lock", {});
+    try {
+      expect((await call("POST", "/api/vault/remember", { remember: true }, true, grant)).status).toBe(423);
+    } finally {
+      expect((await call("POST", "/api/vault/unlock", { passphrase: "brand new passphrase" })).status).toBe(200);
+    }
+  }, SLOW);
+});
+
 describe("passphrase rate limiting", () => {
   test("too many unlock attempts → 429, spoofed X-Forwarded-For does not help", async () => {
     try {
@@ -350,6 +433,8 @@ describe("passphrase rate limiting", () => {
         body: JSON.stringify({ passphrase: "brand new passphrase" }),
       });
       expect(res.status).toBe(429);
+      // The grant endpoint checks the same passphrase and shares the bucket.
+      expect((await call("POST", "/api/vault/grant", { passphrase: "brand new passphrase" })).status).toBe(429);
     } finally {
       resetLoginAttempts("vault:local");
     }

@@ -39,7 +39,7 @@ export function createApp() {
     "/api/*",
     cors({
       origin: (origin, c) => (origin && isAllowedOrigin(origin, c.req.header("host")) ? origin : null),
-      allowHeaders: ["Authorization", "Content-Type"],
+      allowHeaders: ["Authorization", "Content-Type", "X-Godmode-Grant"],
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       exposeHeaders: ["Content-Disposition"],
       maxAge: 600,

@@ -148,6 +148,7 @@ function ImportCard() {
         description: "Vault restored and locked — unlock with the vault passphrase of the backup.",
         duration: 12_000,
       });
+      for (const warning of res.warnings ?? []) toast.warning(warning, { duration: 20_000 });
       void qc.invalidateQueries();
     },
     onError: (e) => {

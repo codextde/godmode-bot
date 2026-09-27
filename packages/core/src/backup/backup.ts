@@ -11,24 +11,28 @@
  * Restoring replaces the database and the vault key: afterwards the vault is LOCKED and unlocks with the
  * passphrase of the vault that was backed up. Device-specific state (dashboard password, server/binding
  * settings, remembered vault key) is kept from the current machine.
+ *
+ * A backup file is untrusted input. On import, settings that name programs to run (Claude/Chrome paths, extra CLI
+ * args, browser-use command) or where to send API keys (OpenAI base URL) are reset to defaults, stdio MCP servers
+ * are disabled until the user reviews them, and agents / browser profiles with unsafe ids are renamed or skipped.
  */
 import { mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
-import type { BackupExportInput, BackupManifest, EntityName } from "@godmode/shared";
+import type { BackupExportInput, BackupImportResult, BackupManifest, EntityName } from "@godmode/shared";
 import { config, VERSION } from "../config";
 import { all, get, getDb } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
 import { applyRuntimeSettings } from "../services/runtime";
-import { getSettings, resetSettingsCache } from "../services/settings";
+import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/settings";
 import { startScheduler, stopScheduler } from "../scheduler/scheduler";
 import { shutdownBrowsers } from "../browser/manager";
 import { resetComposioState } from "../integrations/composio";
 import * as vault from "../vault/vault";
-import { openWithPassphrase, sealWithPassphrase } from "../vault/crypto";
-import { badRequest, conflict, HttpError } from "../util";
+import { assertSafeKdf, openWithPassphrase, sealWithPassphrase } from "../vault/crypto";
+import { badRequest, conflict, HttpError, slugify } from "../util";
 
 const log = logger("backup");
 
@@ -81,6 +85,15 @@ const ALL_ENTITIES: EntityName[] = [
 ];
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
+/** Agent slugs and browser profile ids become directory names: restored ones must match this. */
+const SAFE_ID = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
+
+/** Settings that point at programs or endpoints; a backup must not be able to set them. */
+const EXECUTABLE_SETTINGS: Record<string, string[]> = {
+  runner: ["extraArgs", "claudePath"],
+  browser: ["chromePath", "browserUseCommand"],
+  voice: ["openaiBaseUrl"],
+};
 
 let busy: "export" | "import" | null = null;
 
@@ -342,6 +355,78 @@ function planFiles(entries: Record<string, Uint8Array>, kind: "agents" | "browse
   return out;
 }
 
+/**
+ * Make an untrusted dump safe to apply (mutates `dump`): rename agents whose slug is not a safe folder name, drop
+ * browser profiles with unsafe ids, reset settings that name programs/endpoints and disable stdio MCP servers.
+ * Returns human-readable warnings for the import result.
+ */
+function sanitizeDump(dump: DbDump): string[] {
+  const warnings: string[] = [];
+  const tables = dump.tables;
+  const rowsOf = (table: string) => (Array.isArray(tables[table]) ? tables[table]! : []);
+
+  const agents = rowsOf("agents");
+  const taken = new Set(agents.map((r) => r.slug).filter((s): s is string => typeof s === "string" && SAFE_ID.test(s)));
+  for (const row of agents) {
+    const slug = typeof row.slug === "string" ? row.slug : "";
+    if (SAFE_ID.test(slug)) continue;
+    const base = slugify(slug || String(row.name ?? "")) || "agent";
+    let next = base;
+    for (let i = 2; taken.has(next); i++) next = `${base}-${i}`;
+    taken.add(next);
+    row.slug = next;
+    warnings.push(`Agent "${String(row.name ?? next)}" had an unsafe folder name and was renamed to "${next}"; its files were not restored.`);
+  }
+
+  const profiles = rowsOf("browser_profiles");
+  const safeProfiles = profiles.filter((row) => typeof row.id === "string" && SAFE_ID.test(row.id));
+  if (safeProfiles.length !== profiles.length) {
+    tables.browser_profiles = safeProfiles;
+    warnings.push(`Skipped ${profiles.length - safeProfiles.length} browser profile(s) with an unsafe id.`);
+  }
+
+  const reset: string[] = [];
+  for (const row of rowsOf("settings")) {
+    const section = String(row.key ?? "");
+    const fields = EXECUTABLE_SETTINGS[section];
+    if (!fields) continue;
+    let value: unknown = null;
+    try {
+      value = typeof row.value === "string" ? JSON.parse(row.value) : null;
+    } catch {
+      /* corrupted section → defaults */
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      row.value = "{}";
+      continue;
+    }
+    const obj = value as Record<string, unknown>;
+    const defaults = DEFAULT_SETTINGS[section as keyof typeof DEFAULT_SETTINGS] as unknown as Record<string, unknown>;
+    for (const field of fields) {
+      if (!(field in obj)) continue;
+      if (JSON.stringify(obj[field]) !== JSON.stringify(defaults[field])) reset.push(`${section}.${field}`);
+      delete obj[field];
+    }
+    row.value = JSON.stringify(obj);
+  }
+  if (reset.length) {
+    warnings.push(`Reset ${reset.join(", ")} to the default: settings that choose which programs Godmode runs are never restored from a backup.`);
+  }
+
+  const disabled: string[] = [];
+  for (const row of rowsOf("mcp_servers")) {
+    if ((row.transport ?? "stdio") !== "stdio") continue;
+    if (row.enabled !== 0) disabled.push(String(row.name ?? row.id ?? "unnamed"));
+    row.enabled = 0;
+  }
+  if (disabled.length) {
+    warnings.push(
+      `Disabled ${disabled.length} command-line MCP server(s) from the backup (${disabled.join(", ")}). Check their commands under Integrations before turning them back on.`,
+    );
+  }
+  return warnings;
+}
+
 function restoreDatabase(dump: DbDump, vaultMeta: { kdf?: unknown; wrappedDek?: unknown; canary?: unknown } | null): Record<string, number> {
   const db = getDb();
   const cfg = config();
@@ -456,7 +541,7 @@ function restoreFiles(baseDir: string, files: PlannedFile[], stamp: string) {
   }
 }
 
-export function importBackup(file: Uint8Array, passphrase: string, actor = "user"): Promise<{ ok: true; counts: Record<string, number> }> {
+export function importBackup(file: Uint8Array, passphrase: string, actor = "user"): Promise<BackupImportResult> {
   return withLock("import", async () => {
     if (typeof passphrase !== "string" || !passphrase) throw badRequest("Enter the passphrase of the backup");
     if (!file || file.byteLength === 0) throw badRequest("The backup file is empty");
@@ -480,9 +565,23 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
     const dump = parseJsonEntry<DbDump>(entries, "db.json");
     if (!dump || typeof dump.tables !== "object" || dump.tables === null) throw badRequest("The backup's db.json is corrupted");
     const vaultMeta = parseJsonEntry<{ kdf?: unknown; wrappedDek?: unknown; canary?: unknown } | null>(entries, "vault.json");
+    if (vaultMeta && typeof vaultMeta.kdf === "string") {
+      // The restored KDF parameters are used on every unlock: refuse ones that would exhaust memory/CPU.
+      try {
+        assertSafeKdf(JSON.parse(vaultMeta.kdf));
+      } catch {
+        throw badRequest("The backup's vault key uses unsupported parameters");
+      }
+    }
 
-    const slugs = new Set((dump.tables.agents ?? []).map((r) => String(r.slug ?? "")).filter(Boolean));
-    const profileIds = new Set((dump.tables.browser_profiles ?? []).map((r) => String(r.id ?? "")).filter(Boolean));
+    // Files are only restored for agents whose original slug is a safe folder name (checked before renaming).
+    const slugs = new Set(
+      (Array.isArray(dump.tables.agents) ? dump.tables.agents : [])
+        .map((r) => r.slug)
+        .filter((s): s is string => typeof s === "string" && SAFE_ID.test(s)),
+    );
+    const warnings = sanitizeDump(dump);
+    const profileIds = new Set((dump.tables.browser_profiles ?? []).map((r) => String(r.id)));
     const agentFiles = planFiles(entries, "agents", slugs);
     const browserFiles = planFiles(entries, "browser", profileIds);
 
@@ -517,11 +616,12 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
         browserProfiles: new Set(browserFiles.map((f) => f.top)).size,
         files: agentFiles.filter((f) => !f.dir).length + browserFiles.filter((f) => !f.dir).length,
       };
-      audit(actor, "backup.import", null, { createdAt: manifest.createdAt, appVersion: manifest.appVersion, counts: result });
+      audit(actor, "backup.import", null, { createdAt: manifest.createdAt, appVersion: manifest.appVersion, counts: result, warnings });
       log.info(`backup from ${manifest.createdAt} restored`);
+      for (const w of warnings) log.warn(w);
       for (const entity of ALL_ENTITIES) bus.changed(entity);
       bus.emit({ type: "vault.status", status: vault.status() });
-      return { ok: true as const, counts: result };
+      return { ok: true as const, counts: result, warnings };
     } finally {
       startScheduler();
     }

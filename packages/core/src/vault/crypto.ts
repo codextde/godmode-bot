@@ -78,38 +78,78 @@ export function decryptBytes(key: Buffer, payload: string, aad = ""): Buffer {
   return Buffer.concat([decipher.update(ct), decipher.final()]);
 }
 
-/** Binary container for backups: magic | kdf json len | kdf json | iv | ct | tag */
-const MAGIC = Buffer.from("GMBK1\n", "utf8");
+/**
+ * Binary container for backups: magic | kdf json len (u32 BE) | kdf json | iv | ct | tag.
+ *  - v1 (`GMBK1`): AAD = magic only (read-only support for old backups).
+ *  - v2 (`GMBK2`): AAD = everything before the IV, so the KDF header is authenticated too.
+ */
+const MAGIC_V1 = Buffer.from("GMBK1\n", "utf8");
+const MAGIC_V2 = Buffer.from("GMBK2\n", "utf8");
+const MAX_KDF_HEADER_BYTES = 4096;
+
+/** Upper bounds for scrypt parameters read from untrusted input (backup headers, restored vault metadata). */
+export const KDF_LIMITS = { maxN: 1 << 20, maxR: 16, maxP: 4, minSaltBytes: 16, maxSaltBytes: 64 } as const;
+
+/**
+ * Validate KDF parameters that came from outside (a backup file). Rejects anything that would make scrypt
+ * allocate absurd amounts of memory / CPU, and malformed salts.
+ */
+export function assertSafeKdf(value: unknown): KdfParams {
+  const kdf = value as Partial<KdfParams> | null;
+  const isInt = (n: unknown): n is number => typeof n === "number" && Number.isInteger(n);
+  if (!kdf || typeof kdf !== "object" || kdf.algo !== "scrypt") throw new Error("Unsupported key derivation");
+  const { N, r, p, salt } = kdf;
+  if (!isInt(N) || N < 2 || N > KDF_LIMITS.maxN || (N & (N - 1)) !== 0) throw new Error("Unsupported key derivation parameters");
+  if (!isInt(r) || r < 1 || r > KDF_LIMITS.maxR) throw new Error("Unsupported key derivation parameters");
+  if (!isInt(p) || p < 1 || p > KDF_LIMITS.maxP) throw new Error("Unsupported key derivation parameters");
+  if (typeof salt !== "string" || salt.length > 128) throw new Error("Unsupported key derivation parameters");
+  const saltBytes = Buffer.from(salt, "base64").length;
+  if (saltBytes < KDF_LIMITS.minSaltBytes || saltBytes > KDF_LIMITS.maxSaltBytes) throw new Error("Unsupported key derivation parameters");
+  return { algo: "scrypt", N, r, p, salt };
+}
 
 export function sealWithPassphrase(passphrase: string, data: Uint8Array): Uint8Array {
   const kdf = { ...DEFAULT_KDF, N: 1 << 16, salt: randomBytes(16).toString("base64") } satisfies KdfParams;
   const key = deriveKey(passphrase, kdf);
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  cipher.setAAD(MAGIC);
-  const ct = Buffer.concat([cipher.update(data), cipher.final()]);
-  const tag = cipher.getAuthTag();
   const header = Buffer.from(JSON.stringify(kdf), "utf8");
   const len = Buffer.alloc(4);
   len.writeUInt32BE(header.length);
-  return Buffer.concat([MAGIC, len, header, iv, ct, tag]);
+  const prefix = Buffer.concat([MAGIC_V2, len, header]);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(prefix);
+  const ct = Buffer.concat([cipher.update(data), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([prefix, iv, ct, tag]);
 }
 
 export function openWithPassphrase(passphrase: string, sealed: Uint8Array): Uint8Array {
-  const buf = Buffer.from(sealed);
-  if (!buf.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error("Not a Godmode backup file");
-  let offset = MAGIC.length;
+  const buf = Buffer.from(sealed.buffer, sealed.byteOffset, sealed.byteLength);
+  const magic = buf.subarray(0, MAGIC_V1.length);
+  const v2 = magic.equals(MAGIC_V2);
+  if (!v2 && !magic.equals(MAGIC_V1)) throw new Error("Not a Godmode backup file");
+  let offset = MAGIC_V1.length;
+  if (buf.length < offset + 4) throw new Error("Corrupted backup file");
   const len = buf.readUInt32BE(offset);
   offset += 4;
-  const kdf = JSON.parse(buf.subarray(offset, offset + len).toString("utf8")) as KdfParams;
+  // The header is read before anything is authenticated: bound its size and the KDF cost it may ask for.
+  if (len === 0 || len > MAX_KDF_HEADER_BYTES || buf.length < offset + len + 12 + 16) throw new Error("Corrupted backup file");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(buf.subarray(offset, offset + len).toString("utf8"));
+  } catch {
+    throw new Error("Corrupted backup file");
+  }
+  const kdf = assertSafeKdf(parsed);
   offset += len;
+  const aad = v2 ? buf.subarray(0, offset) : MAGIC_V1;
   const iv = buf.subarray(offset, offset + 12);
   offset += 12;
   const ct = buf.subarray(offset, buf.length - 16);
   const tag = buf.subarray(buf.length - 16);
   const key = deriveKey(passphrase, kdf);
   const decipher = createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAAD(MAGIC);
+  decipher.setAAD(aad);
   decipher.setAuthTag(tag);
   try {
     return Buffer.concat([decipher.update(ct), decipher.final()]);

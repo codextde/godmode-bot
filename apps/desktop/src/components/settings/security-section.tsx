@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { InlineCode } from "@/components/onboarding/doctor-checklist";
+import { isGrantCancelled, useVaultGrant, withGrant } from "@/components/vault/grant";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
 import { useBootstrap, useVaultStatus } from "@/lib/hooks";
@@ -49,6 +50,19 @@ export function SecuritySection({ settings }: { settings: Settings }) {
   const [passphraseOpen, setPassphraseOpen] = useState(false);
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [confirmRemote, setConfirmRemote] = useState(false);
+  const ensureGrant = useVaultGrant();
+
+  // Making "reveal" the default for new agents needs the vault passphrase.
+  const setDefaultSecretAccess = async (defaultSecretAccess: SecretAccessMode) => {
+    if (defaultSecretAccess === "reveal" && sec.defaultSecretAccess !== "reveal") {
+      try {
+        await ensureGrant();
+      } catch {
+        return;
+      }
+    }
+    patch({ security: { defaultSecretAccess } });
+  };
 
   const lock = useMutation({
     mutationFn: api.vault.lock,
@@ -61,7 +75,8 @@ export function SecuritySection({ settings }: { settings: Settings }) {
   });
 
   const remember = useMutation({
-    mutationFn: (on: boolean) => api.vault.remember(on),
+    // Storing the vault key on this device needs the vault passphrase (asked for when the core requires it).
+    mutationFn: (on: boolean) => withGrant((grant) => api.vault.remember(on, grant)),
     onSuccess: (status, on) => {
       qc.setQueryData(qk.vaultStatus, status);
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
@@ -69,7 +84,7 @@ export function SecuritySection({ settings }: { settings: Settings }) {
         description: on ? "The vault key is stored in your OS keychain." : "You'll enter your passphrase after every restart.",
       });
     },
-    onError: (e) => toastApiError(e, "Could not change device unlock", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, "Could not change device unlock", qc),
   });
 
   const rememberOn = remember.isPending ? !!remember.variables : !!vault?.rememberDevice;
@@ -127,7 +142,7 @@ export function SecuritySection({ settings }: { settings: Settings }) {
           <ChoiceCards<SecretAccessMode>
             name="secret-access"
             value={sec.defaultSecretAccess}
-            onChange={(defaultSecretAccess) => patch({ security: { defaultSecretAccess } })}
+            onChange={(defaultSecretAccess) => void setDefaultSecretAccess(defaultSecretAccess)}
             options={[
               {
                 value: "fill",

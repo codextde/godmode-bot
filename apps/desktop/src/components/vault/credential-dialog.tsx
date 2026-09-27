@@ -23,6 +23,7 @@ import { StrengthMeter } from "./strength-meter";
 import { ChipInput } from "./chip-input";
 import { WorkspaceSelect } from "./workspace-select";
 import { domainFromUrl, normalizeUrl, rootDomain, toastApiError } from "./vault-utils";
+import { isGrantCancelled, withGrant } from "./grant";
 import { issuerDomain } from "./use-totp-codes";
 
 export interface CredentialPrefill {
@@ -154,12 +155,12 @@ function CredentialForm({
   }, [totpQuery.data, primaryDomain, totpId]);
 
   const revealNotes = useMutation({
-    mutationFn: () => api.credentials.reveal(credential!.id),
+    mutationFn: () => withGrant((grant) => api.credentials.reveal(credential!.id, grant)),
     onSuccess: (res) => {
       setNotes(res.notes ?? "");
       setNotesEditable(true);
     },
-    onError: (e) => toastApiError(e, "Could not reveal notes", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, "Could not reveal notes", qc),
   });
 
   const save = useMutation({

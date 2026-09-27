@@ -27,7 +27,15 @@ const realBrowser: BrowserModule = { ...browserManager };
 
 export const FAKE_PROFILE_ID = "prof_runner_test";
 export const testAgentIds = new Set<string>();
-export const fills: { profileId: string; text: string; kind?: string; selector?: string; submit?: boolean }[] = [];
+export const fills: {
+  profileId: string;
+  text: string;
+  kind?: string;
+  selector?: string;
+  submit?: boolean;
+  allowedHosts: string[];
+  httpHosts?: string[];
+}[] = [];
 /** When set, the fake fill fails with an error message that echoes the typed text (leak test). */
 export const fillFailure = { echoText: false };
 
@@ -52,7 +60,15 @@ mock.module("../../src/browser/manager", () => ({
   browserMcpServer: async (agent: Agent) => (testAgentIds.has(agent.id) ? null : realBrowser.browserMcpServer(agent)),
   fillIntoPage: async (profileId: string, opts: Parameters<BrowserModule["fillIntoPage"]>[1]) => {
     if (profileId !== FAKE_PROFILE_ID) return realBrowser.fillIntoPage(profileId, opts);
-    fills.push({ profileId, text: opts.text, kind: opts.kind, selector: opts.selector, submit: opts.submit });
+    fills.push({
+      profileId,
+      text: opts.text,
+      kind: opts.kind,
+      selector: opts.selector,
+      submit: opts.submit,
+      allowedHosts: opts.allowedHosts,
+      httpHosts: opts.httpHosts,
+    });
     if (fillFailure.echoText) return { ok: false, url: "https://example.com/login", detail: `Typing failed near "${opts.text}"` };
     return { ok: true, url: "https://example.com/login", detail: "filled" };
   },

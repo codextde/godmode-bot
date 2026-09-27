@@ -14,7 +14,9 @@ import {
 import { AGENT_TEMPLATES } from "../../agents/templates";
 import { createRoutine, deleteRoutine, listRoutines, runRoutineNow, updateRoutine } from "../../services/routines";
 import { startChat } from "../../services/conversations";
+import { getSettings } from "../../services/settings";
 import { conflict } from "../../util";
+import { requireGrant } from "../grants";
 import { body, z } from "../validate";
 
 const id = z.string().min(1).max(64);
@@ -93,9 +95,19 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.get("/api/agents/:id", (c) => c.json(getAgent(c.req.param("id"))));
 
-  app.post("/api/agents", async (c) => c.json(await createAgent(await body(c, agentSchema))));
+  app.post("/api/agents", async (c) => {
+    const input = await body(c, agentSchema);
+    // Letting an agent read secrets in plain text needs a fresh passphrase confirmation (unless it's already the default).
+    if (input.permissions?.secretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
+    return c.json(await createAgent(input));
+  });
 
-  app.patch("/api/agents/:id", async (c) => c.json(await updateAgent(c.req.param("id"), await body(c, agentSchema.partial()))));
+  app.patch("/api/agents/:id", async (c) => {
+    const agentId = c.req.param("id");
+    const input = await body(c, agentSchema.partial());
+    if (input.permissions?.secretAccess === "reveal" && getAgent(agentId).permissions.secretAccess !== "reveal") requireGrant(c);
+    return c.json(await updateAgent(agentId, input));
+  });
 
   app.delete("/api/agents/:id", async (c) => {
     await deleteAgent(c.req.param("id"));

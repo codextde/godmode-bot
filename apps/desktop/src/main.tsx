@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
+import { VaultGrantDialog } from "@/components/vault/grant";
 import { App } from "./App";
 import "./index.css";
 
@@ -31,6 +32,7 @@ createRoot(document.getElementById("root")!).render(
             <App />
           </BrowserRouter>
           <Toaster richColors position="bottom-right" />
+          <VaultGrantDialog />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

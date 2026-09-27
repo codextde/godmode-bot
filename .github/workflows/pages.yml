@@ -1,7 +1,8 @@
 name: Website
 
 # Publishes the landing page in site/ to GitHub Pages.
-# One-time setup: repository Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# One-time setup: repository Settings → Pages → Build and deployment → Source: "GitHub Actions",
+# then add the repository variable PAGES_ENABLED=true (Settings → Secrets and variables → Actions → Variables).
 on:
   push:
     branches: [main]
@@ -20,6 +21,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy landing page
+    if: vars.PAGES_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

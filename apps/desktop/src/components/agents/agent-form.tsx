@@ -36,6 +36,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AvatarPicker, ColorSwatches } from "./avatar-picker";
 import { MultiSelect } from "./multi-select";
+import { useVaultGrant } from "@/components/vault/grant";
 
 export interface AgentFormValues {
   name: string;
@@ -203,6 +204,19 @@ export function AgentForm({
   const errors = validate(values);
   const hasErrors = Object.keys(errors).length > 0;
   const set = <K extends keyof AgentFormValues>(key: K, value: AgentFormValues[K]) => setValues((v) => ({ ...v, [key]: value }));
+  const ensureGrant = useVaultGrant();
+
+  // Letting the AI read secrets needs the vault passphrase (the core checks it again on save).
+  const chooseSecretAccess = async (mode: SecretAccessMode) => {
+    if (mode === "reveal" && seed.secretAccess !== "reveal") {
+      try {
+        await ensureGrant();
+      } catch {
+        return;
+      }
+    }
+    set("secretAccess", mode);
+  };
 
   const submit = () => {
     if (hasErrors) {
@@ -362,7 +376,7 @@ export function AgentForm({
                 </span>
                 <RadioGroup
                   value={values.secretAccess}
-                  onValueChange={(v) => set("secretAccess", v as SecretAccessMode)}
+                  onValueChange={(v) => void chooseSecretAccess(v as SecretAccessMode)}
                   aria-labelledby="secret-access-label"
                   className="grid gap-3 sm:grid-cols-2"
                 >

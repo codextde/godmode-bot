@@ -10,7 +10,7 @@ import type { Subprocess } from "bun";
 import type { McpTransport } from "@godmode/shared";
 import { VERSION } from "../config";
 import { logger } from "../log";
-import { HttpError } from "../util";
+import { childEnv, HttpError } from "../util";
 import { getMcpServer, mcpServerSecrets } from "./mcpServers";
 
 const log = logger("mcp-probe");
@@ -180,7 +180,8 @@ function resolveCommand(command: string, env: Record<string, string | undefined>
 }
 
 async function probeStdio(target: ProbeTarget, signal: AbortSignal): Promise<string[]> {
-  const env: Record<string, string | undefined> = { ...process.env, ...(target.env ?? {}) };
+  // Never hand Godmode's own variables (e.g. GODMODE_TOKEN) to user-configured MCP servers.
+  const env = childEnv(target.env ?? {});
   const cmd = resolveCommand(target.command ?? "", env);
   let proc: Subprocess<"pipe", "pipe", "pipe">;
   try {

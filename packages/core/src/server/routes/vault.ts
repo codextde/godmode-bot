@@ -13,6 +13,7 @@ import { createTotp, currentCodes, deleteTotp, importTotpUris, listTotp, updateT
 import { audit } from "../../services/audit";
 import { updateSettings } from "../../services/settings";
 import { rateLimitLogin, resetLoginAttempts, setDashboardPassword } from "../auth";
+import { issueGrant, requireGrant, verifyVaultPassphrase } from "../grants";
 import { body, z } from "../validate";
 import { badRequest } from "../../util";
 
@@ -144,8 +145,26 @@ export function registerVaultRoutes(app: Hono): void {
     return c.json({ ok: true as const });
   });
 
+  /** Re-enter the vault passphrase → short-lived grant for revealing secrets (does not change the lock state). */
+  app.post("/api/vault/grant", async (c) => {
+    const ip = clientIp(c);
+    const limitKey = `vault:${ip}`;
+    rateLimitLogin(limitKey);
+    const { passphrase } = await body(c, z.object({ passphrase: z.string().min(1).max(1024) }));
+    if (!vault.isInitialized()) throw badRequest("Vault not initialized");
+    if (!verifyVaultPassphrase(passphrase)) {
+      audit("user", "vault.grant_failed", null, { ip });
+      throw badRequest("Wrong passphrase");
+    }
+    resetLoginAttempts(limitKey);
+    audit("user", "vault.grant", null, { ip });
+    return c.json(issueGrant());
+  });
+
   app.post("/api/vault/remember", async (c) => {
     const { remember } = await body(c, z.object({ remember: z.boolean() }));
+    // Storing the vault key on this device lets anything running as this user read it: confirm with the passphrase.
+    if (remember && !vault.status().rememberDevice) requireGrant(c);
     await vault.setRememberDevice(remember);
     audit("user", "vault.remember_device", null, { remember });
     return c.json(vault.status());
@@ -190,6 +209,7 @@ export function registerVaultRoutes(app: Hono): void {
   app.get("/api/credentials/:id", (c) => c.json(getCredential(c.req.param("id"))));
 
   app.post("/api/credentials/:id/reveal", (c) => {
+    requireGrant(c);
     const credential = getCredential(c.req.param("id"), { reveal: true });
     audit("user", "credential.reveal", credential.id, { name: credential.name });
     return c.json({ password: credential.password ?? null, notes: credential.notes ?? null });

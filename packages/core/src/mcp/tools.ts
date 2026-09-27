@@ -4,7 +4,7 @@
  * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management.
  */
 import { z } from "zod";
-import type { Agent, MissingLoginKind, Run } from "@godmode/shared";
+import type { Agent, Credential, MissingLoginKind, Run } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
 import { logger } from "../log";
@@ -12,12 +12,14 @@ import { redact } from "../vault/vault";
 import { audit } from "../services/audit";
 import { notify } from "../services/notifications";
 import { listMissingLogins, reportMissingLogin } from "../services/missingLogins";
-import { createRoutine, deleteRoutine, listRoutines, updateRoutine } from "../services/routines";
+import { createRoutine, deleteRoutine, getRoutine, listRoutines, updateRoutine } from "../services/routines";
 import { listWorkspaces } from "../services/workspaces";
 import { createAgent, deleteAgent, getAgent, listAgents, peersFor, updateAgent } from "../agents/service";
 import { credentialsForAgent, findCredentialsForAgent, getCredential, listCredentials, markCredentialUsed, revealForAgent } from "../vault/credentials";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
 import { fillIntoPage, resolveProfileForAgent } from "../browser/manager";
+import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
+import { loginFillScope } from "../browser/fill";
 import { createConversation, sendMessage } from "../services/conversations";
 import { getRun, listRuns, markMissingLoginReported, waitForRun } from "../runner/runner";
 
@@ -110,6 +112,51 @@ function requireReachable(agent: Agent, targetId: string): Agent {
   return target;
 }
 
+const ASK_HUMAN = "ask the human to change this in Settings";
+
+/**
+ * A reveal-mode agent gets plaintext secrets, so it only takes work (tasks, schedules, instructions) from a
+ * caller that could reveal them itself — and never from another workspace. Returns the refusal, or null.
+ */
+function revealTargetRefusal(caller: Agent, target: Agent, what: string): string | null {
+  if (target.permissions.secretAccess !== "reveal") return null;
+  if (caller.permissions.secretAccess !== "reveal") return `Target agent can reveal secrets; only the human can ${what} from here.`;
+  if (target.workspaceId !== null && target.workspaceId !== caller.workspaceId) {
+    return `${target.name} can reveal secrets and belongs to another workspace; only the human can ${what}.`;
+  }
+  return null;
+}
+
+/**
+ * Settings of agents that only the human may change through the UI: workspace, browser profile, and MCP servers
+ * outside the agent's scope (global / its workspace / pinned to it). `target` is null for a new agent.
+ */
+function assertAgentPatchAllowed(
+  target: Agent | null,
+  patch: { workspaceId?: string | null; browser?: { profileId?: string | null }; mcpServerIds?: string[] },
+): void {
+  if (target && patch.workspaceId !== undefined && (patch.workspaceId ?? null) !== target.workspaceId) {
+    throw new HttpError(403, `Agents cannot move agents between workspaces; ${ASK_HUMAN}.`);
+  }
+  const profileId = patch.browser?.profileId;
+  if (profileId !== undefined && (profileId ?? null) !== (target?.browser.profileId ?? null)) {
+    throw new HttpError(403, `Agents cannot change an agent's browser profile; ${ASK_HUMAN}.`);
+  }
+  if (patch.mcpServerIds?.length) {
+    const scope = { id: target?.id ?? "", workspaceId: target ? target.workspaceId : (patch.workspaceId ?? null) };
+    const outside = patch.mcpServerIds.filter((id) => {
+      try {
+        return !mcpServerInAgentScope(getMcpServer(id), scope);
+      } catch {
+        return false; // unknown ids are dropped by the agent service
+      }
+    });
+    if (outside.length) {
+      throw new HttpError(403, `MCP server ${outside.join(", ")} is outside this agent's scope (global, its workspace or pinned to it); ${ASK_HUMAN}.`);
+    }
+  }
+}
+
 /** Browser error text with the filled value removed (redact() only knows passwords, not usernames/codes). */
 function scrub(detail: string, value: string): string {
   const masked = value ? detail.split(value).join("••••••••") : detail;
@@ -130,7 +177,7 @@ const missingKind = z.enum(["missing_credential", "invalid_credential", "missing
 
 /** Agent fields an orchestrator may set. Secret access and management rights stay human-only. */
 const agentFields = {
-  workspaceId: z.string().nullable().optional().describe("Workspace id, or null for a global agent"),
+  workspaceId: z.string().nullable().optional().describe("Workspace id, or null for a global agent (agent_create only; moving agents is human-only)"),
   avatar: z.string().max(16).optional().describe("Emoji avatar"),
   color: z.string().max(32).optional(),
   description: z.string().max(2000).optional().describe("One-line description of what the agent does"),
@@ -149,10 +196,10 @@ const agentFields = {
     .object({
       enabled: z.boolean().optional(),
       headless: z.boolean().nullable().optional(),
-      profileId: z.string().nullable().optional(),
+      profileId: z.string().nullable().optional().describe("Browser profile — human-only; leave unset"),
     })
     .optional(),
-  mcpServerIds: z.array(z.string()).optional(),
+  mcpServerIds: z.array(z.string()).optional().describe("Extra MCP server ids; only global servers or ones of the agent's workspace"),
   inheritMcp: z.boolean().optional(),
   subagents: z
     .array(z.object({ name: z.string(), description: z.string(), prompt: z.string(), model: z.string().optional() }))
@@ -206,7 +253,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "vault_fill_login",
     description:
-      "Type the username or password of a saved login into the browser page — Godmode fills it directly, you never see the value. The right input is found automatically (focused field, or the best username/password field on the page, incl. iframes); pass a CSS selector only if that picks the wrong field. Use submit:true on the last field to press Enter.",
+      "Type the username or password of a saved login into the browser page — Godmode fills it directly, you never see the value. Only works on the login's own site (its domains/URL, https unless the saved URL is http) — the field's page or frame must belong to it, otherwise the fill is refused. Passwords only go into real password inputs (input[type=password]). The right input is found automatically (focused field, or the best username/password field on the page, incl. iframes); pass a CSS selector only if that picks the wrong field. Use submit:true on the last field to press Enter.",
     schema: z.object({
       credentialId: z.string().describe("Login id from vault_list_logins"),
       field: z.enum(["username", "password"]),
@@ -222,19 +269,19 @@ const TOOLS: ToolDef[] = [
           `This login has no ${field} saved. Call report_missing_login (kind "invalid_credential") so the human can complete it.`,
         );
       }
-      const name = getCredential(credentialId).name;
-      const result = await fillIntoPage(profile.id, { text: value, kind: field, selector, submit });
+      const login = getCredential(credentialId);
+      const result = await fillIntoPage(profile.id, { text: value, kind: field, selector, submit, ...loginFillScope(login) });
       audit(`agent:${agent.id}`, "credential.fill", credentialId, { field, runId: ctx.runId, ok: result.ok });
       if (!result.ok) return fail(`Could not fill the ${field}: ${scrub(result.detail, value)}`);
       markCredentialUsed(credentialId);
-      return `Filled ${field} for "${name}" into ${result.url}${submit ? " and submitted" : ""}.`;
+      return `Filled ${field} for "${login.name}" into ${result.url}${submit ? " and submitted" : ""}.`;
     },
   }),
 
   defineTool({
     name: "vault_fill_totp",
     description:
-      "Type the current 2FA (TOTP / authenticator) code into the browser page — Godmode fills it, you never see it. Pass the login's credentialId (its linked 2FA is used) or a totpId. The code input is found automatically (incl. one-digit-per-box inputs); pass a selector only if needed.",
+      "Type the current 2FA (TOTP / authenticator) code into the browser page — Godmode fills it, you never see it. Pass the login's credentialId (its linked 2FA is used) or a totpId. Only works on the site of the login the 2FA entry is linked to (an unlinked entry also needs the credentialId of the site's login). The code input is found automatically (incl. one-digit-per-box inputs); pass a selector only if needed.",
     schema: z.object({
       credentialId: z.string().optional().describe("Login id whose linked 2FA should be used"),
       totpId: z.string().optional().describe("2FA entry id (alternative to credentialId)"),
@@ -244,16 +291,27 @@ const TOOLS: ToolDef[] = [
     run: async ({ credentialId, totpId, selector, submit }, { agent, ctx }) => {
       const profile = requireBrowser(agent);
       let id = totpId ?? null;
-      if (!id) {
-        if (!credentialId) return fail("Pass credentialId or totpId.");
+      let site: Credential | null = null;
+      if (credentialId) {
         const cred = credentialsForAgent(agent).find((c) => c.id === credentialId);
         if (!cred) return fail(`Login ${credentialId} is not available to you.`);
-        id = cred.totpId ?? totpForAgent(agent).find((t) => t.credentialId === credentialId)?.id ?? null;
+        site = cred;
+        id ??= cred.totpId ?? totpForAgent(agent).find((t) => t.credentialId === credentialId)?.id ?? null;
         if (!id) {
           return fail(
             `No 2FA code is linked to "${cred.name}". Call report_missing_login with kind "missing_totp" so the human can add it, then continue with other work.`,
           );
         }
+      }
+      if (!id) return fail("Pass credentialId or totpId.");
+      const entry = totpForAgent(agent).find((t) => t.id === id);
+      if (!entry) return fail(`2FA entry ${id} is not available to you.`);
+      // The code may only be typed on the site of the login the entry is linked to — the issuer name proves nothing.
+      if (entry.credentialId) site = getCredential(entry.credentialId);
+      if (!site) {
+        return fail(
+          `The 2FA entry "${entry.issuer}" is not linked to a login, so Godmode cannot tell which site it belongs to. Pass the credentialId of this site's login, or ask the human to link the 2FA entry to its login in the vault.`,
+        );
       }
       let code = codeForAgent(agent, id);
       if (code.remaining < 3) {
@@ -261,7 +319,7 @@ const TOOLS: ToolDef[] = [
         await sleep(code.remaining * 1000 + 300);
         code = codeForAgent(agent, id);
       }
-      const result = await fillIntoPage(profile.id, { text: code.code, kind: "totp", selector, submit });
+      const result = await fillIntoPage(profile.id, { text: code.code, kind: "totp", selector, submit, ...loginFillScope(site) });
       audit(`agent:${agent.id}`, "totp.fill", id, { field: "totp", runId: ctx.runId, credentialId: credentialId ?? null, ok: result.ok });
       if (!result.ok) return fail(`Could not fill the 2FA code: ${scrub(result.detail, code.code)}`);
       return `Filled the current 2FA code into ${result.url}${submit ? " and submitted" : ""}.`;
@@ -411,6 +469,12 @@ const TOOLS: ToolDef[] = [
       }
       const target = requireReachable(agent, agentId);
       if (!target.enabled) return fail(`${target.name} is disabled.`);
+      // Orchestrators too: only peers (respects delegateTo), and reveal-mode agents only for reveal-mode callers.
+      if (!peersFor(agent).some((p) => p.id === target.id)) {
+        return fail(`Agent ${agentId} is not one of your peers (use agents_list to see who you can work with).`);
+      }
+      const refusal = revealTargetRefusal(agent, target, "hand it tasks");
+      if (refusal) return fail(refusal);
       const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation" });
       const { run } = await sendMessage(conversation.id, {
         content: `[Delegated by ${agent.name}]\n\n${task}`,
@@ -462,6 +526,8 @@ const TOOLS: ToolDef[] = [
     }),
     when: isManager,
     run: async ({ routine, ...input }, { agent }) => {
+      assertAgentPatchAllowed(null, input);
+      // Secret access, management rights and login allow-lists stay human-only (enforced by createAgent for agent actors).
       const created = await createAgent(input, `agent:${agent.id}`);
       audit(`agent:${agent.id}`, "agent.create", created.id, { name: created.name });
       let routineInfo: unknown = null;
@@ -475,10 +541,15 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "agent_update",
-    description: "Update an agent's name, description, instructions, model, workspace, delegation settings, browser or subagents.",
+    description:
+      "Update an agent's name, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope) or subagents. Workspace, browser profile, secret access and login permissions can only be changed by the human in Settings.",
     schema: z.object({ agentId: z.string(), name: z.string().min(1).max(100).optional(), ...agentFields }),
     when: isManager,
     run: async ({ agentId, ...patch }, { agent }) => {
+      const target = getAgent(agentId);
+      const refusal = target.id === agent.id ? null : revealTargetRefusal(agent, target, "change its settings");
+      if (refusal) return fail(refusal);
+      assertAgentPatchAllowed(target, patch);
       const updated = await updateAgent(agentId, patch, `agent:${agent.id}`);
       audit(`agent:${agent.id}`, "agent.update", agentId, { fields: Object.keys(patch) });
       return json(agentSummary(updated, workspaceNames()));
@@ -529,6 +600,8 @@ const TOOLS: ToolDef[] = [
     schema: z.object({ agentId: z.string(), ...routineFields }),
     when: isManager,
     run: ({ timezone, ...input }, { agent }) => {
+      const refusal = revealTargetRefusal(agent, getAgent(input.agentId), "schedule its tasks");
+      if (refusal) return fail(refusal);
       const r = createRoutine({ ...input, timezone: timezone ?? localTimezone() });
       audit(`agent:${agent.id}`, "routine.create", r.id, { agentId: r.agentId });
       return json({ id: r.id, name: r.name, cron: r.cron, timezone: r.timezone, nextRunAt: r.nextRunAt });
@@ -549,6 +622,8 @@ const TOOLS: ToolDef[] = [
     }),
     when: isManager,
     run: ({ routineId, ...patch }, { agent }) => {
+      const refusal = revealTargetRefusal(agent, getAgent(getRoutine(routineId).agentId), "schedule its tasks");
+      if (refusal) return fail(refusal);
       const r = updateRoutine(routineId, patch);
       audit(`agent:${agent.id}`, "routine.update", routineId, { fields: Object.keys(patch) });
       return json({ id: r.id, name: r.name, cron: r.cron, enabled: r.enabled, nextRunAt: r.nextRunAt });

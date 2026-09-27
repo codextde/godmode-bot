@@ -233,6 +233,24 @@ function defaultPermissions(settings: Settings): AgentPermissions {
   return { ...BASE_PERMISSIONS, secretAccess: settings.security.defaultSecretAccess };
 }
 
+/** Changes made by an agent (MCP tools, actor "agent:<id>") rather than the human. */
+const isAgentActor = (actor: string) => actor.startsWith("agent:");
+
+/**
+ * Permissions an agent may never grant or change: secret access, agent management and the login/2FA allow-lists
+ * stay human-only. Agent-created agents always start in "fill" mode without management rights, whatever the
+ * default secret access setting is.
+ */
+function lockHumanOnlyPermissions(p: AgentPermissions, current: AgentPermissions | null): AgentPermissions {
+  return {
+    ...p,
+    secretAccess: current?.secretAccess ?? "fill",
+    canManageAgents: current?.canManageAgents ?? false,
+    credentialIds: current ? current.credentialIds : null,
+    totpIds: current ? current.totpIds : null,
+  };
+}
+
 /** Unique slug across agents and existing directories in agentsDir (repo dirs are never reused). */
 function uniqueSlug(base: string): string {
   const root = slugify(base);
@@ -422,6 +440,8 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     !get<{ id: string }>("SELECT id FROM agents WHERE slug = ?", preferredSlug) &&
     existsSync(join(repoPathFor(preferredSlug), ".git"));
   const slug = adopt ? preferredSlug! : uniqueSlug(preferredSlug ?? name);
+  let permissions = normalizePermissions({ ...defaultPermissions(settings), ...input.permissions });
+  if (isAgentActor(actor)) permissions = lockHumanOnlyPermissions(permissions, null);
   const ts = now();
   const agent: Agent = {
     id: newId("agt"),
@@ -437,7 +457,7 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     isDefault,
     enabled,
     status: enabled ? "idle" : "disabled",
-    permissions: normalizePermissions({ ...defaultPermissions(settings), ...input.permissions }),
+    permissions,
     browser,
     mcpServerIds: existingMcpServerIds(stringList(input.mcpServerIds ?? [])),
     inheritMcp: input.inheritMcp !== false,
@@ -493,7 +513,10 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
     if (current.isDefault && !patch.enabled) throw badRequest("The default agent cannot be disabled");
     next.enabled = patch.enabled;
   }
-  if (patch.permissions !== undefined) next.permissions = normalizePermissions({ ...current.permissions, ...patch.permissions });
+  if (patch.permissions !== undefined) {
+    next.permissions = normalizePermissions({ ...current.permissions, ...patch.permissions });
+    if (isAgentActor(actor)) next.permissions = lockHumanOnlyPermissions(next.permissions, current.permissions);
+  }
   if (patch.browser !== undefined) {
     next.browser = normalizeBrowser({ ...current.browser, ...patch.browser });
     if (next.browser.profileId !== current.browser.profileId) assertBrowserProfile(next.browser.profileId);

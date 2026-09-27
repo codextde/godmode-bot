@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Bot, CalendarClock, Plus, Sparkles, Wand2 } from "lucide-react";
 import type { Agent, AgentInput, AgentTemplate } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
+import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { qk } from "@/lib/queryKeys";
 import { useAgentTemplates, useBootstrap } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
@@ -239,7 +240,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
 
   const create = useMutation({
     mutationFn: async (input: AgentInput) => {
-      const agent = await api.agents.create(input);
+      const agent = await withGrant((grant) => api.agents.create(input, grant));
       let routineError: unknown = null;
       if (template?.routine && withRoutine) {
         try {
@@ -265,7 +266,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
       if (routineError) toast.error("The routine couldn't be created", { description: errorMessage(routineError) });
       navigate(`/agents/${agent.id}`);
     },
-    onError: (err) => toast.error("Couldn't create agent", { description: errorMessage(err) }),
+    onError: (err) => !isGrantCancelled(err) && toast.error("Couldn't create agent", { description: errorMessage(err) }),
   });
 
   if (!isScratch && templates.isLoading) {

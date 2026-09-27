@@ -495,7 +495,8 @@ async function withActivePage<T>(rb: RunningBrowser, urlContains: string | undef
 
 /**
  * Type text into the focused (or selector-matched) element of the active page WITHOUT the model seeing it.
- * Used for passwords and TOTP codes.
+ * Used for passwords and TOTP codes. The field's frame must belong to `allowedHosts` (https) or `httpHosts`
+ * (http) — see fill.ts — otherwise nothing is typed.
  */
 export async function fillIntoPage(
   profileId: string,
@@ -506,16 +507,32 @@ export async function fillIntoPage(
     selector?: string;
     urlContains?: string;
     submit?: boolean;
+    /** Sites the secret belongs to (credential domains + URL host); the field's frame must be https on one of them. */
+    allowedHosts: string[];
+    /** Hosts also allowed over plain http (the credential's own http:// URL host). */
+    httpHosts?: string[];
   },
 ): Promise<{ ok: boolean; url: string; detail: string }> {
   requireRow(profileId);
   if (typeof opts.text !== "string" || opts.text.length === 0) return { ok: false, url: "", detail: "Nothing to type." };
+  if (!Array.isArray(opts.allowedHosts) || opts.allowedHosts.length === 0) {
+    return { ok: false, url: "", detail: "Refusing to fill: this login has no site (URL or domain) it belongs to. Ask the human to add one in the vault." };
+  }
   const rb = getRunning(profileId);
   if (!rb) return { ok: false, url: "", detail: "The browser is not running. Open the login page with the browser tools first." };
   rb.lastUsedAt = Date.now();
+  // Belt and braces: error texts come from CDP/our scripts, but never let the typed value through.
+  const scrub = (detail: string) => detail.split(opts.text).join("••••••••");
   try {
     const result = await withActivePage(rb, opts.urlContains, (page) =>
-      fillOnPage(page, { text: opts.text, kind: opts.kind, selector: opts.selector, submit: opts.submit }),
+      fillOnPage(page, {
+        text: opts.text,
+        kind: opts.kind,
+        selector: opts.selector,
+        submit: opts.submit,
+        allowedHosts: opts.allowedHosts,
+        httpHosts: opts.httpHosts,
+      }),
     );
     if (!result) {
       return {
@@ -524,10 +541,9 @@ export async function fillIntoPage(
         detail: opts.urlContains ? `No open tab has a URL containing "${opts.urlContains}".` : "The browser has no open tab.",
       };
     }
-    return result;
+    return { ...result, detail: scrub(result.detail) };
   } catch (err) {
-    // Error messages come from CDP/our scripts and never contain the typed text.
-    return { ok: false, url: "", detail: `Could not fill the field: ${err instanceof Error ? err.message : String(err)}` };
+    return { ok: false, url: "", detail: scrub(`Could not fill the field: ${err instanceof Error ? err.message : String(err)}`) };
   } finally {
     rb.lastUsedAt = Date.now();
   }

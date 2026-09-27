@@ -2,22 +2,15 @@ import { isValidElement, memo, type ReactElement, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Link } from "react-router";
-import { Code2 } from "lucide-react";
 import { openExternal } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
-import { CopyButton } from "./copy-button";
+import { CodeBlock as AicssCodeBlock } from "@/components/aicss/CodeBlock";
 
+/** Fenced code in chat — aicss code block (line numbers + copy), height-capped for long snippets. */
 export function CodeBlock({ lang, code, className }: { lang: string; code: string; className?: string }) {
   return (
-    <div className={cn("group/code overflow-hidden rounded-xl border bg-muted/50 dark:bg-black/30", className)}>
-      <div className="flex h-8 items-center gap-2 border-b bg-background/30 pr-1 pl-3 text-xs text-muted-foreground">
-        <Code2 className="size-3.5" />
-        <span className="font-mono">{lang || "text"}</span>
-        <CopyButton text={code} label="Copy code" className="ml-auto" />
-      </div>
-      <pre className="m-0! max-h-[32rem] overflow-auto rounded-none! border-0! bg-transparent! p-3! text-[0.8rem]! leading-relaxed">
-        <code>{code}</code>
-      </pre>
+    <div className={cn("max-h-[32rem] overflow-y-auto rounded-xl", className)}>
+      <AicssCodeBlock lang={lang || "text"} code={code} />
     </div>
   );
 }

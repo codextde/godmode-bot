@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
+import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api, type DeepPartial } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -35,7 +36,8 @@ function deepMerge<T>(base: T, patch: DeepPartial<T>): T {
 export function useSettingsPatch() {
   const qc = useQueryClient();
   const m = useMutation({
-    mutationFn: (p: DeepPartial<Settings>) => api.settings.update(p),
+    // Some changes (secret access "reveal") need a vault passphrase grant; withGrant asks for it when the core does.
+    mutationFn: (p: DeepPartial<Settings>) => withGrant((grant) => api.settings.update(p, grant)),
     onMutate: async (p) => {
       await qc.cancelQueries({ queryKey: qk.settings });
       const prev = qc.getQueryData<Settings>(qk.settings);
@@ -44,7 +46,7 @@ export function useSettingsPatch() {
     },
     onError: (err, _p, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.settings, ctx.prev);
-      toastApiError(err, "Could not save settings", qc);
+      if (!isGrantCancelled(err)) toastApiError(err, "Could not save settings", qc);
     },
     onSuccess: (next) => {
       if (isPlainObject(next) && "general" in next) qc.setQueryData(qk.settings, next);

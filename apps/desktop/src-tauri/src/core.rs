@@ -5,8 +5,10 @@
 //! * Debug builds run `bun <repo>/packages/core/src/index.ts serve --mode desktop` so core edits apply on restart.
 //! * `GODMODE_CORE_CMD` overrides the command prefix in any build (e.g. `/path/to/godmode` or `bun /path/index.ts`).
 //!
-//! The core's stdin stays piped: when this process goes away (even on a crash) the pipe closes and the core
-//! shuts itself down.
+//! The access token is handed over as the first line of the core's stdin (`--token-stdin`), never through the
+//! environment, where any process of the same user (e.g. a prompt-injected agent) could read it via `ps eww`.
+//! After that the core's stdin stays piped: when this process goes away (even on a crash) the pipe closes and the
+//! core shuts itself down.
 
 use std::{
     ffi::OsString,
@@ -263,8 +265,9 @@ fn spawn_core(
     path_env: Option<&OsString>,
 ) -> Result<Arc<CoreProcess>, String> {
     let (mut cmd, description) = core_command(app)?;
-    cmd.args(["serve", "--mode", "desktop"])
-        .env("GODMODE_TOKEN", &manager.token)
+    cmd.args(["serve", "--mode", "desktop", "--token-stdin"])
+        // Never pass the token via the environment (not even one inherited from our own parent).
+        .env_remove("GODMODE_TOKEN")
         .env("GODMODE_MODE", "desktop")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -290,6 +293,12 @@ fn spawn_core(
     }
     let mut child = cmd.spawn().map_err(|err| format!("failed to start the core ({description}): {err}"))?;
     manager.log(&format!("started core ({description}), pid {}", child.id()));
+    // A single short line fits in the pipe buffer, so this doesn't block even before the core reads it.
+    if let Some(stdin) = child.stdin.as_mut() {
+        if let Err(err) = write_token_line(stdin, &manager.token) {
+            manager.log(&format!("could not send the access token to the core: {err}"));
+        }
+    }
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -319,6 +328,13 @@ fn spawn_core(
         });
     }
     Ok(process)
+}
+
+/// The `--token-stdin` handshake: the token followed by a newline.
+fn write_token_line(out: &mut impl Write, token: &str) -> std::io::Result<()> {
+    out.write_all(token.as_bytes())?;
+    out.write_all(b"\n")?;
+    out.flush()
 }
 
 fn on_ready(app: &AppHandle, manager: &CoreManager, json: &str, is_restart: bool) {
@@ -533,6 +549,13 @@ mod tests {
         assert_eq!(token.len(), 43);
         assert!(token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
         assert_ne!(token, generate_token());
+    }
+
+    #[test]
+    fn writes_token_line() {
+        let mut out = Vec::new();
+        write_token_line(&mut out, "abc_DEF-123").unwrap();
+        assert_eq!(out, b"abc_DEF-123\n");
     }
 
     #[test]

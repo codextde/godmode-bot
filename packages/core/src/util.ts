@@ -85,6 +85,18 @@ export function truncate(s: string, max: number): string {
   return s.slice(0, max - 1) + "…";
 }
 
+/**
+ * Environment for child processes: `process.env` without Godmode's own variables (`GODMODE_TOKEN`, …), plus `extra`.
+ * Every spawn of a third-party program (MCP servers, installers, version checks) should use this.
+ */
+export function childEnv(extra: Record<string, string | undefined> = {}): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.toUpperCase().startsWith("GODMODE_")) env[key] = value;
+  }
+  return { ...env, ...extra };
+}
+
 export function which(bin: string): string | null {
   try {
     return Bun.which(bin) ?? null;

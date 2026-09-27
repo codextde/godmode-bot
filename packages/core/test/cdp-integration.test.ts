@@ -17,6 +17,7 @@ import { getRunning, unregisterBrowser } from "../src/browser/state";
 import { updateSettings } from "../src/services/settings";
 import { startLiveView, stopLiveView, dispatchInput } from "../src/browser/screencast";
 import * as manager from "../src/browser/manager";
+import { loginFillScope, originRefusal } from "../src/browser/fill";
 
 const chrome = findChrome();
 const suite = chrome && !process.env.GODMODE_SKIP_BROWSER_TESTS ? describe : describe.skip;
@@ -46,6 +47,16 @@ const OUTER = (innerOrigin: string) => `<!doctype html><title>Outer</title>
 <h1>Embedded login</h1><iframe id="login" src="${innerOrigin}/inner" width="400" height="300"></iframe>`;
 
 const INNER = `<!doctype html><title>Inner</title><input id="ipass" type="password" name="pw">`;
+
+const OUTER_SAME = `<!doctype html><title>Outer same</title>
+<iframe id="same" src="/inner" width="400" height="120"></iframe>`;
+
+const FAKE_PASSWORD = `<!doctype html><title>Fake</title>
+<input id="fakepw" type="text" name="password" placeholder="Password">
+<textarea id="otpnote" name="otp"></textarea>`;
+
+/** Fill binding for the local test server (http://127.0.0.1:<port>), as for a login saved with an http:// URL. */
+const LOCAL = { allowedHosts: ["127.0.0.1"], httpHosts: ["127.0.0.1"] };
 
 let server: ReturnType<typeof Bun.serve>;
 let origin = "";
@@ -87,6 +98,32 @@ async function openPage(profileId: string, path: string) {
   await waitFor(() => evalOn<boolean>(profileId, path, "document.readyState === 'complete'"));
 }
 
+describe("fill origin binding", () => {
+  test("loginFillScope: domains + URL host, http only for the saved http URL host", () => {
+    expect(loginFillScope({ url: "https://github.com/login", domains: ["github.com", "gist.github.com"] })).toEqual({
+      allowedHosts: ["github.com", "gist.github.com"],
+      httpHosts: [],
+    });
+    expect(loginFillScope({ url: "http://127.0.0.1:7799", domains: ["127.0.0.1"] })).toEqual({ allowedHosts: ["127.0.0.1"], httpHosts: ["127.0.0.1"] });
+    expect(loginFillScope({ url: "", domains: [] })).toEqual({ allowedHosts: [], httpHosts: [] });
+  });
+
+  test("originRefusal", () => {
+    const gh = loginFillScope({ url: "https://github.com/login", domains: ["github.com"] });
+    expect(originRefusal("https://github.com", gh)).toBeNull();
+    expect(originRefusal("https://gist.github.com", gh)).toBeNull();
+    expect(originRefusal("https://github.com.evil.test", gh)).toContain("not a site of this login");
+    expect(originRefusal("https://evil.test", gh)).toContain("not a site of this login");
+    expect(originRefusal("http://github.com", gh)).toContain("insecure");
+    expect(originRefusal("null", gh)).toContain("without a web origin");
+    expect(originRefusal("", gh)).toContain("without a web origin");
+    expect(originRefusal("https://github.com", { allowedHosts: [] })).toContain("not a site");
+    const local = loginFillScope({ url: "http://127.0.0.1:7799", domains: [] });
+    expect(originRefusal("http://127.0.0.1:7799", local)).toBeNull();
+    expect(originRefusal("http://localhost:7799", local)).toContain("not a site of this login");
+  });
+});
+
 suite("managed Chromium (CDP integration)", () => {
   let profileId = "";
 
@@ -112,6 +149,10 @@ suite("managed Chromium (CDP integration)", () => {
             return html(OUTER(`http://localhost:${server.port}`));
           case "/inner":
             return html(INNER);
+          case "/outer-same":
+            return html(OUTER_SAME);
+          case "/fake-password":
+            return html(FAKE_PASSWORD);
           default:
             return new Response("not found", { status: 404 });
         }
@@ -142,11 +183,11 @@ suite("managed Chromium (CDP integration)", () => {
 
   test("fills username and password by kind without a selector (and never into the focused wrong field)", async () => {
     await openPage(profileId, "/login");
-    const user = await manager.fillIntoPage(profileId, { text: "alice@example.com", kind: "username" });
+    const user = await manager.fillIntoPage(profileId, { text: "alice@example.com", kind: "username", ...LOCAL });
     expect(user.ok).toBe(true);
     expect(user.url).toContain("/login");
     // The username field is focused now; a password fill must still go to the password input.
-    const pass = await manager.fillIntoPage(profileId, { text: "s3cr3t-P@ss!", kind: "password" });
+    const pass = await manager.fillIntoPage(profileId, { text: "s3cr3t-P@ss!", kind: "password", ...LOCAL });
     expect(pass.ok).toBe(true);
     expect(pass.detail).not.toContain("s3cr3t");
     expect(user.detail).not.toContain("alice");
@@ -161,11 +202,11 @@ suite("managed Chromium (CDP integration)", () => {
   }, 30_000);
 
   test("replaces existing content, honours selectors and submits with Enter", async () => {
-    const again = await manager.fillIntoPage(profileId, { text: "bob@example.com", kind: "username" });
+    const again = await manager.fillIntoPage(profileId, { text: "bob@example.com", kind: "username", ...LOCAL });
     expect(again.ok).toBe(true);
-    const note = await manager.fillIntoPage(profileId, { text: "hello world", selector: "#note" });
+    const note = await manager.fillIntoPage(profileId, { text: "hello world", selector: "#note", ...LOCAL });
     expect(note.ok).toBe(true);
-    const submit = await manager.fillIntoPage(profileId, { text: "another-secret", kind: "password", submit: true });
+    const submit = await manager.fillIntoPage(profileId, { text: "another-secret", kind: "password", submit: true, ...LOCAL });
     expect(submit.ok).toBe(true);
     const values = await evalOn<{ user: string; pass: string; note: string; submitted: number }>(
       profileId,
@@ -176,12 +217,12 @@ suite("managed Chromium (CDP integration)", () => {
   }, 30_000);
 
   test("refuses to type a password into a non-password field and reports bad selectors", async () => {
-    const refused = await manager.fillIntoPage(profileId, { text: "should-not-appear", kind: "password", selector: "#search" });
+    const refused = await manager.fillIntoPage(profileId, { text: "should-not-appear", kind: "password", selector: "#search", ...LOCAL });
     expect(refused.ok).toBe(false);
     expect(refused.detail).toContain("Refusing");
-    const missing = await manager.fillIntoPage(profileId, { text: "x", selector: "#does-not-exist" });
+    const missing = await manager.fillIntoPage(profileId, { text: "x", selector: "#does-not-exist", ...LOCAL });
     expect(missing.ok).toBe(false);
-    const invalid = await manager.fillIntoPage(profileId, { text: "x", selector: "##" });
+    const invalid = await manager.fillIntoPage(profileId, { text: "x", selector: "##", ...LOCAL });
     expect(invalid.ok).toBe(false);
     const search = await evalOn<string>(profileId, "/login", "document.getElementById('search').value");
     expect(search).toBe("");
@@ -189,7 +230,7 @@ suite("managed Chromium (CDP integration)", () => {
 
   test("types a TOTP code into split one-digit boxes", async () => {
     await openPage(profileId, "/otp-split");
-    const res = await manager.fillIntoPage(profileId, { text: "493027", kind: "totp" });
+    const res = await manager.fillIntoPage(profileId, { text: "493027", kind: "totp", ...LOCAL });
     expect(res.ok).toBe(true);
     expect(res.detail).toContain("6 one-digit boxes");
     const digits = await evalOn<string>(profileId, "/otp-split", "[...document.querySelectorAll('input.d')].map((i) => i.value).join('')");
@@ -198,7 +239,7 @@ suite("managed Chromium (CDP integration)", () => {
 
   test("finds a single one-time-code input and leaves other fields alone", async () => {
     await openPage(profileId, "/otp");
-    const res = await manager.fillIntoPage(profileId, { text: "112233", kind: "totp" });
+    const res = await manager.fillIntoPage(profileId, { text: "112233", kind: "totp", ...LOCAL });
     expect(res.ok).toBe(true);
     const values = await evalOn<{ code: string; name: string }>(profileId, "/otp", "({ code: code.value, name: document.getElementById('name').value })");
     expect(values).toEqual({ code: "112233", name: "keep me" });
@@ -211,7 +252,12 @@ suite("managed Chromium (CDP integration)", () => {
       const { targetInfos } = await rb.client.send<{ targetInfos: { type: string; url: string }[] }>("Target.getTargets");
       return targetInfos.some((t) => t.type === "iframe" && t.url.includes("/inner"));
     });
-    const res = await manager.fillIntoPage(profileId, { text: "frame-secret", kind: "password" });
+    // Bound to the outer page's site only: the password field lives in the localhost frame → refused.
+    const refused = await manager.fillIntoPage(profileId, { text: "frame-secret", kind: "password", ...LOCAL });
+    expect(refused.ok).toBe(false);
+    expect(refused.detail).toContain("http://localhost:");
+    expect(refused.detail).not.toContain("frame-secret");
+    const res = await manager.fillIntoPage(profileId, { text: "frame-secret", kind: "password", allowedHosts: ["localhost"], httpHosts: ["localhost"] });
     expect(res.ok).toBe(true);
     expect(res.detail).toContain("embedded frame");
     const { targetInfos } = await rb.client.send<{ targetInfos: { type: string; url: string; targetId: string }[] }>("Target.getTargets");
@@ -229,6 +275,65 @@ suite("managed Chromium (CDP integration)", () => {
     expect(page?.url).toContain("/outer");
     expect(page?.title).toBe("Outer");
   });
+
+  test("fills into a same-origin iframe of the login's site", async () => {
+    await openPage(profileId, "/outer-same");
+    await waitFor(() => evalOn<boolean>(profileId, "/outer-same", "!!document.getElementById('same').contentDocument?.getElementById('ipass')"));
+    const res = await manager.fillIntoPage(profileId, { text: "same-frame-secret", kind: "password", ...LOCAL });
+    expect(res.ok).toBe(true);
+    expect(await evalOn<string>(profileId, "/outer-same", "document.getElementById('same').contentDocument.getElementById('ipass').value")).toBe(
+      "same-frame-secret",
+    );
+  }, 30_000);
+
+  test("refuses to fill on a site that is not the login's (origin binding)", async () => {
+    // Same server under another host name = another site.
+    await manager.navigate(profileId, `http://localhost:${server.port}/login`);
+    await waitFor(() => evalOn<boolean>(profileId, "localhost", "document.readyState === 'complete'"));
+    for (const kind of ["username", "password", "totp"] as const) {
+      const res = await manager.fillIntoPage(profileId, { text: `leak-${kind}-123`, kind, ...LOCAL });
+      expect(res.ok).toBe(false);
+      expect(res.detail).toContain("not a site of this login");
+      expect(res.detail).not.toContain(`leak-${kind}-123`);
+    }
+    const values = await evalOn<string>(profileId, "localhost", "[...document.querySelectorAll('input, textarea')].map((e) => e.value).join('')");
+    expect(values).toBe("");
+  }, 30_000);
+
+  test("requires https unless the login's saved URL is http", async () => {
+    await openPage(profileId, "/login");
+    // A login saved as https://127.0.0.1 must not be typed into the http:// page.
+    const https = loginFillScope({ url: `https://127.0.0.1:${server.port}/login`, domains: ["127.0.0.1"] });
+    expect(https.httpHosts).toEqual([]);
+    const res = await manager.fillIntoPage(profileId, { text: "no-plain-http", kind: "password", ...https });
+    expect(res.ok).toBe(false);
+    expect(res.detail).toContain("insecure");
+    expect(await evalOn<string>(profileId, "/login", "document.getElementById('pass').value")).not.toBe("no-plain-http");
+    // Saved with its http:// URL (local dev) it works.
+    const http = loginFillScope({ url: `http://127.0.0.1:${server.port}/login`, domains: [] });
+    expect(http).toEqual({ allowedHosts: ["127.0.0.1"], httpHosts: ["127.0.0.1"] });
+    const ok = await manager.fillIntoPage(profileId, { text: "plain-http-ok", kind: "password", ...http });
+    expect(ok.ok).toBe(true);
+    expect(await evalOn<string>(profileId, "/login", "document.getElementById('pass').value")).toBe("plain-http-ok");
+  }, 30_000);
+
+  test("never types a password into a text input named password, nor a code into a textarea", async () => {
+    await openPage(profileId, "/fake-password");
+    const bySelector = await manager.fillIntoPage(profileId, { text: "visible-leak-1", kind: "password", selector: "#fakepw", ...LOCAL });
+    expect(bySelector.ok).toBe(false);
+    expect(bySelector.detail).toContain("Refusing");
+    const auto = await manager.fillIntoPage(profileId, { text: "visible-leak-2", kind: "password", ...LOCAL });
+    expect(auto.ok).toBe(false);
+    const code = await manager.fillIntoPage(profileId, { text: "123456", kind: "totp", selector: "#otpnote", ...LOCAL });
+    expect(code.ok).toBe(false);
+    expect(code.detail).toContain("Refusing");
+    const values = await evalOn<{ pw: string; note: string }>(
+      profileId,
+      "/fake-password",
+      "({ pw: document.getElementById('fakepw').value, note: document.getElementById('otpnote').value })",
+    );
+    expect(values).toEqual({ pw: "", note: "" });
+  }, 30_000);
 
   test("live view emits frames and human takeover types into the page", async () => {
     await openPage(profileId, "/login");

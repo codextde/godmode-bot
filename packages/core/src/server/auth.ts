@@ -8,6 +8,7 @@ import { get, getMeta, insert, run, setMeta } from "../db";
 import { getSettings } from "../services/settings";
 import { hashPassword, safeEqual, sha256, verifyPassword } from "../vault/crypto";
 import { HttpError, newId, now, randomToken } from "../util";
+import { closeSessionSockets } from "./ws";
 
 export const SESSION_COOKIE = "gm_session";
 const SESSION_DAYS = 30;
@@ -44,8 +45,9 @@ export function hasDashboardPassword(): boolean {
 export function setDashboardPassword(password: string) {
   if (password.length < 8) throw new HttpError(400, "Dashboard password must be at least 8 characters");
   setMeta("auth.dashboard_password", hashPassword(password));
-  // Invalidate all existing sessions when the password changes.
+  // Invalidate all existing sessions when the password changes, including their open WebSockets.
   run("DELETE FROM sessions");
+  closeSessionSockets();
 }
 
 export function checkDashboardPassword(password: string): boolean {
@@ -67,11 +69,22 @@ export function createSession(c: Context): string {
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "Strict",
-    secure: new URL(c.req.url).protocol === "https:",
+    secure: isHttpsRequest(c),
     path: "/",
     expires,
   });
   return token;
+}
+
+/**
+ * Did the browser reach us over HTTPS? Directly, or — with remote access on — through a TLS-terminating reverse
+ * proxy that says so in X-Forwarded-Proto (only trusted then: locally nobody sits in front of us).
+ */
+function isHttpsRequest(c: Context): boolean {
+  if (new URL(c.req.url).protocol === "https:") return true;
+  if (!getSettings().server.remoteAccess) return false;
+  const proto = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+  return proto === "https";
 }
 
 export function destroySession(c: Context) {
@@ -98,8 +111,10 @@ export function authenticate(c: Context): AuthKind {
   if (header?.startsWith("Bearer ")) {
     if (safeEqual(header.slice(7).trim(), getAccessToken())) return "token";
   }
+  // Browsers can't set headers on WebSocket handshakes, so only /api/ws accepts the token as a query parameter
+  // (elsewhere it would leak into logs, history and Referer headers).
   const q = c.req.query("token");
-  if (q && safeEqual(q, getAccessToken())) return "token";
+  if (q && new URL(c.req.url).pathname === "/api/ws" && safeEqual(q, getAccessToken())) return "token";
   if (validSession(getCookie(c, SESSION_COOKIE))) return "session";
   return null;
 }

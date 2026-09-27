@@ -7,6 +7,7 @@ import type {
   AppNotification,
   AuditEntry,
   BackupExportInput,
+  BackupImportResult,
   Bootstrap,
   BrowserProfile,
   ChromeImportInput,
@@ -77,6 +78,22 @@ export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn;
 }
 
+/** Header for a reveal grant from `api.vault.grant` (see components/vault/grant.tsx). */
+export const GRANT_HEADER = "x-godmode-grant";
+
+export interface VaultGrant {
+  grant: string;
+  expiresAt: string;
+}
+
+let onGrantRejected: (() => void) | null = null;
+/** Called when the core refuses a grant we sent (expired, or the core restarted): drop the cached one. */
+export function setGrantRejectedHandler(fn: () => void) {
+  onGrantRejected = fn;
+}
+
+const withGrant = (grant?: string): RequestInit => (grant ? { headers: { [GRANT_HEADER]: grant } } : {});
+
 export async function request<T>(method: string, path: string, body?: unknown, init: RequestInit = {}): Promise<T> {
   const { baseUrl, token } = await getCoreInfo();
   const headers = new Headers(init.headers);
@@ -97,6 +114,7 @@ export async function request<T>(method: string, path: string, body?: unknown, i
       /* not json */
     }
     if (res.status === 401 && !path.startsWith("/api/auth/")) onUnauthorized?.();
+    if (res.status === 403 && err.code === "grant_required" && headers.has(GRANT_HEADER)) onGrantRejected?.();
     throw new ApiRequestError(res.status, err.error, err.code, err.details);
   }
   const type = res.headers.get("content-type") ?? "";
@@ -127,7 +145,7 @@ export const api = {
 
   settings: {
     get: () => get<Settings>("/api/settings"),
-    update: (p: DeepPartial<Settings>) => put<Settings>("/api/settings", p),
+    update: (p: DeepPartial<Settings>, grant?: string) => request<Settings>("PUT", "/api/settings", p, withGrant(grant)),
   },
 
   notifications: {
@@ -151,7 +169,9 @@ export const api = {
     unlock: (passphrase: string) => post<VaultStatus>("/api/vault/unlock", { passphrase }),
     lock: () => post<VaultStatus>("/api/vault/lock"),
     changePassphrase: (current: string, next: string) => post<{ ok: true }>("/api/vault/passphrase", { current, next }),
-    remember: (remember: boolean) => post<VaultStatus>("/api/vault/remember", { remember }),
+    remember: (remember: boolean, grant?: string) => request<VaultStatus>("POST", "/api/vault/remember", { remember }, withGrant(grant)),
+    /** Re-enter the passphrase → short-lived grant for revealing secrets (the lock state doesn't change). */
+    grant: (passphrase: string) => post<VaultGrant>("/api/vault/grant", { passphrase }),
     /** App-level secrets (API keys): composio_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, browser_use_api_key */
     secrets: {
       list: () => get<{ key: string; set: boolean; updatedAt: string | null }[]>("/api/vault/secrets"),
@@ -163,7 +183,8 @@ export const api = {
   credentials: {
     list: (q: { workspaceId?: ScopeFilter; search?: string } = {}) => get<Credential[]>("/api/credentials", q),
     get: (id: string) => get<Credential>(`/api/credentials/${id}`),
-    reveal: (id: string) => post<{ password: string | null; notes: string | null }>(`/api/credentials/${id}/reveal`),
+    reveal: (id: string, grant?: string) =>
+      request<{ password: string | null; notes: string | null }>("POST", `/api/credentials/${id}/reveal`, {}, withGrant(grant)),
     create: (input: CredentialInput) => post<Credential>("/api/credentials", input),
     update: (id: string, input: Partial<CredentialInput>) => patch<Credential>(`/api/credentials/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/credentials/${id}`),
@@ -188,8 +209,8 @@ export const api = {
   agents: {
     list: (q: { workspaceId?: ScopeFilter } = {}) => get<Agent[]>("/api/agents", q),
     get: (id: string) => get<Agent>(`/api/agents/${id}`),
-    create: (input: AgentInput) => post<Agent>("/api/agents", input),
-    update: (id: string, input: Partial<AgentInput>) => patch<Agent>(`/api/agents/${id}`, input),
+    create: (input: AgentInput, grant?: string) => request<Agent>("POST", "/api/agents", input, withGrant(grant)),
+    update: (id: string, input: Partial<AgentInput>, grant?: string) => request<Agent>("PATCH", `/api/agents/${id}`, input, withGrant(grant)),
     delete: (id: string) => del<{ ok: true }>(`/api/agents/${id}`),
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
     /** Start a fresh task conversation for the agent */
@@ -291,7 +312,7 @@ export const api = {
       const form = new FormData();
       form.set("file", file);
       form.set("passphrase", passphrase);
-      return request<{ ok: true; counts: Record<string, number> }>("POST", "/api/backup/import", form);
+      return request<BackupImportResult>("POST", "/api/backup/import", form);
     },
   },
 

@@ -202,13 +202,15 @@ function mergeSecrets(
 
 function sealSecrets(values: Record<string, string>, context: string): string | null {
   if (Object.keys(values).length === 0) return null;
+  // seal() only remembers the JSON blob; redaction needs the individual values.
+  vault.rememberSecretValues(values);
   return vault.seal(JSON.stringify(values), context);
 }
 
 function openSecrets(ciphertext: string | null, context: string): Record<string, string> {
   if (!ciphertext) return {};
   const parsed = parseJson<Record<string, string>>(vault.open(ciphertext, context), {});
-  for (const v of Object.values(parsed)) vault.rememberSecret(v);
+  vault.rememberSecretValues(parsed);
   return parsed;
 }
 
@@ -328,14 +330,22 @@ export function deleteMcpServer(id: string, actor = "user"): void {
 /* Resolution for a run                                                 */
 /* ------------------------------------------------------------------ */
 
-/** Custom servers that apply to `agent`, in a stable order. */
+/** May `agent` use a server of this scope? Global, the agent's workspace, or pinned to the agent itself. */
+export function mcpServerInAgentScope(
+  server: { workspaceId: string | null; agentId: string | null },
+  agent: Pick<Agent, "id" | "workspaceId">,
+): boolean {
+  if (server.agentId !== null) return server.agentId === agent.id;
+  return server.workspaceId === null || (agent.workspaceId !== null && server.workspaceId === agent.workspaceId);
+}
+
+/** Custom servers that apply to `agent`, in a stable order. Explicit ids (`mcpServerIds`) never widen the scope. */
 export function mcpServerRowsForAgent(agent: Pick<Agent, "id" | "workspaceId" | "inheritMcp" | "mcpServerIds">): McpServer[] {
   const pinnedIds = new Set(agent.mcpServerIds ?? []);
   return all<McpServerRow>("SELECT * FROM mcp_servers WHERE enabled = 1 ORDER BY created_at, id")
     .filter((r) => {
-      if (r.agent_id === agent.id || pinnedIds.has(r.id)) return true;
-      if (!agent.inheritMcp || r.agent_id !== null) return false;
-      return r.workspace_id === null || (agent.workspaceId !== null && r.workspace_id === agent.workspaceId);
+      if (!mcpServerInAgentScope({ workspaceId: r.workspace_id, agentId: r.agent_id }, agent)) return false;
+      return r.agent_id === agent.id || pinnedIds.has(r.id) || agent.inheritMcp;
     })
     .map(toModel);
 }

@@ -123,9 +123,12 @@ describe("browser profiles", () => {
 
   test("fill and page helpers report a stopped browser instead of throwing", async () => {
     const p = manager.ensureDefaultProfile();
-    const res = await manager.fillIntoPage(p.id, { text: "secret-value", kind: "password" });
+    const res = await manager.fillIntoPage(p.id, { text: "secret-value", kind: "password", allowedHosts: ["example.com"] });
     expect(res.ok).toBe(false);
     expect(res.detail).not.toContain("secret-value");
+    const unbound = await manager.fillIntoPage(p.id, { text: "secret-value", kind: "password", allowedHosts: [] });
+    expect(unbound.ok).toBe(false);
+    expect(unbound.detail).toContain("Refusing");
     expect(await manager.currentPage(p.id)).toBeNull();
     await manager.stopBrowser(p.id); // no-op
     expect((await httpError(() => manager.navigate(p.id, "file:///etc/passwd"))).status).toBe(400);

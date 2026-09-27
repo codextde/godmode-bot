@@ -10,8 +10,7 @@ import {
 } from "react";
 import s from "./ReasoningEffort.module.css";
 
-const STOPS = ["Low", "Medium", "High", "Extra High"] as const;
-const MODEL = "4.7";
+const DEFAULT_STOPS = ["Low", "Medium", "High", "Extra High"] as const;
 const TRACK = 224;
 const HEIGHT = 32;
 const RADIUS = HEIGHT / 2;
@@ -25,9 +24,9 @@ function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
 
-function centerFor(value: number) {
+function centerFor(value: number, count: number) {
   const span = TRACK - RADIUS * 2;
-  return RADIUS + (value / (STOPS.length - 1)) * span;
+  return RADIUS + (value / Math.max(1, count - 1)) * span;
 }
 
 function easeOut(t: number) {
@@ -170,15 +169,35 @@ function shellPath(cx: number, open: number, plateauW: number) {
 }
 
 
-export function ReasoningEffort() {
+export interface ReasoningEffortProps {
+  /** Stop labels, low → high. */
+  stops?: readonly string[];
+  /** Selected stop index (controlled). */
+  value?: number;
+  /** Called with the new stop index when the user releases the thumb or uses the keyboard. */
+  onChange?: (index: number) => void;
+  /** Text shown above the thumb while dragging, before the level (e.g. the model name). */
+  label?: string;
+  "aria-label"?: string;
+}
+
+export function ReasoningEffort({
+  stops = DEFAULT_STOPS,
+  value = 1,
+  onChange,
+  label = "Effort",
+  "aria-label": ariaLabel = "Reasoning effort",
+}: ReasoningEffortProps = {}) {
+  const STOPS = stops;
+  const count = STOPS.length;
   const rootRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLDivElement>(null);
-  const valueRef = useRef(1);
-  const displayRef = useRef(1);
+  const valueRef = useRef(value);
+  const displayRef = useRef(value);
   const openRef = useRef(0);
   const draggingRef = useRef(false);
-  const [display, setDisplay] = useState(1);
+  const [display, setDisplay] = useState(value);
   const [open, setOpen] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -307,6 +326,14 @@ export function ReasoningEffort() {
     return () => cancelAnimationFrame(raf);
   }, [dragging]);
 
+  useEffect(() => {
+    if (draggingRef.current) return;
+    const v = clamp(value, 0, count - 1);
+    valueRef.current = v;
+    displayRef.current = v;
+    setDisplay(v);
+  }, [value, count]);
+
   function commit(next: number) {
     valueRef.current = next;
     displayRef.current = next;
@@ -348,6 +375,7 @@ export function ReasoningEffort() {
       /* Ignore when the event was not trusted. */
     }
     setDragging(false);
+    onChange?.(Math.round(valueRef.current));
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
@@ -361,9 +389,10 @@ export function ReasoningEffort() {
     else return;
     event.preventDefault();
     commit(next);
+    if (next !== current) onChange?.(next);
   }
 
-  const center = centerFor(display);
+  const center = centerFor(display, count);
   const thumbW = REST_W + (DRAG_W - REST_W) * open;
   const thumbH = REST_H;
   const outerPad = EDGE_PAD;
@@ -380,7 +409,7 @@ export function ReasoningEffort() {
   const fillW = Math.min(TRACK, thumbRight + EDGE_PAD);
   const active = Math.round(display);
   const level = STOPS[active];
-  const tickHeights = [4.8, 6.4, 8, 9.6];
+  const tickHeights = STOPS.map((_, i) => 4.8 + (4.8 * i) / Math.max(1, count - 1));
   const plateau = shellGeom(center, plateauW);
   const labelX =
     (plateau.topL + plateau.topR) / 2 + (plateau.insetL - plateau.insetR) / 2;
@@ -428,7 +457,7 @@ export function ReasoningEffort() {
         }}
       >
         <span key={level} className={s.swap}>
-          <span className={s.current}>{MODEL}</span>
+          <span className={s.current}>{label}</span>
           <span className={s.next}>{level}</span>
         </span>
       </div>
@@ -437,11 +466,11 @@ export function ReasoningEffort() {
         className={s.track}
         role="slider"
         tabIndex={0}
-        aria-label="Reasoning effort"
+        aria-label={ariaLabel}
         aria-valuemin={0}
         aria-valuemax={STOPS.length - 1}
         aria-valuenow={active}
-        aria-valuetext={`${MODEL} ${level}`}
+        aria-valuetext={`${label} ${level}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -459,7 +488,7 @@ export function ReasoningEffort() {
           }}
         />
         {STOPS.map((label, index) => {
-          const x = centerFor(index);
+          const x = centerFor(index, count);
           const onThumb = x >= thumbLeft + 0.5 && x <= thumbRight - 0.5;
           return (
             <span

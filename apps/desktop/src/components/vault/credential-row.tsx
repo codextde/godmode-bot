@@ -24,6 +24,7 @@ import { Favicon } from "./favicon";
 import { CopyButton } from "./copy-button";
 import { copySecret, copyText } from "./clipboard";
 import { domainFromUrl, normalizeUrl, toastApiError } from "./vault-utils";
+import { isGrantCancelled, withGrant } from "./grant";
 
 const REVEAL_SECONDS = 20;
 
@@ -57,8 +58,8 @@ export function CredentialRow({
   useEffect(() => () => void (hideTimer.current && clearTimeout(hideTimer.current)), []);
 
   const reveal = useMutation({
-    mutationFn: () => api.credentials.reveal(c.id),
-    onError: (e) => toastApiError(e, "Could not reveal password", qc),
+    mutationFn: () => withGrant((grant) => api.credentials.reveal(c.id, grant)),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, "Could not reveal password", qc),
   });
 
   const showPassword = async () => {
@@ -70,8 +71,11 @@ export function CredentialRow({
 
   const getPassword = async () => {
     if (revealed?.password) return revealed.password;
-    const res = await reveal.mutateAsync();
-    return res.password;
+    const res = await reveal.mutateAsync().catch((e: unknown) => {
+      if (isGrantCancelled(e)) return null;
+      throw e;
+    });
+    return res?.password ?? null;
   };
 
   const lastUsed = c.lastUsedAt ? formatDistanceToNow(new Date(c.lastUsedAt), { addSuffix: true }) : null;

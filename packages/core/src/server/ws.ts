@@ -9,6 +9,8 @@ const log = logger("ws");
 export interface WsData {
   id: string;
   subscriptions: Set<string>;
+  /** How the socket authenticated; cookie sessions are closed when sessions are revoked. */
+  auth?: "token" | "session";
 }
 
 const clients = new Set<ServerWebSocket<WsData>>();
@@ -93,6 +95,22 @@ export const websocketHandler = {
     log.warn("websocket error", err);
   },
 };
+
+/** Close every socket that authenticated with a session cookie (sessions were revoked). */
+export function closeSessionSockets(): number {
+  let closed = 0;
+  for (const ws of clients) {
+    if (ws.data.auth !== "session") continue;
+    try {
+      ws.close(4001, "Session ended");
+    } catch {
+      /* already closing */
+    }
+    clients.delete(ws);
+    closed++;
+  }
+  return closed;
+}
 
 export function clientCount() {
   return clients.size;

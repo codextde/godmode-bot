@@ -208,11 +208,10 @@ describe("mcpServersForAgent scoping", () => {
     await mk("reserved2", { workspaceId: null, agentId: null, name: "godmode", transport: "stdio", command: "npx" });
   });
 
-  test("workspace agent inheriting: global + own workspace + pinned + explicit ids", async () => {
-    const servers = await mcpServersForAgent(agentModel({ id: "agt_a", workspaceId: "ws_one", mcpServerIds: [ids.explicit!] }));
-    expect(Object.keys(servers).sort()).toEqual(
-      ["browser-2", "explicit", "github", "github-2", "global-tool", "godmode-2", "pinned-a", "ws-one-tool"].sort(),
-    );
+  test("workspace agent inheriting: global + own workspace + pinned (explicit ids never widen the scope)", async () => {
+    // "explicit" belongs to ws_two and "pinned-b" to agt_b: listing their ids must not hand them to agt_a.
+    const servers = await mcpServersForAgent(agentModel({ id: "agt_a", workspaceId: "ws_one", mcpServerIds: [ids.explicit!, ids.pinnedB!] }));
+    expect(Object.keys(servers).sort()).toEqual(["browser-2", "github", "github-2", "global-tool", "godmode-2", "pinned-a", "ws-one-tool"].sort());
     expect(servers["global-tool"]).toEqual({ type: "http", url: "https://g.example/mcp", headers: { "X-Api-Key": "global-key-123" } });
     expect(servers["ws-one-tool"]).toEqual({ type: "stdio", command: "npx", args: ["ws1"], env: { TOKEN: "ws1-token-abc" } });
     expect(servers["pinned-a"]).toEqual({ type: "sse", url: "https://sse.example/sse" });
@@ -220,9 +219,13 @@ describe("mcpServersForAgent scoping", () => {
     expect(servers).not.toHaveProperty("godmode");
   });
 
-  test("inheritMcp=false: only pinned + explicit ids", async () => {
-    const servers = await mcpServersForAgent(agentModel({ id: "agt_a", workspaceId: "ws_one", inheritMcp: false, mcpServerIds: [ids.explicit!] }));
-    expect(Object.keys(servers).sort()).toEqual(["explicit", "pinned-a"]);
+  test("inheritMcp=false: only pinned + in-scope explicit ids", async () => {
+    const servers = await mcpServersForAgent(
+      agentModel({ id: "agt_a", workspaceId: "ws_one", inheritMcp: false, mcpServerIds: [ids.explicit!, ids.ws1!, ids.global!] }),
+    );
+    expect(Object.keys(servers).sort()).toEqual(["global-tool", "pinned-a", "ws-one-tool"]);
+    const b = await mcpServersForAgent(agentModel({ id: "agt_b", workspaceId: "ws_two", inheritMcp: false, mcpServerIds: [ids.explicit!] }));
+    expect(Object.keys(b).sort()).toEqual(["explicit", "pinned-b"]);
   });
 
   test("global agent sees only global servers; other workspace agent sees its own", async () => {

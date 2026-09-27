@@ -8,6 +8,7 @@ import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { Section } from "@/components/common";
 import { Button } from "@/components/ui/button";
+import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { AgentForm } from "../agent-form";
 import { DeleteAgentDialog } from "../agent-actions";
 
@@ -18,7 +19,7 @@ export function SettingsTab({ agent }: { agent: Agent }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const save = useMutation({
-    mutationFn: (input: AgentInput) => api.agents.update(agent.id, input),
+    mutationFn: (input: AgentInput) => withGrant((grant) => api.agents.update(agent.id, input, grant)),
     onSuccess: (updated) => {
       qc.setQueryData(qk.agent(agent.id), updated);
       qc.invalidateQueries({ queryKey: qk.agents });
@@ -27,7 +28,7 @@ export function SettingsTab({ agent }: { agent: Agent }) {
       setFormKey((k) => k + 1);
       toast.success("Settings saved", { description: "CLAUDE.md was regenerated." });
     },
-    onError: (err) => toast.error("Couldn't save settings", { description: errorMessage(err) }),
+    onError: (err) => !isGrantCancelled(err) && toast.error("Couldn't save settings", { description: errorMessage(err) }),
   });
 
   return (

@@ -12,7 +12,7 @@ import type { DependencyId, DependencyStatus, DoctorReport } from "@godmode/shar
 import { getSettings } from "./settings";
 import { hasAppSecret } from "../vault/vault";
 import { logger } from "../log";
-import { which } from "../util";
+import { childEnv, which } from "../util";
 import { findChrome } from "../browser/chrome";
 import { BROWSER_USE_SPEC, BROWSER_USE_VERSION } from "../browser/browserUse";
 
@@ -57,7 +57,7 @@ export async function runCommand(
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
-      env: (opts.env ?? process.env) as Record<string, string>,
+      env: (opts.env ?? childEnv()) as Record<string, string>,
       cwd: opts.cwd,
       windowsHide: true,
     } as Parameters<typeof Bun.spawn>[1]);
@@ -207,7 +207,7 @@ type Check = Omit<DependencyStatus, "required" | "installable" | "installHint">;
 async function checkClaude(): Promise<Check> {
   const path = resolveClaudeBinary();
   if (!path) return { id: "claude", name: "Claude Code CLI", ok: false, version: null, path: null, detail: "claude CLI not found" };
-  const res = await runCommand([path, "--version"], { timeoutMs: 20_000, env: { ...process.env, PATH: toolPath() } });
+  const res = await runCommand([path, "--version"], { timeoutMs: 20_000, env: childEnv({ PATH: toolPath() }) });
   const version = versionFrom(res.stdout);
   if (res.code !== 0 || !version) {
     return { id: "claude", name: "Claude Code CLI", ok: false, version: null, path, detail: `claude --version failed: ${stripAnsi(res.stderr).trim().slice(0, 300) || "no output"}` };
@@ -234,7 +234,7 @@ async function checkClaudeAuth(claudePath: string | null): Promise<Check> {
   const base = { id: "claude-auth" as const, name: "Claude login", version: null, path: null };
   const apiKey = hasStoredAnthropicKey() || !!process.env.ANTHROPIC_API_KEY;
   if (claudePath) {
-    const res = await runCommand([claudePath, "auth", "status", "--json"], { timeoutMs: 20_000, env: { ...process.env, PATH: toolPath() } });
+    const res = await runCommand([claudePath, "auth", "status", "--json"], { timeoutMs: 20_000, env: childEnv({ PATH: toolPath() }) });
     try {
       const status = JSON.parse(res.stdout) as { loggedIn?: boolean; authMethod?: string; subscriptionType?: string };
       if (typeof status.loggedIn === "boolean") {
@@ -273,7 +273,7 @@ async function checkBrowserUse(uvx: string | null, refresh: boolean): Promise<Ch
   // --offline: only report what is already downloaded; never install as a side effect of a check.
   const res = await runCommand([uvx, "--offline", "--from", BROWSER_USE_SPEC, "browser-use", "--version"], {
     timeoutMs: BROWSER_USE_CHECK_TIMEOUT_MS,
-    env: { ...process.env, PATH: toolPath(), ANONYMIZED_TELEMETRY: "false", BROWSER_USE_VERSION_CHECK: "false" },
+    env: childEnv({ PATH: toolPath(), ANONYMIZED_TELEMETRY: "false", BROWSER_USE_VERSION_CHECK: "false" }),
   });
   let check: Check;
   if (res.code === 0) {
@@ -468,7 +468,7 @@ export async function installDependency(id: DependencyId): Promise<{ ok: boolean
   log.info(`installing ${id}: ${cmd.join(" ")}`);
   const res = await runCommand(cmd, {
     timeoutMs: INSTALL_TIMEOUT_MS,
-    env: { ...process.env, PATH: toolPath(), ANONYMIZED_TELEMETRY: "false", BROWSER_USE_VERSION_CHECK: "false", CI: "1" },
+    env: childEnv({ PATH: toolPath(), ANONYMIZED_TELEMETRY: "false", BROWSER_USE_VERSION_CHECK: "false", CI: "1" }),
     maxOutput: 20_000,
   });
   cachedReport = null;

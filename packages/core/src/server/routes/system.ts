@@ -10,6 +10,7 @@ import { runDoctor, installDependency } from "../../services/doctor";
 import { getDefaultAgentId } from "../../agents/service";
 import { applyRuntimeSettings } from "../../services/runtime";
 import { hasDashboardPassword } from "../auth";
+import { requireGrant } from "../grants";
 import { body, z } from "../validate";
 
 function count(sql: string): number {
@@ -50,6 +51,9 @@ export function registerSystemRoutes(app: Hono) {
     const patch = await body(c, z.record(z.string(), z.unknown()));
     // server.hasDashboardPassword is derived; never trust client value
     if (patch.server && typeof patch.server === "object") delete (patch.server as Record<string, unknown>).hasDashboardPassword;
+    // Making "reveal" the default secret access for new agents needs a fresh passphrase confirmation.
+    const security = patch.security as { defaultSecretAccess?: unknown } | undefined;
+    if (security?.defaultSecretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
     const next = updateSettings(patch as never);
     applyRuntimeSettings(next);
     return c.json(next);
