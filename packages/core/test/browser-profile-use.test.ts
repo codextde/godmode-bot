@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
@@ -7,7 +7,7 @@ import { closeDb, openDb } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache } from "../src/services/settings";
 import { HttpError } from "../src/util";
-import { profileUseStatus, resolveProfileUse, syncWithProfileUse } from "../src/browser/profileUse";
+import { installProfileUse, profileUseStatus, resolveProfileUse, syncWithProfileUse } from "../src/browser/profileUse";
 
 const FAKE_KEY = "bu_test_key_1234567890";
 let dataDir: string;
@@ -38,6 +38,38 @@ suite("profile-use", () => {
     expect(status.hasApiKey).toBe(false);
     expect(status.lastSyncAt).toBeNull();
     expect(status.detail.length).toBeGreaterThan(10);
+  });
+
+  test("never resolves a binary planted in a temp dir", () => {
+    const planted = mkdtempSync(join(tmpdir(), "godmode-plant-"));
+    const savedTmp = process.env.TMPDIR;
+    try {
+      writeFileSync(join(planted, "profile-use"), "#!/bin/sh\necho pwned\n");
+      chmodSync(join(planted, "profile-use"), 0o755);
+      process.env.TMPDIR = planted;
+      expect(resolveProfileUse()).not.toBe(join(planted, "profile-use"));
+    } finally {
+      if (savedTmp === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = savedTmp;
+      rmSync(planted, { recursive: true, force: true });
+    }
+  });
+
+  test("install refuses a download whose SHA-256 does not match the pinned release", async () => {
+    const realFetch = globalThis.fetch;
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      urls.push(String(input));
+      return new Response(new Uint8Array(200_000).fill(7));
+    }) as typeof fetch;
+    try {
+      await expect(installProfileUse()).rejects.toThrow("SHA-256");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toMatch(/^https:\/\/github\.com\/browser-use\/profile-use-releases\/releases\/download\/v\d+\.\d+\.\d+\/profile-use-/);
+    expect(existsSync(join(dataDir, "bin", "profile-use"))).toBe(false);
   });
 
   test("sync passes filters, redacts the API key and reports the cloud profile id", async () => {

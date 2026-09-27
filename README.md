@@ -194,6 +194,9 @@ Every run is committed, so you can see exactly what an agent learned and did —
   bound to its database row.
 - **Fill, don't reveal** (default): agents ask Godmode to type a password/2FA code into the page via CDP; the value
   never enters the model's context. *Reveal* mode is opt-in per agent and audited.
+- **Site-bound fills**: a login is only ever typed into its own website (https, real password fields) — a phishing or
+  prompt-injected lookalike page gets nothing.
+- **Re-auth for sensitive actions**: revealing a password or granting an agent reveal access needs your vault passphrase.
 - **Redaction** of known secrets in transcripts, logs and the UI · **audit log** of every secret access.
 - **Local-first**: API on `127.0.0.1`, per-run MCP tokens, DNS-rebinding & CSRF protection, strict CSP,
   rate-limited logins, HttpOnly/SameSite cookies for the dashboard.

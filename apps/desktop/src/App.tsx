@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, setUnauthorizedHandler } from "@/lib/api";
-import { getCoreInfo } from "@/lib/core";
+import { getCoreInfo, isTauri } from "@/lib/core";
 import { qk } from "@/lib/queryKeys";
 import { startRealtime, onServerEvent } from "@/lib/realtime";
 import { notifyDesktop } from "@/lib/desktop";
@@ -46,6 +46,13 @@ export function App() {
   const auth = useQuery({ queryKey: qk.authStatus, queryFn: api.auth.status, enabled: coreReady, retry: 30, retryDelay: 500 });
   const authed = auth.data?.authenticated ?? false;
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap, enabled: authed, staleTime: 5_000 });
+
+  // Desktop: tell the shell whether closing the window should keep Godmode running in the tray.
+  const minimizeToTray = boot.data?.settings.general.minimizeToTray;
+  useEffect(() => {
+    if (!isTauri || minimizeToTray === undefined) return;
+    void import("@tauri-apps/api/core").then(({ invoke }) => invoke("set_close_to_tray", { enabled: minimizeToTray })).catch(() => {});
+  }, [minimizeToTray]);
 
   // Realtime connection once authenticated
   useEffect(() => {

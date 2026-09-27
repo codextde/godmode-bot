@@ -256,6 +256,35 @@ describe("mcpServersForAgent scoping", () => {
   });
 });
 
+describe("redaction of MCP secrets", () => {
+  test("each stored header/env value is redacted, also after the vault was locked and unlocked", async () => {
+    const server = await createMcpServer({
+      workspaceId: null,
+      agentId: null,
+      name: "Redacted",
+      transport: "http",
+      url: "https://redact.example/mcp",
+      headers: { Authorization: "Bearer tok_live_7f3a9c2e", "X-Api-Key": "hdr-key-5566778" },
+    });
+    const envServer = await createMcpServer({ workspaceId: null, agentId: null, name: "Redacted env", transport: "stdio", command: "npx", env: { API_TOKEN: "env-token-99887766" } });
+    const leak = "auth=Bearer tok_live_7f3a9c2e token=tok_live_7f3a9c2e key=hdr-key-5566778 env=env-token-99887766";
+    const check = () => {
+      const out = vault.redact(leak);
+      for (const v of ["tok_live_7f3a9c2e", "hdr-key-5566778", "env-token-99887766"]) expect(out).not.toContain(v);
+    };
+    try {
+      check();
+      // lock() forgets every known secret; unlock() must reload them from mcp_servers too.
+      vault.lock();
+      await vault.unlock(PASSPHRASE);
+      check();
+    } finally {
+      deleteMcpServer(server.id);
+      deleteMcpServer(envServer.id);
+    }
+  });
+});
+
 describe("probe", () => {
   test("stdio: handshake, pagination, env passing, server→client ping", async () => {
     const server = await createMcpServer({

@@ -67,13 +67,21 @@ Claude runs with `cwd = agents/<slug>/`, so the agent sees its own memory and fi
   OS keychain (`Bun.secrets`) when “remember this device” is on (default on desktop so routines run unattended).
 * **Secret use without exposure** (default `secretAccess: "fill"`): agents call `vault_fill_login` /
   `vault_fill_totp`; the core types the value into the page over CDP. The model never sees the password.
+  Fills are **site-bound**: the frame that owns the target field must be on one of the login's domains (https, or http
+  only when the saved URL is http), and passwords only go into `input[type=password]`.
   `"reveal"` mode lets an agent read raw secrets (needed for API-only tools) and is audited.
+* **Grants**: revealing secrets and enabling reveal/remember-device require `X-Godmode-Grant`, obtained from
+  `POST /api/vault/grant {passphrase}` (10 min, in memory).
 * **Redaction**: every known secret is masked in transcripts, run logs and the UI stream.
 * **Audit log**: every secret access (`credential.fill`, `credential.reveal`, `totp.fill`, …) is recorded.
 * **API auth**: bearer token (desktop shell / `godmode token`) or HttpOnly SameSite=Strict session cookie
   (dashboard password). Loopback-only by default with Host-header DNS-rebinding protection, CSRF origin check,
   login rate limiting, strict CSP for the dashboard.
 * **MCP gateway**: each run gets a random bearer token scoped to that run/agent; expires when the run ends.
+  Management tools cannot grant reveal access, move agents between workspaces or attach out-of-scope profiles/MCP
+  servers; fill-only agents cannot delegate to reveal-mode agents.
+* **Token hand-off**: the desktop shell starts the core with `--token-stdin` and writes the token as the first stdin
+  line; the core strips `GODMODE_*` from every child process environment.
 
 ## Runner
 

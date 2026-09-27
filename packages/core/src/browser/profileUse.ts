@@ -3,11 +3,12 @@
  * (https://github.com/browser-use/profile-use-releases): uploads a local Chrome profile's cookies to a
  * browser-use Cloud profile. Needs a browser-use API key (vault app secret `browser_use_api_key`).
  *
- * The official installer (`curl -fsSL https://browser-use.com/profile.sh | sh`) runs the binary once from a
- * temp dir and deletes it, so Godmode can also download the release binary into `<dataDir>/bin`.
+ * Godmode downloads a pinned release binary into `<dataDir>/bin` and checks its SHA-256 before installing it.
+ * Binaries are only ever run from there, PATH or ~/.local/bin — never from temp dirs (world-writable, plantable).
  */
+import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { ProfileUseStatus, ProfileUseSyncInput, ProfileUseSyncResult } from "@godmode/shared";
 import { config } from "../config";
@@ -21,6 +22,16 @@ import { browserSources, listLocalChromeProfiles } from "./importer";
 const log = logger("profile-use");
 
 const RELEASES_REPO = "browser-use/profile-use-releases";
+/** Pinned release and the SHA-256 of each of its binaries (GitHub's published asset digests). Bump together. */
+const PINNED_RELEASE = "v1.0.5";
+const PINNED_SHA256: Record<string, string> = {
+  "profile-use-darwin-amd64": "8b00783d2f986f0ff8c4fafb4070977c2bd4f38b939748c492956c493519d432",
+  "profile-use-darwin-arm64": "be1f4182dab453019424a98ee704ffb3b721bdf03d33cba498aca1dae84e11e4",
+  "profile-use-linux-amd64": "c28eef6cc99d3e70d543a681cc313552e3ebec33d6b5d25527bd7b26e9163965",
+  "profile-use-linux-arm64": "fe29533562c00f556b38d2fb033432427de092e73dc81d52c04ca22d5c7004b3",
+  "profile-use-windows-amd64.exe": "9fe2dbd688c53c974d9c56a824a442d2b84d6986038744d13001f45ae6ab9999",
+  "profile-use-windows-arm64.exe": "94140d7a7123369421de5d99cd79afa766f4ad8738cb85d77863306b0f3d1807",
+};
 const SYNC_TIMEOUT_MS = 5 * 60_000;
 const API_KEY_SECRET = "browser_use_api_key";
 const LAST_SYNC_META = "profile_use.last_sync_at";
@@ -39,9 +50,8 @@ function managedBinaryPath(): string {
   return join(config().dataDir, "bin", binaryName());
 }
 
-/** Path to a profile-use binary: Godmode's own copy, PATH, ~/.local/bin, or the official installer's work dir. */
+/** Path to a profile-use binary: Godmode's own copy, PATH or ~/.local/bin (never temp or installer work dirs). */
 export function resolveProfileUse(): string | null {
-  const home = homedir();
   const candidates = [
     (() => {
       try {
@@ -51,9 +61,7 @@ export function resolveProfileUse(): string | null {
       }
     })(),
     which("profile-use"),
-    join(home, ".local", "bin", binaryName()),
-    join(home, ".cache", "profile-use-installer", binaryName()),
-    join(process.env.TMPDIR || tmpdir(), binaryName()),
+    join(homedir(), ".local", "bin", binaryName()),
   ];
   for (const c of candidates) if (c && isFile(c)) return c;
   return null;
@@ -78,7 +86,7 @@ export function profileUseStatus(): ProfileUseStatus {
     /* database not open */
   }
   const detail = !path
-    ? "profile-use is not installed. Install it here, or run: curl -fsSL https://browser-use.com/profile.sh | sh"
+    ? "profile-use is not installed. Install it here, or put the profile-use binary on your PATH or in ~/.local/bin."
     : !keySet
       ? "Add your browser-use API key (Settings → Integrations) to sync profiles to browser-use Cloud."
       : "Ready to sync local browser profiles to browser-use Cloud.";
@@ -92,22 +100,20 @@ function releaseAsset(): string {
   return `profile-use-${os}-${arch}${os === "windows" ? ".exe" : ""}`;
 }
 
-/** Download the latest profile-use release binary into `<dataDir>/bin`. */
+/** Download the pinned profile-use release binary into `<dataDir>/bin`, verifying its SHA-256 first. */
 export async function installProfileUse(): Promise<ProfileUseStatus> {
   const asset = releaseAsset();
-  const latest = await fetch(`https://api.github.com/repos/${RELEASES_REPO}/releases/latest`, {
-    headers: { Accept: "application/vnd.github+json", "User-Agent": "godmode-bot" },
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (!latest.ok) throw new HttpError(502, `Could not look up the latest profile-use release (HTTP ${latest.status})`, "upstream_error");
-  const release = (await latest.json()) as { tag_name?: string; assets?: { name: string; browser_download_url: string }[] };
-  const url = release.assets?.find((a) => a.name === asset)?.browser_download_url;
-  if (!url) throw new HttpError(502, `The latest profile-use release has no ${asset} binary`, "upstream_error");
+  const expected = PINNED_SHA256[asset];
+  if (!expected) throw badRequest(`profile-use has no pinned release for ${process.platform}/${process.arch}`);
+  const url = `https://github.com/${RELEASES_REPO}/releases/download/${PINNED_RELEASE}/${asset}`;
 
   const res = await fetch(url, { signal: AbortSignal.timeout(120_000), headers: { "User-Agent": "godmode-bot" } });
   if (!res.ok) throw new HttpError(502, `Downloading profile-use failed (HTTP ${res.status})`, "upstream_error");
   const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.length < 100_000) throw new HttpError(502, "Downloaded profile-use binary looks truncated", "upstream_error");
+  const actual = createHash("sha256").update(bytes).digest("hex");
+  if (actual !== expected) {
+    throw new HttpError(502, `The downloaded profile-use binary failed its SHA-256 check (got ${actual.slice(0, 12)}…); not installed.`, "upstream_error");
+  }
 
   const target = managedBinaryPath();
   mkdirSync(join(config().dataDir, "bin"), { recursive: true, mode: 0o700 });
@@ -116,7 +122,7 @@ export async function installProfileUse(): Promise<ProfileUseStatus> {
   if (process.platform !== "win32") chmodSync(tmp, 0o755);
   renameSync(tmp, target);
   if (process.platform === "darwin") await runCommand(["/usr/bin/xattr", "-d", "com.apple.quarantine", target], { timeoutMs: 10_000 });
-  log.info(`installed profile-use ${release.tag_name ?? ""} at ${target}`);
+  log.info(`installed profile-use ${PINNED_RELEASE} at ${target}`);
   return profileUseStatus();
 }
 
