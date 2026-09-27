@@ -11,6 +11,7 @@ import { AgentAvatar, EmptyState } from "@/components/common";
 import { BrowserFocus, BrowserPanel, BrowserToggle, useChatBrowser, type BrowserFocusMode } from "@/components/chat/browser-panel";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { ConversationHeader } from "@/components/chat/conversation-header";
+import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { ChatDropZone, Thread } from "@/components/chat/thread";
 import { liveActivityLabel } from "@/components/chat/messages";
@@ -136,6 +137,19 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     },
   });
 
+  const choose = useMutation({
+    mutationFn: (patch: Partial<ModelChoice>) => api.conversations.update(conversationId, patch),
+    onMutate: (patch) => {
+      const old = qc.getQueryData<ConversationWithMessages>(key);
+      qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...patch } : c));
+      return { prev: { model: old?.model ?? null, effort: old?.effort ?? null } };
+    },
+    onError: (err, _patch, ctx) => {
+      if (ctx) qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...ctx.prev } : c));
+      toast.error("Couldn't switch the model", { description: errorMessage(err) });
+    },
+  });
+
   const setFolder = useMutation({
     mutationFn: (workingDirectory: string | null) => api.conversations.update(conversationId, { workingDirectory }),
     onSuccess: (updated) => {
@@ -250,6 +264,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 />
               }
               placeholder={agent ? `Message ${agent.name} — or type / for commands` : "Message…"}
+              trailing={
+                <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(patch) => choose.mutate(patch)} />
+              }
               onSubmit={(input) => send.mutateAsync(input)}
             />
             <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 sm:block">

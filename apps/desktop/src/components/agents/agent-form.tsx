@@ -17,11 +17,11 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import type { Agent, AgentInput, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
-import { EFFORT_OPTIONS, MODEL_OPTIONS } from "@godmode/shared";
+import type { Agent, AgentInput, ClaudeModel, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
+import { DEFAULT_MODEL, EFFORT_LABELS, EFFORT_OPTIONS, effortForModel, findModel } from "@godmode/shared";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useModelCatalog, useWorkspaces } from "@/lib/hooks";
 import { isMac, modKey } from "@/lib/desktop";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Spinner } from "@/components/ui/spinner";
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AvatarPicker, ColorSwatches } from "./avatar-picker";
@@ -146,7 +146,32 @@ function validate(v: AgentFormValues): Record<string, string> {
   return errors;
 }
 
-const EFFORT_LABELS: Record<Effort, string> = { low: "Low", medium: "Medium", high: "High", xhigh: "X-High", max: "Max" };
+function ModelOptions({ models, current }: { models: ClaudeModel[]; current?: string }) {
+  const older = models.filter((m) => !m.latest);
+  return (
+    <>
+      {models
+        .filter((m) => m.latest)
+        .map((m) => (
+          <SelectItem key={m.id} value={m.id}>
+            <span>{m.label}</span>
+            {m.description && <span className="text-xs text-muted-foreground">{m.description}</span>}
+          </SelectItem>
+        ))}
+      {older.length > 0 && (
+        <SelectGroup>
+          <SelectLabel>Older models</SelectLabel>
+          {older.map((m) => (
+            <SelectItem key={m.id} value={m.id}>
+              {m.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      )}
+      {current && !findModel(models, current) && <SelectItem value={current}>{current}</SelectItem>}
+    </>
+  );
+}
 
 const SECTIONS = [
   { id: "identity", label: "Identity" },
@@ -182,6 +207,7 @@ export function AgentForm({
   footerExtra?: ReactNode;
 }) {
   const { data: boot } = useBootstrap();
+  const { catalog } = useModelCatalog();
   const scope = useUi((s) => s.workspace);
   const defaults = useMemo(
     () => ({
@@ -196,6 +222,8 @@ export function AgentForm({
   const [baseline, setBaseline] = useState(seedKey);
   const [showErrors, setShowErrors] = useState(false);
   const dirty = JSON.stringify(values) !== baseline;
+  const effectiveModel = findModel(catalog.models, values.model || boot?.settings.runner.model || DEFAULT_MODEL);
+  const efforts: readonly Effort[] = effectiveModel?.efforts ?? EFFORT_OPTIONS;
 
   // Pick up external changes (realtime updates) while the user hasn't edited anything
   const dirtyRef = useRef(dirty);
@@ -328,22 +356,17 @@ export function AgentForm({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="agent-model">Model</Label>
-                <Select value={values.model || "__default"} onValueChange={(v) => set("model", v === "__default" ? "" : v)}>
+                <Select
+                  value={findModel(catalog.models, values.model)?.id ?? (values.model || "__default")}
+                  onValueChange={(v) => set("model", v === "__default" ? "" : v)}
+                >
                   <SelectTrigger id="agent-model" className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent position="popper">
                     <SelectItem value="__default">Default (from settings)</SelectItem>
                     <SelectSeparator />
-                    {MODEL_OPTIONS.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        <span>{m.label}</span>
-                        <span className="text-xs text-muted-foreground">{m.hint}</span>
-                      </SelectItem>
-                    ))}
-                    {values.model && !MODEL_OPTIONS.some((m) => m.id === values.model) && (
-                      <SelectItem value={values.model}>{values.model}</SelectItem>
-                    )}
+                    <ModelOptions models={catalog.models} current={values.model} />
                   </SelectContent>
                 </Select>
               </div>
@@ -356,7 +379,7 @@ export function AgentForm({
               <ToggleGroup
                 type="single"
                 variant="outline"
-                value={values.effort ?? "default"}
+                value={(values.effort && effortForModel(efforts, values.effort)) || "default"}
                 onValueChange={(v) => v && set("effort", v === "default" ? null : (v as Effort))}
                 aria-labelledby="agent-effort-label"
                 className="w-full flex-wrap sm:flex-nowrap"
@@ -364,13 +387,17 @@ export function AgentForm({
                 <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
                   Default
                 </ToggleGroupItem>
-                {EFFORT_OPTIONS.map((e) => (
+                {efforts.map((e) => (
                   <ToggleGroupItem key={e} value={e} className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
                     {EFFORT_LABELS[e]}
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
-              <p className="text-xs text-muted-foreground">Higher effort thinks longer — better for tricky multi-step work, slower and pricier.</p>
+              <p className="text-xs text-muted-foreground">
+                {efforts.length
+                  ? "Higher effort thinks longer — better for tricky multi-step work, slower and pricier."
+                  : `${effectiveModel?.label ?? "This model"} doesn't use effort levels.`}
+              </p>
             </div>
           </FormSection>
 
@@ -567,7 +594,7 @@ export function AgentForm({
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-                <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{MODEL_OPTIONS.find((m) => m.id === values.model)?.label ?? (values.model || "Default model")}</span>
+                <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{findModel(catalog.models, values.model)?.label ?? (values.model || "Default model")}</span>
                 {values.browserEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">Browser</span>}
                 {values.workingDirectory && (
                   <span className="flex max-w-full items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
@@ -867,6 +894,7 @@ function SubagentsEditor({
   onChange: (v: SubagentDefinition[]) => void;
   errors: Record<string, string>;
 }) {
+  const { catalog } = useModelCatalog();
   const update = (i: number, patch: Partial<SubagentDefinition>) => onChange(value.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   if (value.length === 0) {
     return (
@@ -907,17 +935,16 @@ function SubagentsEditor({
                   <Label htmlFor={`sub-model-${i}`} className="text-xs">
                     Model
                   </Label>
-                  <Select value={s.model || "__inherit"} onValueChange={(v) => update(i, { model: v === "__inherit" ? undefined : v })}>
+                  <Select
+                    value={findModel(catalog.models, s.model)?.id ?? (s.model || "__inherit")}
+                    onValueChange={(v) => update(i, { model: v === "__inherit" ? undefined : v })}
+                  >
                     <SelectTrigger id={`sub-model-${i}`} size="sm" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent position="popper">
                       <SelectItem value="__inherit">Same as agent</SelectItem>
-                      {MODEL_OPTIONS.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.label}
-                        </SelectItem>
-                      ))}
+                      <ModelOptions models={catalog.models} current={s.model} />
                     </SelectContent>
                   </Select>
                 </div>

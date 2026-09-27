@@ -92,8 +92,8 @@ function toConversation(r: ConversationRow): Conversation {
     title: r.title,
     origin: r.origin,
     claudeSessionId: r.claude_session_id,
-    model: r.model ?? null,
-    effort: r.effort ?? null,
+    model: r.model || null,
+    effort: r.effort || null,
     workingDirectory: r.working_directory,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
@@ -158,12 +158,15 @@ export function titleFromContent(content: string): string {
   return t.length > TITLE_MAX ? `${t.slice(0, TITLE_MAX - 1).trimEnd()}…` : t;
 }
 
-export function createConversation(input: {
-  agentId: string;
-  title?: string;
-  origin?: ConversationOrigin;
-  workingDirectory?: string | null;
-}): Conversation {
+export interface ModelChoice {
+  /** `claude --model` value; null/empty = the agent's model. */
+  model?: string | null;
+  effort?: Effort | null;
+}
+
+export function createConversation(
+  input: { agentId: string; title?: string; origin?: ConversationOrigin; workingDirectory?: string | null } & ModelChoice,
+): Conversation {
   getAgent(input.agentId); // 404 if the agent doesn't exist
   const workingDirectory = normalizeWorkingDirectory(input.workingDirectory);
   const ts = now();
@@ -175,6 +178,8 @@ export function createConversation(input: {
     title,
     origin: input.origin ?? "chat",
     claude_session_id: null,
+    model: input.model?.trim() || null,
+    effort: input.effort ?? null,
     working_directory: workingDirectory,
     pinned: 0,
     archived: 0,
@@ -225,6 +230,8 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     title,
     pinned: int(patch.pinned),
     archived: int(patch.archived),
+    model: patch.model === undefined ? undefined : patch.model?.trim() || null,
+    effort: patch.effort,
     working_directory: patch.workingDirectory === undefined ? undefined : normalizeWorkingDirectory(patch.workingDirectory),
     updated_at: now(),
   });
@@ -426,15 +433,17 @@ export async function sendMessage(
 }
 
 /** Create a conversation for the agent (default agent if omitted) and send the first message. */
-export async function startChat(input: {
-  agentId?: string;
-  content: string;
-  origin?: ConversationOrigin;
-  title?: string;
-  attachments?: SendMessageInput["attachments"];
-  voice?: boolean;
-  workingDirectory?: string | null;
-}): Promise<StartChatResult> {
+export async function startChat(
+  input: {
+    agentId?: string;
+    content: string;
+    origin?: ConversationOrigin;
+    title?: string;
+    attachments?: SendMessageInput["attachments"];
+    voice?: boolean;
+    workingDirectory?: string | null;
+  } & ModelChoice,
+): Promise<StartChatResult> {
   const agentId = input.agentId || getDefaultAgentId();
   if (!agentId) throw badRequest("No agent given and no default agent exists");
   const agent = getAgent(agentId);
@@ -442,7 +451,14 @@ export async function startChat(input: {
   const title =
     input.title?.trim() ||
     (input.content?.trim() ? titleFromContent(input.content) : input.attachments?.[0]?.name ? titleFromContent(input.attachments[0].name) : DEFAULT_CONVERSATION_TITLE);
-  const conversation = createConversation({ agentId, title, origin: input.origin ?? "chat", workingDirectory: input.workingDirectory });
+  const conversation = createConversation({
+    agentId,
+    title,
+    origin: input.origin ?? "chat",
+    workingDirectory: input.workingDirectory,
+    model: input.model,
+    effort: input.effort,
+  });
   try {
     const result = await sendMessage(conversation.id, { content: input.content, attachments: input.attachments, voice: input.voice });
     return { ...result, conversation: getConversationSummary(conversation.id) };

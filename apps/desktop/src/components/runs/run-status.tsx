@@ -1,7 +1,8 @@
 import type { RunStatus, RunTrigger } from "@godmode/shared";
-import { MODEL_OPTIONS } from "@godmode/shared";
+import { findModel } from "@godmode/shared";
 import { Ban, CalendarClock, CheckCircle2, Clock3, Hand, MessageSquare, Plug, Share2, XCircle } from "lucide-react";
 import { Orb } from "@/components/aicss/Orb";
+import { useModelCatalog } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 /** "850ms", "12s", "3m 04s", "1h 12m" */
@@ -40,10 +41,10 @@ export function formatTokens(n: number | null | undefined): string {
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
 
-/** "Opus 5.5" for known ids, the raw id otherwise. */
-export function modelLabel(id: string | null | undefined): string {
-  if (!id) return "Default";
-  return MODEL_OPTIONS.find((m) => m.id === id)?.label ?? id;
+/** Label lookup: "Opus 5.5" for model ids and aliases Claude Code knows, the raw id otherwise. */
+export function useModelLabel(): (id: string | null | undefined) => string {
+  const { catalog } = useModelCatalog();
+  return (id) => (id ? (findModel(catalog.models, id)?.label ?? id) : "Default");
 }
 
 const STATUS_META: Record<RunStatus, { label: string; className: string; dot: string }> = {

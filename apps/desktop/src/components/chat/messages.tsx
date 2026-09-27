@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
 import { Orb, type OrbVariant } from "@/components/aicss/Orb";
-import { formatCost, formatDuration, formatElapsed, formatTokens, modelLabel } from "@/components/runs/run-status";
+import { formatCost, formatDuration, formatElapsed, formatTokens, useModelLabel } from "@/components/runs/run-status";
 import { useSpeaker } from "@/hooks/use-voice";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -143,6 +143,7 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
 }
 
 function RunMeta({ runId }: { runId: string }) {
+  const modelLabel = useModelLabel();
   const { data: run } = useQuery({
     queryKey: qk.run(runId),
     queryFn: () => api.runs.get(runId),

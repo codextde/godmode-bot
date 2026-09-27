@@ -54,6 +54,8 @@ interface ComposerProps {
   running?: boolean;
   /** Rendered at the start of the toolbar (e.g. agent picker) */
   leading?: ReactNode;
+  /** Rendered before the voice and send buttons (e.g. model picker) */
+  trailing?: ReactNode;
   size?: "md" | "lg";
   /** Persist an unsent draft (sessionStorage) under this key */
   draftKey?: string;
@@ -95,6 +97,7 @@ export function Composer({
   busy,
   running,
   leading,
+  trailing,
   size = "md",
   draftKey,
   agentId,
@@ -517,6 +520,8 @@ export function Composer({
               </motion.span>
             )}
           </AnimatePresence>
+
+          {trailing}
 
           <ToolbarButton label={voiceEnabled ? "Voice mode" : "Voice is off — enable it in Settings"} onClick={openVoiceMode}>
             <AudioLines />

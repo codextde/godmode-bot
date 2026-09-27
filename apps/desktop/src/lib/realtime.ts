@@ -37,6 +37,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   notifications: [qk.notifications, qk.bootstrap],
   settings: [qk.settings, qk.bootstrap],
   runs: [qk.runs],
+  models: [qk.models],
 };
 
 export function startRealtime(queryClient: QueryClient) {
