@@ -69,14 +69,14 @@ export function GeneralSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup title="Appearance" icon={<Palette />}>
-        <SettingRow label="Theme" description="Dark is the signature look. System follows your OS setting.">
+        <SettingRow label="Theme" description="Warm paper by day, anthracite by night. System follows your OS setting.">
           <Segmented<Theme>
             aria-label="Theme"
             value={theme}
             onChange={changeTheme}
             options={[
-              { value: "dark", label: "Dark", icon: <Moon /> },
               { value: "light", label: "Light", icon: <Sun /> },
+              { value: "dark", label: "Dark", icon: <Moon /> },
               { value: "system", label: "System", icon: <Laptop /> },
             ]}
           />
