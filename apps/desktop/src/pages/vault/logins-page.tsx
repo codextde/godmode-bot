@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 import { Bot, FileKey, KeyRound, Lock, Plus, ScrollText, Search, SearchX, X } from "lucide-react";
 import type { Credential, TotpEntry } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -272,23 +272,49 @@ function CredentialList({
     return () => ro.disconnect();
   }, [scrollEl]);
 
+  // Keep the row holding focus mounted while it is scrolled out of view.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const focusedIndex = useMemo(() => (focusedId ? credentials.findIndex((c) => c.id === focusedId) : -1), [credentials, focusedId]);
+  const rangeExtractor = useCallback(
+    (range: Range) => {
+      const indexes = defaultRangeExtractor(range);
+      return focusedIndex < 0 || indexes.includes(focusedIndex) ? indexes : [...indexes, focusedIndex].sort((a, b) => a - b);
+    },
+    [focusedIndex],
+  );
+  const getItemKey = useCallback((i: number) => credentials[i].id, [credentials]);
+
   const virtualizer = useVirtualizer({
     count: credentials.length,
     getScrollElement: () => scrollEl,
-    getItemKey: (i) => credentials[i].id,
+    getItemKey,
+    rangeExtractor,
     estimateSize: () => 68,
     overscan: 8,
     scrollMargin,
   });
 
   return (
-    <div ref={listRef} className="relative" style={{ height: virtualizer.getTotalSize() }}>
+    <div
+      ref={listRef}
+      role="list"
+      className="relative"
+      style={{ height: virtualizer.getTotalSize() }}
+      onFocus={(e) => {
+        const row = (e.target as HTMLElement).closest<HTMLElement>("[data-index]");
+        setFocusedId(row ? (credentials[Number(row.dataset.index)]?.id ?? null) : null);
+      }}
+      onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setFocusedId(null)}
+    >
       {virtualizer.getVirtualItems().map((item) => {
         const c = credentials[item.index];
         return (
           <div
             key={item.key}
             ref={virtualizer.measureElement}
+            role="listitem"
+            aria-posinset={item.index + 1}
+            aria-setsize={credentials.length}
             data-index={item.index}
             className={cn("absolute inset-x-0 top-0", item.index > 0 && "border-t")}
             style={{ transform: `translateY(${item.start - scrollMargin}px)` }}
