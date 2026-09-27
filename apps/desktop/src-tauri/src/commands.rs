@@ -245,7 +245,12 @@ mod tests {
         assert!(validate_write_target(Path::new("export.json"), &p).is_err());
         assert!(validate_write_target(Path::new(""), &p).is_err());
         let dir = scratch("dotdot");
-        assert!(validate_write_target(&dir.join("../x.json"), &p).is_err());
+        // Build the path from a raw string (as a user-supplied save path arrives): `Path::join` on a Windows
+        // verbatim path (`\\?\C:\…`) would already normalize the `..` away.
+        let sep = std::path::MAIN_SEPARATOR;
+        let raw = PathBuf::from(format!("{}{sep}..{sep}x.json", dir.display()));
+        assert!(validate_write_target(&raw, &p).is_err());
+        assert!(validate_write_target(&PathBuf::from(format!("{}/../x.json", dir.display())), &p).is_err());
     }
 
     #[test]
