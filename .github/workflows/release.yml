@@ -8,6 +8,10 @@ name: Release
 #
 # Optional secrets for signed/notarized macOS builds: APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD,
 # APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD (app-specific password), APPLE_TEAM_ID.
+#
+# Required secrets for auto-update: TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD (the key matching
+# `plugins.updater.pubkey` in tauri.conf.json). They sign the update bundles and add latest.json to the release;
+# installed apps pick the update up once the release is published.
 
 on:
   push:
@@ -54,6 +58,16 @@ jobs:
             fi
           done
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check the updater signing key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          # Without latest.json in a published release every installed app's update check fails.
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Set the TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets (see the top of release.yml)."
+            exit 1
+          fi
 
       - name: Create (or reuse) the draft release
         id: release
@@ -152,13 +166,43 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --config src-tauri/tauri.updater.conf.json
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          uploadUpdaterJson: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
           retryAttempts: 1
+
+  updater-manifest:
+    name: Check latest.json
+    needs: [create-release, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      # The desktop jobs merge their platform into latest.json in parallel; a lost race drops a platform silently.
+      - name: Every desktop platform is in latest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq '.[] | select(.name == "latest.json") | .id')
+          if [ -z "$id" ]; then
+            echo "::error::latest.json is missing from the release"
+            exit 1
+          fi
+          gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$id" > latest.json
+          missing=0
+          for platform in darwin-aarch64 darwin-x86_64 windows-x86_64 linux-x86_64 linux-aarch64; do
+            if ! jq -e --arg p "$platform" '.platforms[$p].url' latest.json > /dev/null; then
+              echo "::error::latest.json has no $platform entry: re-run that platform's desktop job"
+              missing=1
+            fi
+          done
+          jq '.platforms | keys' latest.json
+          exit "$missing"
 
   server:
     name: Server binaries (${{ matrix.os }})

@@ -100,6 +100,9 @@ Download the latest release for your platform from
 - **Windows** — `.msi` / `.exe`
 - **Linux** — `.AppImage` / `.deb` / `.rpm`
 
+The app keeps itself up to date: new versions download in the background, and a **Restart** button appears in the
+sidebar once one is ready.
+
 On first launch the onboarding checks your system and installs what's missing with one click:
 
 | Dependency | Why | Install |
