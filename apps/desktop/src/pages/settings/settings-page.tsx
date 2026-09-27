@@ -31,16 +31,16 @@ import { useBootstrap, useSettings } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 const SECTIONS = [
-  { id: "general", label: "General", icon: <SlidersHorizontal /> },
-  { id: "ai", label: "AI & Claude", icon: <Sparkles /> },
-  { id: "browser", label: "Browser", icon: <Globe /> },
-  { id: "voice", label: "Voice", icon: <AudioLines /> },
-  { id: "memory", label: "Memory", icon: <BrainCircuit /> },
-  { id: "security", label: "Security", icon: <ShieldCheck /> },
-  { id: "backup", label: "Backup", icon: <DatabaseBackup /> },
-  { id: "system", label: "System", icon: <HeartPulse /> },
-  { id: "about", label: "About", icon: <Info /> },
-] as const satisfies readonly { id: string; label: string; icon: ReactNode }[];
+  { id: "general", label: "General", icon: <SlidersHorizontal />, group: "Preferences" },
+  { id: "ai", label: "AI & Claude", icon: <Sparkles />, group: "Preferences" },
+  { id: "browser", label: "Browser", icon: <Globe />, group: "Preferences" },
+  { id: "voice", label: "Voice", icon: <AudioLines />, group: "Preferences" },
+  { id: "memory", label: "Memory", icon: <BrainCircuit />, group: "Preferences" },
+  { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
+  { id: "backup", label: "Backup", icon: <DatabaseBackup />, group: "Data & privacy" },
+  { id: "system", label: "System", icon: <HeartPulse />, group: "App" },
+  { id: "about", label: "About", icon: <Info />, group: "App" },
+] as const satisfies readonly { id: string; label: string; icon: ReactNode; group: string }[];
 
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -117,32 +117,37 @@ function SectionNav({ active }: { active: SectionId }) {
       aria-label="Settings sections"
       className={cn(
         "-mx-2 flex gap-1 overflow-x-auto px-2 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-        "@4xl:sticky @4xl:top-6 @4xl:mx-0 @4xl:w-52 @4xl:shrink-0 @4xl:flex-col @4xl:overflow-visible @4xl:px-0 @4xl:pb-0",
+        "@4xl:sticky @4xl:top-6 @4xl:mx-0 @4xl:w-52 @4xl:shrink-0 @4xl:flex-col @4xl:gap-0.5 @4xl:overflow-visible @4xl:px-0 @4xl:pb-0",
       )}
     >
-      {SECTIONS.map((s) => {
+      {SECTIONS.map((s, i) => {
         const isActive = s.id === active;
+        const firstInGroup = i === 0 || SECTIONS[i - 1].group !== s.group;
         return (
-          <NavLink
-            key={s.id}
-            to={`/settings/${s.id}`}
-            aria-current={isActive ? "page" : undefined}
-            className={cn(
-              "relative flex h-9 shrink-0 items-center gap-2.5 rounded-lg px-3 text-sm font-medium whitespace-nowrap outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
-              "[&_svg]:size-4 [&_svg]:shrink-0",
-              isActive ? "text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+          <div key={s.id} className="contents">
+            {firstInGroup && (
+              <div className={cn("eyebrow hidden px-3 pb-1.5 @4xl:block", i > 0 && "@4xl:mt-4")}>{s.group}</div>
             )}
-          >
-            {isActive && (
-              <motion.span
-                layoutId="settings-nav-pill"
-                className="absolute inset-0 rounded-lg border border-primary/20 bg-primary/10 shadow-sm"
-                transition={{ type: "spring", stiffness: 420, damping: 36 }}
-              />
-            )}
-            <span className={cn("relative", isActive && "text-primary")}>{s.icon}</span>
-            <span className="relative">{s.label}</span>
-          </NavLink>
+            <NavLink
+              to={`/settings/${s.id}`}
+              aria-current={isActive ? "page" : undefined}
+              className={cn(
+                "relative flex h-8 shrink-0 items-center gap-2.5 rounded-md px-3 text-[13.5px] whitespace-nowrap outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                "[&_svg]:size-4 [&_svg]:shrink-0",
+                isActive ? "font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              {isActive && (
+                <motion.span
+                  layoutId="settings-nav-pill"
+                  className="absolute inset-0 rounded-md bg-card shadow-card ring-1 ring-border"
+                  transition={{ type: "spring", stiffness: 420, damping: 36 }}
+                />
+              )}
+              <span className={cn("relative", isActive ? "text-foreground" : "text-muted-foreground")}>{s.icon}</span>
+              <span className="relative">{s.label}</span>
+            </NavLink>
+          </div>
         );
       })}
     </nav>
@@ -157,7 +162,7 @@ function SectionSkeleton() {
         <Skeleton className="h-4 w-80" />
       </div>
       {[0, 1].map((i) => (
-        <div key={i} className="space-y-4 rounded-2xl border bg-card/60 p-5">
+        <div key={i} className="space-y-4 rounded-xl border bg-card p-5 shadow-card">
           <Skeleton className="h-5 w-32" />
           {[0, 1, 2].map((j) => (
             <div key={j} className="flex items-center justify-between gap-6">

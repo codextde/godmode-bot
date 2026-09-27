@@ -246,7 +246,7 @@ export function NumberField({
   return (
     <div
       className={cn(
-        "flex h-9 w-36 items-center rounded-md border border-input shadow-xs transition-[color,box-shadow] dark:bg-input/30",
+        "flex h-9 w-36 items-center rounded-md border border-input bg-card shadow-xs transition-[color,box-shadow]",
         "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50",
         disabled && "opacity-50",
         className,
@@ -282,7 +282,7 @@ export function NumberField({
 export function SectionHeading({ title, description }: { title: string; description?: ReactNode }) {
   return (
     <div className="mb-5">
-      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+      <h2 className="text-[22px] leading-tight font-medium tracking-[-0.025em]">{title}</h2>
       {description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>}
     </div>
   );
@@ -312,22 +312,22 @@ export function SettingsGroup({
     <motion.section
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={cn("rounded-2xl border bg-card/60 backdrop-blur-sm", tone === "danger" && "border-destructive/30", className)}
+      className={cn("rounded-xl border bg-card shadow-card", tone === "danger" && "border-destructive/25", className)}
     >
       <header className="flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4">
         <div className="flex min-w-0 items-start gap-3">
           {icon && (
             <div
               className={cn(
-                "grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary [&_svg]:size-4",
-                tone === "danger" && "bg-destructive/10 text-destructive",
+                "grid size-8 shrink-0 place-items-center rounded-lg border bg-paper-2 text-foreground [&_svg]:size-4",
+                tone === "danger" && "border-destructive/20 bg-destructive/[0.06] text-destructive",
               )}
             >
               {icon}
             </div>
           )}
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold">{title}</h3>
+            <h3 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">{title}</h3>
             {description && <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{description}</p>}
           </div>
         </div>
@@ -408,7 +408,7 @@ export function Segmented<T extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       onKeyDown={onKeyDown}
-      className={cn("inline-flex flex-wrap rounded-lg border bg-muted/50 p-0.5", disabled && "pointer-events-none opacity-50", className)}
+      className={cn("inline-flex flex-wrap rounded-lg border bg-secondary p-0.5", disabled && "pointer-events-none opacity-50", className)}
     >
       {options.map((o, i) => {
         const active = o.value === value;
@@ -431,7 +431,7 @@ export function Segmented<T extends string>({
             {active && (
               <motion.span
                 layoutId={layoutId}
-                className="absolute inset-0 rounded-md bg-background shadow-sm ring-1 ring-border dark:bg-input/60"
+                className="absolute inset-0 rounded-md bg-card shadow-card ring-1 ring-border dark:bg-accent"
                 transition={{ type: "spring", stiffness: 420, damping: 34 }}
               />
             )}
@@ -470,13 +470,13 @@ export function ChoiceCards<T extends string>({
             key={o.value}
             htmlFor={id}
             className={cn(
-              "relative flex cursor-pointer gap-3 rounded-xl border bg-background/40 p-4 transition-all hover:border-primary/30",
-              checked && "border-primary/60 bg-primary/5 ring-1 ring-primary/30",
+              "relative flex cursor-pointer gap-3 rounded-lg border bg-card p-4 transition-colors hover:border-foreground/15",
+              checked && "border-foreground/40 bg-paper-2 ring-1 ring-foreground/10 hover:border-foreground/40",
             )}
           >
             <RadioGroupItem value={o.value} id={id} className="mt-0.5" />
             <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2 text-sm font-medium [&_svg]:size-4 [&_svg]:text-primary">
+              <div className="flex flex-wrap items-center gap-2 text-sm font-medium [&_svg]:size-4 [&_svg]:text-foreground">
                 {o.icon}
                 {o.title}
                 {o.badge}
@@ -491,10 +491,10 @@ export function ChoiceCards<T extends string>({
 }
 
 const CALLOUT = {
-  info: { cls: "border-primary/25 bg-primary/5", icon: <Info className="text-primary" /> },
-  warning: { cls: "border-warning/35 bg-warning/10", icon: <TriangleAlert className="text-warning" /> },
-  danger: { cls: "border-destructive/35 bg-destructive/10", icon: <ShieldAlert className="text-destructive" /> },
-  muted: { cls: "border-border bg-muted/40", icon: <CircleAlert className="text-muted-foreground" /> },
+  info: { cls: "border-border bg-paper-2", icon: <Info className="text-foreground" /> },
+  warning: { cls: "border-warning/30 bg-warning/[0.07]", icon: <TriangleAlert className="text-warning" /> },
+  danger: { cls: "border-destructive/30 bg-destructive/[0.06]", icon: <ShieldAlert className="text-destructive" /> },
+  muted: { cls: "border-border bg-secondary/60", icon: <CircleAlert className="text-muted-foreground" /> },
 } as const;
 
 export function Callout({
@@ -512,7 +512,7 @@ export function Callout({
 }) {
   const t = CALLOUT[tone];
   return (
-    <div className={cn("flex gap-3 rounded-xl border p-3.5 text-sm", t.cls, className)} role={tone === "danger" || tone === "warning" ? "alert" : undefined}>
+    <div className={cn("flex gap-3 rounded-lg border p-3.5 text-sm", t.cls, className)} role={tone === "danger" || tone === "warning" ? "alert" : undefined}>
       <span className="mt-0.5 shrink-0 [&_svg]:size-4">{icon ?? t.icon}</span>
       <div className="min-w-0 space-y-1">
         {title && <p className="font-medium">{title}</p>}

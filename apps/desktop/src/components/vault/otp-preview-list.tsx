@@ -40,14 +40,14 @@ export function OtpPreviewList({ uris, onRemove }: { uris: string[]; onRemove: (
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Ready to import</p>
+        <p className="eyebrow">Ready to import</p>
         <Badge variant="secondary" className="tabular-nums">
           {accountCount} {accountCount === 1 ? "account" : "accounts"}
         </Badge>
       </div>
 
       {incomplete.map((b, i) => (
-        <div key={i} className="flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning/8 p-3 text-xs">
+        <div key={i} className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/[0.07] p-3 text-xs">
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
           <p>
             This Google Authenticator export has <strong>{b.size} QR codes</strong> — {b.missing} {b.missing === 1 ? "is" : "are"} still missing. Add the
@@ -56,7 +56,7 @@ export function OtpPreviewList({ uris, onRemove }: { uris: string[]; onRemove: (
         </div>
       ))}
 
-      <div className="divide-y overflow-hidden rounded-xl border bg-card/60">
+      <div className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
         <AnimatePresence initial={false}>
           {parsed.map((p) =>
             p.kind === "otpauth" ? (
@@ -73,8 +73,8 @@ export function OtpPreviewList({ uris, onRemove }: { uris: string[]; onRemove: (
               </motion.div>
             ) : (
               <motion.div key={p.uri} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                <div className="flex items-center gap-2 bg-muted/40 px-3 py-2">
-                  <Layers className="size-4 text-primary" />
+                <div className="flex items-center gap-2 bg-paper-2 px-3 py-2">
+                  <Layers className="size-4 text-muted-foreground" />
                   <p className="min-w-0 flex-1 truncate text-xs font-medium">
                     Google Authenticator export
                     {p.preview.batchSize > 1 && (

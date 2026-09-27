@@ -1,10 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "motion/react";
 import { Check, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 import { AGENT_COLORS, type Workspace } from "@godmode/shared";
-import { colorGradient } from "@/components/common";
+import { colorSwatch } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -85,13 +84,7 @@ export function WorkspaceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-xl">
         <form onSubmit={submit}>
-          <div className="relative overflow-hidden border-b px-6 pt-6 pb-5">
-            <motion.div
-              key={color}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br opacity-[0.14]", colorGradient(color))}
-            />
+          <div className="relative overflow-hidden border-b bg-paper-2 px-6 pt-6 pb-5">
             <DialogHeader className="relative">
               <DialogTitle>{editing ? "Edit workspace" : "New workspace"}</DialogTitle>
               <DialogDescription>
@@ -103,7 +96,7 @@ export function WorkspaceDialog({
                 <PopoverTrigger asChild>
                   <button type="button" aria-label="Choose icon" className="group relative rounded-2xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
                     <WorkspaceTile icon={icon} color={color} size="xl" />
-                    <span className="absolute -right-1 -bottom-1 grid size-6 place-items-center rounded-full border bg-background text-muted-foreground shadow-sm transition group-hover:text-foreground">
+                    <span className="absolute -right-1 -bottom-1 grid size-6 place-items-center rounded-md border bg-card text-muted-foreground shadow-card transition group-hover:text-foreground">
                       <SmilePlus className="size-3.5" />
                     </span>
                   </button>
@@ -121,8 +114,8 @@ export function WorkspaceDialog({
                           setPickerOpen(false);
                         }}
                         className={cn(
-                          "grid size-9 place-items-center rounded-lg text-xl transition hover:scale-110 hover:bg-accent",
-                          icon === e && "bg-primary/15 ring-1 ring-primary/40",
+                          "grid size-9 place-items-center rounded-lg text-xl transition hover:bg-accent",
+                          icon === e && "bg-accent ring-1 ring-foreground/20",
                         )}
                       >
                         {e}
@@ -161,7 +154,7 @@ export function WorkspaceDialog({
                 </PopoverContent>
               </Popover>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-lg font-semibold tracking-tight">{name.trim() || "Untitled workspace"}</p>
+                <p className="truncate text-lg font-medium tracking-[-0.02em]">{name.trim() || "Untitled workspace"}</p>
                 <p className="line-clamp-1 text-sm text-muted-foreground">{description.trim() || "Click the icon to change it"}</p>
               </div>
             </div>
@@ -192,12 +185,12 @@ export function WorkspaceDialog({
                     aria-label={c}
                     onClick={() => setColor(c)}
                     className={cn(
-                      "grid size-8 place-items-center rounded-full bg-gradient-to-br shadow-sm ring-offset-2 ring-offset-background transition hover:scale-110 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                      colorGradient(c),
+                      "grid size-7 place-items-center rounded-md ring-offset-2 ring-offset-background transition hover:opacity-85 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                      colorSwatch(c),
                       color === c && "ring-2 ring-foreground/70",
                     )}
                   >
-                    {color === c && <Check className="size-4 text-white drop-shadow" />}
+                    {color === c && <Check className="size-3.5 text-white" />}
                   </button>
                 ))}
               </div>
@@ -216,11 +209,11 @@ export function WorkspaceDialog({
             </div>
           </div>
 
-          <DialogFooter className="border-t bg-muted/30 px-6 py-4">
+          <DialogFooter className="border-t bg-paper-2 px-6 py-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!name.trim() || save.isPending} className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95">
+            <Button type="submit" disabled={!name.trim() || save.isPending}>
               {save.isPending && <Spinner />}
               {editing ? "Save changes" : "Create workspace"}
             </Button>

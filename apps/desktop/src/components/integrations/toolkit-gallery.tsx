@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { CircleCheck, Plus, Search, SearchX, Sparkles, X } from "lucide-react";
+import { CircleCheck, LayoutGrid, Plus, Search, SearchX, X } from "lucide-react";
 import type { ComposioToolkit } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -98,8 +98,8 @@ export function ToolkitGallery({
     <section aria-label="App gallery" className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Sparkles className="size-4 text-primary" /> Add an app
+          <h2 className="flex items-center gap-2 text-[17px] font-medium tracking-[-0.02em]">
+            <LayoutGrid className="size-4 text-muted-foreground" /> Add an app
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">Connect an account and your agents get its actions as tools.</p>
         </div>
@@ -130,11 +130,11 @@ export function ToolkitGallery({
                 aria-selected={active}
                 onClick={() => setCategory(c)}
                 className={cn(
-                  "relative h-7 shrink-0 rounded-full border px-3 text-xs font-medium whitespace-nowrap capitalize transition",
-                  active ? "border-transparent text-primary-foreground" : "bg-card/40 text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                  "relative h-7 shrink-0 rounded-md border px-3 text-xs font-medium whitespace-nowrap capitalize transition",
+                  active ? "border-transparent text-primary-foreground" : "bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
                 )}
               >
-                {active && <motion.span layoutId="toolkit-cat" className="absolute inset-0 rounded-full bg-primary" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
+                {active && <motion.span layoutId="toolkit-cat" className="absolute -inset-px rounded-md bg-primary" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
                 <span className="relative">{c || "All"}</span>
               </button>
             );
@@ -147,7 +147,7 @@ export function ToolkitGallery({
       ) : query.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 9 }).map((_, i) => (
-            <Skeleton key={i} className="h-[132px] rounded-2xl" />
+            <Skeleton key={i} className="h-[132px] rounded-xl" />
           ))}
         </div>
       ) : items.length === 0 ? (
@@ -189,15 +189,15 @@ function ToolkitCard({ toolkit: t, index, connected, onConnect }: { toolkit: Com
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index % 24, 12) * 0.03 }}
-      className="group flex flex-col rounded-2xl border bg-card/60 p-4 backdrop-blur-sm transition hover:border-primary/30 hover:shadow-lg hover:shadow-glow-a/5"
+      className="group flex flex-col rounded-xl border bg-card p-4 shadow-card transition hover:border-foreground/15 hover:shadow-float"
     >
       <div className="flex items-start gap-3">
-        <ToolkitLogo src={t.logo} name={t.name} className="transition-transform group-hover:scale-105" />
+        <ToolkitLogo src={t.logo} name={t.name} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-semibold">{t.name}</h3>
+            <h3 className="truncate text-sm font-medium tracking-[-0.01em]">{t.name}</h3>
             {connected > 0 && (
-              <Badge className="h-5 shrink-0 gap-1 bg-success/15 px-1.5 text-[10px] text-success">
+              <Badge variant="outline" className="h-5 shrink-0 gap-1 border-brand/25 bg-brand-soft px-1.5 text-[10px] text-brand-strong">
                 <CircleCheck /> {connected > 1 ? `${connected} accounts` : "Connected"}
               </Badge>
             )}

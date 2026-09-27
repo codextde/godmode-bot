@@ -112,12 +112,12 @@ export default function TotpPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" size="icon" onClick={toggleHide} aria-pressed={hideCodes} aria-label={hideCodes ? "Show codes" : "Hide codes"}>
-                  {hideCodes ? <EyeOff /> : <Eye />}
+                  {hideCodes ? <EyeOff className="text-brand-strong" /> : <Eye />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{hideCodes ? "Codes hidden — hover a card to peek" : "Hide codes (privacy mode)"}</TooltipContent>
             </Tooltip>
-            <Button onClick={() => openImport("images")} className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95">
+            <Button onClick={() => openImport("images")}>
               <ScanQrCode /> Import codes
             </Button>
           </>
@@ -174,7 +174,7 @@ export default function TotpPage() {
             description="Import your authenticator codes so agents can finish two-factor sign-ins without pinging you. Moving from Google Authenticator takes about a minute."
             action={
               <div className="flex flex-wrap justify-center gap-2">
-                <Button onClick={() => openImport("images")} className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95">
+                <Button onClick={() => openImport("images")}>
                   <ScanQrCode /> Import from screenshots
                 </Button>
                 <Button variant="outline" onClick={() => openImport("manual")}>

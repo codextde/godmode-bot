@@ -69,12 +69,12 @@ export function TotpCard({
       onMouseLeave={() => setPeek(false)}
       onFocus={() => setPeek(true)}
       onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setPeek(false)}
-      className="group relative flex flex-col gap-3 rounded-2xl border bg-card/60 p-4 backdrop-blur-sm transition hover:border-primary/30 hover:shadow-lg hover:shadow-glow-a/5"
+      className="group relative flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-card transition hover:border-foreground/15 hover:shadow-float"
     >
       <div className="flex items-start gap-3">
         <Favicon domain={domain} name={entry.issuer} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{entry.issuer}</p>
+          <p className="truncate text-sm font-medium tracking-[-0.01em]">{entry.issuer}</p>
           <p className="truncate text-xs text-muted-foreground">{entry.accountName || "No account name"}</p>
         </div>
         <DropdownMenu>
@@ -107,7 +107,7 @@ export function TotpCard({
           onClick={() => void copy()}
           disabled={expired}
           aria-label={masked ? `Copy ${entry.issuer} code` : `Copy ${entry.issuer} code ${code?.code ?? ""}`}
-          className="relative -mx-2 flex min-w-0 items-center gap-2 rounded-xl px-2 py-1 text-left outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-default"
+          className="relative -mx-2 flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-default"
         >
           {code ? (
             <AnimatePresence mode="popLayout" initial={false}>
@@ -118,7 +118,7 @@ export function TotpCard({
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.2 }}
                 className={cn(
-                  "font-mono text-[28px] leading-none font-semibold tracking-[0.08em] tabular-nums",
+                  "font-mono text-[28px] leading-none font-medium tracking-[0.06em] tabular-nums",
                   !masked && !expired && remaining <= 5 ? "text-destructive" : "text-foreground",
                   masked && "text-muted-foreground",
                 )}
@@ -139,7 +139,7 @@ export function TotpCard({
                 initial={{ opacity: 0, y: 4, scale: 0.9 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -4 }}
-                className="absolute -top-5 left-2 rounded-full bg-success px-2 py-0.5 text-[10px] font-medium text-white shadow"
+                className="absolute -top-5 left-2 rounded-[5px] border border-success/25 bg-card px-1.5 py-0.5 text-[10px] font-medium text-success shadow-card"
               >
                 Copied
               </motion.span>
@@ -159,7 +159,7 @@ export function TotpCard({
           <button
             type="button"
             onClick={() => onEdit(true)}
-            className="inline-flex h-5 items-center gap-1 rounded-full border border-dashed px-2 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+            className="inline-flex h-5 items-center gap-1 rounded-[5px] border border-dashed px-1.5 text-[11px] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
           >
             <Link2 className="size-3" /> Link login
           </button>
@@ -177,9 +177,9 @@ export function TotpCard({
 
 export function TotpCardSkeleton() {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border bg-card/60 p-4">
+    <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-card">
       <div className="flex items-center gap-3">
-        <Skeleton className="size-9 rounded-xl" />
+        <Skeleton className="size-9 rounded-lg" />
         <div className="flex-1 space-y-1.5">
           <Skeleton className="h-3.5 w-24" />
           <Skeleton className="h-3 w-32" />
@@ -189,7 +189,7 @@ export function TotpCardSkeleton() {
         <Skeleton className="h-7 w-36 rounded-lg" />
         <Skeleton className="size-9 rounded-full" />
       </div>
-      <Skeleton className="h-5 w-40 rounded-full" />
+      <Skeleton className="h-5 w-40 rounded-md" />
     </div>
   );
 }

@@ -45,7 +45,7 @@ export function ChipInput({
   return (
     <div
       className={cn(
-        "flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-md border border-input px-2 py-1.5 shadow-xs transition-[color,box-shadow] dark:bg-input/30",
+        "flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-md border border-input bg-card px-2 py-1.5 shadow-xs transition-[color,box-shadow]",
         "focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50",
         className,
       )}
@@ -58,12 +58,12 @@ export function ChipInput({
             initial={{ opacity: 0, scale: 0.85 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.85 }}
-            className="inline-flex h-6 items-center gap-1 rounded-full bg-primary/12 pr-1 pl-2.5 text-xs font-medium text-primary"
+            className="inline-flex h-6 items-center gap-1 rounded-[5px] border bg-secondary pr-1 pl-2 text-xs font-medium text-foreground"
           >
             {chip}
             <button
               type="button"
-              className="grid size-4 place-items-center rounded-full hover:bg-primary/20"
+              className="grid size-4 place-items-center rounded-[3px] text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
               aria-label={`Remove ${chip}`}
               onClick={() => onChange(value.filter((v) => v !== chip))}
             >

@@ -3,8 +3,8 @@ import { motion } from "motion/react";
 import { estimateStrength, type StrengthResult } from "@/lib/password";
 import { cn } from "@/lib/utils";
 
-const COLORS = ["bg-destructive", "bg-orange-500", "bg-warning", "bg-emerald-500", "bg-success"];
-const TEXT = ["text-destructive", "text-orange-500", "text-warning", "text-emerald-500", "text-success"];
+const COLORS = ["bg-destructive", "bg-destructive/70", "bg-warning", "bg-success/75", "bg-success"];
+const TEXT = ["text-destructive", "text-destructive", "text-warning", "text-success", "text-success"];
 
 export function useStrength(password: string, userInputs: string[] = []): StrengthResult {
   const key = userInputs.join("\u0000");
@@ -29,9 +29,9 @@ export function StrengthMeter({
     <div className={cn("space-y-1.5", className)} aria-live="polite">
       <div className="flex gap-1" role="meter" aria-label="Password strength" aria-valuemin={0} aria-valuemax={4} aria-valuenow={empty ? 0 : s.score}>
         {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+          <div key={i} className="h-1 flex-1 overflow-hidden rounded-[2px] bg-foreground/[0.07]">
             <motion.div
-              className={cn("h-full rounded-full", COLORS[s.score])}
+              className={cn("h-full rounded-[2px]", COLORS[s.score])}
               initial={false}
               animate={{ width: !empty && i <= s.score ? "100%" : "0%" }}
               transition={{ type: "spring", stiffness: 300, damping: 30, delay: i * 0.03 }}

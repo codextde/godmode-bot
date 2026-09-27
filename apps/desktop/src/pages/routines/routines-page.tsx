@@ -83,7 +83,7 @@ export default function RoutinesPage() {
         title="Routines"
         description="Everything your agents do on a schedule — even while you're away."
         actions={
-          <Button onClick={() => setDialog({ key: `new-${Date.now()}`, open: true, routine: null })} className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95">
+          <Button onClick={() => setDialog({ key: `new-${Date.now()}`, open: true, routine: null })}>
             <Plus /> New routine
           </Button>
         }
@@ -123,7 +123,7 @@ export default function RoutinesPage() {
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search routines…" aria-label="Search routines" className="pl-9" />
           </div>
-          <div role="tablist" aria-label="Filter routines" className="flex items-center gap-1 rounded-xl border bg-card/50 p-1">
+          <div role="tablist" aria-label="Filter routines" className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
             {FILTERS.map((f) => (
               <button
                 key={f.id}
@@ -131,11 +131,11 @@ export default function RoutinesPage() {
                 aria-selected={filter === f.id}
                 onClick={() => setFilter(f.id)}
                 className={cn(
-                  "relative rounded-lg px-3 py-1 text-sm transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  "relative rounded-md px-3 py-1 text-sm transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
                   filter === f.id ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {filter === f.id && <motion.span layoutId="routines-filter" className="absolute inset-0 rounded-lg bg-accent" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />}
+                {filter === f.id && <motion.span layoutId="routines-filter" className="absolute inset-0 rounded-md border bg-card shadow-card" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />}
                 <span className="relative flex items-center gap-1.5">
                   {f.label}
                   {counts[f.id] > 0 && <span className="text-xs text-muted-foreground tabular-nums">{counts[f.id]}</span>}
@@ -164,7 +164,7 @@ export default function RoutinesPage() {
         {routinesQ.isLoading ? (
           <div className="space-y-3">
             {Array.from({ length: 4 }, (_, i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-2xl" />
+              <Skeleton key={i} className="h-20 w-full rounded-xl" />
             ))}
           </div>
         ) : routinesQ.isError ? (
@@ -185,7 +185,7 @@ export default function RoutinesPage() {
             description="Routines run an agent on a schedule — like downloading invoices on the 1st or a morning inbox summary."
             action={
               <div className="flex flex-wrap justify-center gap-2">
-                <Button onClick={() => setDialog({ key: `new-${Date.now()}`, open: true, routine: null })} className="bg-gradient-brand text-white hover:opacity-95">
+                <Button onClick={() => setDialog({ key: `new-${Date.now()}`, open: true, routine: null })}>
                   <Plus /> New routine
                 </Button>
                 <Button variant="outline" onClick={() => navigate(`/?prompt=${encodeURIComponent(ASK_PROMPT)}`)}>
@@ -256,15 +256,15 @@ function SummaryTile({
       type={onClick ? "button" : undefined}
       onClick={onClick}
       className={cn(
-        "glass min-w-0 rounded-2xl p-4 text-left",
-        onClick && "transition hover:border-foreground/15 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        "min-w-0 rounded-xl border bg-card p-4 text-left shadow-card",
+        onClick && "transition hover:border-foreground/15 hover:shadow-float focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
       )}
     >
-      <div className={cn("flex items-center gap-2 text-xs text-muted-foreground [&_svg]:size-3.5", tone === "error" && "text-destructive")}>
+      <div className={cn("eyebrow flex items-center gap-2 [&_svg]:size-3.5", tone === "error" && "text-destructive!")}>
         {icon}
         {label}
       </div>
-      <div className={cn("mt-1.5 text-xl font-semibold tracking-tight tabular-nums", tone === "error" && "text-destructive")}>{value}</div>
+      <div className={cn("mt-1.5 text-xl font-medium tracking-[-0.02em] tabular-nums", tone === "error" && "text-destructive")}>{value}</div>
       {hint && <div className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</div>}
     </Comp>
   );

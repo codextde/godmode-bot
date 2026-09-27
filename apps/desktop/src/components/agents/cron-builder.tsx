@@ -136,7 +136,7 @@ export function CronBuilder({ value, onChange, idPrefix = "cron" }: { value: str
             className="flex-wrap"
           >
             {WEEK_ORDER.map((d) => (
-              <ToggleGroupItem key={d} value={String(d)} aria-label={WEEKDAYS[d]} className="px-2.5 data-[state=on]:bg-primary/15 data-[state=on]:text-primary">
+              <ToggleGroupItem key={d} value={String(d)} aria-label={WEEKDAYS[d]} className="px-2.5 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
                 {WEEKDAYS[d].slice(0, 3)}
               </ToggleGroupItem>
             ))}
@@ -164,7 +164,7 @@ export function CronBuilder({ value, onChange, idPrefix = "cron" }: { value: str
                 key={ex.cron}
                 type="button"
                 onClick={() => update({ custom: ex.cron })}
-                className="rounded-md border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                className="rounded-[5px] border bg-card px-2 py-0.5 text-[11px] text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 <span className="font-mono">{ex.cron}</span> · {ex.label}
               </button>
@@ -175,15 +175,15 @@ export function CronBuilder({ value, onChange, idPrefix = "cron" }: { value: str
 
       <div
         className={cn(
-          "flex items-center gap-2 rounded-xl border px-3 py-2 text-sm",
-          error ? "border-destructive/40 bg-destructive/5 text-destructive" : "bg-primary/5 text-foreground",
+          "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+          error ? "border-destructive/30 bg-destructive/[0.06] text-destructive" : "bg-paper-2 text-foreground",
         )}
         role="status"
         aria-live="polite"
       >
-        {error ? <TriangleAlert className="size-4 shrink-0" /> : <CalendarClock className="size-4 shrink-0 text-primary" />}
+        {error ? <TriangleAlert className="size-4 shrink-0" /> : <CalendarClock className="size-4 shrink-0 text-muted-foreground" />}
         <span className="min-w-0 flex-1 truncate">{error ?? cronToHuman(cron)}</span>
-        {!error && <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{cron}</code>}
+        {!error && <code className="shrink-0 rounded-[5px] border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{cron}</code>}
       </div>
     </div>
   );

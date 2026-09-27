@@ -93,7 +93,7 @@ function ExportCard() {
           The file is encrypted with this passphrase (it can differ from your vault passphrase). Without it the backup can't be restored — nobody,
           including us, can recover it.
         </p>
-        <div className="divide-y rounded-xl border bg-background/40 px-4">
+        <div className="divide-y rounded-lg border bg-paper-2 px-4">
           <SettingRow label="Include agent repositories" htmlFor="bk-repos" description="Memory, transcripts and files agents produced.">
             <Switch id="bk-repos" checked={repos} onCheckedChange={setRepos} />
           </SettingRow>
@@ -181,7 +181,7 @@ function ImportCard() {
                 {Object.keys(result).length > 0 && (
                   <span className="mt-2 flex flex-wrap gap-1.5">
                     {Object.entries(result).map(([k, v]) => (
-                      <span key={k} className="rounded-full border bg-background/60 px-2 py-0.5 text-[11px] text-foreground">
+                      <span key={k} className="rounded-[5px] border bg-card px-2 py-0.5 text-[11px] text-foreground">
                         {v} {k}
                       </span>
                     ))}
@@ -204,8 +204,8 @@ function ImportCard() {
                 onDragLeave={() => setDragging(false)}
                 onDrop={onDrop}
                 className={cn(
-                  "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-7 text-center transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  dragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/40 hover:bg-accent/30",
+                  "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-7 text-center transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  dragging ? "border-foreground/40 bg-paper-2" : "border-foreground/15 bg-paper-2/60 hover:border-foreground/30 hover:bg-paper-2",
                 )}
               >
                 <input
@@ -220,7 +220,7 @@ function ImportCard() {
                 />
                 {file ? (
                   <div className="flex items-center gap-3 text-left">
-                    <div className="grid size-10 place-items-center rounded-xl bg-gradient-brand text-white shadow-md shadow-glow-a/20">
+                    <div className="grid size-10 place-items-center rounded-lg border bg-card text-foreground shadow-card">
                       <FileArchive className="size-5" />
                     </div>
                     <div className="min-w-0">
@@ -277,7 +277,7 @@ function ImportCard() {
       </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent className="rounded-2xl">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Replace your current data?</AlertDialogTitle>
             <AlertDialogDescription>

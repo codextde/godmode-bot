@@ -141,8 +141,8 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
       error: { icon: <CameraOff />, title: "Couldn't start the camera", text: errorText || "Something went wrong while opening the camera." },
     }[state];
     return (
-      <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed bg-muted/20 px-6 py-10 text-center">
-        <div className="grid size-12 place-items-center rounded-2xl bg-muted text-muted-foreground [&_svg]:size-6">{content.icon}</div>
+      <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-card/50 px-6 py-10 text-center">
+        <div className="grid size-11 place-items-center rounded-lg border bg-card text-foreground shadow-card [&_svg]:size-5">{content.icon}</div>
         <div>
           <p className="text-sm font-medium">{content.title}</p>
           <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">{content.text}</p>
@@ -160,7 +160,7 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
 
   return (
     <div className="space-y-2">
-      <div className="relative aspect-video overflow-hidden rounded-2xl border bg-black">
+      <div className="relative aspect-video overflow-hidden rounded-xl border bg-black">
         <video ref={videoRef} muted playsInline className="size-full object-cover" aria-label="Camera preview" />
         {state === "starting" && (
           <div className="absolute inset-0 grid place-items-center text-white/80">
@@ -172,13 +172,13 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
         {/* Scan frame */}
         <div aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center">
           <div className="relative aspect-square h-[68%]">
-            <div className="absolute inset-0 rounded-3xl shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
-            {["top-0 left-0 border-t-4 border-l-4 rounded-tl-3xl", "top-0 right-0 border-t-4 border-r-4 rounded-tr-3xl", "bottom-0 left-0 border-b-4 border-l-4 rounded-bl-3xl", "bottom-0 right-0 border-b-4 border-r-4 rounded-br-3xl"].map((c) => (
+            <div className="absolute inset-0 rounded-xl shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]" />
+            {["top-0 left-0 border-t-[3px] border-l-[3px] rounded-tl-xl", "top-0 right-0 border-t-[3px] border-r-[3px] rounded-tr-xl", "bottom-0 left-0 border-b-[3px] border-l-[3px] rounded-bl-xl", "bottom-0 right-0 border-b-[3px] border-r-[3px] rounded-br-xl"].map((c) => (
               <div key={c} className={cn("absolute size-10 transition-colors duration-300", frameTone, c)} />
             ))}
             {state === "live" && (
               <motion.div
-                className="absolute inset-x-4 h-0.5 rounded-full bg-gradient-to-r from-transparent via-glow-b to-transparent shadow-[0_0_12px_2px] shadow-glow-b/60"
+                className="absolute inset-x-4 h-0.5 bg-brand"
                 initial={{ top: "8%" }}
                 animate={{ top: ["8%", "92%", "8%"] }}
                 transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
@@ -194,8 +194,8 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
               className={cn(
-                "absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur-md",
-                flash.kind === "added" ? "bg-success/90 text-white" : flash.kind === "not-otp" ? "bg-warning/90 text-black" : "bg-black/70 text-white",
+                "absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-md border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-float",
+                flash.kind === "added" ? "[&_svg]:text-success" : flash.kind === "not-otp" ? "[&_svg]:text-warning" : "[&_svg]:text-muted-foreground",
               )}
               role="status"
             >

@@ -37,7 +37,7 @@ export function RoutinesTab({ agent }: { agent: Agent }) {
       {q.isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="h-20 w-full rounded-2xl" />
+            <Skeleton key={i} className="h-20 w-full rounded-xl" />
           ))}
         </div>
       ) : q.isError ? (

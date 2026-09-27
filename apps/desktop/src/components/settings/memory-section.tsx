@@ -40,8 +40,8 @@ export function MemorySection({ settings }: { settings: Settings }) {
               ),
               description: (
                 <>
-                  Each agent keeps <code className="rounded bg-muted px-1 font-mono text-[11px]">MEMORY.md</code> and a{" "}
-                  <code className="rounded bg-muted px-1 font-mono text-[11px]">memory/</code> folder. Plain text you can read and edit — nothing
+                  Each agent keeps <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">MEMORY.md</code> and a{" "}
+                  <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">memory/</code> folder. Plain text you can read and edit — nothing
                   to install.
                 </>
               ),
@@ -108,7 +108,7 @@ function ClaudeMemStatus() {
   });
   if (doctor.isLoading) return null;
   return (
-    <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border bg-muted/30 px-4 py-3 text-sm">
+    <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border bg-paper-2 px-4 py-3 text-sm">
       {dep?.ok ? (
         <p className="flex items-center gap-2 text-muted-foreground">
           <CheckCircle2 className="size-4 text-success" /> claude-mem {dep.version} is installed. Each agent keeps its own isolated store.

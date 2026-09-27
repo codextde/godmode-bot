@@ -29,7 +29,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { ScopeBadge, StatusDot } from "@/components/common";
+import { ScopeBadge } from "@/components/common";
+import { LiveDot } from "@/components/aicss/Motion";
 import { WorkspaceSelect } from "@/components/vault/workspace-select";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
@@ -67,7 +68,7 @@ export function ProfileList({
     return (
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-[84px] rounded-2xl" />
+          <Skeleton key={i} className="h-[84px] rounded-xl" />
         ))}
       </div>
     );
@@ -102,7 +103,7 @@ export function ProfileList({
       <RenameProfileDialog profile={renameTarget} onClose={() => setRenameTarget(null)} actions={actions} />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <AlertDialogContent className="rounded-2xl">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{deleteTarget?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -161,31 +162,30 @@ function ProfileCard({
         }
       }}
       className={cn(
-        "group relative flex cursor-pointer items-start gap-3 rounded-2xl border bg-card/60 p-3.5 backdrop-blur-sm transition outline-none",
-        "hover:border-primary/30 hover:shadow-lg hover:shadow-glow-a/5 focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        selected && "border-primary/40 bg-primary/[0.06] shadow-lg shadow-glow-a/10",
+        "group relative flex cursor-pointer items-start gap-3 rounded-xl border bg-card p-3.5 shadow-card transition outline-none",
+        "hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        selected && "border-foreground/35 ring-1 ring-foreground/10 hover:border-foreground/35",
       )}
     >
       <div className="relative">
         <div
           className={cn(
-            "grid size-10 place-items-center rounded-xl bg-gradient-to-br text-white shadow-sm ring-1 ring-white/10",
-            p.running ? "from-violet-500 to-cyan-500" : "from-zinc-500 to-zinc-700",
+            "grid size-10 place-items-center rounded-lg border text-foreground",
+            p.running ? "bg-card shadow-card" : "bg-paper-2 text-muted-foreground",
           )}
         >
           <Globe className="size-5" />
         </div>
-        <StatusDot
-          status={p.running ? "ok" : "idle"}
-          className={cn("absolute -right-0.5 -bottom-0.5 size-3 border-2 border-background", p.running && "animate-pulse")}
-        />
+        <span className="absolute -right-1 -bottom-1 grid place-items-center rounded-full bg-card p-[2px]">
+          <LiveDot live={p.running} />
+        </span>
       </div>
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-semibold">{p.name}</span>
+          <span className="truncate text-sm font-medium tracking-[-0.01em]">{p.name}</span>
           {p.isDefault && (
-            <Badge variant="secondary" className="h-5 gap-1 bg-primary/12 px-1.5 text-[10px] text-primary">
+            <Badge variant="secondary" className="h-5 gap-1 px-1.5 text-[10px]">
               <Star className="size-2.5 fill-current" /> Default
             </Badge>
           )}
@@ -195,7 +195,7 @@ function ProfileCard({
           <span className="inline-flex items-center gap-1" title={`${p.cookieCount} cookies`}>
             <Cookie className="size-3" /> {p.cookieCount.toLocaleString()}
           </span>
-          <span className={cn("inline-flex items-center gap-1", p.running ? "text-success" : "")}>
+          <span className={cn("inline-flex items-center gap-1", p.running && "text-brand-strong")}>
             {p.running ? "Running" : "Stopped"}
           </span>
         </div>
@@ -260,7 +260,7 @@ function RenameProfileDialog({ profile, onClose, actions }: { profile: BrowserPr
   };
   return (
     <Dialog open={!!profile} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="rounded-2xl sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
             <DialogTitle>Rename profile</DialogTitle>
@@ -316,7 +316,7 @@ export function CreateProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <form
           className="grid gap-5"
           onSubmit={(e) => {

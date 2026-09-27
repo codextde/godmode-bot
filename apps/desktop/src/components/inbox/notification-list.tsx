@@ -26,12 +26,12 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
 const KIND_ICON: Record<NotificationKind, { icon: typeof Info; className: string }> = {
-  info: { icon: Info, className: "bg-sky-500/12 text-sky-600 dark:text-sky-400" },
-  success: { icon: CircleCheck, className: "bg-success/15 text-success" },
-  warning: { icon: TriangleAlert, className: "bg-warning/15 text-warning" },
-  error: { icon: CircleX, className: "bg-destructive/12 text-destructive" },
-  missing_login: { icon: KeyRound, className: "bg-primary/12 text-primary" },
-  run: { icon: Bot, className: "bg-primary/12 text-primary" },
+  info: { icon: Info, className: "border bg-card text-muted-foreground shadow-card" },
+  success: { icon: CircleCheck, className: "bg-success/10 text-success" },
+  warning: { icon: TriangleAlert, className: "bg-warning/12 text-warning" },
+  error: { icon: CircleX, className: "bg-destructive/10 text-destructive" },
+  missing_login: { icon: KeyRound, className: "bg-warning/12 text-warning" },
+  run: { icon: Bot, className: "border bg-card text-foreground shadow-card" },
 };
 
 const PAGE = 30;
@@ -82,13 +82,13 @@ export function NotificationList({ className }: { className?: string }) {
   };
 
   return (
-    <section className={cn("rounded-2xl border bg-card/60 backdrop-blur-sm", className)} aria-labelledby="notifications-title">
+    <section className={cn("overflow-hidden rounded-xl border bg-card shadow-card", className)} aria-labelledby="notifications-title">
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
         <Bell className="size-4 text-muted-foreground" />
-        <h2 id="notifications-title" className="text-sm font-semibold">
+        <h2 id="notifications-title" className="text-sm font-medium">
           Notifications
         </h2>
-        {unread > 0 && <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[11px] font-medium text-primary tabular-nums">{unread} new</span>}
+        {unread > 0 && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-foreground tabular-nums">{unread} new</span>}
         <div className="ml-auto flex items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -128,7 +128,7 @@ export function NotificationList({ className }: { className?: string }) {
       {query.isLoading ? (
         <div className="space-y-1 p-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-14 rounded-xl" />
+            <Skeleton key={i} className="h-14 rounded-lg" />
           ))}
         </div>
       ) : query.isError ? (
@@ -141,7 +141,7 @@ export function NotificationList({ className }: { className?: string }) {
         </div>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center px-6 py-10 text-center">
-          <div className="grid size-10 place-items-center rounded-2xl bg-muted text-muted-foreground">
+          <div className="grid size-10 place-items-center rounded-lg border bg-card text-foreground shadow-card">
             <BellOff className="size-5" />
           </div>
           <p className="mt-3 text-sm font-medium">No notifications</p>
@@ -195,7 +195,7 @@ function NotificationRow({ n, onOpen }: { n: AppNotification; onOpen: () => void
       className={cn(
         "group flex w-full items-start gap-3 px-4 py-3 text-left transition outline-none disabled:cursor-default",
         interactive && "hover:bg-accent/40 focus-visible:bg-accent/50",
-        !n.read && "bg-primary/[0.035]",
+        !n.read && "bg-paper-2/70",
       )}
       aria-label={`${n.read ? "" : "Unread: "}${n.title}`}
     >
@@ -204,8 +204,8 @@ function NotificationRow({ n, onOpen }: { n: AppNotification; onOpen: () => void
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          <span className={cn("truncate text-sm", n.read ? "font-medium text-foreground/85" : "font-semibold")}>{n.title}</span>
-          {!n.read && <span className="size-2 shrink-0 rounded-full bg-primary" aria-hidden />}
+          <span className={cn("truncate text-sm", n.read ? "text-foreground/80" : "font-medium text-foreground")}>{n.title}</span>
+          {!n.read && <span className="size-1.5 shrink-0 rounded-full bg-brand" aria-hidden />}
         </span>
         {n.body && <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{n.body}</span>}
         <span className="mt-1 block text-[11px] text-muted-foreground/80">{when}</span>

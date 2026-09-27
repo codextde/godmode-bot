@@ -106,7 +106,7 @@ export function CredentialRow({
         {revealed && (
           <motion.div
             key={revealed.at}
-            className="absolute -bottom-0.5 left-0 h-0.5 rounded-full bg-primary/60"
+            className="absolute -bottom-0.5 left-0 h-px bg-brand"
             initial={{ width: "100%" }}
             animate={{ width: "0%" }}
             transition={{ duration: REVEAL_SECONDS, ease: "linear" }}
@@ -155,7 +155,7 @@ export function CredentialRow({
             {c.totpId && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge variant="secondary" className="h-5 gap-0.5 bg-success/12 px-1.5 text-[10px] text-success">
+                  <Badge variant="secondary" className="h-5 gap-0.5 border-brand/25 bg-brand-soft px-1.5 text-[10px] text-brand-strong">
                     <ShieldCheck /> 2FA
                   </Badge>
                 </TooltipTrigger>

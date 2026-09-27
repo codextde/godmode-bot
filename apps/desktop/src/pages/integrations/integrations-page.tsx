@@ -51,7 +51,7 @@ export default function IntegrationsPage() {
       />
       <PageBody>
         <Tabs value={tab} onValueChange={setTab} className="gap-6">
-          <TabsList className="h-10 rounded-xl p-1">
+          <TabsList className="h-10 p-1">
             <TabTrigger value="composio" icon={<Boxes />} label="Composio" count={counts.composio} />
             <TabTrigger value="mcp" icon={<Server />} label="MCP servers" count={counts.mcp} />
             <TabTrigger value="api-keys" icon={<KeyRound />} label="API keys" count={counts["api-keys"]} />
@@ -87,11 +87,11 @@ function FadeIn({ children }: { children: ReactNode }) {
 
 function TabTrigger({ value, icon, label, count }: { value: Tab; icon: ReactNode; label: string; count: number | undefined }) {
   return (
-    <TabsTrigger value={value} className="gap-2 rounded-lg px-3.5">
+    <TabsTrigger value={value} className="gap-2 rounded-md px-3.5">
       {icon}
       {label}
       {!!count && (
-        <span className="min-w-5 rounded-full bg-primary/15 px-1.5 text-[10px] leading-4 font-semibold text-primary tabular-nums">{count}</span>
+        <span className="min-w-5 rounded-[5px] bg-foreground/[0.07] px-1.5 font-mono text-[10.5px] leading-4 text-foreground/70 tabular-nums">{count}</span>
       )}
     </TabsTrigger>
   );

@@ -50,11 +50,16 @@ export function UnlockPage() {
   return (
     <AuthLayout
       badge={<Lock />}
-      title="Your vault is locked"
+      title={
+        <>
+          Your vault is locked.
+          <span className="block text-foreground/35">Unlock to get back to work.</span>
+        </>
+      }
       description="Enter your vault passphrase to unlock logins, 2FA codes and API keys for you and your agents."
       footer={
         <span className="inline-flex items-center gap-1.5">
-          <ShieldCheck className="size-3.5 text-success" />
+          <ShieldCheck className="size-3.5 text-brand-strong" />
           Secrets stay encrypted with AES-256-GCM until you unlock.
         </span>
       }
@@ -103,9 +108,9 @@ export function UnlockPage() {
                   <ArchiveRestore /> Restore a backup…
                 </Button>
                 {dataDir && (
-                  <div className="rounded-lg border bg-muted/40 p-3 text-xs">
+                  <div className="rounded-lg border bg-paper-2 p-3 text-xs">
                     <p>To reset, quit Godmode and delete its data directory. This permanently removes all agents, logins and 2FA codes.</p>
-                    <div className="mt-2 flex items-center gap-1 rounded-md bg-background/60 pl-2 font-mono">
+                    <div className="mt-2 flex items-center gap-1 rounded-md border bg-card pl-2 font-mono">
                       <span className="min-w-0 flex-1 truncate" title={dataDir}>
                         {dataDir}
                       </span>
@@ -183,11 +188,13 @@ function RestoreBackupDialog({ open, onOpenChange }: { open: boolean; onOpenChan
             type="button"
             onClick={() => inputRef.current?.click()}
             className={cn(
-              "flex items-center gap-3 rounded-xl border border-dashed p-4 text-left text-sm transition-colors hover:border-primary/40 hover:bg-primary/5",
-              file && "border-solid border-primary/40 bg-primary/5",
+              "flex items-center gap-3 rounded-lg border border-dashed p-4 text-left text-sm transition-colors hover:border-foreground/25 hover:bg-accent/40 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+              file && "border-solid border-foreground/20 bg-paper-2",
             )}
           >
-            <div className="grid size-10 place-items-center rounded-lg bg-muted">{file ? <FileArchive className="size-5 text-primary" /> : <Upload className="size-5" />}</div>
+            <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card">
+              {file ? <FileArchive className="size-5" /> : <Upload className="size-5" />}
+            </div>
             <div className="min-w-0">
               <p className="truncate font-medium">{file ? file.name : "Choose a .godmode-backup file"}</p>
               <p className="text-xs text-muted-foreground">{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : "Created in Settings → Backup"}</p>

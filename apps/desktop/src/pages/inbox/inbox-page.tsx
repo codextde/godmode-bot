@@ -65,7 +65,7 @@ export default function InboxPage() {
         <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
           <section aria-labelledby="attention-title" className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <h2 id="attention-title" className="text-sm font-semibold">
+              <h2 id="attention-title" className="eyebrow">
                 Needs your attention
               </h2>
               <Tabs value={tab} onValueChange={(v) => setTab(v as MissingLoginStatus)}>
@@ -77,8 +77,8 @@ export default function InboxPage() {
                         <span
                           className={
                             s === "open"
-                              ? "rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary tabular-nums"
-                              : "rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground tabular-nums"
+                              ? "rounded-[4px] bg-warning/12 px-1.5 font-mono text-[10px] font-medium text-warning tabular-nums"
+                              : "rounded-[4px] bg-foreground/[0.06] px-1.5 font-mono text-[10px] text-muted-foreground tabular-nums"
                           }
                         >
                           {count(s)}
@@ -93,7 +93,7 @@ export default function InboxPage() {
             {current.isLoading ? (
               <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-36 rounded-2xl" />
+                  <Skeleton key={i} className="h-36 rounded-xl" />
                 ))}
               </div>
             ) : current.isError ? (

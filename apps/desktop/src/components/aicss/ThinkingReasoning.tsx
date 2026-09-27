@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import styles from "./ThinkingReasoning.module.css";
 
 /*
@@ -7,10 +7,8 @@ import styles from "./ThinkingReasoning.module.css";
  * the block folds into a "Thought for Ns" summary that unfolds into the full, scrollable reasoning.
  */
 
-// Geometry — keep in sync with the CSS module.
-const SENT_H = 40; // 2 lines × 20px
-const GAP = 4;
-const MAX_H = 128; // live viewport grows with content up to this, then rolls
+// Geometry — sentences wrap freely (chat columns are wide), so the stream is measured, not assumed.
+const MAX_H = 120; // live viewport grows with content up to this, then rolls
 const FADE = 16;
 
 function sentencesOf(text: string): string[] {
@@ -25,6 +23,8 @@ export function ThinkingReasoning({ text, active, seconds }: { text: string; act
   const [open, setOpen] = useState(false);
   const [fade, setFade] = useState({ top: false, bottom: true });
   const viewportRef = useRef<HTMLDivElement>(null);
+  const streamRef = useRef<HTMLDivElement>(null);
+  const [contentH, setContentH] = useState(0);
   const startedAt = useRef(Date.now());
   const [elapsed, setElapsed] = useState<number | null>(null);
   const wasActive = useRef(active);
@@ -38,7 +38,9 @@ export function ThinkingReasoning({ text, active, seconds }: { text: string; act
   const sentences = useMemo(() => sentencesOf(text), [text]);
   const done = !active;
   const count = sentences.length;
-  const contentH = count > 0 ? count * SENT_H + (count - 1) * GAP : 0;
+  useLayoutEffect(() => {
+    if (streamRef.current) setContentH(streamRef.current.scrollHeight);
+  }, [sentences]);
   const capped = contentH > MAX_H;
   const viewH = capped ? MAX_H : contentH;
   const translate = capped ? MAX_H - FADE - contentH : 0;
@@ -76,7 +78,7 @@ export function ThinkingReasoning({ text, active, seconds }: { text: string; act
             {secs ? ` for ${secs}s` : " process"}
           </span>
         ) : (
-          <span className={styles.trLabel + " " + styles.trShimmer}>Thinking…</span>
+          <span className={styles.trLabel + " " + styles.trShimmer}>Reasoning…</span>
         )}
         {done && (
           <svg className={styles.trChevron} viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
@@ -87,7 +89,7 @@ export function ThinkingReasoning({ text, active, seconds }: { text: string; act
 
       {!done && count > 0 && (
         <div className={styles.trViewport} style={{ height: `${viewH}px`, WebkitMaskImage: liveMask, maskImage: liveMask }}>
-          <div className={styles.trStream} style={{ transform: `translateY(${translate}px)` }}>
+          <div ref={streamRef} className={styles.trStream} style={{ transform: `translateY(${translate}px)` }}>
             {sentences.map((line, i) => (
               <p key={i} className={styles.trSentence}>
                 {line}
