@@ -1,12 +1,27 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="dark light" />
     <meta name="description" content="Godmode Bot — your AI coworker with real logins, 2FA and a browser." />
+    <meta name="theme-color" content="#faf9f5" />
     <title>Godmode Bot</title>
+    <script>
+      // Apply the saved theme before first paint so the window never flashes the wrong palette.
+      (function () {
+        var t = "light";
+        try {
+          t = localStorage.getItem("godmode-theme") || "light";
+        } catch (e) {}
+        if (t === "system") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        var r = document.documentElement;
+        if (t === "dark") r.classList.add("dark");
+        r.dataset.theme = t;
+        r.style.colorScheme = t;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

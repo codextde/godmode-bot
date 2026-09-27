@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Globe2, HandHeart, LockKeyhole, PartyPopper, Stethoscope, AppWindow } from "lucide-react";
 import type { Bootstrap } from "@godmode/shared";
-import { Aurora, Wordmark } from "@/components/brand";
+import { Backdrop, Wordmark } from "@/components/brand";
 import { BrowserStep } from "@/components/onboarding/browser-step";
 import { DoneStep, type OnboardingSummary } from "@/components/onboarding/done-step";
 import { RemoteStep } from "@/components/onboarding/remote-step";
@@ -168,7 +168,7 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-background">
-      <Aurora />
+      <Backdrop />
       <div aria-hidden className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black_10%,transparent_65%)]" />
 
       <header

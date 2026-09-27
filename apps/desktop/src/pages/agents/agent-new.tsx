@@ -12,7 +12,7 @@ import { useAgentTemplates, useBootstrap } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
-import { Aurora } from "@/components/brand";
+import { Backdrop } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -80,7 +80,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
       />
       <PageBody className="space-y-10">
         <section className="relative overflow-hidden rounded-3xl border bg-card/50 p-6 sm:p-8">
-          <Aurora className="opacity-60" />
+          <Backdrop className="opacity-60" />
           <div className="relative mx-auto max-w-3xl">
             <div className="mb-4 flex items-center gap-2 text-sm font-medium">
               <span className="grid size-7 place-items-center rounded-lg bg-gradient-brand text-white shadow-md shadow-glow-a/30">

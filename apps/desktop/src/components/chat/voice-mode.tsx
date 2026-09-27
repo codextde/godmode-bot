@@ -4,7 +4,7 @@ import type { Agent, Message } from "@godmode/shared";
 import { Mic, MicOff, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Aurora } from "@/components/brand";
+import { Backdrop } from "@/components/brand";
 import { AgentAvatar, Kbd } from "@/components/common";
 import { useDictation, useVoiceSettings } from "@/hooks/use-voice";
 import { speak, stopSpeaking, useVoiceSession, voiceInputSupported } from "@/lib/voice";
@@ -236,7 +236,7 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
       transition={{ duration: 0.25 }}
       className="fixed inset-0 z-[70] flex flex-col overflow-hidden bg-background/85 backdrop-blur-2xl"
     >
-      <Aurora className="opacity-80" />
+      <Backdrop className="opacity-80" />
       <div className="relative flex items-center justify-between gap-3 px-5 pt-5 sm:px-8 sm:pt-7">
         <div className="flex min-w-0 items-center gap-2.5">
           {agent && <AgentAvatar agent={agent} size="md" />}

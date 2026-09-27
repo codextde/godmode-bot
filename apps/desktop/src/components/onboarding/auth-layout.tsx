@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { ArrowRight } from "lucide-react";
-import { Aurora, Logo } from "@/components/brand";
+import { Backdrop, Logo } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ApiRequestError, errorMessage } from "@/lib/api";
@@ -25,7 +25,7 @@ export function AuthLayout({
 }) {
   return (
     <div className="relative grid min-h-full place-items-center overflow-y-auto bg-background px-4 py-12">
-      <Aurora />
+      <Backdrop />
       <div
         aria-hidden
         className="bg-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]"

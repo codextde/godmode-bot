@@ -1,11 +1,11 @@
 import { motion } from "motion/react";
-import { Aurora, Logo } from "@/components/brand";
+import { Backdrop, Logo } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 
 export function SplashScreen({ error }: { error?: string }) {
   return (
     <div className="relative grid h-full place-items-center overflow-hidden bg-background">
-      <Aurora />
+      <Backdrop />
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}

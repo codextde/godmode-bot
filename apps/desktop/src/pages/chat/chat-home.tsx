@@ -7,7 +7,7 @@ import type { Agent, Conversation, ConversationWithMessages, StartChatInput } fr
 import { ArrowRight, Bell, Pin, Receipt, Telescope, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Aurora } from "@/components/brand";
+import { Backdrop } from "@/components/brand";
 import { AgentAvatar, Kbd } from "@/components/common";
 import { AgentPicker } from "@/components/chat/agent-picker";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
@@ -92,7 +92,7 @@ export default function ChatHome() {
 
   return (
     <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="relative min-h-full overflow-hidden">
-      <Aurora />
+      <Backdrop />
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-grid [mask-image:radial-gradient(ellipse_at_top,black_20%,transparent_70%)] opacity-60" />
 
       <div className="relative mx-auto flex w-full max-w-3xl flex-col px-5 pt-[11vh] pb-10 sm:px-8">

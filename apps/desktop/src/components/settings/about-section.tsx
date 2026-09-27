@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { AppWindow, Bot, Code, ExternalLink, Globe, Heart, Layers, Plug, Scale } from "lucide-react";
 import type { ReactNode } from "react";
-import { Aurora, Logo } from "@/components/brand";
+import { Backdrop, Logo } from "@/components/brand";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { openExternal } from "@/lib/desktop";
@@ -24,7 +24,7 @@ export function AboutSection({ version }: { version: string | undefined }) {
         animate={{ opacity: 1, y: 0 }}
         className="relative overflow-hidden rounded-2xl border bg-card/60 px-6 py-12 text-center backdrop-blur-sm"
       >
-        <Aurora className="opacity-70" />
+        <Backdrop className="opacity-70" />
         <div className="relative flex flex-col items-center">
           <motion.div initial={{ scale: 0.8, rotate: -8 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 200, damping: 14 }}>
             <Logo className="size-20 animate-float drop-shadow-[0_12px_48px_rgba(139,92,246,0.55)]" />

@@ -2,9 +2,11 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 
 type Theme = "dark" | "light" | "system";
 
+const DEFAULT_THEME: Theme = "light";
+
 const ThemeContext = createContext<{ theme: Theme; resolved: "dark" | "light"; setTheme: (t: Theme) => void }>({
-  theme: "dark",
-  resolved: "dark",
+  theme: DEFAULT_THEME,
+  resolved: "light",
   setTheme: () => {},
 });
 
@@ -15,9 +17,9 @@ function systemTheme(): "dark" | "light" {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     try {
-      return (localStorage.getItem("godmode-theme") as Theme) || "dark";
+      return (localStorage.getItem("godmode-theme") as Theme) || DEFAULT_THEME;
     } catch {
-      return "dark";
+      return DEFAULT_THEME;
     }
   });
   const [resolved, setResolved] = useState<"dark" | "light">(theme === "system" ? systemTheme() : theme);
@@ -26,8 +28,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const apply = () => {
       const r = theme === "system" ? systemTheme() : theme;
       setResolved(r);
-      document.documentElement.classList.toggle("dark", r === "dark");
-      document.documentElement.style.colorScheme = r;
+      const root = document.documentElement;
+      root.classList.toggle("dark", r === "dark");
+      // aicss components key their palette off data-theme; without it they follow the OS instead of the app.
+      root.dataset.theme = r;
+      root.style.colorScheme = r;
     };
     apply();
     if (theme === "system") {
