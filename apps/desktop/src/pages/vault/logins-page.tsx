@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
-import { Bot, KeyRound, Lock, Plus, ScrollText, Search, SearchX, X } from "lucide-react";
+import { Bot, FileKey, KeyRound, Lock, Plus, ScrollText, Search, SearchX, X } from "lucide-react";
 import type { Credential } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,6 +11,7 @@ import { EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
 import { CredentialDialog, type CredentialPrefill } from "@/components/vault/credential-dialog";
 import { CREDENTIAL_GRID, CredentialRow } from "@/components/vault/credential-row";
 import { ConfirmDeleteDialog } from "@/components/vault/confirm-dialog";
+import { PasswordImportDialog } from "@/components/vault/password-import-dialog";
 import { ScopeFilterSelect } from "@/components/vault/workspace-select";
 import { useDebouncedValue } from "@/components/vault/use-debounced-value";
 import { isVaultLocked, toastApiError } from "@/components/vault/vault-utils";
@@ -57,6 +58,19 @@ export default function LoginsPage() {
       setDialog({ open: true, credential: null, prefill: { domain, service, missingLoginId } });
     }
   }, [params]);
+
+  const [importOpen, setImportOpen] = useState(false);
+  useEffect(() => {
+    if (params.get("import") === "1") setImportOpen(true);
+  }, [params]);
+  const changeImportOpen = (open: boolean) => {
+    setImportOpen(open);
+    if (!open && params.has("import")) {
+      const next = new URLSearchParams(params);
+      next.delete("import");
+      setParams(next, { replace: true });
+    }
+  };
 
   const closeDialog = (open: boolean) => {
     if (open) return;
@@ -106,9 +120,14 @@ export default function LoginsPage() {
         title="Logins"
         description="Website logins your agents can use — encrypted in your local vault."
         actions={
-          <Button onClick={openCreate}>
-            <Plus /> Add login
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <FileKey /> Import
+            </Button>
+            <Button onClick={openCreate}>
+              <Plus /> Add login
+            </Button>
+          </>
         }
       />
       <PageBody className="space-y-4">
@@ -177,9 +196,14 @@ export default function LoginsPage() {
               description="Add the website logins your agents need. They're encrypted on this device and typed into the browser for the agent — the AI never sees them."
               action={
                 <div className="flex flex-col items-center gap-3">
-                  <Button onClick={openCreate}>
-                    <Plus /> Add your first login
-                  </Button>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button onClick={() => setImportOpen(true)}>
+                      <FileKey /> Import from Chrome or 1Password
+                    </Button>
+                    <Button variant="outline" onClick={openCreate}>
+                      <Plus /> Add a login
+                    </Button>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     When an agent hits a login it doesn't have, it lands in your{" "}
                     <Link to="/inbox" className="text-foreground underline decoration-foreground/25 underline-offset-2 hover:decoration-foreground">
@@ -218,6 +242,7 @@ export default function LoginsPage() {
         )}
       </PageBody>
 
+      <PasswordImportDialog open={importOpen} onOpenChange={changeImportOpen} defaultWorkspaceId={defaultWorkspaceId} />
       <CredentialDialog open={dialog.open} onOpenChange={closeDialog} credential={dialog.credential} prefill={dialog.prefill} defaultWorkspaceId={defaultWorkspaceId} />
 
       <ConfirmDeleteDialog

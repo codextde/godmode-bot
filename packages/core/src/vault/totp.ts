@@ -133,7 +133,7 @@ function requireLabel(issuer: string, accountName: string): void {
   if (!issuer && !accountName) throw badRequest("Issuer or account name is required");
 }
 
-function insertTotp(workspaceId: string | null, account: ParsedOtpAccount): string {
+export function insertTotp(workspaceId: string | null, account: ParsedOtpAccount): string {
   const id = newId("totp");
   const ts = now();
   insert("totp", {
@@ -292,6 +292,28 @@ function existingKeys(workspaceId: string | null): Set<string> {
     }
   }
   return keys;
+}
+
+export const totpReuseKey = (a: Pick<ParsedOtpAccount, "secret" | "algorithm" | "digits" | "period">) => `${a.secret}:${a.algorithm}:${a.digits}:${a.period}`;
+
+/**
+ * Entries no login uses yet that a login of this scope may link (same scope, or global), by `totpReuseKey` — an
+ * import links these instead of duplicating a code that was scanned earlier. Same-scope entries win.
+ */
+export function unlinkedTotpForImport(workspaceId: string | null): Map<string, string> {
+  const scope = workspaceId === null ? exactScope(null) : { sql: "(workspace_id = ? OR workspace_id IS NULL)", params: [workspaceId] };
+  const out = new Map<string, string>();
+  for (const r of all<TotpRow>(`SELECT ${ROW_SELECT} FROM totp WHERE ${scope.sql} ORDER BY workspace_id IS NULL, created_at`, ...scope.params)) {
+    if (r.linked_credential_id) continue;
+    try {
+      const key = totpReuseKey({ secret: vault.open(r.secret_enc, secretContext(r.id)), algorithm: r.algorithm, digits: r.digits, period: r.period });
+      if (!out.has(key)) out.set(key, r.id);
+    } catch (err) {
+      if (isLockedError(err)) throw err;
+      log.warn(`could not decrypt TOTP entry ${r.id} while matching an import`);
+    }
+  }
+  return out;
 }
 
 const compact = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
