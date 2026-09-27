@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { AGENT_COLORS } from "@godmode/shared";
-import { colorGradient } from "@/components/common";
+import { colorGradient, colorSwatch } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -37,12 +37,12 @@ export function AvatarPicker({
           type="button"
           aria-label={`Avatar ${avatar || "🤖"} — change`}
           className={cn(
-            "group relative grid size-20 shrink-0 place-items-center rounded-3xl bg-gradient-to-br text-4xl shadow-lg ring-1 ring-white/10 transition hover:scale-[1.03] focus-visible:ring-[3px] focus-visible:ring-ring/60 focus-visible:outline-none",
+            "group relative grid size-20 shrink-0 place-items-center rounded-2xl text-4xl ring-1 ring-inset transition hover:ring-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
             colorGradient(color),
           )}
         >
-          <span className="drop-shadow-sm">{avatar || "🤖"}</span>
-          <span className="absolute -right-1 -bottom-1 rounded-full border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground opacity-0 shadow-sm transition group-hover:opacity-100 group-focus-visible:opacity-100">
+          <span>{avatar || "🤖"}</span>
+          <span className="absolute -right-1 -bottom-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground opacity-0 shadow-card transition group-hover:opacity-100 group-focus-visible:opacity-100">
             Edit
           </span>
         </button>
@@ -60,8 +60,8 @@ export function AvatarPicker({
                 setOpen(false);
               }}
               className={cn(
-                "grid size-8 place-items-center rounded-lg text-lg transition hover:scale-110 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none",
-                avatar === e && "bg-primary/15 ring-1 ring-primary/40",
+                "grid size-8 place-items-center rounded-md text-lg transition hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                avatar === e && "bg-secondary ring-1 ring-foreground/20 ring-inset",
               )}
             >
               {e}
@@ -100,12 +100,12 @@ export function ColorSwatches({ value, onChange }: { value: string; onChange: (c
           title={c}
           onClick={() => onChange(c)}
           className={cn(
-            "grid size-7 place-items-center rounded-full bg-gradient-to-br ring-offset-2 ring-offset-background transition hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            colorGradient(c),
+            "grid size-7 place-items-center rounded-full ring-offset-2 ring-offset-background transition hover:opacity-85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            colorSwatch(c),
             value === c && "ring-2 ring-foreground/70",
           )}
         >
-          {value === c && <Check className="size-3.5 text-white drop-shadow" />}
+          {value === c && <Check className="size-3.5 text-white" />}
         </button>
       ))}
     </div>

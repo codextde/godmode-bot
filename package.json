@@ -20,6 +20,7 @@
     "build:server": "pnpm build:ui && pnpm --filter @godmode/core build",
     "build:sidecar": "pnpm --filter @godmode/core build:sidecar",
     "build:app": "pnpm build:sidecar && pnpm --filter @godmode/desktop tauri build",
+    "reinstall:app": "bash scripts/reinstall-app.sh",
     "icons": "bun scripts/icons.ts",
     "start": "pnpm --filter @godmode/core start",
     "typecheck": "pnpm -r typecheck",

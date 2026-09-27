@@ -101,8 +101,8 @@ export function SecuritySection({ settings }: { settings: Settings }) {
         icon={<LockKeyhole />}
         description="AES-256-GCM encrypted. The key is derived from your passphrase and only lives in memory — or in your OS keychain if you allow it."
         actions={
-          <Badge variant="outline" className={cn("gap-1.5 font-normal", vault?.unlocked ? "border-success/40 text-success" : "text-muted-foreground")}>
-            <span className={cn("size-1.5 rounded-full", vault?.unlocked ? "bg-success" : "bg-muted-foreground")} />
+          <Badge variant="outline" className={cn("gap-1.5 font-normal", vault?.unlocked ? "border-brand/25 bg-brand-soft text-brand-strong" : "text-muted-foreground")}>
+            <span className={cn("size-1.5 rounded-full", vault?.unlocked ? "bg-brand" : "bg-muted-foreground")} />
             {vault?.unlocked ? "Unlocked" : "Locked"}
           </Badge>
         }
@@ -264,7 +264,7 @@ export function SecuritySection({ settings }: { settings: Settings }) {
       <DashboardPasswordDialog open={dashboardOpen} onOpenChange={setDashboardOpen} hasPassword={srv.hasDashboardPassword} />
 
       <AlertDialog open={confirmRemote} onOpenChange={setConfirmRemote}>
-        <AlertDialogContent className="rounded-2xl">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Globe2 className="size-5 text-destructive" /> Allow remote access?

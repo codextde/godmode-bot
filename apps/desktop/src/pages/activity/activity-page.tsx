@@ -10,6 +10,7 @@ import { useLive, type LiveRun } from "@/stores/live";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
 import { Orb } from "@/components/aicss/Orb";
+import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -124,8 +125,9 @@ export default function ActivityPage() {
               className="overflow-visible"
               aria-label="Running now"
             >
-              <h2 className="mb-3 flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                <span className="size-1.5 animate-pulse rounded-full bg-primary" /> Live now
+              <h2 className="eyebrow mb-3 flex items-center gap-2">
+                <LiveDot /> Live now
+                <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{liveList.length}</span>
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {liveList.map((r) => (
@@ -177,8 +179,10 @@ export default function ActivityPage() {
               aria-selected={statusFilter === s.id}
               onClick={() => setParam("status", s.id)}
               className={cn(
-                "rounded-full border px-3 py-1 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-                statusFilter === s.id ? "border-primary/40 bg-primary/10 text-primary" : "bg-card/40 text-muted-foreground hover:text-foreground",
+                "rounded-md border px-3 py-1 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                statusFilter === s.id
+                  ? "border-foreground/25 bg-card text-foreground shadow-card"
+                  : "text-muted-foreground hover:border-foreground/15 hover:text-foreground",
               )}
             >
               {s.label}
@@ -193,7 +197,7 @@ export default function ActivityPage() {
         </div>
 
         {runsQ.isLoading ? (
-          <div className="glass space-y-1 rounded-2xl p-2">
+          <div className="space-y-1 rounded-xl border bg-card p-2 shadow-card">
             {Array.from({ length: 8 }, (_, i) => (
               <div key={i} className="flex items-center gap-3 px-3 py-2.5">
                 <Skeleton className="size-4 rounded-full" />
@@ -241,8 +245,8 @@ export default function ActivityPage() {
           <div className="space-y-6">
             {groups.map((g) => (
               <section key={g.label}>
-                <h2 className="mb-2 px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">{g.label}</h2>
-                <div className="glass space-y-0.5 rounded-2xl p-1.5">
+                <h2 className="eyebrow mb-2 px-1">{g.label}</h2>
+                <div className="space-y-0.5 rounded-xl border bg-card p-1.5 shadow-card">
                   {g.runs.map((r, i) => (
                     <motion.div key={r.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 15) * 0.015 }}>
                       <RunRow run={r} agent={agentById.get(r.agentId)} selected={r.id === selectedId} onSelect={(run) => setParam("run", run.id)} />
@@ -273,15 +277,18 @@ function LiveCard({ live, agent, onOpen }: { live: LiveRun; agent?: Agent; onOpe
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
       onClick={onOpen}
-      className="glow-border flex items-center gap-3 rounded-2xl bg-card/80 p-3.5 text-left transition hover:bg-card focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+      className="glow-border flex items-center gap-3 rounded-xl border bg-card p-3.5 text-left shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
     >
       {agent ? <AgentAvatar agent={agent} size="md" /> : <Orb variant="S3" size={24} />}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium">{agent?.name ?? "Agent"}</div>
+        <div className="flex items-center gap-1.5 text-sm font-medium">
+          <span className="truncate">{agent?.name ?? "Agent"}</span>
+          <Orb variant="S3" size={14} label="Running" />
+        </div>
         <div className="text-shimmer truncate text-xs font-medium">{live.activity ?? "Thinking…"}</div>
       </div>
       <div className="flex flex-col items-end gap-1">
-        <Orb variant="C3" size={16} label="Running" />
+        <WorkingTicks count={6} className="h-3 text-brand-strong" />
         <span className="font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - live.startedAt)}</span>
       </div>
     </motion.button>

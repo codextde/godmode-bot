@@ -86,7 +86,7 @@ function childrenOf(entries: AgentFileEntry[], dir: string): AgentFileEntry[] {
 }
 
 function fileIcon(path: string) {
-  if (path === "MEMORY.md") return <Brain className="size-4 text-glow-a" />;
+  if (path === "MEMORY.md") return <Brain className="size-4 text-foreground" />;
   if (path === "CLAUDE.md") return <Lock className="size-4 text-muted-foreground" />;
   if (/\.(json|jsonl)$/.test(path)) return <FileJson className="size-4 text-muted-foreground" />;
   if (/\.(ts|tsx|js|py|sh|yaml|yml|toml)$/.test(path)) return <FileCode2 className="size-4 text-muted-foreground" />;
@@ -120,10 +120,10 @@ export function MemoryTab({ agent }: { agent: Agent }) {
 
   return (
     <div className="grid min-h-[32rem] gap-4 md:grid-cols-[260px_minmax(0,1fr)]">
-      <aside className="glass flex max-h-[70vh] min-h-0 flex-col rounded-2xl">
+      <aside className="flex max-h-[70vh] min-h-0 flex-col rounded-xl border bg-card shadow-card">
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold">Files</h2>
+            <h2 className="text-sm font-medium tracking-[-0.01em]">Files</h2>
             <p className="text-xs text-muted-foreground">Agent repository</p>
           </div>
         </div>
@@ -132,7 +132,7 @@ export function MemoryTab({ agent }: { agent: Agent }) {
         </nav>
       </aside>
 
-      <section className="glass flex min-h-0 min-w-0 flex-col rounded-2xl">
+      <section className="flex min-h-0 min-w-0 flex-col rounded-xl border bg-card shadow-card">
         {selected ? (
           <FileEditor key={selected.path} agentId={agent.id} path={selected.path} size={selected.size} onDirtyChange={setDirty} />
         ) : (
@@ -223,14 +223,14 @@ function Tree({
               onClick={() => (isDir ? onToggle(e.path) : onSelect({ path: e.path, size: e.size }))}
               style={pad}
               className={cn(
-                "flex w-full items-center gap-1.5 rounded-lg py-1.5 pr-2 text-left text-[13px] transition hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-                active && "bg-primary/10 font-medium text-foreground",
+                "flex w-full items-center gap-1.5 rounded-md py-1.5 pr-2 text-left text-[13px] transition hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                active && "bg-secondary font-medium text-foreground",
               )}
             >
               {isDir ? (
                 <>
                   <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
-                  {open ? <FolderOpen className="size-4 shrink-0 text-primary/80" /> : <Folder className="size-4 shrink-0 text-primary/80" />}
+                  {open ? <FolderOpen className="size-4 shrink-0 text-muted-foreground" /> : <Folder className="size-4 shrink-0 text-muted-foreground" />}
                 </>
               ) : (
                 <>
@@ -338,11 +338,11 @@ function FileEditor({
       </div>
 
       {readOnly && (
-        <div className="flex items-center gap-2 border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 border-b bg-paper-2 px-4 py-2 text-xs text-muted-foreground">
           <Lock className="size-3.5 shrink-0" />
           <span>{readOnly}</span>
           {path === "CLAUDE.md" && (
-            <Link to={`/agents/${agentId}/settings`} className="ml-auto shrink-0 font-medium text-primary hover:underline">
+            <Link to={`/agents/${agentId}/settings`} className="ml-auto shrink-0 font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
               Open settings
             </Link>
           )}

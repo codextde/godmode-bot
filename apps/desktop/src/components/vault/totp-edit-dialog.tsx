@@ -128,7 +128,7 @@ function EditForm({ entry, focusLink, onDone }: { entry: TotpEntry; focusLink: b
           <Label htmlFor={id("ws")}>Available to</Label>
           <WorkspaceSelect id={id("ws")} value={workspaceId} onChange={setWorkspaceId} />
         </div>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl border bg-muted/30 p-3 text-xs sm:grid-cols-3">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border bg-paper-2 p-3 text-xs sm:grid-cols-3">
           <Info label="Algorithm" value={entry.algorithm} />
           <Info label="Digits" value={String(entry.digits)} />
           <Info label="Period" value={`${entry.period} s`} />
@@ -137,9 +137,9 @@ function EditForm({ entry, focusLink, onDone }: { entry: TotpEntry; focusLink: b
           <Info label="Type" value="Time-based (TOTP)" />
         </dl>
       </div>
-      <div className="flex flex-col-reverse gap-3 border-t bg-muted/30 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col-reverse gap-3 border-t bg-paper-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <ShieldCheck className="size-3.5 shrink-0" /> Secret stays encrypted in your vault
+          <ShieldCheck className="size-3.5 shrink-0 text-brand-strong" /> Secret stays encrypted in your vault
         </p>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>

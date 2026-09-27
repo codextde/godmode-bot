@@ -18,7 +18,7 @@ export function QueryError({ error, onRetry, title = "Couldn't load this", class
     }
   }, [locked, qc]);
   return (
-    <div className={cn("flex items-start gap-3 rounded-2xl border border-destructive/25 bg-destructive/5 p-4", className)} role="alert">
+    <div className={cn("flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/[0.05] p-4", className)} role="alert">
       {locked ? <Lock className="mt-0.5 size-4 shrink-0 text-warning" /> : <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />}
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{locked ? "The vault is locked" : title}</p>

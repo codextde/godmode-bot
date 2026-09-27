@@ -60,8 +60,8 @@
   --sidebar-border: rgb(38 32 22 / 0.08);
   --sidebar-ring: rgb(38 32 22 / 0.28);
 
-  --shadow-card: 0 1px 2px rgb(38 32 22 / 0.04), 0 0 0 0.5px rgb(38 32 22 / 0.02);
-  --shadow-float: 0 1px 2px rgb(38 32 22 / 0.04), 0 8px 24px -12px rgb(38 32 22 / 0.12);
+  --gm-shadow-card: 0 1px 2px rgb(38 32 22 / 0.04), 0 0 0 0.5px rgb(38 32 22 / 0.02);
+  --gm-shadow-float: 0 1px 2px rgb(38 32 22 / 0.04), 0 8px 24px -12px rgb(38 32 22 / 0.12);
 }
 
 .dark {
@@ -107,8 +107,8 @@
   --sidebar-border: rgb(255 250 240 / 0.07);
   --sidebar-ring: rgb(255 250 240 / 0.3);
 
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.25), 0 0 0 0.5px rgb(255 250 240 / 0.02);
-  --shadow-float: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -12px rgb(0 0 0 / 0.55);
+  --gm-shadow-card: 0 1px 2px rgb(0 0 0 / 0.25), 0 0 0 0.5px rgb(255 250 240 / 0.02);
+  --gm-shadow-float: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -12px rgb(0 0 0 / 0.55);
 }
 
 @theme inline {
@@ -164,8 +164,8 @@
   --radius-2xl: calc(var(--radius) + 6px);
   --radius-3xl: calc(var(--radius) + 8px);
 
-  --shadow-card: var(--shadow-card);
-  --shadow-float: var(--shadow-float);
+  --shadow-card: var(--gm-shadow-card);
+  --shadow-float: var(--gm-shadow-float);
 
   --animate-shimmer: shimmer 2.2s linear infinite;
   --animate-spin-slow: spin 6s linear infinite;
@@ -239,7 +239,7 @@
 @utility glass {
   background: var(--card);
   border: 1px solid var(--border);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--gm-shadow-float);
 }
 
 /* Legacy names — now flat, never a gradient. */
@@ -393,6 +393,24 @@
   background-size: 28px 28px;
 }
 
+/* aicss "Streaming Text" caret (MIT): a solid block riding the end of the text while tokens stream in. */
+.gm-streaming > :is(p, h1, h2, h3, h4, blockquote):last-child::after,
+.gm-streaming > :is(ul, ol):last-child > li:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 3px;
+  border-radius: 1px;
+  background: var(--foreground);
+  opacity: 0.85;
+  vertical-align: text-bottom;
+  animation: gm-caret-in 160ms ease-out;
+}
+@keyframes gm-caret-in {
+  from { opacity: 0; }
+}
+
 /* Markdown prose inside chat bubbles */
 .prose-chat {
   @apply text-[0.9375rem] leading-[1.65];
@@ -424,7 +442,7 @@
 .prose-chat blockquote {
   @apply border-l-2 border-foreground/15 pl-3 text-muted-foreground;
 }
-.prose-chat :not(pre) > code {
+.prose-chat :not(pre) > code:not([class]) {
   @apply rounded-[5px] bg-secondary px-1.5 py-0.5 text-[0.85em];
 }
 .prose-chat pre {
@@ -437,8 +455,11 @@
 .prose-chat td {
   @apply border-b px-3 py-2 text-left;
 }
+.prose-chat tr:last-child td {
+  @apply border-b-0;
+}
 .prose-chat th {
-  @apply text-xs font-medium text-muted-foreground;
+  @apply bg-paper-2 text-xs font-medium text-muted-foreground;
 }
 .prose-chat hr {
   @apply border-border;

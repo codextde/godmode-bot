@@ -87,7 +87,7 @@ export function MultiSelect({
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {selected.map((o) => (
-            <span key={o.value} className="inline-flex items-center gap-1.5 rounded-full border bg-secondary/60 py-0.5 pr-1 pl-2 text-xs">
+            <span key={o.value} className="inline-flex items-center gap-1.5 rounded-md border bg-card py-0.5 pr-1 pl-2 text-xs shadow-card">
               {"icon" in o && o.icon}
               <span className="max-w-40 truncate">{o.label}</span>
               <button
@@ -95,7 +95,7 @@ export function MultiSelect({
                 onClick={() => toggle(o.value)}
                 disabled={disabled}
                 aria-label={`Remove ${o.label}`}
-                className="grid size-4 place-items-center rounded-full text-muted-foreground transition hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                className="grid size-4 place-items-center rounded-[4px] text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 <X className="size-3" />
               </button>

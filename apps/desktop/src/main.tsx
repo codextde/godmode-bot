@@ -6,8 +6,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { VaultGrantDialog } from "@/components/vault/grant";
-import { App } from "./App";
 import "./index.css";
+import { App } from "./App";
 
 const queryClient = new QueryClient({
   defaultOptions: {

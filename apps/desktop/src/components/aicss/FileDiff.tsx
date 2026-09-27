@@ -54,35 +54,45 @@ function tokenize(line: string): { t: string; v: string }[] {
 
 const MAX_LCS = 600;
 
-/** Line diff via LCS (falls back to "all removed, all added" for very large inputs). */
+/** Line diff via LCS (falls back to "all removed, all added" when the changed middle is very large). */
 export function diffLines(before: string, after: string, context = 3): DiffRow[] {
   const a = before ? before.split("\n") : [];
   const b = after ? after.split("\n") : [];
   const rows: DiffRow[] = [];
-  if (a.length > MAX_LCS || b.length > MAX_LCS) {
-    a.forEach((text, i) => rows.push({ old: i + 1, cur: null, type: "del", text }));
-    b.forEach((text, i) => rows.push({ old: null, cur: i + 1, type: "add", text }));
-    return rows;
-  }
-  const n = a.length;
-  const m = b.length;
-  const dp: Uint16Array[] = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-  let i = 0;
-  let j = 0;
-  while (i < n || j < m) {
-    if (i < n && j < m && a[i] === b[j]) {
-      rows.push({ old: i + 1, cur: j + 1, type: "ctx", text: a[i] });
-      i++;
-      j++;
-    } else if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) {
-      rows.push({ old: null, cur: j + 1, type: "add", text: b[j] });
-      j++;
-    } else {
-      rows.push({ old: i + 1, cur: null, type: "del", text: a[i] });
-      i++;
+  // Common prefix/suffix never need the LCS table.
+  let head = 0;
+  while (head < a.length && head < b.length && a[head] === b[head]) head++;
+  let tail = 0;
+  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+  for (let k = 0; k < head; k++) rows.push({ old: k + 1, cur: k + 1, type: "ctx", text: a[k] });
+  const n = a.length - head - tail;
+  const m = b.length - head - tail;
+  if (n > MAX_LCS || m > MAX_LCS) {
+    for (let k = 0; k < n; k++) rows.push({ old: head + k + 1, cur: null, type: "del", text: a[head + k] });
+    for (let k = 0; k < m; k++) rows.push({ old: null, cur: head + k + 1, type: "add", text: b[head + k] });
+  } else {
+    const A = a.slice(head, head + n);
+    const B = b.slice(head, head + m);
+    const dp: Uint16Array[] = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    let i = 0;
+    let j = 0;
+    while (i < n || j < m) {
+      if (i < n && j < m && A[i] === B[j]) {
+        rows.push({ old: head + i + 1, cur: head + j + 1, type: "ctx", text: A[i] });
+        i++;
+        j++;
+      } else if (i < n && (j >= m || dp[i + 1][j] >= dp[i][j + 1])) {
+        // Deletions before additions, as every diff tool shows them.
+        rows.push({ old: head + i + 1, cur: null, type: "del", text: A[i] });
+        i++;
+      } else {
+        rows.push({ old: null, cur: head + j + 1, type: "add", text: B[j] });
+        j++;
+      }
     }
   }
+  for (let k = tail; k > 0; k--) rows.push({ old: a.length - k + 1, cur: b.length - k + 1, type: "ctx", text: a[a.length - k] });
   // Fold long unchanged runs, keeping `context` lines around each change.
   const keep = rows.map((r) => r.type !== "ctx");
   const near = rows.map((_, k) => rows.slice(Math.max(0, k - context), k + context + 1).some((r) => r.type !== "ctx"));
@@ -131,7 +141,7 @@ export function FileDiff({ file, before, after, rows: given }: { file: string; b
                 {r.text}
               </div>
             ) : (
-              <div key={i} className={styles.diffRow + " " + styles[r.type]} style={{ animationDelay: `${Math.min(i, 24) * 14}ms` }}>
+              <div key={i} className={[styles.diffRow, styles[r.type]].filter(Boolean).join(" ")} style={{ animationDelay: `${Math.min(i, 24) * 14}ms` }}>
                 <span className={styles.ln + " " + styles.old}>{r.old ?? ""}</span>
                 <span className={styles.ln + " " + styles.new}>{r.cur ?? ""}</span>
                 <span className={styles.sign}>{r.type === "add" ? "+" : r.type === "del" ? "-" : ""}</span>

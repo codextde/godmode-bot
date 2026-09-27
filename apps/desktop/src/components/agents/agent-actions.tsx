@@ -9,6 +9,7 @@ import { qk } from "@/lib/queryKeys";
 import { modKey } from "@/lib/desktop";
 import { useLive, type LiveRun } from "@/stores/live";
 import { AgentAvatar, Kbd } from "@/components/common";
+import { LiveDot } from "@/components/aicss/Motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
@@ -145,7 +146,7 @@ export function RunTaskDialog({
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!canRun} className="bg-gradient-brand text-white hover:opacity-95">
+              <Button type="submit" disabled={!canRun}>
                 {run.isPending ? <Spinner /> : <Play />}
                 Run task
               </Button>
@@ -227,15 +228,18 @@ export function AgentStatus({ agent, className, showActivity = true }: { agent: 
           : "Idle";
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-xs", className)}>
-      <span
-        className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          state === "running" && "animate-pulse bg-primary",
-          state === "idle" && "bg-success",
-          state === "error" && "bg-destructive",
-          state === "disabled" && "bg-muted-foreground/50",
-        )}
-      />
+      {state === "running" ? (
+        <LiveDot className="shrink-0" />
+      ) : (
+        <span
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            state === "idle" && "bg-success",
+            state === "error" && "bg-destructive",
+            state === "disabled" && "bg-muted-foreground/50",
+          )}
+        />
+      )}
       <span className={cn("truncate", state === "running" ? "text-shimmer font-medium" : "text-muted-foreground")}>{label}</span>
     </span>
   );

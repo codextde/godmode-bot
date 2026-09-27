@@ -4,6 +4,9 @@ import { cn } from "@/lib/utils";
 
 export type VoiceOrbPhase = "listening" | "transcribing" | "sending" | "thinking" | "speaking" | "paused";
 
+/** Per-tick stretch factors for the dial (fixed, so the "spectrum" has shape without per-frame work). */
+const TICKS = Array.from({ length: 72 }, (_, i) => (0.5 + 1.4 * Math.abs(Math.sin(i * 1.7) * Math.cos(i * 0.53))).toFixed(2));
+
 const ORB_FOR_PHASE: Record<VoiceOrbPhase, OrbVariant> = {
   listening: "C2",
   transcribing: "S2",
@@ -14,8 +17,9 @@ const ORB_FOR_PHASE: Record<VoiceOrbPhase, OrbVariant> = {
 };
 
 /**
- * The big voice-mode orb: aurora glow + conic ring + glass core, breathing with the
- * audio level (mic while listening, playback while speaking). Level is read from a ref per frame.
+ * The big voice-mode orb: hairline rings, a radial tick dial and a solid paper core with a dot-matrix
+ * Orb, breathing with the audio level (mic while listening, playback while speaking). Level is read
+ * from a ref per frame and exposed as `--lvl`. Monochrome ink; the brand colour marks "listening".
  */
 export function VoiceOrb({
   phase,
@@ -62,40 +66,48 @@ export function VoiceOrb({
       data-phase={phase}
       style={{ ["--lvl" as string]: 0 }}
       className={cn(
-        "group relative grid size-56 place-items-center rounded-full outline-none sm:size-64",
-        "focus-visible:ring-4 focus-visible:ring-ring/40 focus-visible:ring-offset-8 focus-visible:ring-offset-transparent",
-        phase === "paused" && "opacity-70 saturate-50",
+        "group relative grid size-56 place-items-center rounded-full text-foreground outline-none transition-colors duration-500 sm:size-64",
+        "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-offset-8 focus-visible:ring-offset-background",
+        "data-[phase=listening]:text-brand-strong data-[phase=paused]:text-muted-foreground",
         className,
       )}
     >
-      {/* Soft outer bloom */}
+      {/* Outer hairline rings — they widen with the level */}
       <span
         aria-hidden
-        className="absolute inset-[-30%] rounded-full bg-gradient-brand opacity-35 blur-3xl transition-opacity duration-700 group-data-[phase=speaking]:opacity-55"
-        style={{ transform: "scale(calc(0.8 + var(--lvl) * 0.6))" }}
+        className="absolute inset-0 rounded-full border border-current opacity-[0.08]"
+        style={{ transform: "scale(calc(0.9 + var(--lvl) * 0.22))" }}
       />
-      {/* Rotating conic ring */}
-      <span aria-hidden className="absolute inset-0" style={{ transform: "scale(calc(0.94 + var(--lvl) * 0.22))" }}>
-        <span
-          className={cn(
-            "absolute inset-0 animate-spin-slow rounded-full opacity-80 blur-xl",
-            "group-data-[phase=speaking]:[animation-duration:2.5s] group-data-[phase=thinking]:[animation-duration:3.5s] group-data-[phase=paused]:[animation-play-state:paused]",
-          )}
-          style={{ background: "conic-gradient(from 0deg, var(--glow-a), var(--glow-b), var(--glow-c), var(--glow-a))" }}
-        />
-      </span>
-      {/* Glass core */}
       <span
         aria-hidden
-        className="absolute inset-[9%] rounded-full border border-white/15 bg-background/55 shadow-[inset_0_2px_30px_rgba(255,255,255,0.08)] backdrop-blur-2xl dark:bg-background/40"
-        style={{ transform: "scale(calc(1 + var(--lvl) * 0.1))" }}
+        className="absolute inset-[7%] rounded-full border border-current opacity-[0.14]"
+        style={{ transform: "scale(calc(0.94 + var(--lvl) * 0.14))" }}
       />
-      {/* Inner swirl */}
-      <span aria-hidden className="absolute inset-[26%]" style={{ transform: "scale(calc(0.7 + var(--lvl) * 0.9))" }}>
-        <span className="absolute inset-0 animate-aurora rounded-full bg-gradient-brand opacity-60 blur-2xl" />
+      {/* Radial tick dial — each tick stretches with the level, like a round equaliser */}
+      <span
+        aria-hidden
+        className={cn(
+          "absolute inset-[7%] [animation:spin_40s_linear_infinite]",
+          "group-data-[phase=thinking]:[animation-duration:14s] group-data-[phase=sending]:[animation-duration:14s] group-data-[phase=paused]:[animation-play-state:paused]",
+        )}
+      >
+        {TICKS.map((k, i) => (
+          <span key={i} className="absolute inset-0" style={{ transform: `rotate(${i * (360 / TICKS.length)}deg)` }}>
+            <span
+              className="absolute top-[4%] left-1/2 h-[11%] w-[1.5px] -translate-x-1/2 origin-bottom rounded-[1px] bg-current opacity-50"
+              style={{ transform: `scaleY(calc(0.18 + var(--lvl) * ${k}))` }}
+            />
+          </span>
+        ))}
       </span>
-      <span className="relative transition-transform duration-300 group-hover:scale-105 group-active:scale-95">
-        <Orb variant={ORB_FOR_PHASE[phase]} size={46} label={label} />
+      {/* Solid paper core */}
+      <span
+        aria-hidden
+        className="absolute inset-[24%] rounded-full border bg-card shadow-float transition-[border-color] duration-500 group-data-[phase=listening]:border-brand/30"
+        style={{ transform: "scale(calc(1 + var(--lvl) * 0.08))" }}
+      />
+      <span className="relative transition-transform duration-300 [--orb-fg:currentColor] group-active:scale-[0.97]">
+        <Orb variant={ORB_FOR_PHASE[phase]} size={56} label={label} />
       </span>
     </button>
   );

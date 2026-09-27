@@ -11,6 +11,7 @@ import { useConversations } from "@/lib/hooks";
 import { useLive } from "@/stores/live";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/common";
+import { Orb } from "@/components/aicss/Orb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -80,7 +81,7 @@ export function ChatsTab({ agent }: { agent: Agent }) {
       {query.isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }, (_, i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
           ))}
         </div>
       ) : query.isError ? (
@@ -99,7 +100,7 @@ export function ChatsTab({ agent }: { agent: Agent }) {
           }
         />
       ) : (
-        <div className="glass divide-y divide-border/60 overflow-hidden rounded-2xl">
+        <div className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
           {list.map((c, i) => (
             <ConversationRow key={c.id} conversation={c} index={i} running={!!c.running || runningConversations.split(",").includes(c.id)} />
           ))}
@@ -118,16 +119,16 @@ function ConversationRow({ conversation: c, index, running }: { conversation: Co
       <Link
         to={`/chat/${c.id}`}
         className={cn(
-          "flex items-center gap-3 px-4 py-3 transition hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none",
-          running && "bg-primary/5",
+          "flex items-center gap-3 px-4 py-3 transition hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none",
+          running && "bg-brand-soft/40",
         )}
       >
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-background/50 text-muted-foreground" title={origin.label}>
-          <Icon className="size-4" />
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-secondary text-foreground" title={origin.label}>
+          {running ? <Orb variant="S3" size={14} label="Working…" /> : <Icon className="size-4" />}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-medium">{c.title || "New chat"}</span>
+            <span className="truncate text-sm font-medium tracking-[-0.01em]">{c.title || "New chat"}</span>
             {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" aria-label="Pinned" />}
             {c.archived && <Archive className="size-3 shrink-0 text-muted-foreground" aria-label="Archived" />}
           </span>
@@ -135,7 +136,7 @@ function ConversationRow({ conversation: c, index, running }: { conversation: Co
             {running ? <span className="text-shimmer font-medium">Working…</span> : c.preview || origin.label}
           </span>
         </span>
-        <span className="shrink-0 text-xs text-muted-foreground" title={new Date(when).toLocaleString()}>
+        <span className="shrink-0 text-xs text-muted-foreground tabular-nums" title={new Date(when).toLocaleString()}>
           {formatDistanceToNowStrict(new Date(when), { addSuffix: true })}
         </span>
       </Link>

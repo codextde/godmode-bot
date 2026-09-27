@@ -317,7 +317,7 @@ export function AgentForm({
             />
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
-                <Sparkles className="size-3.5 text-primary" />
+                <Sparkles className="size-3.5" />
                 Tip: be specific about goals, where to save files and when to ask you. The agent keeps its own learnings in MEMORY.md.
               </span>
               <span className="tabular-nums">{values.instructions.length.toLocaleString()} chars</span>
@@ -351,7 +351,7 @@ export function AgentForm({
             </div>
             <div className="mt-4 space-y-1.5">
               <span id="agent-effort-label" className="flex items-center gap-1.5 text-sm font-medium">
-                <BrainCircuit className="size-4 text-primary" /> Reasoning effort
+                <BrainCircuit className="size-4 text-muted-foreground" /> Reasoning effort
               </span>
               <ToggleGroup
                 type="single"
@@ -361,11 +361,11 @@ export function AgentForm({
                 aria-labelledby="agent-effort-label"
                 className="w-full flex-wrap sm:flex-nowrap"
               >
-                <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-primary/15 data-[state=on]:text-primary">
+                <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
                   Default
                 </ToggleGroupItem>
                 {EFFORT_OPTIONS.map((e) => (
-                  <ToggleGroupItem key={e} value={e} className="flex-1 data-[state=on]:bg-primary/15 data-[state=on]:text-primary">
+                  <ToggleGroupItem key={e} value={e} className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
                     {EFFORT_LABELS[e]}
                   </ToggleGroupItem>
                 ))}
@@ -386,7 +386,7 @@ export function AgentForm({
             <div className="space-y-5">
               <div className="space-y-2">
                 <span id="secret-access-label" className="flex items-center gap-1.5 text-sm font-medium">
-                  <KeyRound className="size-4 text-primary" /> Passwords & 2FA codes
+                  <KeyRound className="size-4 text-muted-foreground" /> Passwords & 2FA codes
                 </span>
                 <RadioGroup
                   value={values.secretAccess}
@@ -502,13 +502,13 @@ export function AgentForm({
                     disabled={!values.browserEnabled}
                     className="w-full"
                   >
-                    <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-primary/15 data-[state=on]:text-primary">
+                    <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
                       Default
                     </ToggleGroupItem>
-                    <ToggleGroupItem value="visible" className="flex-1 data-[state=on]:bg-primary/15 data-[state=on]:text-primary">
+                    <ToggleGroupItem value="visible" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
                       Visible
                     </ToggleGroupItem>
-                    <ToggleGroupItem value="headless" className="flex-1 data-[state=on]:bg-primary/15 data-[state=on]:text-primary">
+                    <ToggleGroupItem value="headless" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
                       Headless
                     </ToggleGroupItem>
                   </ToggleGroup>
@@ -557,24 +557,25 @@ export function AgentForm({
         {/* Sticky preview + section nav on wide screens */}
         <aside className="hidden xl:block">
           <div className="sticky top-6 space-y-4">
-            <div className="glass rounded-2xl p-4">
+            <div className="rounded-xl border bg-card p-4 shadow-card">
+              <div className="eyebrow mb-3">Preview</div>
               <div className="flex items-center gap-3">
                 <AgentAvatar agent={preview} size="lg" />
                 <div className="min-w-0">
-                  <div className="truncate font-semibold">{values.name || "Unnamed agent"}</div>
+                  <div className="truncate font-medium tracking-[-0.01em]">{values.name || "Unnamed agent"}</div>
                   <div className="line-clamp-2 text-xs text-muted-foreground">{values.description || "No description yet"}</div>
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-                <span className="rounded-md border px-1.5 py-0.5">{MODEL_OPTIONS.find((m) => m.id === values.model)?.label ?? (values.model || "Default model")}</span>
-                {values.browserEnabled && <span className="rounded-md border px-1.5 py-0.5">Browser</span>}
+                <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{MODEL_OPTIONS.find((m) => m.id === values.model)?.label ?? (values.model || "Default model")}</span>
+                {values.browserEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">Browser</span>}
                 {values.workingDirectory && (
-                  <span className="flex max-w-full items-center gap-1 rounded-md border px-1.5 py-0.5">
+                  <span className="flex max-w-full items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
                     <FolderOpen className="size-3 shrink-0" />
                     <span className="truncate">{folderName(values.workingDirectory)}</span>
                   </span>
                 )}
-                <span className="rounded-md border px-1.5 py-0.5">{values.secretAccess === "fill" ? "Fill-only secrets" : "Reveals secrets"}</span>
+                <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{values.secretAccess === "fill" ? "Fill-only secrets" : "Reveals secrets"}</span>
               </div>
             </div>
             <nav aria-label="Form sections" className="space-y-0.5">
@@ -586,7 +587,7 @@ export function AgentForm({
                     e.preventDefault();
                     document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }}
-                  className="block rounded-lg px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-accent/60 hover:text-foreground"
+                  className="block rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground"
                 >
                   {s.label}
                 </a>
@@ -598,7 +599,7 @@ export function AgentForm({
 
       {/* Submit bar */}
       <div className="sticky bottom-0 z-10 mt-6 -mx-2 px-2 pb-4">
-        <div className="glass flex flex-wrap items-center gap-3 rounded-2xl px-4 py-3 shadow-lg">
+        <div className="glass flex flex-wrap items-center gap-3 rounded-xl px-4 py-3">
           <div className="min-w-0 flex-1">
             {footerExtra ?? (
               <span className="text-sm text-muted-foreground">
@@ -622,7 +623,6 @@ export function AgentForm({
           <Button
             type="submit"
             disabled={pending || (mode === "edit" && !dirty)}
-            className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95"
           >
             {pending && <Spinner />}
             {submitLabel}
@@ -660,7 +660,7 @@ function ToggleRow({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <div className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border bg-background/50 text-muted-foreground">{icon}</div>
+      <div className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card">{icon}</div>
       <div className="min-w-0 flex-1">
         <Label htmlFor={id} className="cursor-pointer">
           {title}
@@ -692,8 +692,8 @@ function RadioCard({
     <Label
       htmlFor={id}
       className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-xl border bg-background/40 p-3.5 font-normal transition hover:bg-accent/40",
-        current === value && "border-primary/60 bg-primary/5 ring-1 ring-primary/30",
+        "flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-3.5 font-normal shadow-card transition hover:border-foreground/15",
+        current === value && "border-foreground/30 ring-1 ring-foreground/10",
       )}
     >
       <RadioGroupItem id={id} value={value} className="mt-0.5" />
@@ -701,7 +701,7 @@ function RadioCard({
         <span className="flex items-center gap-1.5 text-sm font-medium">
           {icon}
           {title}
-          {badge && <span className="rounded-full bg-success/15 px-1.5 py-px text-[10px] font-medium text-success">{badge}</span>}
+          {badge && <span className="rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-px text-[10px] font-medium text-brand-strong">{badge}</span>}
         </span>
         <span className="block text-xs leading-relaxed text-muted-foreground">{description}</span>
       </span>
@@ -715,8 +715,8 @@ function FolderField({ value, onChange }: { value: string | null; onChange: (v: 
   return (
     <>
       {value ? (
-        <div className="flex items-center gap-3 rounded-xl border bg-background/40 p-3">
-          <div className="grid size-9 shrink-0 place-items-center rounded-lg border bg-card text-muted-foreground">
+        <div className="flex items-center gap-3 rounded-lg border bg-paper-2 p-3">
+          <div className="grid size-9 shrink-0 place-items-center rounded-md border bg-card text-muted-foreground">
             <FolderOpen className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
@@ -740,7 +740,7 @@ function FolderField({ value, onChange }: { value: string | null; onChange: (v: 
           </Button>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-dashed px-4 py-4">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-4">
           <FolderOpen className="size-5 shrink-0 text-muted-foreground" />
           <p className="min-w-0 flex-1 text-sm text-muted-foreground">No folder — the agent works in its own repository. A single chat can still pick a folder.</p>
           <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
@@ -870,7 +870,7 @@ function SubagentsEditor({
   const update = (i: number, patch: Partial<SubagentDefinition>) => onChange(value.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   if (value.length === 0) {
     return (
-      <div className="flex items-center gap-3 rounded-xl border border-dashed px-4 py-5 text-sm text-muted-foreground">
+      <div className="flex items-center gap-3 rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
         <UserRound className="size-5 shrink-0" />
         No subagents. Add one for recurring specialist work, e.g. a “researcher” that only searches and summarizes.
       </div>
@@ -886,7 +886,7 @@ function SubagentsEditor({
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.98 }}
-            className="space-y-3 rounded-xl border bg-background/40 p-3.5"
+            className="space-y-3 rounded-lg border bg-paper-2 p-3.5"
           >
             <div className="flex items-start gap-3">
               <div className="grid flex-1 gap-3 sm:grid-cols-2">

@@ -32,18 +32,20 @@ export function VaultStep({
 }) {
   if (vault.initialized && vault.unlocked)
     return (
-      <StepCard>
-        <StepHeader eyebrow="Vault" title="Your vault is ready" description="It's unlocked and encrypted on this machine." />
-        <div className="flex items-center gap-3 rounded-2xl border border-success/30 bg-success/10 p-4 text-sm">
-          <CircleCheck className="size-5 text-success" />
-          Logins, 2FA codes and API keys you add are encrypted with your passphrase.
-        </div>
-        <StepFooter onBack={onBack}>
-          <SubmitButton busy={false} type="button" onClick={() => onDone("existing")} className="w-auto px-6">
-            Continue
-          </SubmitButton>
-        </StepFooter>
-      </StepCard>
+      <div>
+        <StepHeader eyebrow="Vault" title="Your vault is ready." description="It's unlocked and encrypted on this machine." />
+        <StepCard>
+          <div className="flex items-center gap-3 rounded-lg border border-brand/25 bg-brand-soft p-4 text-sm">
+            <CircleCheck className="size-5 shrink-0 text-brand-strong" />
+            Logins, 2FA codes and API keys you add are encrypted with your passphrase.
+          </div>
+          <StepFooter onBack={onBack}>
+            <SubmitButton busy={false} type="button" onClick={() => onDone("existing")} className="w-auto px-6">
+              Continue
+            </SubmitButton>
+          </StepFooter>
+        </StepCard>
+      </div>
     );
   if (vault.initialized) return <UnlockInline onDone={() => onDone("unlocked")} onBack={onBack} />;
   return <CreateVault userName={userName} onDone={() => onDone("created")} onBack={onBack} />;
@@ -76,24 +78,31 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
   };
 
   return (
-    <StepCard>
-      <form onSubmit={submit}>
-        <StepHeader
-          eyebrow="Vault"
-          title="Create your vault"
-          description="The vault holds website logins, 2FA secrets and API keys so your agents can sign in without interrupting you."
-        />
-        <ul className="mb-6 grid gap-2">
+    <form onSubmit={submit}>
+      <StepHeader
+        eyebrow="Vault"
+        title={
+          <>
+            Create your vault.
+            <span className="block text-foreground/35">Sealed on this machine.</span>
+          </>
+        }
+        description="The vault holds website logins, 2FA secrets and API keys so your agents can sign in without interrupting you."
+      />
+      <StepCard>
+        <ul className="mb-6 divide-y overflow-hidden rounded-xl border bg-paper-2">
           {GUARANTEES.map((g, i) => (
             <motion.li
               key={i}
-              initial={{ opacity: 0, x: -8 }}
+              initial={{ opacity: 0, x: -6 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.05 + i * 0.06 }}
-              className="flex items-start gap-3 rounded-xl border bg-card/50 px-3.5 py-3 text-sm"
+              className="flex items-start gap-3 px-3.5 py-3 text-sm"
             >
-              <span className="mt-0.5 text-primary [&_svg]:size-4">{g.icon}</span>
-              <span className="text-foreground/85">{g.text}</span>
+              <span className="grid size-6 shrink-0 place-items-center rounded-md border border-brand/25 bg-brand-soft text-brand-strong [&_svg]:size-3.5">
+                {g.icon}
+              </span>
+              <span className="pt-0.5 text-foreground/85">{g.text}</span>
             </motion.li>
           ))}
         </ul>
@@ -110,7 +119,7 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
           autoFocus
         />
 
-        <div className="mt-4 flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-3.5 text-sm">
+        <div className="mt-5 flex items-start gap-3 rounded-lg border border-warning/25 bg-warning/[0.07] p-3.5 text-sm">
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
           <p>
             <span className="font-medium">It can't be recovered.</span>{" "}
@@ -118,8 +127,8 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
           </p>
         </div>
 
-        <label htmlFor="vault-remember" className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border bg-card/50 p-3.5">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+        <label htmlFor="vault-remember" className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border p-3.5 transition-colors hover:bg-accent/40">
+          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand-strong" />
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium">Remember on this device</span>
             <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
@@ -139,8 +148,8 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
             Create vault
           </SubmitButton>
         </StepFooter>
-      </form>
-    </StepCard>
+      </StepCard>
+    </form>
   );
 }
 
@@ -170,9 +179,9 @@ function UnlockInline({ onDone, onBack }: { onDone: () => void; onBack: () => vo
   };
 
   return (
-    <StepCard>
-      <form onSubmit={submit}>
-        <StepHeader eyebrow="Vault" title="Unlock your vault" description="A vault already exists on this machine. Enter its passphrase to continue setting up." />
+    <form onSubmit={submit}>
+      <StepHeader eyebrow="Vault" title="Unlock your vault." description="A vault already exists on this machine. Enter its passphrase to continue setting up." />
+      <StepCard>
         <motion.div animate={controls} className="space-y-2">
           <Label htmlFor="onboarding-unlock">Vault passphrase</Label>
           <PasswordInput
@@ -195,7 +204,7 @@ function UnlockInline({ onDone, onBack }: { onDone: () => void; onBack: () => vo
             Unlock
           </SubmitButton>
         </StepFooter>
-      </form>
-    </StepCard>
+      </StepCard>
+    </form>
   );
 }

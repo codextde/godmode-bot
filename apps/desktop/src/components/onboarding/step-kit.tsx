@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowLeft, Check } from "lucide-react";
+import { DrawCheck } from "@/components/aicss/Motion";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/vault/password-input";
@@ -27,7 +28,7 @@ export function StepRail({ steps, current }: { steps: StepMeta[]; current: numbe
             {i < steps.length - 1 && (
               <span aria-hidden className="absolute top-11 bottom-[-6px] left-[17px] w-px overflow-hidden bg-border">
                 <motion.span
-                  className="block w-full bg-gradient-to-b from-glow-a to-glow-b"
+                  className="block w-full bg-foreground"
                   initial={false}
                   animate={{ height: done ? "100%" : "0%" }}
                   transition={{ duration: 0.5, ease: "easeOut" }}
@@ -36,16 +37,16 @@ export function StepRail({ steps, current }: { steps: StepMeta[]; current: numbe
             )}
             <div
               className={cn(
-                "relative grid size-9 shrink-0 place-items-center rounded-xl border transition-all duration-300 [&_svg]:size-4",
-                done && "border-transparent bg-gradient-brand text-white",
-                active && "border-primary/50 bg-primary/10 text-primary shadow-[0_0_24px] shadow-glow-a/30",
-                !done && !active && "bg-card/60 text-muted-foreground",
+                "relative grid size-9 shrink-0 place-items-center rounded-lg border transition-colors duration-300 [&_svg]:size-4",
+                done && "border-transparent bg-primary text-primary-foreground",
+                active && "border-foreground/20 bg-card text-foreground shadow-card ring-[3px] ring-foreground/[0.04]",
+                !done && !active && "text-muted-foreground",
               )}
             >
-              {done ? <Check /> : s.icon}
+              {done ? <DrawCheck /> : s.icon}
             </div>
             <div className="min-w-0 pt-0.5">
-              <p className={cn("text-sm font-medium transition-colors", !active && !done && "text-muted-foreground")}>
+              <p className={cn("text-sm font-medium tracking-[-0.01em] transition-colors", !active && !done && "text-muted-foreground")}>
                 {s.title}
                 {s.optional && <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">optional</span>}
               </p>
@@ -61,17 +62,22 @@ export function StepRail({ steps, current }: { steps: StepMeta[]; current: numbe
 /** Compact progress bar (narrow screens). */
 export function StepProgress({ steps, current }: { steps: StepMeta[]; current: number }) {
   return (
-    <div className="mb-6 lg:hidden">
-      <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+    <div className="mb-8 lg:hidden">
+      <div className="mb-2.5 flex items-center justify-between text-xs text-muted-foreground">
         <span className="font-medium text-foreground">{steps[current]?.title}</span>
-        <span>
+        <span className="font-mono text-[11px] tabular-nums">
           Step {current + 1} of {steps.length}
         </span>
       </div>
-      <div className="flex gap-1.5">
+      <div className="flex gap-1">
         {steps.map((s, i) => (
-          <div key={s.id} className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-            <motion.div className="h-full bg-gradient-brand" initial={false} animate={{ width: i <= current ? "100%" : "0%" }} />
+          <div key={s.id} className="h-1 flex-1 overflow-hidden rounded-[2px] bg-foreground/[0.07]">
+            <motion.div
+              className="h-full rounded-[2px] bg-foreground"
+              initial={false}
+              animate={{ width: i <= current ? "100%" : "0%" }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            />
           </div>
         ))}
       </div>
@@ -79,24 +85,26 @@ export function StepProgress({ steps, current }: { steps: StepMeta[]; current: n
   );
 }
 
+/** Hero heading that sits on the paper above a step's card. */
 export function StepHeader({ eyebrow, title, description }: { eyebrow?: string; title: ReactNode; description?: ReactNode }) {
   return (
-    <div className="mb-6">
-      {eyebrow && <p className="mb-2 text-xs font-medium tracking-[0.18em] text-primary uppercase">{eyebrow}</p>}
-      <h2 className="text-2xl font-semibold tracking-tight sm:text-[1.7rem]">{title}</h2>
-      {description && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{description}</p>}
+    <div className="mb-7">
+      {eyebrow && <p className="eyebrow mb-3">{eyebrow}</p>}
+      <h2 className="heading-display text-[30px] sm:text-[34px]">{title}</h2>
+      {description && <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted-foreground">{description}</p>}
     </div>
   );
 }
 
+/** Solid white hairline card that holds a step's form. */
 export function StepCard({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("glass noise rounded-3xl p-6 shadow-2xl shadow-black/10 sm:p-8", className)}>{children}</div>;
+  return <div className={cn("rounded-2xl border bg-card p-6 shadow-float sm:p-7", className)}>{children}</div>;
 }
 
 /** Back + primary actions row. */
 export function StepFooter({ onBack, children, className }: { onBack?: () => void; children: ReactNode; className?: string }) {
   return (
-    <div className={cn("mt-8 flex flex-wrap items-center justify-between gap-3", className)}>
+    <div className={cn("mt-7 flex flex-wrap items-center justify-between gap-3 border-t pt-5", className)}>
       {onBack ? (
         <Button type="button" variant="ghost" onClick={onBack} className="text-muted-foreground">
           <ArrowLeft /> Back
@@ -175,7 +183,14 @@ export function NewSecretFields({
   );
 }
 
-const CONFETTI_COLORS = ["var(--glow-a)", "var(--glow-b)", "var(--glow-c)", "var(--success)", "var(--warning)"];
+/** Paper-and-ink confetti with the one brand accent — no rainbow. */
+const CONFETTI_COLORS = [
+  "var(--foreground)",
+  "var(--brand)",
+  "var(--muted-foreground)",
+  "var(--brand-strong)",
+  "color-mix(in oklab, var(--foreground) 22%, transparent)",
+];
 
 /** One-shot confetti burst (skipped for reduced motion). */
 export function Confetti({ pieces = 90 }: { pieces?: number }) {
@@ -208,7 +223,7 @@ export function Confetti({ pieces = 90 }: { pieces?: number }) {
         <motion.span
           key={b.id}
           className="absolute top-[42%] left-1/2 block"
-          style={{ width: b.w, height: b.h, background: b.color, borderRadius: b.round ? 999 : 2 }}
+          style={{ width: b.w, height: b.h, background: b.color, borderRadius: b.round ? 999 : 1 }}
           initial={{ x: 0, y: 0, opacity: 1, rotate: 0, scale: 0.6 }}
           animate={{ x: b.x, y: [0, b.y, b.y + b.fall], opacity: [1, 1, 0], rotate: b.rotate, scale: 1 }}
           transition={{ duration: b.duration, delay: b.delay, ease: [0.16, 0.8, 0.4, 1], times: [0, 0.35, 1] }}

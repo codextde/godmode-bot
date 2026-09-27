@@ -108,7 +108,7 @@ export function KeyValueEditor({
             <div className="min-w-0 flex-1">
               {r.stored && !r.replacing ? (
                 <div className="flex h-10 items-center gap-2 rounded-md border border-dashed px-3 text-xs text-muted-foreground">
-                  <Lock className="size-3.5 shrink-0 text-success" />
+                  <Lock className="size-3.5 shrink-0 text-brand-strong" />
                   <span className="truncate font-mono tracking-widest">{SECRET_MASK}</span>
                   <span className="ml-auto hidden shrink-0 sm:inline">stored encrypted</span>
                 </div>

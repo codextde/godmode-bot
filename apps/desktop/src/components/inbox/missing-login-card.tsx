@@ -16,11 +16,11 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
 export const KIND_META: Record<MissingLoginKind, { label: string; icon: typeof KeyRound; className: string }> = {
-  missing_credential: { label: "Missing login", icon: KeyRound, className: "bg-primary/12 text-primary" },
-  invalid_credential: { label: "Login failed", icon: ShieldAlert, className: "bg-destructive/12 text-destructive" },
-  missing_totp: { label: "Missing 2FA", icon: ShieldPlus, className: "bg-warning/15 text-warning" },
-  missing_account: { label: "No account", icon: UserX, className: "bg-sky-500/12 text-sky-600 dark:text-sky-400" },
-  other: { label: "Needs attention", icon: CircleAlert, className: "bg-muted text-muted-foreground" },
+  missing_credential: { label: "Missing login", icon: KeyRound, className: "bg-warning/12 text-warning" },
+  invalid_credential: { label: "Login failed", icon: ShieldAlert, className: "bg-destructive/10 text-destructive" },
+  missing_totp: { label: "Missing 2FA", icon: ShieldPlus, className: "bg-warning/12 text-warning" },
+  missing_account: { label: "No account", icon: UserX, className: "bg-secondary text-foreground" },
+  other: { label: "Needs attention", icon: CircleAlert, className: "bg-secondary text-muted-foreground" },
 };
 
 /** Status change with optimistic removal from the current tab's list. */
@@ -84,27 +84,29 @@ export function MissingLoginCard({
   const addTotp = () => navigate("/vault/2fa?import=1");
 
   const open = item.status === "open";
+  const failed = item.kind === "invalid_credential";
 
   return (
     <article
       className={cn(
-        "group rounded-2xl border bg-card/60 p-4 backdrop-blur-sm transition hover:border-primary/30 hover:shadow-lg hover:shadow-glow-a/5",
-        item.kind === "invalid_credential" && open && "border-destructive/25",
+        "group relative overflow-hidden rounded-xl border bg-card p-4 shadow-card transition hover:shadow-float",
+        open && (failed ? "border-destructive/25" : "border-warning/30"),
       )}
       aria-label={`${meta.label}: ${item.service}`}
     >
+      {open && <span aria-hidden className={cn("absolute inset-y-0 left-0 w-[3px]", failed ? "bg-destructive" : "bg-warning")} />}
       <div className="flex items-start gap-3.5">
         <Favicon domain={domain} name={item.service} size="lg" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-sm font-semibold">{item.service || domain || "Unknown service"}</h3>
-            <Badge variant="secondary" className={cn("h-5 gap-1 border-0 px-2 text-[11px]", meta.className)}>
+            <h3 className="truncate text-sm font-medium tracking-[-0.01em]">{item.service || domain || "Unknown service"}</h3>
+            <Badge variant="secondary" className={cn("h-5 gap-1 border-0 px-1.5 text-[11px]", meta.className)}>
               <KindIcon className="size-3" /> {meta.label}
             </Badge>
             {item.occurrences > 1 && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground tabular-nums">×{item.occurrences}</span>
+                  <span className="rounded-[5px] bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground tabular-nums">×{item.occurrences}</span>
                 </TooltipTrigger>
                 <TooltipContent>Reported {item.occurrences} times</TooltipContent>
               </Tooltip>
@@ -134,9 +136,9 @@ export function MissingLoginCard({
             {agent ? (
               <Link
                 to={`/agents/${agent.id}`}
-                className="mr-auto inline-flex min-w-0 items-center gap-1.5 rounded-full py-0.5 pr-2 pl-0.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                className="mr-auto inline-flex min-w-0 items-center gap-1.5 rounded-md py-0.5 pr-2 pl-0.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
               >
-                <AgentAvatar agent={agent} size="sm" className="rounded-full" />
+                <AgentAvatar agent={agent} size="sm" />
                 <span className="truncate">
                   Reported by <span className="font-medium text-foreground">{agent.name}</span>
                 </span>
@@ -154,11 +156,11 @@ export function MissingLoginCard({
                   <Check /> Mark resolved
                 </Button>
                 {item.kind === "missing_totp" ? (
-                  <Button size="sm" className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95" onClick={addTotp}>
+                  <Button size="sm" onClick={addTotp}>
                     <ShieldPlus /> Add 2FA
                   </Button>
                 ) : (
-                  <Button size="sm" className="bg-gradient-brand text-white shadow-md shadow-glow-a/25 hover:opacity-95" onClick={addLogin}>
+                  <Button size="sm" onClick={addLogin}>
                     <KeyRound /> {item.kind === "invalid_credential" ? "Update login" : "Add login"}
                   </Button>
                 )}

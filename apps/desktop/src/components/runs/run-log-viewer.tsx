@@ -19,6 +19,7 @@ import { saveBlob } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { describeTool, formatToolInput } from "@/components/chat/tool-meta";
 import { Markdown } from "@/components/chat/markdown";
+import { LiveDot } from "@/components/aicss/Motion";
 import { CopyButton } from "@/components/chat/copy-button";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -195,16 +196,21 @@ export function RunLogViewer({ runId, live = false }: { runId: string; live?: bo
     );
   }
   if (log.isError) {
-    return <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">Couldn't load the log: {errorMessage(log.error)}</p>;
+    return <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Couldn't load the log: {errorMessage(log.error)}</p>;
   }
   if (!entries.length) {
-    return <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">No log lines yet.</p>;
+    return <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No log lines yet.</p>;
   }
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">{entries.length.toLocaleString()} events</span>
+        <span className="text-xs text-muted-foreground tabular-nums">{entries.length.toLocaleString()} events</span>
+        {live && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-strong">
+            <LiveDot /> Live
+          </span>
+        )}
         {streamCount > 0 && (
           <div className="flex items-center gap-2">
             <Switch id={`stream-${runId}`} size="sm" checked={showStream} onCheckedChange={setShowStream} />
@@ -226,7 +232,7 @@ export function RunLogViewer({ runId, live = false }: { runId: string; live?: bo
           </Button>
         </div>
       </div>
-      <ol className="relative space-y-1 border-l border-border/70 pl-4">
+      <ol className="relative space-y-1 border-l pl-4">
         {visible.slice(0, limit).map((e, i) => (
           <LogRow key={i} entry={e} toolNames={toolNames} />
         ))}
@@ -244,7 +250,7 @@ function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, 
   switch (entry.kind) {
     case "init":
       return (
-        <Row icon={<Power className="size-3.5 text-primary" />} title="Session started" raw={entry.raw}>
+        <Row icon={<Power className="size-3.5 text-foreground" />} title="Session started" raw={entry.raw}>
           <span className="text-muted-foreground">
             {entry.model || "model"} · {entry.tools} tools
             {entry.mcp.length > 0 && ` · MCP: ${entry.mcp.map((m) => `${m.name}${m.status && m.status !== "connected" ? ` (${m.status})` : ""}`).join(", ")}`}
@@ -260,7 +266,7 @@ function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, 
     case "thinking":
       return (
         <Row
-          icon={<Brain className="size-3.5 text-glow-a" />}
+          icon={<Brain className="size-3.5 text-muted-foreground" />}
           title="Thinking"
           summary={entry.text ? entry.text.replace(/\s+/g, " ").slice(0, 90) : "redacted"}
           raw={entry.raw}
@@ -273,7 +279,7 @@ function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, 
       const Icon = meta.icon;
       return (
         <Row
-          icon={<Icon className="size-3.5 text-primary" />}
+          icon={<Icon className="size-3.5 text-foreground" />}
           title={meta.title}
           summary={meta.detail ?? entry.name}
           raw={entry.raw}
@@ -351,12 +357,12 @@ function Row({
   const [showRaw, setShowRaw] = useState(false);
   return (
     <li className="relative">
-      <span className="absolute top-2 -left-[23px] grid size-3.5 place-items-center rounded-full bg-background ring-4 ring-background">{icon}</span>
+      <span className="absolute top-2 -left-[23px] grid size-3.5 place-items-center rounded-full bg-card ring-4 ring-card">{icon}</span>
       <div
         className={cn(
           "rounded-lg text-[13px]",
-          tone === "error" && "bg-destructive/5",
-          tone === "success" && "bg-success/5",
+          tone === "error" && "bg-destructive/[0.05]",
+          tone === "success" && "bg-success/[0.06]",
         )}
       >
         <button
@@ -367,7 +373,7 @@ function Row({
         >
           <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
           <span className={cn("shrink-0 font-medium", muted && "font-normal text-muted-foreground")}>{title}</span>
-          {badge && <span className="shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">{badge}</span>}
+          {badge && <span className="shrink-0 rounded-[4px] border bg-secondary px-1 text-[10px] text-muted-foreground">{badge}</span>}
           {summary && !open && <span className="min-w-0 truncate text-muted-foreground">{summary}</span>}
         </button>
         {open && (
@@ -400,7 +406,7 @@ function prettyJson(raw: string) {
 
 function Pre({ text }: { text: string }) {
   return (
-    <pre className="mt-1 max-h-72 overflow-auto rounded-lg border bg-muted/50 p-2.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap break-all dark:bg-black/30">
+    <pre className="mt-1 max-h-72 overflow-auto rounded-lg border bg-paper-2 p-2.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap break-all">
       {text.length > 20_000 ? `${text.slice(0, 20_000)}\n… (${(text.length - 20_000).toLocaleString()} more characters)` : text}
     </pre>
   );

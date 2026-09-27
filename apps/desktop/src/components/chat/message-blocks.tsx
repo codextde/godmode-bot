@@ -10,7 +10,7 @@ import { AgentAvatar } from "@/components/common";
 import { ThinkingState } from "@/components/aicss/ThinkingState";
 import { ThinkingReasoning } from "@/components/aicss/ThinkingReasoning";
 import { FileDiff, diffLines, type DiffRow } from "@/components/aicss/FileDiff";
-import { DrawCheck, StreamingCaret } from "@/components/aicss/Motion";
+import { DrawCheck } from "@/components/aicss/Motion";
 import { Orb } from "@/components/aicss/Orb";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -140,8 +140,7 @@ export function MessageBlocks({ blocks, streaming = false, compact = false }: { 
           case "text":
             return (
               <div key={item.key} className="min-w-0">
-                <Markdown className={cn(compact && "text-[0.85rem]")}>{item.text}</Markdown>
-                {active && lastBlock?.type === "text" && <StreamingCaret />}
+                <Markdown className={cn(compact && "text-[0.85rem]", active && lastBlock?.type === "text" && "gm-streaming")}>{item.text}</Markdown>
               </div>
             );
           case "thinking":
@@ -394,7 +393,7 @@ function ToolStep({
       {running ? <Orb variant="B2" size={15} label={meta.title} /> : <Icon className="size-3.5" />}
     </span>
   );
-  const edit = fileEditOf(block);
+  const edit = useMemo(() => fileEditOf(block), [block.name, block.input]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const header = (
     <button
