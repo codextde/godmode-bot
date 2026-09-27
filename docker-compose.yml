@@ -1,0 +1,40 @@
+# Godmode Bot as a headless server with the web dashboard.
+#
+#   docker compose up -d
+#   docker compose exec godmode godmode token        # access token for http://<host>:7777
+#   docker compose exec godmode godmode password …   # or set a dashboard password
+#
+# Claude Code credentials — use one of:
+#   * ANTHROPIC_API_KEY=… in a .env file next to this compose file,
+#   * CLAUDE_CODE_OAUTH_TOKEN=… (create it with `claude setup-token` on a machine with a browser),
+#   * log in once: `docker compose exec -it godmode claude` (stored in the godmode-claude volume).
+#
+# Exposing the dashboard beyond your LAN? Put it behind HTTPS (reverse proxy / Tailscale) and set a password.
+
+services:
+  godmode:
+    image: ghcr.io/codextde/godmode-bot:latest
+    build: .
+    container_name: godmode
+    restart: unless-stopped
+    ports:
+      - "7777:7777"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      # Database, vault, agent repositories, browser profiles, backups, logs.
+      - godmode-data:/data
+      # Claude Code login + settings.
+      - godmode-claude:/home/godmode/.claude
+      # uv / browser-use / Playwright downloads, so restarts stay fast.
+      - godmode-cache:/home/godmode/.cache
+    # Chromium needs more shared memory than Docker's 64 MB default.
+    shm_size: 1gb
+
+volumes:
+  godmode-data:
+  godmode-claude:
+  godmode-cache:

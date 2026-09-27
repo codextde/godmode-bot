@@ -462,7 +462,7 @@ const TOOLS: ToolDef[] = [
     }),
     when: isManager,
     run: async ({ routine, ...input }, { agent }) => {
-      const created = await createAgent(input);
+      const created = await createAgent(input, `agent:${agent.id}`);
       audit(`agent:${agent.id}`, "agent.create", created.id, { name: created.name });
       let routineInfo: unknown = null;
       if (routine) {
@@ -479,7 +479,7 @@ const TOOLS: ToolDef[] = [
     schema: z.object({ agentId: z.string(), name: z.string().min(1).max(100).optional(), ...agentFields }),
     when: isManager,
     run: async ({ agentId, ...patch }, { agent }) => {
-      const updated = await updateAgent(agentId, patch);
+      const updated = await updateAgent(agentId, patch, `agent:${agent.id}`);
       audit(`agent:${agent.id}`, "agent.update", agentId, { fields: Object.keys(patch) });
       return json(agentSummary(updated, workspaceNames()));
     },

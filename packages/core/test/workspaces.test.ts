@@ -93,6 +93,22 @@ describe("workspaces", () => {
     expect(listWorkspaces().some((w) => w.id === ws.id)).toBe(false);
   });
 
+  test("forced delete clears links from global logins and 2FA entries to deleted items", async () => {
+    const ws = createWorkspace({ name: "Linked" });
+    const ts = new Date().toISOString();
+    insert("credentials", { id: "crd_ws", workspace_id: ws.id, name: "WS login", created_at: ts, updated_at: ts });
+    insert("totp", { id: "totp_ws", workspace_id: ws.id, issuer: "WS", secret_enc: "x", created_at: ts, updated_at: ts });
+    insert("credentials", { id: "crd_global", name: "Global login", totp_id: "totp_ws", created_at: ts, updated_at: ts });
+    insert("totp", { id: "totp_global", issuer: "Global", secret_enc: "x", credential_id: "crd_ws", created_at: ts, updated_at: ts });
+
+    await deleteWorkspace(ws.id, true);
+
+    expect(get<{ totp_id: string | null }>("SELECT totp_id FROM credentials WHERE id = ?", "crd_global")!.totp_id).toBeNull();
+    expect(get<{ credential_id: string | null }>("SELECT credential_id FROM totp WHERE id = ?", "totp_global")!.credential_id).toBeNull();
+    expect(get("SELECT id FROM credentials WHERE id = ?", "crd_ws")).toBeNull();
+    expect(get("SELECT id FROM totp WHERE id = ?", "totp_ws")).toBeNull();
+  });
+
   test("deleting a non-empty workspace needs force; force trashes agent repos", async () => {
     const defaultAgent = await ensureDefaultAgent();
     const ws = createWorkspace({ name: "Client X" });

@@ -10,7 +10,9 @@ import { setLogLevel } from "../src/log";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import {
   createAgent,
+  commitAgentRepo,
   deleteAgent,
+  ensureAgentRepo,
   ensureDefaultAgent,
   getAgent,
   getDefaultAgentId,
@@ -369,7 +371,87 @@ describe("repository files", () => {
   });
 });
 
+describe("backup restore robustness", () => {
+  test("missing repositories are recreated lazily and at startup", async () => {
+    const a = await createAgent({ name: "Restored A" });
+    const b = await createAgent({ name: "Restored B" });
+    rmSync(a.repoPath, { recursive: true, force: true });
+    rmSync(b.repoPath, { recursive: true, force: true });
+
+    expect((await readAgentFile(a.id, "CLAUDE.md")).content).toContain("Restored A");
+    expect((await listAgentCommits(a.id)).map((c) => c.message)).toEqual(["Create agent Restored A"]);
+
+    await ensureDefaultAgent();
+    expect(existsSync(join(b.repoPath, ".git"))).toBe(true);
+    expect(existsSync(join(b.repoPath, "MEMORY.md"))).toBe(true);
+  });
+
+  test("ids of deleted MCP servers are dropped when an agent is read", async () => {
+    const ts = new Date().toISOString();
+    insert("mcp_servers", { id: "mcp_keep", name: "Keep", created_at: ts, updated_at: ts });
+    insert("mcp_servers", { id: "mcp_drop", name: "Drop", created_at: ts, updated_at: ts });
+    const agent = await createAgent({ name: "Mcp User", mcpServerIds: ["mcp_keep", "mcp_drop", "mcp_never"] });
+    expect(agent.mcpServerIds).toEqual(["mcp_keep", "mcp_drop"]);
+    run("DELETE FROM mcp_servers WHERE id = ?", "mcp_drop");
+    expect(getAgent(agent.id).mcpServerIds).toEqual(["mcp_keep"]);
+  });
+});
+
+describe("gitignore", () => {
+  async function headFiles(dir: string): Promise<string[]> {
+    const git = (await import("isomorphic-git")).default;
+    const fs = await import("node:fs");
+    return git.listFiles({ fs, dir, ref: "HEAD" });
+  }
+
+  test("new repositories keep user uploads out of git", async () => {
+    const agent = await createAgent({ name: "Uploads" });
+    expect(readFileSync(join(agent.repoPath, ".gitignore"), "utf8")).toContain("workspace/uploads/");
+    mkdirSync(join(agent.repoPath, "workspace", "uploads"), { recursive: true });
+    writeFileSync(join(agent.repoPath, "workspace", "uploads", "contract.pdf"), "private");
+    writeFileSync(join(agent.repoPath, "workspace", "report.md"), "# Report");
+    await commitAgentRepo(agent.id, "Run");
+    const files = await headFiles(agent.repoPath);
+    expect(files).toContain("workspace/report.md");
+    expect(files).not.toContain("workspace/uploads/contract.pdf");
+  });
+
+  test("older repositories get the rule and stop tracking committed uploads", async () => {
+    const agent = await createAgent({ name: "Legacy" });
+    writeFileSync(join(agent.repoPath, ".gitignore"), "# Managed by Godmode Bot\nworkspace/tmp/\n*.tmp\n.claude-mem/\nnode_modules/");
+    mkdirSync(join(agent.repoPath, "workspace", "uploads"), { recursive: true });
+    writeFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "private");
+    await repo.commitAll(agent.repoPath, "Legacy state");
+    expect(await headFiles(agent.repoPath)).toContain("workspace/uploads/old.pdf");
+
+    await ensureAgentRepo(agent);
+    const gitignore = readFileSync(join(agent.repoPath, ".gitignore"), "utf8");
+    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\n.DS_Store\n");
+    const files = await headFiles(agent.repoPath);
+    expect(files).not.toContain("workspace/uploads/old.pdf");
+    expect(files).toContain(".gitignore");
+    expect(readFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "utf8")).toBe("private");
+    expect((await listAgentCommits(agent.id))[0]!.message).toBe("Update generated files");
+
+    // Complete now: the fast path does nothing and later commits stay clean.
+    await ensureAgentRepo(agent);
+    expect(await repo.commitAll(agent.repoPath, "noop")).toBeNull();
+  });
+});
+
 describe("git helpers", () => {
+  test("refuses to touch repositories outside the Godmode data directory", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "godmode-outside-"));
+    try {
+      await expect(repo.initRepo(outside)).rejects.toThrow(/outside the Godmode data directory/);
+      await expect(repo.commitAll(process.cwd(), "nope")).rejects.toThrow(/outside the Godmode data directory/);
+      await expect(repo.commitAll(dataDir, "nope")).rejects.toThrow(/outside the Godmode data directory/);
+      expect(existsSync(join(outside, ".git"))).toBe(false);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   test("commitAll stages additions, modifications and deletions and is a no-op when clean", async () => {
     const dir = join(dataDir, "plain-repo");
     await repo.initRepo(dir);

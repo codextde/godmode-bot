@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
 import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
@@ -306,6 +306,14 @@ describe("runner end-to-end with fake claude", () => {
     expect(getRun(run.id).status).toBe("cancelled");
     expect(() => getConversation(conversation.id)).toThrow();
     expect(existsSync(transcriptPath(agent, conversation.id))).toBe(false);
+  });
+
+  test("a missing agent repo is rebuilt before the run", async () => {
+    const bot = await makeAgent({ name: "Repo Rebuild Bot" });
+    rmSync(bot.repoPath, { recursive: true, force: true });
+    const { run } = await startChat({ agentId: bot.id, content: "hello" });
+    expect((await waitForRun(run.id, 20_000)).status).toBe("succeeded");
+    expect(existsSync(join(bot.repoPath, "CLAUDE.md"))).toBe(true);
   });
 
   test("disabled agents cannot start runs", async () => {

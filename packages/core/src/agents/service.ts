@@ -1,8 +1,8 @@
 /**
  * Agents (bots): CRUD, per-agent git repository and generated files (CLAUDE.md, MEMORY.md, state/agent.json).
  */
-import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   Agent,
@@ -27,7 +27,14 @@ import { getSettings } from "../services/settings";
 import { cancelRun, waitForRun } from "../runner/runner";
 import { reloadSchedules } from "../scheduler/scheduler";
 import { badRequest, newId, notFound, now, parseJson, slugify } from "../util";
-import { AGENT_GITIGNORE, AGENT_REPO_DIRS, renderAgentState, renderClaudeMd, renderMemoryMd } from "./claudeMd";
+import {
+  AGENT_GITIGNORE,
+  AGENT_REPO_DIRS,
+  missingGitignoreRules,
+  renderAgentState,
+  renderClaudeMd,
+  renderMemoryMd,
+} from "./claudeMd";
 import * as repo from "./repo";
 
 const log = logger("agents");
@@ -276,7 +283,7 @@ async function syncRepoFiles(agent: Agent, regenerate: boolean): Promise<void> {
     const writeIfMissing = async (file: string, content: string) => {
       if (!existsSync(join(dir, file))) await writeFile(join(dir, file), content, "utf8");
     };
-    await writeIfMissing(".gitignore", AGENT_GITIGNORE);
+    await syncGitignore(dir);
     await writeIfMissing("MEMORY.md", renderMemoryMd(agent));
     if (regenerate) await writeFile(join(dir, "CLAUDE.md"), claudeMd, "utf8");
     else await writeIfMissing("CLAUDE.md", claudeMd);
@@ -284,6 +291,29 @@ async function syncRepoFiles(agent: Agent, regenerate: boolean): Promise<void> {
       await writeFile(join(dir, "state", "agent.json"), renderAgentState(agent), "utf8");
     }
   });
+}
+
+/** Create .gitignore, or append managed rules an older repository lacks (untracking newly ignored uploads). */
+async function syncGitignore(dir: string): Promise<void> {
+  const file = join(dir, ".gitignore");
+  if (!existsSync(file)) {
+    await writeFile(file, AGENT_GITIGNORE, "utf8");
+    return;
+  }
+  const current = await readFile(file, "utf8");
+  const missing = missingGitignoreRules(current);
+  if (!missing.length) return;
+  const separator = current.endsWith("\n") || current === "" ? "" : "\n";
+  await writeFile(file, `${current}${separator}# Added by Godmode Bot\n${missing.join("\n")}\n`, "utf8");
+  if (missing.includes("workspace/uploads/")) await repo.untrackInLock(dir, "workspace/uploads");
+}
+
+function gitignoreComplete(dir: string): boolean {
+  try {
+    return missingGitignoreRules(readFileSync(join(dir, ".gitignore"), "utf8")).length === 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -294,10 +324,10 @@ async function syncRepoFiles(agent: Agent, regenerate: boolean): Promise<void> {
 export async function ensureAgentRepo(agentOrId: Agent | string): Promise<void> {
   const agent = typeof agentOrId === "string" ? getAgent(agentOrId) : agentOrId;
   const essentials = [".git", "CLAUDE.md", "MEMORY.md", join("state", "agent.json")];
-  if (essentials.every((p) => existsSync(join(agent.repoPath, p)))) return;
+  if (essentials.every((p) => existsSync(join(agent.repoPath, p))) && gitignoreComplete(agent.repoPath)) return;
   const fresh = !existsSync(join(agent.repoPath, ".git"));
   await syncRepoFiles(agent, false);
-  await repo.commitAll(agent.repoPath, fresh ? `Create agent ${agent.name}` : "Restore generated files");
+  await repo.commitAll(agent.repoPath, fresh ? `Create agent ${agent.name}` : "Update generated files");
 }
 
 /** Rewrite CLAUDE.md + state/agent.json from the current settings and commit (no-op commit if unchanged). */
@@ -409,7 +439,7 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     status: enabled ? "idle" : "disabled",
     permissions: normalizePermissions({ ...defaultPermissions(settings), ...input.permissions }),
     browser,
-    mcpServerIds: stringList(input.mcpServerIds ?? []),
+    mcpServerIds: existingMcpServerIds(stringList(input.mcpServerIds ?? [])),
     inheritMcp: input.inheritMcp !== false,
     subagents: normalizeSubagents(input.subagents ?? []),
     repoPath: repoPathFor(slug),
@@ -468,7 +498,7 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
     next.browser = normalizeBrowser({ ...current.browser, ...patch.browser });
     if (next.browser.profileId !== current.browser.profileId) assertBrowserProfile(next.browser.profileId);
   }
-  if (patch.mcpServerIds !== undefined) next.mcpServerIds = stringList(patch.mcpServerIds);
+  if (patch.mcpServerIds !== undefined) next.mcpServerIds = existingMcpServerIds(stringList(patch.mcpServerIds));
   if (patch.inheritMcp !== undefined) next.inheritMcp = patch.inheritMcp;
   if (patch.subagents !== undefined) next.subagents = normalizeSubagents(patch.subagents);
 

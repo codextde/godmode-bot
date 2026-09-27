@@ -19,7 +19,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson, which } from "../util";
 import { getAppSecret, isUnlocked, redact } from "../vault/vault";
-import { commitAgentRepo, getAgent, peersFor, setAgentStatus, touchAgentRun } from "../agents/service";
+import { commitAgentRepo, ensureAgentRepo, getAgent, peersFor, setAgentStatus, touchAgentRun } from "../agents/service";
 import { resolveClaudeBinary } from "../services/doctor";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
@@ -747,6 +747,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const settings = getSettings();
   const cmd = resolveClaudeCommand();
   if (!cmd) return { status: "failed", error: CLAUDE_NOT_FOUND };
+  // Claude runs with cwd = the agent repo; rebuild it if it went missing (e.g. restored backup without repos).
+  await ensureAgentRepo(agent);
 
   const conv = get<{ claude_session_id: string | null }>("SELECT claude_session_id FROM conversations WHERE id = ?", job.conversationId);
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };

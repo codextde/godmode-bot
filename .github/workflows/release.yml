@@ -1,0 +1,257 @@
+name: Release
+
+# Push a tag like v0.2.0 (matching the version in package.json / Cargo.toml / tauri.conf.json) to build:
+#   * desktop installers (macOS arm64 + x64, Windows x64, Linux x64 + arm64) with the core sidecar,
+#   * standalone `godmode` server binaries (web dashboard embedded) + .sha256 files,
+#   * the Docker image ghcr.io/codextde/godmode-bot,
+# all attached to a draft GitHub release that a maintainer publishes after a quick check.
+#
+# Optional secrets for signed/notarized macOS builds: APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD,
+# APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD (app-specific password), APPLE_TEAM_ID.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build (e.g. v0.1.0)
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  create-release:
+    name: Create draft release
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.id }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Check that the tag matches the app version
+        id: version
+        run: |
+          version="${TAG#v}"
+          desktop=$(node -p "require('./apps/desktop/package.json').version")
+          core=$(node -p "require('./packages/core/package.json').version")
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' apps/desktop/src-tauri/Cargo.toml | head -n1)
+          for v in "$desktop" "$core" "$cargo"; do
+            if [ "$v" != "$version" ]; then
+              echo "::error::tag $TAG does not match versions (desktop $desktop, core $core, Cargo.toml $cargo)"
+              exit 1
+            fi
+          done
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create (or reuse) the draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$TAG\") | .id" | head -n1)
+          if [ -z "$id" ]; then
+            id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$TAG" -f name="Godmode Bot $TAG" \
+              -F draft=true -F prerelease=$([[ "$TAG" == *-* ]] && echo true || echo false) \
+              -F generate_release_notes=true --jq .id)
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-latest
+            rust_target: aarch64-apple-darwin
+            bun_target: bun-darwin-arm64
+            args: --target aarch64-apple-darwin
+          - name: macOS x64
+            os: macos-latest
+            rust_target: x86_64-apple-darwin
+            bun_target: bun-darwin-x64
+            args: --target x86_64-apple-darwin
+          - name: Windows x64
+            os: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            bun_target: bun-windows-x64
+            args: ""
+          - name: Linux x64
+            os: ubuntu-22.04
+            rust_target: x86_64-unknown-linux-gnu
+            bun_target: bun-linux-x64
+            args: ""
+          - name: Linux arm64
+            os: ubuntu-22.04-arm
+            rust_target: aarch64-unknown-linux-gnu
+            bun_target: bun-linux-arm64
+            args: ""
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf build-essential libssl-dev libxdo-dev
+
+      - uses: ./.github/actions/setup
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+          key: ${{ matrix.rust_target }}
+
+      - name: Build the core sidecar
+        working-directory: packages/core
+        run: bun run scripts/build.ts --sidecar --target=${{ matrix.bun_target }} --smoke
+
+      - name: Enable macOS signing when secrets are configured
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Exported only when set: empty values would make the bundler try (and fail) to import a certificate.
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            value="${!name}"
+            if [ -n "$value" ]; then
+              { echo "$name<<__GODMODE_EOF__"; echo "$value"; echo "__GODMODE_EOF__"; } >> "$GITHUB_ENV"
+            fi
+          done
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          args: ${{ matrix.args }}
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          uploadUpdaterJson: false
+          retryAttempts: 1
+
+  server:
+    name: Server binaries (${{ matrix.os }})
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Built on Linux: Linux + Windows. macOS binaries are built (and signed ad hoc) on macOS.
+          - os: ubuntu-latest
+            targets: bun-linux-x64 bun-linux-x64-baseline bun-linux-arm64 bun-windows-x64
+          - os: macos-latest
+            targets: bun-darwin-arm64 bun-darwin-x64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: ./.github/actions/setup
+
+      - name: Build web UI
+        run: pnpm --filter @godmode/desktop build
+
+      - name: Build standalone binaries
+        working-directory: packages/core
+        run: |
+          for target in ${{ matrix.targets }}; do
+            bun run scripts/build.ts --target="$target" --smoke
+          done
+
+      - name: Checksums
+        working-directory: packages/core/bin
+        run: |
+          for f in godmode-*; do
+            if command -v sha256sum >/dev/null; then sha256sum "$f" > "$f.sha256"; else shasum -a 256 "$f" > "$f.sha256"; fi
+          done
+          ls -la
+
+      - name: Upload to the draft release
+        working-directory: packages/core/bin
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          for f in godmode-*; do
+            # Replace an asset from a previous attempt of this workflow.
+            old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq ".[] | select(.name == \"$f\") | .id")
+            if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"; fi
+            gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$f" \
+              -H "Content-Type: application/octet-stream" --input "$f" --jq .browser_download_url
+          done
+
+  docker:
+    name: Docker image
+    needs: create-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/codextde/godmode-bot
+          tags: |
+            type=semver,pattern={{version}},value=${{ env.TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
+            type=raw,value=latest,enable=${{ !contains(env.TAG, '-') }}
+          labels: |
+            org.opencontainers.image.title=Godmode Bot
+            org.opencontainers.image.description=Godmode Bot headless server with the web dashboard, Chromium, uv and Claude Code
+            org.opencontainers.image.licenses=MIT
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

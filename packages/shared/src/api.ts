@@ -214,10 +214,16 @@ export interface ProfileUseStatus {
   path: string | null;
   /** A browser-use Cloud API key is stored in the vault (app secret `browser_use_api_key`) or set in the environment. */
   hasApiKey: boolean;
+  /** Last successful sync (ISO date), if any. */
+  lastSyncAt: string | null;
+  /** Human-readable next step / state, e.g. how to install or that the API key is missing. */
+  detail: string;
 }
 
 /** POST /api/browser/profile-use/sync */
 export interface ProfileUseSyncInput {
+  /** A `LocalChromeProfile.path` from GET /api/browser/chrome-profiles (sets browser + profile). */
+  sourcePath?: string;
   /** Browser name as shown by `profile-use list`, e.g. "Google Chrome". */
   browser?: string;
   /** Profile name, e.g. "Default" or "Profile 1". Omitted = every profile (of `browser`, if given). */
@@ -231,6 +237,8 @@ export interface ProfileUseSyncInput {
 export interface ProfileUseSyncResult {
   ok: boolean;
   output: string;
+  /** browser-use Cloud profile id reported by profile-use, when it printed one. */
+  cloudProfileId: string | null;
 }
 
 export interface DashboardLoginInput {

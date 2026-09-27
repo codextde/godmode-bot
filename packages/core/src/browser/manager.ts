@@ -14,7 +14,6 @@ import { badRequest, conflict, HttpError, newId, notFound, now, sleep } from "..
 import { getSettings } from "../services/settings";
 import { onSettingsApplied } from "../services/runtime";
 import { resolveUvx, toolPath } from "../services/doctor";
-import { notify } from "../services/notifications";
 import { hasBrowserSubscribers } from "../server/ws";
 import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type PageSession } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
@@ -85,6 +84,7 @@ export function listProfiles(): BrowserProfile[] {
 /** Ensure a global default profile exists (called at startup). */
 export function ensureDefaultProfile(): BrowserProfile {
   initLiveView();
+  if (!idleTimer) void adoptOrphans();
   startIdleWatcher();
   const existing = get<ProfileRow>("SELECT * FROM browser_profiles WHERE workspace_id IS NULL AND is_default = 1 ORDER BY created_at LIMIT 1");
   if (existing) {
@@ -304,8 +304,22 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
   proc?.exited.then((code) => onBrowserGone(rb, `exited with code ${code}`));
 
   registerBrowser(rb);
+  startIdleWatcher();
   emitProfile(profileId);
   return rb;
+}
+
+/** Take over browsers a previous core process left running, so idle shutdown and the UI cover them. */
+async function adoptOrphans() {
+  for (const r of all<ProfileRow>("SELECT * FROM browser_profiles")) {
+    const marker = readLaunchMarker(r.user_data_dir);
+    if (!marker || getRegistered(r.id)) continue;
+    if (!isProcessAlive(marker.pid) || !(await probeCdp(marker.port))) {
+      clearLaunchMarker(r.user_data_dir);
+      continue;
+    }
+    await ensureBrowser(r.id).catch((err) => log.warn(`could not adopt browser for profile ${r.id}`, err));
+  }
 }
 
 function pidAlive(rb: RunningBrowser): boolean {
@@ -560,23 +574,10 @@ export function requireRunning(profileId: string): RunningBrowser {
 /* Agent browser tools (browser-use MCP)                                */
 /* ------------------------------------------------------------------ */
 
-const warned = new Set<string>();
-
-function warnOnce(key: string, title: string, body: string) {
-  log.warn(`${title}: ${body}`);
-  if (warned.has(key)) return;
-  warned.add(key);
-  try {
-    notify("warning", title, body, "/settings");
-  } catch {
-    /* notifications unavailable */
-  }
-}
-
 /**
  * MCP server entry giving the agent browser tools (browser-use MCP connected to the profile's Chromium via CDP).
- * Returns null when browser is disabled for the agent or globally (or when browser tools can't be provided;
- * the human is notified once).
+ * Returns null when browser is disabled for the agent or globally; throws (with a message fit for the human)
+ * when browser tools are enabled but can't be provided.
  */
 export async function browserMcpServer(agent: Agent): Promise<McpServerJson | null> {
   const settings = getSettings();
@@ -584,19 +585,12 @@ export async function browserMcpServer(agent: Agent): Promise<McpServerJson | nu
 
   const command = browserUseCommand(settings.browser.browserUseCommand, resolveUvx());
   if (!command) {
-    warnOnce("uvx", "Browser tools unavailable", "uv (uvx) is not installed, so browser-use can't start. Install it from Settings → Dependencies.");
-    return null;
+    throw new HttpError(424, "uv (uvx) is not installed, so browser-use can't start. Install it in Settings → Dependencies.", "uv_missing");
   }
 
   const profile = resolveProfileForAgent(agent);
   const headless = agent.browser.headless ?? settings.browser.headless;
-  let cdpUrl: string;
-  try {
-    ({ cdpUrl } = await launchBrowser(profile.id, { headless }));
-  } catch (err) {
-    warnOnce("launch", "Browser tools unavailable", err instanceof Error ? err.message : String(err));
-    return null;
-  }
+  const { cdpUrl } = await launchBrowser(profile.id, { headless });
 
   const cfg = config();
   const configDir = join(cfg.dataDir, "browser-use", profile.id, agent.id);

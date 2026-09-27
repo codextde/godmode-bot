@@ -92,6 +92,7 @@ export function registerBrowserRoutes(app: Hono): void {
     const input = await body(
       c,
       z.object({
+        sourcePath: z.string().min(1).max(4096).optional(),
         browser: z.string().min(1).max(100).optional(),
         profile: z.string().min(1).max(200).optional(),
         domains: z.array(z.string().min(1).max(253)).max(200).optional(),

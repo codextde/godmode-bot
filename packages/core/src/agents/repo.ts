@@ -100,12 +100,26 @@ export async function commitAllInLock(dir: string, message: string): Promise<str
     const matchesHead = (head === 1 && workdir === 1) || (head === 0 && workdir === 0);
     if (!matchesHead) changed = true;
     if (workdir === 0) toRemove.push(filepath);
+    // Committed earlier but since ignored and removed from the index (untrackInLock): commit it as a deletion.
+    else if (head === 1 && stage === 0 && (await git.isIgnored({ fs, dir, filepath }))) changed = true;
     else toAdd.push(filepath);
   }
   for (const filepath of toRemove) await git.remove({ fs, dir, filepath, cache });
   if (toAdd.length) await git.add({ fs, dir, filepath: toAdd, cache });
   if (!changed) return null;
   return git.commit({ fs, dir, message: message.trim() || "Update", author: GIT_AUTHOR, cache });
+}
+
+/**
+ * Stop tracking files under the directory `prefix` (e.g. after it was added to .gitignore). The files stay on disk;
+ * the next commit records them as removed from the repository. Call within withRepoLock(dir, …).
+ */
+export async function untrackInLock(dir: string, prefix: string): Promise<number> {
+  if (!fs.existsSync(join(dir, ".git"))) return 0;
+  const base = prefix.replace(/\/+$/, "");
+  const tracked = (await git.listFiles({ fs, dir })).filter((f) => f === base || f.startsWith(`${base}/`));
+  for (const filepath of tracked) await git.remove({ fs, dir, filepath });
+  return tracked.length;
 }
 
 type StatusRow = [string, number, number, number];

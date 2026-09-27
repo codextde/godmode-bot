@@ -13,12 +13,19 @@ export interface ClaudeMdContext {
   workspace: { name: string; description: string } | null;
 }
 
-export const AGENT_GITIGNORE = `# Managed by Godmode Bot
-workspace/tmp/
-*.tmp
-.claude-mem/
-.DS_Store
-`;
+/**
+ * Rules every agent repository's .gitignore must contain (re-added to existing repos when missing).
+ * `workspace/uploads/` holds files the human attaches — possibly large or sensitive, so they stay out of git.
+ */
+export const AGENT_GITIGNORE_RULES = ["workspace/tmp/", "workspace/uploads/", "*.tmp", ".claude-mem/", ".DS_Store"] as const;
+
+export const AGENT_GITIGNORE = `# Managed by Godmode Bot\n${AGENT_GITIGNORE_RULES.join("\n")}\n`;
+
+/** Rules from AGENT_GITIGNORE_RULES that `content` (an existing .gitignore) lacks. */
+export function missingGitignoreRules(content: string): string[] {
+  const present = new Set(content.split(/\r?\n/).map((l) => l.trim()));
+  return AGENT_GITIGNORE_RULES.filter((rule) => !present.has(rule));
+}
 
 /** Directories every agent repository contains (kept in git with a .gitkeep). */
 export const AGENT_REPO_DIRS = ["memory", "workspace", "conversations", "runs", "state"] as const;
@@ -75,7 +82,7 @@ export function renderClaudeMd(agent: Agent, ctx: ClaudeMdContext): string {
       "| `CLAUDE.md` | This file (generated — edits are overwritten when your settings change) |",
       "| `MEMORY.md` | Your long-term memory — keep it current |",
       "| `memory/` | Longer notes, playbooks and reference material |",
-      "| `workspace/` | Files you produce or download (`workspace/tmp/` is not versioned) |",
+      "| `workspace/` | Files you produce or download (`workspace/tmp/` and `workspace/uploads/` are not versioned) |",
       "| `conversations/` | Conversation transcripts (written by Godmode) |",
       "| `runs/` | Raw run logs (written by Godmode) |",
       "| `state/` | Snapshot of your settings and routines (written by Godmode, read-only for you) |",

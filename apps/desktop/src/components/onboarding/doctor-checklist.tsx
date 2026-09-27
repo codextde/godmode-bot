@@ -12,10 +12,17 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+/** "How to fix" fallbacks when the core doesn't send an install hint. */
+const FIX_FALLBACK: Partial<Record<DependencyId, string>> = {
+  "claude-auth": "Run `claude` once in a terminal to sign in.",
+  "browser-use": "Install it with uv: `uv tool install browser-use`.",
+};
+
+/** Context shown under the fix: why it matters or an alternative. */
 const DEFAULT_HINTS: Partial<Record<DependencyId, string>> = {
-  "claude-auth": "Run `claude` once in a terminal to sign in — or add an Anthropic API key later in Integrations → API keys.",
-  "browser-use": "Gives agents a real browser. Installed with uv (`uv tool install browser-use`).",
-  chrome: "Godmode drives its own Chromium profile; Google Chrome is also used to import your sessions.",
+  "claude-auth": "Prefer an API key? Add an Anthropic key later in Integrations → API keys.",
+  "browser-use": "Gives agents a real browser to work in.",
+  chrome: "Used to import your existing sign-ins into Godmode's browser.",
   git: "Optional — agent memory is versioned with a built-in git implementation.",
 };
 
@@ -143,14 +150,14 @@ function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint
           </div>
           {dep.detail && <p className="mt-0.5 text-xs text-muted-foreground">{dep.detail}</p>}
           {dep.path && dep.ok && <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80">{dep.path}</p>}
-          {!dep.ok && (hint || dep.installHint) && (
-            <p className="mt-1.5 text-xs leading-relaxed text-foreground/80">
-              <InlineCode text={hint ?? dep.installHint} />
+          {!dep.ok && (dep.installHint || FIX_FALLBACK[dep.id]) && (
+            <p className="mt-1.5 text-xs leading-relaxed text-foreground/85">
+              <InlineCode text={dep.installHint || FIX_FALLBACK[dep.id]!} />
             </p>
           )}
-          {!dep.ok && hint && dep.installHint && hint !== dep.installHint && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              <InlineCode text={dep.installHint} />
+          {!dep.ok && hint && (
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              <InlineCode text={hint} />
             </p>
           )}
         </div>

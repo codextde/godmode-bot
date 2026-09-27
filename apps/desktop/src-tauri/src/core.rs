@@ -12,7 +12,6 @@ use std::{
     ffi::OsString,
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, Read, Write},
-    path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, ExitStatus, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -370,6 +369,7 @@ fn core_command(app: &AppHandle) -> Result<(Command, String), String> {
 
     #[cfg(debug_assertions)]
     {
+        use std::path::Path;
         let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../packages/core/src/index.ts");
         if let Ok(entry) = entry.canonicalize() {
             let mut cmd: Command = app.shell().command("bun").into();
@@ -431,6 +431,7 @@ fn split_command_line(input: &str) -> Result<Vec<String>, String> {
 #[cfg(unix)]
 fn user_path(app: &AppHandle) -> Option<OsString> {
     let home = app.path().home_dir().ok();
+    use std::path::PathBuf;
     let mut dirs: Vec<PathBuf> = Vec::new();
     if !cfg!(debug_assertions) {
         if let Some(login) = login_shell_path() {

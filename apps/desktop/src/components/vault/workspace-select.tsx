@@ -20,10 +20,24 @@ export function WorkspaceSelect({
   disabled?: boolean;
 }) {
   const { data: workspaces = [] } = useWorkspaces();
+  const current = value ? workspaces.find((w) => w.id === value) : null;
   return (
     <Select value={value ?? GLOBAL_SCOPE} onValueChange={(v) => onChange(v === GLOBAL_SCOPE ? null : v)} disabled={disabled}>
       <SelectTrigger id={id} className={cn("w-full", className)}>
-        <SelectValue />
+        {/* Compact trigger label; the list items carry the longer hints. */}
+        <SelectValue>
+          {current ? (
+            <>
+              <span className="w-4 text-center">{current.icon || "🗂️"}</span> {current.name}
+            </>
+          ) : value ? (
+            "Workspace"
+          ) : (
+            <>
+              <Globe2 className="size-4" /> Global
+            </>
+          )}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={GLOBAL_SCOPE}>

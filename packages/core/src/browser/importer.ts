@@ -96,6 +96,8 @@ export function profilesFromLocalState(browser: string, root: string, localState
     .sort((a, b) => (a.profileDir === "Default" ? -1 : b.profileDir === "Default" ? 1 : a.profileDir.localeCompare(b.profileDir, undefined, { numeric: true })));
 }
 
+const permissionWarned = new Set<string>();
+
 export async function listLocalChromeProfiles(opts: DetectOptions = {}): Promise<LocalChromeProfile[]> {
   const out: LocalChromeProfile[] = [];
   for (const src of browserSources(opts)) {
@@ -104,7 +106,15 @@ export async function listLocalChromeProfiles(opts: DetectOptions = {}): Promise
       json = readFileSync(join(src.root, "Local State"), "utf8");
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
-      if (code !== "ENOENT" && code !== "ENOTDIR") log.debug(`cannot read ${src.browser} Local State (${code})`);
+      if ((code === "EPERM" || code === "EACCES") && !permissionWarned.has(src.root)) {
+        permissionWarned.add(src.root);
+        log.warn(
+          `cannot read ${src.browser} profiles (${code}).` +
+            (process.platform === "darwin" ? ' macOS privacy protection: allow Godmode to access data from other apps / grant "Full Disk Access".' : ""),
+        );
+      } else if (code !== "ENOENT" && code !== "ENOTDIR" && code !== "EPERM" && code !== "EACCES") {
+        log.debug(`cannot read ${src.browser} Local State (${code})`);
+      }
       continue;
     }
     out.push(...profilesFromLocalState(src.browser, src.root, json));

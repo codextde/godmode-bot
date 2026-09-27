@@ -1,0 +1,75 @@
+name: Bug report
+description: Something in Godmode Bot does not work as expected.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please **never paste passwords, 2FA secrets, API keys or tokens** —
+        check logs and screenshots for secrets before attaching them.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Ask the agent to …
+        3. See error …
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: How do you run Godmode?
+      options:
+        - Desktop app
+        - Web dashboard (godmode serve)
+        - Docker
+        - From source (pnpm dev)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Godmode version
+      description: Settings → About, or `godmode version`.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux (x64)
+        - Linux (arm64)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`godmode doctor` output"
+      description: Settings → Dependencies, or run `godmode doctor`.
+      render: shell
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      description: From `~/.godmode/logs/core.log` and `~/.godmode/logs/desktop.log`. Remove anything sensitive.
+      render: shell
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Screenshots, the agent/model you used, browser profile setup, …

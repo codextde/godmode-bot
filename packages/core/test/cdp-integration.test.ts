@@ -328,15 +328,20 @@ suite("managed Chromium (CDP integration)", () => {
     // Simulate a core restart: forget the browser without stopping it.
     unregisterBrowser(rb);
     rb.client.close();
-    expect(manager.getProfile(profileId).running).toBe(false);
-    const { port } = await manager.launchBrowser(profileId);
-    expect(port).toBe(rb.port);
-    const adopted = getRunning(profileId)!;
-    expect(adopted.process).toBeNull();
-    expect(adopted.headless).toBe(true);
-    await manager.stopBrowser(profileId);
-    await Promise.race([rb.process!.exited, Bun.sleep(8000)]);
-    expect(rb.process!.isAlive()).toBe(false);
+    try {
+      expect(manager.getProfile(profileId).running).toBe(false);
+      const { port } = await manager.launchBrowser(profileId);
+      expect(port).toBe(rb.port);
+      const adopted = getRunning(profileId)!;
+      expect(adopted.process).toBeNull();
+      expect(adopted.headless).toBe(true);
+      await manager.stopBrowser(profileId);
+      await Promise.race([rb.process!.exited, Bun.sleep(8000)]);
+      expect(rb.process!.isAlive()).toBe(false);
+    } finally {
+      // Never leak the original process if adoption failed.
+      if (rb.process!.isAlive()) rb.process!.kill("SIGKILL");
+    }
   }, 60_000);
 
   test("imports sessions from another profile's cookie store (profile-use technique)", async () => {

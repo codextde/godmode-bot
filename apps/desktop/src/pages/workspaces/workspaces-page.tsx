@@ -358,8 +358,12 @@ function ScopeCard({
         current && "border-primary/40 ring-1 ring-primary/25",
       )}
     >
-      <div className={cn("pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-br opacity-[0.12] transition-opacity group-hover:opacity-20", wash)} />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-transparent to-card/60" />
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-br opacity-[0.14] transition-opacity [mask-image:linear-gradient(to_bottom,black_20%,transparent)] group-hover:opacity-25",
+          wash,
+        )}
+      />
       <div className="relative flex items-start justify-between gap-3">
         <motion.div whileHover={{ rotate: -4, scale: 1.04 }} transition={{ type: "spring", stiffness: 300, damping: 15 }}>
           {tile}

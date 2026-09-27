@@ -8,19 +8,22 @@
  */
 import { chmodSync, existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { ProfileUseStatus, ProfileUseSyncInput, ProfileUseSyncResult } from "@godmode/shared";
 import { config } from "../config";
+import { getMeta, setMeta } from "../db";
 import { logger } from "../log";
 import { HttpError, badRequest, which } from "../util";
 import { getAppSecret, hasAppSecret } from "../vault/vault";
 import { runCommand, stripAnsi } from "../services/doctor";
+import { browserSources, listLocalChromeProfiles } from "./importer";
 
 const log = logger("profile-use");
 
 const RELEASES_REPO = "browser-use/profile-use-releases";
 const SYNC_TIMEOUT_MS = 5 * 60_000;
 const API_KEY_SECRET = "browser_use_api_key";
+const LAST_SYNC_META = "profile_use.last_sync_at";
 
 const binaryName = () => (process.platform === "win32" ? "profile-use.exe" : "profile-use");
 
@@ -67,7 +70,19 @@ function hasApiKey(): boolean {
 
 export function profileUseStatus(): ProfileUseStatus {
   const path = resolveProfileUse();
-  return { installed: !!path, path, hasApiKey: hasApiKey() };
+  const keySet = hasApiKey();
+  let lastSyncAt: string | null = null;
+  try {
+    lastSyncAt = getMeta(LAST_SYNC_META);
+  } catch {
+    /* database not open */
+  }
+  const detail = !path
+    ? "profile-use is not installed. Install it here, or run: curl -fsSL https://browser-use.com/profile.sh | sh"
+    : !keySet
+      ? "Add your browser-use API key (Settings → Integrations) to sync profiles to browser-use Cloud."
+      : "Ready to sync local browser profiles to browser-use Cloud.";
+  return { installed: !!path, path, hasApiKey: keySet, lastSyncAt, detail };
 }
 
 function releaseAsset(): string {
@@ -108,17 +123,36 @@ export async function installProfileUse(): Promise<ProfileUseStatus> {
 const DOMAIN_RE = /^\.?[a-z0-9-]+(\.[a-z0-9-]+)*$/i;
 
 /** `profile-use sync …` with the API key from the vault; output is returned with the key redacted. */
+const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+
+/** Browser + profile filters for a local profile folder (`LocalChromeProfile.path`). */
+async function filtersForPath(sourcePath: string): Promise<{ browser: string; profiles: string[] }> {
+  const path = resolve(sourcePath);
+  const listed = (await listLocalChromeProfiles()).find((p) => resolve(p.path) === path);
+  const root = dirname(path);
+  const browser = listed?.browser ?? browserSources().find((s) => resolve(s.root) === root)?.browser;
+  if (!browser) throw badRequest(`${sourcePath} is not a known local browser profile`);
+  // profile-use matches profiles by name; pass the folder name and the display name (the filter is repeatable).
+  const profiles = [...new Set([basename(path), listed?.name].filter((v): v is string => !!v))];
+  return { browser, profiles };
+}
+
+/** `profile-use sync …` with the API key from the vault; output is returned with the key redacted. */
 export async function syncWithProfileUse(input: ProfileUseSyncInput): Promise<ProfileUseSyncResult> {
   const bin = resolveProfileUse();
   if (!bin || !existsSync(bin)) throw badRequest("profile-use is not installed");
   const apiKey = process.env.BROWSER_USE_API_KEY || getAppSecret(API_KEY_SECRET);
   if (!apiKey) throw badRequest("Add your browser-use API key in Settings → Integrations first");
 
+  let browser = input.browser;
+  let profiles = input.profile ? [input.profile] : [];
+  if (input.sourcePath) ({ browser, profiles } = await filtersForPath(input.sourcePath));
+
   const args = ["sync"];
-  if (input.browser) args.push("--browser", input.browser);
-  if (input.profile) args.push("--profile", input.profile);
+  if (browser) args.push("--browser", browser);
+  for (const p of profiles) args.push("--profile", p);
   // Without a profile filter profile-use would ask interactively which profile to sync.
-  else args.push("--all");
+  if (!profiles.length) args.push("--all");
   for (const d of input.domains ?? []) {
     if (!DOMAIN_RE.test(d.trim())) throw badRequest(`Invalid domain: ${d}`);
     args.push("--domain", d.trim());
@@ -132,6 +166,16 @@ export async function syncWithProfileUse(input: ProfileUseSyncInput): Promise<Pr
   });
   let output = stripAnsi(`${res.stdout}${res.stderr ? `\n${res.stderr}` : ""}`).trim();
   output = output.split(apiKey).join("••••••••");
-  if (res.timedOut) return { ok: false, output: `${output}\n\nprofile-use timed out after 5 minutes.`.trim() };
-  return { ok: res.code === 0, output: output || (res.code === 0 ? "Done." : `profile-use exited with code ${res.code}`) };
+  const cloudProfileId = output.match(UUID_RE)?.[0] ?? input.cloudProfileId ?? null;
+  if (res.timedOut) return { ok: false, output: `${output}\n\nprofile-use timed out after 5 minutes.`.trim(), cloudProfileId };
+  const ok = res.code === 0;
+  if (ok) {
+    try {
+      setMeta(LAST_SYNC_META, new Date().toISOString());
+    } catch {
+      /* database not open */
+    }
+    log.info(`profile-use sync finished${browser ? ` (${browser})` : ""}`);
+  }
+  return { ok, output: output || (ok ? "Done." : `profile-use exited with code ${res.code}`), cloudProfileId };
 }

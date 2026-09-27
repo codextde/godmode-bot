@@ -178,7 +178,7 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
               <TabsContent value="images" className="space-y-4 pt-3">
                 <QrDropZone items={images.items} onFiles={images.addFiles} onRemove={images.remove} />
                 {images.items.length === 0 && <PasteHint />}
-                <GoogleAuthenticatorGuide defaultOpen={images.items.length === 0 && direct.length === 0} />
+                <GoogleAuthenticatorGuide hasCodes={images.items.length > 0 || direct.length > 0} />
               </TabsContent>
               <TabsContent value="camera" className="pt-3">
                 <CameraScanner known={known} onCode={addDirect} />
@@ -235,8 +235,12 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
   );
 }
 
-function GoogleAuthenticatorGuide({ defaultOpen }: { defaultOpen: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+function GoogleAuthenticatorGuide({ hasCodes }: { hasCodes: boolean }) {
+  const [open, setOpen] = useState(!hasCodes);
+  // Make room for the preview once something was added; the user can still reopen it.
+  useEffect(() => {
+    if (hasCodes) setOpen(false);
+  }, [hasCodes]);
   const steps = [
     "Open Google Authenticator on your phone.",
     "Tap the menu (⋮ or ☰) → Transfer accounts → Export accounts.",
