@@ -31,7 +31,7 @@ export function isGrantCancelled(err: unknown): boolean {
 }
 
 let cached: { grant: string; expiresAt: number } | null = null;
-let pending: { promise: Promise<string>; resolve: (grant: string) => void; reject: (err: Error) => void } | null = null;
+let pending: { promise: Promise<string>; resolve: (grant: string) => void; reject: (err: Error) => void; reason?: string } | null = null;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -54,7 +54,7 @@ function validCachedGrant(): string | undefined {
 }
 
 /** A valid grant: the cached one, or ask for the passphrase. Rejects (see `isGrantCancelled`) if the user cancels. */
-function ensureGrant(): Promise<string> {
+function ensureGrant(reason?: string): Promise<string> {
   const grant = validCachedGrant();
   if (grant) return Promise.resolve(grant);
   if (!pending) {
@@ -64,7 +64,7 @@ function ensureGrant(): Promise<string> {
       resolve = res;
       reject = rej;
     });
-    pending = { promise, resolve, reject };
+    pending = { promise, resolve, reject, reason };
     notify();
   }
   return pending.promise;
@@ -80,7 +80,7 @@ function settle(grant: string | null) {
 }
 
 /** `ensureGrant()` asks for the vault passphrase once and caches the resulting grant until it expires. */
-export function useVaultGrant(): () => Promise<string> {
+export function useVaultGrant(): (reason?: string) => Promise<string> {
   return ensureGrant;
 }
 
@@ -88,19 +88,20 @@ export function useVaultGrant(): () => Promise<string> {
  * Run a request that may need a grant: sends the cached grant if there is one; if the core answers
  * `grant_required`, asks for the passphrase and tries once more.
  */
-export async function withGrant<T>(fn: (grant: string | undefined) => Promise<T>): Promise<T> {
+export async function withGrant<T>(fn: (grant: string | undefined) => Promise<T>, reason?: string): Promise<T> {
   try {
     return await fn(validCachedGrant());
   } catch (err) {
     if (!(err instanceof ApiRequestError && err.code === "grant_required")) throw err;
     cached = null;
-    return fn(await ensureGrant());
+    return fn(await ensureGrant(reason));
   }
 }
 
 /** The passphrase prompt behind `ensureGrant()`. Mount once. */
 export function VaultGrantDialog() {
   const open = useSyncExternalStore(subscribe, () => pending !== null);
+  const reason = useSyncExternalStore(subscribe, () => pending?.reason);
   const [passphrase, setPassphrase] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -136,7 +137,9 @@ export function VaultGrantDialog() {
             <DialogTitle className="flex items-center gap-2">
               <ShieldCheck className="size-5 text-brand-strong" /> Confirm it's you
             </DialogTitle>
-            <DialogDescription>Enter your vault passphrase to show secrets in plain text. You won't be asked again for 10 minutes.</DialogDescription>
+            <DialogDescription>
+              {reason ?? "Enter your vault passphrase to show secrets in plain text."} You won't be asked again for 10 minutes.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="vault-grant-passphrase">Vault passphrase</Label>
