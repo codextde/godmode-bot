@@ -86,8 +86,8 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0(@types/react@19.3.0)(react@19.3.0)
       react-router:
-        specifier: ^7
-        version: 7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: ^8
+        version: 8.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
@@ -982,6 +982,9 @@ packages:
   '@radix-ui/rect@1.1.3':
     resolution: {integrity: sha512-JtyZR+mqgBibTo8xea3B6ZRmzZiM/YeVBtUkas6zMuXjAlfIFIW2FgqeM9eLyvEaYX66vr6DJMK+4U6LV0KhNw==}
 
+  '@remix-run/route-pattern@0.22.1':
+    resolution: {integrity: sha512-czdGJWh09Lapvcqt7Vb09KlrU2PhRJ8xQaI+AItTuD9aDJ5MAgxnS38lnys6Ll+6RJEqPiaUqTwIQhVLwFvv+w==}
+
   '@rolldown/binding-android-arm-eabi@1.2.11':
     resolution: {integrity: sha512-A5kXfGKvKWWZE0TtPrfsvT+q4Y5d1QG8gGUzpYjGydM+fARM9MuX90PrXYXe0XbsDVgyxxNzHo6giCj90bsFNw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -1400,9 +1403,8 @@ packages:
   comma-separated-tokens@2.0.3:
     resolution: {integrity: sha512-Fu4hJdvzeylCfQPp9SGWidpzrMs7tTrlu6Vb8XGaRGck8QSNZJJp538Wrb60Lax4fPwR64ViY468OIUTbRlGZg==}
 
-  cookie@1.1.1:
-    resolution: {integrity: sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ==}
-    engines: {node: '>=18'}
+  cookie-es@3.1.1:
+    resolution: {integrity: sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg==}
 
   crc-32@1.2.2:
     resolution: {integrity: sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==}
@@ -2052,12 +2054,12 @@ packages:
       '@types/react':
         optional: true
 
-  react-router@7.18.4:
-    resolution: {integrity: sha512-PUPQcMhMGRAslLcvtlPz/kmzBEWPhLdgLFrL7pLNepBL6dX0lWj4WD2cUYVgYCuT3jxvghYFg81cDTj44DhetQ==}
-    engines: {node: '>=20.0.0'}
+  react-router@8.4.0:
+    resolution: {integrity: sha512-JtydAkBvU9UTEe5qNC+POhu+ZBNM7rlKY2IegwXc7Idj7xfRG16x5RZrw3mju+XlqBxfvb2ky9P3jUp9WyWC1g==}
+    engines: {node: '>=22.22.0'}
     peerDependencies:
-      react: '>=18'
-      react-dom: '>=18'
+      react: '>=19.2.7'
+      react-dom: '>=19.2.7'
     peerDependenciesMeta:
       react-dom:
         optional: true
@@ -2102,9 +2104,6 @@ packages:
 
   scheduler@0.28.0:
     resolution: {integrity: sha512-juorfCmIkIw8tT+p5BXSm6PJjQF/ycEYmKyzURCIt/RaZIhL+PulbQ9Yu2z1HdOJDdqDTlxA1+xKBmHXJsczAw==}
-
-  set-cookie-parser@2.7.2:
-    resolution: {integrity: sha512-oeM1lpU/UvhTxw+g3cIfxXHyJRc/uidd3yK1P242gzHds0udQBYzs3y8j4gCCW+ZJ7ad0yctld8RYO+bdurlvw==}
 
   set-function-length@1.2.2:
     resolution: {integrity: sha512-pgRc4hJ4/sNjWCSS9AmnS40x3bNMDTknHgL5UaMBTMyJnU90EgWh1Rz+MC9eFu4BuN/UwZjKQuY/1v3rM7HMfg==}
@@ -3110,6 +3109,8 @@ snapshots:
 
   '@radix-ui/rect@1.1.3': {}
 
+  '@remix-run/route-pattern@0.22.1': {}
+
   '@rolldown/binding-android-arm-eabi@1.2.11':
     optional: true
 
@@ -3428,7 +3429,7 @@ snapshots:
 
   comma-separated-tokens@2.0.3: {}
 
-  cookie@1.1.1: {}
+  cookie-es@3.1.1: {}
 
   crc-32@1.2.2: {}
 
@@ -4277,11 +4278,11 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.3.0
 
-  react-router@7.18.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
+  react-router@8.4.0(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
     dependencies:
-      cookie: 1.1.1
+      '@remix-run/route-pattern': 0.22.1
+      cookie-es: 3.1.1
       react: 19.3.0
-      set-cookie-parser: 2.7.2
     optionalDependencies:
       react-dom: 19.3.0(react@19.3.0)
 
@@ -4361,8 +4362,6 @@ snapshots:
   safe-buffer@5.2.1: {}
 
   scheduler@0.28.0: {}
-
-  set-cookie-parser@2.7.2: {}
 
   set-function-length@1.2.2:
     dependencies:
