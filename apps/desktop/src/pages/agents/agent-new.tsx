@@ -79,7 +79,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
         }
       />
       <PageBody className="space-y-10">
-        <section className="relative overflow-hidden rounded-2xl border bg-paper-2 p-6 sm:p-8">
+        <section className="relative overflow-hidden rounded-2xl border bg-paper-2 p-4 @md:p-6 @2xl:p-8">
           <Backdrop className="opacity-60" />
           <div className="relative mx-auto max-w-3xl">
             <div className="mb-4 flex items-center gap-2 text-sm font-medium">
@@ -117,7 +117,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
                 className="block w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground/70"
               />
               <div className="flex flex-wrap items-center gap-2 px-2 pb-1">
-                <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
+                <span className="hidden items-center gap-1 text-xs text-muted-foreground @xl:flex">
                   <Kbd>{modKey}</Kbd>
                   <Kbd>↵</Kbd>
                 </span>
@@ -153,7 +153,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
               <p className="text-sm text-muted-foreground">Templates come with instructions and, where it makes sense, a schedule.</p>
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
             <motion.button
               type="button"
               onClick={() => onPick("scratch")}

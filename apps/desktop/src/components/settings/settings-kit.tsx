@@ -360,12 +360,12 @@ export function SettingRow({
     <div
       className={cn(
         "flex gap-x-6 gap-y-2.5 py-4",
-        stacked ? "flex-col" : "flex-wrap items-center justify-between sm:flex-nowrap",
+        stacked ? "flex-col" : "flex-wrap items-center justify-between @xl:flex-nowrap",
         disabled && "opacity-60",
         className,
       )}
     >
-      <div className="min-w-0 flex-1 space-y-1">
+      <div className={cn("min-w-0 space-y-1", stacked ? "flex-1" : "grow basis-56")}>
         <Label htmlFor={htmlFor} className="text-sm font-medium">
           {label}
         </Label>
@@ -461,7 +461,7 @@ export function ChoiceCards<T extends string>({
   name: string;
 }) {
   return (
-    <RadioGroup value={value} onValueChange={(v) => onChange(v as T)} className={cn("grid gap-3 sm:grid-cols-2", className)} aria-label={name}>
+    <RadioGroup value={value} onValueChange={(v) => onChange(v as T)} className={cn("grid grid-cols-1 gap-3 @xl:grid-cols-2", className)} aria-label={name}>
       {options.map((o) => {
         const checked = o.value === value;
         const id = `${name}-${o.value}`;

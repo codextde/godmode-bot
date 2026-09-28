@@ -363,7 +363,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
           </span>
         </span>
         {!expanded && images.length > 0 && (
-          <span className="hidden gap-1 sm:flex">
+          <span className="hidden gap-1 @lg:flex">
             {images.slice(-3).map((img, i) => (
               <img key={i} src={imageSrc(img)} alt="" className="h-8 w-12 rounded-md border object-cover object-top" />
             ))}
@@ -461,7 +461,7 @@ function ToolStep({
         {meta.detail && <span className="block truncate text-xs text-muted-foreground">{meta.detail}</span>}
       </span>
       {meta.kind === "vault" && !failed && (
-        <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-0.5 text-[10.5px] font-medium text-brand-strong sm:inline-flex">
+        <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-0.5 text-[10.5px] font-medium text-brand-strong @lg:inline-flex">
           <Lock className="size-3" /> Secret hidden
         </span>
       )}
@@ -529,7 +529,7 @@ function DiffStat({ rows }: { rows: DiffRow[] }) {
   const added = rows.filter((r) => r.type === "add").length;
   const removed = rows.filter((r) => r.type === "del").length;
   return (
-    <span className="hidden shrink-0 items-center gap-1.5 font-mono text-[11px] sm:inline-flex">
+    <span className="hidden shrink-0 items-center gap-1.5 font-mono text-[11px] @lg:inline-flex">
       <span className="text-success">+{added}</span>
       <span className="text-destructive">-{removed}</span>
     </span>

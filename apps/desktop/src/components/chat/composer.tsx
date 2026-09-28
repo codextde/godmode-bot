@@ -363,7 +363,7 @@ export function Composer({
     <div
       ref={rootRef}
       className={cn(
-        "relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200",
+        "@container/composer relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200",
         focused && "border-foreground/20 ring-4 ring-foreground/[0.035] dark:border-foreground/25 dark:ring-foreground/[0.05]",
         working && "glow-border",
         dragOver && "border-foreground/40 ring-4 ring-foreground/[0.06]",
@@ -469,7 +469,7 @@ export function Composer({
         </ToolbarButton>
 
         {agentId && (
-          <ToolbarButton label="Slash commands" onClick={toggleCommands} active={menuOpen} keepFocus className={cn(menuOpen && "bg-accent text-foreground")}>
+          <ToolbarButton label="Slash commands" onClick={toggleCommands} active={menuOpen} keepFocus className={cn("@max-md/composer:hidden", menuOpen && "bg-accent text-foreground")}>
             <SquareSlash />
           </ToolbarButton>
         )}
@@ -502,7 +502,7 @@ export function Composer({
                 initial={{ opacity: 0, x: 6 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 6 }}
-                className="hidden min-w-0 items-center gap-2 pr-1.5 text-xs text-muted-foreground sm:flex"
+                className="hidden min-w-0 items-center gap-2 pr-1.5 text-xs text-muted-foreground @xl/composer:flex"
               >
                 <WorkingTicks count={9} className="text-brand-strong" />
                 <span className="truncate">{transcribing ? "Transcribing…" : "Working — new messages are queued"}</span>
@@ -513,7 +513,7 @@ export function Composer({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="hidden items-center gap-1 pr-1 text-[11px] text-muted-foreground md:flex"
+                className="hidden items-center gap-1 pr-1 text-[11px] text-muted-foreground @2xl/composer:flex"
               >
                 <Kbd>⇧</Kbd>
                 <Kbd>↵</Kbd> new line

@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { useEffect } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -12,6 +12,7 @@ import {
   Lock,
   MessageSquarePlus,
   MessagesSquare,
+  PanelLeft,
   Plug,
   Search,
   Settings,
@@ -32,16 +33,18 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Wordmark } from "@/components/brand";
+import { Logo, Wordmark } from "@/components/brand";
 import { LiveDot } from "@/components/aicss/Motion";
 import { WorkspaceSwitcher } from "@/components/layout/workspace-switcher";
 import { RecentChats } from "@/components/layout/recent-chats";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useBootstrap } from "@/lib/hooks";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -66,6 +69,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const setCollapsed = useUi((s) => s.setSidebarCollapsed);
   const runningCount = useLive((s) => Object.keys(s.runs).length);
+  const location = useLocation();
+  // 768–1023px: icon rail by default; expanding it is a temporary peek that folds back on navigation.
+  const compact = useMediaQuery("(width >= 768px) and (width < 1024px)");
+  const [peek, setPeek] = useState(false);
+  useEffect(() => setPeek(false), [compact, location.key]);
+  const inboxCount = (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.unreadNotifications ?? 0);
 
   // Global shortcuts
   useEffect(() => {
@@ -90,7 +99,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
     { to: "/routines", label: "Routines", icon: <CalendarClock /> },
     { to: "/activity", label: "Activity", icon: <Activity /> },
-    { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.unreadNotifications ?? 0) || undefined },
+    { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
   ];
   const accessNav: NavItem[] = [
     { to: "/vault/logins", label: "Logins", icon: <KeyRound />, badge: undefined },
@@ -102,9 +111,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     // Fixed viewport height: pages get a definite `h-full`, so the chat thread scrolls inside itself and the
     // composer stays put (with `min-h-svh` the whole page grew and scrolled the composer away).
-    <SidebarProvider open={!collapsed} onOpenChange={(open) => setCollapsed(!open)} className="h-svh min-h-0 overflow-hidden">
+    <SidebarProvider
+      open={compact ? peek : !collapsed}
+      onOpenChange={(open) => (compact ? setPeek(open) : setCollapsed(!open))}
+      className="h-svh min-h-0 overflow-hidden"
+      // The macOS traffic lights reach 72px in; widen the icon rail so they never sit on top of a page.
+      style={isTauri && isMac ? ({ "--sidebar-width-icon": "5rem" } as CSSProperties) : undefined}
+    >
       <Sidebar collapsible="icon" variant="sidebar">
-        <SidebarHeader className={cn("gap-3 px-3 pt-3", isTauri && isMac && "pt-10")} data-tauri-drag-region>
+        <SidebarHeader className={cn("gap-3 px-3 pt-3 group-data-[collapsible=icon]:items-center", isTauri && isMac && "pt-10")} data-tauri-drag-region>
           <div className="flex items-center justify-between px-1 group-data-[collapsible=icon]:justify-center" data-tauri-drag-region>
             <Link to="/" className="no-drag">
               <Wordmark className="group-data-[collapsible=icon]:[&>div:last-child]:hidden" />
@@ -114,7 +129,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex gap-2 group-data-[collapsible=icon]:flex-col">
             <Button
               asChild
-              className="h-9 flex-1 justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+              className="h-9 flex-1 justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
             >
               <Link to="/">
                 <MessageSquarePlus className="size-4" />
@@ -136,7 +151,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className="group-data-[collapsible=icon]:items-center">
                 <NavMenuItem item={{ to: "/", label: "Chat", icon: <MessagesSquare />, end: true }} />
                 {workNav.map((item) => (
                   <NavMenuItem key={item.to} item={item} />
@@ -147,7 +162,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <SidebarGroup>
             <SidebarGroupLabel className="eyebrow text-[10.5px]">Access</SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className="group-data-[collapsible=icon]:items-center">
                 {accessNav.map((item) => (
                   <NavMenuItem key={item.to} item={item} />
                 ))}
@@ -165,13 +180,65 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset className="relative h-svh min-h-0 overflow-hidden bg-background">
-        {isTauri && isMac && <div className="absolute inset-x-0 top-0 z-50 h-7" data-tauri-drag-region />}
-        <div className="h-full overflow-y-auto">{children}</div>
+      <SidebarInset className="relative h-svh min-h-0 min-w-0 overflow-hidden bg-background">
+        <MobileBar attention={inboxCount > 0} />
+        <DesktopDragStrip />
+        <div className="@container min-h-0 flex-1 overflow-y-auto">{children}</div>
       </SidebarInset>
       <CommandPalette />
     </SidebarProvider>
   );
+}
+
+function MobileBar({ attention }: { attention: boolean }) {
+  const { isMobile, openMobile, setOpenMobile } = useSidebar();
+  const setCommandOpen = useUi((s) => s.setCommandOpen);
+  const location = useLocation();
+  useEffect(() => setOpenMobile(false), [location.key, isMobile, setOpenMobile]);
+  if (!isMobile) return null;
+  const mac = isTauri && isMac;
+  return (
+    <header
+      data-tauri-drag-region
+      className={cn(
+        "z-30 flex h-12 shrink-0 items-center gap-1 border-b bg-background/85 px-2 backdrop-blur-md",
+        mac && "h-14 pl-[84px]",
+      )}
+    >
+      <Button
+        variant="ghost"
+        size="icon"
+        className="relative"
+        aria-label={attention ? "Open navigation — inbox needs attention" : "Open navigation"}
+        aria-haspopup="dialog"
+        aria-expanded={openMobile}
+        onClick={() => setOpenMobile(true)}
+      >
+        <PanelLeft className="size-[18px]" />
+        {attention && <span className="absolute top-2 right-2 size-1.5 rounded-full bg-brand ring-2 ring-background" />}
+      </Button>
+      <Link to="/" className="no-drag flex items-center gap-2 rounded-md px-1 py-1" aria-label="Godmode home">
+        <Logo className="size-6" />
+        <span className="text-[15px] font-medium tracking-[-0.02em]">Godmode</span>
+      </Link>
+      <div className="ml-auto flex items-center gap-1">
+        <Button variant="ghost" size="icon" aria-label="Search and commands" aria-keyshortcuts={isMac ? "Meta+K" : "Control+K"} onClick={() => setCommandOpen(true)}>
+          <Search className="size-[18px]" />
+        </Button>
+        <Button size="icon" className="size-8" aria-label="New chat" asChild>
+          <Link to="/">
+            <MessageSquarePlus className="size-4" />
+          </Link>
+        </Button>
+      </div>
+    </header>
+  );
+}
+
+function DesktopDragStrip() {
+  const { isMobile } = useSidebar();
+  if (!isTauri || !isMac || isMobile) return null;
+  return <div className="absolute inset-x-0 top-0 z-50 h-7" data-tauri-drag-region />;
 }
 
 function NavMenuItem({ item }: { item: NavItem }) {

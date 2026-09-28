@@ -103,7 +103,7 @@ export function ToolkitGallery({
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">Connect an account and your agents get its actions as tools.</p>
         </div>
-        <InputGroup className="h-9 w-full sm:w-72">
+        <InputGroup className="h-9 w-full @xl:w-72">
           <InputGroupAddon>
             <Search />
           </InputGroupAddon>
@@ -145,7 +145,7 @@ export function ToolkitGallery({
       {query.isError ? (
         <QueryError error={query.error} onRetry={() => query.refetch()} title="Couldn't load Composio apps" />
       ) : query.isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
           {Array.from({ length: 9 }).map((_, i) => (
             <Skeleton key={i} className="h-[132px] rounded-xl" />
           ))}
@@ -163,7 +163,7 @@ export function ToolkitGallery({
         />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
             {items.map((t, i) => (
               <ToolkitCard key={t.slug} toolkit={t} index={i} connected={connectedCount(t.slug)} onConnect={() => onConnect(t)} />
             ))}

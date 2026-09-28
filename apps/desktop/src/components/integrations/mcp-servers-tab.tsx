@@ -138,7 +138,7 @@ export function McpServersTab() {
             title="No MCP servers yet"
             description="Add a server to give agents new abilities — a database, your file system, an internal API. Start with one of these:"
           />
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
             {MCP_PRESETS.map((p, i) => (
               <motion.button
                 key={p.id}
@@ -319,7 +319,7 @@ function ServerRow({
           <TooltipContent>{s.enabled ? "Enabled" : "Disabled"}</TooltipContent>
         </Tooltip>
         <Button size="sm" variant="ghost" onClick={onTest} aria-label={`Test ${s.name}`}>
-          <FlaskConical /> <span className="hidden sm:inline">Test</span>
+          <FlaskConical /> <span className="hidden @xl:inline">Test</span>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

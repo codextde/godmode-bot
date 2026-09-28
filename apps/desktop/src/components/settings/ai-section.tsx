@@ -66,7 +66,7 @@ function ModelSelect({
   const older = catalog.models.filter((m) => !m.latest);
 
   return (
-    <div className="flex w-full flex-col items-stretch gap-2 sm:w-72">
+    <div className="flex w-full flex-col items-stretch gap-2 @xl:w-72">
       <Select
         value={selectValue}
         onValueChange={(v) => {

@@ -386,6 +386,40 @@
   background-size: 14px 14px;
 }
 
+/* Soft edges on horizontal strips that scroll; the fade follows the scroll position where supported. */
+@property --gm-fade-start {
+  syntax: "<length>";
+  initial-value: 0px;
+  inherits: false;
+}
+@property --gm-fade-end {
+  syntax: "<length>";
+  initial-value: 0px;
+  inherits: false;
+}
+@utility scroll-fade-x {
+  mask-image: linear-gradient(to right, transparent, #000 var(--gm-fade-start), #000 calc(100% - var(--gm-fade-end)), transparent);
+  @supports (animation-timeline: scroll()) {
+    animation: gm-scroll-fade linear both;
+    animation-timeline: scroll(self inline);
+  }
+}
+@keyframes gm-scroll-fade {
+  0% {
+    --gm-fade-start: 0px;
+    --gm-fade-end: 2rem;
+  }
+  10%,
+  90% {
+    --gm-fade-start: 2rem;
+    --gm-fade-end: 2rem;
+  }
+  100% {
+    --gm-fade-start: 2rem;
+    --gm-fade-end: 0px;
+  }
+}
+
 @utility bg-grid {
   background-image:
     linear-gradient(to right, color-mix(in oklab, var(--foreground) 4%, transparent) 1px, transparent 1px),

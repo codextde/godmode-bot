@@ -136,7 +136,7 @@ export default function WorkspacesPage() {
       />
       <PageBody>
         {isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-64 rounded-xl" />
             ))}
@@ -150,7 +150,7 @@ export default function WorkspacesPage() {
             </Button>
           </div>
         ) : (
-          <motion.div layout className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <motion.div layout className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
             <ScopeCard
               index={0}
               current={scope === "global"}

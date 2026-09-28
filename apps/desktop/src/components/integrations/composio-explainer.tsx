@@ -25,8 +25,8 @@ const POINTS = [
 /** Shown while Composio isn't configured: what it is and why it's worth two minutes. */
 export function ComposioExplainer() {
   return (
-    <div className="relative overflow-hidden rounded-xl border bg-card p-6 shadow-card sm:p-8">
-      <div className="relative grid items-center gap-8 lg:grid-cols-[1fr_minmax(0,300px)]">
+    <div className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-card @2xl:p-8">
+      <div className="relative grid grid-cols-1 items-center gap-8 @5xl:grid-cols-[1fr_minmax(0,300px)]">
         <div>
           <p className="eyebrow">Composio</p>
           <h3 className="mt-2 text-[22px] leading-tight font-medium tracking-[-0.025em]">Plug your agents into the apps you already use</h3>
@@ -34,7 +34,7 @@ export function ComposioExplainer() {
             Composio handles sign-in and API plumbing for hundreds of services. Connect an account once and every agent in reach gets
             it as MCP tools — no scraping, no shared passwords.
           </p>
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="mt-6 grid grid-cols-1 gap-3 @3xl:grid-cols-3">
             {POINTS.map((p, i) => (
               <motion.div
                 key={p.title}

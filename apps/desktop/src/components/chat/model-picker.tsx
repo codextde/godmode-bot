@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, RotateCw } from "lucide-react";
+import { Check, ChevronDown, Cpu, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import {
   DEFAULT_MODEL,
@@ -189,7 +189,8 @@ export function ModelPicker({
                 className,
               )}
             >
-              <span className="truncate">{current.label}</span>
+              <Cpu className="hidden size-4 shrink-0 @max-sm/composer:block" />
+              <span className="truncate @max-sm/composer:hidden">{current.label}</span>
               {effort && <EffortGlyph level={effortIndex} count={current.efforts.length} />}
               <ChevronDown className="size-3.5 shrink-0 opacity-60" />
             </button>

@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useSidebar } from "@/components/ui/sidebar";
 import { AgentAvatar } from "@/components/common";
 import { useModelLabel } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
@@ -52,6 +53,7 @@ export function ConversationHeader({
   const qc = useQueryClient();
   const navigate = useNavigate();
   const modelLabel = useModelLabel();
+  const { isMobile } = useSidebar();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const id = conversation.id;
@@ -102,8 +104,8 @@ export function ConversationHeader({
   return (
     <header
       className={cn(
-        "relative z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3 sm:px-4",
-        isTauri && isMac && "h-auto pt-7 pb-2",
+        "relative z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3 @xl:px-4",
+        isTauri && isMac && !isMobile && "h-auto pt-7 pb-2",
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -114,7 +116,7 @@ export function ConversationHeader({
             aria-label={`Open ${agent.name}`}
           >
             <AgentAvatar agent={agent} size="sm" />
-            <span className="hidden max-w-[10rem] truncate md:inline">{agent.name}</span>
+            <span className="hidden max-w-[10rem] truncate @2xl:inline">{agent.name}</span>
           </Link>
         ) : (
           <span className="size-6 shrink-0 animate-pulse rounded-md bg-muted" />
@@ -127,14 +129,14 @@ export function ConversationHeader({
           onSave={(title) => title !== conversation.title && update.mutate({ title })}
         />
         {origin && (
-          <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground sm:inline-flex">
+          <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground @xl:inline-flex">
             <origin.icon className="size-3" /> {origin.label}
           </span>
         )}
         {(conversation.model || conversation.effort) && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground sm:inline-flex">
+              <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground @xl:inline-flex">
                 <Cpu className="size-3" />
                 {[conversation.model && modelLabel(conversation.model), conversation.effort && EFFORT_LABELS[conversation.effort]].filter(Boolean).join(" · ")}
               </span>

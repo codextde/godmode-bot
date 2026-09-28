@@ -73,7 +73,7 @@ export function RunRow({
           {running && live?.activity ? <span className="text-shimmer font-medium">{live.activity}</span> : snippet}
         </p>
       </div>
-      <div className="hidden shrink-0 items-center gap-4 text-xs text-muted-foreground tabular-nums md:flex">
+      <div className="hidden shrink-0 items-center gap-4 text-xs text-muted-foreground tabular-nums @xl:flex">
         <span className="w-16 text-right" title="Duration">
           {elapsed != null ? <span className="font-mono text-brand-strong">{formatElapsed(elapsed)}</span> : formatDuration(run.durationMs)}
         </span>

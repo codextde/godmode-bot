@@ -26,7 +26,7 @@ const SUGGESTED_DOMAINS = ["google.com", "github.com", "linkedin.com", "notion.s
 export function ImportSessionsCard({ profiles, targetId, onTargetChange }: { profiles: BrowserProfile[]; targetId: string | null; onTargetChange: (id: string) => void }) {
   const target = profiles.find((p) => p.id === targetId) ?? null;
   return (
-    <section className="rounded-xl border bg-card p-5 shadow-card">
+    <section className="@container rounded-xl border bg-card p-5 shadow-card">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="grid size-9 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card">
@@ -124,7 +124,7 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
         {step === 1 && (
           <motion.div key="s1" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.18 }}>
             {chrome.isLoading ? (
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 @lg:grid-cols-2">
                 {Array.from({ length: 2 }).map((_, i) => (
                   <Skeleton key={i} className="h-[68px] rounded-xl" />
                 ))}
@@ -144,7 +144,7 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
                 footer="You can also import a cookie export in the “Cookies JSON” tab."
               />
             ) : (
-              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Chrome profile to import from">
+              <div className="grid grid-cols-1 gap-2 @lg:grid-cols-2" role="radiogroup" aria-label="Chrome profile to import from">
                 {chrome.data.map((p, i) => (
                   <ChromeProfileCard key={p.path} profile={p} index={i} selected={source?.path === p.path} onSelect={() => setSource(p)} />
                 ))}
@@ -233,7 +233,7 @@ function Stepper({ step }: { step: Step }) {
             >
               {done ? <Check className="size-3" /> : n}
             </span>
-            <span className={cn("hidden sm:inline", active ? "font-medium text-foreground" : "text-muted-foreground")}>{label}</span>
+            <span className={cn("hidden @md:inline", active ? "font-medium text-foreground" : "text-muted-foreground")}>{label}</span>
             {i < steps.length - 1 && <span className={cn("h-px w-6 bg-border", done && "bg-brand/50")} />}
           </li>
         );

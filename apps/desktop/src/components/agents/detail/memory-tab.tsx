@@ -119,7 +119,7 @@ export function MemoryTab({ agent }: { agent: Agent }) {
     });
 
   return (
-    <div className="grid min-h-[32rem] gap-4 md:grid-cols-[260px_minmax(0,1fr)]">
+    <div className="grid min-h-[32rem] grid-cols-1 gap-4 @3xl:grid-cols-[260px_minmax(0,1fr)]">
       <aside className="flex max-h-[70vh] min-h-0 flex-col rounded-xl border bg-card shadow-card">
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div>

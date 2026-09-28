@@ -222,7 +222,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
   return (
     <div className="flex h-full min-h-0">
-      <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="flex h-full min-w-0 flex-1 flex-col">
+      <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="@container flex h-full min-w-0 flex-1 flex-col">
         <ConversationHeader
           conversation={conv}
           agent={agent}
@@ -246,7 +246,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           }
         />
 
-        <div className="relative shrink-0 px-3 pb-3 sm:px-6 sm:pb-4">
+        <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
           <div className="mx-auto w-full max-w-3xl">
             <Composer
               ref={composerRef}
@@ -269,7 +269,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               }
               onSubmit={(input) => send.mutateAsync(input)}
             />
-            <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 sm:block">
+            <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 @2xl:block">
               Agents act for you with your saved logins — secrets are filled into the browser, never shown to the AI.
             </p>
           </div>
@@ -318,7 +318,7 @@ function ConversationWelcome({ agent, onPick }: { agent?: Agent; onPick: (text: 
   return (
     <div className="flex flex-col items-center pt-[10vh] text-center">
       {agent && <AgentAvatar agent={agent} size="xl" className="animate-float" />}
-      <h2 className="heading-display mt-6 text-[32px]">
+      <h2 className="heading-display mt-6 text-[26px] text-balance @lg:text-[32px]">
         {agent?.name ?? "Your agent"}. <span className="text-muted-foreground">Ready when you are.</span>
       </h2>
       {agent?.description && <p className="mt-3 max-w-md text-sm text-muted-foreground">{agent.description}</p>}

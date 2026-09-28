@@ -165,7 +165,7 @@ function RunMeta({ runId }: { runId: string }) {
         </span>
       )}
       {run.model && (
-        <span className="hidden items-center gap-1 sm:inline-flex">
+        <span className="hidden items-center gap-1 @lg:inline-flex">
           <Cpu className="size-3" /> {modelLabel(run.model)}
         </span>
       )}

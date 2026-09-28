@@ -61,7 +61,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
     <div className="space-y-6">
       <LiveCard agent={agent} />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
         <Kpi
           icon={<Activity />}
           label={runs.length >= 200 ? "Runs (last 200)" : "Total runs"}
@@ -79,7 +79,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
         <Kpi icon={<Timer />} label="Avg duration" value={runsQ.isLoading ? null : formatDuration(stats.avg)} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-1 gap-6 @4xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-w-0 rounded-xl border bg-card p-2 shadow-card">
           <div className="flex items-center justify-between px-3 pt-2 pb-1">
             <h2 className="text-sm font-medium tracking-[-0.01em]">Recent runs</h2>

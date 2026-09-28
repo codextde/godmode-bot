@@ -62,7 +62,7 @@ export default function InboxPage() {
         }
       />
       <PageBody>
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid grid-cols-1 items-start gap-6 @5xl:grid-cols-[minmax(0,1fr)_380px]">
           <section aria-labelledby="attention-title" className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 id="attention-title" className="eyebrow">
@@ -139,7 +139,7 @@ export default function InboxPage() {
             )}
           </section>
 
-          <NotificationList className="xl:sticky xl:top-6" />
+          <NotificationList className="@5xl:sticky @5xl:top-6" />
         </div>
       </PageBody>
     </div>

@@ -66,7 +66,7 @@ export function ProfileList({
 
   if (isLoading) {
     return (
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+      <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @5xl:grid-cols-1">
         {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-[84px] rounded-xl" />
         ))}
@@ -76,7 +76,7 @@ export function ProfileList({
 
   return (
     <>
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1" role="listbox" aria-label="Browser profiles">
+      <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @5xl:grid-cols-1" role="listbox" aria-label="Browser profiles">
         <AnimatePresence initial={false}>
           {profiles.map((p, i) => (
             <motion.div
