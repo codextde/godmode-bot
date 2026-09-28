@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -42,6 +42,7 @@ import { RecentChats } from "@/components/layout/recent-chats";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
+import { PageScrollContext } from "@/components/layout/page-scroll";
 import { useBootstrap } from "@/lib/hooks";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -66,6 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const setCollapsed = useUi((s) => s.setSidebarCollapsed);
   const runningCount = useLive((s) => Object.keys(s.runs).length);
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
 
   // Global shortcuts
   useEffect(() => {
@@ -167,7 +169,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <SidebarInset className="relative h-svh min-h-0 overflow-hidden bg-background">
         {isTauri && isMac && <div className="absolute inset-x-0 top-0 z-50 h-7" data-tauri-drag-region />}
-        <div className="h-full overflow-y-auto">{children}</div>
+        <div ref={setScrollEl} className="h-full overflow-y-auto">
+          <PageScrollContext value={scrollEl}>{children}</PageScrollContext>
+        </div>
       </SidebarInset>
       <CommandPalette />
     </SidebarProvider>
