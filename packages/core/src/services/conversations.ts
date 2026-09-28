@@ -216,7 +216,7 @@ export function listConversations(opts: { agentId?: string; search?: string; lim
   params.push(limit);
   const rows = all<ConversationRow>(
     `SELECT c.*, ${PREVIEW_SQL} FROM conversations c WHERE ${where.join(" AND ")}
-     ORDER BY c.pinned DESC, COALESCE(c.last_message_at, c.created_at) DESC LIMIT ?`,
+     ORDER BY ${opts.archived ? "" : "c.pinned DESC, "}COALESCE(c.last_message_at, c.created_at) DESC LIMIT ?`,
     ...params,
   );
   return rows.map(toConversation);
@@ -243,10 +243,18 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
 /** Internal fields maintained by the runner. Does not emit. */
 export function setConversationState(
   id: string,
-  patch: { claudeSessionId?: string | null; lastMessageAt?: string; title?: string; model?: string | null; effort?: Effort | null },
+  patch: {
+    claudeSessionId?: string | null;
+    lastMessageAt?: string;
+    title?: string;
+    model?: string | null;
+    effort?: Effort | null;
+    archived?: boolean;
+  },
 ) {
   update("conversations", id, {
     claude_session_id: patch.claudeSessionId,
+    archived: int(patch.archived),
     model: patch.model,
     effort: patch.effort,
     last_message_at: patch.lastMessageAt,
@@ -427,7 +435,9 @@ export async function sendMessage(
     throw err;
   }
 
-  setConversationState(conversationId, { lastMessageAt: message.createdAt });
+  // Writing in an archived chat brings it back; routines and delegations keep it archived.
+  const restore = bool(conv.archived) && (input.trigger ?? "chat") === "chat";
+  setConversationState(conversationId, { lastMessageAt: message.createdAt, archived: restore ? false : undefined });
   emitConversationUpdated(conversationId);
   return { message: getMessage(message.id), run: started };
 }

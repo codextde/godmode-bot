@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ConversationWithMessages, Message, SendMessageInput } from "@godmode/shared";
-import { ArrowUpRight, Brain, MessageSquareDashed, Sparkles, Wand2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AgentAvatar, EmptyState } from "@/components/common";
 import { BrowserFocus, BrowserPanel, BrowserToggle, useChatBrowser, type BrowserFocusMode } from "@/components/chat/browser-panel";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
+import { useArchiveChat } from "@/components/chat/chat-actions";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
@@ -51,6 +52,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const setBrowserPanel = useUi((s) => s.setBrowserPanel);
   const wide = useMediaQuery("(min-width: 1024px)");
   const [browserFocus, setBrowserFocus] = useState<BrowserFocusMode | null>(null);
+  const { setArchived } = useArchiveChat();
   const showBrowserPanel = !!browser?.running && !!agent && wide && browserPanel;
   useEffect(() => setBrowserFocus(null), [browser?.id]);
 
@@ -248,6 +250,27 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
         <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
           <div className="mx-auto w-full max-w-3xl">
+            <AnimatePresence initial={false}>
+              {conv.archived && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                  className="overflow-hidden"
+                >
+                  <div className="mb-2 flex items-center gap-2.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-3 text-[13px] text-muted-foreground shadow-card">
+                    <Archive className="size-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-medium text-foreground">Archived.</span> Send a message to move it back to Recent.
+                    </span>
+                    <Button size="xs" variant="ghost" onClick={() => setArchived(conv, false)}>
+                      <ArchiveRestore /> Unarchive
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <Composer
               ref={composerRef}
               draftKey={conversationId}

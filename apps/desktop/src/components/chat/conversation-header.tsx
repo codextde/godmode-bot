@@ -5,16 +5,6 @@ import type { Agent, Conversation, ConversationWithMessages } from "@godmode/sha
 import { EFFORT_LABELS } from "@godmode/shared";
 import { Archive, ArchiveRestore, AudioLines, CalendarClock, ChevronRight, Cpu, Ellipsis, Pencil, Pin, PinOff, Share2, Trash2, Plug } from "lucide-react";
 import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,6 +16,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSidebar } from "@/components/ui/sidebar";
 import { AgentAvatar } from "@/components/common";
+import { DeleteChatDialog, useArchiveChat } from "@/components/chat/chat-actions";
 import { useModelLabel } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -59,7 +50,7 @@ export function ConversationHeader({
   const id = conversation.id;
 
   const update = useMutation({
-    mutationFn: (input: { title?: string; pinned?: boolean; archived?: boolean }) => api.conversations.update(id, input),
+    mutationFn: (input: { title?: string; pinned?: boolean }) => api.conversations.update(id, input),
     onMutate: async (input) => {
       await qc.cancelQueries({ queryKey: qk.conversation(id) });
       const prev = qc.getQueryData<ConversationWithMessages>(qk.conversation(id));
@@ -75,29 +66,7 @@ export function ConversationHeader({
     },
   });
 
-  const remove = useMutation({
-    mutationFn: () => api.conversations.delete(id),
-    onSuccess: () => {
-      toast.success("Chat deleted");
-      qc.removeQueries({ queryKey: qk.conversation(id) });
-      qc.invalidateQueries({ queryKey: qk.conversationsAll });
-      navigate("/", { replace: true });
-    },
-    onError: (err) => toast.error("Couldn't delete the chat", { description: errorMessage(err) }),
-  });
-
-  const toggleArchive = () => {
-    const archived = !conversation.archived;
-    update.mutate(
-      { archived },
-      {
-        onSuccess: () =>
-          toast.success(archived ? "Chat archived" : "Chat restored", {
-            action: archived ? { label: "Undo", onClick: () => update.mutate({ archived: false }) } : undefined,
-          }),
-      },
-    );
-  };
+  const { setArchived } = useArchiveChat();
 
   const origin = conversation.origin !== "chat" ? ORIGIN_META[conversation.origin] : null;
 
@@ -145,7 +114,12 @@ export function ConversationHeader({
           </Tooltip>
         )}
         {conversation.archived && (
-          <span className="shrink-0 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">Archived</span>
+          <Link
+            to="/archived"
+            className="inline-flex shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:text-foreground"
+          >
+            <Archive className="size-3" /> Archived
+          </Link>
         )}
       </div>
 
@@ -189,7 +163,7 @@ export function ConversationHeader({
             <DropdownMenuItem onClick={() => update.mutate({ pinned: !conversation.pinned })}>
               {conversation.pinned ? <PinOff /> : <Pin />} {conversation.pinned ? "Unpin" : "Pin"}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={toggleArchive}>
+            <DropdownMenuItem onClick={() => setArchived(conversation, !conversation.archived)}>
               {conversation.archived ? <ArchiveRestore /> : <Archive />} {conversation.archived ? "Unarchive" : "Archive"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -200,26 +174,12 @@ export function ConversationHeader({
         </DropdownMenu>
       </div>
 
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
-            <AlertDialogDescription>
-              “{conversation.title || "New chat"}” and its messages will be removed. The agent keeps its memory and the transcript in its history.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => remove.mutate()}
-              className="bg-destructive text-white hover:bg-destructive/90"
-              disabled={remove.isPending}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteChatDialog
+        chat={conversation}
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        onDeleted={() => navigate("/", { replace: true })}
+      />
     </header>
   );
 }
