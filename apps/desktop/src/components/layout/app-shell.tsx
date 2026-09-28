@@ -44,6 +44,7 @@ import { RecentChats } from "@/components/layout/recent-chats";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
+import { PageScrollContext } from "@/components/layout/page-scroll";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useBootstrap } from "@/lib/hooks";
 import { api } from "@/lib/api";
@@ -69,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const setCollapsed = useUi((s) => s.setSidebarCollapsed);
   const runningCount = useLive((s) => Object.keys(s.runs).length);
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const location = useLocation();
   // 768–1023px: icon rail by default; expanding it is a temporary peek that folds back on navigation.
   const compact = useMediaQuery("(width >= 768px) and (width < 1024px)");
@@ -183,7 +185,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SidebarInset className="relative h-svh min-h-0 min-w-0 overflow-hidden bg-background">
         <MobileBar attention={inboxCount > 0} />
         <DesktopDragStrip />
-        <div className="@container min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div ref={setScrollEl} className="@container min-h-0 flex-1 overflow-y-auto">
+          <PageScrollContext value={scrollEl}>{children}</PageScrollContext>
+        </div>
       </SidebarInset>
       <CommandPalette />
     </SidebarProvider>

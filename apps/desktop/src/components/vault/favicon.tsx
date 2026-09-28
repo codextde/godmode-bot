@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 import { useSettings } from "@/lib/hooks";
 import { faviconUrl, hueFor, isPrivateHost } from "./vault-utils";
 
+const missingIcons = new Set<string>();
+
 /**
  * Site icon with graceful fallback to a flat, softly tinted initial tile.
  * Google's favicon service returns a generic globe for unknown sites (16px) — we treat tiny images as missing.
@@ -18,7 +20,11 @@ export function Favicon({
   size?: "sm" | "md" | "lg";
   className?: string;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState(() => !!domain && missingIcons.has(domain));
+  const markFailed = () => {
+    if (domain) missingIcons.add(domain);
+    setFailed(true);
+  };
   const { data: settings } = useSettings();
   const iconsAllowed = settings?.security.fetchSiteIcons !== false;
   const sizes = { sm: "size-6 rounded-md text-[11px]", md: "size-9 rounded-lg text-sm", lg: "size-12 rounded-xl text-lg" };
@@ -46,9 +52,9 @@ export function Favicon({
           referrerPolicy="no-referrer"
           className="size-[62%] object-contain"
           onLoad={(e) => {
-            if (e.currentTarget.naturalWidth <= 16) setFailed(true);
+            if (e.currentTarget.naturalWidth <= 16) markFailed();
           }}
-          onError={() => setFailed(true)}
+          onError={markFailed}
         />
       ) : (
         <span>{initial}</span>
