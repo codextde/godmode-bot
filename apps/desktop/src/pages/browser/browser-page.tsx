@@ -29,16 +29,47 @@ export default function BrowserPage() {
 
   const requested = params.get("profile");
   const selected = profiles.find((p) => p.id === requested) ?? defaultProfile ?? profiles[0] ?? null;
+  // Chats browse in parallel, each in its own tab: show the one picked (or the one used last).
+  const requestedChat = params.get("chat");
+  const chats = selected?.running ? selected.chats : [];
+  const chat =
+    chats.find((c) => c.conversationId === requestedChat) ??
+    chats.reduce<(typeof chats)[number] | null>((latest, c) => (!latest || c.lastUsedAt > latest.lastUsedAt ? c : latest), null);
 
   const select = (id: string) =>
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.set("profile", id);
+        next.delete("chat");
         return next;
       },
       { replace: true },
     );
+
+  const selectChat = (conversationId: string) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("chat", conversationId);
+        return next;
+      },
+      { replace: true },
+    );
+
+  // Pin the chat shown, so the view doesn't hop to whichever chat was just busy.
+  const shownChat = chat?.conversationId ?? null;
+  useEffect(() => {
+    if (!shownChat || requestedChat === shownChat) return;
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("chat", shownChat);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [shownChat, requestedChat, setParams]);
 
   // Drop a stale ?profile= (e.g. after deletion).
   useEffect(() => {
@@ -107,7 +138,13 @@ export default function BrowserPage() {
             </aside>
             <div className="min-w-0 space-y-6">
               {selected ? (
-                <LiveView profile={selected} onLaunch={() => actions.launch.mutate(selected)} launching={launching} />
+                <LiveView
+                  profile={selected}
+                  conversationId={chat?.conversationId ?? null}
+                  onConversationChange={selectChat}
+                  onLaunch={() => actions.launch.mutate(selected)}
+                  launching={launching}
+                />
               ) : (
                 <Skeleton className="aspect-[16/10] w-full rounded-xl" />
               )}

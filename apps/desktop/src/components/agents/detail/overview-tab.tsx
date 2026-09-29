@@ -17,7 +17,7 @@ import { RunRow, useNow } from "@/components/runs/run-row";
 import { RunDetailSheet, useCancelRun } from "@/components/runs/run-detail-sheet";
 import { formatCost, formatDuration, formatElapsed } from "@/components/runs/run-status";
 import { useAgentLiveRun } from "../agent-actions";
-import { cronToHuman } from "../cron";
+import { cronToHuman, scheduleToHuman } from "../cron";
 import { lowerFirst, TRIGGER_TYPES } from "@/components/automations/trigger-meta";
 
 export function OverviewTab({ agent }: { agent: Agent }) {
@@ -137,7 +137,10 @@ export function OverviewTab({ agent }: { agent: Agent }) {
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">{r.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {r.trigger.type === "condition" ? `Checks ${lowerFirst(cronToHuman(r.cron))}` : cronToHuman(r.cron)} ·{" "}
+                          {r.trigger.type === "condition"
+                            ? `Checks ${lowerFirst(cronToHuman(r.cron))}`
+                            : scheduleToHuman(r.cron, r.trigger.type === "schedule" ? r.trigger.startWindowMinutes : 0)}{" "}
+                          ·{" "}
                           {formatDistanceToNowStrict(new Date(r.nextRunAt!), { addSuffix: true })}
                         </div>
                       </div>

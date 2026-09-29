@@ -94,7 +94,7 @@ export const agentSchema = z.object({
 });
 
 const triggerSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("schedule") }),
+  z.object({ type: z.literal("schedule"), startWindowMinutes: z.number().optional() }),
   z.object({
     type: z.literal("app"),
     connectionId: id,
