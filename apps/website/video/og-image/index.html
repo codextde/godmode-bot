@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1200, height=630" />
+    <title>Godmode Bot — social card</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="assets/brand.css" />
+    <style>
+      @font-face { font-family: "Geist"; src: url("assets/fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
+      html, body { width: 1200px; height: 630px; }
+      #shot { position: absolute; left: 640px; top: 96px; width: 820px; height: 512px; border-radius: 18px; overflow: hidden;
+        border: 1px solid var(--line-2); background: #1a1a1a;
+        box-shadow: 0 40px 90px rgba(0,0,0,0.7), 0 10px 30px rgba(0,0,0,0.45);
+        -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0.25) 0%, #000 34%);
+        mask-image: linear-gradient(to right, rgba(0,0,0,0.25) 0%, #000 34%); }
+      #shot .ftb { position: absolute; left: 0; right: 0; top: 0; height: 30px; background: #151515; border-bottom: 1px solid rgba(255,255,255,0.06);
+        display: flex; align-items: center; padding: 0 12px; }
+      #shot .ftb .traffic i { width: 10px; height: 10px; }
+      #shot img { position: absolute; left: -300px; top: -170px; width: 1200px; height: 750px; }
+      #hl { position: absolute; left: 451px; top: 222px; width: 98px; height: 200px; border-radius: 12px; border: 2.5px solid var(--em);
+        box-shadow: 0 0 0 5px rgba(47,214,144,0.14), 0 0 30px rgba(47,214,144,0.35); }
+      #left { position: absolute; left: 72px; top: 0; bottom: 0; width: 600px; display: flex; flex-direction: column; justify-content: center; }
+      .brandrow { display: flex; align-items: center; gap: 14px; }
+      .brandrow .logo { width: 52px; height: 52px; }
+      .brandrow b { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; }
+      h1 { font-size: 66px; margin-top: 34px; width: 580px; line-height: 1.02; }
+      h1 .serif { font-size: 74px; }
+      .sub { margin-top: 28px; font-family: var(--mono); font-size: 15px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; white-space: nowrap; }
+      .by { margin-top: 14px; display: flex; align-items: center; gap: 10px; font-size: 18px; color: #d8d4cc; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="2" data-width="1200" data-height="630">
+      <div id="scene" class="clip" data-start="0" data-duration="2" data-track-index="0">
+        <div class="bg-field"></div>
+        <div class="bg-glow" id="glow" style="left: 560px; top: -140px; width: 900px; height: 900px"></div>
+        <div class="bg-warm" style="left: -200px; top: -300px; width: 900px; height: 800px"></div>
+        <div class="guide-v" style="left: 40px"></div>
+        <div class="guide-h" style="top: 594px"></div>
+        <div id="shot"><div class="ftb"><div class="traffic color"><i></i><i></i><i></i></div></div><img src="assets/screens/chat.png" alt="" /><div id="hl"></div></div>
+        <div id="left">
+          <div class="brandrow"><div class="logo" data-logo></div><b>Godmode Bot</b></div>
+          <h1 class="headline" id="h">Your AI coworker that <span class="serif">actually</span> does the work.</h1>
+          <div class="sub">Browser · Vault &amp; 2FA · Its own Mac · Agents</div>
+          <div class="by"><span class="claude-dot"></span>Powered by Claude Opus 5.5</div>
+        </div>
+        <div class="grain" data-layout-ignore></div>
+      </div>
+    </div>
+    <script src="assets/lib.js"></script>
+    <script>
+      GM.hydrate(document);
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#left", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.8, ease: "expo.out" }, 0.1);
+      tl.fromTo("#shot", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 1.0, ease: "expo.out" }, 0.2);
+      tl.fromTo("#glow", { opacity: 0.6 }, { opacity: 0.95, duration: 1.4, ease: "sine.inOut" }, 0);
+      GM.markLayered(["#shot"], []);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

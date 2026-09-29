@@ -8,7 +8,7 @@ import type { Agent, AgentInput, AgentTemplate } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { qk } from "@/lib/queryKeys";
-import { useAgentTemplates, useBootstrap } from "@/lib/hooks";
+import { useAgentTemplates, useBootstrap, useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
@@ -46,6 +46,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: boot } = useBootstrap();
+  const workspace = useScopeWorkspace();
   const templates = useAgentTemplates();
   const [description, setDescription] = useState("");
   const [focused, setFocused] = useState(false);
@@ -54,6 +55,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
     mutationFn: () =>
       api.chat.start({
         agentId: boot?.defaultAgentId ?? undefined,
+        workspaceId: workspace?.id,
         content: `Create a new agent for me: ${description.trim()}. Configure sensible instructions and an automation if it should work on its own (on a schedule or when something happens).`,
       }),
     onSuccess: (res) => {

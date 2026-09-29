@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CalendarClock, TriangleAlert } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
 import {
   buildCron,
   CRON_KIND_LABELS,
-  cronToHuman,
   ordinal,
   parseCron,
+  scheduleToHuman,
   validateCron,
   WEEKDAYS,
   type CronDraft,
@@ -35,11 +35,27 @@ function pad(n: number) {
 /**
  * Friendly schedule editor. Emits a cron expression via `onChange`.
  * Mount with a `key` when the underlying routine changes so the draft re-initialises.
+ * `children` render above the summary, which includes `startWindowMinutes`; `problem` shows there like an invalid expression.
  */
-export function CronBuilder({ value, onChange, idPrefix = "cron" }: { value: string; onChange: (cron: string) => void; idPrefix?: string }) {
+export function CronBuilder({
+  value,
+  onChange,
+  idPrefix = "cron",
+  startWindowMinutes = 0,
+  problem = null,
+  children,
+}: {
+  value: string;
+  onChange: (cron: string) => void;
+  idPrefix?: string;
+  startWindowMinutes?: number;
+  problem?: string | null;
+  children?: ReactNode;
+}) {
   const [draft, setDraft] = useState<CronDraft>(() => parseCron(value));
   const cron = buildCron(draft);
-  const error = useMemo(() => validateCron(cron), [cron]);
+  const invalid = useMemo(() => validateCron(cron), [cron]);
+  const error = invalid ?? problem;
 
   const update = (patch: Partial<CronDraft>) => {
     const next = { ...draft, ...patch };
@@ -155,7 +171,7 @@ export function CronBuilder({ value, onChange, idPrefix = "cron" }: { value: str
             onChange={(e) => update({ custom: e.target.value })}
             placeholder="0 9 * * 1-5"
             spellCheck={false}
-            aria-invalid={!!error}
+            aria-invalid={!!invalid}
             className="font-mono"
           />
           <div className="flex flex-wrap gap-1.5">
@@ -173,6 +189,8 @@ export function CronBuilder({ value, onChange, idPrefix = "cron" }: { value: str
         </div>
       )}
 
+      {children}
+
       <div
         className={cn(
           "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm",
@@ -182,7 +200,7 @@ export function CronBuilder({ value, onChange, idPrefix = "cron" }: { value: str
         aria-live="polite"
       >
         {error ? <TriangleAlert className="size-4 shrink-0" /> : <CalendarClock className="size-4 shrink-0 text-muted-foreground" />}
-        <span className="min-w-0 flex-1 truncate">{error ?? cronToHuman(cron)}</span>
+        <span className="min-w-0 flex-1 truncate">{error ?? scheduleToHuman(cron, startWindowMinutes)}</span>
         {!error && <code className="shrink-0 rounded-[5px] border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{cron}</code>}
       </div>
     </div>

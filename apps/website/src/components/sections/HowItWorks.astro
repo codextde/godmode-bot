@@ -1,0 +1,56 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+
+const steps = [
+  {
+    n: '1',
+    icon: 'download',
+    title: 'Install it',
+    time: '2 minutes',
+    text: 'Download for macOS, Windows or Linux. Onboarding checks your system, installs what’s missing and connects your Claude account.',
+  },
+  {
+    n: '2',
+    icon: 'key-round',
+    title: 'Give it access',
+    time: '5 minutes',
+    text: 'Import your Chrome profile, your passwords from Chrome or 1Password, and your 2FA codes from a QR screenshot. All encrypted, all on your device.',
+  },
+  {
+    n: '3',
+    icon: 'sparkles',
+    title: 'Hand over the work',
+    time: 'forever',
+    text: 'Chat with it, put it on a schedule, or message it from Slack. Watch it live, take control anytime — or don’t.',
+  },
+];
+---
+
+<section class="relative py-20 sm:py-28">
+  <div class="container-x">
+    <div class="mx-auto max-w-[760px] text-center">
+      <p class="eyebrow justify-center" data-reveal><span class="n">04</span> How it works</p>
+      <Words text="From download to *done* before your coffee cools." class="h-section mt-6" />
+    </div>
+    <ol class="steps relative mt-16 grid gap-3 md:grid-cols-3">
+      <div class="steps-line pointer-events-none absolute top-[52px] right-[16%] left-[16%] hidden h-px md:block" aria-hidden="true"></div>
+      {
+        steps.map((s, i) => (
+          <li class="card p-7 sm:p-8" data-reveal style={`--d:${i * 120}`}>
+            <div class="flex items-center justify-between">
+              <span class="step-num grid size-11 place-items-center rounded-full bg-bg font-mono text-[14px] ring-1 ring-line-2">{s.n}</span>
+              <span class="chip">
+                <Icon name="timer" size={11} /> {s.time}
+              </span>
+            </div>
+            <h3 class="h-card mt-7 flex items-center gap-2.5">
+              <Icon name={s.icon} size={18} class="text-brand" /> {s.title}
+            </h3>
+            <p class="mt-2.5 text-[15px] leading-relaxed text-muted">{s.text}</p>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>

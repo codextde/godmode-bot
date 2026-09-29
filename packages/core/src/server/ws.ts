@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from "bun";
-import type { ClientEvent, ServerEvent } from "@godmode/shared";
+import { browserView, type ClientEvent, type ServerEvent } from "@godmode/shared";
 import { bus } from "../events/bus";
 import { VERSION } from "../config";
 import { logger } from "../log";
@@ -16,13 +16,20 @@ export interface WsData {
 }
 
 const clients = new Set<ServerWebSocket<WsData>>();
+/** Live view subscribers per view (`browserView`: a profile's active tab, or one chat's tab). */
 const browserSubscribers = new Map<string, number>();
 const browserWatchers = new Map<string, number>();
+const browserViews = new Map<string, BrowserViewRef>();
+
+export interface BrowserViewRef {
+  profileId: string;
+  conversationId: string | null;
+}
 
 const computerSubscribers = new Map<string, number>();
 
 /** Hooks invoked when the first/last UI subscribes to a browser live view. */
-let onBrowserSubscribe: ((profileId: string, subscribed: boolean) => void) | null = null;
+let onBrowserSubscribe: ((view: BrowserViewRef, subscribed: boolean) => void) | null = null;
 /** Hooks invoked when the first/last UI subscribes to a computer live view. */
 let onComputerSubscribe: ((view: string, subscribed: boolean) => void) | null = null;
 
@@ -39,23 +46,35 @@ export function subscribedComputerViews(): string[] {
   return [...computerSubscribers.keys()];
 }
 
-export function setBrowserSubscriptionHandler(fn: (profileId: string, subscribed: boolean) => void) {
+export function setBrowserSubscriptionHandler(fn: (view: BrowserViewRef, subscribed: boolean) => void) {
   onBrowserSubscribe = fn;
 }
 
-export function hasBrowserSubscribers(profileId: string): boolean {
-  return (browserSubscribers.get(profileId) ?? 0) > 0;
+/** Someone subscribed to a live view of the profile (with `conversationId`: to that chat's). */
+export function hasBrowserSubscribers(profileId: string, conversationId?: string): boolean {
+  return anyView(browserSubscribers, profileId, conversationId);
 }
 
-/** A non-passive viewer is watching the live view, so the browser counts as in use. */
-export function hasBrowserWatchers(profileId: string): boolean {
-  return (browserWatchers.get(profileId) ?? 0) > 0;
+/** A non-passive viewer is watching the profile's (or the chat's) live view, so it counts as in use. */
+export function hasBrowserWatchers(profileId: string, conversationId?: string): boolean {
+  return anyView(browserWatchers, profileId, conversationId);
 }
 
-function bump(counts: Map<string, number>, profileId: string, by: number): number {
-  const next = Math.max(0, (counts.get(profileId) ?? 0) + by);
-  if (next) counts.set(profileId, next);
-  else counts.delete(profileId);
+/** Live views of the profile someone subscribed to. */
+export function subscribedBrowserViews(profileId: string): BrowserViewRef[] {
+  return [...browserSubscribers.keys()].map((key) => browserViews.get(key)!).filter((v) => v?.profileId === profileId);
+}
+
+function anyView(counts: Map<string, number>, profileId: string, conversationId?: string): boolean {
+  if (conversationId) return (counts.get(browserView(profileId, conversationId)) ?? 0) > 0;
+  for (const key of counts.keys()) if (browserViews.get(key)?.profileId === profileId) return true;
+  return false;
+}
+
+function bump(counts: Map<string, number>, key: string, by: number): number {
+  const next = Math.max(0, (counts.get(key) ?? 0) + by);
+  if (next) counts.set(key, next);
+  else counts.delete(key);
   return next;
 }
 
@@ -69,7 +88,8 @@ function send(ws: ServerWebSocket<WsData>, event: ServerEvent) {
 
 bus.on((event) => {
   if (event.type === "browser.frame") {
-    for (const ws of clients) if (ws.data.subscriptions.has(`browser:${event.profileId}`)) send(ws, event);
+    const key = `browser:${browserView(event.profileId, event.conversationId)}`;
+    for (const ws of clients) if (ws.data.subscriptions.has(key)) send(ws, event);
     return;
   }
   if (event.type === "computer.frame" || event.type === "computer.action") {
@@ -94,20 +114,26 @@ bus.on((event) => {
   }
 });
 
-function changeSubscription(ws: ServerWebSocket<WsData>, profileId: string, subscribe: boolean, passive = false) {
-  const key = `browser:${profileId}`;
+const ID = /^[\w-]{1,100}$/;
+
+function changeSubscription(ws: ServerWebSocket<WsData>, ref: BrowserViewRef, subscribe: boolean, passive = false) {
+  if (!ID.test(ref.profileId) || (ref.conversationId !== null && !ID.test(ref.conversationId))) return;
+  const view = browserView(ref.profileId, ref.conversationId);
+  const key = `browser:${view}`;
   const has = ws.data.subscriptions.has(key);
   const wasWatching = has && !ws.data.passive?.has(key);
   const watching = subscribe && !passive;
-  if (wasWatching !== watching) bump(browserWatchers, profileId, watching ? 1 : -1);
+  if (subscribe) browserViews.set(view, ref);
+  if (wasWatching !== watching) bump(browserWatchers, view, watching ? 1 : -1);
   if (subscribe && passive) (ws.data.passive ??= new Set()).add(key);
   else ws.data.passive?.delete(key);
 
   if (subscribe === has) return;
   if (subscribe) ws.data.subscriptions.add(key);
   else ws.data.subscriptions.delete(key);
-  const count = bump(browserSubscribers, profileId, subscribe ? 1 : -1);
-  if ((subscribe && count === 1) || (!subscribe && count === 0)) onBrowserSubscribe?.(profileId, subscribe);
+  const count = bump(browserSubscribers, view, subscribe ? 1 : -1);
+  if (!count && !browserWatchers.has(view)) browserViews.delete(view);
+  if ((subscribe && count === 1) || (!subscribe && count === 0)) onBrowserSubscribe?.(ref, subscribe);
 }
 
 /** Views are "display:<id>", "window:<pid>:<id>" or "tab:<profile>:<target>" — keep keys bounded. */
@@ -142,10 +168,10 @@ export const websocketHandler = {
         ws.send(JSON.stringify({ type: "pong" }));
         break;
       case "browser.subscribe":
-        changeSubscription(ws, msg.profileId, true, msg.passive === true);
+        changeSubscription(ws, { profileId: msg.profileId, conversationId: msg.conversationId ?? null }, true, msg.passive === true);
         break;
       case "browser.unsubscribe":
-        changeSubscription(ws, msg.profileId, false);
+        changeSubscription(ws, { profileId: msg.profileId, conversationId: msg.conversationId ?? null }, false);
         break;
       case "computer.subscribe":
         if (validView(msg.view)) changeComputerSubscription(ws, msg.view, true);
@@ -157,7 +183,8 @@ export const websocketHandler = {
   },
   close(ws: ServerWebSocket<WsData>) {
     for (const key of [...ws.data.subscriptions]) {
-      if (key.startsWith("browser:")) changeSubscription(ws, key.slice(8), false);
+      const view = key.startsWith("browser:") ? browserViews.get(key.slice(8)) : undefined;
+      if (view) changeSubscription(ws, view, false);
       else if (key.startsWith("computer:")) changeComputerSubscription(ws, key.slice(9), false);
     }
     clients.delete(ws);

@@ -468,4 +468,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_messaging_chats_external ON messaging_chat
 ALTER TABLE conversations ADD COLUMN browser_profile_id TEXT;
 `,
   },
+  {
+    id: 12,
+    name: "chat_workspace",
+    sql: /* sql */ `
+-- Workspace a chat with a global agent was started in: it browses with that workspace's default profile.
+ALTER TABLE conversations ADD COLUMN workspace_id TEXT;
+`,
+  },
 ];

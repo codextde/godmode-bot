@@ -15,6 +15,11 @@ import {
 import { dispatchInput, initLiveView } from "../../browser/screencast";
 import { installProfileUse, profileUseStatus, syncWithProfileUse } from "../../browser/profileUse";
 import { body, z } from "../validate";
+import { conversationExists } from "../../services/conversations";
+import { notFound } from "../../util";
+
+/** Scopes the live view action to one chat's tab. */
+const chatId = z.string().min(1).max(100).nullable().optional();
 
 const inputEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("click"), x: z.number().finite(), y: z.number().finite() }),
@@ -76,17 +81,19 @@ export function registerBrowserRoutes(app: Hono): void {
   });
 
   app.post("/api/browser/profiles/:id/navigate", async (c) => {
-    const { url } = await body(c, z.object({ url: z.string().min(1).max(8192) }));
-    await navigate(c.req.param("id"), url);
+    const { url, conversationId } = await body(c, z.object({ url: z.string().min(1).max(8192), conversationId: chatId }));
+    if (conversationId && !conversationExists(conversationId)) throw notFound("Conversation");
+    await navigate(c.req.param("id"), url, conversationId ?? undefined);
     return c.json({ ok: true });
   });
 
   app.post("/api/browser/profiles/:id/bot-check", async (c) => c.json(await botCheck(c.req.param("id"))));
 
   app.post("/api/browser/profiles/:id/input", async (c) => {
-    const event = await body(c, inputEvent);
+    const { conversationId, ...event } = await body(c, inputEvent.and(z.object({ conversationId: chatId })));
     getProfile(c.req.param("id"));
-    await dispatchInput(c.req.param("id"), event);
+    if (conversationId && !conversationExists(conversationId)) throw notFound("Conversation");
+    await dispatchInput(c.req.param("id"), event, conversationId ?? null);
     return c.json({ ok: true });
   });
 

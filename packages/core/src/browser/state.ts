@@ -3,6 +3,7 @@
  */
 import type { CdpClient } from "./cdp";
 import type { ChromeProcess } from "./chrome";
+import type { TabRegistry } from "./tabs";
 
 export interface RunningBrowser {
   profileId: string;
@@ -15,6 +16,8 @@ export interface RunningBrowser {
   stealth: boolean;
   /** Persistent browser-level CDP connection owned by Godmode. */
   client: CdpClient;
+  /** Which chat owns which tab. */
+  tabs: TabRegistry;
   /** null when we adopted a browser left running by a previous core process. */
   process: ChromeProcess | null;
   /** Browser process id (known for adopted browsers too). */

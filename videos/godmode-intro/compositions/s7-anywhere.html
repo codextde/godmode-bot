@@ -1,0 +1,145 @@
+<template id="s7-anywhere-template">
+  <div id="s7-anywhere" data-composition-id="s7-anywhere" data-width="1920" data-height="1080" data-duration="11">
+    <style>
+      @font-face { font-family: "Geist"; src: url("assets/fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif.woff2") format("woff2"); font-style: normal; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
+
+      #s7-anywhere { position: absolute; inset: 0; overflow: hidden; background: #faf9f5; color: #1a1a1a; font-family: "Geist", sans-serif; }
+      #s7-anywhere .s7-sky { position: absolute; left: -200px; top: -560px; width: 1500px; height: 1100px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(255, 244, 214, 0.9), rgba(250, 238, 206, 0.3) 60%, rgba(250, 249, 245, 0) 100%); }
+      #s7-anywhere .s7-glow { position: absolute; left: 90px; top: 260px; width: 600px; height: 600px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(14, 202, 123, 0.16), rgba(14, 202, 123, 0)); }
+      #s7-anywhere .s7-grain { position: absolute; inset: -40px; opacity: 0.3; mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='53' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0.10 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+      #s7-anywhere .s7-content { position: absolute; inset: 0; }
+
+      /* Phone */
+      #s7-anywhere .s7-phone { position: absolute; left: 170px; top: 100px; width: 440px; height: 900px; border-radius: 68px; background: #1c1c1c; padding: 14px;
+        box-shadow: 0 80px 120px -60px rgba(38, 32, 22, 0.6), 0 6px 18px rgba(38, 32, 22, 0.12); }
+      #s7-anywhere .s7-screen { position: relative; width: 412px; height: 872px; border-radius: 55px; background: #f4f2ed; overflow: hidden; }
+      #s7-anywhere .s7-island { position: absolute; left: 50%; top: 14px; width: 120px; height: 34px; margin-left: -60px; border-radius: 17px; background: #1c1c1c; z-index: 3; }
+      #s7-anywhere .s7-sbar { position: absolute; left: 34px; right: 30px; top: 18px; display: flex; justify-content: space-between; font-size: 19px; font-weight: 600; color: #1c1c1c; }
+      #s7-anywhere .s7-chead { position: absolute; left: 0; right: 0; top: 62px; height: 92px; background: #ffffff; border-bottom: 2px solid rgba(38, 32, 22, 0.07);
+        display: flex; align-items: center; gap: 14px; padding: 0 22px; }
+      #s7-anywhere .s7-chead .bk { font-size: 30px; color: #087f4d; }
+      #s7-anywhere .s7-chead img { width: 52px; height: 52px; border-radius: 15px; }
+      #s7-anywhere .s7-chead b { display: block; font-size: 22px; font-weight: 620; color: #1c1c1c; }
+      #s7-anywhere .s7-chead small { display: block; font-size: 16px; color: #087f4d; margin-top: 2px; }
+      #s7-anywhere .s7-view { position: absolute; left: 0; right: 0; top: 156px; bottom: 100px; overflow: hidden; }
+      #s7-anywhere .s7-msgs { position: absolute; left: 16px; right: 16px; top: 16px; }
+      #s7-anywhere .s7-m { position: absolute; max-width: 318px; padding: 13px 17px 14px; border-radius: 22px; font-size: 21px; line-height: 1.34; }
+      #s7-anywhere .s7-in { left: 0; background: #ffffff; color: #1a1a1a; border-bottom-left-radius: 7px; box-shadow: 0 1px 2px rgba(38, 32, 22, 0.08); transform-origin: 0 100%; }
+      #s7-anywhere .s7-out { right: 0; background: #1c1c1c; color: #faf9f5; border-bottom-right-radius: 7px; transform-origin: 100% 100%; }
+      #s7-anywhere .s7-m small { display: block; font-size: 14px; color: #6b675f; margin-top: 4px; text-align: right; font-family: "Geist Mono", monospace; }
+      #s7-anywhere .s7-out small { color: #b3ada2; }
+      #s7-anywhere .s7-m .who { display: block; font-size: 16px; font-weight: 620; color: #087f4d; margin-bottom: 3px; }
+      #s7-anywhere .s7-lock { position: absolute; left: 0; right: 0; top: 96px; text-align: center; color: #1c1c1c; z-index: 2; }
+      #s7-anywhere .s7-lock .d { font-size: 21px; font-weight: 500; color: #3a3733; margin-bottom: 22px; }
+      #s7-anywhere .s7-lock .t { font-size: 118px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; }
+      #s7-anywhere .s7-notif { position: absolute; left: 14px; right: 14px; top: 300px; height: 96px; border-radius: 26px; background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 18px 40px -18px rgba(38, 32, 22, 0.45); display: flex; align-items: center; gap: 14px; padding: 0 18px; z-index: 4; }
+      #s7-anywhere .s7-notif img { width: 50px; height: 50px; border-radius: 13px; }
+      #s7-anywhere .s7-notif b { display: block; font-size: 18px; font-weight: 620; color: #1c1c1c; }
+      #s7-anywhere .s7-notif span { display: block; font-size: 17px; color: #3a3733; margin-top: 2px; }
+      #s7-anywhere .s7-compose { position: absolute; left: 16px; right: 16px; bottom: 30px; height: 58px; border-radius: 29px; background: #ffffff; border: 2px solid rgba(38, 32, 22, 0.08);
+        display: flex; align-items: center; padding: 0 20px; font-size: 18px; color: #8c867b; }
+      #s7-anywhere .s7-chips { position: absolute; left: 150px; top: 1020px; width: 480px; display: flex; justify-content: center; gap: 12px; font-family: "Geist Mono", monospace; font-size: 18px; letter-spacing: 0.06em; color: #5f5b54; }
+
+      /* Right column */
+      #s7-anywhere .s7-right { position: absolute; left: 720px; top: 96px; width: 1100px; }
+      #s7-anywhere .s7-kicker { font-family: "Geist Mono", monospace; font-size: 22px; letter-spacing: 0.26em; color: #6b675f; }
+      #s7-anywhere .s7-title { font-family: "Instrument Serif", serif; font-size: 112px; line-height: 1; letter-spacing: -0.025em; color: #1c1c1c; margin-top: 12px; }
+      #s7-anywhere .s7-title em { font-style: italic; color: #087f4d; }
+      #s7-anywhere .s7-grid { position: absolute; left: 0; top: 230px; width: 1100px; }
+      #s7-anywhere .s7-tile { position: absolute; width: 538px; height: 148px; border-radius: 26px; background: #ffffff; border: 2px solid rgba(38, 32, 22, 0.10);
+        box-shadow: 0 30px 50px -36px rgba(38, 32, 22, 0.38); display: flex; align-items: center; gap: 22px; padding: 0 26px; }
+      #s7-anywhere .s7-ti { width: 72px; height: 72px; flex: none; border-radius: 20px; background: #f1eee9; color: #1c1c1c; display: flex; align-items: center; justify-content: center; }
+      #s7-anywhere .s7-ti svg { width: 36px; height: 36px; }
+      #s7-anywhere .s7-tile b { display: block; font-size: 30px; font-weight: 620; letter-spacing: -0.015em; color: #1c1c1c; }
+      #s7-anywhere .s7-tile span { display: block; font-size: 22px; line-height: 1.3; color: #5f5b54; margin-top: 4px; }
+    </style>
+
+    <div class="s7-sky" id="s7-sky"></div>
+    <div class="s7-glow" id="s7-glow"></div>
+    <div class="s7-grain" id="s7-grain"></div>
+
+    <div class="s7-content" id="s7-content">
+      <div class="s7-phone" id="s7-phone">
+        <div class="s7-screen">
+          <div class="s7-island"></div>
+          <div class="s7-sbar"><span>9:41</span><span>●●● ▮</span></div>
+          <div class="s7-chead" id="s7-chead"><span class="bk">‹</span><img src="assets/img/logo.svg" alt="" /><div><b>Godmode</b><small>bot · 6 agents</small></div></div>
+          <div class="s7-view"><div class="s7-msgs" id="s7-msgs">
+            <div class="s7-m s7-in" id="s7-m0" style="top: 0"><span class="who">🧾 Billing Clerk</span>All three September invoices are filed. €4,242.00 in total, €2,730.00 still open.<small>09:12</small></div>
+            <div class="s7-m s7-out" id="s7-m1" style="top: 204px">Great. Remind me before the Oct 05 due date?<small>09:13</small></div>
+            <div class="s7-m s7-in" id="s7-m2" style="top: 326px"><span class="who">🧾 Billing Clerk</span>Will do — I'll ping you here on Oct 03 at 09:00.<small>09:13</small></div>
+            <div class="s7-m s7-out" id="s7-m3" style="top: 472px">/agent research — anything new on Northwind?<small>09:15</small></div>
+            <div class="s7-m s7-in" id="s7-m4" style="top: 594px"><span class="who">🔎 Research Analyst</span>Your response plan is ready for review.<small>09:15</small></div>
+          </div></div>
+          <div class="s7-compose" id="s7-compose">Message</div>
+          <div class="s7-lock" id="s7-lock"><div class="d">Wednesday, 30 September</div><div class="t">9:41</div></div>
+          <div class="s7-notif" id="s7-notif"><img src="assets/img/logo.svg" alt="" /><div><b>Billing Clerk</b><span>September invoices are filed ✓</span></div></div>
+        </div>
+      </div>
+      <div class="s7-chips" id="s7-chips"><span>SLACK</span>·<span>TELEGRAM</span>·<span>TEAMS</span></div>
+
+      <div class="s7-right">
+        <div class="s7-kicker" id="s7-kicker">WHEREVER YOU ARE</div>
+        <div class="s7-title" id="s7-title">Reach them <em>anywhere.</em></div>
+        <div class="s7-grid">
+          <div class="s7-tile" id="s7-t0" style="left: 0; top: 0"><div class="s7-ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2" /><line x1="8" x2="16" y1="21" y2="21" /><line x1="12" x2="12" y1="17" y2="21" /></svg></div><div><b>Computer use</b><span>Share a window — it works in the background.</span></div></div>
+          <div class="s7-tile" id="s7-t1" style="left: 562px; top: 0"><div class="s7-ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 5a2 2 0 0 1 2 2v8.526a2 2 0 0 0 .212.897l1.068 2.127a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45l1.068-2.127A2 2 0 0 0 4 15.526V7a2 2 0 0 1 2-2z" /><path d="M20.054 15.987H3.946" /></svg></div><div><b>A Mac of its own</b><span>Isolated macOS VMs in one click.</span></div></div>
+          <div class="s7-tile" id="s7-t2" style="left: 0; top: 172px"><div class="s7-ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" /></svg></div><div><b>Slack, Telegram, Teams</b><span>Talk to agents where you already are.</span></div></div>
+          <div class="s7-tile" id="s7-t3" style="left: 562px; top: 172px"><div class="s7-ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5" /><path d="M15 8V2" /><path d="M17 8a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1z" /><path d="M9 8V2" /></svg></div><div><b>Your apps</b><span>Gmail, GitHub, Notion — or any MCP server.</span></div></div>
+          <div class="s7-tile" id="s7-t4" style="left: 0; top: 344px"><div class="s7-ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></svg></div><div><b>Workspaces</b><span>Clients kept apart: agents, logins, tools.</span></div></div>
+          <div class="s7-tile" id="s7-t5" style="left: 562px; top: 344px"><div class="s7-ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19v3" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><rect x="9" y="2" width="6" height="13" rx="3" /></svg></div><div><b>Voice mode</b><span>Talk to it, hear it answer.</span></div></div>
+          <div class="s7-tile" id="s7-t6" style="left: 0; top: 516px"><div class="s7-ti" style="background: rgba(14, 202, 123, 0.14); color: #087f4d"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></svg></div><div><b>Encrypted vault</b><span>Local, AES-256, every use audited.</span></div></div>
+          <div class="s7-tile" id="s7-t7" style="left: 562px; top: 516px"><div class="s7-ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" /><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" /><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg></div><div><b>Take control anytime</b><span>Watch it live, step in for a CAPTCHA.</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+        const D = 11;
+
+        tl.fromTo("#s7-sky", { opacity: 0.6, x: 60 }, { opacity: 1, x: -60, duration: D, ease: "sine.inOut" }, 0);
+        tl.fromTo("#s7-grain", { x: 0 }, { x: -36, duration: D, ease: "none" }, 0);
+        tl.fromTo("#s7-glow", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1.05, duration: 3, ease: "sine.out" }, 0.4);
+
+        // Phone rises; the headline sets beside it.
+        tl.fromTo("#s7-phone", { opacity: 0, y: 140, rotation: -3 }, { opacity: 1, y: 0, rotation: 0, duration: 1.2, ease: "expo.out" }, 0.1);
+        tl.fromTo("#s7-phone", { y: 0 }, { y: -14, duration: 4.4, ease: "sine.inOut", yoyo: true, repeat: 1, immediateRender: false }, 1.4);
+        tl.fromTo("#s7-kicker", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: "power2.out" }, 0.35);
+        tl.fromTo("#s7-title", { opacity: 0, y: 40, filter: "blur(8px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.9, ease: "power3.out" }, 0.45);
+        tl.fromTo("#s7-chips", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 1.0);
+
+        // A notification drops in, then the conversation plays out.
+        tl.fromTo("#s7-notif", { y: 40, opacity: 0, scale: 0.94 }, { y: 0, opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.4)" }, 1.1);
+        tl.to(["#s7-notif", "#s7-lock"], { opacity: 0, scale: 1.06, duration: 0.4, ease: "power2.in" }, 2.1);
+        tl.fromTo(["#s7-chead", "#s7-compose"], { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power2.out" }, 2.35);
+        const M = [2.45, 3.6, 4.6, 5.9, 7.0];
+        tl.fromTo("#s7-msgs", { y: 0 }, { y: -150, duration: 0.7, ease: "power3.inOut" }, 6.6);
+        M.forEach(function (t, i) {
+          tl.fromTo("#s7-m" + i, { opacity: 0, scale: 0.8, y: 18 }, { opacity: 1, scale: 1, y: 0, duration: 0.5, ease: "back.out(1.6)" }, t);
+        });
+
+        // Capability tiles assemble in a soft cascade.
+        for (let i = 0; i < 8; i++) {
+          const t = 3.1 + i * 0.16;
+          tl.fromTo("#s7-t" + i, { opacity: 0, y: 40, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "power3.out" }, t);
+          tl.fromTo("#s7-t" + i + " .s7-ti", { scale: 0.4, rotation: -10 }, { scale: 1, rotation: 0, duration: 0.6, ease: "back.out(2)" }, t + 0.15);
+        }
+
+        // Dip to paper.
+        tl.to("#s7-content", { opacity: 0, filter: "blur(12px)", duration: 0.55, ease: "power2.in" }, D - 0.6);
+        tl.to("#s7-glow", { opacity: 0, duration: 0.55, ease: "power2.in" }, D - 0.6);
+
+        window.__timelines["s7-anywhere"] = tl;
+      })();
+    </script>
+  </div>
+</template>

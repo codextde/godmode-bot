@@ -1,0 +1,89 @@
+---
+import Legal from '@/layouts/Legal.astro';
+import { LEGAL } from '@/config/site';
+---
+
+<Legal title="Privacy policy" description="How the Godmode website handles your data: cookieless analytics, optional X pixel, Stripe payments.">
+  <p>
+    This policy explains what personal data we process when you visit this website or buy Godmode, why, and what rights
+    you have. It does not cover the Godmode app itself: the app runs on your device, has no telemetry and sends nothing
+    to us.
+  </p>
+
+  <h2>1. Controller</h2>
+  <p>
+    {LEGAL.company}, {LEGAL.street}, {LEGAL.city}, {LEGAL.country} · <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a>
+  </p>
+
+  <h2>2. Hosting and server logs</h2>
+  <p>
+    The website is served by Cloudflare, Inc. (101 Townsend St, San Francisco, CA 94107, USA) on our behalf. To deliver
+    the pages and protect them against attacks, Cloudflare processes technical connection data such as your IP address,
+    browser and time of access. Legal basis: Art. 6 (1)(f) GDPR (legitimate interest in a secure, working website).
+    Cloudflare is certified under the EU–US Data Privacy Framework; we have a data processing agreement with Cloudflare.
+  </p>
+
+  <h2>3. Cookieless visitor statistics</h2>
+  <p>
+    We count visits and clicks on this site (for example “pricing viewed” or “checkout started”) with our own, cookieless
+    analytics. We store the page, the event, the referring website’s domain, campaign parameters (utm_*), your country
+    (derived by Cloudflare), a device class and a pseudonymous visitor ID. That ID is a keyed one-way hash (with a secret
+    key) of the date, your IP address and your browser’s user-agent; it changes every day, and your IP address itself is
+    never stored. The statistics set no cookies and store nothing on your device. Legal basis: Art. 6 (1)(f) GDPR
+    (legitimate interest in understanding which parts of the site and which campaigns work). Events are deleted after 14
+    months. We do keep your cookie choice in your browser’s local storage, and after a purchase a strictly necessary,
+    signed session cookie (30 days) lets you reach your license, downloads and billing portal.
+  </p>
+
+  <h2>4. X (Twitter) pixel — only with your consent</h2>
+  <p>
+    If you click “Accept” in the cookie notice, we load the X conversion pixel from X Corp. (1355 Market Street, San
+    Francisco, CA 94103, USA; for EU users, Twitter International Unlimited Company, Dublin). It sets cookies and sends
+    X information about your visit and actions on this site (for example a purchase and its value), so we can measure
+    which ads work and show ads to people who visited. X may link this to your X account. Legal basis: your consent,
+    Art. 6 (1)(a) GDPR and § 25 (1) TDDDG. You can withdraw consent at any time via “Cookie settings” in the footer.
+    With consent we also remember in your browser’s local storage which campaign brought you here, so a later purchase
+    can be attributed to it.
+  </p>
+
+  <h2>5. Buying Godmode (Stripe)</h2>
+  <p>
+    Payments are processed by Stripe Payments Europe, Ltd. (1 Grand Canal Street Lower, Dublin, Ireland). When you
+    check out, Stripe processes your name, email, billing address, payment details and, if you provide it, your VAT ID;
+    we receive your name, email, country, the plan and amount, and never your full card details. We use this to fulfil
+    the contract, issue invoices, provide support and meet tax and accounting obligations (Art. 6 (1)(b) and (c) GDPR).
+    We link the purchase to the campaign that brought you here (Art. 6 (1)(f) GDPR). Invoicing records are kept for the
+    statutory retention period (up to 10 years).
+  </p>
+  <p>
+    Downloads and app updates are served through this website from our software repository; we log which build was
+    requested, not who you are.
+  </p>
+
+  <h2>6. Playbook and launch emails</h2>
+  <p>
+    If you enter your email to get the playbook, we store it with the date and campaign source and email you about
+    Godmode (Art. 6 (1)(a) GDPR). You can unsubscribe with the link in every email or by writing to us; we then delete
+    your address.
+  </p>
+
+  <h2>7. Email contact</h2>
+  <p>
+    If you email us, we process your message to answer it (Art. 6 (1)(b) or (f) GDPR) and delete it when it’s no longer
+    needed, unless retention obligations apply.
+  </p>
+
+  <h2>8. Transfers outside the EU</h2>
+  <p>
+    Cloudflare, X and Stripe may process data in the USA. Transfers rely on the EU–US Data Privacy Framework and/or the
+    EU Standard Contractual Clauses.
+  </p>
+
+  <h2>9. Your rights</h2>
+  <p>
+    You have the right to access, rectification, erasure, restriction of processing, data portability and to object to
+    processing based on legitimate interests (Art. 15–21 GDPR), and to withdraw consent at any time with effect for the
+    future. You can also lodge a complaint with a supervisory authority, for example the Landesbeauftragte für den
+    Datenschutz und die Informationsfreiheit Baden-Württemberg. Just email <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a>.
+  </p>
+</Legal>

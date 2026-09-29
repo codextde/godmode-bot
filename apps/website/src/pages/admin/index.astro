@@ -1,0 +1,284 @@
+---
+import Base from '@/layouts/Base.astro';
+import Logo from '@/components/ui/Logo.astro';
+import Bars from '@/components/admin/Bars.astro';
+import { checkAdmin } from '@/lib/auth';
+import { db } from '@/lib/db';
+import { PRICING } from '@/config/site';
+
+export const prerender = false;
+
+const denied = checkAdmin(Astro.request);
+if (denied) return denied;
+Astro.response.headers.set('cache-control', 'no-store');
+
+const range = [7, 30, 90].includes(Number(Astro.url.searchParams.get('days'))) ? Number(Astro.url.searchParams.get('days')) : 30;
+const live = Astro.url.searchParams.get('mode') !== 'test';
+const liveFlag = live ? 1 : 0;
+const sinceMs = Date.now() - range * 86400000;
+const sinceDay = new Date(sinceMs).toISOString().slice(0, 10);
+const D = db();
+
+// Retention: events older than 14 months are deleted (privacy policy). Cheap — `day` is indexed.
+await D.prepare('DELETE FROM events WHERE day < ?').bind(new Date(Date.now() - 425 * 86400000).toISOString().slice(0, 10)).run();
+
+type Row = Record<string, number | string | null>;
+const all = async (sql: string, ...args: unknown[]) => ((await D.prepare(sql).bind(...args).all()).results ?? []) as Row[];
+const one = async (sql: string, ...args: unknown[]) => ((await D.prepare(sql).bind(...args).first()) ?? {}) as Row;
+const n = (v: unknown) => Number(v ?? 0);
+
+const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sourceOrders, recent, abandoned, leads, ctas] =
+  await Promise.all([
+    one(`SELECT COUNT(DISTINCT day || visitor) AS v FROM events WHERE day >= ? AND type = 'pageview'`, sinceDay),
+    all(
+      `SELECT CASE WHEN type = 'view' THEN 'view:' || label ELSE type END AS step, COUNT(DISTINCT day || visitor) AS v
+       FROM events WHERE day >= ? AND type IN ('view', 'checkout_start', 'purchase_view') GROUP BY step`,
+      sinceDay,
+    ),
+    all(
+      `SELECT plan, status, COUNT(*) AS c, SUM(amount_total) AS amount, currency FROM orders
+       WHERE created_at >= ? AND livemode = ? GROUP BY plan, status, currency`,
+      sinceMs,
+      liveFlag,
+    ),
+    one(
+      `SELECT SUM(CASE WHEN plan = 'lifetime' AND status = 'paid' THEN 1 ELSE 0 END) AS lifetime,
+              SUM(CASE WHEN plan = 'monthly' AND status = 'paid' THEN 1 ELSE 0 END) AS subs,
+              SUM(CASE WHEN status = 'paid' AND currency = 'usd' THEN amount_total ELSE 0 END) AS revenue
+       FROM orders WHERE livemode = ?`,
+      liveFlag,
+    ),
+    all(`SELECT day, COUNT(DISTINCT visitor) AS v FROM events WHERE day >= ? AND type = 'pageview' GROUP BY day ORDER BY day`, sinceDay),
+    all(
+      `SELECT strftime('%Y-%m-%d', paid_at / 1000, 'unixepoch') AS day, SUM(amount_total) AS amount FROM orders
+       WHERE status = 'paid' AND paid_at >= ? AND livemode = ? AND currency = 'usd' GROUP BY day ORDER BY day`,
+      sinceMs,
+      liveFlag,
+    ),
+    all(
+      `SELECT COALESCE(utm_source, referrer, '(direct)') AS source, COALESCE(utm_campaign, '') AS campaign,
+              COUNT(DISTINCT day || visitor) AS visitors,
+              COUNT(DISTINCT CASE WHEN type = 'checkout_start' THEN day || visitor END) AS checkouts
+       FROM events WHERE day >= ? GROUP BY source, campaign ORDER BY visitors DESC LIMIT 20`,
+      sinceDay,
+    ),
+    all(
+      `SELECT COALESCE(utm_source, referrer, '(direct)') AS source, COALESCE(utm_campaign, '') AS campaign,
+              COUNT(*) AS orders, SUM(amount_total) AS amount
+       FROM orders WHERE status = 'paid' AND created_at >= ? AND livemode = ? GROUP BY source, campaign`,
+      sinceMs,
+      liveFlag,
+    ),
+    all(
+      `SELECT created_at, plan, status, amount_total, currency, email, country, utm_source, utm_campaign, twclid
+       FROM orders WHERE livemode = ? AND status NOT IN ('open') ORDER BY created_at DESC LIMIT 25`,
+      liveFlag,
+    ),
+    all(
+      `SELECT created_at, plan, email, utm_source FROM orders
+       WHERE livemode = ? AND status = 'expired' AND email IS NOT NULL ORDER BY created_at DESC LIMIT 10`,
+      liveFlag,
+    ),
+    one(`SELECT COUNT(*) AS c, SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END) AS recent FROM leads`, sinceMs),
+    all(
+      `SELECT label, COUNT(*) AS c FROM events WHERE day >= ? AND type IN ('click', 'checkout_start') AND label IS NOT NULL
+       GROUP BY label ORDER BY c DESC LIMIT 12`,
+      sinceDay,
+    ),
+  ]);
+
+const visitors = n(visitorsRow.v);
+const step = (k: string) => n(stepRows.find((r) => r.step === k)?.v);
+const paidOrders = orderRows.filter((r) => r.status === 'paid');
+const paidCount = paidOrders.reduce((s, r) => s + n(r.c), 0);
+const revenueUsd = paidOrders.filter((r) => r.currency === 'usd').reduce((s, r) => s + n(r.amount), 0) / 100;
+const otherCurrencies = paidOrders.filter((r) => r.currency && r.currency !== 'usd');
+const refunded = orderRows.filter((r) => r.status === 'refunded').reduce((s, r) => s + n(r.c), 0);
+const openCheckouts = orderRows.reduce((s, r) => s + n(r.c), 0);
+const mrr = n(allTime.subs) * PRICING.plans.monthly.price;
+
+const funnel = [
+  { label: 'Visitors', value: visitors },
+  { label: 'Saw pricing', value: step('view:pricing') },
+  { label: 'Started checkout', value: step('checkout_start') },
+  { label: 'Created a Stripe session', value: openCheckouts },
+  { label: 'Paid', value: paidCount },
+];
+const pct = (a: number, b: number) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : '—');
+
+// Fill missing days so the charts have a continuous x-axis.
+const days: string[] = [];
+for (let i = range - 1; i >= 0; i--) days.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+const visitorsByDay = days.map((d) => ({ label: d, value: n(daily.find((r) => r.day === d)?.v) }));
+const revenueByDay = days.map((d) => ({ label: d, value: n(dailyRev.find((r) => r.day === d)?.amount) / 100 }));
+
+const sourceRows = sources.map((s) => {
+  const o = sourceOrders.find((x) => x.source === s.source && x.campaign === s.campaign);
+  return {
+    source: String(s.source),
+    campaign: String(s.campaign ?? ''),
+    visitors: n(s.visitors),
+    checkouts: n(s.checkouts),
+    orders: n(o?.orders),
+    amount: n(o?.amount) / 100,
+  };
+});
+const money = (v: number, cur = 'usd') =>
+  v.toLocaleString('en-US', { style: 'currency', currency: cur.toUpperCase(), maximumFractionDigits: 0 });
+const date = (ms: unknown) => new Date(n(ms)).toISOString().slice(0, 16).replace('T', ' ');
+const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=${mode}`;
+---
+
+<Base title="Sales" noindex bare>
+  <main class="pb-20" data-no-pageview>
+    <header class="border-b border-line">
+      <div class="container-x flex h-16 items-center justify-between gap-4">
+        <a href="/" class="flex items-center gap-2.5"><Logo size={24} /><span class="text-[15px] font-semibold tracking-tight">Sales</span></a>
+        <div class="flex items-center gap-1.5 text-[13px]">
+          {[7, 30, 90].map((d) => <a href={q(d)} class="tab !h-8" aria-current={d === range ? 'page' : undefined}>{d}d</a>)}
+          <span class="mx-2 h-5 w-px bg-line-2"></span>
+          <a href={q(range, 'live')} class="tab !h-8" aria-current={live ? 'page' : undefined}>Live</a>
+          <a href={q(range, 'test')} class="tab !h-8" aria-current={!live ? 'page' : undefined}>Test</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="container-x mt-8">
+      {!live && <p class="mb-6 rounded-xl p-3 text-[13px] text-warn ring-1 ring-[rgb(232_165_58/0.3)]">Showing Stripe test-mode orders.</p>}
+
+      <section class="grid gap-3 md:grid-cols-[1.3fr_1fr_1fr_1fr]">
+        <div class="card p-6">
+          <p class="text-[13px] text-muted">Revenue · last {range} days</p>
+          <p class="mt-2 text-[52px] leading-none font-semibold tracking-[-0.05em]">{money(revenueUsd)}</p>
+          <p class="mt-3 text-[12.5px] text-dim">
+            {money(n(allTime.revenue) / 100)} all time
+            {otherCurrencies.map((r) => ` · ${money(n(r.amount) / 100, String(r.currency))}`)}
+          </p>
+        </div>
+        <div class="card p-6">
+          <p class="text-[13px] text-muted">Paid orders</p>
+          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{paidCount}</p>
+          <p class="mt-1 text-[12.5px] text-dim">{pct(paidCount, visitors)} of visitors · {refunded} refunded</p>
+        </div>
+        <div class="card p-6">
+          <p class="text-[13px] text-muted">MRR</p>
+          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{money(mrr)}</p>
+          <p class="mt-1 text-[12.5px] text-dim">{n(allTime.subs)} active monthly</p>
+        </div>
+        <div class="card p-6">
+          <p class="text-[13px] text-muted">Lifetime licenses</p>
+          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{n(allTime.lifetime)}</p>
+          <p class="mt-1 text-[12.5px] text-dim">{n(leads.c)} leads ({n(leads.recent)} new)</p>
+        </div>
+      </section>
+
+      <section class="mt-3 grid gap-3 lg:grid-cols-2">
+        <Bars title="Visitors per day" data={visitorsByDay} />
+        <Bars title="Revenue per day (USD)" data={revenueByDay} format="usd" />
+      </section>
+
+      <section class="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr]">
+        <div class="card p-6">
+          <p class="text-[13px] text-muted">Funnel · last {range} days</p>
+          <ol class="mt-5 space-y-4">
+            {
+              funnel.map((f, i) => (
+                <li>
+                  <div class="flex items-baseline justify-between text-[13.5px]">
+                    <span class="text-text-2">{f.label}</span>
+                    <span class="font-medium tabular-nums">
+                      {f.value.toLocaleString('en-US')}
+                      {i > 0 && <span class="ml-2 text-[12px] font-normal text-dim">{pct(f.value, funnel[i - 1].value)}</span>}
+                    </span>
+                  </div>
+                  <div class="mt-1.5 h-2 rounded-full bg-[rgb(255_250_240/0.05)]">
+                    <div class="h-2 rounded-full bg-[#1a9e66]" style={`width:${funnel[0].value ? Math.min(100, Math.max(0.5, (f.value / funnel[0].value) * 100)) : 0}%`} title={`${f.label}: ${f.value}`}></div>
+                  </div>
+                </li>
+              ))
+            }
+          </ol>
+        </div>
+        <div class="card p-6">
+          <p class="text-[13px] text-muted">Top clicks & checkout buttons</p>
+          <table class="mt-4 w-full text-[13px]">
+            <tbody>
+              {ctas.map((c) => (
+                <tr class="border-b border-line last:border-0">
+                  <td class="py-2 font-mono text-[12px] text-text-2">{c.label}</td>
+                  <td class="py-2 text-right tabular-nums">{n(c.c)}</td>
+                </tr>
+              ))}
+              {!ctas.length && <tr><td class="py-2 text-dim">No clicks yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card mt-3 overflow-x-auto p-6">
+        <p class="text-[13px] text-muted">Sources & campaigns</p>
+        <table class="mt-4 w-full min-w-[640px] text-[13px]">
+          <thead class="text-left text-[12px] text-dim">
+            <tr><th class="py-2 font-normal">Source</th><th class="font-normal">Campaign</th><th class="text-right font-normal">Visitors</th><th class="text-right font-normal">Checkouts</th><th class="text-right font-normal">Orders</th><th class="text-right font-normal">Revenue</th><th class="text-right font-normal">Conv.</th></tr>
+          </thead>
+          <tbody>
+            {sourceRows.map((s) => (
+              <tr class="border-t border-line">
+                <td class="py-2 text-text-2">{s.source}</td>
+                <td class="text-muted">{s.campaign || '—'}</td>
+                <td class="text-right tabular-nums">{n(s.visitors)}</td>
+                <td class="text-right tabular-nums">{n(s.checkouts)}</td>
+                <td class="text-right tabular-nums">{s.orders}</td>
+                <td class="text-right tabular-nums">{money(s.amount)}</td>
+                <td class="text-right tabular-nums text-muted">{pct(s.orders, n(s.visitors))}</td>
+              </tr>
+            ))}
+            {!sourceRows.length && <tr><td class="py-2 text-dim">No traffic yet.</td></tr>}
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card mt-3 overflow-x-auto p-6">
+        <div class="flex items-center justify-between">
+          <p class="text-[13px] text-muted">Recent orders</p>
+          <div class="flex gap-2">
+            <a href="/admin/export.csv?what=orders" class="btn btn-ghost btn-sm">Orders CSV</a>
+            <a href="/admin/export.csv?what=leads" class="btn btn-ghost btn-sm">Leads CSV</a>
+          </div>
+        </div>
+        <table class="mt-4 w-full min-w-[760px] text-[13px]">
+          <thead class="text-left text-[12px] text-dim">
+            <tr><th class="py-2 font-normal">Date (UTC)</th><th class="font-normal">Plan</th><th class="font-normal">Status</th><th class="text-right font-normal">Amount</th><th class="font-normal pl-4">Email</th><th class="font-normal">Country</th><th class="font-normal">Source</th></tr>
+          </thead>
+          <tbody>
+            {recent.map((o) => (
+              <tr class="border-t border-line">
+                <td class="py-2 font-mono text-[12px] text-muted">{date(o.created_at)}</td>
+                <td>{o.plan}</td>
+                <td><span class:list={['chip', o.status === 'paid' && 'chip-brand']}>{o.status}</span></td>
+                <td class="text-right tabular-nums">{o.amount_total != null ? money(n(o.amount_total) / 100, String(o.currency ?? 'usd')) : '—'}</td>
+                <td class="pl-4 text-text-2">{o.email ?? '—'}</td>
+                <td class="text-muted">{o.country ?? '—'}</td>
+                <td class="text-muted">{o.utm_source ?? (o.twclid ? 'x (click id)' : '—')}{o.utm_campaign ? ` · ${o.utm_campaign}` : ''}</td>
+              </tr>
+            ))}
+            {!recent.length && <tr><td class="py-2 text-dim">No orders yet.</td></tr>}
+          </tbody>
+        </table>
+      </section>
+
+      {
+        abandoned.length > 0 && (
+          <section class="card mt-3 p-6">
+            <p class="text-[13px] text-muted">Abandoned checkouts with an email</p>
+            <ul class="mt-3 space-y-1.5 text-[13px]">
+              {abandoned.map((a) => (
+                <li class="flex gap-4"><span class="font-mono text-[12px] text-dim">{date(a.created_at)}</span><span>{a.email}</span><span class="text-muted">{a.plan}</span><span class="text-dim">{a.utm_source ?? ''}</span></li>
+              ))}
+            </ul>
+          </section>
+        )
+      }
+    </div>
+  </main>
+</Base>

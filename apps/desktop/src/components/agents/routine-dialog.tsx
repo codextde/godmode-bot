@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
@@ -31,8 +31,9 @@ import { isEventTrigger, TRIGGER_TYPES } from "@/components/automations/trigger-
 import { TriggerPicker } from "@/components/automations/trigger-picker";
 import { WebhookPanel } from "@/components/automations/webhook-panel";
 import { CronBuilder } from "./cron-builder";
-import { DEFAULT_CRON, localTimezone, validateCron } from "./cron";
+import { DEFAULT_CRON, localTimezone, startWindowProblem, validateCron } from "./cron";
 import { ModelOptions } from "./model-options";
+import { StartWindowField } from "./start-window-field";
 import { TimezoneSelect } from "./timezone-select";
 
 /** Conditions are checked hourly unless the human picks otherwise. */
@@ -56,6 +57,8 @@ export interface RoutineDraft {
   triggerType: RoutineTriggerType;
   /** Schedule triggers: when to run. */
   cron: string;
+  /** Schedule triggers: random start window in minutes, 0 = on time. */
+  startWindow: number;
   /** Condition triggers: how often to check. */
   checkCron: string;
   timezone: string;
@@ -83,6 +86,7 @@ function initialDraft(routine: Routine | null | undefined, agentId: string | und
     name: routine?.name ?? initial?.name ?? "",
     triggerType,
     cron: t?.type === "schedule" ? routine!.cron : (initial?.cron ?? DEFAULT_CRON),
+    startWindow: t?.type === "schedule" ? (t.startWindowMinutes ?? 0) : (initial?.startWindow ?? 0),
     checkCron: t?.type === "condition" ? routine!.cron : (initial?.checkCron ?? DEFAULT_CHECK_CRON),
     timezone: routine?.timezone || initial?.timezone || localTimezone(),
     condition: t?.type === "condition" ? t.condition : (initial?.condition ?? ""),
@@ -146,7 +150,11 @@ export function RoutineDialog({
   const eventTrigger = isEventTrigger(type);
   const appSchema = useAppTriggerSchema(draft.app);
 
-  const cronError = type === "schedule" ? validateCron(draft.cron) : type === "condition" ? validateCron(draft.checkCron) : null;
+  const windowProblem = useMemo(
+    () => (type === "schedule" ? startWindowProblem(draft.cron, draft.timezone, draft.startWindow) : null),
+    [type, draft.cron, draft.timezone, draft.startWindow],
+  );
+  const cronError = type === "schedule" ? (validateCron(draft.cron) ?? windowProblem) : type === "condition" ? validateCron(draft.checkCron) : null;
   const appProblems = type === "app" ? appTriggerProblems(draft.app, appSchema) : null;
   /** The event's settings can't be checked until its schema is known: no saving meanwhile (the fields say why). */
   const schemaBlocked = !!appProblems?.schema;
@@ -163,7 +171,7 @@ export function RoutineDialog({
   const buildTrigger = (): RoutineTrigger => {
     switch (type) {
       case "schedule":
-        return { type: "schedule" };
+        return draft.startWindow > 0 ? { type: "schedule", startWindowMinutes: draft.startWindow } : { type: "schedule" };
       case "app": {
         const { connectionId, toolkit, triggerSlug, triggerName, config } = draft.app;
         return {
@@ -326,7 +334,15 @@ export function RoutineDialog({
               <motion.div key={type} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-3">
                 {type === "schedule" && (
                   <>
-                    <CronBuilder value={draft.cron} onChange={(c) => set("cron", c)} idPrefix="routine-cron" />
+                    <CronBuilder
+                      value={draft.cron}
+                      onChange={(c) => set("cron", c)}
+                      idPrefix="routine-cron"
+                      startWindowMinutes={draft.startWindow}
+                      problem={windowProblem}
+                    >
+                      <StartWindowField cron={draft.cron} timezone={draft.timezone} value={draft.startWindow} onChange={(m) => set("startWindow", m)} />
+                    </CronBuilder>
                     <TimezoneField value={draft.timezone} onChange={(tz) => set("timezone", tz)} />
                   </>
                 )}

@@ -175,6 +175,12 @@ describe("browser-use MCP wiring", () => {
     writeBrowserUseConfig({ ...input, userDataDir: "/Users/x/Library/Application Support/Google/Chrome" });
     const third = JSON.parse(readFileSync(path, "utf8"));
     expect(third.browser_profile[id].user_data_dir).toBe(join(configDir, "user-data"));
+    // A run's own file (its chat-bound endpoint) lives apart from the shared config.
+    const runPath = join(configDir, "runs", "run_1", "config.json");
+    const shared = readFileSync(path, "utf8");
+    expect(writeBrowserUseConfig({ ...input, configPath: runPath, cdpUrl: "http://127.0.0.1:9444/token" })).toBe(runPath);
+    expect((Object.values(JSON.parse(readFileSync(runPath, "utf8")).browser_profile)[0] as { cdp_url: string }).cdp_url).toBe("http://127.0.0.1:9444/token");
+    expect(readFileSync(path, "utf8")).toBe(shared);
   });
 
   test("env disables telemetry/cloud sync and carries PATH + config dir only", () => {
@@ -187,5 +193,7 @@ describe("browser-use MCP wiring", () => {
       BROWSER_USE_LOGGING_LEVEL: "warning",
     });
     expect(Object.keys(env).some((k) => /API_KEY|TOKEN|SECRET/i.test(k))).toBe(false);
+    expect(env.BROWSER_USE_CONFIG_PATH).toBeUndefined();
+    expect(browserUseEnv("/cfg", "/bin", "/cfg/runs/run_1/config.json").BROWSER_USE_CONFIG_PATH).toBe("/cfg/runs/run_1/config.json");
   });
 });

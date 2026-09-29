@@ -1,0 +1,33 @@
+---
+import type { Plan } from '@/config/site';
+import Icon from './Icon.astro';
+
+interface Props {
+  plan: Plan;
+  label: string;
+  source: string;
+  variant?: 'primary' | 'ghost' | 'brand';
+  size?: 'sm' | 'md' | 'lg';
+  class?: string;
+  full?: boolean;
+}
+const { plan, label, source, variant = 'primary', size = 'md', class: className = '', full = false } = Astro.props;
+---
+
+<form method="post" action="/api/checkout" data-checkout={source} class:list={[full && 'w-full', className]}>
+  <input type="hidden" name="plan" value={plan} />
+  <button
+    type="submit"
+    class:list={[
+      'btn group',
+      `btn-${variant}`,
+      size === 'lg' && 'btn-lg',
+      size === 'sm' && 'btn-sm',
+      full && 'w-full',
+    ]}
+  >
+    <span class="btn-label">{label}</span>
+    <Icon name="arrow-right" size={16} class="arrow" />
+    <span class="btn-spinner" aria-hidden="true"></span>
+  </button>
+</form>
