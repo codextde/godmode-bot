@@ -8,7 +8,7 @@ import { parseKeySequence, type KeyCombo } from "../computer/keys";
 import { logger } from "../log";
 import { sleep } from "../util";
 import { fromBgrx, encodePng, scaleDown } from "./raster";
-import { ensureVmRunning, execInVm, onVmStopped, screenEndpoint } from "./service";
+import { ensureVmRunning, execInVm, execProgramInVm, onVmStopped, screenEndpoint } from "./service";
 import { MODIFIER_KEYSYMS, VncClient, VncError, keysymFor, needsShift } from "./vnc";
 
 const log = logger("vm");
@@ -165,6 +165,12 @@ export async function pressKeys(vmId: string, keys: string, holdMs = 0): Promise
 /** Characters a US keyboard types directly (the rest is pasted). */
 const TYPABLE = /^[\x20-\x7e\n\t]*$/;
 
+async function typeChars(c: VncClient, text: string): Promise<void> {
+  for (const ch of text.replace(/\r/g, "")) {
+    await pressCombo(c, { key: ch === "\n" ? "enter" : ch === "\t" ? "tab" : ch === " " ? "space" : ch, modifiers: [] });
+  }
+}
+
 /** Type text into the focused field: short US-keyboard text key by key, anything else pasted from the clipboard. */
 export async function typeText(vmId: string, text: string): Promise<"typed" | "pasted"> {
   if (text.length > TYPE_MAX) throw new VncError(`That's too much text to type (${text.length} characters, at most ${TYPE_MAX}) — write it to a file with the shell instead.`);
@@ -177,8 +183,38 @@ export async function typeText(vmId: string, text: string): Promise<"typed" | "p
     }
     if (!TYPABLE.test(text)) throw new VncError(`Could not paste the text: ${res.stderr.trim() || `pbcopy exited with ${res.exitCode}`}`);
   }
-  for (const ch of text.replace(/\r/g, "")) {
-    await pressCombo(c, { key: ch === "\n" ? "enter" : ch === "\t" ? "tab" : ch === " " ? "space" : ch, modifiers: [] });
-  }
+  await typeChars(c, text);
   return "typed";
+}
+
+/** Secrets are only ever typed key by key: pasting would leave them on the guest's clipboard. */
+export const TYPABLE_SECRET = /^[\x20-\x7e]+$/;
+
+/** Type a secret into the focused field, replacing what it holds. */
+export async function typeSecret(vmId: string, secret: string, signal?: AbortSignal): Promise<void> {
+  if (!TYPABLE_SECRET.test(secret)) throw new VncError("Only plain ASCII can be typed into the VM.");
+  const c = await client(vmId);
+  if (signal?.aborted) throw new VncError("The run ended before anything was typed.");
+  await pressCombo(c, { key: "a", modifiers: ["cmd"] });
+  await typeChars(c, secret);
+}
+
+/** Take back up to `count` just-typed characters from whatever has focus now. */
+export async function eraseTyped(vmId: string, count: number): Promise<void> {
+  const c = await client(vmId);
+  for (let i = 0; i < count; i++) await pressCombo(c, { key: "backspace", modifiers: [] });
+}
+
+/**
+ * The app that turned on macOS secure keyboard input — what a focused password field does (browsers, native password
+ * fields) — or null when none did. Both programs run without a shell, so the guest user's shell setup can't fake them.
+ */
+export async function secureInputOwner(vmId: string, signal?: AbortSignal): Promise<string | null> {
+  const reg = await execProgramInVm(vmId, ["/usr/sbin/ioreg", "-l", "-w", "0", "-d", "1"], { signal });
+  const pid = reg.exitCode === 0 ? /"kCGSSessionSecureInputPID"=(\d+)/.exec(reg.stdout)?.[1] : undefined;
+  if (!pid) return null;
+  const ps = await execProgramInVm(vmId, ["/bin/ps", "-o", "comm=", "-p", pid], { signal });
+  const path = ps.exitCode === 0 ? ps.stdout.trim() : "";
+  if (!path) return null;
+  return /([^/]+)\.app\//.exec(path)?.[1] ?? path.split("/").pop()!;
 }

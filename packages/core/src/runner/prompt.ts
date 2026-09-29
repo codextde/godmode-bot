@@ -8,6 +8,7 @@ import { arch, platform } from "node:os";
 import { join } from "node:path";
 import type { Agent, ComputerTarget, Settings } from "@godmode/shared";
 import { computerTargetLabel } from "@godmode/shared";
+import type { RunSource } from "../services/workspaceSources";
 import { vmSupport } from "../vm/tart";
 
 export interface PromptContext {
@@ -25,11 +26,18 @@ export interface PromptContext {
   voice?: boolean;
   /** Folder attached to the chat (Claude's cwd). null = the agent's own repository. */
   workingDirectory?: string | null;
+  /** Folders and repositories of the agent's workspace (passed with --add-dir). */
+  sources?: PromptSources | null;
   /** Rendered by `instructionsSection`. */
   standingInstructions?: string;
   /** MEMORY.md, loaded into the prompt (null = not loaded: disabled in settings, or the agent has none). */
   memory?: { text: string; truncated: boolean } | null;
   now?: Date;
+}
+
+export interface PromptSources {
+  workspace: string;
+  items: RunSource[];
 }
 
 /** The macOS VM a run works in, as the prompt describes it. */
@@ -40,6 +48,8 @@ export interface PromptVm {
   hostSharedDir: string;
   /** Claude Code's Bash tool (which runs on the host) is off for this run. */
   hostShellOff: boolean;
+  /** Saved logins and 2FA codes may be typed into the VM (settings.vm.vaultFill). */
+  vaultFill: boolean;
 }
 
 /** Standing instructions from the human besides the global ones, most general first. The agent's own live in its CLAUDE.md. */
@@ -135,6 +145,7 @@ Use the \`browser\` MCP tools for anything on the web (navigate, click, type, re
 No browser tools are attached to this run. If a task needs a website, say so in your final summary instead of guessing.`);
   }
 
+  if (ctx.sources?.items.length) out.push(sourcesSection(ctx.sources, human, !!ctx.vm));
   if (ctx.vm) out.push(vmSection(ctx.vm, human));
   if (ctx.computer) out.push(computerSection(ctx.computer, human, perms.secretAccess === "reveal"));
 
@@ -234,6 +245,21 @@ You are "${agent.name}", an AI coworker running inside Godmode Bot for ${human}.
 - Only edit \`MEMORY.md\` and files in \`memory/\`. Godmode snapshots them before the dream, and ${human} can review and undo every change.`;
 }
 
+function sourceLine(s: RunSource): string {
+  return s.kind === "folder" ? `\`${s.path}\` (folder)` : `\`${s.path}\` (clone of ${s.url}${s.branch ? `, branch \`${s.branch}\`` : ""})`;
+}
+
+function sourcesSection({ workspace, items }: PromptSources, human: string, inVm: boolean): string {
+  const git = items.some((s) => s.kind === "git");
+  return `### Workspace folders and repositories
+Attached to the "${workspace}" workspace for every agent in it, and added to this session: read and edit them with your file tools (their CLAUDE.md files are loaded too) whenever a task is about their contents, and follow their conventions.
+${items.map((s) => `- ${sourceLine(s)}`).join("\n")}${
+    git
+      ? `\nGodmode clones the repositories and fast-forwards them from their remote while they have no local changes. Other agents of the workspace share these clones: commit, push or switch branches only when ${human} asks.${inVm ? ` They are on ${human}'s computer — to build or run one in the VM, clone it there.` : ""}`
+      : ""
+  }`;
+}
+
 function vmSection(vm: PromptVm, human: string): string {
   return `### macOS virtual machine
 This task runs in a dedicated macOS virtual machine, **${vm.name}** — not on ${human}'s own computer. Do the work (commands, code, installs, builds, apps) inside the VM.
@@ -241,7 +267,12 @@ This task runs in a dedicated macOS virtual machine, **${vm.name}** — not on $
 - The VM keeps its disk between tasks: tools you install, repositories you clone and files you create stay until ${human} resets the VM. Keep your work in the home folder (\`/Users/${vm.guestUser}\`).
 - Shared folder: \`${vm.guestSharedDir}\` in the VM is \`${vm.hostSharedDir}\` on ${human}'s computer. Put results ${human} should get (reports, builds, exports) there; you can also read and write it with your normal file tools.
 - Your own repository (CLAUDE.md, MEMORY.md) stays on ${human}'s computer — keep using your normal file tools for it.
-- Start servers and other long-running processes in the background (\`nohup … > /tmp/x.log 2>&1 &\`); \`shell\` returns when a command's output closes.`;
+- Start servers and other long-running processes in the background (\`nohup … > /tmp/x.log 2>&1 &\`); \`shell\` returns when a command's output closes.
+${
+  vm.vaultFill
+    ? `- Signing in inside the VM (a website in its browser, an app): find the login with \`vault_list_logins\`, click the field on the VM's screen, then call \`fill_login({ credentialId, field })\` or \`fill_totp({ credentialId })\` from the \`vm\` server (both take \`coordinate\` to click first and \`submit: true\`). Godmode types the value — you never see it — and only types passwords into password fields. It can't check which website a field in the VM belongs to, so only fill a login on its own site or app. Never type passwords or 2FA codes with \`screen\`.`
+    : `- Godmode doesn't type saved logins or 2FA codes into this VM: ${human} hasn't allowed it. If a task needs to sign in inside the VM, tell ${human} they can turn on "Logins and 2FA codes" in Settings → Virtual machines.`
+}`;
 }
 
 function computerSection(target: ComputerTarget, human: string, canReveal: boolean): string {
@@ -270,9 +301,9 @@ ${scope}
 export function resumeContextPrefix(
   folder: string | null,
   repoPath: string,
-  opts: { now?: Date; instructions?: string; memoryChanged?: boolean; vm?: PromptVm | null } = {},
+  opts: { now?: Date; instructions?: string; memoryChanged?: boolean; vm?: PromptVm | null; sources?: PromptSources | null } = {},
 ): string {
-  const { now = new Date(), instructions, memoryChanged, vm } = opts;
+  const { now = new Date(), instructions, memoryChanged, vm, sources } = opts;
   const where = folder
     ? `Working directory: \`${folder}\` (the folder attached to this chat). Your own repository with CLAUDE.md and MEMORY.md: \`${repoPath}\`.`
     : `Working directory: your own repository \`${repoPath}\`.`;
@@ -287,7 +318,9 @@ export function resumeContextPrefix(
     : "";
   // The VM can be assigned or changed between turns: always restate where the work happens.
   const machine = vm
-    ? `\nYou work in the macOS VM "${vm.name}": use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen) for all work in it. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""}`
+    ? `\nYou work in the macOS VM "${vm.name}": use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen) for all work in it. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""} ${vm.vaultFill ? "Saved logins and 2FA codes can be typed into the VM with fill_login / fill_totp." : "Typing saved logins and 2FA codes into the VM is turned off."}`
     : "";
-  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${machine}${update}${memory}</godmode-context>\n\n`;
+  // Folders and repositories can be attached or removed between turns.
+  const attached = sources?.items.length ? `\nWorkspace folders and repositories (added to this session): ${sources.items.map(sourceLine).join(", ")}.` : "";
+  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${machine}${update}${memory}</godmode-context>\n\n`;
 }

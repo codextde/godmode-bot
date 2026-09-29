@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS runs (
   prompt TEXT NOT NULL,
   result TEXT,
   error TEXT,
+  note TEXT,
   cost_usd REAL,
   duration_ms INTEGER,
   num_turns INTEGER,
@@ -340,6 +341,7 @@ CREATE TABLE IF NOT EXISTS dreams (
   files TEXT NOT NULL DEFAULT '[]',
   snapshot TEXT,
   error TEXT,
+  note TEXT,
   created_at TEXT NOT NULL,
   started_at TEXT,
   finished_at TEXT
@@ -380,6 +382,31 @@ ALTER TABLE workspaces ADD COLUMN vm_id TEXT;
   },
   {
     id: 9,
+    name: "workspace_sources",
+    sql: /* sql */ `
+-- Folders and git repositories attached to a workspace. \`path\` is the folder, or for git the clone's directory name
+-- under <data>/repos/<workspace id>/ (derived, so the data dir can move).
+CREATE TABLE IF NOT EXISTS workspace_sources (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  path TEXT NOT NULL,
+  url TEXT,
+  branch TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  note TEXT,
+  commit_sha TEXT,
+  head_branch TEXT,
+  synced_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workspace_sources_workspace ON workspace_sources(workspace_id, position);
+`,
+  },
+  {
+    id: 10,
     name: "messaging",
     sql: /* sql */ `
 -- Bots on Slack, Telegram and Teams that people use to talk to agents. \`secrets_enc\` holds the tokens (sealed JSON),

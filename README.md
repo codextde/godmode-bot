@@ -59,7 +59,7 @@ needs to be useful:
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
-| 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent runs commands, edits files and uses apps *inside the VM* — your computer stays untouched. VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
+| 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent runs commands, edits files and uses apps *inside the VM* — your computer stays untouched. VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. Allow it once and agents sign in inside the VM too: Godmode types your saved logins and 2FA codes into it for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
 | 🔐 **Vault** | Logins with password generator, per-workspace or global, AES-256-GCM encrypted, fully audited. |
 | 📥 **Password import** | Bring logins over from Chrome (and Edge, Brave, Arc), 1Password (.1pux or CSV), Bitwarden, Apple Passwords, Firefox and more — with a preview that updates saved logins instead of duplicating them. |
@@ -68,6 +68,7 @@ needs to be useful:
 | 🧩 **Integrations** | Composio toolkits (Gmail, Slack, GitHub, Notion…) and custom MCP servers — globally, per workspace, or per agent. |
 | 💬 **Messaging** | Talk to your agents from **Slack**, **Telegram** and **Microsoft Teams**. Connect a bot, pick which agents it reaches, and approve who may use it; `/agent`, `/new` and `/stop` work right in the chat, and every chat is also a Godmode conversation. |
 | 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA and integrations, plus shared global ones. |
+| 🧬 **Workspace folders & repos** | Attach project folders and git repositories to a workspace — paste `https://github.com/you/app` and Godmode clones it with your git sign-in, keeps it up to date and hands it to every agent in the workspace. |
 | 🎙️ **Voice mode** | Dictate and hear replies; hands-free conversation loop (Web Speech, OpenAI or ElevenLabs). |
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
@@ -104,6 +105,10 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/activity.png" alt="Activity across agents" /><br /><sub><b>Activity</b> — every run, its cost, duration and result</sub></td>
     <td><img src="docs/screenshots/settings.png" alt="Security settings" /><br /><sub><b>Security</b> — fill-only secrets, device keychain and auto-lock</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/workspace-sources.png" alt="Folders and git repositories attached to a workspace" /><br /><sub><b>Workspace folders & repos</b> — every agent in the workspace works with them</sub></td>
+    <td><img src="docs/screenshots/workspace-add-repo.png" alt="Add a git repository to a workspace" /><br /><sub><b>Add a repository</b> — paste a URL, Godmode clones it and keeps it up to date</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/messaging.png" alt="Slack, Telegram and Teams bots connected to agents" /><br /><sub><b>Messaging</b> — talk to agents from Slack, Telegram and Microsoft Teams</sub></td>

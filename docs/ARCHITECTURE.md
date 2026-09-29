@@ -38,6 +38,7 @@ access-token          0600 — bearer token for server mode / dev
 agents/<slug>/        one git repository per agent (see below)
 browser/<profile-id>/ Chromium user-data-dirs managed by Godmode
 attachments/          chat uploads
+repos/<workspace-id>/ clones of the workspaces' git repositories (removed ones go to repos/.trash/)
 backups/              automatic + manual backups (*.godmode-backup)
 vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, tart/ (TART_HOME: vms/<vm-id>
                       disks and gm-image-* templates), downloads/ (image layers while downloading),
@@ -73,6 +74,35 @@ system prompt is a snapshot of its first turn. Folders must exist, be absolute a
 only the human sets them (agent-made changes are ignored). The UI picks them via `GET /api/folders?path=` (subfolders on
 the core's machine) and `GET /api/folders/recent`.
 
+### Workspace folders and repositories
+
+A workspace can attach folders and git repositories (`workspace_sources`, `Workspace.sources`, set as a whole list with
+`sources` on `POST/PATCH /api/workspaces`; `services/workspaceSources.ts`). Every run of an agent in the workspace gets
+the usable ones with `--add-dir` (their CLAUDE.md loads too), a "Workspace folders and repositories" section in the
+system prompt, and a one-line restatement on resumed turns. Dreams don't get them. Only the human attaches them.
+
+* **Folders** follow the working-folder rules (absolute, existing, outside the data directory). One that goes missing
+  shows as `missing` and is skipped by runs with a notice; the workspace can still be saved.
+* **Repositories** are cloned with the system `git` into `repos/<workspace-id>/<name>` as soon as they are added, so the
+  machine's own git sign-in applies (SSH keys, credential helpers). Accepted URLs: https, `ssh://`, `git@host:owner/repo`
+  and `git://`; GitHub/GitLab/Bitbucket/Codeberg web links (also `…/tree/<branch>`) become clone URLs (`parseGitUrl` in
+  `@godmode/shared`). Credentials in URLs, local paths and other transports are refused. Nothing waits for a prompt
+  (`GIT_TERMINAL_PROMPT=0`, no askpass, SSH in batch mode with `StrictHostKeyChecking=accept-new` unless the user set
+  their own SSH command). A clone lands in `<name>.cloning-*` and is only renamed into place when complete.
+* **Updates** (`POST /api/workspaces/:id/sources/:sourceId/sync`, which clones a missing one) fetch, then
+  `merge --ff-only` only when the tree has no local changes — agents' work is never overwritten; `note` says why a clone
+  was left as it was. Before a run, all sources are prepared at once: a missing clone is cloned (the run waits up to
+  90 s, then goes on without it while the clone continues), one not updated for 15 minutes is fast-forwarded (20 s,
+  retried at most every 15 minutes). Failures are stored on the source (`error`) in words a human can act on; a clone
+  whose update failed stays usable.
+* **Agents can write into clones, git runs there on the host.** Godmode's git ignores the clone's hooks and fsmonitor
+  (`core.hooksPath`, `core.fsmonitor` on the command line), pins the SSH command through the environment, and runs that
+  may edit files but not run commands (no permission bypass, VM runs) get `Edit(**/.git/**)` plus the clones' `.git`
+  denied, so a clone's git settings can't be used to run programs on this computer.
+* Removing a repository or deleting its workspace stops a running clone and moves the clone to `repos/.trash/` (it may
+  hold unpushed work). Backups carry the records, not the clones: restored repositories are cloned again, restored
+  folders must exist on the new machine.
+
 ## Security model
 
 * **Vault**: passphrase → scrypt (N=2^17) → KEK → unwraps a random 256-bit DEK. Every secret column is
@@ -83,6 +113,12 @@ the core's machine) and `GET /api/folders/recent`.
   Fills are **site-bound**: the frame that owns the target field must be on one of the login's domains (https, or http
   only when the saved URL is http), and passwords only go into `input[type=password]`.
   `"reveal"` mode lets an agent read raw secrets (needed for API-only tools) and is audited.
+* **Secrets in VMs** (`settings.vm.vaultFill`, off by default; turning it on needs a grant): the `vm` tools `fill_login` /
+  `fill_totp` type a login or the current 2FA code into the field focused on the VM's screen, key by key over VNC (never
+  through the guest clipboard; secrets that aren't plain ASCII are refused). Passwords only go in while macOS secure
+  keyboard input is on and not owned by a terminal, checked before and after typing (when focus moved away, the typed characters
+  are erased again) with `ioreg` / `ps` run without a shell. Unlike browser fills they can't be bound to a website, and the agent
+  controls the VM, so this is best effort against a determined agent — closer to "reveal" than to fill-only.
 * **Grants**: revealing secrets and enabling reveal/remember-device require `X-Godmode-Grant`, obtained from
   `POST /api/vault/grant {passphrase}` (10 min, in memory).
 * **Redaction**: every known secret is masked in transcripts, run logs and the UI stream.
@@ -111,6 +147,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        --setting-sources project,local
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key; Bash when the run works in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
+       [--add-dir <folder or clone> for each usable workspace folder and repository]
        (prompt is written to stdin)
 cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <agent repo>)
 ```
@@ -263,7 +300,9 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   Remote Desktop authentication, raw 32-bit updates, pointer/key events; `vm/raster.ts`: crop, area-average downscale,
   PNG). Long or non-ASCII text is pasted through the guest clipboard. Screenshots remember their frame, so model
   coordinates map back to framebuffer pixels. (Tart's `--vnc-experimental` server is not used: it listens on every
-  network interface.)
+  network interface.) `fill_login` / `fill_totp` type vault secrets into the focused field (optionally clicking a
+  `coordinate` first) when `settings.vm.vaultFill` allows it; a password needs `kCGSSessionSecureInputPID` in the guest's
+  `ioreg` (the app that owns it is named in the result and the audit entry). The value is never in a tool result.
 * **Human access**: `POST /api/vms/:id/open { what }` opens Screen Sharing (`vnc://admin:admin@<NAT IP>`), Terminal
   (SSH with Godmode's key) or the shared folder in Finder; `GET /api/vms/:id/screenshot` feeds the card preview (never
   boots a VM). Backups carry VM records and assignments, not disks; a restore keeps this Mac's own VM records, and a

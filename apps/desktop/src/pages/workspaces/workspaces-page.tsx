@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Bot, EllipsisVertical, Globe2, KeyRound, Layers, Pencil, Plug, Plus, ScrollText, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
-import type { Workspace } from "@godmode/shared";
+import type { Workspace, WorkspaceSource } from "@godmode/shared";
 import { PageBody, PageHeader } from "@/components/common";
 import {
   AlertDialog,
@@ -28,6 +28,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
+import { SourcesSummary } from "@/components/workspaces/workspace-sources";
 import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 
 interface Counts {
@@ -78,7 +79,7 @@ export default function WorkspacesPage() {
   const hasGlobalInstructions = !!boot?.settings.runner.appendSystemPrompt?.trim();
 
   const [editing, setEditing] = useState<Workspace | null>(null);
-  const [focusContext, setFocusContext] = useState(false);
+  const [focus, setFocus] = useState<"instructions" | "sources" | null>(null);
   const [deleting, setDeleting] = useState<Workspace | null>(null);
   const [forceDelete, setForceDelete] = useState<{ workspace: Workspace; counts: [string, number][] } | null>(null);
 
@@ -89,7 +90,7 @@ export default function WorkspacesPage() {
   const dialogOpen = creating || !!target;
   const closeDialog = () => {
     setEditing(null);
-    setFocusContext(false);
+    setFocus(null);
     if (creating || editId) {
       const next = new URLSearchParams(params);
       next.delete("new");
@@ -104,8 +105,8 @@ export default function WorkspacesPage() {
     setParams(next, { replace: true });
     toast.error("That workspace doesn't exist anymore");
   }, [editId, workspaces, linked, params, setParams]);
-  const editContext = (ws: Workspace) => {
-    setFocusContext(true);
+  const editFocused = (ws: Workspace, field: "instructions" | "sources") => {
+    setFocus(field);
     setEditing(ws);
   };
   const openCreate = () => {
@@ -205,8 +206,9 @@ export default function WorkspacesPage() {
                   context={{
                     label: ws.instructions.trim() ? "Agent context" : "Add agent context",
                     set: !!ws.instructions.trim(),
-                    onClick: () => editContext(ws),
+                    onClick: () => editFocused(ws, "instructions"),
                   }}
+                  sources={{ list: ws.sources, onClick: () => editFocused(ws, "sources") }}
                   menu={
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -252,7 +254,7 @@ export default function WorkspacesPage() {
       <WorkspaceDialog
         open={dialogOpen}
         workspace={target}
-        focus={focusContext || (linked && !editing) ? "instructions" : undefined}
+        focus={focus ?? (linked && !editing ? "instructions" : undefined)}
         onOpenChange={(o) => {
           if (!o) closeDialog();
         }}
@@ -355,6 +357,7 @@ function ScopeCard({
   onOpen,
   menu,
   context,
+  sources,
 }: {
   index: number;
   current: boolean;
@@ -367,6 +370,7 @@ function ScopeCard({
   onOpen: () => void;
   menu?: ReactNode;
   context?: { label: string; set: boolean; onClick: () => void };
+  sources?: { list: WorkspaceSource[]; onClick: () => void };
 }) {
   const stats: { key: keyof Counts; label: string; icon: ReactNode }[] = [
     { key: "agents", label: "Agents", icon: <Bot /> },
@@ -415,6 +419,26 @@ function ScopeCard({
           >
             {context.set ? <ScrollText className="size-3.5 shrink-0 text-brand-strong" /> : <Plus className="size-3.5 shrink-0" />}
             <span className="truncate">{context.label}</span>
+          </button>
+        )}
+        {sources && (
+          <button
+            type="button"
+            onClick={sources.onClick}
+            aria-label={sources.list.length ? `Folders and repositories: ${sources.list.map((s) => s.name).join(", ")}` : undefined}
+            className={cn(
+              "mt-1.5 flex max-w-full items-center gap-1.5 rounded-md text-xs transition focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+              sources.list.length ? "text-foreground hover:text-foreground/70" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {sources.list.length ? (
+              <SourcesSummary sources={sources.list} />
+            ) : (
+              <>
+                <Plus className="size-3.5 shrink-0" />
+                <span className="truncate">Add folders or repositories</span>
+              </>
+            )}
           </button>
         )}
       </div>

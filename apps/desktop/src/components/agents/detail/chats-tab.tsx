@@ -2,7 +2,7 @@ import { useEffect, useState, type ComponentType } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Archive, ArchiveRestore, MessageSquare, MessagesSquare, Moon, Pin, Plug, Plus, Search, Share2, Workflow } from "lucide-react";
+import { Archive, ArchiveRestore, MessageSquare, MessagesSquare, Moon, Pin, Plug, Plus, Search, Share2, Trash2, Workflow } from "lucide-react";
 import type { Agent, Conversation, ConversationOrigin } from "@godmode/shared";
 import { errorMessage } from "@/lib/api";
 import { useArchivedConversations, useConversations } from "@/lib/hooks";
@@ -17,7 +17,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useArchiveChat } from "@/components/chat/chat-actions";
+import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { useStartAgentChat } from "../agent-actions";
 import { PLATFORMS } from "@/components/messaging/platform";
 
@@ -49,6 +49,7 @@ export function ChatsTab({ agent }: { agent: Agent }) {
   const archived = useArchivedConversations(agent.id, q, { enabled: showArchived, limit: 100 });
   const chat = useStartAgentChat();
   const { setArchived } = useArchiveChat();
+  const { askDelete, deleteDialog } = useDeleteChat();
   const runningConversations = useLive((s) => Object.values(s.runs).map((r) => r.conversationId).join(","));
 
   const list = ((showArchived ? archived.data : active.data) ?? [])
@@ -113,10 +114,12 @@ export function ChatsTab({ agent }: { agent: Agent }) {
               index={i}
               running={!!c.running || runningConversations.split(",").includes(c.id)}
               onToggleArchive={() => setArchived(c, !c.archived)}
+              onDelete={() => askDelete(c)}
             />
           ))}
         </div>
       )}
+      {deleteDialog}
     </div>
   );
 }
@@ -126,11 +129,13 @@ function ConversationRow({
   index,
   running,
   onToggleArchive,
+  onDelete,
 }: {
   conversation: Conversation;
   index: number;
   running: boolean;
   onToggleArchive: () => void;
+  onDelete: () => void;
 }) {
   const origin = ORIGIN[c.origin] ?? ORIGIN.chat;
   const Icon = origin.icon;
@@ -164,7 +169,7 @@ function ConversationRow({
           {formatDistanceToNowStrict(new Date(when), { addSuffix: true })}
         </span>
       </Link>
-      <div className="absolute inset-y-0 right-3 flex items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+      <div className="absolute inset-y-0 right-3 flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -178,6 +183,20 @@ function ConversationRow({
             </Button>
           </TooltipTrigger>
           <TooltipContent>{c.archived ? "Unarchive" : "Archive"}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon-xs"
+              variant="outline"
+              aria-label={`Delete “${c.title || "New chat"}”`}
+              onClick={onDelete}
+              className="bg-card text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Delete</TooltipContent>
         </Tooltip>
       </div>
     </motion.div>
