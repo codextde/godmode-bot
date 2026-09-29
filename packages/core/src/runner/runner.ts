@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { FileSink, Subprocess } from "bun";
-import type { Agent, ComputerTarget, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
+import type { Agent, BrowserProfile, ComputerTarget, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
 import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
@@ -25,7 +25,7 @@ import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
-import { BROWSER_LLM_TOOLS, browserLlmKey, currentPage, resolveProfileForAgent } from "../browser/manager";
+import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, resolveProfileForAgent } from "../browser/manager";
 import {
   addMessage,
   appendTranscript,
@@ -232,6 +232,8 @@ interface Job {
   vmId?: string | null;
   /** The run drove the Chrome in its VM. */
   vmBrowser?: boolean;
+  /** The browser profile was picked for the run's chat rather than inherited from its agent. */
+  browserFromChat?: boolean;
   /** Screen, window or tab this run may control (undefined = not resolved yet, null = none). */
   computerTarget?: ComputerTarget | null;
   /** The target is the agent's own unattended access, not something shared in the chat. */
@@ -549,17 +551,48 @@ function vmOf(job: Job): string | null {
 
 function browserLockOf(job: Job): string | null {
   if (job.browserLock !== undefined) return job.browserLock;
+  job.browserFromChat = false;
   if (job.trigger === "dream") return (job.browserLock = null);
   // One screen, one mouse and one Chrome per VM: runs working in the same VM take turns.
   const vmId = vmOf(job);
   if (vmId) return (job.browserLock = `vm:${vmId}`);
   try {
     const agent = getAgent(job.agentId);
-    job.browserLock = getSettings().browser.enabled && agent.browser.enabled ? resolveProfileForAgent(agent).id : null;
+    job.browserLock = getSettings().browser.enabled && agent.browser.enabled ? resolveProfileForAgent(agent, job.conversationId).id : null;
+    job.browserFromChat = !!job.browserLock && job.browserLock === chatProfileId(job.conversationId);
   } catch {
     job.browserLock = null;
   }
   return job.browserLock;
+}
+
+/** The browser profile the run drives on this computer (null for none or a run in a VM). */
+function runProfileOf(job: Job): string | null {
+  const lock = browserLockOf(job);
+  return lock && !lock.startsWith("vm:") ? lock : null;
+}
+
+/** Browser profile a live run drives on this computer; null when it has none, works in a VM or is over. */
+export function runBrowserProfile(runId: string): string | null {
+  const job = jobs.get(runId);
+  return job ? runProfileOf(job) : null;
+}
+
+/** The profile a live run drives when it was picked for its chat (null when inherited, gone or the run is over). */
+export function runChatBrowserProfile(runId: string): BrowserProfile | null {
+  const job = jobs.get(runId);
+  const id = job ? runProfileOf(job) : null;
+  if (!id || !job?.browserFromChat) return null;
+  try {
+    return getProfile(id);
+  } catch {
+    return null;
+  }
+}
+
+/** Something a waiting run depends on changed (e.g. its chat's browser profile): try to start queued runs again. */
+export function retryQueued(): void {
+  pump();
 }
 
 function isAncestor(candidate: Job, job: Job): boolean {
@@ -954,6 +987,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     computer: !!computer,
     vm: vm ? { id: vm.id, browser: guest?.browser ?? null, cua: guest?.cua ?? null } : null,
     gatewayOnly: dreaming,
+    browserProfileId: runProfileOf(job),
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
@@ -1341,7 +1375,7 @@ async function detectMissingLogin(job: Job, agent: Agent, text: string) {
   let url = "";
   if (agent.browser.enabled && (!job.vmId || job.vmBrowser)) {
     try {
-      const page = job.vmId ? await currentVmPage(job.vmId) : await currentPage(resolveProfileForAgent(agent).id);
+      const page = job.vmId ? await currentVmPage(job.vmId) : await currentPage(runProfileOf(job) ?? resolveProfileForAgent(agent, job.conversationId).id);
       if (page?.url && /^https?:/i.test(page.url)) {
         url = page.url;
         service = hostnameOf(page.url) || service;

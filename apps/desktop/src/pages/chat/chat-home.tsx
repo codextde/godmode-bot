@@ -18,6 +18,7 @@ import { FolderChip } from "@/components/chat/folder-picker";
 import { ComputerShareChip } from "@/components/computer/computer-panel";
 import { InstructionsChip } from "@/components/instructions/instructions";
 import { VmChip } from "@/components/vms/vm-picker";
+import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { ChatDropZone } from "@/components/chat/thread";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -82,6 +83,8 @@ export default function ChatHome() {
   const [instructions, setInstructions] = useState("");
   /** macOS VM for the new chat; null = the agent's (or its workspace's). */
   const [vmId, setVmId] = useState<string | null>(null);
+  /** Browser profile for the new chat; null = the agent's. */
+  const [browserProfileId, setBrowserProfileId] = useState<string | null>(null);
   const { data: workspaces = [] } = useWorkspaces();
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
@@ -168,6 +171,7 @@ export default function ChatHome() {
                     agentName={selected?.name}
                     onChange={setFolder}
                   />
+                  <BrowserProfileChip agent={selected} value={browserProfileId} onChange={setBrowserProfileId} />
                   <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />
                   <VmChip
                     value={vmId}
@@ -192,6 +196,7 @@ export default function ChatHome() {
                 workingDirectory: folder ?? undefined,
                 computerTarget: shared ?? undefined,
                 vmId: vmId ?? undefined,
+                browserProfileId: browserProfileId ?? undefined,
                 instructions: instructions || undefined,
               })
             }
@@ -234,6 +239,7 @@ export default function ChatHome() {
             workingDirectory: folder ?? undefined,
             computerTarget: shared ?? undefined,
             vmId: vmId ?? undefined,
+            browserProfileId: browserProfileId ?? undefined,
             instructions: instructions || undefined,
             ...choice,
           });

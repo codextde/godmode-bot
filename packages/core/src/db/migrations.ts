@@ -460,4 +460,12 @@ CREATE TABLE IF NOT EXISTS messaging_chats (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messaging_chats_external ON messaging_chats(connection_id, external_id);
 `,
   },
+  {
+    id: 11,
+    name: "chat_browser_profile",
+    sql: /* sql */ `
+-- Browser profile a chat works in, overriding its agent's (and the workspace / global default).
+ALTER TABLE conversations ADD COLUMN browser_profile_id TEXT;
+`,
+  },
 ];

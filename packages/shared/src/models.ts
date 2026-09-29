@@ -296,6 +296,8 @@ export interface Conversation {
   computerTarget: ComputerTarget | null;
   /** macOS VM this chat works in, overriding the agent's and the workspace's. null = theirs. */
   vmId: ID | null;
+  /** Browser profile this chat works in, overriding the agent's and the workspace / global default. null = theirs. */
+  browserProfileId: ID | null;
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
   instructions: string;
   pinned: boolean;

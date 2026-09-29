@@ -38,6 +38,8 @@ const folder = z.string().trim().max(4096).nullable().optional();
 const instructions = z.string().max(MAX_INSTRUCTIONS_LENGTH).optional();
 /** macOS VM of the chat; null = the agent's (or workspace's). */
 const vmId = z.string().trim().max(100).nullable().optional();
+/** Browser profile of the chat; null = the agent's (or the default). */
+const browserProfileId = z.string().trim().max(100).nullable().optional();
 
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
@@ -69,7 +71,7 @@ export function registerChatRoutes(app: Hono): void {
   );
 
   app.post("/api/conversations", async (c) => {
-    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, instructions, ...modelChoice }));
+    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, instructions, ...modelChoice }));
     return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
@@ -86,6 +88,7 @@ export function registerChatRoutes(app: Hono): void {
         workingDirectory: folder,
         computerTarget: computerTargetSchema.nullable().optional(),
         vmId,
+        browserProfileId,
         instructions,
       }),
     );
@@ -114,6 +117,7 @@ export function registerChatRoutes(app: Hono): void {
         workingDirectory: folder,
         computerTarget: computerTargetSchema.nullable().optional(),
         vmId,
+        browserProfileId,
         instructions,
         ...modelChoice,
       }),

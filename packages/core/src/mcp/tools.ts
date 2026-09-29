@@ -32,7 +32,7 @@ import { createConversation, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
-import { getRun, listRuns, markMissingLoginReported, waitForRun } from "../runner/runner";
+import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun } from "../runner/runner";
 
 const log = logger("mcp");
 
@@ -200,7 +200,7 @@ type FillTarget = { vmId: string } | { profileId: string };
 function requireBrowser(agent: Agent, ctx: RunContext): FillTarget {
   if (!agent.browser.enabled) throw new HttpError(409, "The browser is disabled for this agent, so nothing can be filled into a page.");
   const vmId = vmOfRun(ctx.runId);
-  if (!vmId) return { profileId: resolveProfileForAgent(agent).id };
+  if (!vmId) return { profileId: runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id };
   // A run in a VM browses in the VM, where its shell shares the machine with the browser: secrets only go there when
   // the human allowed logins in VMs — never into a browser on this computer instead.
   if (!getSettings().vm.vaultFill) {
@@ -636,7 +636,11 @@ const TOOLS: ToolDef[] = [
       if (refusal) return fail(refusal);
       // From a VM, work for an agent without its own VM stays in the caller's VM.
       const vmId = lockedVm(ctx) && !resolveVmId(null, target) ? lockedVm(ctx) : null;
-      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId });
+      // Work for an agent without its own profile stays in the browser profile picked for the caller's chat, within the
+      // target's reach (global or its workspace's).
+      const inherited = target.browser.profileId ? null : runChatBrowserProfile(ctx.runId);
+      const browserProfileId = inherited && (!inherited.workspaceId || inherited.workspaceId === target.workspaceId) ? inherited.id : null;
+      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId });
       const { run } = await sendMessage(conversation.id, {
         content: `[Delegated by ${agent.name}]\n\n${task}`,
         trigger: "delegation",

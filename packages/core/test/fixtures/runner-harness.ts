@@ -56,8 +56,11 @@ const fakeProfile: BrowserProfile = {
 
 mock.module("../../src/browser/manager", () => ({
   ...realBrowser,
-  resolveProfileForAgent: (agent: Agent) => (testAgentIds.has(agent.id) ? fakeProfile : realBrowser.resolveProfileForAgent(agent)),
-  browserMcpServer: async (agent: Agent) => (testAgentIds.has(agent.id) ? null : realBrowser.browserMcpServer(agent)),
+  resolveProfileForAgent: (agent: Agent, conversationId?: string | null) =>
+    testAgentIds.has(agent.id) && !(conversationId && realBrowser.chatProfileId(conversationId))
+      ? fakeProfile
+      : realBrowser.resolveProfileForAgent(agent, conversationId),
+  browserMcpServer: async (agent: Agent, profileId?: string | null) => (testAgentIds.has(agent.id) ? null : realBrowser.browserMcpServer(agent, profileId)),
   fillIntoPage: async (profileId: string, opts: Parameters<BrowserModule["fillIntoPage"]>[1]) => {
     if (profileId !== FAKE_PROFILE_ID) return realBrowser.fillIntoPage(profileId, opts);
     fills.push({
