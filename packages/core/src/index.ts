@@ -28,6 +28,7 @@ import { startMessaging, stopMessaging } from "./messaging/service";
 import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
 import { shutdownComputer } from "./computer/service";
 import { shutdownVms, startVms } from "./vm/service";
+import { closeGuestTunnels } from "./vm/guest";
 import { runDoctor } from "./services/doctor";
 import { getModelCatalog } from "./runner/models";
 import { newId } from "./util";
@@ -199,6 +200,7 @@ async function serve(values: Record<string, unknown>) {
     await shutdownBrowsers();
     await shutdownComputer();
     await shutdownVms().catch((err) => log.warn("could not stop VMs", err));
+    closeGuestTunnels();
     server.stop(true);
     closeDb();
     process.exit(0);

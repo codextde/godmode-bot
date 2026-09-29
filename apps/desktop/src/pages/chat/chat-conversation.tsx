@@ -21,6 +21,7 @@ import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { InstructionsChip } from "@/components/instructions/instructions";
 import { VmChip } from "@/components/vms/vm-picker";
+import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { ChatDropZone, Thread } from "@/components/chat/thread";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -70,9 +71,19 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const computerPanel = useUi((s) => s.computerPanel);
   const setComputerPanel = useUi((s) => s.setComputerPanel);
   const [computerFocus, setComputerFocus] = useState<ComputerFocusMode | null>(null);
+  const vmInherited = [
+    agent?.vmId ? { vmId: agent.vmId, from: agent.name } : null,
+    agentWorkspace?.vmId ? { vmId: agentWorkspace.vmId, from: `the ${agentWorkspace.name} workspace` } : null,
+  ];
+  // A chat that works in a VM does everything there: its panel shows the VM, not this Mac's browser or screen.
+  const chatVm = useChatVm(conv?.vmId ?? null, vmInherited);
+  const vmPanel = useUi((s) => s.vmPanel);
+  const setVmPanel = useUi((s) => s.setVmPanel);
+  const [vmFocus, setVmFocus] = useState(false);
+  const showVmPanel = !!chatVm && !!agent && wide && vmPanel;
   // Something shared takes the side panel; the browser stays one click away in the header.
-  const showComputerPanel = !!computerTarget && !!agent && wide && computerPanel;
-  const showBrowserPanel = !!browser?.running && !!agent && wide && browserPanel && !showComputerPanel;
+  const showComputerPanel = !chatVm && !!computerTarget && !!agent && wide && computerPanel;
+  const showBrowserPanel = !chatVm && !!browser?.running && !!agent && wide && browserPanel && !showComputerPanel;
   useEffect(() => setBrowserFocus(null), [browser?.id]);
   useEffect(() => {
     if (!computerTarget) setComputerFocus(null);
@@ -310,6 +321,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           agent={agent}
           onVoiceMode={dreamLog ? undefined : onVoiceMode}
           browserToggle={
+            chatVm ? (
+              !showVmPanel && <VmToggle working={!!activeRunId} onClick={() => (wide ? setVmPanel(true) : setVmFocus(true))} />
+            ) : (
             <>
               {computerTarget && !showComputerPanel && (
                 <ComputerToggle working={!!activeRunId} onClick={() => (wide ? setComputerPanel(true) : setComputerFocus("watch"))} />
@@ -321,6 +335,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 />
               )}
             </>
+            )
           }
         />
 
@@ -379,25 +394,26 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                       onChange={(path) => setFolder.mutate(path)}
                       busy={setFolder.isPending}
                     />
-                    <BrowserProfileChip
-                      agent={agent}
-                      value={conv.browserProfileId ?? null}
-                      onChange={(id) => setBrowserProfile.mutateAsync(id).catch(() => undefined)}
-                      busy={setBrowserProfile.isPending}
-                    />
-                    <ComputerShareChip
-                      target={computerTarget}
-                      agentName={agent?.name}
-                      onShare={(t) => share.mutateAsync(t)}
-                      onWatch={() => setComputerFocus("watch")}
-                      busy={share.isPending}
-                    />
+                    {!chatVm && (
+                      <>
+                        <BrowserProfileChip
+                          agent={agent}
+                          value={conv.browserProfileId ?? null}
+                          onChange={(id) => setBrowserProfile.mutateAsync(id).catch(() => undefined)}
+                          busy={setBrowserProfile.isPending}
+                        />
+                        <ComputerShareChip
+                          target={computerTarget}
+                          agentName={agent?.name}
+                          onShare={(t) => share.mutateAsync(t)}
+                          onWatch={() => setComputerFocus("watch")}
+                          busy={share.isPending}
+                        />
+                      </>
+                    )}
                     <VmChip
                       value={conv.vmId ?? null}
-                      inherited={[
-                        agent?.vmId ? { vmId: agent.vmId, from: agent.name } : null,
-                        agentWorkspace?.vmId ? { vmId: agentWorkspace.vmId, from: `the ${agentWorkspace.name} workspace` } : null,
-                      ]}
+                      inherited={vmInherited}
                       onChange={(vmId) => setVm.mutateAsync(vmId).catch(() => undefined)}
                       busy={setVm.isPending}
                     />
@@ -436,6 +452,16 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         )}
       </ChatDropZone>
       <AnimatePresence initial={false}>
+        {showVmPanel && (
+          <VmPanel
+            key="vm"
+            vm={chatVm.vm}
+            from={chatVm.from}
+            activity={activeRunId ? liveActivityLabel(live) : null}
+            onHide={() => setVmPanel(false)}
+            onFocus={() => setVmFocus(true)}
+          />
+        )}
         {showComputerPanel && (
           <ComputerPanel
             key="computer"
@@ -462,6 +488,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       </AnimatePresence>
       <BrowserFocus profile={browser} mode={browserFocus} onClose={() => setBrowserFocus(null)} />
       <ComputerFocus target={computerTarget} mode={computerFocus} onClose={() => setComputerFocus(null)} />
+      <VmFocus vm={chatVm?.vm ?? null} open={vmFocus} working={!!activeRunId} onClose={() => setVmFocus(false)} />
     </div>
   );
 }

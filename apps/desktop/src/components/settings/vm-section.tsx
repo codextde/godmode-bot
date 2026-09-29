@@ -140,7 +140,7 @@ export function VmSection({ settings }: { settings: Settings }) {
           label="Type logins and 2FA codes into VMs"
           htmlFor="vm-vault-fill"
           disabled={!v.enabled}
-          description="Godmode types the value into the field the agent clicked on the VM's screen, so it never passes through the AI. But the agent controls the VM: Godmode can't check which website a field belongs to, and a determined agent could capture what's typed there. Turning this on asks for your vault passphrase."
+          description="In the VM's Chrome, logins are filled like on your Mac — only on the login's own website. In other apps, Godmode types into the field the agent clicked. Either way the value never passes through the AI, but the agent controls the VM, so a determined agent could capture what's filled there. Turning this on asks for your vault passphrase."
         >
           <Switch id="vm-vault-fill" checked={v.vaultFill} disabled={!v.enabled} onCheckedChange={(on) => void setVaultFill(on)} />
         </SettingRow>
@@ -149,7 +149,7 @@ export function VmSection({ settings }: { settings: Settings }) {
           <Fact icon={<RectangleEllipsis />}>Passwords only into password fields</Fact>
           <Fact icon={<ScrollText />}>Every fill audited</Fact>
           <Fact icon={<Globe />} caution>
-            Not bound to a website
+            In apps, not bound to a website
           </Fact>
         </ul>
       </SettingsGroup>

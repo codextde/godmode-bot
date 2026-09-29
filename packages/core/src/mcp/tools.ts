@@ -25,6 +25,7 @@ import { addCredentialDomain, credentialsForAgent, findCredentialsForAgent, getC
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
 import { nameGuessMatchesHost } from "../vault/match";
 import { currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
+import { currentVmPage, fillIntoVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { loginFillScope } from "../browser/fill";
 import { createConversation, sendMessage } from "../services/conversations";
@@ -193,9 +194,30 @@ function scrub(detail: string, value: string): string {
   return redact(masked);
 }
 
-function requireBrowser(agent: Agent, ctx: RunContext): string {
+/** The browser a fill goes to: Godmode's Chromium for the agent's profile, or the Chrome in the run's VM. */
+type FillTarget = { vmId: string } | { profileId: string };
+
+function requireBrowser(agent: Agent, ctx: RunContext): FillTarget {
   if (!agent.browser.enabled) throw new HttpError(409, "The browser is disabled for this agent, so nothing can be filled into a page.");
-  return runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id;
+  const vmId = vmOfRun(ctx.runId);
+  if (!vmId) return { profileId: runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id };
+  // A run in a VM browses in the VM, where its shell shares the machine with the browser: secrets only go there when
+  // the human allowed logins in VMs — never into a browser on this computer instead.
+  if (!getSettings().vm.vaultFill) {
+    throw new HttpError(
+      403,
+      'Filling saved logins and 2FA codes into the VM is turned off. Ask the human to turn on "Logins and 2FA codes" in Settings → Virtual machines, then try again.',
+    );
+  }
+  return { vmId };
+}
+
+function pageOf(target: FillTarget) {
+  return "vmId" in target ? currentVmPage(target.vmId) : currentPage(target.profileId);
+}
+
+function fillInto(target: FillTarget, opts: Parameters<typeof fillIntoPage>[1]) {
+  return "vmId" in target ? fillIntoVm(target.vmId, opts) : fillIntoPage(target.profileId, opts);
 }
 
 /**
@@ -204,9 +226,9 @@ function requireBrowser(agent: Agent, ctx: RunContext): string {
  * the only way a name guess widens where a secret may be typed; `guessHost` (the host that was added) is returned
  * so the caller can remember it on the login after a successful fill. The scope stays https-only.
  */
-async function fillScopeFor(profileId: string, login: Credential): Promise<{ scope: { allowedHosts: string[]; httpHosts: string[] }; guessHost: string | null }> {
+async function fillScopeFor(target: FillTarget, login: Credential): Promise<{ scope: { allowedHosts: string[]; httpHosts: string[] }; guessHost: string | null }> {
   const scope = loginFillScope(login);
-  const host = hostnameOf((await currentPage(profileId))?.url ?? "");
+  const host = hostnameOf((await pageOf(target))?.url ?? "");
   if (!host || scope.allowedHosts.some((d) => domainMatches(host, d)) || !nameGuessMatchesHost(login, host, { strict: true })) {
     return { scope, guessHost: null };
   }
@@ -402,7 +424,7 @@ const TOOLS: ToolDef[] = [
       submit: z.boolean().optional().describe("Press Enter after filling"),
     }),
     run: async ({ credentialId, field, selector, submit }, { agent, ctx }) => {
-      const profileId = requireBrowser(agent, ctx);
+      const browser = requireBrowser(agent, ctx);
       const secret = revealForAgent(agent, credentialId);
       const value = field === "username" ? secret.username : secret.password;
       if (!value) {
@@ -411,8 +433,8 @@ const TOOLS: ToolDef[] = [
         );
       }
       const login = getCredential(credentialId);
-      const { scope, guessHost } = await fillScopeFor(profileId, login);
-      const result = await fillIntoPage(profileId, { text: value, kind: field, selector, submit, ...scope });
+      const { scope, guessHost } = await fillScopeFor(browser, login);
+      const result = await fillInto(browser, { text: value, kind: field, selector, submit, ...scope });
       audit(`agent:${agent.id}`, "credential.fill", credentialId, { field, runId: ctx.runId, ok: result.ok, ...(guessHost ? { guessedSite: guessHost } : {}) });
       if (!result.ok) return fail(`Could not fill the ${field}: ${scrub(result.detail, value)}`);
       markCredentialUsed(credentialId);
@@ -433,7 +455,7 @@ const TOOLS: ToolDef[] = [
       submit: z.boolean().optional().describe("Press Enter after filling"),
     }),
     run: async ({ credentialId, totpId, selector, submit }, { agent, ctx }) => {
-      const profileId = requireBrowser(agent, ctx);
+      const browser = requireBrowser(agent, ctx);
       let id = totpId ?? null;
       let site: Credential | null = null;
       if (credentialId) {
@@ -463,8 +485,8 @@ const TOOLS: ToolDef[] = [
         await sleep(code.remaining * 1000 + 300);
         code = codeForAgent(agent, id);
       }
-      const { scope, guessHost } = await fillScopeFor(profileId, site);
-      const result = await fillIntoPage(profileId, { text: code.code, kind: "totp", selector, submit, ...scope });
+      const { scope, guessHost } = await fillScopeFor(browser, site);
+      const result = await fillInto(browser, { text: code.code, kind: "totp", selector, submit, ...scope });
       audit(`agent:${agent.id}`, "totp.fill", id, { field: "totp", runId: ctx.runId, credentialId: credentialId ?? null, ok: result.ok, ...(guessHost ? { guessedSite: guessHost } : {}) });
       if (!result.ok) return fail(`Could not fill the 2FA code: ${scrub(result.detail, code.code)}`);
       const remembered = guessHost && addCredentialDomain(site.id, guessHost);

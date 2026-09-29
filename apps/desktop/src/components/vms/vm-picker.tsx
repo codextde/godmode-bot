@@ -19,7 +19,7 @@ export interface InheritedVm {
 }
 
 /** First inherited candidate that still exists (the agent's VM wins over its workspace's). */
-function resolveInherited(candidates: (InheritedVm | null | undefined)[], vms: Vm[]): { vm: Vm; from: string } | null {
+export function resolveInherited(candidates: (InheritedVm | null | undefined)[], vms: Vm[]): { vm: Vm; from: string } | null {
   for (const c of candidates) {
     const vm = c ? vms.find((v) => v.id === c.vmId) : undefined;
     if (vm && c) return { vm, from: c.from };
@@ -107,7 +107,7 @@ export function VmChip({
       <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
         <div className="border-b px-3 pt-2.5 pb-2">
           <p className="text-[13px] font-medium">Virtual machine</p>
-          <p className="text-xs text-muted-foreground">Runs in this chat install tools, run commands and use apps in this macOS VM instead of on your Mac.</p>
+          <p className="text-xs text-muted-foreground">Runs in this chat browse, run commands and use apps inside this macOS VM instead of on your Mac.</p>
         </div>
         {vms.length === 0 ? (
           <div className="space-y-3 px-3 py-4 text-center">

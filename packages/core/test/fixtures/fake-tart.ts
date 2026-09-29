@@ -11,6 +11,10 @@
  * `exec` runs the command on the host as a stand-in for the guest, made safe: `/bin/zsh -l -c` becomes `/bin/sh -c`
  * (no login shell resetting PATH), `sudo`, `defaults`, `scutil`, `pmset` and `sw_vers` are no-op shims, the guest home
  * `/Users/admin` is `$TART_HOME/guest-home` and the shared folder mount is the host folder given to `run --dir`.
+ * The guest's tools for Godmode's agent in the VM are shims too: `curl` "downloads" a placeholder (logged to
+ * `$TART_HOME/downloads.log`; with `$TART_HOME/no-network` present it fails) and answers Chrome's DevTools probe once
+ * `open` (logged to `$TART_HOME/open.log`) started Chrome with a debugging port; `hdiutil attach` mounts a fake
+ * Chrome disk image and `ditto` copies.
  * `pbcopy` writes the "guest clipboard" to `$TART_HOME/clipboard`. Run directly (without a shell), `/usr/sbin/ioreg`
  * reports secure keyboard input while `$TART_HOME/secure-input` exists (or once for `secure-input-once`), and `/bin/ps`
  * names its owner: the app in that file (default Safari).
@@ -374,6 +378,34 @@ switch (cmd) {
       }
     }
     const scripted: Record<string, string> = {
+      curl: `out=""; url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    -m|--retry) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+case "$url" in
+  *127.0.0.1:*/json/version) [ -f "${home}/chrome-running" ] || exit 7; echo '{"Browser":"Chrome/fake"}'; exit 0 ;;
+esac
+echo "$url" >> "${home}/downloads.log"
+if [ -f "${home}/no-network" ]; then echo "curl: (6) Could not resolve host: $url" >&2; exit 6; fi
+[ -n "$out" ] || { echo "curl: (6) no network in the fake guest" >&2; exit 6; }
+echo "fake download of $url" > "$out"
+`,
+      open: `echo "$*" >> "${home}/open.log"
+case "$*" in *--remote-debugging-port=*) touch "${home}/chrome-running" ;; esac
+exit 0
+`,
+      hdiutil: `[ "$1" = attach ] || exit 0
+mnt=""
+while [ $# -gt 0 ]; do [ "$1" = -mountpoint ] && mnt="$2"; shift; done
+mkdir -p "$mnt/Google Chrome.app/Contents/MacOS"
+`,
+      ditto: `cp -R "$1" "$2"
+`,
       sw_vers: "echo 26.0",
       pbcopy: `cat > "${join(home, "clipboard")}"`,
       // secure-input-once: the password field loses focus right after the first look.

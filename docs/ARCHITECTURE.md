@@ -145,7 +145,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
-       [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key; Bash when the run works in a VM]
+       [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key or in a VM; Bash in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
        [--add-dir <folder or clone> for each usable workspace folder and repository]
        (prompt is written to stdin)
@@ -192,8 +192,9 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
 
 * One managed Chromium per **browser profile** (global default + optional per workspace/agent/chat), launched with
   `--remote-debugging-port=<free port> --user-data-dir=~/.godmode/browser/<id>` on 127.0.0.1.
-* A run uses its chat's profile (`conversations.browser_profile_id`, picked in the composer), else its agent's pinned
-  profile, else its workspace's default profile (`Workspace.browserProfileId`), else the global default. Delegated work
+* A run on this computer uses its chat's profile (`conversations.browser_profile_id`, picked in the composer), else its
+  agent's pinned profile, else its workspace's default profile (`Workspace.browserProfileId`), else the global default
+  (a run in a VM browses in the VM instead). Delegated work
   for an agent without a pinned profile keeps the profile picked for the caller's chat when it's global or in the target's
   workspace; deleting a profile sends its chats back to their default. Profiles can be reassigned to another workspace
   (`PATCH /api/browser/profiles/:id { workspaceId }`) or picked in the workspace's settings (`browserProfileId`, which
@@ -221,7 +222,7 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
 A chat can **share** something with its agent — `conversations.computer_target` (`ComputerTarget` in
 `packages/shared/src/computer.ts`): one app window, one display, the whole desktop or a tab of a Godmode browser.
 Agents allowed to use the computer unattended (`agents.computer`, human-only) get the desktop (or one display) for runs
-without a share. A run with a target gets a fourth MCP server, `computer` → `POST /mcp/computer` on the gateway with
+without a share. Runs in a VM get neither: they use the VM's own screen and apps (see macOS virtual machines). A run with a target gets a fourth MCP server, `computer` → `POST /mcp/computer` on the gateway with
 the run's token; its tools only ever reach that target:
 
 | Tool | |
@@ -291,9 +292,13 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   `idleStopMinutes` stops unused ones. A suspended VM keeps its hardware (changes are refused). At most two macOS VMs
   run at once (Apple's limit) — a third start answers 409 naming the running ones.
 * **Runs** (`runner.ts`): when a run has a VM, `attachVm` boots it if needed (activity "Starting the VM …"; cancelling
-  the run stops the wait). Work meant for a VM never falls back to the host: VMs turned off, a missing VM or a VM that
-  can't start fail the run with the reason. The MCP config gets the `vm` server (`/mcp/vm`, same run token), the system
-  prompt a "macOS virtual machine" section (restated in every resumed turn) and `--add-dir <shared folder>`. With
+  the run stops the wait), then `prepareGuest` readies Godmode's agent in the VM (see below). Work meant for a VM never
+  falls back to the host: VMs turned off, a missing VM or a VM that can't start fail the run with the reason, and a tool
+  that can't be set up in the guest is left out with a notice — never replaced by the host's. The run gets no host
+  browser (`browserMcpServer` isn't called) and no host computer use (no unattended access, and a share in the chat
+  doesn't apply); runs in the same VM take turns (one screen, one Chrome). The MCP config gets the `vm` server
+  (`/mcp/vm`, same run token), the in-guest `browser` and `cua` servers, the system prompt a "macOS virtual machine"
+  section (restated in every resumed turn) and `--add-dir <shared folder>`. With
   `settings.vm.isolateHostShell` (default) the run is kept off the host: `--disallowedTools Bash`, no permission bypass
   (`acceptEdits` + allow-listed MCP tools, so Claude Code's file tools only reach the run's folders) and
   `--setting-sources ""` plus a deny rule for `.claude/**` edits (no hooks from settings files, for this run or later host
@@ -310,9 +315,24 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   network interface.) `fill_login` / `fill_totp` type vault secrets into the focused field (optionally clicking a
   `coordinate` first) when `settings.vm.vaultFill` allows it; a password needs `kCGSSessionSecureInputPID` in the guest's
   `ioreg` (the app that owns it is named in the result and the audit entry). The value is never in a tool result.
+* **Godmode's agent in the VM** (`vm/guest.ts`): the browser and computer use of a VM run live in the guest. Claude
+  Code starts two stdio MCP servers as `tart exec -i <vm> /bin/zsh -f -c …` (stdio through the Tart guest agent, which
+  runs in the guest user's GUI session; no startup files, so nothing the agent puts there can print into the JSON-RPC
+  stream; ending the process kills the command's process group): `browser` — browser-use
+  (`browser-use --mcp`, pinned like on the host) connected to Google Chrome in the guest (`~/Applications`, own profile
+  in `~/.godmode/browser-profile`, DevTools on the guest's `127.0.0.1:9322`, visible on the VM's screen, downloads in
+  `~/Downloads`), started again when it was closed — and `cua` — Cua Driver (`cua-driver mcp --direct`), which controls
+  the guest's apps and windows; the Cirrus Labs images grant the guest agent (and so everything `tart exec` starts)
+  Accessibility and Screen Recording. Everything is installed on first use, shared by concurrent runs: uv is copied
+  from the host (the official installer as fallback), Chrome comes from Google's disk image, browser-use and Cua Driver
+  are fetched through uv (`uv tool run --from <pinned spec> python …` records the program's path in
+  `~/.godmode/stamps`). A tool that failed isn't retried for 10 minutes (or until the VM stops). Vault fills
+  (`vault_fill_login`, `vault_fill_totp` — only with `settings.vm.vaultFill`, like `fill_login`) and the missing-login check reach the guest's Chrome over CDP through an SSH port forward
+  (`ssh -N -L 127.0.0.1:<free port>:127.0.0.1:9322` with Godmode's key; one per VM, closed when the VM stops). The
+  OpenAI key never goes into a VM, so browser-use's LLM tools are hidden there.
 * **Human access**: `POST /api/vms/:id/open { what }` opens Screen Sharing (`vnc://admin:admin@<NAT IP>`), Terminal
-  (SSH with Godmode's key) or the shared folder in Finder; `GET /api/vms/:id/screenshot` feeds the card preview (never
-  boots a VM). Backups carry VM records and assignments, not disks; a restore keeps this Mac's own VM records, and a
+  (SSH with Godmode's key) or the shared folder in Finder; `GET /api/vms/:id/screenshot` feeds the card preview and the chat's VM panel
+  (never boots a VM). Backups carry VM records and assignments, not disks; a restore keeps this Mac's own VM records, and a
   restored VM whose disk is missing shows an error and can be reset.
 
 ## Automations
