@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { WorkspaceSource } from "@godmode/shared";
 import { parseGitUrl } from "@godmode/shared";
 import { loadConfig } from "../src/config";
-import { closeDb, openDb } from "../src/db";
+import { closeDb, openDb, run } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache } from "../src/services/settings";
 import { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../src/services/workspaces";
@@ -154,11 +154,13 @@ describe("workspace repositories", () => {
     expect(synced.commit).toBe(next);
     expect(existsSync(join(synced.path, "CHANGELOG.md"))).toBe(true);
 
-    // Local work is never overwritten: with changes, a sync only fetches.
+    // Local work is never overwritten: with changes, a sync only fetches and says why.
     writeFileSync(join(synced.path, "README.md"), "# Local edit\n");
     server.commit("NEWS.md", "news\n");
     syncSource(ws.id, added.id);
-    expect((await settled(ws.id, added.id)).commit).toBe(next);
+    const kept = await settled(ws.id, added.id);
+    expect(kept.commit).toBe(next);
+    expect(kept.note).toContain("local changes");
     expect(readFileSync(join(synced.path, "README.md"), "utf8")).toBe("# Local edit\n");
 
     updateWorkspace(ws.id, { sources: [] });
@@ -189,6 +191,41 @@ describe("workspace repositories", () => {
     const prepared = await prepareSources(ws.id, { onActivity: () => {}, signal: new AbortController().signal });
     expect(prepared.sources).toEqual([]);
     expect(prepared.notices[0]).toContain("couldn't be cloned");
+  });
+
+  test("a failed update keeps the clone usable, and runs don't retry it every time", async () => {
+    const ws = createWorkspace({ name: "Flaky", sources: [{ kind: "git", url: server.url }] });
+    const source = await settled(ws.id, ws.sources[0]!.id);
+    Bun.spawnSync(["git", "remote", "set-url", "origin", "http://127.0.0.1:9/gone.git"], { cwd: source.path });
+    run("UPDATE workspace_sources SET synced_at = ? WHERE id = ?", "2020-01-01T00:00:00.000Z", source.id);
+
+    const labels: string[] = [];
+    const first = await prepareSources(ws.id, { onActivity: (l) => labels.push(l), signal: new AbortController().signal });
+    expect(labels).toEqual(["Updating app …"]);
+    expect(first.sources.map((s) => s.path)).toEqual([source.path]);
+    const failed = getWorkspace(ws.id).sources[0]!;
+    expect(failed.status).toBe("ready");
+    expect(failed.error).toContain("127.0.0.1");
+
+    const again: string[] = [];
+    await prepareSources(ws.id, { onActivity: (l) => again.push(l), signal: new AbortController().signal });
+    expect(again).toEqual([]);
+  });
+
+  test("removing a repository while it clones stops the clone", async () => {
+    server.delayMs = 400;
+    try {
+      const ws = createWorkspace({ name: "Impatient", sources: [{ kind: "git", url: server.url }] });
+      const source = ws.sources[0]!;
+      expect(source.status).toBe("cloning");
+      const started = Date.now();
+      await deleteWorkspace(ws.id);
+      expect(Date.now() - started).toBeLessThan(2_000);
+      await Bun.sleep(100);
+      expect(existsSync(join(reposDir(), ws.id))).toBe(false);
+    } finally {
+      server.delayMs = 0;
+    }
   });
 
   test("runs clone missing repositories first", async () => {

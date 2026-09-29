@@ -86,15 +86,22 @@ system prompt, and a one-line restatement on resumed turns. Dreams don't get the
 * **Repositories** are cloned with the system `git` into `repos/<workspace-id>/<name>` as soon as they are added, so the
   machine's own git sign-in applies (SSH keys, credential helpers). Accepted URLs: https, `ssh://`, `git@host:owner/repo`
   and `git://`; GitHub/GitLab/Bitbucket/Codeberg web links (also `…/tree/<branch>`) become clone URLs (`parseGitUrl` in
-  `@godmode/shared`). Credentials in URLs, local paths and other transports are refused; git runs with
-  `protocol.ext/file.allow=never`, `GIT_TERMINAL_PROMPT=0` and — unless the user configured their own — SSH in batch mode
-  with `StrictHostKeyChecking=accept-new`, so nothing waits for a prompt. A clone lands in `<name>.cloning-*` and is only
-  renamed into place when complete. A run clones a missing repository first (activity "Cloning …") and fast-forwards
-  one not updated for 15 minutes; updates (`POST /api/workspaces/:id/sources/:sourceId/sync`, clones a missing one)
-  fetch, then `merge --ff-only` only when the tree has no local changes — agents' work is never overwritten. Failures
-  are stored on the source (`error`) in words a human can act on; the run goes on without it. Clones of removed
-  repositories and deleted workspaces move to `repos/.trash/` (they may hold unpushed work). Backups carry the records,
-  not the clones: restored repositories are cloned again, restored folders must exist on the new machine.
+  `@godmode/shared`). Credentials in URLs, local paths and other transports are refused. Nothing waits for a prompt
+  (`GIT_TERMINAL_PROMPT=0`, no askpass, SSH in batch mode with `StrictHostKeyChecking=accept-new` unless the user set
+  their own SSH command). A clone lands in `<name>.cloning-*` and is only renamed into place when complete.
+* **Updates** (`POST /api/workspaces/:id/sources/:sourceId/sync`, which clones a missing one) fetch, then
+  `merge --ff-only` only when the tree has no local changes — agents' work is never overwritten; `note` says why a clone
+  was left as it was. Before a run, all sources are prepared at once: a missing clone is cloned (the run waits up to
+  90 s, then goes on without it while the clone continues), one not updated for 15 minutes is fast-forwarded (20 s,
+  retried at most every 15 minutes). Failures are stored on the source (`error`) in words a human can act on; a clone
+  whose update failed stays usable.
+* **Agents can write into clones, git runs there on the host.** Godmode's git ignores the clone's hooks and fsmonitor
+  (`core.hooksPath`, `core.fsmonitor` on the command line), pins the SSH command through the environment, and runs that
+  may edit files but not run commands (no permission bypass, VM runs) get `Edit(**/.git/**)` plus the clones' `.git`
+  denied, so a clone's git settings can't be used to run programs on this computer.
+* Removing a repository or deleting its workspace stops a running clone and moves the clone to `repos/.trash/` (it may
+  hold unpushed work). Backups carry the records, not the clones: restored repositories are cloned again, restored
+  folders must exist on the new machine.
 
 ## Security model
 

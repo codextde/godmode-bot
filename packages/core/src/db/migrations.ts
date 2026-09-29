@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS runs (
   prompt TEXT NOT NULL,
   result TEXT,
   error TEXT,
+  note TEXT,
   cost_usd REAL,
   duration_ms INTEGER,
   num_turns INTEGER,
@@ -340,6 +341,7 @@ CREATE TABLE IF NOT EXISTS dreams (
   files TEXT NOT NULL DEFAULT '[]',
   snapshot TEXT,
   error TEXT,
+  note TEXT,
   created_at TEXT NOT NULL,
   started_at TEXT,
   finished_at TEXT
@@ -393,6 +395,7 @@ CREATE TABLE IF NOT EXISTS workspace_sources (
   branch TEXT,
   position INTEGER NOT NULL DEFAULT 0,
   error TEXT,
+  note TEXT,
   commit_sha TEXT,
   head_branch TEXT,
   synced_at TEXT,

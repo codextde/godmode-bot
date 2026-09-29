@@ -70,7 +70,8 @@ export function WorkspaceDialog({
     setVmId(workspace?.vmId ?? null);
     setSources(workspace?.sources.map(toSourceInput) ?? []);
     setCustomEmoji("");
-  }, [open, workspace]);
+    // Only when the dialog opens or switches workspace: live updates (clone progress) must not reset the form.
+  }, [open, workspace?.id]);
 
   useEffect(() => {
     if (!open || focus !== "sources") return;
@@ -119,7 +120,13 @@ export function WorkspaceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-xl">
+      <DialogContent
+        className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-xl"
+        onEscapeKeyDown={(e) => {
+          // Escape inside an inline editor closes that editor, not the dialog with its unsaved changes.
+          if (e.target instanceof Element && e.target.closest("[data-escape-local]")) e.preventDefault();
+        }}
+      >
         <form onSubmit={submit} className="min-w-0">
           <div className="relative overflow-hidden border-b bg-paper-2 px-6 pt-6 pb-5">
             <DialogHeader className="relative">
@@ -267,7 +274,9 @@ export function WorkspaceDialog({
                 <Label>
                   Folders &amp; repositories <span className="font-normal text-muted-foreground">(optional)</span>
                 </Label>
-                <p className="text-xs text-muted-foreground">Every agent in this workspace can read and edit these. Repositories are cloned for them.</p>
+                <p className="text-xs text-muted-foreground">
+                  Every agent in this workspace can read and edit these and follows their CLAUDE.md. Repositories are cloned for them.
+                </p>
               </div>
               <WorkspaceSourcesField workspaceId={workspace?.id ?? null} value={sources} onChange={setSources} />
             </div>

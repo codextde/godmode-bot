@@ -980,6 +980,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // Shell work belongs in the VM: Claude Code's own Bash tool would run on the host. Settings files (hooks run shell
   // commands on this computer) can't be planted for later runs in the folders this run may write to.
   if (hostLocked) disallowed.push("Bash", "Edit(**/.claude/**)"); // Edit rules cover every file-editing tool
+  // Godmode runs git in the workspace's clones: a run that may edit files but not run commands must not plant git
+  // settings or hooks there that would run on this computer.
+  const bypass = settings.runner.bypassPermissions && !hostLocked;
+  if (!bypass && sources.some((s) => s.kind === "git")) {
+    disallowed.push("Edit(**/.git/**)", ...sources.filter((s) => s.kind === "git").map((s) => `Edit(/${s.path.replace(/\\/g, "/")}/.git/**)`));
+  }
   if (disallowed.length) baseArgs.push("--disallowedTools", disallowed.join(","));
   if (viaFiles) baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));
   else baseArgs.push("--append-system-prompt", systemPrompt);

@@ -84,10 +84,11 @@ export function createWorkspace(input: WorkspaceInput): Workspace {
     created_at: ts,
     updated_at: ts,
   };
-  tx(() => {
+  const applySources = tx(() => {
     insert("workspaces", { ...row });
-    if (input.sources) setSources(row.id, input.sources);
+    return input.sources ? setSources(row.id, input.sources) : undefined;
   });
+  applySources?.();
   bus.changed("workspaces");
   if (row.vm_id) assignmentsChanged();
   return toModel(row);
@@ -98,7 +99,7 @@ export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Wor
   const name = patch.name !== undefined ? cleanName(patch.name) : undefined;
   const description = patch.description !== undefined ? patch.description.trim() : undefined;
   const vmId = normalizeVmId(patch.vmId);
-  tx(() => {
+  const applySources = tx(() => {
     update("workspaces", id, {
       name,
       description,
@@ -108,8 +109,9 @@ export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Wor
       vm_id: vmId,
       updated_at: now(),
     });
-    if (patch.sources) setSources(id, patch.sources);
+    return patch.sources ? setSources(id, patch.sources) : undefined;
   });
+  applySources?.();
   const next = getWorkspace(id);
   bus.changed("workspaces");
   if (next.vmId !== current.vmId) assignmentsChanged();

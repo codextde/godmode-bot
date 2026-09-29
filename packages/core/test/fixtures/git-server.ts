@@ -8,6 +8,8 @@ export interface GitServer {
   url: string;
   /** Commit a file in the origin and publish it; returns the new short commit. */
   commit: (file: string, content: string) => string;
+  /** Delay every response by this many milliseconds (a slow network). */
+  delayMs: number;
   close: () => void;
 }
 
@@ -34,10 +36,12 @@ export function startGitServer(): GitServer {
   git(work, "remote", "add", "origin", bare);
 
   const served = join(root, "srv");
+  const state = { delayMs: 0 };
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch(req) {
+    async fetch(req) {
+      if (state.delayMs) await Bun.sleep(state.delayMs);
       const path = normalize(join(served, decodeURIComponent(new URL(req.url).pathname)));
       if (!path.startsWith(served) || !existsSync(path) || !statSync(path).isFile()) return new Response("not found", { status: 404 });
       return new Response(Bun.file(path));
@@ -46,6 +50,12 @@ export function startGitServer(): GitServer {
 
   return {
     url: `http://127.0.0.1:${server.port}/app.git`,
+    get delayMs() {
+      return state.delayMs;
+    },
+    set delayMs(ms: number) {
+      state.delayMs = ms;
+    },
     commit(file, content) {
       writeFileSync(join(work, file), content);
       git(work, "add", ".");

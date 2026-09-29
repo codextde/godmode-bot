@@ -288,10 +288,11 @@ function SourceStatus({ source, live, pending }: { source: WorkspaceSourceInput;
     );
   }
   if (live.status === "cloning" || live.status === "syncing" || pending) {
+    const cloning = live.status === "cloning" || (pending && live.status !== "ready");
     return (
       <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <Loader2 className="size-3 animate-spin" />
-        {live.status === "cloning" ? "Cloning…" : "Pulling the latest changes…"}
+        {cloning ? "Cloning…" : "Pulling the latest changes…"}
       </p>
     );
   }
@@ -311,23 +312,32 @@ function SourceStatus({ source, live, pending }: { source: WorkspaceSourceInput;
   }
   if (live.kind === "folder") return null;
   const synced = live.syncedAt ? new Date(live.syncedAt) : null;
+  const warning = live.error ?? live.note;
   return (
-    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-      <span aria-hidden className="size-1.5 rounded-full bg-success" />
-      <span className="font-mono">{live.headBranch ?? "detached"}</span>
-      {live.commit && (
-        <>
-          <span className="opacity-40">·</span>
-          <span className="font-mono">{live.commit}</span>
-        </>
+    <>
+      <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span aria-hidden className="size-1.5 rounded-full bg-success" />
+        <span className="font-mono">{live.headBranch ?? "detached"}</span>
+        {live.commit && (
+          <>
+            <span className="opacity-40">·</span>
+            <span className="font-mono">{live.commit}</span>
+          </>
+        )}
+        {synced && !Number.isNaN(synced.getTime()) && (
+          <>
+            <span className="opacity-40">·</span>
+            <span>checked {formatDistanceToNowStrict(synced, { addSuffix: true })}</span>
+          </>
+        )}
+      </p>
+      {warning && (
+        <p className={cn("mt-1 flex items-start gap-1.5 text-[11px] leading-snug", live.error ? "text-warning" : "text-muted-foreground")}>
+          <TriangleAlert className="mt-px size-3 shrink-0" />
+          <span className="line-clamp-3">{live.error ? `Couldn't pull the latest changes: ${live.error}` : live.note}</span>
+        </p>
       )}
-      {synced && !Number.isNaN(synced.getTime()) && (
-        <>
-          <span className="opacity-40">·</span>
-          <span>updated {formatDistanceToNowStrict(synced, { addSuffix: true })}</span>
-        </>
-      )}
-    </p>
+    </>
   );
 }
 
@@ -362,7 +372,7 @@ function AddRepository({ onAdd, onCancel }: { onAdd: (source: WorkspaceSourceInp
   };
 
   return (
-    <div className="rounded-xl border bg-paper-2 p-3">
+    <div data-escape-local className="rounded-xl border bg-paper-2 p-3">
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-sm font-medium">
           <FolderGit2 className="size-4 text-brand-strong" /> Add a git repository
@@ -438,7 +448,7 @@ function AddRepository({ onAdd, onCancel }: { onAdd: (source: WorkspaceSourceInp
 /** One line for the workspace card: what is attached, and whether something needs attention. */
 export function SourcesSummary({ sources }: { sources: WorkspaceSource[] }) {
   const busy = sources.some((s) => s.status === "cloning" || s.status === "syncing");
-  const problem = sources.find((s) => s.status === "error" || (s.status === "missing" && s.kind === "folder"));
+  const problem = sources.find((s) => s.status === "error" || !!s.error || (s.status === "missing" && s.kind === "folder"));
   const names = sources.map((s) => s.name);
   const label = names.length > 2 ? `${names.slice(0, 2).join(", ")} +${names.length - 2}` : names.join(", ");
   const icon = busy ? (

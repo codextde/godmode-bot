@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { insert, run as sql } from "../src/db";
-import { updateSettings } from "../src/services/settings";
+import { getSettings, updateSettings } from "../src/services/settings";
+import { config } from "../src/config";
 import { listMissingLogins } from "../src/services/missingLogins";
 import {
   createConversation,
@@ -451,6 +452,27 @@ describe("workspace folders and repositories", () => {
     await waitForRun(next.run.id, 20_000);
     expect(invocations(env).at(-1)!.prompt).toContain(`Workspace folders and repositories (added to this session): \`${dir}\` (folder).`);
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("runs that may edit files but not run commands can't touch the clones' .git", async () => {
+    const ws = createWorkspace({ name: "Guarded clones" });
+    const clone = join(config().dataDir, "repos", ws.id, "app");
+    mkdirSync(join(clone, ".git"), { recursive: true });
+    const ts = now();
+    insert("workspace_sources", { id: "src_guard", workspace_id: ws.id, kind: "git", path: "app", url: "https://example.com/acme/app.git", synced_at: ts, created_at: ts, updated_at: ts });
+    const bot = await makeAgent({ name: "Guarded Bot", workspaceId: ws.id });
+    const before = getSettings().runner.bypassPermissions;
+    updateSettings({ runner: { bypassPermissions: false } });
+    try {
+      const { run } = await startChat({ agentId: bot.id, content: "Hi" });
+      expect((await waitForRun(run.id, 20_000)).status).toBe("succeeded");
+      const inv = invocations(env).at(-1)!;
+      expect(inv.args).toContain(clone);
+      expect(argValue(inv, "--disallowedTools")).toContain("Edit(**/.git/**)");
+      expect(argValue(inv, "--disallowedTools")).toContain(`Edit(/${clone}/.git/**)`);
+    } finally {
+      updateSettings({ runner: { bypassPermissions: before } });
+    }
   });
 });
 

@@ -39,7 +39,7 @@ export interface Workspace {
  *  - `ready`: usable (a repository is cloned)
  *  - `cloning` / `syncing`: a clone or an update is in progress
  *  - `missing`: the folder is gone, or the repository isn't cloned yet (the next run or a sync clones it)
- *  - `error`: the last clone or update failed (`error`)
+ *  - `error`: cloning failed (`error`)
  */
 export type WorkspaceSourceStatus = "ready" | "cloning" | "syncing" | "missing" | "error";
 
@@ -54,7 +54,10 @@ export interface WorkspaceSource {
   /** Branch to check out (git only); null = the repository's default branch. */
   branch: string | null;
   status: WorkspaceSourceStatus;
+  /** Why the folder can't be used, or why the last clone or update failed (a clone stays usable). */
   error: string | null;
+  /** Why the last update left the clone as it was (local changes, no tracking branch). */
+  note: string | null;
   /** Checked out commit and branch (git only). */
   commit: string | null;
   headBranch: string | null;
