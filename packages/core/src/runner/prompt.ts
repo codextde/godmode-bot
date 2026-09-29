@@ -194,7 +194,7 @@ You are the orchestrator. You can create, update and delete agents (\`agent_crea
 
 ### Automations
 An automation runs an agent's prompt when its trigger fires:
-- \`schedule\` — a cron expression in ${human}'s timezone ("every Monday at 9").
+- \`schedule\` — a cron expression in ${human}'s timezone ("every Monday at 9"). \`startWindowMinutes\` starts each run at a random moment in a window after the scheduled time, for work that should look like a person's ("start sometime between 8 and 9:30 on weekdays" = "0 8 * * 1-5" + 90).
 - \`app\` — an event in a connected app: a new email, a Slack message, a calendar event starting, a Notion page changing… Call \`automation_triggers_list\` for the connected accounts and their apps' events, then again with \`toolkit\` for the event's settings (required \`config\` fields). Use \`filter\` when only some events matter ("only invoices", "only from customers").
 - \`condition\` — something without an app event ("a competitor changes their pricing", "the visa appointment page shows a free slot"): the agent checks it on a cron schedule (at most every 5 minutes; hourly or daily is usually enough) and runs the task once it holds. Every check automatically sees what the previous check observed, so state the condition plainly ("the price of X changes") — no instructions on remembering or baselines. Consider \`checkModel: "haiku"\` for simple, frequent checks.
 - \`webhook\` — a secret URL other tools can POST to; ${human} copies it from the automation in the app (Automations → Copy webhook URL).

@@ -18,6 +18,13 @@ export function useWorkspaces() {
   return useQuery({ queryKey: qk.workspaces, queryFn: api.workspaces.list });
 }
 
+/** The workspace picked in the sidebar; null for "All workspaces" and "Global". */
+export function useScopeWorkspace() {
+  const scope = useUi((s) => s.workspace);
+  const { data } = useWorkspaces();
+  return data?.find((w) => w.id === scope) ?? null;
+}
+
 export function useAgents(workspaceId?: ScopeFilter) {
   const scope = useUi((s) => s.workspace);
   const ws = workspaceId ?? scope;

@@ -163,7 +163,14 @@ export interface Agent {
 export type RoutineTriggerType = "schedule" | "app" | "condition" | "webhook";
 
 export type RoutineTrigger =
-  | { type: "schedule" }
+  | {
+      type: "schedule";
+      /**
+       * Start at a random moment up to this many minutes after each scheduled time, drawn anew for every run
+       * ("0 8 * * 1-5" + 90 = weekdays somewhere between 08:00 and 09:30). Absent = on time.
+       */
+      startWindowMinutes?: number;
+    }
   | {
       type: "app";
       /** Godmode Composio connection (`ComposioConnection.id`) whose account is watched. */
@@ -298,6 +305,8 @@ export interface Conversation {
   vmId: ID | null;
   /** Browser profile this chat works in, overriding the agent's and the workspace / global default. null = theirs. */
   browserProfileId: ID | null;
+  /** Workspace a global agent's chat was started in; it browses with that workspace's default profile. */
+  workspaceId: ID | null;
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
   instructions: string;
   pinned: boolean;
@@ -674,8 +683,25 @@ export interface BrowserProfile {
   cookieCount: number;
   running: boolean;
   cdpUrl: string | null;
+  /** Chats with tabs open in the running browser, in the order they opened their first tab. */
+  chats: BrowserChat[];
   createdAt: ISODate;
   updatedAt: ISODate;
+}
+
+/** A chat's own tabs in a profile's browser: chats work in parallel, each in its own tabs, with the profile's logins. */
+export interface BrowserChat {
+  conversationId: ID;
+  /** null when the conversation no longer exists */
+  title: string | null;
+  agentId: ID | null;
+  /** The tab the chat's agent works in */
+  url: string;
+  pageTitle: string;
+  tabs: number;
+  /** A run of the chat is using the browser right now */
+  active: boolean;
+  lastUsedAt: ISODate;
 }
 
 export interface LocalChromeProfile {

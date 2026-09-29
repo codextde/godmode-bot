@@ -470,6 +470,14 @@ ALTER TABLE conversations ADD COLUMN browser_profile_id TEXT;
   },
   {
     id: 12,
+    name: "chat_workspace",
+    sql: /* sql */ `
+-- Workspace a chat with a global agent was started in: it browses with that workspace's default profile.
+ALTER TABLE conversations ADD COLUMN workspace_id TEXT;
+`,
+  },
+  {
+    id: 13,
     name: "followups",
     sql: /* sql */ `
 -- A time an agent set to continue a chat on its own (one per chat). Removed when it runs or is cancelled.

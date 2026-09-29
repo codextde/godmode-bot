@@ -1,10 +1,11 @@
 /**
  * CONTRACT (owner: browser agent). Managed Chromium instances (one per browser profile), CDP access,
- * secure secret filling, cookie/session import from the user's Chrome and live view.
+ * secure secret filling, cookie/session import from the user's Chrome and live view. Chats share a profile's
+ * browser but each works in its own tabs (tabs.ts, proxy.ts).
  */
 import { existsSync, rmSync } from "node:fs";
 import { join, relative, resolve, isAbsolute } from "node:path";
-import type { Agent, BrowserProfile, ChromeImportInput, ChromeImportResult, LocalChromeProfile } from "@godmode/shared";
+import type { Agent, BrowserChat, BrowserProfile, ChromeImportInput, ChromeImportResult, LocalChromeProfile } from "@godmode/shared";
 import type { McpServerJson } from "../types";
 import { config, ensureDir } from "../config";
 import { bool, get, all, insert, run, update, tx } from "../db";
@@ -16,12 +17,14 @@ import { getAppSecret, isUnlocked } from "../vault/vault";
 import { onSettingsApplied } from "../services/runtime";
 import { resolveUvx, toolPath } from "../services/doctor";
 import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
-import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type PageSession } from "./cdp";
+import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type PageSession, type PageTarget } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
-import { initLiveView, startLiveView, stopLiveView } from "./screencast";
+import { initLiveView, pauseLiveViews, resumeLiveViews } from "./screencast";
+import { TabRegistry } from "./tabs";
+import { leasedChats, openChatLease, releaseChatLease, stopChatProxy } from "./proxy";
 import * as importer from "./importer";
 
 const log = logger("browser");
@@ -58,6 +61,7 @@ function toProfile(r: ProfileRow): BrowserProfile {
     cookieCount: r.cookie_count,
     running: !!rb,
     cdpUrl: rb ? rb.httpUrl : null,
+    chats: rb ? chatsOf(rb) : [],
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -73,9 +77,49 @@ function requireRow(id: string): ProfileRow {
   return r;
 }
 
+function chatsOf(rb: RunningBrowser): BrowserChat[] {
+  const open = rb.tabs.openChats();
+  if (!open.length) return [];
+  const ids = open.map((c) => c.conversationId);
+  const rows = all<{ id: string; title: string; agent_id: string }>(
+    `SELECT id, title, agent_id FROM conversations WHERE id IN (${ids.map(() => "?").join(",")})`,
+    ...ids,
+  );
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const leased = leasedChats(rb.profileId);
+  return open.map((c) => ({
+    conversationId: c.conversationId,
+    title: byId.get(c.conversationId)?.title ?? null,
+    agentId: byId.get(c.conversationId)?.agent_id ?? null,
+    url: c.current.url,
+    pageTitle: c.current.title,
+    tabs: c.tabs,
+    active: leased.has(c.conversationId),
+    lastUsedAt: new Date(c.usedAt).toISOString(),
+  }));
+}
+
 function emitProfile(id: string) {
   const r = row(id);
   if (r) bus.emit({ type: "browser.updated", profile: toProfile(r) });
+}
+
+const emitTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Tabs change with every navigation: tell the UI at most twice a second. */
+function emitProfileSoon(id: string) {
+  if (emitTimers.has(id)) return;
+  emitTimers.set(
+    id,
+    setTimeout(() => {
+      emitTimers.delete(id);
+      try {
+        emitProfile(id);
+      } catch {
+        /* shutting down */
+      }
+    }, 500),
+  );
 }
 
 export function listProfiles(): BrowserProfile[] {
@@ -217,21 +261,34 @@ export async function deleteProfile(id: string): Promise<void> {
   if (r.workspace_id && r.is_default) bus.changed("workspaces");
 }
 
-/** Profile picked for the chat itself (not inherited from its agent). */
-export function chatProfileId(conversationId: string): string | null {
-  return get<{ browser_profile_id: string | null }>("SELECT browser_profile_id FROM conversations WHERE id = ?", conversationId)?.browser_profile_id ?? null;
+function chatRow(conversationId: string) {
+  return get<{ browser_profile_id: string | null; workspace_id: string | null }>(
+    "SELECT browser_profile_id, workspace_id FROM conversations WHERE id = ?",
+    conversationId,
+  );
 }
 
-/** Profile a run uses: its chat's ?? agent.browser.profileId ?? workspace default ?? global default. */
+/** Profile picked for the chat itself (not inherited from its agent). */
+export function chatProfileId(conversationId: string): string | null {
+  return chatRow(conversationId)?.browser_profile_id ?? null;
+}
+
+/** Workspace a chat was started in (set for global agents only). */
+export function chatWorkspaceId(conversationId: string | null | undefined): string | null {
+  return conversationId ? (chatRow(conversationId)?.workspace_id ?? null) : null;
+}
+
+/** Profile a run uses: its chat's ?? agent.browser.profileId ?? default of the agent's (or the chat's) workspace ?? global default. */
 export function resolveProfileForAgent(agent: Agent, conversationId?: string | null): BrowserProfile {
-  const chosen = conversationId ? chatProfileId(conversationId) : null;
-  const forChat = chosen ? row(chosen) : null;
+  const chat = conversationId ? chatRow(conversationId) : null;
+  const forChat = chat?.browser_profile_id ? row(chat.browser_profile_id) : null;
   if (forChat) return toProfile(forChat);
   const pinned = agent.browser?.profileId ? row(agent.browser.profileId) : null;
   if (pinned) return toProfile(pinned);
   if (agent.browser?.profileId) log.warn(`agent ${agent.id} references missing browser profile ${agent.browser.profileId}; using default`);
-  if (agent.workspaceId) {
-    const wsDefault = get<ProfileRow>("SELECT * FROM browser_profiles WHERE workspace_id = ? AND is_default = 1 ORDER BY created_at LIMIT 1", agent.workspaceId);
+  const workspaceId = agent.workspaceId ?? chat?.workspace_id ?? null;
+  if (workspaceId) {
+    const wsDefault = get<ProfileRow>("SELECT * FROM browser_profiles WHERE workspace_id = ? AND is_default = 1 ORDER BY created_at LIMIT 1", workspaceId);
     if (wsDefault) return toProfile(wsDefault);
   }
   return ensureDefaultProfile();
@@ -308,9 +365,12 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
   }
 
   let client: CdpClient;
+  let tabs: TabRegistry;
   try {
     client = await CdpClient.connect(wsUrl);
+    tabs = new TabRegistry(client);
     await client.send("Target.setDiscoverTargets", { discover: true });
+    tabs.addSpares(tabs.userPages().filter((p) => tabs.isBlank(p.targetId)).map((p) => p.targetId));
   } catch (err) {
     proc?.kill("SIGKILL");
     throw new HttpError(500, `Could not connect to the browser: ${err instanceof Error ? err.message : String(err)}`, "browser_connect_failed");
@@ -323,6 +383,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
     wsUrl,
     headless,
     client,
+    tabs,
     process: proc,
     pid,
     userDataDir: profile.user_data_dir,
@@ -337,6 +398,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
   };
   client.on("Target.targetCreated", activity);
   client.on("Target.targetInfoChanged", activity);
+  tabs.onChange((conversationId) => conversationId && emitProfileSoon(profileId));
   client.onClose(() => void onBrowserGone(rb, "CDP connection closed"));
   proc?.exited.then((code) => onBrowserGone(rb, `exited with code ${code}`));
 
@@ -438,6 +500,9 @@ async function shutdownOne(rb: RunningBrowser) {
 
 export async function shutdownBrowsers(): Promise<void> {
   stopIdleWatcher();
+  stopChatProxy();
+  for (const timer of emitTimers.values()) clearTimeout(timer);
+  emitTimers.clear();
   await Promise.all(allRunning().map((rb) => stopBrowser(rb.profileId).catch((err) => log.warn("stop failed", err))));
 }
 
@@ -462,7 +527,10 @@ onSettingsApplied(() => {
   if (idleTimer) void sweepIdleBrowsers();
 });
 
-/** Stop browsers unused for `settings.browser.keepAliveMinutes` (0 = never). */
+/**
+ * Close chats' tabs and stop browsers unused for `settings.browser.keepAliveMinutes` (0 = never stop the browser;
+ * idle chats' tabs still close after an hour, so a busy browser doesn't pile up windows).
+ */
 export async function sweepIdleBrowsers(): Promise<void> {
   let keepAlive: number;
   try {
@@ -470,6 +538,7 @@ export async function sweepIdleBrowsers(): Promise<void> {
   } catch {
     return;
   }
+  await sweepIdleChats((keepAlive > 0 ? keepAlive : 60) * 60_000);
   if (!keepAlive || keepAlive <= 0) return;
   for (const rb of allRunning()) {
     if (rb.stopping || launching.has(rb.profileId)) continue;
@@ -480,16 +549,32 @@ export async function sweepIdleBrowsers(): Promise<void> {
     if (Date.now() - rb.lastUsedAt < keepAlive * 60_000) continue;
     // Passive previews attach our own screencast to the tab; pause it so it doesn't look like another CDP client.
     const previewing = hasBrowserSubscribers(rb.profileId);
-    if (previewing) await stopLiveView(rb.profileId);
+    if (previewing) await pauseLiveViews(rb.profileId);
     // An error means the browser is going away — the exit handler cleans up.
     const inUse = await browserInUse(rb).catch(() => true);
     if (inUse) {
       rb.lastUsedAt = Date.now();
-      if (previewing && hasBrowserSubscribers(rb.profileId)) void startLiveView(rb.profileId);
+      if (previewing) resumeLiveViews(rb.profileId);
       continue;
     }
     log.info(`stopping idle browser for profile ${rb.profileId} (unused for ${keepAlive} min)`);
     await stopBrowser(rb.profileId).catch((err) => log.warn("idle stop failed", err));
+  }
+}
+
+async function sweepIdleChats(idleMs: number) {
+  for (const rb of allRunning()) {
+    if (rb.stopping) continue;
+    const leased = leasedChats(rb.profileId);
+    for (const chat of rb.tabs.openChats()) {
+      if (leased.has(chat.conversationId) || hasBrowserWatchers(rb.profileId, chat.conversationId)) {
+        rb.tabs.touch(chat.conversationId);
+        continue;
+      }
+      if (Date.now() - chat.usedAt < idleMs) continue;
+      log.info(`closing the tabs of idle chat ${chat.conversationId} in profile ${rb.profileId}`);
+      await closeTabsOf(rb, chat.conversationId).catch((err) => log.warn("closing idle chat tabs failed", err));
+    }
   }
 }
 
@@ -518,9 +603,84 @@ async function pageHasFocus(rb: RunningBrowser, targetId: string): Promise<boole
 /* Pages                                                                */
 /* ------------------------------------------------------------------ */
 
-/** Attach to the active page of a running browser (optionally the one whose URL contains `urlContains`). */
-async function withActivePage<T>(rb: RunningBrowser, urlContains: string | undefined, fn: (page: PageSession, url: string) => Promise<T>): Promise<T | null> {
-  const target = await pickActivePage(rb.client, { port: rb.port, urlContains });
+/* ------------------------------------------------------------------ */
+/* Chat tabs                                                            */
+/* ------------------------------------------------------------------ */
+
+const opening = new Map<string, Promise<string>>();
+
+/** The chat's tab: the one it works in, else a spare blank page, else a new background window. */
+export async function ensureChatTab(rb: RunningBrowser, conversationId: string): Promise<string> {
+  const current = rb.tabs.currentPage(conversationId);
+  if (current) return current.targetId;
+  const key = `${rb.profileId}:${conversationId}`;
+  const inflight = opening.get(key);
+  if (inflight) return inflight;
+  const p = (async () => {
+    const spare = rb.tabs.spareBlankPage();
+    if (spare) {
+      rb.tabs.claim(spare.targetId, conversationId);
+      return spare.targetId;
+    }
+    const { targetId } = await rb.client.send<{ targetId: string }>("Target.createTarget", { url: "about:blank", newWindow: true, background: true });
+    rb.tabs.claim(targetId, conversationId);
+    return targetId;
+  })().finally(() => opening.delete(key));
+  opening.set(key, p);
+  return p;
+}
+
+/** A chat's tab (with `urlContains`: its tab whose URL contains it, preferring the one it works in). */
+function chatPage(rb: RunningBrowser, conversationId: string, urlContains?: string): PageTarget | null {
+  const current = rb.tabs.currentPage(conversationId);
+  const needle = urlContains?.toLowerCase();
+  const page = needle
+    ? [current, ...rb.tabs.pagesOf(conversationId).reverse()].find((p) => p?.url.toLowerCase().includes(needle))
+    : current;
+  return page ? { targetId: page.targetId, url: page.url, title: page.title, attached: true } : null;
+}
+
+/** Close a chat's tabs (deleted, archived or idle chats). The browser's last page stays open, blank, for the next chat. */
+async function closeTabsOf(rb: RunningBrowser, conversationId: string) {
+  if (leasedChats(rb.profileId).has(conversationId)) return;
+  const pages = rb.tabs.pagesOf(conversationId);
+  // Closing its last window quits Chromium on Windows and Linux.
+  const keep = rb.tabs.userPages().length > pages.length ? null : pages[0];
+  for (const page of pages) {
+    if (page !== keep) await rb.client.send("Target.closeTarget", { targetId: page.targetId }, undefined, 5000).catch(() => {});
+  }
+  if (keep) {
+    const session = await attachToPage(rb.client, keep.targetId).catch(() => null);
+    await session?.navigate("about:blank").catch(() => {});
+    await session?.detach();
+  }
+  rb.tabs.dropChat(conversationId, keep?.targetId);
+}
+
+export async function closeChatTabs(conversationId: string): Promise<void> {
+  await Promise.all(
+    allRunning()
+      .filter((rb) => !rb.stopping)
+      .map((rb) => closeTabsOf(rb, conversationId).catch((err) => log.warn(`could not close the tabs of chat ${conversationId}`, err))),
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Pages                                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Attach to the page a chat works in — or, without a chat, the browser's active page — optionally the one whose
+ * URL contains `urlContains`.
+ */
+async function withPage<T>(
+  rb: RunningBrowser,
+  opts: { conversationId?: string; urlContains?: string },
+  fn: (page: PageSession, url: string) => Promise<T>,
+): Promise<T | null> {
+  const target = opts.conversationId
+    ? chatPage(rb, opts.conversationId, opts.urlContains)
+    : await pickActivePage(rb.client, { port: rb.port, urlContains: opts.urlContains });
   if (!target) return null;
   const page = await attachToPage(rb.client, target.targetId);
   try {
@@ -531,9 +691,9 @@ async function withActivePage<T>(rb: RunningBrowser, urlContains: string | undef
 }
 
 /**
- * Type text into the focused (or selector-matched) element of the active page WITHOUT the model seeing it.
- * Used for passwords and TOTP codes. The field's frame must belong to `allowedHosts` (https) or `httpHosts`
- * (http) — see fill.ts — otherwise nothing is typed.
+ * Type text into the focused (or selector-matched) element of the chat's page (without a chat: the active page)
+ * WITHOUT the model seeing it. Used for passwords and TOTP codes. The field's frame must belong to `allowedHosts`
+ * (https) or `httpHosts` (http) — see fill.ts — otherwise nothing is typed.
  */
 export async function fillIntoPage(
   profileId: string,
@@ -543,6 +703,8 @@ export async function fillIntoPage(
     kind?: FillKind;
     selector?: string;
     urlContains?: string;
+    /** The chat whose tab gets the text. */
+    conversationId?: string;
     submit?: boolean;
     /** Sites the secret belongs to (credential domains + URL host); the field's frame must be https on one of them. */
     allowedHosts: string[];
@@ -557,16 +719,24 @@ export async function fillIntoPage(
   if (!rb) return { ok: false, url: "", detail: "The browser is not running. Open the login page with the browser tools first." };
   rb.lastUsedAt = Date.now();
   try {
-    return await fillIntoActivePage({ client: rb.client, port: rb.port }, opts);
+    const chat = opts.conversationId;
+    return await fillIntoActivePage(
+      { client: rb.client, port: rb.port, ...(chat ? { chatPage: (urlContains?: string) => chatPage(rb, chat, urlContains) } : {}) },
+      opts,
+    );
   } finally {
     rb.lastUsedAt = Date.now();
   }
 }
 
-/** URL + title of the most recently active page of the profile browser. */
-export async function currentPage(profileId: string): Promise<{ url: string; title: string } | null> {
+/** URL + title of the page a chat works in, or without a chat of the most recently active page. */
+export async function currentPage(profileId: string, conversationId?: string): Promise<{ url: string; title: string } | null> {
   const rb = getRunning(profileId);
   if (!rb) return null;
+  if (conversationId) {
+    const page = rb.tabs.currentPage(conversationId);
+    return page ? { url: page.url, title: page.title } : null;
+  }
   try {
     const page = await pickActivePage(rb.client, { port: rb.port });
     return page ? { url: page.url, title: page.title } : null;
@@ -575,8 +745,8 @@ export async function currentPage(profileId: string): Promise<{ url: string; tit
   }
 }
 
-/** Navigate the active tab (opening one if there is none), launching the browser if needed. */
-export async function navigate(profileId: string, url: string): Promise<void> {
+/** Navigate the chat's tab — without a chat the active tab — (opening one if there is none), launching the browser if needed. */
+export async function navigate(profileId: string, url: string, conversationId?: string): Promise<void> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -586,7 +756,8 @@ export async function navigate(profileId: string, url: string): Promise<void> {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw badRequest("Only http and https URLs can be opened");
   const rb = await ensureBrowser(profileId);
   rb.lastUsedAt = Date.now();
-  const done = await withActivePage(rb, undefined, async (page) => {
+  if (conversationId) await ensureChatTab(rb, conversationId);
+  const done = await withPage(rb, { conversationId }, async (page) => {
     await page.navigate(parsed.href);
     return true;
   });
@@ -605,13 +776,19 @@ export function requireRunning(profileId: string): RunningBrowser {
 /* Agent browser tools (browser-use MCP)                                */
 /* ------------------------------------------------------------------ */
 
+const runDirs = new Map<string, string>();
+
 /**
- * MCP server entry giving the agent browser tools (browser-use MCP connected to the profile's Chromium via CDP) —
- * `profileId` as resolved for the run, else the agent's.
- * Returns null when browser is disabled for the agent or globally; throws (with a message fit for the human)
- * when browser tools are enabled but can't be provided.
+ * MCP server entry giving a run browser tools: browser-use MCP connected over CDP to the profile's Chromium — `profileId`
+ * as resolved for the run, else the agent's — through the run's own endpoint that only reaches its chat's tabs
+ * (proxy.ts). Returns null when browser is disabled for the agent or globally; throws (with a message fit for the
+ * human) when browser tools are enabled but can't be provided. Call `releaseChatBrowser` when the run ends.
  */
-export async function browserMcpServer(agent: Agent, profileId?: string | null): Promise<McpServerJson | null> {
+export async function browserMcpServer(
+  agent: Agent,
+  run: { runId: string; conversationId: string },
+  profileId?: string | null,
+): Promise<McpServerJson | null> {
   const settings = getSettings();
   if (!settings.browser.enabled || !agent.browser?.enabled) return null;
 
@@ -620,28 +797,61 @@ export async function browserMcpServer(agent: Agent, profileId?: string | null):
     throw new HttpError(424, "uv (uvx) is not installed, so browser-use can't start. Install it in Settings → Dependencies.", "uv_missing");
   }
 
-  const profile = profileId ? getProfile(profileId) : resolveProfileForAgent(agent);
+  const profile = profileId ? getProfile(profileId) : resolveProfileForAgent(agent, run.conversationId);
   const headless = agent.browser.headless ?? settings.browser.headless;
-  const { cdpUrl } = await launchBrowser(profile.id, { headless });
+  await launchBrowser(profile.id, { headless });
+  const cdpUrl = openChatLease({
+    runId: run.runId,
+    profileId: profile.id,
+    conversationId: run.conversationId,
+    open: async () => {
+      const rb = await ensureBrowser(profile.id, { headless });
+      await ensureChatTab(rb, run.conversationId);
+      return rb;
+    },
+  });
+  emitProfileSoon(profile.id);
 
   const cfg = config();
   const configDir = join(cfg.dataDir, "browser-use", profile.id, agent.id);
+  // Parallel runs of one agent each get their own config (their own endpoint) and scratch files, which browser-use
+  // wipes on every start anyway.
+  const runDir = join(configDir, "runs", run.runId);
+  const configPath = join(runDir, "config.json");
+  runDirs.set(run.runId, runDir);
   const workspace = agent.repoPath ? join(agent.repoPath, "workspace") : join(cfg.dataDir, "browser-use", profile.id, agent.id, "files");
   writeBrowserUseConfig({
     configDir,
+    configPath,
     cdpUrl,
     headless,
     userDataDir: profile.userDataDir,
     downloadsPath: join(workspace, "downloads"),
-    fileSystemPath: join(cfg.dataDir, "browser-use", profile.id, agent.id, "files"),
+    fileSystemPath: join(runDir, "files"),
   });
   touchBrowser(profile.id);
-  const env = browserUseEnv(configDir, toolPath());
+  const env = browserUseEnv(configDir, toolPath(), configPath);
   // browser-use's content extraction tools need an OpenAI-compatible LLM. Pass the key via env only (never into
   // browser-use's config file); without one, the runner hides those tools from Claude.
   const llmKey = browserLlmKey();
   if (llmKey) env.OPENAI_API_KEY = llmKey;
   return { command: command.command, args: command.args, env };
+}
+
+/** The run ended: its browser endpoint stops working; the chat keeps its tabs for its next message. */
+export function releaseChatBrowser(runId: string) {
+  const lease = releaseChatLease(runId);
+  if (lease) {
+    getRunning(lease.profileId)?.tabs.touch(lease.conversationId);
+    emitProfileSoon(lease.profileId);
+  }
+  const runDir = runDirs.get(runId);
+  runDirs.delete(runId);
+  try {
+    if (runDir) rmSync(runDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch (err) {
+    log.warn(`could not remove ${runDir}`, err);
+  }
 }
 
 /** OpenAI API key for browser-use's LLM-backed tools (extract_content, retry agent), if configured. */

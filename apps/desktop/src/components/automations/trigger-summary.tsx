@@ -1,5 +1,5 @@
 import type { Routine } from "@godmode/shared";
-import { cronToHuman, localTimezone } from "@/components/agents/cron";
+import { cronToHuman, localTimezone, scheduleToHuman } from "@/components/agents/cron";
 import { prettySlug, ToolkitLogo, toolkitLogoUrl } from "@/components/integrations/toolkit-logo";
 import { cn } from "@/lib/utils";
 import { lowerFirst, TRIGGER_TYPES } from "./trigger-meta";
@@ -20,7 +20,7 @@ export function TriggerSummary({ routine, icon = true, className }: { routine: R
         ))}
       {t.type === "schedule" && (
         <span className="min-w-0 truncate">
-          {cronToHuman(routine.cron)}
+          {scheduleToHuman(routine.cron, t.startWindowMinutes)}
           {tz && <span className="ml-1.5 text-xs text-muted-foreground">({tz})</span>}
         </span>
       )}
