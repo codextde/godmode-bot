@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { Blocks, CalendarClock, Hand, Radar, Webhook } from "lucide-react";
 import type { AutomationEventSource, AutomationEventStatus, Routine, RoutineTriggerType } from "@godmode/shared";
-import { cronToHuman } from "@/components/agents/cron";
+import { cronToHuman, scheduleToHuman } from "@/components/agents/cron";
 import { prettySlug } from "@/components/integrations/toolkit-logo";
 
 export interface TriggerTypeMeta {
@@ -70,7 +70,7 @@ export function triggerText(routine: Routine): string {
   const t = routine.trigger;
   switch (t.type) {
     case "schedule":
-      return cronToHuman(routine.cron);
+      return scheduleToHuman(routine.cron, t.startWindowMinutes);
     case "app":
       return `${t.triggerName} · ${prettySlug(t.toolkit)}`;
     case "condition":

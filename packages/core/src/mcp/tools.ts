@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 import type { Agent, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Vm } from "@godmode/shared";
-import { isModelId } from "@godmode/shared";
+import { isModelId, MAX_START_WINDOW_MINUTES } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
 import { logger } from "../log";
@@ -13,7 +13,15 @@ import { hasAppSecret, redact } from "../vault/vault";
 import { audit } from "../services/audit";
 import { notify } from "../services/notifications";
 import { listMissingLogins, reportMissingLogin } from "../services/missingLogins";
-import { createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigger, runRoutineNow, updateRoutine } from "../services/routines";
+import {
+  createRoutine,
+  deleteRoutine,
+  getRoutine,
+  listRoutines,
+  resolveAppTrigger,
+  runRoutineNow,
+  updateRoutine,
+} from "../services/routines";
 import { listEvents } from "../automations/events";
 import { reportCheckResult } from "../automations/conditions";
 import { reportDream } from "../memory/dreaming";
@@ -280,7 +288,18 @@ const agentFields = {
 
 const triggerSchema = z
   .discriminatedUnion("type", [
-    z.object({ type: z.literal("schedule") }),
+    z.object({
+      type: z.literal("schedule"),
+      startWindowMinutes: z
+        .number()
+        .int()
+        .min(0)
+        .max(MAX_START_WINDOW_MINUTES)
+        .optional()
+        .describe(
+          'Start at a random moment up to this many minutes after each scheduled time, drawn anew every run — like a coworker who doesn\'t start at the same minute every day. cron "0 8 * * 1-5" + 90 = weekdays somewhere between 08:00 and 09:30. Must not exceed the gap between two runs. Default: on time.',
+        ),
+    }),
     z.object({
       type: z.literal("app"),
       connectionId: z.string().describe("Connected account id (from automation_triggers_list)"),
@@ -326,7 +345,7 @@ function triggerSummary(r: Routine) {
   if (t.type === "condition") return { type: t.type, condition: t.condition, checks: r.cron, checkModel: t.checkModel };
   // The URL is a secret (and masked in transcripts): the human copies it from the app.
   if (t.type === "webhook") return { type: t.type, url: "secret — copy it in the Godmode app: Automations → this automation → Copy webhook URL" };
-  return { type: t.type, cron: r.cron };
+  return { type: t.type, cron: r.cron, ...(t.startWindowMinutes ? { startWindowMinutes: t.startWindowMinutes } : {}) };
 }
 
 /** Event titles, notes and observations quote outside content (emails, web pages, webhook callers). */
