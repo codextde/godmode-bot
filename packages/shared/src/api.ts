@@ -124,6 +124,8 @@ export interface StartChatInput {
   computerTarget?: ComputerTarget | null;
   /** Work in this macOS VM instead of the agent's. */
   vmId?: ID | null;
+  /** Browse in this profile instead of the agent's. */
+  browserProfileId?: ID | null;
   instructions?: string;
 }
 
@@ -140,6 +142,8 @@ export interface ConversationPatch {
   computerTarget?: ComputerTarget | null;
   /** macOS VM for this chat; null = back to the agent's (or workspace's). */
   vmId?: ID | null;
+  /** Browser profile for this chat; null = back to the agent's (or the default). */
+  browserProfileId?: ID | null;
   /** "" = none. */
   instructions?: string;
 }

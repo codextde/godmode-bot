@@ -159,8 +159,11 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
 
 ## Browser
 
-* One managed Chromium per **browser profile** (global default + optional per workspace/agent), launched with
+* One managed Chromium per **browser profile** (global default + optional per workspace/agent/chat), launched with
   `--remote-debugging-port=<free port> --user-data-dir=~/.godmode/browser/<id>` on 127.0.0.1.
+* A run browses in its chat's profile (`conversations.browser_profile_id`, picked in the composer), else the agent's
+  pinned one, else its workspace's default, else the global default. Delegated work for an agent without a pinned
+  profile keeps the caller chat's profile; deleting a profile sends its chats back to their default.
 * On macOS a visible browser never takes focus: it is started in the background through LaunchServices
   (`open -g`, no startup window) and its first window opens behind the active app.
 * Agents get browser tools from the **browser-use MCP server** (`uvx --from browser-use==0.13.10 browser-use --mcp`)

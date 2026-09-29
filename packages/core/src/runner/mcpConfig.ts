@@ -34,7 +34,7 @@ function errorText(err: unknown): string {
 export async function buildMcpConfig(
   agent: Agent,
   runToken: string,
-  opts: { onNotice?: (text: string) => void; computer?: boolean; vm?: boolean; gatewayOnly?: boolean } = {},
+  opts: { onNotice?: (text: string) => void; computer?: boolean; vm?: boolean; gatewayOnly?: boolean; browserProfileId?: string | null } = {},
 ): Promise<McpConfigFile> {
   const servers: Record<string, McpServerJson> = {};
   // Dreams get the Godmode gateway only: no integrations, browser or computer.
@@ -60,7 +60,7 @@ export async function buildMcpConfig(
 
   if (agent.browser.enabled && getSettings().browser.enabled) {
     try {
-      const browser = await browserMcpServer(agent);
+      const browser = await browserMcpServer(agent, opts.browserProfileId);
       if (browser) servers[BROWSER_MCP_NAME] = browser;
     } catch (err) {
       log.warn(`browser tools unavailable for agent ${agent.id}`, err);

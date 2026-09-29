@@ -24,14 +24,14 @@ import { createAgent, deleteAgent, getAgent, listAgents, peersFor, updateAgent }
 import { addCredentialDomain, credentialsForAgent, findCredentialsForAgent, getCredential, listCredentials, markCredentialUsed, revealForAgent } from "../vault/credentials";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
 import { nameGuessMatchesHost } from "../vault/match";
-import { currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
+import { chatProfileId, currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { loginFillScope } from "../browser/fill";
 import { createConversation, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
-import { getRun, listRuns, markMissingLoginReported, waitForRun } from "../runner/runner";
+import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, waitForRun } from "../runner/runner";
 
 const log = logger("mcp");
 
@@ -193,9 +193,9 @@ function scrub(detail: string, value: string): string {
   return redact(masked);
 }
 
-function requireBrowser(agent: Agent) {
+function requireBrowser(agent: Agent, ctx: RunContext): string {
   if (!agent.browser.enabled) throw new HttpError(409, "The browser is disabled for this agent, so nothing can be filled into a page.");
-  return resolveProfileForAgent(agent);
+  return runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id;
 }
 
 /**
@@ -402,7 +402,7 @@ const TOOLS: ToolDef[] = [
       submit: z.boolean().optional().describe("Press Enter after filling"),
     }),
     run: async ({ credentialId, field, selector, submit }, { agent, ctx }) => {
-      const profile = requireBrowser(agent);
+      const profileId = requireBrowser(agent, ctx);
       const secret = revealForAgent(agent, credentialId);
       const value = field === "username" ? secret.username : secret.password;
       if (!value) {
@@ -411,8 +411,8 @@ const TOOLS: ToolDef[] = [
         );
       }
       const login = getCredential(credentialId);
-      const { scope, guessHost } = await fillScopeFor(profile.id, login);
-      const result = await fillIntoPage(profile.id, { text: value, kind: field, selector, submit, ...scope });
+      const { scope, guessHost } = await fillScopeFor(profileId, login);
+      const result = await fillIntoPage(profileId, { text: value, kind: field, selector, submit, ...scope });
       audit(`agent:${agent.id}`, "credential.fill", credentialId, { field, runId: ctx.runId, ok: result.ok, ...(guessHost ? { guessedSite: guessHost } : {}) });
       if (!result.ok) return fail(`Could not fill the ${field}: ${scrub(result.detail, value)}`);
       markCredentialUsed(credentialId);
@@ -433,7 +433,7 @@ const TOOLS: ToolDef[] = [
       submit: z.boolean().optional().describe("Press Enter after filling"),
     }),
     run: async ({ credentialId, totpId, selector, submit }, { agent, ctx }) => {
-      const profile = requireBrowser(agent);
+      const profileId = requireBrowser(agent, ctx);
       let id = totpId ?? null;
       let site: Credential | null = null;
       if (credentialId) {
@@ -463,8 +463,8 @@ const TOOLS: ToolDef[] = [
         await sleep(code.remaining * 1000 + 300);
         code = codeForAgent(agent, id);
       }
-      const { scope, guessHost } = await fillScopeFor(profile.id, site);
-      const result = await fillIntoPage(profile.id, { text: code.code, kind: "totp", selector, submit, ...scope });
+      const { scope, guessHost } = await fillScopeFor(profileId, site);
+      const result = await fillIntoPage(profileId, { text: code.code, kind: "totp", selector, submit, ...scope });
       audit(`agent:${agent.id}`, "totp.fill", id, { field: "totp", runId: ctx.runId, credentialId: credentialId ?? null, ok: result.ok, ...(guessHost ? { guessedSite: guessHost } : {}) });
       if (!result.ok) return fail(`Could not fill the 2FA code: ${scrub(result.detail, code.code)}`);
       const remembered = guessHost && addCredentialDomain(site.id, guessHost);
@@ -614,7 +614,9 @@ const TOOLS: ToolDef[] = [
       if (refusal) return fail(refusal);
       // From a VM, work for an agent without its own VM stays in the caller's VM.
       const vmId = lockedVm(ctx) && !resolveVmId(null, target) ? lockedVm(ctx) : null;
-      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId });
+      // Work for an agent without its own profile stays in the browser profile picked for the caller's chat.
+      const browserProfileId = target.browser.profileId ? null : chatProfileId(ctx.conversationId);
+      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId });
       const { run } = await sendMessage(conversation.id, {
         content: `[Delegated by ${agent.name}]\n\n${task}`,
         trigger: "delegation",

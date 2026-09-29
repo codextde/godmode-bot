@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, Vm } from "@godmode/shared";
+import type { Agent, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, Vm } from "@godmode/shared";
 import { computerTargetLabel } from "@godmode/shared";
 import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { AgentAvatar, EmptyState } from "@/components/common";
-import { BrowserFocus, BrowserPanel, BrowserToggle, useChatBrowser, type BrowserFocusMode } from "@/components/chat/browser-panel";
+import { BrowserFocus, BrowserPanel, BrowserToggle, agentBrowserProfile, useChatBrowser, type BrowserFocusMode } from "@/components/chat/browser-panel";
+import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { ComputerFocus, ComputerPanel, ComputerShareChip, ComputerToggle, type ComputerFocusMode } from "@/components/computer/computer-panel";
 import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
@@ -55,7 +56,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const composerRef = useRef<ComposerHandle>(null);
   const [queued, setQueued] = useState<Record<string, string>>({});
   const mountedAt = useRef(Date.now());
-  const browser = useChatBrowser(agent);
+  const browser = useChatBrowser(agent, conv?.browserProfileId ?? null);
   const browserPanel = useUi((s) => s.browserPanel);
   const setBrowserPanel = useUi((s) => s.setBrowserPanel);
   const wide = useMediaQuery("(min-width: 1024px)");
@@ -209,6 +210,21 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     onError: (err) => toast.error("Couldn't change the VM", { description: errorMessage(err) }),
   });
 
+  const setBrowserProfile = useMutation({
+    mutationFn: (browserProfileId: string | null) => api.conversations.update(conversationId, { browserProfileId }),
+    onSuccess: (updated) => {
+      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
+      const profiles = qc.getQueryData<BrowserProfile[]>(qk.browserProfiles) ?? [];
+      const profile = updated.browserProfileId
+        ? profiles.find((p) => p.id === updated.browserProfileId)
+        : agent && agentBrowserProfile(agent, profiles);
+      const when = busyRef.current ? "From your next message" : "The next messages";
+      if (updated.browserProfileId) toast.success(`Browsing in ${profile?.name ?? "the new profile"}`, { description: `${when} use its cookies and logins.` });
+      else toast.success("Back to the default profile", { description: `${agent?.name ?? "The agent"} browses in ${profile?.name ?? "its own profile"} again.` });
+    },
+    onError: (err) => toast.error("Couldn't change the browser profile", { description: errorMessage(err) }),
+  });
+
   const share = useMutation({
     mutationFn: (computerTarget: ComputerTarget | null) => api.conversations.update(conversationId, { computerTarget }),
     onSuccess: (updated, target) => {
@@ -359,6 +375,12 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                       onChange={(path) => setFolder.mutate(path)}
                       busy={setFolder.isPending}
                     />
+                    <BrowserProfileChip
+                      agent={agent}
+                      value={conv.browserProfileId ?? null}
+                      onChange={(id) => setBrowserProfile.mutateAsync(id).catch(() => undefined)}
+                      busy={setBrowserProfile.isPending}
+                    />
                     <ComputerShareChip
                       target={computerTarget}
                       agentName={agent?.name}
@@ -427,6 +449,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             key={browser.id}
             profile={browser}
             agent={agent}
+            forChat={browser.id === conv.browserProfileId}
             activity={activeRunId ? liveActivityLabel(live) : null}
             onHide={() => setBrowserPanel(false)}
             onFocus={setBrowserFocus}

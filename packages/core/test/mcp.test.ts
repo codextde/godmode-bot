@@ -7,9 +7,10 @@ import { createTotp } from "../src/vault/totp";
 import { listAudit } from "../src/services/audit";
 import { listMissingLogins } from "../src/services/missingLogins";
 import { listNotifications } from "../src/services/notifications";
-import { getConversation } from "../src/services/conversations";
+import { createConversation, getConversation } from "../src/services/conversations";
 import { issueRunToken, resolveRunToken, revokeRunToken } from "../src/mcp/tokens";
-import { getRun, listRuns } from "../src/runner/runner";
+import { getRun, listRuns, waitForRun } from "../src/runner/runner";
+import { createProfile } from "../src/browser/manager";
 import { getAgent, listAgents, updateAgent } from "../src/agents/service";
 import { createRoutine, listRoutines } from "../src/services/routines";
 import { updateSettings } from "../src/services/settings";
@@ -389,6 +390,17 @@ describe("agents + delegation", () => {
     expect(getRun(runId).status).toBe("succeeded");
     const other = await call(tokens[worker.id]!, "vault_list_logins", {});
     expect(other.isError).toBeUndefined();
+  });
+
+  test("agent_delegate keeps the browser profile picked for the caller's chat", async () => {
+    const profile = createProfile({ name: "Delegation profile", workspaceId: createWorkspace({ name: "Delegation" }).id });
+    const chat = createConversation({ agentId: delegator.id, browserProfileId: profile.id });
+    const token = issueRunToken({ runId: "run_mcp_profile", agentId: delegator.id, conversationId: chat.id, workspaceId: null, depth: 0 });
+    const r = await call(token, "agent_delegate", { agentId: worker.id, task: "Profile check", wait: false });
+    const runId = /run (run_[A-Za-z0-9]+)/.exec(r.content[0]!.text)![1]!;
+    expect(getConversation(getRun(runId).conversationId).browserProfileId).toBe(profile.id);
+    await waitForRun(runId, 20_000);
+    revokeRunToken(token);
   });
 
   test("delegation limits: depth, self, non-peers", async () => {

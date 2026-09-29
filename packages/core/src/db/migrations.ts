@@ -378,4 +378,12 @@ ALTER TABLE conversations ADD COLUMN vm_id TEXT;
 ALTER TABLE workspaces ADD COLUMN vm_id TEXT;
 `,
   },
+  {
+    id: 9,
+    name: "chat_browser_profile",
+    sql: /* sql */ `
+-- Browser profile a chat works in, overriding its agent's (and the workspace / global default).
+ALTER TABLE conversations ADD COLUMN browser_profile_id TEXT;
+`,
+  },
 ];

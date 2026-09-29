@@ -51,6 +51,7 @@ interface ConversationRow {
   working_directory: string | null;
   computer_target: string | null;
   vm_id: string | null;
+  browser_profile_id: string | null;
   instructions: string;
   pinned: number;
   archived: number;
@@ -104,6 +105,7 @@ function toConversation(r: ConversationRow): Conversation {
     workingDirectory: r.working_directory,
     computerTarget: parseComputerTarget(parseJson<unknown>(r.computer_target, null)),
     vmId: r.vm_id ?? null,
+    browserProfileId: r.browser_profile_id ?? null,
     instructions: r.instructions,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
@@ -168,6 +170,14 @@ export function titleFromContent(content: string): string {
   return t.length > TITLE_MAX ? `${t.slice(0, TITLE_MAX - 1).trimEnd()}…` : t;
 }
 
+/** Normalize a chat's browser profile from an API input: undefined = unchanged, null/"" = the agent's, else an existing profile. */
+function normalizeBrowserProfileId(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const id = value?.trim() || null;
+  if (id && !get<{ id: string }>("SELECT id FROM browser_profiles WHERE id = ?", id)) throw badRequest("That browser profile doesn't exist anymore");
+  return id;
+}
+
 export interface ModelChoice {
   /** `claude --model` value; null/empty = the agent's model. */
   model?: string | null;
@@ -175,11 +185,20 @@ export interface ModelChoice {
 }
 
 export function createConversation(
-  input: { agentId: string; title?: string; origin?: ConversationOrigin; workingDirectory?: string | null; vmId?: string | null; instructions?: string } & ModelChoice,
+  input: {
+    agentId: string;
+    title?: string;
+    origin?: ConversationOrigin;
+    workingDirectory?: string | null;
+    vmId?: string | null;
+    browserProfileId?: string | null;
+    instructions?: string;
+  } & ModelChoice,
 ): Conversation {
   getAgent(input.agentId); // 404 if the agent doesn't exist
   const workingDirectory = normalizeWorkingDirectory(input.workingDirectory);
   const vmId = normalizeVmId(input.vmId) ?? null;
+  const browserProfileId = normalizeBrowserProfileId(input.browserProfileId) ?? null;
   const ts = now();
   const id = newId("cnv");
   const title = input.title?.trim() ? input.title.trim().slice(0, 200) : DEFAULT_CONVERSATION_TITLE;
@@ -193,6 +212,7 @@ export function createConversation(
     effort: input.effort ?? null,
     working_directory: workingDirectory,
     vm_id: vmId,
+    browser_profile_id: browserProfileId,
     instructions: input.instructions?.trim() ?? "",
     pinned: 0,
     archived: 0,
@@ -249,6 +269,7 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     working_directory: patch.workingDirectory === undefined ? undefined : normalizeWorkingDirectory(patch.workingDirectory),
     computer_target: patch.computerTarget === undefined ? undefined : patch.computerTarget ? JSON.stringify(parseComputerTarget(patch.computerTarget)) : null,
     vm_id: normalizeVmId(patch.vmId),
+    browser_profile_id: normalizeBrowserProfileId(patch.browserProfileId),
     instructions: patch.instructions?.trim(),
     updated_at: now(),
   });
@@ -484,6 +505,8 @@ export async function startChat(
     computerTarget?: ComputerTarget | null;
     /** macOS VM for this chat (null/omitted = the agent's). */
     vmId?: string | null;
+    /** Browser profile for this chat (null/omitted = the agent's). */
+    browserProfileId?: string | null;
     instructions?: string;
   } & ModelChoice,
 ): Promise<StartChatResult> {
@@ -500,6 +523,7 @@ export async function startChat(
     origin: input.origin ?? "chat",
     workingDirectory: input.workingDirectory,
     vmId: input.vmId,
+    browserProfileId: input.browserProfileId,
     instructions: input.instructions,
     model: input.model,
     effort: input.effort,

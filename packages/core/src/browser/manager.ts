@@ -174,7 +174,10 @@ export async function deleteProfile(id: string): Promise<void> {
   const r = requireRow(id);
   if (!r.workspace_id && r.is_default) throw badRequest("The global default profile can't be deleted. Make another global profile the default first.");
   await stopBrowser(id);
-  run("DELETE FROM browser_profiles WHERE id = ?", id);
+  tx(() => {
+    run("DELETE FROM browser_profiles WHERE id = ?", id);
+    run("UPDATE conversations SET browser_profile_id = NULL WHERE browser_profile_id = ?", id);
+  });
   // Only ever delete directories Godmode created.
   const cfg = config();
   for (const dir of [r.user_data_dir, join(cfg.dataDir, "browser-use", id)]) {
@@ -189,8 +192,16 @@ export async function deleteProfile(id: string): Promise<void> {
   bus.changed("browser-profiles");
 }
 
-/** Profile an agent should use: agent.browser.profileId ?? workspace default ?? global default. */
-export function resolveProfileForAgent(agent: Agent): BrowserProfile {
+/** Profile picked for the chat itself (not inherited from its agent). */
+export function chatProfileId(conversationId: string): string | null {
+  return get<{ browser_profile_id: string | null }>("SELECT browser_profile_id FROM conversations WHERE id = ?", conversationId)?.browser_profile_id ?? null;
+}
+
+/** Profile a run uses: its chat's ?? agent.browser.profileId ?? workspace default ?? global default. */
+export function resolveProfileForAgent(agent: Agent, conversationId?: string | null): BrowserProfile {
+  const chosen = conversationId ? chatProfileId(conversationId) : null;
+  const forChat = chosen ? row(chosen) : null;
+  if (forChat) return toProfile(forChat);
   const pinned = agent.browser?.profileId ? row(agent.browser.profileId) : null;
   if (pinned) return toProfile(pinned);
   if (agent.browser?.profileId) log.warn(`agent ${agent.id} references missing browser profile ${agent.browser.profileId}; using default`);
@@ -593,11 +604,12 @@ export function requireRunning(profileId: string): RunningBrowser {
 /* ------------------------------------------------------------------ */
 
 /**
- * MCP server entry giving the agent browser tools (browser-use MCP connected to the profile's Chromium via CDP).
+ * MCP server entry giving the agent browser tools (browser-use MCP connected to the profile's Chromium via CDP) —
+ * `profileId` as resolved for the run, else the agent's.
  * Returns null when browser is disabled for the agent or globally; throws (with a message fit for the human)
  * when browser tools are enabled but can't be provided.
  */
-export async function browserMcpServer(agent: Agent): Promise<McpServerJson | null> {
+export async function browserMcpServer(agent: Agent, profileId?: string | null): Promise<McpServerJson | null> {
   const settings = getSettings();
   if (!settings.browser.enabled || !agent.browser?.enabled) return null;
 
@@ -606,7 +618,8 @@ export async function browserMcpServer(agent: Agent): Promise<McpServerJson | nu
     throw new HttpError(424, "uv (uvx) is not installed, so browser-use can't start. Install it in Settings → Dependencies.", "uv_missing");
   }
 
-  const profile = resolveProfileForAgent(agent);
+  const chosen = profileId ? row(profileId) : null;
+  const profile = chosen ? toProfile(chosen) : resolveProfileForAgent(agent);
   const headless = agent.browser.headless ?? settings.browser.headless;
   const { cdpUrl } = await launchBrowser(profile.id, { headless });
 

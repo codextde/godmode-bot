@@ -529,11 +529,17 @@ function browserProfileOf(job: Job): string | null {
   try {
     const agent = getAgent(job.agentId);
     job.browserProfileId =
-      getSettings().browser.enabled && agent.browser.enabled ? resolveProfileForAgent(agent).id : null;
+      getSettings().browser.enabled && agent.browser.enabled ? resolveProfileForAgent(agent, job.conversationId).id : null;
   } catch {
     job.browserProfileId = null;
   }
   return job.browserProfileId;
+}
+
+/** Browser profile a live run drives; null when it has none or is over. */
+export function runBrowserProfile(runId: string): string | null {
+  const job = jobs.get(runId);
+  return job ? browserProfileOf(job) : null;
 }
 
 function isAncestor(candidate: Job, job: Job): boolean {
@@ -894,6 +900,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     computer: !!computer,
     vm: !!vm,
     gatewayOnly: dreaming,
+    browserProfileId: browserProfileOf(job),
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
@@ -1268,9 +1275,10 @@ async function detectMissingLogin(job: Job, agent: Agent, text: string) {
   if (!reason) return;
   let service = "Unknown service";
   let url = "";
-  if (agent.browser.enabled) {
+  const profileId = browserProfileOf(job);
+  if (profileId) {
     try {
-      const page = await currentPage(resolveProfileForAgent(agent).id);
+      const page = await currentPage(profileId);
       if (page?.url && /^https?:/i.test(page.url)) {
         url = page.url;
         service = hostnameOf(page.url) || service;
