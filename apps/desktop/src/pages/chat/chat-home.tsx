@@ -16,6 +16,7 @@ import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { FolderChip } from "@/components/chat/folder-picker";
 import { ComputerShareChip } from "@/components/computer/computer-panel";
+import { InstructionsChip } from "@/components/instructions/instructions";
 import { ChatDropZone } from "@/components/chat/thread";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -77,6 +78,7 @@ export default function ChatHome() {
   const [folder, setFolder] = useState<string | null>(null);
   /** Shared with the chat this message starts (a window, a screen or a browser tab). */
   const [shared, setShared] = useState<ComputerTarget | null>(null);
+  const [instructions, setInstructions] = useState("");
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
   const selected =
@@ -105,6 +107,7 @@ export default function ChatHome() {
       });
       if (input.voice) markVoiceRun(res.run.id);
       setShared(null);
+      setInstructions("");
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${res.conversation.id}`);
     },
@@ -161,6 +164,7 @@ export default function ChatHome() {
                     onChange={setFolder}
                   />
                   <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />
+                  <InstructionsChip value={instructions} agent={selected} onChange={setInstructions} />
                 </>
               )
             }
@@ -174,6 +178,7 @@ export default function ChatHome() {
                 ...choice,
                 workingDirectory: folder ?? undefined,
                 computerTarget: shared ?? undefined,
+                instructions: instructions || undefined,
               })
             }
           />
@@ -208,7 +213,15 @@ export default function ChatHome() {
         agent={selected}
         busy={start.isPending}
         onSend={async (text) => {
-          await start.mutateAsync({ agentId: selected?.id, content: text, voice: true, workingDirectory: folder ?? undefined, computerTarget: shared ?? undefined, ...choice });
+          await start.mutateAsync({
+            agentId: selected?.id,
+            content: text,
+            voice: true,
+            workingDirectory: folder ?? undefined,
+            computerTarget: shared ?? undefined,
+            instructions: instructions || undefined,
+            ...choice,
+          });
         }}
       />
     </ChatDropZone>

@@ -13,7 +13,9 @@ import {
   sendMessage,
   startChat,
   transcriptPath,
+  updateConversation,
 } from "../src/services/conversations";
+import { createWorkspace } from "../src/services/workspaces";
 import {
   CLAUDE_NOT_FOUND,
   INTERRUPTED,
@@ -337,6 +339,53 @@ describe("runner end-to-end with fake claude", () => {
   test("disabled agents cannot start runs", async () => {
     const off = await makeAgent({ name: "Disabled Bot", enabled: false });
     await expect(startChat({ agentId: off.id, content: "hi" })).rejects.toThrow(/disabled/);
+  });
+});
+
+describe("standing instructions", () => {
+  afterAll(() => {
+    updateSettings({ runner: { appendSystemPrompt: "" } });
+  });
+
+  test("global, workspace and chat layers reach the system prompt, most specific last", async () => {
+    updateSettings({ runner: { appendSystemPrompt: "Use less comments." } });
+    const ws = createWorkspace({ name: "Acme", instructions: "Invoices go to finance@acme.test." });
+    const bot = await makeAgent({ name: "Layered Bot", workspaceId: ws.id });
+    const { run } = await startChat({ agentId: bot.id, content: "Hi", instructions: "Answer in German." });
+    expect((await waitForRun(run.id, 20_000)).status).toBe("succeeded");
+    const system = argValue(invocations(env).at(-1)!, "--append-system-prompt")!;
+    const every = system.indexOf("### For every agent\nUse less comments.");
+    const workspace = system.indexOf('### For the "Acme" workspace\nInvoices go to finance@acme.test.');
+    const chat = system.indexOf("### For this chat\nAnswer in German.");
+    expect(system).toContain("## Standing instructions");
+    expect(every).toBeGreaterThan(-1);
+    expect(workspace).toBeGreaterThan(every);
+    expect(chat).toBeGreaterThan(workspace);
+  });
+
+  test("a resumed chat is told when its instructions change, once", async () => {
+    const { conversation, run } = await startChat({ agentId: agent.id, content: "Hi" });
+    await waitForRun(run.id, 20_000);
+    const lastPrompt = async (content: string) => {
+      const sent = await sendMessage(conversation.id, { content });
+      await waitForRun(sent.run.id, 20_000);
+      return invocations(env).at(-1)!.prompt;
+    };
+
+    expect(await lastPrompt("unchanged")).not.toContain("standing instructions");
+
+    updateConversation(conversation.id, { instructions: "Always sign with Dan." });
+    const changed = await lastPrompt("after edit");
+    expect(changed).toContain("Your standing instructions changed");
+    expect(changed).toContain("### For this chat\nAlways sign with Dan.");
+    expect(changed).toContain("### For every agent\nUse less comments.");
+    expect(changed.endsWith("after edit")).toBe(true);
+
+    expect(await lastPrompt("again")).not.toContain("standing instructions");
+
+    updateSettings({ runner: { appendSystemPrompt: "" } });
+    updateConversation(conversation.id, { instructions: "" });
+    expect(await lastPrompt("cleared")).toContain("Your standing instructions were removed");
   });
 });
 

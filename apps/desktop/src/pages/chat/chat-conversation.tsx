@@ -16,6 +16,7 @@ import { useArchiveChat } from "@/components/chat/chat-actions";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
+import { InstructionsChip } from "@/components/instructions/instructions";
 import { ChatDropZone, Thread } from "@/components/chat/thread";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -176,6 +177,17 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     onError: (err) => toast.error("Couldn't change the folder", { description: errorMessage(err) }),
   });
 
+  const setInstructions = useMutation({
+    mutationFn: (instructions: string) => api.conversations.update(conversationId, { instructions }),
+    onSuccess: (updated) => {
+      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
+      toast.success(updated.instructions ? "Chat instructions saved" : "Chat instructions removed", {
+        description: busyRef.current ? "They apply from your next message." : undefined,
+      });
+    },
+    onError: (err) => toast.error("Couldn't save the instructions", { description: errorMessage(err) }),
+  });
+
   const share = useMutation({
     mutationFn: (computerTarget: ComputerTarget | null) => api.conversations.update(conversationId, { computerTarget }),
     onSuccess: (updated, target) => {
@@ -325,6 +337,12 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     onShare={(t) => share.mutateAsync(t)}
                     onWatch={() => setComputerFocus("watch")}
                     busy={share.isPending}
+                  />
+                  <InstructionsChip
+                    value={conv.instructions ?? ""}
+                    agent={agent}
+                    onChange={(text) => setInstructions.mutateAsync(text)}
+                    busy={setInstructions.isPending}
                   />
                 </>
               }

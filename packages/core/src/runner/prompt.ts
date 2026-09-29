@@ -3,6 +3,7 @@
  * CLAUDE.md in the agent repo carries identity + standing instructions; this carries runtime context,
  * the tool guide (browser, vault login procedure, missing logins, delegation, management) and policies.
  */
+import { createHash } from "node:crypto";
 import { arch, platform } from "node:os";
 import { join } from "node:path";
 import type { Agent, ComputerTarget, Settings } from "@godmode/shared";
@@ -21,7 +22,37 @@ export interface PromptContext {
   voice?: boolean;
   /** Folder attached to the chat (Claude's cwd). null = the agent's own repository. */
   workingDirectory?: string | null;
+  /** Rendered by `instructionsSection`. */
+  standingInstructions?: string;
   now?: Date;
+}
+
+/** Standing instructions from the human besides the global ones, most general first. The agent's own live in its CLAUDE.md. */
+export interface InstructionLayers {
+  workspace: { name: string; text: string } | null;
+  chat: string;
+}
+
+/** The "Standing instructions" section, or "" when no layer has any. */
+export function instructionsSection(settings: Settings, layers: InstructionLayers): string {
+  const human = settings.general.userName.trim() || "the user";
+  const parts: string[] = [];
+  const global = settings.runner.appendSystemPrompt?.trim();
+  const workspace = layers.workspace?.text.trim();
+  const chat = layers.chat.trim();
+  if (global) parts.push(`### For every agent\n${global}`);
+  if (workspace) parts.push(`### For the "${layers.workspace!.name}" workspace\n${workspace}`);
+  if (chat) parts.push(`### For this chat\n${chat}`);
+  if (!parts.length) return "";
+  return `## Standing instructions
+${human} set these rules. Follow them in every task. When two conflict, the more specific one wins: this chat, then your own instructions in CLAUDE.md, then the workspace, then the ones for every agent.
+
+${parts.join("\n\n")}`;
+}
+
+/** Identifies the standing instructions a Claude session was given, so changes can be restated on resume. */
+export function instructionsDigest(section: string): string {
+  return section ? createHash("sha256").update(section).digest("hex").slice(0, 16) : "";
 }
 
 function osName(): string {
@@ -143,8 +174,7 @@ ${human} is talking to you by voice and your answer will be read aloud: reply in
   out.push(`## Final answer
 End with a concise markdown summary: what you did, the results (numbers, findings, links, file paths), anything that failed or was skipped and why, and exactly what ${human} needs to do next (if anything). Don't narrate every step.`);
 
-  const extra = settings.runner.appendSystemPrompt?.trim();
-  if (extra) out.push(`## Additional instructions\n${extra}`);
+  if (ctx.standingInstructions) out.push(ctx.standingInstructions);
 
   return out.join("\n\n");
 }
@@ -169,11 +199,18 @@ ${scope}
 
 /**
  * Prefix for resumed sessions: the session's system prompt is a snapshot of its first turn, so the date and a
- * working directory that changed since then are restated on every turn.
+ * working directory that changed since then are restated on every turn. `instructions` is the current
+ * "Standing instructions" section when it changed since the session saw it ("" = all removed).
  */
-export function resumeContextPrefix(folder: string | null, repoPath: string, now = new Date()): string {
+export function resumeContextPrefix(folder: string | null, repoPath: string, now = new Date(), instructions?: string): string {
   const where = folder
     ? `Working directory: \`${folder}\` (the folder attached to this chat). Your own repository with CLAUDE.md and MEMORY.md: \`${repoPath}\`.`
     : `Working directory: your own repository \`${repoPath}\`.`;
-  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}</godmode-context>\n\n`;
+  const update =
+    instructions === undefined
+      ? ""
+      : instructions
+        ? `\n\nYour standing instructions changed. These replace the "Standing instructions" in your system prompt:\n\n${instructions}`
+        : `\n\nYour standing instructions were removed. Ignore the "Standing instructions" in your system prompt.`;
+  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${update}</godmode-context>\n\n`;
 }

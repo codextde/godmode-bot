@@ -42,7 +42,7 @@ import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memor
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor } from "./models";
-import { buildSystemPrompt, resumeContextPrefix } from "./prompt";
+import { buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix } from "./prompt";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
 import { parseComputerTarget } from "../computer/targets";
 import { StreamAccumulator, detectLoginFailure, redactBlocks } from "./stream";
@@ -781,8 +781,15 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // Every run needs the agent repo (cwd or --add-dir); rebuild it if it went missing (e.g. restored backup without repos).
   await ensureAgentRepo(agent);
 
-  const conv = get<{ claude_session_id: string | null; working_directory: string | null; model: string | null; effort: Effort | null }>(
-    "SELECT claude_session_id, working_directory, model, effort FROM conversations WHERE id = ?",
+  const conv = get<{
+    claude_session_id: string | null;
+    working_directory: string | null;
+    model: string | null;
+    effort: Effort | null;
+    instructions: string | null;
+    instructions_digest: string | null;
+  }>(
+    "SELECT claude_session_id, working_directory, model, effort, instructions, instructions_digest FROM conversations WHERE id = ?",
     job.conversationId,
   );
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
@@ -822,6 +829,14 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       log.warn(`could not list peers of agent ${agent.id}`, err);
     }
   }
+  const workspace = agent.workspaceId
+    ? get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", agent.workspaceId)
+    : null;
+  const standing = instructionsSection(settings, {
+    workspace: workspace ? { name: workspace.name, text: workspace.instructions } : null,
+    chat: conv.instructions ?? "",
+  });
+  const digest = instructionsDigest(standing);
   const systemPrompt = buildSystemPrompt({
     agent,
     settings,
@@ -830,6 +845,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     computer,
     voice: job.voice,
     workingDirectory: folder,
+    standingInstructions: standing,
   });
 
   const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
@@ -901,13 +917,16 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const resuming = !!sessionId;
     if (!sessionId) {
       sessionId = randomUUID();
-      setConversationState(job.conversationId, { claudeSessionId: sessionId });
+      setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest });
     }
     if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
     const sessionArgs = resuming ? ["--resume", sessionId] : ["--session-id", sessionId];
     // Claude Code only recognizes a slash command at the very start of the prompt.
     const command = parseSlashCommand(job.prompt) !== null;
-    const prompt = resuming && !command ? resumeContextPrefix(folder, agent.repoPath) + job.prompt : job.prompt;
+    // A resumed session keeps the system prompt of its first turn: restate standing instructions that changed since.
+    const restate = resuming && !command && (conv.instructions_digest ?? "") !== digest;
+    if (restate) setConversationState(job.conversationId, { instructionsDigest: digest });
+    const prompt = resuming && !command ? resumeContextPrefix(folder, agent.repoPath, undefined, restate ? standing : undefined) + job.prompt : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 
     const lostSession =
@@ -923,7 +942,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       for (const n of notices) if (n.type === "notice") job.acc.addNotice(n.level, n.text);
       if (command) job.keepSessionId = sessionId;
       sessionId = randomUUID();
-      setConversationState(job.conversationId, { claudeSessionId: sessionId });
+      setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest });
       attempt = await spawnClaude(
         job,
         cmd,

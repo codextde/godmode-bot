@@ -23,6 +23,8 @@ export interface Workspace {
   description: string;
   color: string; // tailwind-ish color token e.g. "violet" | hex
   icon: string; // emoji or lucide icon name
+  /** Agent context: standing instructions for every agent in this workspace, on every run. */
+  instructions: string;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -151,6 +153,8 @@ export interface Conversation {
   workingDirectory: string | null;
   /** What the human shared with the agent in this chat (screen, window or browser tab). null = nothing. */
   computerTarget: ComputerTarget | null;
+  /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
+  instructions: string;
   pinned: boolean;
   archived: boolean;
   lastMessageAt: ISODate | null;
@@ -487,7 +491,7 @@ export interface RunnerSettings {
   runTimeoutMinutes: number;
   defaultMaxBudgetUsd: number | null;
   extraArgs: string[];
-  /** Extra environment variables for claude (e.g. ANTHROPIC_API_KEY stored in vault is injected separately) */
+  /** Global instructions: included in every run of every agent. */
   appendSystemPrompt: string;
 }
 

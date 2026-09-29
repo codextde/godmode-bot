@@ -20,6 +20,7 @@ interface WorkspaceRow {
   description: string;
   color: string;
   icon: string;
+  instructions: string;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +33,7 @@ function toModel(r: WorkspaceRow): Workspace {
     description: r.description,
     color: r.color,
     icon: r.icon,
+    instructions: r.instructions ?? "",
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -70,6 +72,7 @@ export function createWorkspace(input: WorkspaceInput): Workspace {
     description: input.description?.trim() ?? "",
     color: input.color?.trim() || "violet",
     icon: input.icon?.trim() || "🗂️",
+    instructions: input.instructions?.trim() ?? "",
     created_at: ts,
     updated_at: ts,
   };
@@ -87,6 +90,7 @@ export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Wor
     description,
     color: patch.color !== undefined ? patch.color.trim() || "violet" : undefined,
     icon: patch.icon !== undefined ? patch.icon.trim() || "🗂️" : undefined,
+    instructions: patch.instructions?.trim(),
     updated_at: now(),
   });
   const next = getWorkspace(id);

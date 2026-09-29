@@ -10,6 +10,7 @@ import {
   Info,
   MonitorUp,
   RefreshCw,
+  ScrollText,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
@@ -22,6 +23,7 @@ import { BackupSection } from "@/components/settings/backup-section";
 import { BrowserSection } from "@/components/settings/browser-section";
 import { ComputerSection } from "@/components/settings/computer-section";
 import { GeneralSection } from "@/components/settings/general-section";
+import { InstructionsSection } from "@/components/settings/instructions-section";
 import { MemorySection } from "@/components/settings/memory-section";
 import { SecuritySection } from "@/components/settings/security-section";
 import { SystemSection } from "@/components/settings/system-section";
@@ -35,6 +37,7 @@ import { cn } from "@/lib/utils";
 const SECTIONS = [
   { id: "general", label: "General", icon: <SlidersHorizontal />, group: "Preferences" },
   { id: "ai", label: "AI & Claude", icon: <Sparkles />, group: "Preferences" },
+  { id: "instructions", label: "Instructions", icon: <ScrollText />, group: "Preferences" },
   { id: "browser", label: "Browser", icon: <Globe />, group: "Preferences" },
   { id: "computer", label: "Computer", icon: <MonitorUp />, group: "Preferences" },
   { id: "voice", label: "Voice", icon: <AudioLines />, group: "Preferences" },
@@ -79,6 +82,7 @@ export default function SettingsPage() {
     content = {
       general: () => <GeneralSection settings={s} />,
       ai: () => <AiSection settings={s} />,
+      instructions: () => <InstructionsSection settings={s} />,
       browser: () => <BrowserSection settings={s} />,
       computer: () => <ComputerSection settings={s} />,
       voice: () => <VoiceSection settings={s} />,

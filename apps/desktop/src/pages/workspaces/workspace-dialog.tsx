@@ -26,16 +26,20 @@ const EMOJIS = [
 ];
 
 const MAX_NAME = 60;
+const CONTEXT_EXAMPLE = "We are ACME GmbH. Write to clients in German.\nInvoices go to finance@acme.de.\nNever touch the production database.";
 
 export function WorkspaceDialog({
   open,
   onOpenChange,
   workspace,
+  focus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Edit this workspace; omitted = create */
   workspace?: Workspace | null;
+  /** Start in the agent context field instead of the name. */
+  focus?: "instructions";
 }) {
   const qc = useQueryClient();
   const setScope = useUi((s) => s.setWorkspace);
@@ -44,6 +48,7 @@ export function WorkspaceDialog({
   const [icon, setIcon] = useState("🚀");
   const [color, setColor] = useState<string>("violet");
   const [description, setDescription] = useState("");
+  const [instructions, setInstructions] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [customEmoji, setCustomEmoji] = useState("");
 
@@ -53,12 +58,13 @@ export function WorkspaceDialog({
     setIcon(workspace?.icon || EMOJIS[Math.floor(Math.random() * 10)]);
     setColor(workspace?.color || AGENT_COLORS[Math.floor(Math.random() * AGENT_COLORS.length)]);
     setDescription(workspace?.description ?? "");
+    setInstructions(workspace?.instructions ?? "");
     setCustomEmoji("");
   }, [open, workspace]);
 
   const save = useMutation({
     mutationFn: () => {
-      const input = { name: name.trim(), icon, color, description: description.trim() };
+      const input = { name: name.trim(), icon, color, description: description.trim(), instructions: instructions.trim() };
       return workspace ? api.workspaces.update(workspace.id, input) : api.workspaces.create(input);
     },
     onSuccess: (ws) => {
@@ -160,12 +166,12 @@ export function WorkspaceDialog({
             </div>
           </div>
 
-          <div className="space-y-5 px-6 py-5">
+          <div className="max-h-[min(36rem,calc(100dvh-18rem))] space-y-5 overflow-y-auto px-6 py-5">
             <div className="space-y-2">
               <Label htmlFor="ws-name">Name</Label>
               <Input
                 id="ws-name"
-                autoFocus
+                autoFocus={focus !== "instructions"}
                 required
                 maxLength={MAX_NAME}
                 placeholder="e.g. ACME Corp, Side project, Household"
@@ -205,6 +211,24 @@ export function WorkspaceDialog({
                 placeholder="What happens in this workspace? Agents see this as context."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="space-y-0.5">
+                <Label htmlFor="ws-instructions">
+                  Agent context <span className="font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <p className="text-xs text-muted-foreground">Given to every agent in this workspace on every run.</p>
+              </div>
+              <Textarea
+                id="ws-instructions"
+                autoFocus={focus === "instructions"}
+                rows={5}
+                maxLength={20_000}
+                placeholder={CONTEXT_EXAMPLE}
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                className="max-h-72 min-h-28 resize-y leading-relaxed"
               />
             </div>
           </div>

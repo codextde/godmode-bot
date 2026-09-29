@@ -49,6 +49,7 @@ interface ConversationRow {
   effort: Effort | null;
   working_directory: string | null;
   computer_target: string | null;
+  instructions: string | null;
   pinned: number;
   archived: number;
   last_message_at: string | null;
@@ -100,6 +101,7 @@ function toConversation(r: ConversationRow): Conversation {
     effort: r.effort || null,
     workingDirectory: r.working_directory,
     computerTarget: parseComputerTarget(parseJson<unknown>(r.computer_target, null)),
+    instructions: r.instructions ?? "",
     pinned: bool(r.pinned),
     archived: bool(r.archived),
     lastMessageAt: r.last_message_at,
@@ -170,7 +172,7 @@ export interface ModelChoice {
 }
 
 export function createConversation(
-  input: { agentId: string; title?: string; origin?: ConversationOrigin; workingDirectory?: string | null } & ModelChoice,
+  input: { agentId: string; title?: string; origin?: ConversationOrigin; workingDirectory?: string | null; instructions?: string } & ModelChoice,
 ): Conversation {
   getAgent(input.agentId); // 404 if the agent doesn't exist
   const workingDirectory = normalizeWorkingDirectory(input.workingDirectory);
@@ -186,6 +188,7 @@ export function createConversation(
     model: input.model?.trim() || null,
     effort: input.effort ?? null,
     working_directory: workingDirectory,
+    instructions: input.instructions?.trim() ?? "",
     pinned: 0,
     archived: 0,
     last_message_at: null,
@@ -239,6 +242,7 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     effort: patch.effort,
     working_directory: patch.workingDirectory === undefined ? undefined : normalizeWorkingDirectory(patch.workingDirectory),
     computer_target: patch.computerTarget === undefined ? undefined : patch.computerTarget ? JSON.stringify(parseComputerTarget(patch.computerTarget)) : null,
+    instructions: patch.instructions?.trim(),
     updated_at: now(),
   });
   const conversation = getConversationSummary(id);
@@ -251,6 +255,8 @@ export function setConversationState(
   id: string,
   patch: {
     claudeSessionId?: string | null;
+    /** `instructionsDigest` of the standing instructions the Claude session has seen. */
+    instructionsDigest?: string;
     lastMessageAt?: string;
     title?: string;
     model?: string | null;
@@ -260,6 +266,7 @@ export function setConversationState(
 ) {
   update("conversations", id, {
     claude_session_id: patch.claudeSessionId,
+    instructions_digest: patch.instructionsDigest,
     archived: int(patch.archived),
     model: patch.model,
     effort: patch.effort,
@@ -460,6 +467,7 @@ export async function startChat(
     workingDirectory?: string | null;
     /** Screen, window or tab the human shares with this chat (already validated). */
     computerTarget?: ComputerTarget | null;
+    instructions?: string;
   } & ModelChoice,
 ): Promise<StartChatResult> {
   const agentId = input.agentId || getDefaultAgentId();
@@ -474,6 +482,7 @@ export async function startChat(
     title,
     origin: input.origin ?? "chat",
     workingDirectory: input.workingDirectory,
+    instructions: input.instructions,
     model: input.model,
     effort: input.effort,
   });

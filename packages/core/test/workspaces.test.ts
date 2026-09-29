@@ -69,6 +69,13 @@ describe("workspaces", () => {
     expect(updated.description).toBe("");
   });
 
+  test("agent context is trimmed and editable", () => {
+    const ws = createWorkspace({ name: "Context", instructions: "  Bill in EUR.\n" });
+    expect(ws.instructions).toBe("Bill in EUR.");
+    expect(updateWorkspace(ws.id, { color: "rose" }).instructions).toBe("Bill in EUR.");
+    expect(updateWorkspace(ws.id, { instructions: "" }).instructions).toBe("");
+  });
+
   test("renaming a workspace refreshes its agents' CLAUDE.md", async () => {
     const ws = createWorkspace({ name: "Old Name" });
     const agent = await createAgent({ name: "Member", workspaceId: ws.id });

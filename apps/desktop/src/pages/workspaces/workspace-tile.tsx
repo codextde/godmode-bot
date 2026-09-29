@@ -3,6 +3,7 @@ import { colorGradient } from "@/components/common";
 import { cn } from "@/lib/utils";
 
 const SIZES = {
+  sm: "size-6 rounded-md text-[13px]",
   md: "size-10 rounded-lg text-xl",
   lg: "size-14 rounded-xl text-3xl",
   xl: "size-16 rounded-2xl text-4xl",

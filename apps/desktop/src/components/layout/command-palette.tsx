@@ -15,6 +15,7 @@ import {
   Moon,
   Plug,
   Plus,
+  ScrollText,
   Settings,
   ShieldCheck,
   Sun,
@@ -122,6 +123,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => go("/workspaces")}>
             <Layers /> Workspaces
+          </CommandItem>
+          <CommandItem value="instructions rules agent context" onSelect={() => go("/settings/instructions")}>
+            <ScrollText /> Instructions
           </CommandItem>
           <CommandItem onSelect={() => go("/settings/general")}>
             <Settings /> Settings <CommandShortcut>{modKey},</CommandShortcut>

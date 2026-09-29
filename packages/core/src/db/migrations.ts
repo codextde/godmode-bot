@@ -278,4 +278,13 @@ ALTER TABLE agents ADD COLUMN computer TEXT NOT NULL DEFAULT '{}';
 ALTER TABLE conversations ADD COLUMN computer_target TEXT;
 `,
   },
+  {
+    id: 5,
+    name: "layered_instructions",
+    sql: /* sql */ `
+ALTER TABLE workspaces ADD COLUMN instructions TEXT NOT NULL DEFAULT '';
+ALTER TABLE conversations ADD COLUMN instructions TEXT NOT NULL DEFAULT '';
+ALTER TABLE conversations ADD COLUMN instructions_digest TEXT;
+`,
+  },
 ];

@@ -22,7 +22,6 @@ import { cn } from "@/lib/utils";
 import {
   Callout,
   CommitInput,
-  CommitTextarea,
   LinesTextarea,
   NumberField,
   SectionHeading,
@@ -250,20 +249,6 @@ export function AiSection({ settings }: { settings: Settings }) {
             placeholder={"--verbose\n--add-dir\n/Users/me/projects"}
             value={r.extraArgs}
             onCommit={(extraArgs) => patch({ runner: { extraArgs } })}
-          />
-        </SettingRow>
-        <SettingRow
-          stacked
-          label="Extra system prompt"
-          htmlFor="system-prompt"
-          description="Appended to the Godmode system prompt for every agent — house rules, tone, company context."
-        >
-          <CommitTextarea
-            id="system-prompt"
-            className="min-h-32 font-sans text-sm"
-            placeholder="e.g. Always answer in German. Our company is ACME GmbH…"
-            value={r.appendSystemPrompt}
-            onCommit={(appendSystemPrompt) => patch({ runner: { appendSystemPrompt } })}
           />
         </SettingRow>
       </SettingsGroup>

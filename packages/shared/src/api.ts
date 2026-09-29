@@ -30,6 +30,7 @@ export interface WorkspaceInput {
   description?: string;
   color?: string;
   icon?: string;
+  instructions?: string;
 }
 
 export interface AgentInput {
@@ -101,6 +102,8 @@ export interface StartChatInput {
   workingDirectory?: string | null;
   /** Share a screen, window or browser tab with the new chat. */
   computerTarget?: ComputerTarget | null;
+  /** Standing instructions for the new chat. */
+  instructions?: string;
 }
 
 export interface ConversationPatch {
@@ -114,6 +117,8 @@ export interface ConversationPatch {
   workingDirectory?: string | null;
   /** Share a screen, window or browser tab with the agent; null = stop sharing. */
   computerTarget?: ComputerTarget | null;
+  /** Standing instructions for this chat; "" = none. */
+  instructions?: string;
 }
 
 export interface StartChatResult extends SendMessageResult {

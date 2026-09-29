@@ -166,6 +166,10 @@ describe("HTTP routes", () => {
     expect(created.status).toBe(201);
     const conv = (await created.json()) as Conversation;
     expect(conv.origin).toBe("chat");
+    expect(conv.instructions).toBe("");
+    const ruled = (await (await api("PATCH", `/api/conversations/${conv.id}`, { instructions: "  Reply in German.\n" })).json()) as Conversation;
+    expect(ruled.instructions).toBe("Reply in German.");
+    expect((await api("PATCH", `/api/conversations/${conv.id}`, { instructions: "x".repeat(20_001) })).status).toBe(400);
     expect((await api("POST", `/api/conversations/${conv.id}/messages`, { content: "" })).status).toBe(400);
     expect((await api("POST", `/api/conversations/${conv.id}/messages`, { content: "x", attachments: [{ name: "a", data: "!!!" }] })).status).toBe(400);
     expect((await api("POST", "/api/conversations/cnv_nope/messages", { content: "x" })).status).toBe(404);

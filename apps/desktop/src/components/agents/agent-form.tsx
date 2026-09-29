@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Bot,
@@ -40,6 +41,7 @@ import { AvatarPicker, ColorSwatches } from "./avatar-picker";
 import { MultiSelect } from "./multi-select";
 import { useVaultGrant } from "@/components/vault/grant";
 import { FolderPickerDialog, folderName, useShortPath } from "@/components/chat/folder-picker";
+import { InheritedInstructions, useInheritedInstructions } from "@/components/instructions/instructions";
 
 export interface AgentFormValues {
   name: string;
@@ -288,6 +290,16 @@ export function AgentForm({
 
   const err = (k: string) => (showErrors ? errors[k] : undefined);
   const preview = { id: agentId, avatar: values.avatar, color: values.color };
+  const inherited = useInheritedInstructions(
+    { id: agentId ?? "", name: values.name, avatar: values.avatar, color: values.color, instructions: "", workspaceId: values.workspaceId },
+    { includeAgent: false },
+  );
+
+  const { hash } = useLocation();
+  useEffect(() => {
+    const id = hash.slice(1);
+    if (SECTIONS.some((s) => s.id === id)) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: "start" }));
+  }, [hash]);
 
   return (
     <form
@@ -359,6 +371,12 @@ export function AgentForm({
               </span>
               <span className="tabular-nums">{values.instructions.length.toLocaleString()} chars</span>
             </div>
+            {inherited.length > 0 && (
+              <div className="mt-4 rounded-lg border bg-paper-2 p-1.5">
+                <p className="px-2 pt-1 pb-0.5 text-[11px] font-medium text-muted-foreground">Also given to this agent on every run</p>
+                <InheritedInstructions layers={inherited} />
+              </div>
+            )}
           </FormSection>
 
           <FormSection id="brain" title="Model & workspace" description="Which Claude model powers it, how hard it thinks, and where it lives.">

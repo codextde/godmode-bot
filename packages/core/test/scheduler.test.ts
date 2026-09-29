@@ -143,6 +143,7 @@ describe("triggering", () => {
         effort: null,
         workingDirectory: null,
         computerTarget: null,
+        instructions: "",
         pinned: false,
         archived: false,
         lastMessageAt: null,

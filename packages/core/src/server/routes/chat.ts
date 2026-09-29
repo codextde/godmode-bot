@@ -35,6 +35,7 @@ const modelChoice = {
 };
 
 const folder = z.string().trim().max(4096).nullable().optional();
+const instructions = z.string().max(20_000).optional();
 
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
@@ -66,7 +67,7 @@ export function registerChatRoutes(app: Hono): void {
   );
 
   app.post("/api/conversations", async (c) => {
-    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, ...modelChoice }));
+    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, instructions, ...modelChoice }));
     return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
@@ -82,6 +83,7 @@ export function registerChatRoutes(app: Hono): void {
         ...modelChoice,
         workingDirectory: folder,
         computerTarget: computerTargetSchema.nullable().optional(),
+        instructions,
       }),
     );
     const { computerTarget, ...rest } = patch;
@@ -104,7 +106,13 @@ export function registerChatRoutes(app: Hono): void {
   app.post("/api/chat", async (c) => {
     const input = await body(
       c,
-      sendSchema.extend({ agentId: z.string().min(1).optional(), workingDirectory: folder, computerTarget: computerTargetSchema.nullable().optional(), ...modelChoice }),
+      sendSchema.extend({
+        agentId: z.string().min(1).optional(),
+        workingDirectory: folder,
+        computerTarget: computerTargetSchema.nullable().optional(),
+        instructions,
+        ...modelChoice,
+      }),
     );
     // Check the shared window/screen/tab before the chat exists, so a stale pick doesn't leave an empty chat.
     const computerTarget = input.computerTarget ? await validateTarget(input.computerTarget) : null;

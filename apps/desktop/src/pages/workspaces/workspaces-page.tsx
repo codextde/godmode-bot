@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Bot, EllipsisVertical, Globe2, KeyRound, Layers, Pencil, Plug, Plus, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowRight, Bot, EllipsisVertical, Globe2, KeyRound, Layers, Pencil, Plug, Plus, ScrollText, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { Workspace } from "@godmode/shared";
 import { PageBody, PageHeader } from "@/components/common";
@@ -23,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
-import { useWorkspaces } from "@/lib/hooks";
+import { useBootstrap, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
@@ -73,21 +73,33 @@ export default function WorkspacesPage() {
   const scope = useUi((s) => s.workspace);
   const setScope = useUi((s) => s.setWorkspace);
   const { data: workspaces, isLoading, isError, error, refetch } = useWorkspaces();
+  const { data: boot } = useBootstrap();
   const counts = useScopeCounts();
+  const hasGlobalInstructions = !!boot?.settings.runner.appendSystemPrompt?.trim();
 
   const [editing, setEditing] = useState<Workspace | null>(null);
+  const [focusContext, setFocusContext] = useState(false);
   const [deleting, setDeleting] = useState<Workspace | null>(null);
   const [forceDelete, setForceDelete] = useState<{ workspace: Workspace; counts: [string, number][] } | null>(null);
 
   const creating = params.get("new") === "1";
-  const dialogOpen = creating || !!editing;
+  const editId = params.get("edit");
+  const linked = editId ? (workspaces?.find((w) => w.id === editId) ?? null) : null;
+  const target = editing ?? linked;
+  const dialogOpen = creating || !!target;
   const closeDialog = () => {
     setEditing(null);
-    if (creating) {
+    setFocusContext(false);
+    if (creating || editId) {
       const next = new URLSearchParams(params);
       next.delete("new");
+      next.delete("edit");
       setParams(next, { replace: true });
     }
+  };
+  const editContext = (ws: Workspace) => {
+    setFocusContext(true);
+    setEditing(ws);
   };
   const openCreate = () => {
     const next = new URLSearchParams(params);
@@ -165,6 +177,11 @@ export default function WorkspacesPage() {
               counts={counts.get(null)}
               countsLoading={counts.loading}
               onOpen={() => open(null)}
+              context={{
+                label: hasGlobalInstructions ? "Instructions for every agent" : "Add instructions for every agent",
+                set: hasGlobalInstructions,
+                onClick: () => navigate("/settings/instructions"),
+              }}
             />
             <AnimatePresence initial={false}>
               {list.map((ws, i) => (
@@ -178,6 +195,11 @@ export default function WorkspacesPage() {
                   counts={counts.get(ws.id)}
                   countsLoading={counts.loading}
                   onOpen={() => open(ws)}
+                  context={{
+                    label: ws.instructions.trim() ? "Agent context" : "Add agent context",
+                    set: !!ws.instructions.trim(),
+                    onClick: () => editContext(ws),
+                  }}
                   menu={
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -222,7 +244,8 @@ export default function WorkspacesPage() {
 
       <WorkspaceDialog
         open={dialogOpen}
-        workspace={editing}
+        workspace={target}
+        focus={focusContext || (!!linked && !editing) ? "instructions" : undefined}
         onOpenChange={(o) => {
           if (!o) closeDialog();
         }}
@@ -324,6 +347,7 @@ function ScopeCard({
   countsLoading,
   onOpen,
   menu,
+  context,
 }: {
   index: number;
   current: boolean;
@@ -335,6 +359,7 @@ function ScopeCard({
   countsLoading: boolean;
   onOpen: () => void;
   menu?: ReactNode;
+  context?: { label: string; set: boolean; onClick: () => void };
 }) {
   const stats: { key: keyof Counts; label: string; icon: ReactNode }[] = [
     { key: "agents", label: "Agents", icon: <Bot /> },
@@ -372,6 +397,19 @@ function ScopeCard({
         <p className={cn("mt-1.5 line-clamp-2 min-h-10 text-sm text-muted-foreground", !description && "italic opacity-70")}>
           {description || "No description yet."}
         </p>
+        {context && (
+          <button
+            type="button"
+            onClick={context.onClick}
+            className={cn(
+              "mt-2.5 flex max-w-full items-center gap-1.5 rounded-md text-xs transition focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+              context.set ? "text-foreground hover:text-foreground/70" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {context.set ? <ScrollText className="size-3.5 shrink-0 text-brand-strong" /> : <Plus className="size-3.5 shrink-0" />}
+            <span className="truncate">{context.label}</span>
+          </button>
+        )}
       </div>
       <div className="relative mt-4 grid grid-cols-4 gap-1.5">
         {stats.map((s) => {
