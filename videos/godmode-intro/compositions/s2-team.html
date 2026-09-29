@@ -1,0 +1,126 @@
+<template id="s2-team-template">
+  <div id="s2-team" data-composition-id="s2-team" data-width="1920" data-height="1080" data-duration="11">
+    <style>
+      @font-face { font-family: "Geist"; src: url("assets/fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif.woff2") format("woff2"); font-style: normal; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
+
+      #s2-team { position: absolute; inset: 0; overflow: hidden; background: #faf9f5; color: #1a1a1a; font-family: "Geist", sans-serif; }
+      #s2-team .s2-sky { position: absolute; left: 900px; top: -560px; width: 1500px; height: 1000px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(255, 244, 214, 0.9), rgba(250, 238, 206, 0.35) 60%, rgba(250, 249, 245, 0) 100%); }
+      #s2-team .s2-floor { position: absolute; left: 0; right: 0; bottom: 0; height: 300px;
+        background: linear-gradient(180deg, rgba(244, 242, 237, 0) 0%, rgba(239, 235, 228, 0.85) 100%); }
+      #s2-team .s2-grain { position: absolute; inset: -40px; opacity: 0.32; mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='11' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0.10 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+
+      #s2-team .s2-head { position: absolute; left: 120px; top: 64px; }
+      #s2-team .s2-kicker { font-family: "Geist Mono", monospace; font-size: 22px; letter-spacing: 0.26em; color: #6b675f; }
+      #s2-team .s2-title { font-family: "Instrument Serif", serif; font-size: 132px; line-height: 1; letter-spacing: -0.025em; color: #1c1c1c; margin-top: 22px; }
+      #s2-team .s2-title em { font-style: italic; }
+
+      #s2-team .s2-world { position: absolute; left: 0; top: 0; width: 3040px; height: 1080px; transform-origin: 0 0; }
+      #s2-team .s2-card { position: absolute; top: 300px; width: 440px; height: 560px; border-radius: 38px; background: #ffffff;
+        border: 2px solid rgba(38, 32, 22, 0.10);
+        box-shadow: 0 60px 90px -50px rgba(38, 32, 22, 0.40), 0 3px 10px rgba(38, 32, 22, 0.05); overflow: hidden; }
+      #s2-team .s2-stage { position: absolute; left: 14px; top: 14px; right: 14px; height: 330px; border-radius: 28px; }
+      #s2-team .s2-shadow { position: absolute; left: 50%; bottom: 44px; width: 180px; height: 26px; margin-left: -90px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(38, 32, 22, 0.22), rgba(38, 32, 22, 0)); }
+      #s2-team .s2-av { position: absolute; left: 50%; top: 58px; width: 200px; height: 200px; margin-left: -100px;
+        display: flex; align-items: center; justify-content: center; font-size: 150px; line-height: 1; }
+      #s2-team .s2-av img { width: 186px; height: 186px; border-radius: 46px; box-shadow: 0 24px 40px -22px rgba(38, 32, 22, 0.5); }
+      #s2-team .s2-meta { position: absolute; left: 36px; right: 30px; top: 372px; }
+      #s2-team .s2-name { font-size: 40px; font-weight: 620; letter-spacing: -0.02em; color: #1c1c1c; }
+      #s2-team .s2-role { font-size: 25px; line-height: 1.32; color: #5f5b54; margin-top: 10px; }
+      #s2-team .s2-status { position: absolute; left: 36px; bottom: 30px; display: flex; align-items: center; gap: 10px;
+        font-family: "Geist Mono", monospace; font-size: 19px; letter-spacing: 0.08em; color: #6b675f; text-transform: uppercase; }
+      #s2-team .s2-dot { width: 12px; height: 12px; border-radius: 50%; background: #b9b3a8; }
+      #s2-team .s2-dot.on { background: #0eca7b; box-shadow: 0 0 0 5px rgba(14, 202, 123, 0.16); }
+      #s2-team .s2-status.on { color: #087f4d; }
+
+      #s2-team .s2-cap { position: absolute; left: 0; right: 0; bottom: 92px; text-align: center; font-size: 44px; letter-spacing: -0.015em; color: #1a1a1a; }
+      #s2-team .s2-cap em { font-family: "Instrument Serif", serif; font-style: italic; font-size: 54px; color: #087f4d; }
+    </style>
+
+    <div class="s2-sky" id="s2-sky"></div>
+    <div class="s2-floor"></div>
+    <div class="s2-grain" id="s2-grain"></div>
+
+    <div class="s2-world" id="s2-world">
+      <div class="s2-card" id="s2-c0" style="left: 0px">
+        <div class="s2-stage" style="background: #f1eee9"><div class="s2-shadow"></div><div class="s2-av" id="s2-a0"><img src="assets/img/logo.svg" alt="" /></div></div>
+        <div class="s2-meta"><div class="s2-name">Godmode</div><div class="s2-role">Your main coworker. Answers, acts — and hires the rest.</div></div>
+        <div class="s2-status on"><i class="s2-dot on"></i>Online</div>
+      </div>
+      <div class="s2-card" id="s2-c1" style="left: 520px">
+        <div class="s2-stage" style="background: #e7effb"><div class="s2-shadow"></div><div class="s2-av" id="s2-a1">🔎</div></div>
+        <div class="s2-meta"><div class="s2-name">Research Analyst</div><div class="s2-role">Tracks competitor pricing. Briefs you every Monday.</div></div>
+        <div class="s2-status"><i class="s2-dot"></i>Next · Mon 09:00</div>
+      </div>
+      <div class="s2-card" id="s2-c2" style="left: 1040px">
+        <div class="s2-stage" style="background: #fbefd9"><div class="s2-shadow"></div><div class="s2-av" id="s2-a2">🧾</div></div>
+        <div class="s2-meta"><div class="s2-name">Billing Clerk</div><div class="s2-role">Pulls invoices from the Acme portal and files them.</div></div>
+        <div class="s2-status on"><i class="s2-dot on"></i>Working</div>
+      </div>
+      <div class="s2-card" id="s2-c3" style="left: 1560px">
+        <div class="s2-stage" style="background: #fbe6e1"><div class="s2-shadow"></div><div class="s2-av" id="s2-a3">🚀</div></div>
+        <div class="s2-meta"><div class="s2-name">Launch Manager</div><div class="s2-role">Keeps the launch checklist moving.</div></div>
+        <div class="s2-status"><i class="s2-dot"></i>Idle</div>
+      </div>
+      <div class="s2-card" id="s2-c4" style="left: 2080px">
+        <div class="s2-stage" style="background: #e3f4ea"><div class="s2-shadow"></div><div class="s2-av" id="s2-a4">📬</div></div>
+        <div class="s2-meta"><div class="s2-name">Inbox Triage</div><div class="s2-role">Sorts support mail before you're up.</div></div>
+        <div class="s2-status"><i class="s2-dot"></i>Next · 18:00</div>
+      </div>
+      <div class="s2-card" id="s2-c5" style="left: 2600px">
+        <div class="s2-stage" style="background: #ece6f6"><div class="s2-shadow"></div><div class="s2-av" id="s2-a5">📱</div></div>
+        <div class="s2-meta"><div class="s2-name">iOS Engineer</div><div class="s2-role">Builds and tests on a Mac of its own.</div></div>
+        <div class="s2-status on"><i class="s2-dot on"></i>Working · VM</div>
+      </div>
+    </div>
+
+    <div class="s2-head" id="s2-head">
+      <div class="s2-kicker" id="s2-kicker">PERSISTENT AGENTS</div>
+      <div class="s2-title" id="s2-title">Meet your <em>team.</em></div>
+    </div>
+    <div class="s2-cap" id="s2-cap">Each with its own <em>memory, routines</em> and history.</div>
+
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+        const D = 11;
+
+        tl.fromTo("#s2-sky", { opacity: 0.6, x: -80 }, { opacity: 1, x: 60, duration: D, ease: "sine.inOut" }, 0);
+        tl.fromTo("#s2-grain", { x: 0 }, { x: -40, duration: D, ease: "none" }, 0);
+
+        // Headline pinned top-left.
+        tl.fromTo("#s2-kicker", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: "power2.out" }, 0.1);
+        tl.fromTo("#s2-title", { opacity: 0, y: 40, filter: "blur(8px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.9, ease: "power3.out" }, 0.2);
+
+        // Camera: slow lateral pan along the wall, then one pull-back reveals the whole team.
+        tl.fromTo("#s2-world", { x: 300, y: 0, scale: 1 }, { x: -1560, y: 0, scale: 1, duration: 7.0, ease: "sine.inOut" }, 0.4);
+        tl.to("#s2-world", { x: 78, y: 206, scale: 0.58, duration: 1.6, ease: "power3.inOut" }, 7.4);
+        tl.to("#s2-world", { x: 60, y: 200, scale: 0.595, duration: 2.0, ease: "none" }, 9.0);
+
+        // Cards arrive as the pan brings them into frame.
+        const arrive = [0.45, 0.75, 1.05, 2.1, 3.5, 4.8];
+        arrive.forEach(function (t, i) {
+          tl.fromTo("#s2-c" + i, { opacity: 0, y: 70 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, t);
+          tl.fromTo("#s2-a" + i, { scale: 0.2, y: 40 }, { scale: 1, y: 0, duration: 0.85, ease: "back.out(1.7)" }, t + 0.18);
+          // Idle bob, like characters breathing on their screens.
+          const bobStart = t + 1.05 + i * 0.13;
+          const cycles = Math.max(0, Math.floor((D - bobStart) / 1.4) - 1);
+          tl.fromTo("#s2-a" + i, { y: 0 }, { y: -12, duration: 0.7, ease: "sine.inOut", yoyo: true, repeat: cycles * 2 + 1, immediateRender: false }, bobStart);
+        });
+
+        // Caption lands with the pull-back.
+        tl.fromTo("#s2-cap", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 8.3);
+
+        // Dip to paper.
+        tl.to(["#s2-world", "#s2-head", "#s2-cap"], { opacity: 0, filter: "blur(12px)", duration: 0.55, ease: "power2.in" }, D - 0.6);
+
+        window.__timelines["s2-team"] = tl;
+      })();
+    </script>
+  </div>
+</template>

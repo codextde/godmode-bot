@@ -1,0 +1,163 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+import Logo from '../ui/Logo.astro';
+
+const cases = [
+  {
+    key: 'finance',
+    label: 'Finance',
+    icon: 'landmark',
+    when: 'Every Monday · 07:00',
+    prompt:
+      'Every Monday, log into our supplier portals, download the new invoices, match them to last week’s Stripe payouts and post a summary to #finance.',
+    steps: [
+      ['key-round', 'Signed into 6 portals with vault logins + 2FA', 'secret hidden'],
+      ['file-down', 'Downloaded 23 new invoices to Drive / Invoices', ''],
+      ['scale', 'Matched invoices against Stripe payouts', '2 mismatches'],
+      ['send', 'Posted summary to Slack #finance', 'done'],
+    ],
+  },
+  {
+    key: 'sales',
+    label: 'Sales',
+    icon: 'handshake',
+    when: 'After every call',
+    prompt:
+      'After each sales call in my calendar, update the deal in HubSpot, draft a follow-up in Gmail and ping me on Telegram if they haven’t replied in 3 days.',
+    steps: [
+      ['calendar', 'Read today’s calls from Google Calendar', ''],
+      ['contact', 'Updated 4 deals in HubSpot with notes + next steps', ''],
+      ['mail', 'Drafted 4 follow-ups in Gmail for your review', 'drafts'],
+      ['bell', 'Scheduled reply checks · Telegram reminder', 'done'],
+    ],
+  },
+  {
+    key: 'marketing',
+    label: 'Marketing',
+    icon: 'megaphone',
+    when: 'Fridays · 16:00',
+    prompt:
+      'Pull this week’s spend and conversions from Meta, Google and X Ads, update our reporting sheet and flag every campaign with a CPA above $80.',
+    steps: [
+      ['globe', 'Opened Meta, Google and X Ads — already signed in', 'your session'],
+      ['table', 'Exported 31 campaigns into the weekly sheet', ''],
+      ['triangle-alert', 'Flagged 3 campaigns above $80 CPA', 'review'],
+      ['send', 'Sent the report to #growth', 'done'],
+    ],
+  },
+  {
+    key: 'support',
+    label: 'Support',
+    icon: 'life-buoy',
+    when: 'When a ticket arrives',
+    prompt:
+      'Answer new Zendesk tickets about shipping using our help center, look up the order in Shopify, and escalate refunds over $200 to me.',
+    steps: [
+      ['inbox', 'Picked up 12 new tickets in Zendesk', ''],
+      ['shopping-bag', 'Looked up each order in Shopify admin', ''],
+      ['message-circle-reply', 'Answered 10 with tracking links + help-center answers', ''],
+      ['user-round', 'Escalated 2 refunds over $200 to you', 'done'],
+    ],
+  },
+  {
+    key: 'engineering',
+    label: 'Engineering',
+    icon: 'code-xml',
+    when: 'On demand · in its VM',
+    prompt:
+      'In your Mac VM: clone the repo, reproduce the checkout bug from ticket #42, fix it, run the test suite and open a pull request.',
+    steps: [
+      ['monitor', 'Booted its macOS VM · cloned the repo', 'isolated'],
+      ['bug', 'Reproduced the bug in Safari inside the VM', ''],
+      ['flask-conical', 'Fixed it · 248 tests passing', ''],
+      ['git-pull-request', 'Opened a pull request for your review', 'done'],
+    ],
+  },
+  {
+    key: 'founder',
+    label: 'Founders',
+    icon: 'crown',
+    when: 'Every morning · 06:30',
+    prompt:
+      'Every morning, read my inbox, calendar and yesterday’s Stripe numbers, and send me a 5-line briefing on Telegram with what needs my attention.',
+    steps: [
+      ['mail', 'Read 84 new emails · 6 need you', ''],
+      ['calendar', 'Checked today’s 5 meetings · prepped notes', ''],
+      ['chart-line', 'Pulled yesterday’s revenue from Stripe', ''],
+      ['send', 'Sent your briefing to Telegram', 'done'],
+    ],
+  },
+];
+---
+
+<section id="use-cases" class="relative py-20 sm:py-28" data-track-view="use_cases">
+  <div class="container-x">
+    <div class="max-w-[780px]">
+      <p class="eyebrow" data-reveal><span class="n">05</span> Use cases</p>
+      <Words text="Say it once. *It happens* every time." class="h-section mt-6" />
+      <p class="lead mt-6 max-w-[600px]" data-reveal style="--d:200">
+        Describe the work in a sentence. Godmode figures out the clicks — and the schedule.
+      </p>
+    </div>
+
+    <div class="mt-14" data-tabs data-reveal style="--d:100">
+      <div role="tablist" aria-label="Use cases" class="tablist -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+        {
+          cases.map((c, i) => (
+            <button
+              type="button"
+              role="tab"
+              id={`tab-${c.key}`}
+              aria-controls={`panel-${c.key}`}
+              aria-selected={i === 0 ? 'true' : 'false'}
+              tabindex={i === 0 ? 0 : -1}
+              data-key={c.key}
+              class="tab"
+            >
+              <Icon name={c.icon} size={15} /> {c.label}
+            </button>
+          ))
+        }
+      </div>
+
+      <div class="card mt-4 overflow-hidden">
+        {
+          cases.map((c, i) => (
+            <div role="tabpanel" id={`panel-${c.key}`} aria-labelledby={`tab-${c.key}`} hidden={i !== 0} class="panel grid lg:grid-cols-[1.1fr_1fr]">
+              <div class="border-b border-line p-7 sm:p-10 lg:border-r lg:border-b-0">
+                <div class="flex items-center gap-2 text-[12px] text-muted">
+                  <span class="chip">
+                    <Icon name="repeat" size={11} /> {c.when}
+                  </span>
+                </div>
+                <div class="prompt-box mt-6">
+                  <div class="flex items-center gap-2 border-b border-line px-4 py-2.5 font-mono text-[11px] text-dim">
+                    <Logo size={18} />
+                    Message Godmode
+                  </div>
+                  <p class="min-h-[132px] px-4 py-4 text-[17px] leading-relaxed tracking-[-0.01em] text-text sm:text-[19px]">
+                    <span data-type={c.prompt}>{c.prompt}</span>
+                    <span class="caret" aria-hidden="true" />
+                  </p>
+                </div>
+              </div>
+              <ol class="flex flex-col justify-center gap-2 p-7 sm:p-10">
+                {c.steps.map(([icon, text, tag]) => (
+                  <li data-step class="step-row">
+                    <span class="step-icon">
+                      <Icon name={icon} size={15} />
+                    </span>
+                    <span class="flex-1 text-[14.5px] text-text-2">{text}</span>
+                    {tag && <span class:list={['chip', tag === 'done' && 'chip-brand']}>{tag}</span>}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ))
+        }
+      </div>
+      <p class="mt-4 text-[12.5px] text-dim">Illustrative runs. Your agents work with the tools and accounts you give them.</p>
+    </div>
+  </div>
+</section>

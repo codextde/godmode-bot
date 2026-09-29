@@ -1,0 +1,129 @@
+---
+import Base from '@/layouts/Base.astro';
+import Nav from '@/components/Nav.astro';
+import Footer from '@/components/Footer.astro';
+import Icon from '@/components/ui/Icon.astro';
+import Words from '@/components/ui/Words.astro';
+import CheckoutButton from '@/components/ui/CheckoutButton.astro';
+import { PRICING } from '@/config/site';
+
+const groups: { name: string; icon: string; items: [string, string, string][] }[] = [
+  {
+    name: 'Finance & admin',
+    icon: 'landmark',
+    items: [
+      ['Invoice collector', 'Every Monday at 07:00', 'Log into each supplier portal in my vault, download invoices from the last 7 days, save them to Drive › Invoices › {year}-{month}, and post a list with amounts to #finance.'],
+      ['Payout reconciliation', 'Weekly', 'Match last week’s Stripe payouts against the bank statement in our online banking. List anything that doesn’t add up, with links.'],
+      ['Receipt filer', 'When an email with a receipt arrives', 'Save the receipt PDF, add it to our expense sheet with date, vendor, amount and category, and forward it to accounting.'],
+      ['Dunning, politely', 'Every Thursday', 'Find invoices more than 14 days overdue in our accounting tool and draft a friendly reminder for each customer. Don’t send — put them in Gmail drafts.'],
+      ['Subscription audit', 'First of the month', 'List every SaaS subscription charged to our company card last month, with the price and last login date. Flag anything nobody used.'],
+    ],
+  },
+  {
+    name: 'Sales',
+    icon: 'handshake',
+    items: [
+      ['CRM hygiene', 'After every call', 'After each call in my calendar, update the deal in HubSpot with notes, next step and close date. Draft the follow-up in Gmail.'],
+      ['Lead research', 'On demand', 'For each company in this sheet, find the website, headcount, recent news and the right contact on LinkedIn. Fill the columns in.'],
+      ['Reply watcher', 'Daily at 17:00', 'Check which prospects haven’t answered in 3 days and ping me on Telegram with a one-line suggestion for each.'],
+      ['Proposal builder', 'On demand', 'Build a proposal in our Google Docs template for {company} using the notes from my last call and the pricing sheet.'],
+      ['Pipeline briefing', 'Monday 08:00', 'Summarise the pipeline changes from last week in five bullet points and send them to #sales.'],
+    ],
+  },
+  {
+    name: 'Marketing',
+    icon: 'megaphone',
+    items: [
+      ['Ads report', 'Friday 16:00', 'Pull spend, clicks and conversions from Meta, Google and X Ads for this week into our reporting sheet. Flag any campaign with CPA above $80.'],
+      ['Competitor watch', 'When it changes', 'Watch the pricing pages of these three competitors. When anything changes, send me a screenshot and what changed.'],
+      ['Content repurposing', 'When a blog post goes live', 'Turn the new blog post into a LinkedIn post, an X thread and a newsletter blurb. Save drafts in Notion for my review.'],
+      ['SEO check', 'Every Monday', 'Check Search Console for pages that lost more than 20% clicks week over week and suggest one fix for each.'],
+      ['Review responder', 'Daily', 'Reply to new Google reviews in our voice. Escalate anything under 3 stars to me before replying.'],
+    ],
+  },
+  {
+    name: 'Support & ops',
+    icon: 'life-buoy',
+    items: [
+      ['Ticket first responder', 'When a ticket arrives', 'Answer new shipping questions in Zendesk using our help center and the order status in Shopify. Escalate refunds over $200 to me.'],
+      ['Stock alerts', 'Daily 09:00', 'Check inventory in Shopify. For anything under 2 weeks of stock, draft a purchase order with the supplier from our sheet.'],
+      ['Domain & certificate keeper', 'Monthly', 'Check expiry dates of our domains and SSL certificates. Renew anything expiring in the next 30 days with the saved logins.'],
+      ['Meeting prep', 'Every morning', 'For each meeting today, prepare one page: who they are, our history from email and CRM, and three questions to ask.'],
+      ['Office restock', 'When we run low', 'When someone writes “we’re out of …” in #office, reorder it from our usual Amazon Business account and confirm in the thread.'],
+    ],
+  },
+  {
+    name: 'Founders & engineering',
+    icon: 'crown',
+    items: [
+      ['Morning briefing', 'Daily 06:30', 'Read my inbox, calendar and yesterday’s revenue in Stripe. Send me a five-line briefing on Telegram with what needs my attention.'],
+      ['Bug reproducer', 'On demand · in its VM', 'In your Mac VM, clone the repo, reproduce the bug from issue #{n}, fix it, run the tests and open a pull request.'],
+      ['Release QA', 'Nightly', 'Run through signup, checkout and cancellation on staging in a fresh browser. Report anything broken with screenshots to #eng.'],
+      ['Investor update', 'Monthly', 'Draft this month’s investor update from our metrics sheet, shipped changelog and notes in Notion. Keep it under 300 words.'],
+      ['Travel booker', 'On demand', 'Find the best flight to {city} next month that fits my calendar and book it with my airline login. Ask before paying over $800.'],
+    ],
+  },
+];
+---
+
+<Base
+  title="The Godmode Playbook: 25 automations"
+  description="25 ready-to-use AI automations for finance, sales, marketing, support and founders — paste a prompt into Godmode and it runs."
+>
+  <Nav home={false} />
+  <main class="pt-36 pb-16">
+    <div class="container-x">
+      <div class="max-w-[820px]">
+        <p class="eyebrow" data-reveal><span class="n">●</span> The Godmode Playbook</p>
+        <Words as="h1" text="25 automations to hand off *this week.*" class="h-section mt-6" />
+        <p class="lead mt-6 max-w-[620px]" data-reveal style="--d:200">
+          Copy a prompt, paste it into Godmode, adjust the details. Godmode signs in with your saved logins, does the
+          clicking, and asks before anything risky.
+        </p>
+      </div>
+
+      {
+        groups.map((g) => (
+          <section class="mt-20">
+            <h2 class="flex items-center gap-3 text-[22px] font-semibold tracking-[-0.03em]" data-reveal>
+              <span class="grid size-9 place-items-center rounded-lg bg-brand-soft text-brand">
+                <Icon name={g.icon} size={17} />
+              </span>
+              {g.name}
+            </h2>
+            <div class="mt-6 grid gap-3 md:grid-cols-2">
+              {g.items.map(([title, when, prompt], i) => (
+                <div class="card flex flex-col p-6" data-reveal style={`--d:${(i % 2) * 70}`}>
+                  <div class="flex items-center justify-between gap-3">
+                    <p class="text-[16px] font-medium tracking-[-0.015em]">{title}</p>
+                    <span class="chip">
+                      <Icon name="repeat" size={11} /> {when}
+                    </span>
+                  </div>
+                  <p class="mt-4 flex-1 rounded-xl bg-[rgb(0_0_0/0.28)] p-4 text-[14.5px] leading-relaxed text-text-2 ring-1 ring-line">
+                    {prompt}
+                  </p>
+                  <button type="button" class="btn btn-ghost btn-sm mt-4 self-start" data-copy={prompt} data-track={`copy_${title}`}>
+                    <Icon name="copy" size={13} /> <span data-copy-label>Copy prompt</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        ))
+      }
+
+      <div class="card mt-24 p-8 text-center sm:p-12" data-reveal>
+        <h2 class="text-[clamp(26px,3.4vw,40px)] font-semibold tracking-[-0.04em]">Ready to hand these off?</h2>
+        <p class="mx-auto mt-3 max-w-[520px] text-muted">
+          ${PRICING.plans.lifetime.price} once or ${PRICING.plans.monthly.price}/month. {PRICING.guaranteeDays}-day money-back guarantee.
+        </p>
+        <div class="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+          <CheckoutButton plan="lifetime" label="Get Godmode lifetime" source="playbook" size="lg" />
+          <CheckoutButton plan="monthly" label="Start monthly" source="playbook" variant="ghost" size="lg" />
+        </div>
+      </div>
+    </div>
+  </main>
+  <Footer />
+</Base>

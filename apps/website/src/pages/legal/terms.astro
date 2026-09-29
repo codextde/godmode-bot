@@ -1,0 +1,80 @@
+---
+import Legal from '@/layouts/Legal.astro';
+import { LEGAL, PRICING } from '@/config/site';
+---
+
+<Legal title="Terms of sale & license" description="Terms for buying and using Godmode — lifetime and monthly licenses.">
+  <p>
+    These terms apply to purchases of Godmode (“the Software”) from {LEGAL.company}, {LEGAL.street}, {LEGAL.city},
+    {LEGAL.country} (“we”, “us”) through this website. By completing a purchase you agree to them.
+  </p>
+
+  <h2>1. Contract and delivery</h2>
+  <p>
+    The product pages are an invitation to buy. You make an offer by completing checkout; the contract is concluded when
+    your payment is confirmed. The Software is delivered by download from this website; your license key is shown right after
+    payment, printed on your invoice (lifetime) and shown in your billing portal (monthly). Contract language is English.
+  </p>
+
+  <h2>2. Plans</h2>
+  <ul>
+    <li>
+      <strong>Lifetime</strong> — a one-time payment of ${PRICING.plans.lifetime.price} for a perpetual license to use the
+      Software, including all updates we release for it.
+    </li>
+    <li>
+      <strong>Monthly</strong> — ${PRICING.plans.monthly.price} per month, billed in advance and renewing automatically until
+      cancelled. You can cancel anytime in the billing portal or by email; access continues until the end of the paid
+      period.
+    </li>
+  </ul>
+  <p>
+    Prices are in US dollars. Applicable sales tax or VAT is shown at checkout. Payment is processed by Stripe.
+  </p>
+
+  <h2>3. License</h2>
+  <p>
+    We grant you a non-exclusive, non-transferable license to install and use the Software on devices you own or control,
+    for your own or your organisation’s internal purposes. You may not resell or sublicense your license key. Parts of the
+    Software may be subject to open-source licenses, whose terms take precedence for those parts.
+  </p>
+
+  <h2>4. What you need, and what you’re responsible for</h2>
+  <ul>
+    <li>
+      The Software uses Anthropic’s Claude Code and requires your own Claude plan or Anthropic API key, which is not
+      included and is governed by Anthropic’s terms. Third-party services may change their terms or availability; we
+      can’t guarantee them.
+    </li>
+    <li>
+      Some features have system requirements — for example, macOS virtual machines require a Mac with Apple silicon.
+    </li>
+    <li>
+      Godmode acts on your behalf with the access you give it. You are responsible for the tasks you assign, for
+      complying with the terms of the websites and services you automate, and for reviewing consequential actions. AI
+      systems can make mistakes.
+    </li>
+  </ul>
+
+  <h2>5. Money-back guarantee</h2>
+  <p>
+    If you’re not happy, email us within {PRICING.guaranteeDays} days of your first payment and we’ll refund it in full.
+    This voluntary guarantee is in addition to any statutory rights. See <a href="/legal/refunds">Refunds & cancellation</a>.
+  </p>
+
+  <h2>6. Warranty and liability</h2>
+  <p>
+    Statutory warranty rights apply. We are liable without limitation for intent and gross negligence, for injury to
+    life, body or health, and under the Product Liability Act. For slight negligence we are liable only for breach of
+    essential contractual obligations, limited to the foreseeable damage typical for this kind of contract. We are not
+    liable for the loss of data where it would have been prevented by reasonable backups, or for actions taken by the
+    Software on your instructions within the access you granted.
+  </p>
+
+  <h2>7. Final provisions</h2>
+  <p>
+    German law applies, excluding the UN Convention on Contracts for the International Sale of Goods. For consumers,
+    this choice of law does not remove the protection of mandatory provisions of the law of their country of residence.
+    If you are a merchant, the place of jurisdiction is Stuttgart, Germany.
+  </p>
+</Legal>

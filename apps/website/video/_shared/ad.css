@@ -1,0 +1,303 @@
+/* X ad toolkit styles. Sizes are set per format by ad.js (CSS variables on #root). */
+.ad-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ad-hook {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.ad-hook .l {
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 0.98;
+  white-space: nowrap;
+}
+.ad-hook .l.s {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+}
+.ad-hook .kick {
+  font-family: var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--em);
+}
+.ad-cap {
+  position: absolute;
+}
+.ad-cap .k {
+  font-family: var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--em);
+  white-space: nowrap;
+}
+.ad-cap .l1 {
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+.ad-cap .l2 {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-top: 0.04em;
+  color: #e9e5dc;
+}
+.ad-vis {
+  position: absolute;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 42px, #000 calc(100% - 42px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 42px, #000 calc(100% - 42px), transparent 100%);
+}
+.ad-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.ad-frame {
+  position: absolute;
+  border-radius: 18px;
+  background: #1a1a1a;
+  border: 1px solid var(--line-2);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 40px 100px rgba(0, 0, 0, 0.65), 0 12px 30px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.ad-frame .ftb {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  background: #151515;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ad-frame .ftb .traffic i {
+  width: 11px;
+  height: 11px;
+}
+.ad-frame .fvp {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 34px;
+  bottom: 0;
+  overflow: hidden;
+}
+.ad-frame img {
+  display: block;
+  width: 2000px;
+  height: 1250px;
+}
+.ad-hl {
+  position: absolute;
+  border-radius: 14px;
+  border: 3px solid var(--em);
+  box-shadow: 0 0 0 6px rgba(47, 214, 144, 0.16), 0 0 40px rgba(47, 214, 144, 0.35);
+}
+.ad-mark {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+.ad-mark .logo {
+  flex: none;
+}
+.ad-mark b {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.ad-by {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  color: #d8d4cc;
+}
+.ad-by .m {
+  font-family: var(--mono);
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+.ad-end {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.ad-end .name {
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+.ad-end .tagl {
+  color: #d8d4cc;
+  letter-spacing: -0.02em;
+}
+.ad-end .tagl .serif {
+  color: var(--fg);
+}
+.ad-end .price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  white-space: nowrap;
+}
+.ad-end .price .or {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--muted);
+}
+.ad-end .price .per {
+  color: var(--muted);
+  font-weight: 500;
+}
+.ad-end .cta {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  border-radius: 999px;
+  background: var(--em);
+  color: #04160d;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  box-shadow: 0 0 0 1px rgba(47, 214, 144, 0.5), 0 20px 60px rgba(47, 214, 144, 0.32);
+  white-space: nowrap;
+}
+.ad-end .cta svg {
+  stroke-width: 2.4;
+}
+.ad-end .url {
+  font-family: var(--mono);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: rgba(244, 242, 237, 0.7);
+  white-space: nowrap;
+}
+.ad-end .meta {
+  font-family: var(--mono);
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+.ad-slack {
+  position: absolute;
+  border-radius: 20px;
+  background: #1a1917;
+  border: 1px solid var(--line-3);
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.72), 0 10px 30px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  width: 700px;
+  transform-origin: 50% 100%;
+}
+.ad-slack .sh {
+  height: 66px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--line);
+  font-size: 22px;
+  font-weight: 600;
+}
+.ad-slack .sh .ic {
+  width: 22px;
+  height: 22px;
+  color: var(--muted);
+}
+.ad-slack .sh .via {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  font-weight: 400;
+}
+.ad-slack .sm {
+  display: flex;
+  gap: 16px;
+  padding: 22px 24px 26px;
+}
+.ad-slack .lg {
+  width: 52px;
+  height: 52px;
+  flex: none;
+}
+.ad-slack .who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 600;
+}
+.ad-slack .app {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #2d2b27;
+  color: #bdb9b0;
+}
+.ad-slack .tm {
+  font-size: 15px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.ad-slack p {
+  font-size: 21px;
+  line-height: 1.45;
+  color: #e7e3da;
+  margin-top: 6px;
+}
+.ad-slack .files {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+.ad-slack .files span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  font-family: var(--mono);
+  font-size: 15px;
+  color: #d8d4cc;
+}
+.ad-slack .files .ic {
+  width: 17px;
+  height: 17px;
+  color: #f08c6b;
+}

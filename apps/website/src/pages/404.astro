@@ -1,0 +1,17 @@
+---
+import Base from '@/layouts/Base.astro';
+import Logo from '@/components/ui/Logo.astro';
+---
+
+<Base title="Page not found" noindex>
+  <main class="relative grid min-h-dvh place-items-center overflow-hidden px-6 text-center">
+    <div class="hero-light pointer-events-none absolute inset-x-0 top-0 -z-10 h-[700px]" aria-hidden="true"></div>
+    <div>
+      <Logo size={48} class="mx-auto" />
+      <p class="mt-8 font-mono text-[12px] tracking-[0.14em] text-dim uppercase">404 · agent reports</p>
+      <h1 class="h-section mt-4">This page doesn’t exist. <span class="serif text-muted">Yet.</span></h1>
+      <p class="lead mx-auto mt-5 max-w-[440px]">Our agent looked everywhere. Let’s get you back to something useful.</p>
+      <a href="/" class="btn btn-primary mt-8">Take me home</a>
+    </div>
+  </main>
+</Base>

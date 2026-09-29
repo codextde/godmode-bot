@@ -1,0 +1,72 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+import { FOUNDER } from '@/config/site';
+
+const problems = [
+  {
+    icon: 'message-square-off',
+    title: 'Chatbots stop at the login screen.',
+    text: 'They’ll write the email. They won’t sign into your supplier portal, grab the invoice and file it.',
+  },
+  {
+    icon: 'unplug',
+    title: 'Integrations never cover everything.',
+    text: 'MCP servers, API keys, Zapier flows — every tool needs its own connector, and half of yours don’t have one.',
+  },
+  {
+    icon: 'cloud-off',
+    title: 'Cloud agents aren’t you.',
+    text: 'They run in someone else’s browser, without your sessions, cookies or 2FA — and get blocked as bots.',
+  },
+];
+---
+
+<section class="relative py-20 sm:py-28">
+  <div class="container-x">
+    <div class="mx-auto max-w-[920px] text-center">
+      <p class="eyebrow justify-center" data-reveal><span class="n">01</span> Why this exists</p>
+      <Words
+        text="“I automated my company with *Godmode.*”"
+        class="h-section mx-auto mt-6 max-w-[16ch]"
+      />
+      <div class="mx-auto mt-10 max-w-[680px] space-y-5 text-left text-[18px] leading-[1.7] text-text-2 sm:text-center" data-reveal style="--d:200">
+        <p>
+          I run a software company. For years I tried every way to automate the busywork — Zapier flows, RPA bots, MCP
+          servers, AI agents that gave up the moment a login screen appeared. None of them worked the way a person
+          does.
+        </p>
+        <p>
+          So we built one that does. Godmode uses a computer like my team does: it opens the browser, signs in, clicks
+          through the tools and finishes the job. It now does the repetitive work at my company while we focus on the
+          work only humans can do. <span class="text-text">I can’t imagine going back.</span>
+        </p>
+      </div>
+      <div class="mt-9 flex items-center justify-center gap-3" data-reveal style="--d:300">
+        <span class="grid size-10 place-items-center rounded-full bg-surface-3 text-[14px] font-semibold ring-1 ring-line-2">DE</span>
+        <span class="text-left">
+          <span class="block text-[15px] font-medium">{FOUNDER.name}</span>
+          <span class="block text-[13px] text-muted">{FOUNDER.role}</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="mt-24 grid gap-3 md:grid-cols-3">
+      {
+        problems.map((p, i) => (
+          <div class="card p-7" data-reveal style={`--d:${i * 90}`}>
+            <span class="grid size-10 place-items-center rounded-xl bg-[rgb(240_82_91/0.1)] text-danger ring-1 ring-[rgb(240_82_91/0.2)]">
+              <Icon name={p.icon} size={18} />
+            </span>
+            <h3 class="h-card mt-6">{p.title}</h3>
+            <p class="mt-2.5 text-[15px] leading-relaxed text-muted">{p.text}</p>
+          </div>
+        ))
+      }
+    </div>
+    <p class="mx-auto mt-10 max-w-[760px] text-center text-[clamp(22px,2.6vw,30px)] leading-snug font-medium tracking-[-0.03em] text-balance" data-reveal>
+      Godmode takes the human route: a real browser with your sessions, your apps, your Mac.
+      <span class="text-muted">If you can do it on a computer, Godmode can too.</span>
+    </p>
+  </div>
+</section>

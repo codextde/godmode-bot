@@ -1,0 +1,151 @@
+<template id="s4-ask-template">
+  <div id="s4-ask" data-composition-id="s4-ask" data-width="1920" data-height="1080" data-duration="7.5">
+    <style>
+      @font-face { font-family: "Geist"; src: url("assets/fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif.woff2") format("woff2"); font-style: normal; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
+
+      #s4-ask { position: absolute; inset: 0; overflow: hidden; background: #faf9f5; color: #1a1a1a; font-family: "Geist", sans-serif; }
+      #s4-ask .s4-sky { position: absolute; left: 700px; top: -600px; width: 1600px; height: 1100px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(255, 244, 214, 0.85), rgba(250, 238, 206, 0.3) 60%, rgba(250, 249, 245, 0) 100%); }
+      #s4-ask .s4-grain { position: absolute; inset: -40px; opacity: 0.32; mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='31' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0.10 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+      #s4-ask .s4-ghost { position: absolute; right: 60px; top: 40px; width: 620px; height: 470px; }
+      #s4-ask .s4-ghost::before { content: "01"; position: absolute; right: 0; top: 0; font-family: "Instrument Serif", serif; font-size: 560px; line-height: 0.8; color: #efebe4; letter-spacing: -0.04em; }
+
+      #s4-ask .s4-content { position: absolute; inset: 0; }
+      #s4-ask .s4-head { position: absolute; left: 120px; top: 96px; }
+      #s4-ask .s4-kicker { display: flex; align-items: center; gap: 16px; font-family: "Geist Mono", monospace; font-size: 22px; letter-spacing: 0.26em; color: #6b675f; }
+      #s4-ask .s4-kicker b { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 12px; border-radius: 10px; background: #1c1c1c; color: #faf9f5; font-weight: 500; letter-spacing: 0.1em; }
+      #s4-ask .s4-title { font-family: "Instrument Serif", serif; font-size: 120px; line-height: 1; letter-spacing: -0.025em; color: #1c1c1c; margin-top: 18px; }
+      #s4-ask .s4-title em { font-style: italic; }
+
+      #s4-ask .s4-sent { position: absolute; right: 220px; top: 420px; max-width: 980px; padding: 24px 32px; border-radius: 30px; border-top-right-radius: 10px;
+        background: #1c1c1c; color: #faf9f5; font-size: 36px; line-height: 1.3; letter-spacing: -0.01em; transform-origin: 100% 100%; }
+      #s4-ask .s4-status { position: absolute; left: 220px; top: 560px; display: flex; align-items: center; gap: 18px; font-size: 30px; color: #3a3733; }
+      #s4-ask .s4-status .av { width: 58px; height: 58px; border-radius: 16px; }
+      #s4-ask .s4-status .sp { width: 30px; height: 30px; }
+      #s4-ask .s4-status .lbl b { font-weight: 600; color: #1c1c1c; }
+      #s4-ask .s4-status .lbl span { color: #087f4d; }
+
+      #s4-ask .s4-composer { position: absolute; left: 220px; top: 700px; width: 1480px; height: 236px; border-radius: 34px; background: #ffffff;
+        border: 2px solid rgba(38, 32, 22, 0.13);
+        box-shadow: 0 50px 90px -50px rgba(38, 32, 22, 0.45), 0 3px 10px rgba(38, 32, 22, 0.05); }
+      #s4-ask .s4-field { position: absolute; left: 44px; right: 44px; top: 38px; height: 60px; display: flex; align-items: center; font-size: 42px; letter-spacing: -0.012em; white-space: nowrap; }
+      #s4-ask .s4-ph { position: absolute; left: 0; top: 0; height: 60px; display: flex; align-items: center; color: #8c867b; }
+      #s4-ask .s4-typed { color: #1a1a1a; }
+      #s4-ask .s4-caret { display: inline-block; width: 3px; height: 50px; background: #1c1c1c; margin-left: 3px; border-radius: 2px; }
+      #s4-ask .s4-tools { position: absolute; left: 36px; right: 30px; bottom: 26px; height: 64px; display: flex; align-items: center; gap: 8px; color: #6b675f; }
+      #s4-ask .s4-tools .ic { width: 58px; height: 58px; display: flex; align-items: center; justify-content: center; border-radius: 14px; }
+      #s4-ask .s4-tools .ic svg { width: 32px; height: 32px; }
+      #s4-ask .s4-model { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 28px; color: #3a3733; padding-right: 12px; }
+      #s4-ask .s4-bars { display: flex; align-items: flex-end; gap: 4px; height: 26px; }
+      #s4-ask .s4-bars i { width: 5px; border-radius: 2px; background: #1c1c1c; display: block; }
+      #s4-ask .s4-send { width: 70px; height: 70px; border-radius: 20px; background: #1c1c1c; color: #faf9f5; display: flex; align-items: center; justify-content: center; margin-left: 10px; }
+      #s4-ask .s4-send svg { width: 34px; height: 34px; }
+      #s4-ask .s4-ripple { position: absolute; right: 30px; bottom: 26px; width: 70px; height: 70px; border-radius: 50%; border: 3px solid #0eca7b; }
+      #s4-ask .s4-note { position: absolute; left: 0; right: 0; top: 968px; text-align: center; font-size: 26px; color: #6b675f; }
+    </style>
+
+    <div class="s4-sky" id="s4-sky"></div>
+    <div class="s4-ghost" id="s4-ghost" aria-hidden="true"></div>
+    <div class="s4-grain" id="s4-grain"></div>
+
+    <div class="s4-content" id="s4-content">
+      <div class="s4-head" id="s4-head">
+        <div class="s4-kicker"><b>01</b>HOW IT WORKS</div>
+        <div class="s4-title" id="s4-title">Ask in <em>plain words.</em></div>
+      </div>
+
+      <div class="s4-sent" id="s4-sent">Log into Acme Billing and download September's invoices.</div>
+      <div class="s4-status" id="s4-status">
+        <img class="av" src="assets/img/logo.svg" alt="" />
+        <svg class="sp" id="s4-spin" viewBox="0 0 24 24" fill="none" stroke="#0eca7b" stroke-width="2.6" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+        <div class="lbl"><b>Godmode</b> is on it — <span>opening billing.acme.example</span></div>
+      </div>
+
+      <div class="s4-composer" id="s4-composer">
+        <div class="s4-field">
+          <div class="s4-ph" id="s4-ph">Message Godmode — or type / for commands</div>
+          <span class="s4-typed" id="s4-typed"></span><span class="s4-caret" id="s4-caret"></span>
+        </div>
+        <div class="s4-tools">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></svg></div>
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" /></svg></div>
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2" /><line x1="8" x2="16" y1="21" y2="21" /><line x1="12" x2="12" y1="17" y2="21" /></svg></div>
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19v3" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><rect x="9" y="2" width="6" height="13" rx="3" /></svg></div>
+          <div class="s4-model">Opus 5.5 <span class="s4-bars"><i style="height: 8px"></i><i style="height: 13px"></i><i style="height: 19px"></i><i style="height: 26px; opacity: 0.25"></i></span>
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg></div>
+          <div class="s4-send" id="s4-send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7" /><path d="M12 19V5" /></svg></div>
+        </div>
+        <div class="s4-ripple" id="s4-ripple"></div>
+      </div>
+      <div class="s4-note" id="s4-note">Agents act for you with your saved logins — secrets are filled into the browser, never shown to the AI.</div>
+    </div>
+
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+        const D = 7.5;
+        const FULL = "Log into Acme Billing and download September's invoices.";
+
+        tl.fromTo("#s4-sky", { opacity: 0.6, x: 60 }, { opacity: 1, x: -60, duration: D, ease: "sine.inOut" }, 0);
+        tl.fromTo("#s4-grain", { x: 0 }, { x: -36, duration: D, ease: "none" }, 0);
+        tl.fromTo("#s4-ghost", { opacity: 0, x: 80 }, { opacity: 1, x: 0, duration: 1.4, ease: "power3.out" }, 0.1);
+
+        tl.fromTo("#s4-head .s4-kicker", { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.6, ease: "power2.out" }, 0.15);
+        tl.fromTo("#s4-title", { opacity: 0, y: 40, filter: "blur(8px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.9, ease: "power3.out" }, 0.25);
+        tl.fromTo("#s4-composer", { opacity: 0, y: 70, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 0.9, ease: "expo.out" }, 0.35);
+        tl.fromTo("#s4-note", { opacity: 0 }, { opacity: 1, duration: 0.8, ease: "power2.out" }, 0.9);
+
+        // Human typing schedule: word-break pauses, a quick burst on the long words.
+        const STEPS = [];
+        let t = 1.05;
+        for (let i = 1; i <= FULL.length; i++) {
+          const ch = FULL[i - 1];
+          t += ch === " " ? 0.085 : 0.045;
+          if (i === 22 || i === 35) t += 0.18;
+          STEPS.push({ t: t, text: FULL.slice(0, i) });
+        }
+        const typedEnd = t;
+        const SEND = typedEnd + 0.45;
+        function textAt(time) {
+          for (let i = STEPS.length - 1; i >= 0; i--) if (time >= STEPS[i].t) return STEPS[i].text;
+          return "";
+        }
+        const typedEl = document.getElementById("s4-typed");
+        const phEl = document.getElementById("s4-ph");
+        const caretEl = document.getElementById("s4-caret");
+        const drv = { t: 0 };
+        tl.fromTo(drv, { t: 0 }, {
+          t: D, duration: D, ease: "none",
+          onUpdate: function () {
+            const now = drv.t;
+            const txt = now >= SEND + 0.15 ? "" : textAt(now);
+            typedEl.textContent = txt;
+            phEl.style.opacity = txt.length === 0 && now < 1.0 ? "1" : (txt.length === 0 && now >= SEND + 0.15 ? "1" : "0");
+            const typing = now >= 1.0 && now < SEND + 0.15;
+            caretEl.style.opacity = typing ? ((now % 0.9) < 0.5 || (now > 1.05 && now < typedEnd) ? "1" : "0") : "0";
+          },
+        }, 0);
+
+        // Send: press spring + ripple, the message lifts into the thread.
+        tl.fromTo("#s4-send", { scale: 1 }, { scale: 0.86, duration: 0.09, ease: "power1.in" }, SEND);
+        tl.to("#s4-send", { scale: 1, duration: 0.45, ease: "back.out(3)" }, SEND + 0.09);
+        tl.fromTo("#s4-ripple", { opacity: 0.9, scale: 0.8 }, { opacity: 0, scale: 2.3, duration: 0.7, ease: "power2.out" }, SEND + 0.05);
+        tl.fromTo("#s4-sent", { opacity: 0, y: 260, scale: 0.9 }, { opacity: 1, y: 0, scale: 1, duration: 0.75, ease: "power3.out" }, SEND + 0.12);
+        tl.fromTo("#s4-status", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, SEND + 0.7);
+        const spinFrom = SEND + 0.7;
+        tl.fromTo("#s4-spin", { rotation: 0 }, { rotation: 360 * Math.floor((D - spinFrom) / 0.8), duration: 0.8 * Math.floor((D - spinFrom) / 0.8), ease: "none", transformOrigin: "50% 50%" }, spinFrom);
+
+        // Slow push, then dip to paper.
+        tl.fromTo("#s4-content", { scale: 1 }, { scale: 1.025, duration: D, ease: "none", transformOrigin: "50% 60%" }, 0);
+        tl.to("#s4-content", { opacity: 0, filter: "blur(12px)", duration: 0.5, ease: "power2.in" }, D - 0.55);
+        tl.to("#s4-ghost", { opacity: 0, duration: 0.5, ease: "power2.in" }, D - 0.55);
+
+        window.__timelines["s4-ask"] = tl;
+      })();
+    </script>
+  </div>
+</template>
