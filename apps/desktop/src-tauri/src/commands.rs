@@ -18,7 +18,7 @@ pub fn core_info(core: State<'_, Arc<CoreManager>>) -> Option<CoreInfo> {
     core.info()
 }
 
-/// Directory holding `core.log` (core) and `desktop.log` (this shell).
+/// Directory holding `godmode.jsonl` (core) and `desktop.log` (this shell).
 #[tauri::command]
 pub fn core_logs_path(app: AppHandle) -> Result<String, String> {
     let dir = paths::logs_dir(&app).ok_or("could not determine the home directory")?;

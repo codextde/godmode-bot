@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router";
 import { FolderOpen, HeartPulse, RotateCcw, ScrollText, Server } from "lucide-react";
 import type { Bootstrap } from "@godmode/shared";
 import {
@@ -41,7 +42,7 @@ export function SystemSection({ bootstrap }: { bootstrap: Bootstrap | undefined 
   });
 
   const dataDir = bootstrap?.dataDir ?? "";
-  const logPath = dataDir ? joinPath(dataDir, "logs", "core.log") : "";
+  const logPath = dataDir ? joinPath(dataDir, "logs", "godmode.jsonl") : "";
 
   return (
     <div className="space-y-5">
@@ -76,7 +77,11 @@ export function SystemSection({ bootstrap }: { bootstrap: Bootstrap | undefined 
           {logPath && <CopyButton value={logPath} label="Copy log path" size="icon-xs" toastLabel="Path copied" />}
         </InfoRow>
         <p className="py-3 text-xs text-muted-foreground">
-          Something off? Open the log file in a text editor, or run <code className="rounded-[4px] bg-secondary px-1 font-mono">godmode doctor</code> in a terminal.
+          Something off?{" "}
+          <Link to="/settings/logs" className="font-medium text-foreground underline-offset-4 hover:underline">
+            Open the logs
+          </Link>{" "}
+          to copy them for Claude, or run <code className="rounded-[4px] bg-secondary px-1 font-mono">godmode doctor</code> in a terminal.
         </p>
       </SettingsGroup>
 

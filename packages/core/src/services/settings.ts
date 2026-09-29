@@ -93,6 +93,9 @@ export const DEFAULT_SETTINGS: Settings = {
       refreshDays: 7,
     },
   },
+  diagnostics: {
+    verbose: false,
+  },
   onboardingComplete: false,
 };
 

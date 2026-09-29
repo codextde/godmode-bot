@@ -547,7 +547,7 @@ export function Composer({
 
       {/* Context tray: who works on this and with what, kept apart from the input actions so neither row gets crowded. */}
       {leading && (
-        <div className="flex min-w-0 items-center gap-1 rounded-b-[calc(var(--radius-2xl)-1px)] border-t border-border/60 bg-muted/40 px-2 py-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1 rounded-b-[calc(var(--radius-2xl)-1px)] border-t border-border/60 bg-muted/40 px-2 py-1.5">
           {leading}
         </div>
       )}
