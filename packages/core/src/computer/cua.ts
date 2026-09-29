@@ -533,7 +533,8 @@ export async function getCuaDriver(): Promise<CuaDriverClient> {
           if (code !== 0) log.warn(`Cua Driver exited with code ${code}`);
         }
       });
-      if (!getSettings().computer.agentCursor) {
+      // On macOS Godmode's helper draws the agent cursor for every window-share action (Cua Driver's or its own).
+      if (!getSettings().computer.agentCursor || process.platform === "darwin") {
         void client.rawCall("set_agent_cursor_enabled", { enabled: false }).catch(() => {});
       }
       log.info(`Cua Driver ${client.version} started (${cmd.source})`);

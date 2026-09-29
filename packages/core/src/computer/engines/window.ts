@@ -10,6 +10,13 @@
  *
  * Frame space is window-local points (origin = the window's top-left), so an action still lands on the same spot of
  * the window when the human moved it after the screenshot. The helper gets global points at the time of the action.
+ *
+ * The agent's pointer input never moves the human's cursor, so on macOS the helper draws an agent cursor over the
+ * window (like ChatGPT's): it glides to each point before the input lands there. Cua Driver's own cursor stays off.
+ *
+ * Background clicks go to the helper first on macOS: posted mouse and key events don't reach the web content of a
+ * background Chromium-family window (Chrome, Edge, Arc, Slack, VS Code…) on current macOS — Cua Driver's either — so
+ * the helper presses the element under the point through accessibility and types into the web field it focused.
  */
 import type { ComputerTarget } from "@godmode/shared";
 import { computerTargetLabel } from "@godmode/shared";
@@ -46,6 +53,11 @@ function fallbackWorthy(err: unknown): boolean {
 }
 
 /** "✅ Performed AXPress on [2] AXButton "Press me"." → a short, scrubbed line for the model. */
+/** Chromium web pages in the background take no key events: what the model can do instead. */
+function webKeysNote(allowForeground: boolean): string {
+  return `key events usually don't reach the web page of a background Chrome/Electron window. Click the text field first (then type — Godmode types into the field it focused), type into it by its computer_ui element, and press the page's own button instead of Return${allowForeground ? ", or retry with foreground: true" : ""}.`;
+}
+
 function describe(r: CuaResult, fallback: string): string {
   const summary = typeof r.structured.summary === "string" ? r.structured.summary : r.text;
   const line = scrubSummary(summary).split("\n")[0]?.replace(/^✅\s*/, "").trim();
@@ -64,10 +76,11 @@ export class WindowEngine implements ComputerEngine {
   /** Elements handed to the model, so a token made stale by a newer driver snapshot can be found again. */
   private known = new Map<string, { role: string; label: string; frame: Rect | null }>();
   private cuaDisabledReason: string | null = null;
+  private cursorShown = false;
 
   constructor(
     readonly target: WindowTarget,
-    private opts: { useCua: boolean; allowForeground: boolean },
+    private opts: { useCua: boolean; allowForeground: boolean; agentCursor?: boolean },
   ) {
     this.name = opts.useCua ? "cua" : "native";
     if (!opts.useCua) this.cuaDisabledReason = "Cua Driver is turned off in Settings → Computer.";
@@ -267,32 +280,77 @@ export class WindowEngine implements ComputerEngine {
   }
 
   private helperPointer(h: NativeHelper, params: Record<string, unknown>) {
-    return h.call<{ method: string }>("pointer", { pid: this.target.pid, window: this.target.windowId, ...params });
+    if (this.opts.agentCursor) this.cursorShown = true;
+    return h.call<{ method: string; chromium?: boolean; cameToFront?: boolean }>("pointer", { pid: this.target.pid, window: this.target.windowId, cursor: !!this.opts.agentCursor, ...params });
+  }
+
+  /**
+   * Before Cua Driver acts at a window-local point: glide the agent cursor there (and ring on a click). Best effort —
+   * the helper draws the cursor for its own input.
+   */
+  private async pointAt(p: Point, click: boolean): Promise<void> {
+    if (!this.opts.agentCursor) return;
+    const helper = await this.helper();
+    if (!helper) return;
+    try {
+      const g = await this.global(p);
+      this.cursorShown = true;
+      await helper.call("agentCursor", { window: this.target.windowId, x: g.x, y: g.y, click }, 3000);
+    } catch (err) {
+      log.debug(`agent cursor: ${errorMessage(err)}`);
+    }
+  }
+
+  /**
+   * Text and editing keys for the web field a background click focused (Chromium-family apps, macOS): the helper
+   * applies them through accessibility. `chromium` tells whether the app is one whose pages ignore key events.
+   */
+  private async webInput(cmd: "type" | "key", params: Record<string, unknown>, foreground?: boolean): Promise<{ handled: boolean; chromium: boolean }> {
+    if (foreground && this.opts.allowForeground) return { handled: false, chromium: false };
+    const helper = await this.helper();
+    if (!helper) return { handled: false, chromium: false };
+    const r = await helper.call<{ method: string | null; chromium?: boolean }>(cmd, { ...params, pid: this.target.pid, webOnly: true }).catch(() => null);
+    return { handled: !!r?.method, chromium: !!r?.chromium };
   }
 
   async click(_view: string, p: Point, opts: PointerOptions): Promise<Outcome> {
     const maxDimension = getSettings().computer.screenshotMaxSize;
     const verb = opts.count === 2 ? "Double-clicked" : opts.count === 3 ? "Triple-clicked" : opts.button === "right" ? "Right-clicked" : "Clicked";
-    return this.route(
-      "click",
-      async (cua) => {
-        const kind = opts.count === 2 && opts.button === "left" ? "double_click" : opts.button === "right" && opts.count === 1 ? "right_click" : "click";
-        const r = await cua.pointer(kind, this.ref, p, {
-          button: opts.button,
-          count: opts.count,
-          modifiers: opts.modifiers.map(cuaModifier),
-          delivery: this.delivery(opts.foreground),
-          maxDimension,
-          size: await this.size(),
-        });
-        return describe(r, verb);
-      },
-      async (h) => {
-        const g = await this.global(p);
-        const r = await this.helperPointer(h, { action: "click", x: g.x, y: g.y, button: opts.button, count: opts.count, modifiers: opts.modifiers });
-        return r.method === "ax" ? `${verb} (pressed the control via accessibility)` : `${verb} (background)`;
-      },
-    );
+    const viaHelper = async (h: NativeHelper) => {
+      const g = await this.global(p);
+      const r = await this.helperPointer(h, { action: "click", x: g.x, y: g.y, button: opts.button, count: opts.count, modifiers: opts.modifiers });
+      if (r.method === "ax") return `${verb} (pressed the element via accessibility)`;
+      if (r.method === "ax-focus") return `${verb} (focused the text field — type now)`;
+      const front = r.cameToFront ? " The app came to the front — the human may notice." : "";
+      return r.chromium
+        ? `${verb} (sent as background mouse events — the web page of a background Chrome/Electron window often ignores those; check the next screenshot and click by computer_ui element if nothing changed)${front}`
+        : `${verb} (background)${front}`;
+    };
+    const viaCua = async (cua: CuaDriverClient) => {
+      await this.pointAt(p, true);
+      const kind = opts.count === 2 && opts.button === "left" ? "double_click" : opts.button === "right" && opts.count === 1 ? "right_click" : "click";
+      const r = await cua.pointer(kind, this.ref, p, {
+        button: opts.button,
+        count: opts.count,
+        modifiers: opts.modifiers.map(cuaModifier),
+        delivery: this.delivery(opts.foreground),
+        maxDimension,
+        size: await this.size(),
+      });
+      return describe(r, verb);
+    };
+    // The helper first on macOS: accessibility for web content, Cua Driver's event recipe otherwise — and Cua Driver
+    // when the helper fails. Foreground delivery is Cua Driver's.
+    if (!(opts.foreground && this.opts.allowForeground) && (await this.helper())) {
+      try {
+        return await this.route("click", null, viaHelper);
+      } catch (err) {
+        if (!(err instanceof EngineError) || err.code === "gone" || !(await this.cua())) throw err;
+        log.debug(`helper click failed (${err.message}); trying Cua Driver`);
+        return this.route("click", viaCua, null);
+      }
+    }
+    return this.route("click", viaCua, viaHelper);
   }
 
   async move(_view: string, p: Point): Promise<Outcome> {
@@ -308,6 +366,7 @@ export class WindowEngine implements ComputerEngine {
     return this.route(
       "drag",
       async (cua) => {
+        await this.pointAt(from, false);
         const r = await cua.drag(this.ref, from, to, {
           button: opts.button,
           modifiers: opts.modifiers.map(cuaModifier),
@@ -345,6 +404,7 @@ export class WindowEngine implements ComputerEngine {
       "scroll",
       async (cua) => {
         const local = p;
+        if (local) await this.pointAt(local, false);
         const size = await this.size();
         const steps: ["up" | "down" | "left" | "right", number][] = [];
         if (dy) steps.push([dy > 0 ? "down" : "up", Math.abs(dy)]);
@@ -361,9 +421,22 @@ export class WindowEngine implements ComputerEngine {
   }
 
   async keys(_view: string, combos: KeyCombo[], opts: { foreground?: boolean }): Promise<Outcome> {
-    await this.ensureKeyWindow(opts.foreground);
     const details: string[] = [];
+    let keyWindow = false;
+    let chromium = false;
+    const sent: KeyCombo[] = [];
     for (const c of combos) {
+      const web = await this.webInput("key", { key: c.key, modifiers: c.modifiers }, opts.foreground);
+      if (web.handled) {
+        details.push("Pressed (applied to the focused field via accessibility)");
+        continue;
+      }
+      chromium ||= web.chromium;
+      sent.push(c);
+      if (!keyWindow) {
+        await this.ensureKeyWindow(opts.foreground);
+        keyWindow = true;
+      }
       const key = cuaKeyName(c.key);
       const outcome = await this.route(
         "press keys",
@@ -380,15 +453,19 @@ export class WindowEngine implements ComputerEngine {
       details.push(outcome.detail);
       if (combos.length > 1) await sleep(40);
     }
-    const note = combos.some((c) => c.modifiers.some((m) => m === "cmd" || m === "ctrl"))
-      ? " Shortcuts with cmd/ctrl don't always reach a window in the background — check the result and use menus or elements if nothing happened."
-      : "";
+    const note = chromium
+      ? ` — but ${webKeysNote(this.opts.allowForeground)}`
+      : sent.some((c) => c.modifiers.some((m) => m === "cmd" || m === "ctrl"))
+        ? " Shortcuts with cmd/ctrl don't always reach a window in the background — check the result and use menus or elements if nothing happened."
+        : "";
     return { detail: `${details[details.length - 1] ?? "Pressed"}${note}` };
   }
 
   async type(_view: string, text: string, opts: { foreground?: boolean }): Promise<Outcome> {
+    const web = await this.webInput("type", { text }, opts.foreground);
+    if (web.handled) return { detail: `Typed ${[...text].length} characters into the focused field (via accessibility)` };
     await this.ensureKeyWindow(opts.foreground);
-    return this.route(
+    const out = await this.route(
       "type",
       async (cua) => describe(await cua.typeText(this.ref, text, { delivery: this.delivery(opts.foreground) }), `Typed ${[...text].length} characters`),
       async (h) => {
@@ -396,6 +473,7 @@ export class WindowEngine implements ComputerEngine {
         return `Typed ${[...text].length} characters (background)`;
       },
     );
+    return web.chromium ? { detail: `${out.detail} — but ${webKeysNote(this.opts.allowForeground)}` } : out;
   }
 
   async elements(query?: string): Promise<{ elements: UiElement[]; note: string | null }> {
@@ -477,6 +555,8 @@ export class WindowEngine implements ComputerEngine {
   }
 
   async clickElement(token: string, opts: PointerOptions): Promise<Outcome> {
+    const frame = this.known.get(token)?.frame;
+    if (frame) await this.pointAt({ x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 }, true);
     return this.withElement(
       token,
       (cua, t) => cua.clickElement(this.ref, t, { button: opts.button === "right" ? "right" : "left", count: opts.count, delivery: this.delivery(opts.foreground) }),
@@ -485,13 +565,21 @@ export class WindowEngine implements ComputerEngine {
   }
 
   async typeInto(token: string, text: string, opts: { foreground?: boolean }): Promise<Outcome> {
+    const frame = this.known.get(token)?.frame;
+    if (frame) await this.pointAt({ x: frame.x + frame.width / 2, y: frame.y + frame.height / 2 }, false);
     return this.withElement(token, (cua, t) => cua.typeText(this.ref, text, { element: t, delivery: this.delivery(opts.foreground) }), `Typed ${[...text].length} characters`);
   }
 
-  async dispose(): Promise<void> {}
+  async dispose(): Promise<void> {
+    if (!this.cursorShown) return;
+    this.cursorShown = false;
+    const helper = await this.helper();
+    await helper?.call("agentCursor", { hide: true, window: this.target.windowId }, 3000).catch(() => {});
+  }
 }
 
-export function windowEngine(target: WindowTarget): WindowEngine {
+/** `agent`: the run's engine — its pointer input shows the agent cursor (when turned on in Settings). */
+export function windowEngine(target: WindowTarget, opts: { agent?: boolean } = {}): WindowEngine {
   const s = getSettings().computer;
-  return new WindowEngine(target, { useCua: s.useCuaDriver, allowForeground: s.allowForeground });
+  return new WindowEngine(target, { useCua: s.useCuaDriver, allowForeground: s.allowForeground, agentCursor: !!opts.agent && s.agentCursor });
 }

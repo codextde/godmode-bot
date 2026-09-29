@@ -37,13 +37,14 @@ export function computerEnabled(): boolean {
 /* Engines                                                              */
 /* ------------------------------------------------------------------ */
 
-export function createEngine(target: ComputerTarget): ComputerEngine {
+/** `agent`: the engine a run acts through (window shares show the agent cursor for its input, not the human's). */
+export function createEngine(target: ComputerTarget, opts: { agent?: boolean } = {}): ComputerEngine {
   switch (target.kind) {
     case "desktop":
     case "display":
       return desktopEngine(target);
     case "window":
-      return windowEngine(target);
+      return windowEngine(target, { agent: opts.agent ?? false });
     case "tab":
       return new TabEngine(target);
   }
@@ -332,7 +333,7 @@ export function attachComputer(runId: string, agentId: string, conversationId: s
     agentId,
     conversationId,
     target,
-    engine: createEngine(target),
+    engine: createEngine(target, { agent: true }),
     shots: new Map(),
     view: null,
     queue: Promise.resolve(),

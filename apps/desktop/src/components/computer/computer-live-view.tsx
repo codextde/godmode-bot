@@ -98,6 +98,8 @@ export function ComputerLiveView({
   );
   const [focused, setFocused] = useState(false);
   const [ripples, setRipples] = useState<Ripple[]>([]);
+  /** The agent's pointer (0–1 within the frame) — background shares never move the real one. */
+  const [agentPointer, setAgentPointer] = useState<{ x: number; y: number; at: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -105,6 +107,7 @@ export function ComputerLiveView({
   size.current = { width: frame?.width ?? 0, height: frame?.height ?? 0 };
 
   useEffect(() => subscribeComputer(view), [view]);
+  useEffect(() => setAgentPointer(null), [view]);
   useEffect(() => {
     if (takeover) viewportRef.current?.focus();
   }, [takeover]);
@@ -144,14 +147,17 @@ export function ComputerLiveView({
     setTimeout(() => setRipples((r) => r.filter((p) => p.id !== id)), 700);
   }, []);
 
-  // Where the agent acts.
+  // Where the agent acts: its pointer glides there, clicks ring.
   const lastAgentAt = useRef(0);
   useEffect(() => {
     if (!agentAction || agentAction.at === lastAgentAt.current || agentAction.x === undefined || agentAction.y === undefined) return;
     lastAgentAt.current = agentAction.at;
+    setAgentPointer({ x: agentAction.x, y: agentAction.y, at: agentAction.at });
     const p = place(agentAction.x, agentAction.y);
-    if (p) ripple(p.x, p.y, true);
+    if (p && /click|drag/.test(agentAction.action)) ripple(p.x, p.y, true);
   }, [agentAction, place, ripple]);
+  const pointerAt =
+    (target.kind === "window" || target.kind === "tab") && agentPointer && now - agentPointer.at < AGENT_POINTER_IDLE_MS ? place(agentPointer.x, agentPointer.y) : null;
 
   /* ---------------------------- input forwarding ---------------------------- */
 
@@ -479,6 +485,18 @@ export function ComputerLiveView({
                 <Waiting error={frame?.error} />
               )}
               <AnimatePresence>
+                {pointerAt && hasPicture && (
+                  <motion.div
+                    key="agent-pointer"
+                    className="pointer-events-none absolute top-0 left-0 z-10"
+                    initial={{ x: pointerAt.x, y: pointerAt.y, opacity: 0 }}
+                    animate={{ x: pointerAt.x, y: pointerAt.y, opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ x: { duration: 0.35, ease: "easeInOut" }, y: { duration: 0.35, ease: "easeInOut" }, opacity: { duration: 0.2 } }}
+                  >
+                    <AgentPointer />
+                  </motion.div>
+                )}
                 {ripples.map((r) => (
                   <motion.span
                     key={r.id}
@@ -499,6 +517,22 @@ export function ComputerLiveView({
         </div>
       </motion.div>
     </>
+  );
+}
+
+const AGENT_POINTER_IDLE_MS = 20_000;
+
+/** The agent's pointer — the same arrow the helper draws over a shared window. Its tip is the element's origin. */
+function AgentPointer() {
+  return (
+    <div className="relative -mt-[1.5px] -ml-[1.5px]">
+      <svg width="16" height="23" viewBox="-1.5 -1.5 16 23" className="drop-shadow-[0_1px_1.5px_rgba(0,0,0,0.4)]" aria-hidden>
+        <path d="M0 0 L0 18 L4.8 13.8 L8 20.6 L11 19.3 L7.9 12.6 L13.6 12.6 Z" className="fill-sky-500 stroke-white" strokeWidth={1.6} strokeLinejoin="round" />
+      </svg>
+      <span className="absolute top-[20px] left-[14px] rounded-full bg-sky-500 px-[7px] py-px text-[11px] leading-4 font-semibold whitespace-nowrap text-white shadow-sm">
+        Godmode
+      </span>
+    </div>
   );
 }
 

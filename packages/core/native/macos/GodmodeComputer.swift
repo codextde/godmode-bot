@@ -19,18 +19,36 @@ import ImageIO
 import ScreenCaptureKit
 import UniformTypeIdentifiers
 
-let HELPER_VERSION = "1"
+let HELPER_VERSION = "2"
 
 // MARK: - Output
 
 let outputLock = NSLock()
 
 func emit(_ object: [String: Any]) {
-  guard let data = try? JSONSerialization.data(withJSONObject: object, options: []) else { return }
+  guard var data = try? JSONSerialization.data(withJSONObject: object, options: []) else { return }
+  data.append(0x0A)
   outputLock.lock()
-  FileHandle.standardOutput.write(data)
-  FileHandle.standardOutput.write("\n".data(using: .utf8)!)
-  outputLock.unlock()
+  defer { outputLock.unlock() }
+  // write(2), not FileHandle.write: that raises an Objective-C exception (a crash report) when the core is gone.
+  let ok = data.withUnsafeBytes { buf -> Bool in
+    var offset = 0
+    while offset < buf.count {
+      let n = write(STDOUT_FILENO, buf.baseAddress! + offset, buf.count - offset)
+      if n < 0 {
+        if errno == EINTR { continue }
+        if errno == EAGAIN {
+          usleep(1_000)
+          continue
+        }
+        return false
+      }
+      offset += n
+    }
+    return true
+  }
+  // The core went away: nothing is listening anymore. (_exit: no atexit handlers racing AppKit on another thread.)
+  if !ok { _exit(0) }
 }
 
 struct HelperError: Error {
@@ -326,7 +344,14 @@ func sckImage(window windowId: Int?, display displayId: CGDirectDisplayID, frame
       scDisplay = content.displays.first { $0.displayID == displayId }
     }
     guard let d = scDisplay else { throw HelperError("Display \(displayId) is not connected.", code: "display_gone") }
-    filter = SCContentFilter(display: d, excludingWindows: [])
+    // Leave out the agent cursor (sharingType .none doesn't hide windows from ScreenCaptureKit on every macOS) — with
+    // fresh content when the cached list predates its panel.
+    let cursorWindow = agentCursorWindowNumber()
+    if cursorWindow != 0 && !content.windows.contains(where: { Int($0.windowID) == cursorWindow }) {
+      content = try await shareable.get(refresh: true)
+    }
+    let own = ProcessInfo.processInfo.processIdentifier
+    filter = SCContentFilter(display: d, excludingWindows: content.windows.filter { $0.owningApplication?.processID == own })
   }
   let scale = Double(filter.pointPixelScale)
   let config = SCStreamConfiguration()
@@ -531,10 +556,14 @@ func keyEvent(_ code: Int, down: Bool, flags: CGEventFlags, pid: pid_t?, unicode
   post(e, pid: pid)
 }
 
-func pressKey(_ p: Params) throws {
+func pressKey(_ p: Params) throws -> [String: Any] {
   let pid = p.int("pid").map { pid_t($0) }
   let name = (p.string("key") ?? "").lowercased()
   let action = p.string("action") ?? "press"
+  if let pid, action == "press", let field = focusedWebField(pid) {
+    if axWebKey(field, pid: pid, key: name, modifiers: p.strings("modifiers")) { return ["method": "ax"] }
+  }
+  if p.bool("webOnly") == true { return ["method": NSNull(), "chromium": pid.map(isChromiumApp) ?? false] }
   var flags: CGEventFlags = []
   var mods: [(Int, CGEventFlags)] = []
   for m in p.strings("modifiers") {
@@ -581,11 +610,14 @@ func pressKey(_ p: Params) throws {
       keyEvent(mcode, down: false, flags: flags, pid: pid)
     }
   }
+  return ["method": "event", "chromium": pid.map(isChromiumApp) ?? false]
 }
 
-func typeText(_ p: Params) throws {
+func typeText(_ p: Params) throws -> [String: Any] {
   let pid = p.int("pid").map { pid_t($0) }
   guard let text = p.string("text") else { throw HelperError("Missing \"text\"", code: "bad_request") }
+  if let pid, let field = focusedWebField(pid), axReplace(field, pid: pid, with: text) { return ["method": "ax"] }
+  if p.bool("webOnly") == true { return ["method": NSNull(), "chromium": pid.map(isChromiumApp) ?? false] }
   let map = keyMap()
   for ch in text {
     let s = String(ch)
@@ -604,6 +636,7 @@ func typeText(_ p: Params) throws {
     }
     usleep(pid == nil ? 6_000 : 3_000)
   }
+  return ["method": "event", "chromium": pid.map(isChromiumApp) ?? false]
 }
 
 // MARK: - Pointer
@@ -709,20 +742,21 @@ enum SkyLight {
 
   /// Make `window` its app's focused window without raising it or activating the app: Chromium only treats a click
   /// in a focused window as a user gesture. The front app gets a defocus record — `restoreFocus` hands it back.
+  /// Returns whether that defocus record went out (then focus must be restored, whatever else failed).
   static func focusWithoutRaise(pid: pid_t, window: UInt32) -> Bool {
     guard let getFront = getFrontProcessFn, let postRecord = postEventRecordFn else { return false }
     var front = ProcessSerialNumber()
     var target = ProcessSerialNumber()
     guard getFront(&front) == 0, psn(window: window, pid: pid, into: &target) else { return false }
     let defocused = postRecord(&front, focusRecord(window, focus: false)) == 0
-    let focused = postRecord(&target, focusRecord(window, focus: true)) == 0
-    return defocused && focused
+    _ = postRecord(&target, focusRecord(window, focus: true))
+    return defocused
   }
 
-  /// Undo `focusWithoutRaise`: defocus the shared window and give the front app's key window its focus back, so the
-  /// human's typing keeps landing where it did.
-  static func restoreFocus(previousPid: pid_t, targetPid: pid_t, targetWindow: UInt32) -> Bool {
-    guard let postRecord = postEventRecordFn, let previousWindow = keyWindowNumber(pid: previousPid) else { return false }
+  /// Undo `focusWithoutRaise`: defocus the shared window and give the human's key window (`previousWindow`, read
+  /// before the click) its focus back, so their typing keeps landing where it did.
+  static func restoreFocus(previousPid: pid_t, previousWindow: UInt32, targetPid: pid_t, targetWindow: UInt32) -> Bool {
+    guard let postRecord = postEventRecordFn else { return false }
     var previous = ProcessSerialNumber()
     var target = ProcessSerialNumber()
     guard psn(window: previousWindow, pid: previousPid, into: &previous), psn(window: targetWindow, pid: targetPid, into: &target) else { return false }
@@ -732,7 +766,7 @@ enum SkyLight {
   }
 
   /// The app's focused window (accessibility), else its frontmost normal window on screen.
-  private static func keyWindowNumber(pid: pid_t) -> UInt32? {
+  static func keyWindowNumber(pid: pid_t) -> UInt32? {
     let app = AXUIElementCreateApplication(pid)
     AXUIElementSetMessagingTimeout(app, 0.5)
     var ref: CFTypeRef?
@@ -781,11 +815,14 @@ func routedEvent(_ type: CGEventType, at point: CGPoint, button: CGMouseButton, 
 /// Background left click Chromium accepts (Cua Driver's recipe): focus the window without raising it, then a stamped
 /// move to the target, an off-screen press/release that opens Chromium's user-activation gate without touching the
 /// page, and the real press/release pairs — one gesture, through SkyLight. The front app's focus is handed back after.
-func backgroundLeftClick(pid: pid_t, window: Int, at point: CGPoint, count: Int, flags: CGEventFlags) {
+/// Returns false when the click brought the app to the front and the human's app couldn't be given back.
+func backgroundLeftClick(pid: pid_t, window: Int, at point: CGPoint, count: Int, flags: CGEventFlags) -> Bool {
   let prior = frontmostPid()
-  var focused = false
-  if prior != pid {
-    focused = SkyLight.focusWithoutRaise(pid: pid, window: UInt32(window))
+  // Only take focus from the human's window when it can be handed back.
+  let priorWindow = prior.flatMap { $0 == pid ? nil : SkyLight.keyWindowNumber(pid: $0) }
+  var defocused = false
+  if let priorWindow, priorWindow != 0 {
+    defocused = SkyLight.focusWithoutRaise(pid: pid, window: UInt32(window))
     usleep(50_000)
   }
   let gesture = gestureId()
@@ -806,15 +843,18 @@ func backgroundLeftClick(pid: pid_t, window: Int, at point: CGPoint, count: Int,
     send(.leftMouseUp, point, phase: 3, clickState: Int64(i))
     if i < count { usleep(80_000) }
   }
-  guard let prior, prior != pid else { return }
+  guard let prior, prior != pid else { return true }
   usleep(50_000)
-  let now = frontmostPid()
-  if now == pid {
-    // The click activated the app after all: give the human their app back.
+  if frontmostPid() == pid {
+    // The click activated the app after all: give the human their app back (macOS may refuse an accessory app).
     DispatchQueue.main.sync { _ = NSRunningApplication(processIdentifier: prior)?.activate(options: []) }
-  } else if focused && now == prior {
-    _ = SkyLight.restoreFocus(previousPid: prior, targetPid: pid, targetWindow: UInt32(window))
+    usleep(100_000)
+    return frontmostPid() != pid
   }
+  if defocused, let priorWindow {
+    _ = SkyLight.restoreFocus(previousPid: prior, previousWindow: priorWindow, targetPid: pid, targetWindow: UInt32(window))
+  }
+  return true
 }
 
 /// Window-scoped right/middle click, hover, drag and wheel: stamped like the left click, window-local location,
@@ -845,6 +885,16 @@ func windowOrigin(_ window: Int) -> CGPoint? {
 
 // MARK: - Agent cursor
 
+let agentCursorLock = NSLock()
+var agentCursorWindow = 0
+
+/// The agent cursor panel's window number (0 before it exists), for leaving it out of captures.
+func agentCursorWindowNumber() -> Int {
+  agentCursorLock.lock()
+  defer { agentCursorLock.unlock() }
+  return agentCursorWindow
+}
+
 /// The agent's pointer over a shared window, like ChatGPT's agent cursor: background input never moves the human's
 /// pointer, so this shows where the agent points and clicks. A click-through panel ordered directly above the window —
 /// windows the human brings forward cover it as they cover the window — kept out of captures, following the window
@@ -852,7 +902,8 @@ func windowOrigin(_ window: Int) -> CGPoint? {
 final class AgentCursor {
   static let shared = AgentCursor()
 
-  private static let tint = CGColor(srgbRed: 0.15, green: 0.39, blue: 0.92, alpha: 1)
+  /// Sky 500, like the agent's marks in Godmode's live view.
+  private static let tint = CGColor(srgbRed: 0.055, green: 0.647, blue: 0.914, alpha: 1)
   private static let idleSeconds: TimeInterval = 20
 
   private var panel: NSPanel?
@@ -876,6 +927,9 @@ final class AgentCursor {
     p.animationBehavior = .none
     p.sharingType = .none
     p.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
+    agentCursorLock.lock()
+    agentCursorWindow = p.windowNumber
+    agentCursorLock.unlock()
     let view = NSView()
     view.wantsLayer = true
     p.contentView = view
@@ -967,7 +1021,7 @@ final class AgentCursor {
     let next = CGPoint(x: global.x - frame.minX, y: global.y - frame.minY)
     var duration: TimeInterval = 0
     CATransaction.begin()
-    if visible, let from = local {
+    if visible, let from = local, hypot(next.x - from.x, next.y - from.y) >= 1 {
       duration = min(0.45, max(0.12, Double(hypot(next.x - from.x, next.y - from.y)) / 1500))
       CATransaction.setAnimationDuration(duration)
       CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeInEaseOut))
@@ -1027,7 +1081,9 @@ final class AgentCursor {
     CATransaction.commit()
   }
 
-  func hide() {
+  /// Hide the cursor (only when it is over `window`, if given — another share may have moved it since).
+  func hide(window only: Int? = nil) {
+    if let only, only != window { return }
     generation += 1
     follow?.invalidate()
     follow = nil
@@ -1107,6 +1163,219 @@ func axPress(pid: pid_t, at point: CGPoint) -> Bool {
   return false
 }
 
+// MARK: - Web content (Chromium-family apps)
+
+let chromiumLock = NSLock()
+/// pid → (launch date, Chromium-family?) — the launch date tells a reused pid apart.
+var chromiumApps: [pid_t: (Date, Bool)] = [:]
+/// pid → launch date of the process whose web accessibility was switched on.
+var webAccessibilityOn: [pid_t: Date] = [:]
+
+/// Chrome, Edge, Brave, Arc, Vivaldi, Opera and Electron apps (Slack, VS Code, …): posted mouse events don't reach
+/// their web content while the window is in the background, accessibility actions do.
+func isChromiumApp(_ pid: pid_t) -> Bool {
+  let app = NSRunningApplication(processIdentifier: pid)
+  let launched = app?.launchDate ?? .distantPast
+  chromiumLock.lock()
+  if let known = chromiumApps[pid], known.0 == launched {
+    chromiumLock.unlock()
+    return known.1
+  }
+  chromiumLock.unlock()
+  var found = (app?.bundleIdentifier ?? "").hasPrefix("company.thebrowser.")  // Arc
+  if !found, let url = app?.bundleURL,
+     let names = try? FileManager.default.contentsOfDirectory(atPath: url.appendingPathComponent("Contents/Frameworks").path) {
+    // "Google Chrome Framework", "Microsoft Edge Framework", "Brave Browser Framework", "Electron Framework", "Chromium
+    // Embedded Framework", …
+    let markers = ["Chrome", "Chromium", "Electron", "Edge", "Brave", "Vivaldi", "Opera"]
+    found = names.contains { n in n.hasSuffix("Framework.framework") && markers.contains { n.contains($0) } }
+  }
+  chromiumLock.lock()
+  chromiumApps[pid] = (launched, found)
+  chromiumLock.unlock()
+  return found
+}
+
+func hasWebArea(_ el: AXUIElement, depth: Int, budget: inout Int) -> Bool {
+  guard depth > 0, budget > 0 else { return false }
+  var ref: CFTypeRef?
+  guard AXUIElementCopyAttributeValue(el, kAXChildrenAttribute as CFString, &ref) == .success, let children = ref as? [AnyObject] else { return false }
+  for child in children {
+    guard budget > 0, let c = asElement(child) else { continue }
+    budget -= 1
+    if axString(c, kAXRoleAttribute) == "AXWebArea" || hasWebArea(c, depth: depth - 1, budget: &budget) { return true }
+  }
+  return false
+}
+
+/// Chromium builds its web accessibility tree only once an assistive client asks (like Cua Driver, which flips
+/// AXManualAccessibility, or AXEnhancedUserInterface where that isn't supported), and asynchronously: wait for it.
+func ensureWebAccessibility(pid: pid_t, app: AXUIElement, window: () -> AXUIElement?) {
+  let launched = NSRunningApplication(processIdentifier: pid)?.launchDate ?? .distantPast
+  chromiumLock.lock()
+  let done = webAccessibilityOn[pid] == launched
+  chromiumLock.unlock()
+  if done { return }
+  let root = window() ?? app
+  if AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue) != .success {
+    _ = AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+  }
+  let deadline = Date().addingTimeInterval(3)
+  while Date() < deadline {
+    var budget = 600
+    if hasWebArea(root, depth: 14, budget: &budget) { break }
+    usleep(100_000)
+  }
+  chromiumLock.lock()
+  webAccessibilityOn[pid] = launched
+  chromiumLock.unlock()
+}
+
+let textEntryRoles: Set<String> = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"]
+
+/// Background left click on web content in a Chromium-family app: focus the field under the point, or press the
+/// element there through accessibility — Chromium turns that into a click (mousedown, mouseup, click) on it.
+/// Returns the method ("ax-focus", "ax"), or nil when the point isn't on web content.
+func axWebClick(pid: pid_t, window: Int, at point: CGPoint) -> String? {
+  guard AXIsProcessTrusted(), isChromiumApp(pid) else { return nil }
+  let app = AXUIElementCreateApplication(pid)
+  AXUIElementSetMessagingTimeout(app, 1.0)
+  ensureWebAccessibility(pid: pid, app: app, window: { axWindow(pid: pid, windowId: window) })
+  var hit: AXUIElement?
+  guard AXUIElementCopyElementAtPosition(app, Float(point.x), Float(point.y), &hit) == .success, var el = hit else { return nil }
+  // The elements from the hit up to the page (none when the point isn't on a page).
+  var chain: [AXUIElement] = []
+  var onPage = false
+  for _ in 0..<40 {
+    let role = axString(el, kAXRoleAttribute) ?? ""
+    if role == "AXWebArea" {
+      onPage = true
+      break
+    }
+    if role == "AXWindow" || role == "AXApplication" { break }
+    chain.append(el)
+    guard let parent = axParent(el) else { break }
+    el = parent
+  }
+  guard onPage, !chain.isEmpty else { return nil }
+  for e in chain.prefix(4) where textEntryRoles.contains(axString(e, kAXRoleAttribute) ?? "") {
+    if AXUIElementSetAttributeValue(e, kAXFocusedAttribute as CFString, kCFBooleanTrue) == .success {
+      // Password fields report a masked value: never rewrite them.
+      rememberWebField(pid, axString(e, kAXSubroleAttribute) == "AXSecureTextField" ? nil : e)
+      return "ax-focus"
+    }
+  }
+  for e in chain where axActions(e).contains(kAXPressAction) {
+    if AXUIElementPerformAction(e, kAXPressAction as CFString) == .success {
+      rememberWebField(pid, nil)
+      return "ax"
+    }
+  }
+  return nil
+}
+
+// Keys posted to a background Chromium-family app don't reach its pages either (no route does on current macOS).
+// Text goes into the web field a background click focused through accessibility instead: Chromium ignores
+// AXSelectedText, so the field's value is rewritten with the text spliced in at the caret (the page gets an input
+// event). Editing keys (backspace, delete, cmd+a) work the same way; Return can't be sent.
+
+let webFieldLock = NSLock()
+var webFields: [pid_t: AXUIElement] = [:]
+
+func rememberWebField(_ pid: pid_t, _ field: AXUIElement?) {
+  webFieldLock.lock()
+  webFields[pid] = field
+  pendingSelections[pid] = nil
+  webFieldLock.unlock()
+}
+
+/// The web field a background click focused, while it still has the page's focus. (A background app reports no
+/// focused element, so it is remembered.)
+func focusedWebField(_ pid: pid_t) -> AXUIElement? {
+  webFieldLock.lock()
+  let field = webFields[pid]
+  webFieldLock.unlock()
+  guard let field else { return nil }
+  var ref: CFTypeRef?
+  guard AXUIElementCopyAttributeValue(field, kAXFocusedAttribute as CFString, &ref) == .success, (ref as? Bool) == true else {
+    rememberWebField(pid, nil)
+    return nil
+  }
+  return field
+}
+
+/// A selection set on a field, with the text it was set on: the page applies it at once, but Chromium's accessibility
+/// tree reports it a moment later — until then (at most a second) the helper's own record wins.
+var pendingSelections: [pid_t: (field: AXUIElement, text: String, range: NSRange, at: Date)] = [:]
+
+func axReadSelection(_ el: AXUIElement) -> NSRange? {
+  var ref: CFTypeRef?
+  var r = CFRange(location: 0, length: 0)
+  guard AXUIElementCopyAttributeValue(el, kAXSelectedTextRangeAttribute as CFString, &ref) == .success, let v = asAXValue(ref), AXValueGetValue(v, .cfRange, &r) else { return nil }
+  return NSRange(location: r.location, length: r.length)
+}
+
+func axSelection(_ el: AXUIElement, pid: pid_t, text: String) -> NSRange {
+  let length = (text as NSString).length
+  webFieldLock.lock()
+  let pending = pendingSelections[pid]
+  webFieldLock.unlock()
+  let reported = axReadSelection(el)
+  var r = reported ?? NSRange(location: length, length: 0)
+  if let pending, CFEqual(pending.field, el), pending.text == text, Date().timeIntervalSince(pending.at) < 1, reported != pending.range {
+    r = pending.range
+  }
+  let location = max(0, min(length, r.location))
+  return NSRange(location: location, length: max(0, min(length - location, r.length)))
+}
+
+func axSetSelection(_ el: AXUIElement, pid: pid_t, text: String, _ range: NSRange) {
+  var r = CFRange(location: range.location, length: range.length)
+  if let v = AXValueCreate(.cfRange, &r) { AXUIElementSetAttributeValue(el, kAXSelectedTextRangeAttribute as CFString, v) }
+  webFieldLock.lock()
+  pendingSelections[pid] = (el, text, range, Date())
+  webFieldLock.unlock()
+}
+
+/// The field's text — nil when it can't be read (then it must not be rewritten: that would drop what's in it).
+func axFieldText(_ el: AXUIElement) -> String? {
+  var ref: CFTypeRef?
+  guard AXUIElementCopyAttributeValue(el, kAXValueAttribute as CFString, &ref) == .success else { return nil }
+  return ref as? String
+}
+
+/// Replace `range` (default: the selection) of the field's text with `text`; the caret goes after it.
+func axReplace(_ el: AXUIElement, pid: pid_t, _ range: NSRange? = nil, with text: String) -> Bool {
+  guard let current = axFieldText(el) else { return false }
+  let target = range ?? axSelection(el, pid: pid, text: current)
+  let next = (current as NSString).replacingCharacters(in: target, with: text)
+  guard AXUIElementSetAttributeValue(el, kAXValueAttribute as CFString, next as CFString) == .success else { return false }
+  axSetSelection(el, pid: pid, text: next, NSRange(location: target.location + (text as NSString).length, length: 0))
+  return true
+}
+
+/// An editing key on a focused web field. False when the key has no accessibility equivalent.
+func axWebKey(_ field: AXUIElement, pid: pid_t, key: String, modifiers: [String]) -> Bool {
+  guard let value = axFieldText(field) else { return false }
+  let text = value as NSString
+  let sel = axSelection(field, pid: pid, text: value)
+  switch (key, Set(modifiers)) {
+  case ("a", ["cmd"]):
+    axSetSelection(field, pid: pid, text: value, NSRange(location: 0, length: text.length))
+    return true
+  case ("backspace", []):
+    if sel.length > 0 { return axReplace(field, pid: pid, sel, with: "") }
+    guard sel.location > 0 else { return true }
+    return axReplace(field, pid: pid, text.rangeOfComposedCharacterSequence(at: sel.location - 1), with: "")
+  case ("delete", []):
+    if sel.length > 0 { return axReplace(field, pid: pid, sel, with: "") }
+    guard sel.location < text.length else { return true }
+    return axReplace(field, pid: pid, text.rangeOfComposedCharacterSequence(at: sel.location), with: "")
+  default:
+    return false
+  }
+}
+
 func axSize(_ el: AXUIElement) -> CGSize? {
   var ref: CFTypeRef?
   guard AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &ref) == .success, let ref else { return nil }
@@ -1172,6 +1441,7 @@ func pointer(_ p: Params) throws -> [String: Any] {
   let (button, downType, upType, dragType) = mouseButton(p.string("button"))
   let flags = modifierFlags(p.strings("modifiers"))
   var method = "event"
+  var frontStolen = false
   // One window of a background app: Cua Driver's routed recipes, window-local locations, the agent cursor.
   var routed: (pid: pid_t, window: Int, origin: CGPoint)? = nil
   if let pid, let window {
@@ -1204,8 +1474,10 @@ func pointer(_ p: Params) throws -> [String: Any] {
     if let r = routed {
       if button == .left && count == 1 && flags.isEmpty && axPress(pid: r.pid, at: point) {
         method = "ax"
+      } else if button == .left && count == 1 && flags.isEmpty, let how = axWebClick(pid: r.pid, window: r.window, at: point) {
+        method = how
       } else if button == .left {
-        backgroundLeftClick(pid: r.pid, window: r.window, at: point, count: count, flags: flags)
+        if !backgroundLeftClick(pid: r.pid, window: r.window, at: point, count: count, flags: flags) { frontStolen = true }
       } else {
         routedClick(pid: r.pid, window: r.window, at: point, local: local(point), button: button, downType: downType, upType: upType, count: count, flags: flags)
       }
@@ -1305,7 +1577,7 @@ func pointer(_ p: Params) throws -> [String: Any] {
   default:
     throw HelperError("Unknown pointer action \"\(action)\"", code: "bad_request")
   }
-  return ["method": method]
+  return ["method": method, "chromium": routed.map { isChromiumApp($0.pid) } ?? false, "cameToFront": frontStolen]
 }
 
 func cursor() -> [String: Any] {
@@ -1479,15 +1751,22 @@ func handle(_ line: String) {
       case "pointer": return try pointer(p)
       case "key":
         try requireAccessibility()
-        try pressKey(p)
-        return ["ok": true]
+        return try pressKey(p)
       case "type":
         try requireAccessibility()
-        try typeText(p)
-        return ["ok": true]
+        return try typeText(p)
       case "activate": return try activate(p)
       case "ensureKeyWindow": return try ensureKeyWindow(p)
       case "openApp": return try openApp(p)
+      case "agentCursor":
+        if p.bool("hide") == true {
+          let window = p.int("window")
+          DispatchQueue.main.async { AgentCursor.shared.hide(window: window) }
+          return ["ok": true]
+        }
+        agentCursor(window: try p.requireInt("window"), to: CGPoint(x: try p.requireDouble("x"), y: try p.requireDouble("y")))
+        if p.bool("click") == true { agentCursorPulse() }
+        return ["ok": true]
       default: throw HelperError("Unknown command \"\(cmd)\"", code: "bad_request")
       }
     }
@@ -1507,5 +1786,8 @@ Thread.detachNewThread {
   exit(0)
 }
 
-// The main run loop keeps AppKit state fresh (frontmost app, running apps) and runs main-thread work (TIS, activation).
-RunLoop.main.run()
+// The main thread runs AppKit: it keeps its state fresh (frontmost app, running apps), runs main-thread work (TIS,
+// activation) and draws the agent cursor. An accessory app: no Dock icon, never activated.
+let application = NSApplication.shared
+application.setActivationPolicy(.accessory)
+application.run()

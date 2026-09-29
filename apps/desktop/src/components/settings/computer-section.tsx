@@ -135,13 +135,13 @@ export function ComputerSection({ settings }: { settings: Settings }) {
         <SettingRow
           label="Show the agent's cursor"
           htmlFor="computer-agent-cursor"
-          disabled={!c.enabled || !c.useCuaDriver}
-          description="Cua Driver draws its own pointer on the window an agent controls, so you can see where it acts."
+          disabled={!c.enabled || (!mac && !c.useCuaDriver)}
+          description="An agent works in the background without moving your pointer — this draws its own pointer on the window it controls, so you can see where it clicks."
         >
           <Switch
             id="computer-agent-cursor"
             checked={c.agentCursor}
-            disabled={!c.enabled || !c.useCuaDriver}
+            disabled={!c.enabled || (!mac && !c.useCuaDriver)}
             onCheckedChange={(agentCursor) => patch({ computer: { agentCursor } })}
           />
         </SettingRow>
