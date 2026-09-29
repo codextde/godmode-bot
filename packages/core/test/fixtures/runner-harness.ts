@@ -38,7 +38,7 @@ export const fills: {
   httpHosts?: string[];
 }[] = [];
 /** Runs that asked for browser tools, with the chat they are bound to. */
-export const browserRuns: { agentId: string; runId: string; conversationId: string }[] = [];
+export const browserRuns: { agentId: string; runId: string; conversationId: string; profileId: string | null }[] = [];
 /** When set, the fake fill fails with an error message that echoes the typed text (leak test). */
 export const fillFailure = { echoText: false };
 
@@ -60,10 +60,13 @@ const fakeProfile: BrowserProfile = {
 
 mock.module("../../src/browser/manager", () => ({
   ...realBrowser,
-  resolveProfileForAgent: (agent: Agent) => (testAgentIds.has(agent.id) ? fakeProfile : realBrowser.resolveProfileForAgent(agent)),
-  browserMcpServer: async (agent: Agent, run: Parameters<BrowserModule["browserMcpServer"]>[1]) => {
-    if (!testAgentIds.has(agent.id)) return realBrowser.browserMcpServer(agent, run);
-    browserRuns.push({ agentId: agent.id, ...run });
+  resolveProfileForAgent: (agent: Agent, conversationId?: string | null) =>
+    testAgentIds.has(agent.id) && !(conversationId && realBrowser.chatProfileId(conversationId))
+      ? fakeProfile
+      : realBrowser.resolveProfileForAgent(agent, conversationId),
+  browserMcpServer: async (agent: Agent, run: Parameters<BrowserModule["browserMcpServer"]>[1], profileId?: string | null) => {
+    if (!testAgentIds.has(agent.id)) return realBrowser.browserMcpServer(agent, run, profileId);
+    browserRuns.push({ agentId: agent.id, ...run, profileId: profileId ?? null });
     return null;
   },
   fillIntoPage: async (profileId: string, opts: Parameters<BrowserModule["fillIntoPage"]>[1]) => {

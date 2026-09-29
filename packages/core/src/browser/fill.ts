@@ -11,7 +11,7 @@
  * typing — so a prompt-injected page cannot get a secret typed into a foreign site.
  */
 import { domainMatches, hostnameOf, randomToken } from "../util";
-import { PageSession, type CdpClient } from "./cdp";
+import { PageSession, attachToPage, pickActivePage, type CdpClient, type PageTarget } from "./cdp";
 
 export type FillKind = "username" | "password" | "totp" | "text";
 
@@ -440,4 +440,49 @@ export async function fillOnPage(page: PageSession, opts: FillOptions): Promise<
   let detail = `Filled ${kind === "text" ? "text" : kind} into ${where} (${how}${ctx.isChildFrame ? ", inside an embedded frame" : ""})${opts.submit ? " and pressed Enter" : ""}.`;
   if (fin.matches === false) detail += " Warning: the field's content length differs from what was typed — the page may have truncated or reformatted it.";
   return { ok: true, url: opts.submit ? await currentUrl() : fin.url || (await currentUrl()), detail };
+}
+
+/** Why nothing may be filled no matter which page is open (nothing to type, a login bound to no site), or null. */
+export function fillPrecheck(opts: Pick<FillOptions, "text" | "allowedHosts">): FillResult | null {
+  if (typeof opts.text !== "string" || opts.text.length === 0) return { ok: false, url: "", detail: "Nothing to type." };
+  if (!Array.isArray(opts.allowedHosts) || opts.allowedHosts.length === 0) {
+    return { ok: false, url: "", detail: "Refusing to fill: this login has no site (URL or domain) it belongs to. Ask the human to add one in the vault." };
+  }
+  return null;
+}
+
+/**
+ * Fill into the active page (or the one whose URL contains `urlContains`) of a browser reached over CDP — Godmode's
+ * Chromium on this computer or the Chrome in a VM — or into the page `chatPage` picks (a chat's own tab). Callers check
+ * `fillPrecheck` first. The typed value never appears in the result.
+ */
+export async function fillIntoActivePage(
+  browser: { client: CdpClient; port?: number; chatPage?: (urlContains?: string) => PageTarget | null },
+  opts: FillOptions & { urlContains?: string },
+): Promise<FillResult> {
+  // Belt and braces: error texts come from CDP/our scripts, but never let the typed value through.
+  const scrub = (detail: string) => detail.split(opts.text).join("••••••••");
+  try {
+    const chat = !!browser.chatPage;
+    const target = browser.chatPage
+      ? browser.chatPage(opts.urlContains)
+      : await pickActivePage(browser.client, { port: browser.port, urlContains: opts.urlContains });
+    if (!target) {
+      const detail = opts.urlContains
+        ? `No open tab${chat ? " of this chat" : ""} has a URL containing "${opts.urlContains}".`
+        : chat
+          ? "This chat has no open tab yet. Open the login page with the browser tools first."
+          : "The browser has no open tab.";
+      return { ok: false, url: "", detail };
+    }
+    const page = await attachToPage(browser.client, target.targetId);
+    try {
+      const result = await fillOnPage(page, opts);
+      return { ...result, detail: scrub(result.detail) };
+    } finally {
+      await page.detach();
+    }
+  } catch (err) {
+    return { ok: false, url: "", detail: scrub(`Could not fill the field: ${err instanceof Error ? err.message : String(err)}`) };
+  }
 }

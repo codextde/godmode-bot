@@ -34,6 +34,8 @@ export interface WorkspaceInput {
   instructions?: string;
   /** macOS VM for the workspace's agents; null = none. */
   vmId?: ID | null;
+  /** Browser profile for the workspace's agents, moved into the workspace if needed; null = the global default. */
+  browserProfileId?: ID | null;
   /** Every attached folder and repository, in order. One naming an existing source keeps it (and its clone). */
   sources?: WorkspaceSourceInput[];
 }
@@ -128,6 +130,8 @@ export interface StartChatInput {
   computerTarget?: ComputerTarget | null;
   /** Work in this macOS VM instead of the agent's. */
   vmId?: ID | null;
+  /** Browse in this profile instead of the agent's. */
+  browserProfileId?: ID | null;
   instructions?: string;
 }
 
@@ -144,6 +148,8 @@ export interface ConversationPatch {
   computerTarget?: ComputerTarget | null;
   /** macOS VM for this chat; null = back to the agent's (or workspace's). */
   vmId?: ID | null;
+  /** Browser profile for this chat; null = back to the agent's (or the default). */
+  browserProfileId?: ID | null;
   /** "" = none. */
   instructions?: string;
 }
@@ -388,6 +394,16 @@ export interface SetupInput {
   rememberDevice: boolean;
   userName?: string;
   dashboardPassword?: string;
+}
+
+/** Errors the app UI ran into, recorded in the diagnostic log (`POST /api/logs/client`). */
+export interface ClientLogInput {
+  entries: {
+    level: "info" | "warn" | "error";
+    msg: string;
+    stack?: string;
+    data?: Record<string, unknown>;
+  }[];
 }
 
 export type { Agent, Attachment, Conversation, Credential, Message, Routine, Run, TotpEntry, Workspace };

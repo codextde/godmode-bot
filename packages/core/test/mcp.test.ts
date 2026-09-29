@@ -7,9 +7,10 @@ import { createTotp } from "../src/vault/totp";
 import { listAudit } from "../src/services/audit";
 import { listMissingLogins } from "../src/services/missingLogins";
 import { listNotifications } from "../src/services/notifications";
-import { getConversation } from "../src/services/conversations";
+import { getConversation, startChat } from "../src/services/conversations";
 import { issueRunToken, resolveRunToken, revokeRunToken } from "../src/mcp/tokens";
-import { getRun, listRuns } from "../src/runner/runner";
+import { cancelRun, getRun, listRuns, waitForRun } from "../src/runner/runner";
+import { createProfile } from "../src/browser/manager";
 import { getAgent, listAgents, updateAgent } from "../src/agents/service";
 import { createRoutine, listRoutines } from "../src/services/routines";
 import { updateSettings } from "../src/services/settings";
@@ -390,6 +391,25 @@ describe("agents + delegation", () => {
     expect(getRun(runId).status).toBe("succeeded");
     const other = await call(tokens[worker.id]!, "vault_list_logins", {});
     expect(other.isError).toBeUndefined();
+  });
+
+  test("agent_delegate keeps the browser profile picked for the caller's chat, within the target's reach", async () => {
+    const browsing = await makeAgent({ name: "Browsing delegator", browser: { enabled: true }, permissions: { allowDelegation: true } });
+    const global = createProfile({ name: "Delegation profile", workspaceId: null });
+    const elsewhere = createProfile({ name: "Other workspace profile", workspaceId: createWorkspace({ name: "Delegation" }).id });
+    const delegate = async (profileId: string) => {
+      const parent = await startChat({ agentId: browsing.id, content: "SLEEP", browserProfileId: profileId });
+      const token = issueRunToken({ runId: parent.run.id, agentId: browsing.id, conversationId: parent.conversation.id, workspaceId: null, depth: 0 });
+      const r = await call(token, "agent_delegate", { agentId: worker.id, task: "Profile check", wait: false });
+      const runId = /run (run_[A-Za-z0-9]+)/.exec(r.content[0]!.text)![1]!;
+      const inherited = getConversation(getRun(runId).conversationId).browserProfileId;
+      revokeRunToken(token);
+      await cancelRun(parent.run.id);
+      await waitForRun(runId, 20_000);
+      return inherited;
+    };
+    expect(await delegate(global.id)).toBe(global.id);
+    expect(await delegate(elsewhere.id)).toBeNull();
   });
 
   test("delegation limits: depth, self, non-peers", async () => {

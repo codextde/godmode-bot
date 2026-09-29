@@ -1,11 +1,13 @@
 import type { Settings } from "@godmode/shared";
 import * as vault from "../vault/vault";
+import { setFileLogLevel } from "../log";
 import { pruneAudit } from "./audit";
 
 /** Apply settings that affect running subsystems (called at startup and after every settings update). */
 export function applyRuntimeSettings(settings: Settings) {
   vault.setAutoLock(settings.security.autoLockMinutes);
   pruneAudit(settings.security.auditRetentionDays);
+  setFileLogLevel(settings.diagnostics.verbose || process.env.GODMODE_LOG_LEVEL === "debug" ? "debug" : "info");
   for (const hook of hooks) {
     try {
       hook(settings);

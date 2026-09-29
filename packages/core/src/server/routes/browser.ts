@@ -40,7 +40,10 @@ export function registerBrowserRoutes(app: Hono): void {
   app.get("/api/browser/profiles/:id", (c) => c.json(getProfile(c.req.param("id"))));
 
   app.patch("/api/browser/profiles/:id", async (c) => {
-    const patch = await body(c, z.object({ name: z.string().min(1).max(80).optional(), isDefault: z.boolean().optional() }));
+    const patch = await body(
+      c,
+      z.object({ name: z.string().min(1).max(80).optional(), isDefault: z.boolean().optional(), workspaceId: z.string().max(100).nullable().optional() }),
+    );
     return c.json(updateProfile(c.req.param("id"), patch));
   });
 

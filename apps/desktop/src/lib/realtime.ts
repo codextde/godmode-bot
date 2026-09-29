@@ -41,6 +41,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   computer: [qk.computer],
   // VM list + status (installs, image downloads, assignment changes).
   vms: [qk.vms],
+  // Bot status, access requests and chats (the sidebar badge counts requests).
+  messaging: [qk.messaging, qk.bootstrap],
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
 };

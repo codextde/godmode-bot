@@ -60,17 +60,19 @@ needs to be useful:
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
 | 🗂️ **Parallel chats, own tabs** | Every chat gets its own tab (in its own background window) in the shared browser profile, so several chats and agents browse at the same time — signed in with the same logins, without ever touching each other's pages. |
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
-| 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent runs commands, edits files and uses apps *inside the VM* — your computer stays untouched. VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. Allow it once and agents sign in inside the VM too: Godmode types your saved logins and 2FA codes into it for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). |
+| 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent works *entirely inside the VM* — commands, files, apps (computer use with Cua Driver) and the web (Google Chrome with browser-use) — and no browser opens on your Mac. Watch the VM's screen next to the chat and take control anytime. Allow it once and agents sign in inside the VM too: Godmode fills your saved logins and 2FA codes for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
 | 🔐 **Vault** | Logins with password generator, per-workspace or global, AES-256-GCM encrypted, fully audited. |
 | 📥 **Password import** | Bring logins over from Chrome (and Edge, Brave, Arc), 1Password (.1pux or CSV), Bitwarden, Apple Passwords, Firefox and more — with a preview that updates saved logins instead of duplicating them. |
 | 🔢 **2FA / TOTP** | Import Google Authenticator QR codes from screenshots — including multi-account *export* QR codes — or scan with your camera. |
 | 📬 **Missing-login inbox** | Agents report missing or broken logins, accounts and 2FA; add them in one click. |
 | 🧩 **Integrations** | Composio toolkits (Gmail, Slack, GitHub, Notion…) and custom MCP servers — globally, per workspace, or per agent. |
-| 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA and integrations, plus shared global ones. |
+| 💬 **Messaging** | Talk to your agents from **Slack**, **Telegram** and **Microsoft Teams**. Connect a bot, pick which agents it reaches, and approve who may use it; `/agent`, `/new` and `/stop` work right in the chat, and every chat is also a Godmode conversation. |
+| 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA, integrations and browser profile, plus shared global ones. Assign any browser profile to a workspace (Browser → profile menu, or in the workspace's settings) and its agents browse with it. |
 | 🧬 **Workspace folders & repos** | Attach project folders and git repositories to a workspace — paste `https://github.com/you/app` and Godmode clones it with your git sign-in, keeps it up to date and hands it to every agent in the workspace. |
 | 🎙️ **Voice mode** | Dictate and hear replies; hands-free conversation loop (Web Speech, OpenAI or ElevenLabs). |
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
+| 🩺 **Diagnostic log** | Errors, slow spots and how every run went, with secrets masked. Settings → Logs groups recurring problems and copies an AI-ready report — paste it into Claude to find bugs and speed things up. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
 
 <table>
@@ -109,6 +111,10 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/workspace-sources.png" alt="Folders and git repositories attached to a workspace" /><br /><sub><b>Workspace folders & repos</b> — every agent in the workspace works with them</sub></td>
     <td><img src="docs/screenshots/workspace-add-repo.png" alt="Add a git repository to a workspace" /><br /><sub><b>Add a repository</b> — paste a URL, Godmode clones it and keeps it up to date</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/messaging.png" alt="Slack, Telegram and Teams bots connected to agents" /><br /><sub><b>Messaging</b> — talk to agents from Slack, Telegram and Microsoft Teams</sub></td>
+    <td><img src="docs/screenshots/messaging-bot.png" alt="A bot's access requests, agents and who may use it" /><br /><sub><b>Bot settings</b> — approve people, pick agents, see every chat</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/chat-own-tab.png" alt="A chat next to a live preview of its own browser tab" /><br /><sub><b>Own tab per chat</b> — the preview shows only this chat's page, while others browse alongside</sub></td>
@@ -200,9 +206,9 @@ workspace's, and boots it when needed. You can also just ask Godmode: *"Give the
 
 | | |
 |---|---|
-| **What the agent gets** | A `vm` tool set: `shell` (zsh as `admin`, passwordless sudo, Homebrew), `read_file` / `write_file` / `edit_file`, and `screen` — screenshots, clicks and typing on the VM's display for GUI apps. Claude Code's own Bash tool is turned off for these runs and its file tools only reach the agent's own folders (Settings → Virtual machines → *Keep agents with a VM off this Mac*), so the work stays in the VM. |
+| **What the agent gets** | A `vm` tool set: `shell` (zsh as `admin`, passwordless sudo, Homebrew), `read_file` / `write_file` / `edit_file`, and `screen` — screenshots, clicks and typing on the VM's display. Plus Godmode's agent *inside* the VM: **Google Chrome with browser-use** for the web and **Cua Driver** for apps and windows. They're installed into the VM the first time an agent needs them (a few minutes, once per VM); no browser, app or shell of these runs opens on your Mac. Claude Code's own Bash tool is turned off for these runs and its file tools only reach the agent's own folders (Settings → Virtual machines → *Keep agents with a VM off this Mac*). |
 | **Moving files** | Every VM has a shared folder: `~/Godmode` in the VM is `~/.godmode/vm/shared/<vm>` on your Mac (**Shared folder** opens it in Finder). |
-| **Watching & taking over** | The VM card shows a live preview; **Screen** opens it in Screen Sharing, **Terminal** opens an SSH session (a firewall in each VM lets only your Mac in). |
+| **Watching & taking over** | A chat that works in a VM shows the VM's screen next to the conversation (full size with one click); **Take control** and the VM card's **Screen** open it in Screen Sharing, **Terminal** opens an SSH session (a firewall in each VM lets only your Mac in). |
 | **Keeping & recreating** | Disks are stored under `~/.godmode/vm` and keep everything (installed tools, repos, logins) between tasks and restarts. When Godmode quits, running VMs are suspended and resume where they left off. **Reset** recreates a clean macOS from the image (shared folder and assignments stay), **Duplicate** copies a VM with its whole disk. |
 
 Needs a Mac with Apple silicon. macOS allows **two** macOS VMs to run at the same time; Godmode tells you which one to

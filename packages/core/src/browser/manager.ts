@@ -19,7 +19,7 @@ import { resolveUvx, toolPath } from "../services/doctor";
 import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
 import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type PageSession, type PageTarget } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
-import { fillOnPage, type FillKind } from "./fill";
+import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
 import { initLiveView, pauseLiveViews, resumeLiveViews } from "./screencast";
@@ -175,35 +175,59 @@ export function createProfile(input: { name: string; workspaceId: string | null 
   if (!name) throw badRequest("Profile name is required");
   if (name.length > 80) throw badRequest("Profile name is too long (max 80 characters)");
   const workspaceId = input.workspaceId || null;
-  if (workspaceId && !get<{ id: string }>("SELECT id FROM workspaces WHERE id = ?", workspaceId)) throw notFound("Workspace");
-  const hasDefault = workspaceId
-    ? get<{ id: string }>("SELECT id FROM browser_profiles WHERE workspace_id = ? AND is_default = 1", workspaceId)
-    : get<{ id: string }>("SELECT id FROM browser_profiles WHERE workspace_id IS NULL AND is_default = 1");
+  assertWorkspace(workspaceId);
   // The first profile of a scope becomes its default.
-  return insertProfile(name, workspaceId, !hasDefault);
+  const profile = insertProfile(name, workspaceId, !scopeDefaultId(workspaceId));
+  if (workspaceId && profile.isDefault) bus.changed("workspaces");
+  return profile;
 }
 
-export function updateProfile(id: string, patch: { name?: string; isDefault?: boolean }): BrowserProfile {
+function assertWorkspace(workspaceId: string | null) {
+  if (workspaceId && !get<{ id: string }>("SELECT id FROM workspaces WHERE id = ?", workspaceId)) throw notFound("Workspace");
+}
+
+function scopeDefaultId(workspaceId: string | null): string | null {
+  const r = workspaceId
+    ? get<{ id: string }>("SELECT id FROM browser_profiles WHERE workspace_id = ? AND is_default = 1", workspaceId)
+    : get<{ id: string }>("SELECT id FROM browser_profiles WHERE workspace_id IS NULL AND is_default = 1");
+  return r?.id ?? null;
+}
+
+/**
+ * Rename, make (non-)default, or assign to another scope. A profile assigned to a workspace becomes that workspace's
+ * default when it has none yet (or when `isDefault` asks for it); the workspace it leaves falls back to the global default.
+ */
+export function updateProfile(id: string, patch: { name?: string; isDefault?: boolean; workspaceId?: string | null }): BrowserProfile {
   const r = requireRow(id);
-  const changes: Record<string, string | number> = {};
+  const changes: Record<string, string | number | null> = {};
   if (patch.name !== undefined) {
     const name = patch.name.trim();
     if (!name) throw badRequest("Profile name is required");
     if (name.length > 80) throw badRequest("Profile name is too long (max 80 characters)");
     changes.name = name;
   }
-  tx(() => {
-    if (patch.isDefault === true && !r.is_default) {
-      if (r.workspace_id) run("UPDATE browser_profiles SET is_default = 0 WHERE workspace_id = ?", r.workspace_id);
+  const workspaceId = patch.workspaceId === undefined ? r.workspace_id : patch.workspaceId || null;
+  const moving = workspaceId !== r.workspace_id;
+  if (moving) {
+    if (!r.workspace_id && r.is_default) throw badRequest("The global default profile can't be moved. Make another global profile the default first.");
+    assertWorkspace(workspaceId);
+    changes.workspace_id = workspaceId;
+  }
+  const alreadyDefault = !!r.is_default && !moving;
+  const isDefault = tx(() => {
+    const next = patch.isDefault ?? (moving ? !scopeDefaultId(workspaceId) : alreadyDefault);
+    if (next && !alreadyDefault) {
+      if (workspaceId) run("UPDATE browser_profiles SET is_default = 0 WHERE workspace_id = ?", workspaceId);
       else run("UPDATE browser_profiles SET is_default = 0 WHERE workspace_id IS NULL");
-      changes.is_default = 1;
-    } else if (patch.isDefault === false && r.is_default) {
-      if (!r.workspace_id) throw badRequest("The global default profile can't be unset. Make another global profile the default instead.");
-      changes.is_default = 0;
+    } else if (!next && alreadyDefault && !workspaceId) {
+      throw badRequest("The global default profile can't be unset. Make another global profile the default instead.");
     }
+    if (next !== !!r.is_default) changes.is_default = next ? 1 : 0;
     if (Object.keys(changes).length) update("browser_profiles", id, { ...changes, updated_at: now() });
+    return next;
   });
   bus.changed("browser-profiles");
+  if (moving || (workspaceId && isDefault !== alreadyDefault)) bus.changed("workspaces");
   emitProfile(id);
   return getProfile(id);
 }
@@ -218,7 +242,10 @@ export async function deleteProfile(id: string): Promise<void> {
   const r = requireRow(id);
   if (!r.workspace_id && r.is_default) throw badRequest("The global default profile can't be deleted. Make another global profile the default first.");
   await stopBrowser(id);
-  run("DELETE FROM browser_profiles WHERE id = ?", id);
+  tx(() => {
+    run("DELETE FROM browser_profiles WHERE id = ?", id);
+    run("UPDATE conversations SET browser_profile_id = NULL WHERE browser_profile_id = ?", id);
+  });
   // Only ever delete directories Godmode created.
   const cfg = config();
   for (const dir of [r.user_data_dir, join(cfg.dataDir, "browser-use", id)]) {
@@ -231,10 +258,19 @@ export async function deleteProfile(id: string): Promise<void> {
     }
   }
   bus.changed("browser-profiles");
+  if (r.workspace_id && r.is_default) bus.changed("workspaces");
 }
 
-/** Profile an agent should use: agent.browser.profileId ?? workspace default ?? global default. */
-export function resolveProfileForAgent(agent: Agent): BrowserProfile {
+/** Profile picked for the chat itself (not inherited from its agent). */
+export function chatProfileId(conversationId: string): string | null {
+  return get<{ browser_profile_id: string | null }>("SELECT browser_profile_id FROM conversations WHERE id = ?", conversationId)?.browser_profile_id ?? null;
+}
+
+/** Profile a run uses: its chat's ?? agent.browser.profileId ?? workspace default ?? global default. */
+export function resolveProfileForAgent(agent: Agent, conversationId?: string | null): BrowserProfile {
+  const chosen = conversationId ? chatProfileId(conversationId) : null;
+  const forChat = chosen ? row(chosen) : null;
+  if (forChat) return toProfile(forChat);
   const pinned = agent.browser?.profileId ? row(agent.browser.profileId) : null;
   if (pinned) return toProfile(pinned);
   if (agent.browser?.profileId) log.warn(`agent ${agent.id} references missing browser profile ${agent.browser.profileId}; using default`);
@@ -664,40 +700,17 @@ export async function fillIntoPage(
   },
 ): Promise<{ ok: boolean; url: string; detail: string }> {
   requireRow(profileId);
-  if (typeof opts.text !== "string" || opts.text.length === 0) return { ok: false, url: "", detail: "Nothing to type." };
-  if (!Array.isArray(opts.allowedHosts) || opts.allowedHosts.length === 0) {
-    return { ok: false, url: "", detail: "Refusing to fill: this login has no site (URL or domain) it belongs to. Ask the human to add one in the vault." };
-  }
+  const refused = fillPrecheck(opts);
+  if (refused) return refused;
   const rb = getRunning(profileId);
   if (!rb) return { ok: false, url: "", detail: "The browser is not running. Open the login page with the browser tools first." };
   rb.lastUsedAt = Date.now();
-  // Belt and braces: error texts come from CDP/our scripts, but never let the typed value through.
-  const scrub = (detail: string) => detail.split(opts.text).join("••••••••");
   try {
-    const result = await withPage(rb, opts, (page) =>
-      fillOnPage(page, {
-        text: opts.text,
-        kind: opts.kind,
-        selector: opts.selector,
-        submit: opts.submit,
-        allowedHosts: opts.allowedHosts,
-        httpHosts: opts.httpHosts,
-      }),
+    const chat = opts.conversationId;
+    return await fillIntoActivePage(
+      { client: rb.client, port: rb.port, ...(chat ? { chatPage: (urlContains?: string) => chatPage(rb, chat, urlContains) } : {}) },
+      opts,
     );
-    if (!result) {
-      return {
-        ok: false,
-        url: "",
-        detail: opts.urlContains
-          ? `No open tab${opts.conversationId ? " of this chat" : ""} has a URL containing "${opts.urlContains}".`
-          : opts.conversationId
-            ? "This chat has no open tab yet. Open the login page with the browser tools first."
-            : "The browser has no open tab.",
-      };
-    }
-    return { ...result, detail: scrub(result.detail) };
-  } catch (err) {
-    return { ok: false, url: "", detail: scrub(`Could not fill the field: ${err instanceof Error ? err.message : String(err)}`) };
   } finally {
     rb.lastUsedAt = Date.now();
   }
@@ -753,12 +766,16 @@ export function requireRunning(profileId: string): RunningBrowser {
 const runDirs = new Map<string, string>();
 
 /**
- * MCP server entry giving a run browser tools: browser-use MCP connected over CDP to the profile's Chromium, through
- * the run's own endpoint that only reaches its chat's tabs (proxy.ts). Returns null when browser is disabled for the
- * agent or globally; throws (with a message fit for the human) when browser tools are enabled but can't be provided.
- * Call `releaseChatBrowser` when the run ends.
+ * MCP server entry giving a run browser tools: browser-use MCP connected over CDP to the profile's Chromium — `profileId`
+ * as resolved for the run, else the agent's — through the run's own endpoint that only reaches its chat's tabs
+ * (proxy.ts). Returns null when browser is disabled for the agent or globally; throws (with a message fit for the
+ * human) when browser tools are enabled but can't be provided. Call `releaseChatBrowser` when the run ends.
  */
-export async function browserMcpServer(agent: Agent, run: { runId: string; conversationId: string }): Promise<McpServerJson | null> {
+export async function browserMcpServer(
+  agent: Agent,
+  run: { runId: string; conversationId: string },
+  profileId?: string | null,
+): Promise<McpServerJson | null> {
   const settings = getSettings();
   if (!settings.browser.enabled || !agent.browser?.enabled) return null;
 
@@ -767,7 +784,7 @@ export async function browserMcpServer(agent: Agent, run: { runId: string; conve
     throw new HttpError(424, "uv (uvx) is not installed, so browser-use can't start. Install it in Settings → Dependencies.", "uv_missing");
   }
 
-  const profile = resolveProfileForAgent(agent);
+  const profile = profileId ? getProfile(profileId) : resolveProfileForAgent(agent, run.conversationId);
   const headless = agent.browser.headless ?? settings.browser.headless;
   await launchBrowser(profile.id, { headless });
   const cdpUrl = openChatLease({

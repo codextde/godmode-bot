@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
-import { Cookie, Download, Ellipsis, Globe, Pencil, Play, Plus, Square, Star, Trash2 } from "lucide-react";
+import { Cookie, Download, Ellipsis, Globe, Layers, Pencil, Play, Plus, Square, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { BrowserProfile } from "@godmode/shared";
 import {
@@ -38,6 +38,7 @@ import { qk } from "@/lib/queryKeys";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import type { ProfileActions } from "./use-profile-actions";
+import { AssignWorkspaceDialog } from "./assign-workspace-dialog";
 
 function relative(iso: string | null) {
   if (!iso) return null;
@@ -62,6 +63,7 @@ export function ProfileList({
   actions: ProfileActions;
 }) {
   const [renameTarget, setRenameTarget] = useState<BrowserProfile | null>(null);
+  const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BrowserProfile | null>(null);
 
   if (isLoading) {
@@ -93,6 +95,7 @@ export function ProfileList({
                 onSelect={() => onSelect(p.id)}
                 actions={actions}
                 onRename={() => setRenameTarget(p)}
+                onAssign={() => setAssignTarget(p.id)}
                 onDelete={() => setDeleteTarget(p)}
               />
             </motion.div>
@@ -101,6 +104,7 @@ export function ProfileList({
       </div>
 
       <RenameProfileDialog profile={renameTarget} onClose={() => setRenameTarget(null)} actions={actions} />
+      <AssignWorkspaceDialog profileId={assignTarget} profiles={profiles} onClose={() => setAssignTarget(null)} actions={actions} />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
@@ -135,6 +139,7 @@ function ProfileCard({
   onSelect,
   actions,
   onRename,
+  onAssign,
   onDelete,
 }: {
   profile: BrowserProfile;
@@ -142,6 +147,7 @@ function ProfileCard({
   onSelect: () => void;
   actions: ProfileActions;
   onRename: () => void;
+  onAssign: () => void;
   onDelete: () => void;
 }) {
   const launching = actions.launch.isPending && actions.launch.variables?.id === p.id;
@@ -237,6 +243,9 @@ function ProfileCard({
           )}
           <DropdownMenuItem onClick={onRename}>
             <Pencil /> Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onAssign} disabled={p.isDefault && !p.workspaceId}>
+            <Layers /> {p.isDefault && !p.workspaceId ? "Default stays global" : "Assign to workspace…"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" disabled={p.isDefault} onClick={onDelete}>

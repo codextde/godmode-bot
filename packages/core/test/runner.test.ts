@@ -33,6 +33,7 @@ import {
   waitForRun,
 } from "../src/runner/runner";
 import { FAKE_CLAUDE } from "./fixtures/runner-harness";
+import { createProfile, deleteProfile, resolveProfileForAgent } from "../src/browser/manager";
 import { now } from "../src/util";
 
 let env: TestEnv;
@@ -226,9 +227,45 @@ describe("runner end-to-end with fake claude", () => {
     expect((await waitForRun(child.run.id, 20_000)).status).toBe("succeeded");
     expect(getRun(a.run.id).status).toBe("running");
     // Each run's browser tools are bound to its own chat.
-    expect(browserRuns).toContainEqual({ agentId: browserA.id, runId: a.run.id, conversationId: a.conversation.id });
-    expect(browserRuns).toContainEqual({ agentId: browserB.id, runId: b.run.id, conversationId: b.conversation.id });
+    expect(browserRuns).toContainEqual(expect.objectContaining({ agentId: browserA.id, runId: a.run.id, conversationId: a.conversation.id }));
+    expect(browserRuns).toContainEqual(expect.objectContaining({ agentId: browserB.id, runId: b.run.id, conversationId: b.conversation.id }));
 
+    await cancelRun(a.run.id);
+    await waitForRun(a.run.id, 10_000);
+  });
+
+  test("a chat can work in its own browser profile", async () => {
+    const browserA = await makeAgent({ name: "Browser C", browser: { enabled: true } });
+    const browserB = await makeAgent({ name: "Browser D", browser: { enabled: true } });
+    const own = createProfile({ name: "Chat profile", workspaceId: createWorkspace({ name: "Profiles" }).id });
+    const a = await startChat({ agentId: browserA.id, content: "SLEEP a" });
+    await until(() => getRun(a.run.id).status === "running", 10_000, "run a");
+
+    // A different profile doesn't wait for the run holding the agents' default one.
+    const b = await startChat({ agentId: browserB.id, content: "hello b", browserProfileId: own.id });
+    expect(b.conversation.browserProfileId).toBe(own.id);
+    expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
+    expect(resolveProfileForAgent(browserB, b.conversation.id).id).toBe(own.id);
+    await cancelRun(a.run.id);
+
+    expect(() => updateConversation(b.conversation.id, { browserProfileId: "bpr_missing" })).toThrow(/doesn't exist/);
+    expect(updateConversation(b.conversation.id, { browserProfileId: null }).browserProfileId).toBeNull();
+    updateConversation(b.conversation.id, { browserProfileId: own.id });
+    await deleteProfile(own.id);
+    expect(getConversation(b.conversation.id).browserProfileId).toBeNull();
+  });
+
+  test("a chat's picked browser profile is the one its run drives — without waiting for other chats", async () => {
+    const holder = await makeAgent({ name: "Browser E", browser: { enabled: true } });
+    const other = createProfile({ name: "Free profile", workspaceId: createWorkspace({ name: "Free" }).id });
+    const a = await startChat({ agentId: holder.id, content: "SLEEP a" });
+    await until(() => getRun(a.run.id).status === "running", 10_000, "run a");
+    const conv = createConversation({ agentId: holder.id });
+    updateConversation(conv.id, { browserProfileId: other.id });
+    const b = await sendMessage(conv.id, { content: "hello b" });
+    expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
+    expect(browserRuns).toContainEqual({ agentId: holder.id, runId: b.run.id, conversationId: conv.id, profileId: other.id });
+    expect(getRun(a.run.id).status).toBe("running");
     await cancelRun(a.run.id);
     await waitForRun(a.run.id, 10_000);
   });

@@ -18,6 +18,7 @@ import { requireGrant } from "../grants";
 import { body, z } from "../validate";
 import { badRequest } from "../../util";
 import { isValidDreamSchedule } from "../../memory/dreaming";
+import { pendingRequestCount } from "../../messaging/service";
 
 function count(sql: string): number {
   return get<{ c: number }>(sql)?.c ?? 0;
@@ -44,6 +45,7 @@ export function registerSystemRoutes(app: Hono) {
         openMissingLogins: count("SELECT COUNT(*) AS c FROM missing_logins WHERE status = 'open'"),
         runningRuns: count("SELECT COUNT(*) AS c FROM runs WHERE status IN ('queued','running')"),
         unreadNotifications: unreadCount(),
+        messagingRequests: pendingRequestCount(),
       },
     };
     return c.json(data);
@@ -83,6 +85,9 @@ export function registerSystemRoutes(app: Hono) {
         throw badRequest("Invalid model id for dreaming");
       }
     }
+    const diagnostics = patch.diagnostics as { verbose?: unknown } | undefined;
+    if (diagnostics !== undefined && (typeof diagnostics !== "object" || diagnostics === null || Array.isArray(diagnostics))) throw badRequest("Invalid log settings");
+    if (diagnostics?.verbose !== undefined && typeof diagnostics.verbose !== "boolean") throw badRequest("diagnostics.verbose must be true or false");
     const vm = patch.vm as Record<string, unknown> | undefined;
     if (vm !== undefined) {
       if (typeof vm !== "object" || vm === null || Array.isArray(vm)) throw badRequest("Invalid virtual machine settings");

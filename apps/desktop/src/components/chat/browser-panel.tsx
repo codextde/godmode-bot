@@ -24,20 +24,22 @@ import { cn } from "@/lib/utils";
 
 export type BrowserFocusMode = "watch" | "control";
 
-/** Mirrors the core's resolveProfileForAgent: pinned profile → workspace default → global default. */
-export function agentBrowserProfile(agent: Agent, profiles: BrowserProfile[]): BrowserProfile | null {
+/** Mirrors the core's resolveProfileForAgent: the chat's profile → pinned profile → workspace default → global default. */
+export function agentBrowserProfile(agent: Agent, profiles: BrowserProfile[], chatProfileId: string | null = null): BrowserProfile | null {
+  const own = chatProfileId ? profiles.find((p) => p.id === chatProfileId) : undefined;
+  if (own) return own;
   const pinned = agent.browser.profileId ? profiles.find((p) => p.id === agent.browser.profileId) : undefined;
   if (pinned) return pinned;
   const workspaceDefault = agent.workspaceId ? profiles.find((p) => p.workspaceId === agent.workspaceId && p.isDefault) : undefined;
   return workspaceDefault ?? profiles.find((p) => !p.workspaceId && p.isDefault) ?? null;
 }
 
-/** The browser profile this chat's agent drives (null when the agent has no browser). */
-export function useChatBrowser(agent: Agent | undefined): BrowserProfile | null {
+/** The browser profile this chat drives (null when its agent has no browser). */
+export function useChatBrowser(agent: Agent | undefined, chatProfileId: string | null = null): BrowserProfile | null {
   const { data: settings } = useSettings();
   const enabled = !!agent?.browser.enabled && settings?.browser.enabled !== false;
   const { data: profiles } = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles, enabled });
-  return enabled && agent && profiles ? agentBrowserProfile(agent, profiles) : null;
+  return enabled && agent && profiles ? agentBrowserProfile(agent, profiles, chatProfileId) : null;
 }
 
 /** The chat's own tab in its agent's browser (undefined until the agent opens one). */
@@ -55,6 +57,7 @@ export function BrowserPanel({
   profile,
   conversationId,
   agent,
+  forChat,
   activity,
   onHide,
   onFocus,
@@ -62,6 +65,8 @@ export function BrowserPanel({
   profile: BrowserProfile;
   conversationId: string;
   agent: Agent;
+  /** The profile was picked for this chat rather than inherited from the agent. */
+  forChat?: boolean;
   /** What the agent is doing right now; null while this chat is idle. */
   activity: string | null;
   onHide: () => void;
@@ -211,19 +216,33 @@ export function BrowserPanel({
           )}
         </div>
 
-        <ProfileFooter profile={profile} conversationId={conversationId} pinned={agent.browser.profileId === profile.id} parallel={parallel} />
+        <ProfileFooter profile={profile} conversationId={conversationId} forChat={!!forChat} pinned={agent.browser.profileId === profile.id} parallel={parallel} />
       </div>
     </motion.aside>
   );
 }
 
-function ProfileFooter({ profile, conversationId, pinned, parallel }: { profile: BrowserProfile; conversationId: string; pinned: boolean; parallel: number }) {
+function ProfileFooter({
+  profile,
+  conversationId,
+  forChat,
+  pinned,
+  parallel,
+}: {
+  profile: BrowserProfile;
+  conversationId: string;
+  forChat: boolean;
+  pinned: boolean;
+  parallel: number;
+}) {
   const workspace = useWorkspaceName(profile.workspaceId);
   const detail = parallel
     ? `Own tab · ${parallel} more ${parallel === 1 ? "chat" : "chats"} browsing alongside`
-    : pinned
-      ? "Own tab · profile pinned in this agent's settings"
-      : `Own tab · logins shared with every chat${profile.workspaceId ? ` in ${workspace}` : ""}`;
+    : forChat
+      ? "Own tab · profile picked for this chat"
+      : pinned
+        ? "Own tab · profile pinned in this agent's settings"
+        : `Own tab · logins shared with every chat${profile.workspaceId ? ` in ${workspace}` : ""}`;
   return (
     <Link
       to={`/browser?profile=${profile.id}&chat=${conversationId}`}

@@ -114,6 +114,43 @@ describe("browser profiles", () => {
     expect(manager.resolveProfileForAgent(agent({ browser: { profileId: "bpr_deleted" } })).id).toBe(globalDefault.id);
   });
 
+  test("assigning a profile to a workspace moves it and settles each scope's default", async () => {
+    workspace("ws_b");
+    const globalDefault = manager.ensureDefaultProfile();
+    const first = manager.createProfile({ name: "Client B", workspaceId: null });
+    const second = manager.createProfile({ name: "Client B extra", workspaceId: null });
+    const third = manager.createProfile({ name: "Client B new", workspaceId: null });
+
+    const changed: string[] = [];
+    const off = bus.on((e) => {
+      if (e.type === "entity.changed") changed.push(e.entity);
+    });
+    expect(manager.updateProfile(first.id, { workspaceId: "ws_b" })).toMatchObject({ workspaceId: "ws_b", isDefault: true });
+    off();
+    expect(changed).toEqual(expect.arrayContaining(["browser-profiles", "workspaces"]));
+    expect(manager.updateProfile(second.id, { workspaceId: "ws_b" })).toMatchObject({ workspaceId: "ws_b", isDefault: false });
+    expect(manager.resolveProfileForAgent(agent({ workspaceId: "ws_b" })).id).toBe(first.id);
+
+    manager.updateProfile(third.id, { workspaceId: "ws_b", isDefault: true });
+    expect(manager.getProfile(first.id).isDefault).toBe(false);
+    expect(manager.resolveProfileForAgent(agent({ workspaceId: "ws_b" })).id).toBe(third.id);
+
+    // Leaving a workspace it was the default of: that workspace falls back to the global default.
+    const wsADefault = manager.listProfiles().find((p) => p.workspaceId === "ws_a" && p.isDefault)!;
+    expect(manager.updateProfile(third.id, { workspaceId: "ws_a" })).toMatchObject({ workspaceId: "ws_a", isDefault: false });
+    expect(manager.getProfile(wsADefault.id).isDefault).toBe(true);
+    expect(manager.resolveProfileForAgent(agent({ workspaceId: "ws_b" })).id).toBe(globalDefault.id);
+
+    expect(manager.updateProfile(third.id, { workspaceId: null })).toMatchObject({ workspaceId: null, isDefault: false });
+    expect(manager.ensureDefaultProfile().id).toBe(globalDefault.id);
+    expect(manager.updateProfile(second.id, { name: "Renamed" })).toMatchObject({ workspaceId: "ws_b", name: "Renamed" });
+
+    expect((await httpError(() => manager.updateProfile(globalDefault.id, { workspaceId: "ws_b" }))).status).toBe(400);
+    expect((await httpError(() => manager.updateProfile(second.id, { workspaceId: "ws_missing" }))).status).toBe(404);
+    expect(manager.getProfile(globalDefault.id)).toMatchObject({ workspaceId: null, isDefault: true });
+    expect(manager.getProfile(second.id).workspaceId).toBe("ws_b");
+  });
+
   test("browserMcpServer returns null when browser tools are disabled", async () => {
     const run = { runId: "run_disabled", conversationId: "cnv_disabled" };
     expect(await manager.browserMcpServer(agent({ browser: { enabled: false } }), run)).toBeNull();

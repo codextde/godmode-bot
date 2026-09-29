@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { WorkspaceProfileField } from "@/components/browser/workspace-profile-field";
 import { VmSelectField } from "@/components/vms/vm-picker";
 import { api } from "@/lib/api";
 import { useVmChoices } from "@/lib/hooks";
@@ -53,6 +54,7 @@ export function WorkspaceDialog({
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [vmId, setVmId] = useState<string | null>(null);
+  const [browserProfileId, setBrowserProfileId] = useState<string | null>(null);
   const [sources, setSources] = useState<WorkspaceSourceInput[]>([]);
   const sourcesRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -68,6 +70,7 @@ export function WorkspaceDialog({
     setDescription(workspace?.description ?? "");
     setInstructions(workspace?.instructions ?? "");
     setVmId(workspace?.vmId ?? null);
+    setBrowserProfileId(workspace?.browserProfileId ?? null);
     setSources(workspace?.sources.map(toSourceInput) ?? []);
     setCustomEmoji("");
     // Only when the dialog opens or switches workspace: live updates (clone progress) must not reset the form.
@@ -96,12 +99,14 @@ export function WorkspaceDialog({
         sources,
         // Only when the VM control is shown: otherwise leave the assignment as it is.
         ...(vmChoices.available ? { vmId } : {}),
+        ...(browserProfileId !== (workspace?.browserProfileId ?? null) ? { browserProfileId } : {}),
       };
       return workspace ? api.workspaces.update(workspace.id, input) : api.workspaces.create(input);
     },
     onSuccess: (ws) => {
       void qc.invalidateQueries({ queryKey: qk.workspaces });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
+      void qc.invalidateQueries({ queryKey: qk.browserProfiles });
       if (editing) toast.success("Workspace updated");
       else
         toast.success(`${ws.icon} ${ws.name} created`, {
@@ -280,6 +285,7 @@ export function WorkspaceDialog({
               </div>
               <WorkspaceSourcesField workspaceId={workspace?.id ?? null} value={sources} onChange={setSources} />
             </div>
+            <WorkspaceProfileField id="ws-browser" workspaceId={workspace?.id ?? null} value={browserProfileId} onChange={setBrowserProfileId} />
             {vmChoices.available && (
               <VmSelectField
                 id="ws-vm"

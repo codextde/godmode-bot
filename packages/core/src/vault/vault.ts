@@ -5,7 +5,7 @@ import { config } from "../config";
 import { getMeta, setMeta, deleteMeta, get, run, all, tx } from "../db";
 import { bus } from "../events/bus";
 import { getSettings } from "../services/settings";
-import { logger } from "../log";
+import { logger, setSecretMasker } from "../log";
 import { badRequest, locked, now } from "../util";
 import { decrypt, deriveKey, encrypt, newKdfParams, randomKey, sha256, type KdfParams } from "./crypto";
 
@@ -338,6 +338,15 @@ function loadKnownSecrets() {
         }
       }
     }
+    for (const row of all<{ id: string; secrets_enc: string | null }>("SELECT id, secrets_enc FROM messaging_connections")) {
+      if (!row.secrets_enc) continue;
+      try {
+        const parsed: unknown = JSON.parse(decrypt(dek, row.secrets_enc, `messaging_connections.secrets:${row.id}`));
+        if (parsed && typeof parsed === "object") rememberSecretValues(parsed as Record<string, unknown>);
+      } catch {
+        /* ignore */
+      }
+    }
   } catch (err) {
     log.warn("could not load secrets for redaction", err);
   }
@@ -346,9 +355,17 @@ function loadKnownSecrets() {
 /** Replace every known secret value in `text` with a mask. */
 export function redact(text: string): string {
   if (!text || knownSecrets.size === 0 || !getSettings().security.redactSecrets) return text;
+  return maskKnownSecrets(text);
+}
+
+/** `redact` regardless of the setting: the diagnostic log is meant to be shared. */
+function maskKnownSecrets(text: string): string {
+  if (!text || knownSecrets.size === 0) return text;
   let out = text;
   for (const secret of knownSecrets) {
     if (out.includes(secret)) out = out.split(secret).join("••••••••");
   }
   return out;
 }
+
+setSecretMasker(maskKnownSecrets);
