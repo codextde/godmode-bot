@@ -5,9 +5,9 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCenter,
+  closestCorners,
   getFirstCollision,
   pointerWithin,
-  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
@@ -65,12 +65,11 @@ export function TaskBoard({ tasks, agents, workspaces, onOpen, onMove, onQuickAd
   const lastOverId = useRef<UniqueIdentifier | null>(null);
   const movedToNewColumn = useRef(false);
 
-  // Pointer first, then the column's closest card; while a card has just changed columns, stick to the last target —
-  // otherwise the re-laid-out columns make it flip back and forth between them.
+  // What's under the pointer (the keyboard uses the closest corners); over a column, its closest card. Between columns
+  // the last target sticks — re-laid-out columns would otherwise make a card flip back and forth between them.
   const collisionDetection: CollisionDetection = useCallback(
     (args) => {
-      const pointer = pointerWithin(args);
-      let overId = getFirstCollision(pointer.length ? pointer : rectIntersection(args), "id");
+      let overId = getFirstCollision(args.pointerCoordinates ? pointerWithin(args) : closestCorners(args), "id");
       if (overId != null) {
         const key = String(overId);
         if (key.startsWith(COLUMN_ID)) {
@@ -102,21 +101,24 @@ export function TaskBoard({ tasks, agents, workspaces, onOpen, onMove, onQuickAd
 
   const onDragStart = ({ active }: DragStartEvent) => setDrag({ id: String(active.id), columns: grouped });
 
-  const onDragOver = ({ active, over }: DragOverEvent) => {
+  const onDragOver = ({ active, over, activatorEvent, delta }: DragOverEvent) => {
     if (!over || !drag) return;
     const id = String(active.id);
     const overId = String(over.id);
     const from = columnOf(id, drag.columns);
     const to = columnOf(overId, drag.columns);
-    if (!from || !to || from === to) return;
+    // One column change per frame: the columns settle before the next one.
+    if (!from || !to || from === to || movedToNewColumn.current) return;
     movedToNewColumn.current = true;
+    const startY = activatorEvent instanceof PointerEvent || activatorEvent instanceof MouseEvent ? activatorEvent.clientY : null;
     setDrag((d) => {
       if (!d || !d.columns[from].includes(id)) return d;
       const cols = { ...d.columns, [from]: d.columns[from].filter((x) => x !== id) };
       const target = [...d.columns[to]];
       const overIndex = overId.startsWith(COLUMN_ID) ? -1 : target.indexOf(overId);
       const translated = active.rect.current.translated;
-      const below = !!translated && translated.top > over.rect.top + over.rect.height / 2;
+      const y = startY !== null ? startY + delta.y : translated ? translated.top + translated.height / 2 : null;
+      const below = y !== null && y > over.rect.top + over.rect.height / 2;
       target.splice(overIndex < 0 ? target.length : overIndex + (below ? 1 : 0), 0, id);
       return { ...d, columns: { ...cols, [to]: target } };
     });
@@ -134,7 +136,8 @@ export function TaskBoard({ tasks, agents, workspaces, onOpen, onMove, onQuickAd
     const oldIndex = list.indexOf(id);
     const newIndex = overId.startsWith(COLUMN_ID) ? oldIndex : list.indexOf(overId);
     if (oldIndex >= 0 && newIndex >= 0 && oldIndex !== newIndex) list = arrayMove(list, oldIndex, newIndex);
-    const beforeId = list[list.indexOf(id) + 1] ?? null;
+    // Dropped before its move into this column was applied: land where the pointer is.
+    const beforeId = list.includes(id) ? (list[list.indexOf(id) + 1] ?? null) : overId.startsWith(COLUMN_ID) ? null : overId;
     const original = grouped[task.status];
     const unchanged = to === task.status && (original[original.indexOf(id) + 1] ?? null) === beforeId;
     if (!unchanged) onMove(task, to, beforeId);
