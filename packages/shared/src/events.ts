@@ -1,4 +1,5 @@
 import type { ComputerView } from "./computer";
+import type { Task } from "./tasks";
 import type { Vm } from "./vm";
 import type { MobileDevice } from "./mobile";
 import type {
@@ -53,6 +54,8 @@ export type ServerEvent =
   | {
       type: "browser.frame";
       profileId: ID;
+      /** Set when the frame shows one chat's tab (a chat-scoped subscription). */
+      conversationId?: ID;
       /** base64 jpeg */
       data: string;
       url: string;
@@ -86,6 +89,8 @@ export type ServerEvent =
     }
   | { type: "vm.updated"; vm: Vm }
   | { type: "vm.deleted"; id: ID }
+  | { type: "task.updated"; task: Task }
+  | { type: "task.deleted"; id: ID }
   /** A phone was paired (the pairing QR code was used). */
   | { type: "mobile.paired"; device: MobileDevice }
   | { type: "entity.changed"; entity: EntityName };
@@ -108,14 +113,19 @@ export type EntityName =
   | "computer"
   | "vms"
   | "messaging"
+  | "tasks"
+  | "followups"
   | "mobile";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =
   | { type: "ping" }
-  /** `passive` viewers (e.g. the chat preview) get frames without keeping an idle browser running. */
-  | { type: "browser.subscribe"; profileId: ID; passive?: boolean }
-  | { type: "browser.unsubscribe"; profileId: ID }
+  /**
+   * `passive` viewers (e.g. the chat preview) get frames without keeping an idle browser running. With
+   * `conversationId` the frames show that chat's tab instead of the browser's active one.
+   */
+  | { type: "browser.subscribe"; profileId: ID; conversationId?: ID; passive?: boolean }
+  | { type: "browser.unsubscribe"; profileId: ID; conversationId?: ID }
   /** Computer live view frames (see computerView). */
   | { type: "computer.subscribe"; view: ComputerView }
   | { type: "computer.unsubscribe"; view: ComputerView }

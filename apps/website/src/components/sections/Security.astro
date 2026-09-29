@@ -1,0 +1,99 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+
+const points = [
+  {
+    icon: 'eye-off',
+    title: 'Fill, don’t reveal',
+    text: 'In the browser, Godmode types passwords and 2FA codes into the page itself. The model only ever sees that a secret was filled.',
+  },
+  {
+    icon: 'link-2',
+    title: 'Site-bound logins',
+    text: 'A login is only ever filled into its own website, over https, into a real password field. Phishing and prompt-injected lookalikes get nothing.',
+  },
+  {
+    icon: 'hard-drive',
+    title: 'Encrypted on your device',
+    text: 'AES-256-GCM envelope encryption with scrypt, keys in your OS keychain. Your vault, agents and history never touch our servers.',
+  },
+  {
+    icon: 'box',
+    title: 'Isolated when you want it',
+    text: 'Give risky work its own macOS VM. Scope logins, folders and integrations per workspace, so each agent reaches only what it needs.',
+  },
+  {
+    icon: 'scroll-text',
+    title: 'Everything on the record',
+    text: 'An audit log of every secret access. Known secrets are redacted from transcripts, logs and screens. Every run is committed to git.',
+  },
+  {
+    icon: 'hand',
+    title: 'You stay in charge',
+    text: 'Watch every step live. Take control with one click, stop any run instantly, and get told exactly which login is missing.',
+  },
+];
+---
+
+<section id="security" class="relative overflow-hidden py-20 sm:py-28" data-track-view="security">
+  <div class="security-glow pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
+  <div class="container-x">
+    <div class="grid items-end gap-10 lg:grid-cols-[1.1fr_1fr]">
+      <div>
+        <p class="eyebrow" data-reveal><span class="n">06</span> Security</p>
+        <Words text="Built like a vault. *Not like a demo.*" class="h-section mt-6" />
+      </div>
+      <p class="lead max-w-[460px]" data-reveal style="--d:200">
+        You’re handing an AI the keys to your business. So the keys stay on your device, encrypted — and in the browser the
+        AI never gets to hold them.
+      </p>
+    </div>
+
+    <div class="mt-16 grid gap-3 lg:grid-cols-[1fr_1.35fr]">
+      <!-- Context window visual -->
+      <div class="card p-6 sm:p-8" data-reveal>
+        <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">What the model sees</p>
+        <div class="ctx mt-5 space-y-2.5 font-mono text-[12.5px] leading-relaxed">
+          <div class="ctx-line" style="--c:0"><span class="text-muted">user</span> Log into the Acme portal and download September’s invoice.</div>
+          <div class="ctx-line" style="--c:1"><span class="text-brand">tool</span> vault_fill_login(“billing.acme.com”)</div>
+          <div class="ctx-line ctx-result" style="--c:2">
+            <span class="text-dim">result</span> filled username ✓ password ✓
+            <span class="redact">[secret hidden]</span>
+          </div>
+          <div class="ctx-line" style="--c:3"><span class="text-brand">tool</span> vault_fill_totp(“billing.acme.com”)</div>
+          <div class="ctx-line ctx-result" style="--c:4">
+            <span class="text-dim">result</span> 2FA code filled ✓ <span class="redact">[secret hidden]</span>
+          </div>
+          <div class="ctx-line" style="--c:5"><span class="text-muted">godmode</span> Signed in. Downloaded invoice INV-2026-0931.pdf.</div>
+        </div>
+        <div class="mt-6 flex flex-wrap gap-2">
+          <span class="chip chip-brand"><Icon name="shield-check" size={11} /> AES-256-GCM</span>
+          <span class="chip">scrypt N=2¹⁷</span>
+          <span class="chip">OS keychain</span>
+          <span class="chip">no telemetry</span>
+        </div>
+      </div>
+
+      <div class="grid gap-3 sm:grid-cols-2">
+        {
+          points.map((p, i) => (
+            <div class="card p-6" data-reveal style={`--d:${(i % 2) * 80 + Math.floor(i / 2) * 60}`}>
+              <span class="grid size-9 place-items-center rounded-lg bg-brand-soft text-brand ring-1 ring-[rgb(47_214_144/0.25)]">
+                <Icon name={p.icon} size={17} />
+              </span>
+              <h3 class="mt-5 text-[16px] font-medium tracking-[-0.015em]">{p.title}</h3>
+              <p class="mt-1.5 text-[14px] leading-relaxed text-muted">{p.text}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+    <p class="mt-6 max-w-[860px] text-[12.5px] leading-relaxed text-dim" data-reveal>
+      Plainly stated: agents run Claude Code with full permissions so they can finish without asking — treat them like a
+      trusted coworker, and use a VM for sensitive work. Inside a VM the agent controls the whole machine, so signing in
+      there is best effort and closer to revealing a password than to fill-only; it’s off until you allow it. Tasks and the
+      pages the agent reads are processed by Claude under your own Anthropic account.
+    </p>
+  </div>
+</section>

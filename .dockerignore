@@ -17,4 +17,7 @@ docs
 idea.md
 Dockerfile
 docker-compose.yml
+**/.dev.vars
+**/.secrets.local
+**/.wrangler
 apps/mobile

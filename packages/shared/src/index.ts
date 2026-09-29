@@ -6,4 +6,6 @@ export * from "./computer";
 export * from "./vm";
 export * from "./git";
 export * from "./messaging";
+export * from "./schedule";
+export * from "./tasks";
 export * from "./mobile";

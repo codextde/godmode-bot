@@ -1,0 +1,85 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+import CheckoutButton from '../ui/CheckoutButton.astro';
+---
+
+<section id="roi" class="relative py-20 sm:py-28" data-track-view="roi">
+  <div class="container-x">
+    <div class="grid gap-14 lg:grid-cols-[1fr_1.1fr] lg:items-center">
+      <div>
+        <p class="eyebrow" data-reveal><span class="n">08</span> The math</p>
+        <Words text="The math is *almost embarrassing.*" class="h-section mt-6" />
+        <p class="lead mt-6 max-w-[520px]" data-reveal style="--d:200">
+          A full-time assistant in the US costs a median <span class="text-text">$76,590 a year</span>. Godmode costs
+          <span class="text-text">$500 once</span> — about what that assistant earns in two days — and it works nights,
+          weekends and holidays.
+        </p>
+        <div class="mt-10 grid grid-cols-2 gap-3" data-reveal style="--d:300">
+          <div class="card p-5">
+            <p class="font-mono text-[11px] tracking-[0.1em] text-dim uppercase">Assistant / year</p>
+            <p class="mt-2 text-[32px] font-semibold tracking-[-0.04em]" data-count="76590" data-prefix="$">$76,590</p>
+            <p class="mt-1 text-[12px] text-dim">US median, BLS</p>
+          </div>
+          <div class="card p-5 ring-1 ring-[rgb(47_214_144/0.3)]">
+            <p class="font-mono text-[11px] tracking-[0.1em] text-brand uppercase">Godmode, forever</p>
+            <p class="mt-2 text-[32px] font-semibold tracking-[-0.04em]" data-count="500" data-prefix="$">$500</p>
+            <p class="mt-1 text-[12px] text-dim">+ your Claude plan</p>
+          </div>
+        </div>
+        <p class="mt-6 max-w-[520px] text-[14px] leading-relaxed text-muted" data-reveal style="--d:350">
+          And the gap grows every week: an agent’s memory and routines compound. The team that starts now has months of
+          learned workflows by the time everyone else begins.
+        </p>
+      </div>
+
+      <div class="card p-7 sm:p-10" data-roi data-reveal="scale" style="--d:150">
+        <div class="flex items-center justify-between">
+          <p class="text-[17px] font-medium tracking-tight">What is your busywork worth?</p>
+          <span class="chip"><Icon name="calculator" size={11} /> calculator</span>
+        </div>
+
+        <label class="mt-8 block">
+          <span class="flex items-baseline justify-between text-[14px] text-text-2">
+            Hours of repetitive computer work per week
+            <b class="font-mono text-[15px] font-medium text-text" data-out="hours">15</b>
+          </span>
+          <input class="range mt-2" type="range" name="hours" min="1" max="60" value="15" />
+        </label>
+        <label class="mt-6 block">
+          <span class="flex items-baseline justify-between text-[14px] text-text-2">
+            What an hour of your (or your team’s) time is worth
+            <b class="font-mono text-[15px] font-medium text-text" data-out="rate">$100</b>
+          </span>
+          <input class="range mt-2" type="range" name="rate" min="20" max="500" step="10" value="100" />
+        </label>
+
+        <div class="rule my-8"></div>
+
+        <dl class="grid grid-cols-2 gap-6">
+          <div>
+            <dt class="text-[13px] text-muted">Hours back per year</dt>
+            <dd class="mt-1 text-[34px] font-semibold tracking-[-0.045em]" data-out="saved-hours">504</dd>
+          </div>
+          <div>
+            <dt class="text-[13px] text-muted">Worth per year</dt>
+            <dd class="mt-1 text-[34px] font-semibold tracking-[-0.045em] text-brand" data-out="saved">$50,400</dd>
+          </div>
+          <div>
+            <dt class="text-[13px] text-muted">Lifetime license pays off in</dt>
+            <dd class="mt-1 text-[22px] font-medium tracking-[-0.03em]" data-out="payback">4 days</dd>
+          </div>
+          <div>
+            <dt class="text-[13px] text-muted">Every week you wait costs</dt>
+            <dd class="mt-1 text-[22px] font-medium tracking-[-0.03em] text-[#f0a488]" data-out="weekly-loss">$1,050</dd>
+          </div>
+        </dl>
+
+        <CheckoutButton plan="lifetime" label="Stop paying for busywork" source="roi" full size="lg" class="mt-9" />
+        <p class="mt-3 text-center text-[12px] text-dim">
+          Estimate assumes Godmode takes over 70% of those hours across 48 working weeks. Your results depend on your tasks.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>

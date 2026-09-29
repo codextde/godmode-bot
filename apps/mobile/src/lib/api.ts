@@ -219,7 +219,9 @@ export const api = {
 
   browser: {
     profiles: () => get<BrowserProfile[]>("/api/browser/profiles"),
-    input: (id: string, event: BrowserInput) => post<{ ok: true }>(`/api/browser/profiles/${id}/input`, event),
+    /** With `conversationId`: into that chat's tab. */
+    input: (id: string, event: BrowserInput, conversationId?: string | null) =>
+      post<{ ok: true }>(`/api/browser/profiles/${id}/input`, conversationId ? { ...event, conversationId } : event),
   },
 
   computer: {

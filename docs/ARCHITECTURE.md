@@ -44,6 +44,7 @@ backups/              automatic + manual backups (*.godmode-backup)
 vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, tart/ (TART_HOME: vms/<vm-id>
                       disks and gm-image-* templates), downloads/ (image layers while downloading),
                       shared/<vm-id>/ shared folders, logs/<vm-id>.log, ssh/ key
+tasks/<task-id>/      checkout of a coding task's repository (see "Tasks")
 logs/godmode.jsonl    diagnostic log (see "Diagnostic log"); godmode.1.jsonl is the previous 2 MB, desktop.log the shell's
 ```
 
@@ -156,7 +157,8 @@ cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <a
 Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + result) and pushed as
 `run.delta` WS events; the final assistant message is stored in SQLite and in the agent repo.
 Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-conversation lock prevents
-two concurrent turns in the same conversation.
+two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
+works in its own tabs (see Browser).
 
 ## Godmode MCP gateway tools (`/mcp`)
 
@@ -170,10 +172,12 @@ two concurrent turns in the same conversation.
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |
 | `agents_list()`, `agent_get({id})` | Discover peer agents |
 | `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result) |
-| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent) |
+| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list`, `tasks_list`, `task_create`, `task_update` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent) |
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
+| `task_report_blocked({ reason })` | Only in runs working on a board task: say what's missing; the task moves to Blocked when the run ends (see Tasks) |
 | `memory_dream_report({ summary, changes })` | Only in dream runs — and the only tool they get: report what a memory consolidation changed (see Dreaming) |
 | `notify_user({ title, body })` | Push a notification to the human |
+| `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
 
 ## HTTP API
 
@@ -218,28 +222,59 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
   `--remote-debugging-port=<free port> --user-data-dir=~/.godmode/browser/<id>` on 127.0.0.1.
 * A run on this computer uses its chat's profile (`conversations.browser_profile_id`, picked in the composer), else its
   agent's pinned profile, else its workspace's default profile (`Workspace.browserProfileId`), else the global default
-  (a run in a VM browses in the VM instead). Delegated work
-  for an agent without a pinned profile keeps the profile picked for the caller's chat when it's global or in the target's
-  workspace; deleting a profile sends its chats back to their default. Profiles can be reassigned to another workspace
+  (a run in a VM browses in the VM instead). A global agent's chat remembers the workspace selected in the sidebar when
+  it started (`conversations.workspace_id`) and uses that workspace's default. Delegated work stays in the caller's
+  workspace, and for an agent without a pinned profile keeps the profile picked for the caller's chat when it's global or
+  in the target's workspace; deleting a profile sends its chats back to their default. Profiles can be reassigned to another workspace
   (`PATCH /api/browser/profiles/:id { workspaceId }`) or picked in the workspace's settings (`browserProfileId`, which
   moves a global profile into the workspace); cookies and sessions travel with the profile. The global default always
   stays global.
 * On macOS a visible browser never takes focus: it is started in the background through LaunchServices
   (`open -g`, no startup window) and its first window opens behind the active app.
 * Agents get browser tools from the **browser-use MCP server** (`uvx --from browser-use==0.13.10 browser-use --mcp`)
-  configured via `BROWSER_USE_CONFIG_DIR` → `<data>/browser-use/<profile>/<agent>/config.json` with
-  `browser_profile.cdp_url` pointing at that Chromium; downloads land in the agent's `workspace/downloads`.
+  configured per run via `BROWSER_USE_CONFIG_PATH` → `<data>/browser-use/<profile>/<agent>/runs/<run-id>/config.json`
+  (removed with the run, together with browser-use's scratch files next to it) with `browser_profile.cdp_url`
+  pointing at the run's chat endpoint (below); downloads land in the agent's `workspace/downloads`.
   LLM-backed browser-use tools (`browser_extract_content`, `retry_with_browser_use_agent`) are only offered when an
   OpenAI key is in the vault (passed via env, never written to disk); otherwise the runner disallows them.
-* One profile = one Chromium: runs that share a profile take turns (delegated child runs may use their parent's
-  browser while the parent waits).
+* **Chat tabs** — one profile = one Chromium, shared by every chat that uses it, but each chat works in its **own tabs**,
+  so runs on one profile run in parallel with the same cookies and logins (`browser/tabs.ts`, `browser/proxy.ts`):
+  * A chat's first tab is a spare blank page (the browser's first window, or a released tab) or a new background
+    window (`Target.createTarget { newWindow, background }` — it never takes focus). Tabs it opens itself and popups
+    of its tabs (`openerId`) are its own; iframes belong to their page (`parentId`). Tabs nobody owns (a human's) are
+    hidden from every chat.
+  * browser-use doesn't connect to Chromium directly: each run gets a loopback DevTools endpoint
+    `http://127.0.0.1:<port>/<256-bit token>` (`/json/version` + a browser WebSocket; requests with an `Origin` or
+    a foreign `Host` are refused) that forwards CDP to Chromium and back, filtered for the run's chat:
+    `Target.getTargets` and target events only list its tabs, commands naming another tab (`attachToTarget`,
+    `activateTarget`, `closeTarget`, …) or another tab's session answer like a missing target, `Browser.close` and
+    browser-target sessions are refused, auto-attach never makes other chats' new tabs wait for a debugger, and
+    `Target.createTarget` opens a background window (a plain new tab would land in whichever window was active last —
+    maybe another chat's). Target events that arrive before a `createTarget` answer are held until it's clear whose
+    tab it is. The endpoint dies with the run. This keeps chats from getting in each other's way; it is no security
+    boundary between agents (Chromium's own DevTools port on loopback is unauthenticated).
+  * Which tab a chat works in follows its agent (navigation, input and screenshots through the endpoint); live view,
+    vault fills (`vault_fill_*` type into the calling chat's tab only) and missing-login detection use that tab.
+  * A chat keeps its tabs between messages. They close when the chat is deleted, archived or moved to another
+    profile, or after `keepAliveMinutes` without use (an hour when the browser is kept alive) unless a run of the chat
+    is going or someone watches its live view; the browser's last page is kept, blank, for the next chat (closing the
+    last window would quit Chromium on Windows and Linux). Chromium has one download folder per profile, so two agents
+    downloading through one profile at the same moment may find the file in the folder of the one that set it last.
+* **On demand**: a run's endpoint only starts Chromium when browser-use first asks for `/json/version`, on its first
+  browser tool call, so a run that never browses never opens a browser. A start that fails or outlasts browser-use's
+  15 s connect timeout becomes a warning in that run. Idle browsers (no CDP client attached, no watcher, window not
+  focused) stop after `browser.keepAliveMinutes` (default 5); browsers an earlier core left running are adopted at
+  startup and closed unless something still uses them.
 * **Session import** (“continue where Chrome left off”): the importer uses the same technique as browser-use’s
   `profile-use` — copy the Chrome profile’s cookie store to a temp dir, start the real Chrome binary headless on it
   with CDP, read decrypted cookies via `Storage.getCookies`, inject them into the Godmode profile with
   `Storage.setCookies`. `profile-use` itself is supported for syncing to browser-use Cloud profiles.
 * **Live view**: CDP `Page.startScreencast` frames streamed to subscribed UIs; the human can take over
-  (click/type) e.g. to solve a CAPTCHA. Chats show a *passive* preview of their agent's browser next to the thread:
-  passive subscribers get frames but don't keep an idle browser running.
+  (click/type) e.g. to solve a CAPTCHA. A view shows the profile's active tab, or with `conversationId` the tab one chat
+  works in (`browser.subscribe { profileId, conversationId }`, frames carry `conversationId`; navigate and input take
+  it too). Chats show a *passive* preview of their own tab next to the thread once they have one: passive subscribers
+  get frames but don't keep an idle browser running. `BrowserProfile.chats` lists the chats with tabs open, and the
+  Browser page switches between them.
 
 ## Computer use
 
@@ -366,7 +401,7 @@ runs an agent's prompt when its trigger fires (`Routine.trigger`):
 
 | Trigger | Fires when | How |
 |---|---|---|
-| `schedule` | the cron expression matches | croner job (`scheduler/scheduler.ts`), timezone aware |
+| `schedule` | the cron expression matches — or, with `startWindowMinutes`, at a random moment up to that long after it | croner job (`scheduler/scheduler.ts`), timezone aware. A random start window gets a one-off job at the start drawn for the next time slot (offset = hash of routine id + slot, so restarts and edits keep it; slots before the last schedule event are skipped); the window may not exceed the gap between two runs (≤ 12 h, gaps shortened by a DST change don't count — `startWindowLimit` in `@godmode/shared`, also used by the UI) |
 | `app` | a connected app emits an event (new email, Slack message, calendar event, Notion update…) | Composio trigger instance per watched account + settings (`POST /api/v3.1/trigger_instances/{slug}/upsert`), delivered over Composio's realtime channel (Pusher, `private-<project>_triggers`, the feed behind the SDK's `triggers.subscribe`) — no public URL needed (`integrations/composioTriggers.ts`, `integrations/pusher.ts`) |
 | `condition` | a plain-language condition becomes true ("a competitor changes their pricing") | on the cron schedule (≥ 5 min apart) the agent runs a **check** (`Run.trigger = "check"`, archived per-automation conversation, fresh Claude session, optional cheaper `checkModel`) and reports via `automation_check_result`; the reported observation is fed into the next check to detect changes (`automations/conditions.ts`) |
 | `webhook` | something POSTs to `/hooks/<token>` | public route outside `/api` (exempt from the loopback Host check so a tunnel can forward it); the token is stored as a SHA-256 hash (lookup) and sealed with the vault key (shown again in the UI); ≤ 256 KB, 60 calls/min, `Idempotency-Key`/`X-Request-Id` dedupe (`automations/webhooks.ts`) |
@@ -393,6 +428,76 @@ use the watched account.
 
 The Godmode agent sets automations up from one sentence ("when X happens, do Y"): `automation_triggers_list` shows the
 connected Composio accounts and each app's events with their settings schema; `routine_create` takes the trigger.
+
+## Follow-ups
+
+An agent that has to wait — for a reply, a delivery, a build, office hours — sets a time to continue the chat on its
+own, like a coworker who says "I'll check back tomorrow at 10" (`services/followups.ts`, table `followups`):
+
+* **Setting one**: `followup_schedule({ at | inMinutes, note })` from any run but condition checks, dreams and tasks
+  delegated by another agent (those report back to it). `at` is ISO 8601; without an offset it is the core's time
+  zone. It must be 1 minute to 1 year ahead; the note loses anything that looks like a Godmode prompt tag. A chat has one follow-up (keyed by
+  the conversation): scheduling again moves it, `followup_cancel` removes it, deleting the chat or agent removes it too.
+  The system prompt explains when to use it ("Following up later"); resumed turns restate a pending one so a new message
+  can move or cancel it.
+* **Running it**: one timer armed for the earliest `due_at` of a chat that isn't busy (re-checked at least every
+  minute, so sleep and clock changes are caught); a follow-up whose chat is busy runs when that turn finishes. A due
+  follow-up is removed first (the run may schedule the next one), then the chat gets a
+  system message with a `followup` block (the marker in the thread) and a run with trigger `followup` that resumes the
+  same Claude session with a `<godmode-followup>` prompt carrying the note. Follow-ups that came due while Godmode was
+  off run on start, marked `late`. One that can't start (agent turned off) is dropped and the human is notified. When
+  the run finishes the human is notified too (unless the agent did it with `notify_user`); in a Slack, Telegram or
+  Teams chat the answer goes there instead.
+* **Runaway guard**: after 20 follow-up runs in a row without a message from the human, an automation or another
+  agent, scheduling is refused and the agent is told to ask the human.
+* **The human** sees a bar above the composer (continue now, change the time, cancel), a clock in Recent chats and all
+  pending follow-ups on the Automations page: `GET /api/followups`, `PATCH|DELETE /api/conversations/:id/followup`,
+  `POST /api/conversations/:id/followup/run`. `Conversation.followup` carries the pending one. Backups carry follow-ups;
+  a restore drops the ones already due.
+
+## Tasks
+
+A Kanban board of tickets agents work on (table `tasks`, `/api/tasks`, `tasks/service.ts`), per workspace or global.
+Columns are the statuses: `backlog` (parked — assigning an agent never starts it), `todo` (queued — entering it with an
+agent, or getting one while in it, starts that agent), `in_progress`, `in_review` (delivered, waiting for the human),
+`blocked`, `done` and `cancelled`. Positions are REAL values within a column (a move places the task between its new
+neighbours; a column is re-spaced when they get too close). A task may only be assigned to an agent of its workspace or
+a global one. Every change is pushed as `task.updated` / `task.deleted` and patched into the UI's cached lists.
+
+* **Starting** (`dispatch`): an active run of the task is cancelled first (restart), the task moves to `in_progress`,
+  and the agent gets the task in its conversation (`origin = 'task'`, created archived so it stays off the chat list;
+  reused while the agent and folder stay the same) as a `trigger = "task"` run. The prompt carries the title,
+  description and what to deliver per type: `general` (do it, summarize), `research` (a Markdown report) or `coding`.
+* **Coding tasks** (`tasks/git.ts`): Godmode clones the repository (the task's `repoUrl` — any URL `parseGitUrl`
+  accepts — else the workspace's first git repository, see Workspace folders and repositories) into `<data>/tasks/<id>`
+  with the same hardened git as workspace clones (the human's credential helper / SSH keys, no prompts, no clone hooks)
+  and checks out `godmode/<number>-<slug>` from `origin/<base>` (the task's, the repository's configured branch, else
+  the remote's default branch). The URL and resolved base are pinned on the task. The checkout is the conversation's
+  working folder — the only folder inside the data directory allowed as one — and the workspace's shared clone of the
+  same repository is left out of the run's `--add-dir` folders, so the agent changes the task's branch only. When a run succeeds, Godmode commits what
+  the agent left uncommitted (new `.env`/key files are left out), refuses to push when the branch adds such files or its
+  diff contains a secret from the vault, merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks
+  the task), and pushes with an explicit lease on what it saw — so nothing pushed meanwhile is overwritten. It then
+  opens a pull request with `gh pr create` (body: the agent's summary, redacted); without `gh`, or for GitLab, the task
+  links to the page that opens one. A branch without commits on top of its base goes to review without a pull request.
+  Restarting fast-forwards the checkout to the remote branch first.
+* **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
+  `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
+  `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
+  blocked task back to `in_progress`; for coding tasks the next push updates the open pull request.
+* **Moving on the board**: away from `in_progress` cancels the run (the UI asks first); into `todo` (or
+  `in_progress`) with an agent starts it. Every 5 minutes, tasks in review with an open pull request are checked with
+  `gh pr view`: merged → `done`, closed → noted on the task.
+* **Races**: one start or publish per task at a time; a start the board asks for meanwhile runs once the task is free,
+  and a run that ended meanwhile is handled then. Moves caused by the work (to In review, Blocked, Done) only apply
+  from the status the work expects — a move the human made meanwhile wins — and put the task at the top of its column.
+* **Agents managing the board**: `task_create` / `task_update` follow the delegation rules (no reveal-mode or unattended
+  computer agents from callers that couldn't use them, VM-kept runs stay off the host); coding tasks created by agents
+  use the workspace's repositories; and a run working on a task — or delegated from one — can't start a manager agent
+  (itself included), so tasks can't spawn tasks without end. Follow-ups wait while Godmode prepares or publishes a task. Task numbers are never reused.
+* **Restart**: tasks left `in_progress` without a live run are blocked ("Interrupted"), tasks waiting in `todo` with an
+  agent are started. Deleting a task cancels its run and removes the checkout (the conversation stays); deleting a
+  workspace counts its tasks as dependents.
 
 ## Integrations
 

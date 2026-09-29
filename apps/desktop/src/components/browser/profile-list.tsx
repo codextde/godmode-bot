@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import { Cookie, Download, Ellipsis, Globe, Layers, Pencil, Play, Plus, Square, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import type { BrowserProfile } from "@godmode/shared";
+import type { BrowserProfile, Workspace } from "@godmode/shared";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScopeBadge } from "@/components/common";
 import { LiveDot } from "@/components/aicss/Motion";
 import { WorkspaceSelect } from "@/components/vault/workspace-select";
@@ -51,12 +52,18 @@ function relative(iso: string | null) {
 
 export function ProfileList({
   profiles,
+  defaultId,
+  workspace,
   isLoading,
   selectedId,
   onSelect,
   actions,
 }: {
   profiles: BrowserProfile[];
+  /** The profile new chats in `workspace` browse with. */
+  defaultId: string | null;
+  /** Workspace picked in the sidebar; null = global. */
+  workspace: Workspace | null;
   isLoading: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -91,6 +98,8 @@ export function ProfileList({
             >
               <ProfileCard
                 profile={p}
+                isDefault={p.id === defaultId}
+                workspace={workspace}
                 selected={p.id === selectedId}
                 onSelect={() => onSelect(p.id)}
                 actions={actions}
@@ -135,6 +144,8 @@ export function ProfileList({
 
 function ProfileCard({
   profile: p,
+  isDefault,
+  workspace,
   selected,
   onSelect,
   actions,
@@ -143,6 +154,8 @@ function ProfileCard({
   onDelete,
 }: {
   profile: BrowserProfile;
+  isDefault: boolean;
+  workspace: Workspace | null;
   selected: boolean;
   onSelect: () => void;
   actions: ProfileActions;
@@ -153,6 +166,9 @@ function ProfileCard({
   const launching = actions.launch.isPending && actions.launch.variables?.id === p.id;
   const stopping = actions.stop.isPending && actions.stop.variables?.id === p.id;
   const imported = relative(p.importedAt);
+  const globalDefault = p.isDefault && !p.workspaceId;
+  const canMakeDefault = !isDefault && (!p.workspaceId || p.workspaceId === workspace?.id);
+  const makeDefaultLabel = !workspace ? "Set as default" : p.workspaceId || globalDefault ? `Make default in ${workspace.name}` : `Move to ${workspace.name} as default`;
 
   return (
     <div
@@ -190,10 +206,15 @@ function ProfileCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-sm font-medium tracking-[-0.01em]">{p.name}</span>
-          {p.isDefault && (
-            <Badge variant="secondary" className="h-5 gap-1 px-1.5 text-[10px]">
-              <Star className="size-2.5 fill-current" /> Default
-            </Badge>
+          {isDefault && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="h-5 gap-1 px-1.5 text-[10px]">
+                  <Star className="size-2.5 fill-current" /> Default
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>{workspace ? `New chats in ${workspace.name} browse here` : "New chats browse here unless their workspace has its own default"}</TooltipContent>
+            </Tooltip>
           )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
@@ -202,7 +223,7 @@ function ProfileCard({
             <Cookie className="size-3" /> {p.cookieCount.toLocaleString()}
           </span>
           <span className={cn("inline-flex items-center gap-1", p.running && "text-brand-strong")}>
-            {p.running ? "Running" : "Stopped"}
+            {p.running ? (p.chats.length ? `${p.chats.length} ${p.chats.length === 1 ? "chat" : "chats"}` : "Running") : "Stopped"}
           </span>
         </div>
         {p.importedFrom && (
@@ -226,7 +247,7 @@ function ProfileCard({
             {launching || stopping ? <Spinner /> : <Ellipsis />}
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuContent align="end" className="w-64" onClick={(e) => e.stopPropagation()}>
           {p.running ? (
             <DropdownMenuItem onClick={() => actions.stop.mutate(p)} disabled={stopping}>
               <Square /> Stop browser
@@ -236,20 +257,20 @@ function ProfileCard({
               <Play /> Launch browser
             </DropdownMenuItem>
           )}
-          {!p.isDefault && (
-            <DropdownMenuItem onClick={() => actions.setDefault.mutate(p)}>
-              <Star /> Set as default
+          {canMakeDefault && (
+            <DropdownMenuItem onClick={() => actions.setDefault.mutate({ profile: p, workspace })}>
+              <Star /> {makeDefaultLabel}
             </DropdownMenuItem>
           )}
           <DropdownMenuItem onClick={onRename}>
             <Pencil /> Rename
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={onAssign} disabled={p.isDefault && !p.workspaceId}>
-            <Layers /> {p.isDefault && !p.workspaceId ? "Default stays global" : "Assign to workspace…"}
+          <DropdownMenuItem onClick={onAssign} disabled={globalDefault}>
+            <Layers /> {globalDefault ? "Global default stays global" : "Assign to workspace…"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" disabled={p.isDefault} onClick={onDelete}>
-            <Trash2 /> {p.isDefault ? "Default can't be deleted" : "Delete"}
+          <DropdownMenuItem variant="destructive" disabled={globalDefault} onClick={onDelete}>
+            <Trash2 /> {globalDefault ? "Global default can't be deleted" : "Delete"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

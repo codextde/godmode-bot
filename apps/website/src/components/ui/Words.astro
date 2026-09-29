@@ -1,0 +1,31 @@
+---
+// Splits a line into words for the staggered blur-in reveal. Wrap a word in *asterisks* to set
+// it in the italic serif accent.
+interface Props {
+  text: string;
+  as?: 'h1' | 'h2' | 'h3' | 'p' | 'span';
+  class?: string;
+  delay?: number;
+}
+const { text, as: Tag = 'h2', class: className = '', delay = 0 } = Astro.props;
+let inSerif = false;
+const words = text.split(' ').map((w) => {
+  const starts = w.includes('*') && !inSerif;
+  const stars = (w.match(/\*/g) ?? []).length;
+  const serif = inSerif || starts;
+  if (stars % 2 === 1) inSerif = !inSerif;
+  return { text: w.replace(/\*/g, ''), serif };
+});
+---
+
+<Tag class={className} data-words style={`--d:${delay}`} aria-label={text.replace(/\*/g, '')}>
+  {
+    words.map((w, i) => (
+      <>
+        <span class:list={['w', w.serif && 'serif pr-[0.06em]']} style={`--i:${i}`} aria-hidden="true">
+          {w.text}
+        </span>{' '}
+      </>
+    ))
+  }
+</Tag>

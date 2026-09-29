@@ -1,0 +1,112 @@
+---
+import '@/styles/global.css';
+import { SITE, PRICING, TRACKING } from '@/config/site';
+import Consent from '@/components/Consent.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+  image?: string;
+  noindex?: boolean;
+  bare?: boolean;
+}
+
+const { title, description = SITE.description, image = '/media/og-image.png', noindex = false, bare = false } = Astro.props;
+const fullTitle = title ? `${title} · ${SITE.name}` : SITE.title;
+const canonical = new URL(Astro.url.pathname, Astro.site ?? SITE.url).href;
+const ogImage = new URL(image, Astro.site ?? SITE.url).href;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: SITE.product,
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'macOS, Windows, Linux',
+  description: SITE.description,
+  url: Astro.site?.href ?? SITE.url,
+  publisher: { '@type': 'Organization', name: 'Codext GmbH', url: 'https://codext.de' },
+  offers: [
+    {
+      '@type': 'Offer',
+      name: 'Godmode Lifetime',
+      price: PRICING.plans.lifetime.price,
+      priceCurrency: PRICING.currency,
+      category: 'one-time',
+    },
+    {
+      '@type': 'Offer',
+      name: 'Godmode Monthly',
+      price: PRICING.plans.monthly.price,
+      priceCurrency: PRICING.currency,
+      priceSpecification: {
+        '@type': 'UnitPriceSpecification',
+        price: PRICING.plans.monthly.price,
+        priceCurrency: PRICING.currency,
+        billingDuration: 'P1M',
+      },
+    },
+  ],
+};
+
+// Internal pages (admin) never load marketing pixels.
+const tracking = bare ? { x: '', xEvents: {} } : { x: TRACKING.xPixelId, xEvents: TRACKING.xEvents };
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    <meta name="theme-color" content="#0a0a09" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE.product} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <script is:inline>
+      document.documentElement.classList.add('js');
+      // If the main script never runs, don't leave reveal-on-scroll content invisible.
+      setTimeout(function () {
+        if (!window.__gm) document.documentElement.classList.remove('js');
+      }, 2500);
+    </script>
+    <script is:inline define:vars={{ tracking }}>
+      window.__gmTracking = tracking;
+    </script>
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    {
+      TRACKING.cfBeacon && (
+        <script
+          defer
+          is:inline
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon={JSON.stringify({ token: TRACKING.cfBeacon })}
+        />
+      )
+    }
+    <slot name="head" />
+  </head>
+  <body class="min-h-dvh">
+    <div class="grain" aria-hidden="true"></div>
+    <slot />
+    {!bare && <Consent />}
+    <script>
+      import '@/scripts/main';
+    </script>
+  </body>
+</html>

@@ -1,0 +1,87 @@
+---
+import { Image } from 'astro:assets';
+import Words from '../ui/Words.astro';
+import agents from '@/assets/shots/agents.png';
+import routines from '@/assets/shots/routines.png';
+import browser from '@/assets/shots/browser.png';
+import vault from '@/assets/shots/vault-2fa.png';
+import messaging from '@/assets/shots/messaging.png';
+import activity from '@/assets/shots/activity.png';
+
+const clips = [
+  { key: 'vm', title: 'Its own Mac', text: 'An isolated macOS VM on your device. The agent works inside; your Mac stays untouched.', src: '/media/feature-vm' },
+  { key: 'background', title: 'In the background', text: 'It clicks and types in a covered window while your cursor does its own thing.', src: '/media/feature-background' },
+  { key: 'vault', title: 'Fill, don’t reveal', text: 'Passwords and 2FA codes are typed into the page. The model sees [secret hidden].', src: '/media/feature-vault' },
+];
+
+const shots = [
+  { img: agents, label: 'Agents', text: 'Persistent coworkers with memory, schedules and tools' },
+  { img: browser, label: 'Live browser', text: 'Watch it work — take control anytime' },
+  { img: routines, label: 'Routines', text: 'Everything that runs on its own, at a glance' },
+  { img: vault, label: '2FA codes', text: 'Import Google Authenticator QR screenshots' },
+  { img: messaging, label: 'Chat apps', text: 'Slack, Telegram and Teams bots for your agents' },
+  { img: activity, label: 'Activity', text: 'Every run, its cost, duration and result' },
+];
+---
+
+<section class="relative py-20 sm:py-28" data-track-view="showcase">
+  <div class="container-x">
+    <div class="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
+      <div class="max-w-[640px]">
+        <p class="eyebrow" data-reveal><span class="n">03</span> See it work</p>
+        <Words text="Watch it. Or *don’t* — that’s the point." class="h-section mt-6" />
+      </div>
+      <p class="lead max-w-[380px] md:text-right" data-reveal style="--d:150">
+        Every step is visible and every run is logged. Jump in with one click, or let it finish on its own.
+      </p>
+    </div>
+
+    <div class="mt-14 grid gap-3 lg:grid-cols-3">
+      {
+        clips.map((c, i) => (
+          <figure class="card group overflow-hidden" data-reveal style={`--d:${i * 90}`}>
+            <div class="relative aspect-[16/10] overflow-hidden bg-bg-2">
+              <div class="clip-fallback absolute inset-0 grid place-items-center">
+                <span class="font-mono text-[11px] text-dim">{c.title}</span>
+              </div>
+              <video
+                class="clip-video absolute inset-0 size-full object-cover transition-transform duration-[1.2s] ease-[var(--ease-out)] group-hover:scale-[1.03]"
+                muted
+                playsinline
+                loop
+                autoplay
+                preload="none"
+                data-autoplay
+                aria-label={c.text}
+              >
+                <source src={`${c.src}.webm`} type="video/webm" />
+                <source src={`${c.src}.mp4`} type="video/mp4" />
+              </video>
+            </div>
+            <figcaption class="p-6">
+              <p class="h-card text-[17px]">{c.title}</p>
+              <p class="mt-1.5 text-[14px] leading-relaxed text-muted">{c.text}</p>
+            </figcaption>
+          </figure>
+        ))
+      }
+    </div>
+  </div>
+
+  <div class="marquee-wrap mask-x mt-4 overflow-hidden pt-3" data-reveal="fade">
+    <div class="marquee gap-3" style="--dur:90s">
+      {
+        [...shots, ...shots].map((s, i) => (
+          <figure class="w-[420px] flex-none sm:w-[520px]" aria-hidden={i >= shots.length ? 'true' : undefined}>
+            <div class="window overflow-hidden">
+              <Image src={s.img} alt={i < shots.length ? `${s.label}: ${s.text}` : ''} widths={[520, 1040]} sizes="520px" loading="lazy" class="block aspect-[16/10] w-full object-cover object-top" />
+            </div>
+            <figcaption class="mt-3 px-1 text-[13px]">
+              <span class="font-medium text-text">{s.label}</span> <span class="text-muted">— {s.text}</span>
+            </figcaption>
+          </figure>
+        ))
+      }
+    </div>
+  </div>
+</section>

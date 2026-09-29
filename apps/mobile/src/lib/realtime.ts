@@ -1,5 +1,5 @@
 import { AppState, type AppStateStatus } from "react-native";
-import type { ClientEvent, EntityName, ServerEvent, Vm } from "@godmode/shared";
+import { browserView, type ClientEvent, type EntityName, type ServerEvent, type Vm } from "@godmode/shared";
 import { api, reachableBase } from "./api";
 import { useLive } from "./live";
 import { qk, queryClient } from "./query";
@@ -42,8 +42,13 @@ function subscription(key: string, on: ClientEvent, off: ClientEvent): () => voi
   };
 }
 
-export const subscribeBrowser = (profileId: string) =>
-  subscription(`browser:${profileId}`, { type: "browser.subscribe", profileId, passive: true }, { type: "browser.unsubscribe", profileId });
+/** A browser's live view: its active tab, or with `conversationId` that chat's own tab. */
+export const subscribeBrowser = (profileId: string, conversationId: string | null = null) =>
+  subscription(
+    `browser:${browserView(profileId, conversationId)}`,
+    { type: "browser.subscribe", profileId, passive: true, ...(conversationId ? { conversationId } : {}) },
+    { type: "browser.unsubscribe", profileId, ...(conversationId ? { conversationId } : {}) },
+  );
 
 export const subscribeComputer = (view: string) =>
   subscription(`computer:${view}`, { type: "computer.subscribe", view }, { type: "computer.unsubscribe", view });
@@ -55,7 +60,10 @@ function replaySubscriptions() {
   for (const key of counts.keys()) {
     const [kind, ...rest] = key.split(":");
     const id = rest.join(":");
-    if (kind === "browser") sendEvent({ type: "browser.subscribe", profileId: id, passive: true });
+    if (kind === "browser") {
+      const [profileId, conversationId] = id.split(":");
+      sendEvent({ type: "browser.subscribe", profileId: profileId!, passive: true, ...(conversationId ? { conversationId } : {}) });
+    }
     else if (kind === "computer") sendEvent({ type: "computer.subscribe", view: id });
     else if (kind === "conversation") sendEvent({ type: "conversation.subscribe", conversationId: id });
   }
@@ -120,7 +128,7 @@ function handle(event: ServerEvent) {
       void queryClient.invalidateQueries({ queryKey: qk.browserProfiles });
       break;
     case "browser.frame":
-      live.frame(`browser:${event.profileId}`, {
+      live.frame(`browser:${browserView(event.profileId, event.conversationId)}`, {
         data: event.data,
         mime: "image/jpeg",
         width: event.width,

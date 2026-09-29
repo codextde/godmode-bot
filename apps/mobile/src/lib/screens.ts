@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
-import { computerTargetLabel, computerView, type Agent, type BrowserProfile, type Conversation, type Vm } from "@godmode/shared";
+import { browserView, computerTargetLabel, computerView, type Agent, type BrowserProfile, type Conversation, type Vm } from "@godmode/shared";
 import { api } from "./api";
 import { useLive, type Frame } from "./live";
 import { qk } from "./query";
@@ -8,12 +8,18 @@ import { subscribeBrowser, subscribeComputer } from "./realtime";
 
 /** Something an agent works on that the phone can watch. */
 export type LiveScreen =
-  | { kind: "browser"; key: string; id: string; title: string; running: boolean }
+  /** `conversationId`: that chat's own tab (chats browse in parallel, each in its tabs). */
+  | { kind: "browser"; key: string; id: string; conversationId: string | null; title: string; running: boolean }
   | { kind: "vm"; key: string; id: string; title: string; vm: Vm }
   | { kind: "share"; key: string; view: string; title: string; conversationId: string };
 
 export function screenHref(screen: LiveScreen) {
-  const params = screen.kind === "share" ? { kind: screen.kind, id: screen.view, title: screen.title } : { kind: screen.kind, id: screen.id, title: screen.title };
+  const params =
+    screen.kind === "share"
+      ? { kind: screen.kind, id: screen.view, title: screen.title }
+      : screen.kind === "browser"
+        ? { kind: screen.kind, id: screen.id, title: screen.title, chat: screen.conversationId ?? "" }
+        : { kind: screen.kind, id: screen.id, title: screen.title };
   return { pathname: "/live" as const, params };
 }
 
@@ -28,7 +34,11 @@ export function useLiveScreens() {
       const view = computerView(c.computerTarget!);
       if (!out.some((s) => s.key === `computer:${view}`)) out.push({ kind: "share", key: `computer:${view}`, view, title: computerTargetLabel(c.computerTarget!), conversationId: c.id });
     }
-    for (const p of profiles.data ?? []) out.push({ kind: "browser", key: `browser:${p.id}`, id: p.id, title: p.name, running: p.running });
+    for (const p of profiles.data ?? []) {
+      const chats = p.running ? p.chats : [];
+      for (const chat of chats) out.push(browserScreen(p, chat.conversationId, chat.title || chat.pageTitle || p.name));
+      if (!chats.length) out.push(browserScreen(p, null, p.name));
+    }
     for (const vm of vms.data ?? []) out.push({ kind: "vm", key: `vm:${vm.id}`, id: vm.id, title: vm.name, vm });
     return out.sort((a, b) => rank(b) - rank(a));
   }, [profiles.data, vms.data, conversations.data]);
@@ -38,6 +48,10 @@ export function useLiveScreens() {
     loading: profiles.isLoading || conversations.isLoading,
     refetch: () => Promise.all([profiles.refetch(), vms.refetch(), conversations.refetch()]),
   };
+}
+
+function browserScreen(profile: BrowserProfile, conversationId: string | null, title: string): LiveScreen {
+  return { kind: "browser", key: `browser:${browserView(profile.id, conversationId)}`, id: profile.id, conversationId, title, running: profile.running };
 }
 
 function shared(list: Conversation[] | undefined) {
@@ -58,11 +72,12 @@ export function isLive(s: LiveScreen): boolean {
 export function useStreamFrame(screen: LiveScreen | null, active = true): Frame | undefined {
   const key = screen && screen.kind !== "vm" ? screen.key : null;
   const target = screen?.kind === "browser" ? screen.id : screen?.kind === "share" ? screen.view : null;
+  const chat = screen?.kind === "browser" ? screen.conversationId : null;
   const kind = screen?.kind;
   useEffect(() => {
     if (!active || !target) return;
-    return kind === "browser" ? subscribeBrowser(target) : subscribeComputer(target);
-  }, [active, kind, target]);
+    return kind === "browser" ? subscribeBrowser(target, chat) : subscribeComputer(target);
+  }, [active, kind, target, chat]);
   return useLive((s) => (key ? s.frames[key] : undefined));
 }
 
@@ -83,10 +98,11 @@ export function useVmFrame(vm: Vm | null, active = true, intervalMs = 2500) {
 
 /** Mirrors the core: the chat's profile, the agent's pinned one, the workspace default, the global default. */
 function chatBrowser(conversation: Conversation, agent: Agent, profiles: BrowserProfile[]): BrowserProfile | undefined {
+  const workspaceId = agent.workspaceId ?? conversation.workspaceId;
   return (
     profiles.find((p) => p.id === conversation.browserProfileId) ??
     profiles.find((p) => p.id === agent.browser.profileId) ??
-    (agent.workspaceId ? profiles.find((p) => p.workspaceId === agent.workspaceId && p.isDefault) : undefined) ??
+    (workspaceId ? profiles.find((p) => p.workspaceId === workspaceId && p.isDefault) : undefined) ??
     profiles.find((p) => !p.workspaceId && p.isDefault)
   );
 }
@@ -108,7 +124,7 @@ export function useChatScreens(conversation: Conversation | undefined, agent: Ag
     if (vm) out.push({ kind: "vm", key: `vm:${vm.id}`, id: vm.id, title: vm.name, vm });
     else if (agent.browser.enabled) {
       const profile = chatBrowser(conversation, agent, profiles.data ?? []);
-      if (profile) out.push({ kind: "browser", key: `browser:${profile.id}`, id: profile.id, title: profile.name, running: profile.running });
+      if (profile) out.push(browserScreen(profile, conversation.id, profile.name));
     }
     return out;
   }, [conversation, agent, profiles.data, vms.data, workspaces.data]);

@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { AutomationEvent, ClientEvent, EntityName, ServerEvent, Vm } from "@godmode/shared";
+import { browserView, type AutomationEvent, type BrowserProfile, type ClientEvent, type EntityName, type ServerEvent, type Task, type Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { qk } from "./queryKeys";
@@ -43,10 +43,12 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   vms: [qk.vms],
   // Bot status, access requests and chats (the sidebar badge counts requests).
   messaging: [qk.messaging, qk.bootstrap],
+  tasks: [qk.tasks],
   // A phone was paired, removed, or connected.
   mobile: [qk.mobile],
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
+  followups: [qk.followups],
 };
 
 export function startRealtime(queryClient: QueryClient) {
@@ -76,7 +78,7 @@ async function connect(queryClient: QueryClient) {
     useLive.getState().setConnected(true);
     while (pendingSends.length) ws.send(JSON.stringify(pendingSends.shift()));
     // Resubscribe live views
-    for (const [profileId, viewers] of browserViewers) ws.send(JSON.stringify(subscribeEvent(profileId, viewers)));
+    for (const viewers of browserViewers.values()) ws.send(JSON.stringify(subscribeEvent(viewers)));
     for (const view of computerViewers.keys()) ws.send(JSON.stringify({ type: "computer.subscribe", view } satisfies ClientEvent));
     if (pingTimer) clearInterval(pingTimer);
     pingTimer = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: "ping" })), 25_000);
@@ -144,17 +146,27 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "conversation.updated":
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
+      // Follow-ups show the chat's title.
+      qc.invalidateQueries({ queryKey: qk.followups });
       break;
     case "conversation.deleted":
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries({ queryKey: qk.followups });
       break;
     case "agent.updated":
     case "agent.deleted":
       qc.invalidateQueries({ queryKey: qk.agents });
+      if (event.type === "agent.deleted") qc.invalidateQueries({ queryKey: qk.followups });
       break;
     case "routine.updated":
     case "routine.deleted":
       qc.invalidateQueries({ queryKey: qk.routines });
+      break;
+    case "task.updated":
+      upsertTask(qc, event.task);
+      break;
+    case "task.deleted":
+      qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.filter((t) => t.id !== event.id));
       break;
     case "automation.event":
       void upsertAutomationEvent(qc, event.event);
@@ -174,12 +186,17 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.setQueryData(qk.vaultStatus, event.status);
       qc.invalidateQueries({ queryKey: qk.bootstrap });
       break;
-    case "browser.updated":
-      qc.invalidateQueries({ queryKey: qk.browserProfiles });
+    case "browser.updated": {
+      // Frequent while chats browse (tabs and titles change): update in place instead of refetching.
+      const known = qc.getQueryData<BrowserProfile[]>(qk.browserProfiles);
+      if (known?.some((p) => p.id === event.profile.id)) {
+        qc.setQueryData(qk.browserProfiles, known.map((p) => (p.id === event.profile.id ? event.profile : p)));
+      } else qc.invalidateQueries({ queryKey: qk.browserProfiles });
       if (!event.profile.running) live.dropBrowserFrame(event.profile.id);
       break;
+    }
     case "browser.frame":
-      live.browserFrame(event.profileId, {
+      live.browserFrame(browserView(event.profileId, event.conversationId), {
         data: event.data,
         url: event.url,
         title: event.title,
@@ -291,29 +308,35 @@ export function subscribeComputer(view: string): () => void {
 }
 
 interface BrowserViewers {
+  profileId: string;
+  conversationId: string | null;
   watching: number;
   passive: number;
 }
 
-/** Live view subscribers per profile in this UI; the core only hears about the first/last and passive changes. */
+/** Live view subscribers per view in this UI; the core only hears about the first/last and passive changes. */
 const browserViewers = new Map<string, BrowserViewers>();
 
-function subscribeEvent(profileId: string, viewers: BrowserViewers): ClientEvent {
-  return { type: "browser.subscribe", profileId, passive: viewers.watching === 0 };
+function subscribeEvent({ profileId, conversationId, watching }: BrowserViewers): ClientEvent {
+  return { type: "browser.subscribe", profileId, ...(conversationId ? { conversationId } : {}), passive: watching === 0 };
 }
 
 /**
- * Subscribe to the live view of a browser profile. Passive viewers (glanceable previews) get frames without
- * keeping an idle browser running.
+ * Subscribe to the live view of a browser profile — with `conversationId`, of the tab that chat works in. Passive
+ * viewers (glanceable previews) get frames without keeping an idle browser running.
  */
-export function subscribeBrowser(profileId: string, { passive = false }: { passive?: boolean } = {}): () => void {
+export function subscribeBrowser(
+  profileId: string,
+  { passive = false, conversationId = null }: { passive?: boolean; conversationId?: string | null } = {},
+): () => void {
   const kind = passive ? "passive" : "watching";
-  const viewers = browserViewers.get(profileId) ?? { watching: 0, passive: 0 };
+  const view = browserView(profileId, conversationId);
+  const viewers = browserViewers.get(view) ?? { profileId, conversationId, watching: 0, passive: 0 };
   const wasPassive = viewers.watching === 0;
   const isFirst = viewers.watching + viewers.passive === 0;
   viewers[kind]++;
-  browserViewers.set(profileId, viewers);
-  if (isFirst || wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(profileId, viewers));
+  browserViewers.set(view, viewers);
+  if (isFirst || wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(viewers));
 
   let active = true;
   return () => {
@@ -322,8 +345,23 @@ export function subscribeBrowser(profileId: string, { passive = false }: { passi
     const wasPassive = viewers.watching === 0;
     viewers[kind]--;
     if (viewers.watching + viewers.passive === 0) {
-      browserViewers.delete(profileId);
-      sendClientEvent({ type: "browser.unsubscribe", profileId });
-    } else if (wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(profileId, viewers));
+      browserViewers.delete(view);
+      sendClientEvent({ type: "browser.unsubscribe", profileId, ...(conversationId ? { conversationId } : {}) });
+    } else if (wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(viewers));
   };
+}
+
+/** Patch every cached task list the task belongs to (the key's third segment is the scope: all, global or a workspace id). */
+function upsertTask(qc: QueryClient, task: Task) {
+  for (const [key, list] of qc.getQueriesData<Task[]>({ queryKey: qk.tasks })) {
+    if (!list) continue;
+    const scope = key[2];
+    const belongs = scope === "all" || (scope === "global" ? task.workspaceId === null : task.workspaceId === scope);
+    const idx = list.findIndex((t) => t.id === task.id);
+    if (!belongs) {
+      if (idx >= 0) qc.setQueryData(key, list.filter((t) => t.id !== task.id));
+      continue;
+    }
+    qc.setQueryData(key, idx >= 0 ? list.map((t) => (t.id === task.id ? task : t)) : [...list, task]);
+  }
 }

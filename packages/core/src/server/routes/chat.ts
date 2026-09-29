@@ -12,6 +12,7 @@ import {
   updateConversation,
 } from "../../services/conversations";
 import { cancelRun, findRunLog, getRun, listRuns } from "../../runner/runner";
+import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } from "../../services/followups";
 import { notFound } from "../../util";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
@@ -40,6 +41,8 @@ const instructions = z.string().max(MAX_INSTRUCTIONS_LENGTH).optional();
 const vmId = z.string().trim().max(100).nullable().optional();
 /** Browser profile of the chat; null = the agent's (or the default). */
 const browserProfileId = z.string().trim().max(100).nullable().optional();
+/** Workspace the chat is started in; a global agent browses with its default profile. */
+const workspaceId = z.string().trim().max(100).nullable().optional();
 
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
@@ -71,7 +74,7 @@ export function registerChatRoutes(app: Hono): void {
   );
 
   app.post("/api/conversations", async (c) => {
-    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, instructions, ...modelChoice }));
+    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, workspaceId, instructions, ...modelChoice }));
     return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
@@ -109,6 +112,20 @@ export function registerChatRoutes(app: Hono): void {
     return c.json(await sendMessage(id, { ...input, trigger: "chat" }), 201);
   });
 
+  app.get("/api/followups", (c) => c.json(listFollowups({ agentId: c.req.query("agentId") || undefined })));
+
+  app.patch("/api/conversations/:id/followup", async (c) => {
+    const { dueAt } = await body(c, z.object({ dueAt: z.string().min(1).max(64) }));
+    return c.json(rescheduleFollowup(c.req.param("id"), new Date(dueAt)));
+  });
+
+  app.delete("/api/conversations/:id/followup", (c) => {
+    if (!cancelFollowup(c.req.param("id"))) throw notFound("Follow-up");
+    return c.json({ ok: true as const });
+  });
+
+  app.post("/api/conversations/:id/followup/run", async (c) => c.json(await runFollowupNow(c.req.param("id")), 201));
+
   app.post("/api/chat", async (c) => {
     const input = await body(
       c,
@@ -118,6 +135,7 @@ export function registerChatRoutes(app: Hono): void {
         computerTarget: computerTargetSchema.nullable().optional(),
         vmId,
         browserProfileId,
+        workspaceId,
         instructions,
         ...modelChoice,
       }),

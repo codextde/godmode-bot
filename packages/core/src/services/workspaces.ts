@@ -13,6 +13,7 @@ import { reloadSchedules } from "../scheduler/scheduler";
 import { HttpError, badRequest, newId, notFound, now, slugify } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { gitSourceRows, listSources, setSources, sourcesByWorkspace, trashClones } from "./workspaceSources";
+import { removeWorkspaceTasks } from "../tasks/service";
 
 const log = logger("workspaces");
 
@@ -154,6 +155,7 @@ const DEPENDENTS = [
   { table: "mcp_servers", key: "mcpServers" },
   { table: "browser_profiles", key: "browserProfiles" },
   { table: "composio_connections", key: "composioConnections" },
+  { table: "tasks", key: "tasks" },
 ] as const;
 
 type DependentCounts = Record<(typeof DEPENDENTS)[number]["key"], number>;
@@ -174,6 +176,7 @@ function describeCounts(counts: DependentCounts): string {
     mcpServers: ["MCP server", "MCP servers"],
     browserProfiles: ["browser profile", "browser profiles"],
     composioConnections: ["Composio connection", "Composio connections"],
+    tasks: ["task", "tasks"],
   };
   return (Object.keys(labels) as (keyof DependentCounts)[])
     .filter((k) => counts[k] > 0)
@@ -200,6 +203,7 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
   }
 
   const agents = listAgents({ workspaceId: id }).filter((a) => a.workspaceId === id && !a.isDefault);
+  await removeWorkspaceTasks(id);
   for (const agent of agents) await stopAgentRuns(agent.id);
   const clones = gitSourceRows(id);
 
@@ -216,6 +220,7 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
   tx(() => {
     // The default agent is always global; never let a cascade take it down.
     run("UPDATE agents SET workspace_id = NULL WHERE workspace_id = ? AND is_default = 1", id);
+    run("UPDATE conversations SET workspace_id = NULL WHERE workspace_id = ?", id);
     // Global logins/2FA entries must not keep links to items the cascade is about to delete.
     run("UPDATE totp SET credential_id = NULL WHERE credential_id IN (SELECT id FROM credentials WHERE workspace_id = ?)", id);
     run("UPDATE credentials SET totp_id = NULL WHERE totp_id IN (SELECT id FROM totp WHERE workspace_id = ?)", id);
@@ -247,4 +252,5 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
   if (counts.mcpServers) bus.changed("mcp-servers");
   if (counts.browserProfiles) bus.changed("browser-profiles");
   if (counts.composioConnections) bus.changed("composio");
+  if (counts.tasks) bus.changed("tasks");
 }

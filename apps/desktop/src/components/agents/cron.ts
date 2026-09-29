@@ -1,4 +1,6 @@
 /** Friendly cron helpers: presets ⇄ cron expressions, validation and human-readable descriptions. */
+import { Cron } from "croner";
+import { formatMinutes, MAX_START_WINDOW_MINUTES, startWindowLimit, startWindowTooLong } from "@godmode/shared";
 
 export type CronKind = "hourly" | "daily" | "weekdays" | "weekly" | "monthly" | "custom";
 
@@ -252,6 +254,53 @@ export function cronToHuman(cron: string): string {
 
   const extras = [describeDom(dom), describeMonth(mon), describeDow(dow)].filter(Boolean);
   return extras.length ? `${time} ${extras.join(" ")}` : time;
+}
+
+/* ------------------------------------------------------------------ */
+/* Random start window                                                  */
+/* ------------------------------------------------------------------ */
+
+export const START_WINDOW_PRESETS = [15, 30, 60, 90, 120, 180];
+
+/** Longest start window the schedule leaves room for (same rule as the core). */
+export function maxStartWindow(cron: string, timezone: string): number {
+  if (validateCron(cron)) return MAX_START_WINDOW_MINUTES;
+  try {
+    const job = new Cron(cron.trim(), { paused: true, timezone, mode: "5-or-6-parts" });
+    return startWindowLimit((after) => job.nextRun(after), timezone);
+  } catch {
+    return MAX_START_WINDOW_MINUTES;
+  }
+}
+
+export function startWindowProblem(cron: string, timezone: string, minutes: number): string | null {
+  if (!minutes) return null;
+  const limit = maxStartWindow(cron, timezone);
+  return minutes > limit ? startWindowTooLong(limit) : null;
+}
+
+/** Like cronToHuman, with the random start window: "Weekdays between 8:00 AM and 9:30 AM". */
+export function scheduleToHuman(cron: string, startWindowMinutes = 0): string {
+  const base = cronToHuman(cron);
+  if (!startWindowMinutes || validateCron(cron)) return base;
+  const expr = cron.trim().replace(/\s+/g, " ");
+  const d = parseCron(expr);
+  if (d.kind === "hourly" && startWindowMinutes === 60) return "Every hour at a random minute";
+  if (d.kind !== "custom" && d.kind !== "hourly") {
+    const end = d.hour * 60 + d.minute + startWindowMinutes;
+    const range = `between ${formatTime(d.hour, d.minute)} and ${formatTime(Math.floor(end / 60) % 24, end % 60)}`;
+    switch (d.kind) {
+      case "daily":
+        return `Every day ${range}`;
+      case "weekdays":
+        return `Weekdays ${range}`;
+      case "weekly":
+        return `Every ${WEEKDAYS[d.weekday]} ${range}`;
+      case "monthly":
+        return `Monthly on the ${ordinal(d.monthDay)} ${range}`;
+    }
+  }
+  return `${base} · random start within ${formatMinutes(startWindowMinutes)}`;
 }
 
 /* ------------------------------------------------------------------ */

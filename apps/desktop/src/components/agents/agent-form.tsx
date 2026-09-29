@@ -27,8 +27,9 @@ import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useModelCatalog, useVmChoices, useWorkspaces } from "@/lib/hooks";
 import { isMac, modKey } from "@/lib/desktop";
 import { useUi } from "@/stores/ui";
+import { useDraft } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
-import { AgentAvatar, Kbd, Section } from "@/components/common";
+import { AgentAvatar, DraftStatus, Kbd, Section } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +44,7 @@ import { MultiSelect } from "./multi-select";
 import { ModelOptions } from "./model-options";
 import { useVaultGrant } from "@/components/vault/grant";
 import { FolderPickerDialog, folderName, useShortPath } from "@/components/chat/folder-picker";
+import { defaultProfileFor } from "@/components/chat/browser-panel";
 import { InheritedInstructions, useInheritedInstructions } from "@/components/instructions/instructions";
 import { VmSelectField } from "@/components/vms/vm-picker";
 
@@ -186,6 +188,7 @@ export function AgentForm({
   onSubmit,
   onCancel,
   footerExtra,
+  draftKey,
 }: {
   initial?: Partial<Agent>;
   agentId?: string;
@@ -197,6 +200,8 @@ export function AgentForm({
   onCancel?: () => void;
   /** Rendered above the submit bar (e.g. template automation opt-in). */
   footerExtra?: ReactNode;
+  /** Keep unsaved values as a draft under this key; clear it with `clearDraft` once saved. */
+  draftKey?: string;
 }) {
   const { data: boot } = useBootstrap();
   const { catalog } = useModelCatalog();
@@ -209,23 +214,12 @@ export function AgentForm({
     [scope, boot?.settings.security.defaultSecretAccess],
   );
   const seed = useMemo(() => agentToValues(initial, defaults), [initial, defaults]);
-  const seedKey = JSON.stringify(seed);
-  const [values, setValues] = useState<AgentFormValues>(seed);
-  const [baseline, setBaseline] = useState(seedKey);
+  // Realtime updates flow into the fields that haven't been edited.
+  const [values, setValues, draft] = useDraft<AgentFormValues>(draftKey, seed);
   const [showErrors, setShowErrors] = useState(false);
-  const dirty = JSON.stringify(values) !== baseline;
+  const dirty = JSON.stringify(values) !== JSON.stringify(seed);
   const effectiveModel = findModel(catalog.models, values.model || boot?.settings.runner.model || DEFAULT_MODEL);
   const efforts: readonly Effort[] = effectiveModel?.efforts ?? EFFORT_OPTIONS;
-
-  // Pick up external changes (realtime updates) while the user hasn't edited anything
-  const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty;
-  useEffect(() => {
-    if (!dirtyRef.current) {
-      setValues(JSON.parse(seedKey) as AgentFormValues);
-      setBaseline(seedKey);
-    }
-  }, [seedKey]);
 
   const errors = validate(values);
   const hasErrors = Object.keys(errors).length > 0;
@@ -523,7 +517,12 @@ export function AgentForm({
                 onChange={(v) => set("browserEnabled", v)}
               />
               <div className={cn("grid grid-cols-1 gap-4 @xl:grid-cols-2", !values.browserEnabled && "pointer-events-none opacity-50")}>
-                <BrowserProfileField value={values.browserProfileId} onChange={(v) => set("browserProfileId", v)} disabled={!values.browserEnabled} />
+                <BrowserProfileField
+                  value={values.browserProfileId}
+                  workspaceId={values.workspaceId}
+                  onChange={(v) => set("browserProfileId", v)}
+                  disabled={!values.browserEnabled}
+                />
                 <div className="space-y-1.5">
                   <span id="agent-headless-label" className="text-sm font-medium">
                     Window
@@ -677,6 +676,7 @@ export function AgentForm({
               </span>
             )}
           </div>
+          {mode === "create" && draft.saved && <DraftStatus onDiscard={draft.discard} />}
           <span className="hidden items-center gap-1 text-xs text-muted-foreground @2xl:flex">
             <Kbd>{modKey}S</Kbd>
           </span>
@@ -686,7 +686,7 @@ export function AgentForm({
             </Button>
           )}
           {mode === "edit" && dirty && !onCancel && (
-            <Button type="button" variant="ghost" onClick={() => setValues(JSON.parse(baseline) as AgentFormValues)}>
+            <Button type="button" variant="ghost" onClick={draft.discard}>
               Discard
             </Button>
           )}
@@ -926,8 +926,19 @@ function ComputerDisplayField({ value, onChange, disabled }: { value: string | n
   );
 }
 
-function BrowserProfileField({ value, onChange, disabled }: { value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
+function BrowserProfileField({
+  value,
+  workspaceId,
+  onChange,
+  disabled,
+}: {
+  value: string | null;
+  workspaceId: string | null;
+  onChange: (v: string | null) => void;
+  disabled?: boolean;
+}) {
   const { data: profiles = [], isLoading } = useQuery({ queryKey: [...qk.browserProfiles, "list"], queryFn: api.browser.profiles });
+  const defaultId = defaultProfileFor(profiles, workspaceId)?.id;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-browser-profile">Profile</Label>
@@ -941,7 +952,7 @@ function BrowserProfileField({ value, onChange, disabled }: { value: string | nu
           {profiles.map((p) => (
             <SelectItem key={p.id} value={p.id}>
               {p.name}
-              {p.isDefault && <span className="text-xs text-muted-foreground">default</span>}
+              {p.id === defaultId && <span className="text-xs text-muted-foreground">default</span>}
               {p.cookieCount > 0 && <span className="text-xs text-muted-foreground">{p.cookieCount} cookies</span>}
             </SelectItem>
           ))}

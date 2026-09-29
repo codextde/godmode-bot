@@ -7,8 +7,9 @@ import { Sparkles } from "lucide-react";
 import type { ConversationWithMessages, RoutineTriggerType } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
+import { useDraft } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
 import { Backdrop } from "@/components/brand";
 import { Kbd } from "@/components/common";
@@ -18,6 +19,7 @@ import { TRIGGER_TYPES } from "./trigger-meta";
 
 const EXAMPLES: { kind: RoutineTriggerType; text: string }[] = [
   { kind: "schedule", text: "Every Monday at 9:00, collect last week's numbers and write a report" },
+  { kind: "schedule", text: "Every weekday, start sometime between 8:00 and 9:30 and work through my inbox" },
   { kind: "app", text: "When I get an email from a customer, draft a reply" },
   { kind: "app", text: "When a meeting is about to start, brief me on the attendees" },
   { kind: "app", text: "When someone posts in #support on Slack, draft an answer" },
@@ -33,15 +35,17 @@ export function OnePromptCard({ compact = false }: { compact?: boolean }) {
   const qc = useQueryClient();
   const { data: boot } = useBootstrap();
   const { data: agents = [] } = useAllAgents();
-  const [text, setText] = useState("");
+  const workspace = useScopeWorkspace();
+  const [text, setText, textDraft] = useDraft("automation:describe", "");
   const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const godmodeId = boot?.defaultAgentId ?? agents.find((a) => a.isDefault)?.id;
   const expanded = !compact || focused || text.trim().length > 0;
 
   const start = useMutation({
-    mutationFn: () => api.chat.start({ agentId: godmodeId, content: `Set up an automation: ${text.trim()}` }),
+    mutationFn: () => api.chat.start({ agentId: godmodeId, content: `Set up an automation: ${text.trim()}`, workspaceId: workspace?.id }),
     onSuccess: (res) => {
+      textDraft.discard();
       qc.setQueryData<ConversationWithMessages>(qk.conversation(res.conversation.id), {
         ...res.conversation,
         messages: [res.message],

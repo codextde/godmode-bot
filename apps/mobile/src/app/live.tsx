@@ -6,7 +6,7 @@ import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View, type GestureResponderEvent } from "react-native";
 import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { ComputerInputEvent } from "@godmode/shared";
+import { browserView, type ComputerInputEvent } from "@godmode/shared";
 import { Glass, GlassGroup } from "@/components/glass";
 import { Icon } from "@/components/icon";
 import { frameUri, vmState } from "@/components/screen-tile";
@@ -22,7 +22,8 @@ const WHITE = "#FFFFFF";
 const DIM = "rgba(255,255,255,0.7)";
 
 export default function Live() {
-  const params = useLocalSearchParams<{ kind: LiveScreen["kind"]; id: string; title?: string }>();
+  const params = useLocalSearchParams<{ kind: LiveScreen["kind"]; id: string; title?: string; chat?: string }>();
+  const chat = params.chat || null;
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const now = useNow(1000);
@@ -30,7 +31,7 @@ export default function Live() {
   const vm = params.kind === "vm" ? (vms.data?.find((v) => v.id === params.id) ?? null) : null;
   const screen: LiveScreen | null =
     params.kind === "browser"
-      ? { kind: "browser", key: `browser:${params.id}`, id: params.id, title: params.title ?? "Browser", running: true }
+      ? { kind: "browser", key: `browser:${browserView(params.id, chat)}`, id: params.id, conversationId: chat, title: params.title ?? "Browser", running: true }
       : params.kind === "share"
         ? { kind: "share", key: `computer:${params.id}`, view: params.id, title: params.title ?? "Shared screen", conversationId: "" }
         : null;
@@ -49,7 +50,7 @@ export default function Live() {
   const input = useMutation({
     mutationFn: async (event: BrowserInput & ComputerInputEvent) => {
       if (!frame) return;
-      if (params.kind === "browser") await api.browser.input(params.id, event);
+      if (params.kind === "browser") await api.browser.input(params.id, event, chat);
       else await api.computer.input(params.id, event, { width: frame.width, height: frame.height });
     },
     onError: (err) => Alert.alert("Couldn't reach the screen", errorText(err)),

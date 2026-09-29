@@ -1,0 +1,119 @@
+<template id="s6-memory-template">
+  <div id="s6-memory" data-composition-id="s6-memory" data-width="1920" data-height="1080" data-duration="10">
+    <style>
+      @font-face { font-family: "Geist"; src: url("assets/fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif.woff2") format("woff2"); font-style: normal; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
+
+      #s6-memory { position: absolute; inset: 0; overflow: hidden; background: #faf9f5; color: #1a1a1a; font-family: "Geist", sans-serif; }
+      #s6-memory .s6-sky { position: absolute; left: 500px; top: -640px; width: 1700px; height: 1100px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(255, 244, 214, 0.85), rgba(250, 238, 206, 0.3) 60%, rgba(250, 249, 245, 0) 100%); }
+      #s6-memory .s6-moon { position: absolute; left: 1100px; top: 300px; width: 1000px; height: 1000px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(85, 82, 201, 0.12), rgba(85, 82, 201, 0)); }
+      #s6-memory .s6-grain { position: absolute; inset: -40px; opacity: 0.3; mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='61' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0.10 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+      #s6-memory .s6-content { position: absolute; inset: 0; }
+
+      #s6-memory .s6-head { position: absolute; left: 272px; top: 56px; height: 100px; width: 1400px; }
+      #s6-memory .s6-hl { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 22px; white-space: nowrap; }
+      #s6-memory .s6-hl b { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 12px; border-radius: 10px; background: #1c1c1c; color: #faf9f5;
+        font-family: "Geist Mono", monospace; font-size: 22px; font-weight: 500; letter-spacing: 0.1em; }
+      #s6-memory .s6-hl span { font-family: "Instrument Serif", serif; font-size: 84px; line-height: 1.1; letter-spacing: -0.02em; color: #1c1c1c; }
+      #s6-memory .s6-hl em { color: #087f4d; }
+      #s6-memory #s6-hb em { color: #5552c9; }
+
+      /* Real app screenshots inside a window, with an in-window camera. */
+      #s6-memory .s6-win { position: absolute; left: 272px; top: 180px; width: 1376px; height: 860px; border-radius: 24px; overflow: hidden; background: #faf9f5;
+        border: 2px solid rgba(38, 32, 22, 0.12);
+        box-shadow: 0 70px 120px -60px rgba(38, 32, 22, 0.45), 0 3px 12px rgba(38, 32, 22, 0.06); }
+      #s6-memory .s6-layer { position: absolute; left: 0; top: 0; width: 1376px; height: 860px; transform-origin: 0 0; }
+      #s6-memory .s6-layer img { position: absolute; left: 0; top: 0; width: 1376px; height: 860px; }
+      #s6-memory .s6-ring { position: absolute; left: 245px; top: 461px; width: 1106px; height: 92px; border-radius: 14px; border: 3px solid #0eca7b;
+        box-shadow: 0 0 0 7px rgba(14, 202, 123, 0.14); }
+      #s6-memory .s6-mark { position: absolute; left: 289px; width: 460px; height: 22px; border-radius: 6px; background: rgba(85, 82, 201, 0.16); transform-origin: 0 50%; }
+
+      #s6-memory .s6-cap { position: absolute; left: 0; right: 0; bottom: 0; height: 250px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 66px;
+        background: linear-gradient(180deg, rgba(250, 249, 245, 0) 0%, #faf9f5 50%, #faf9f5 100%); }
+      #s6-memory .s6-ct { position: absolute; left: 0; right: 0; bottom: 66px; text-align: center; font-size: 42px; letter-spacing: -0.015em; color: #1a1a1a; }
+      #s6-memory .s6-ct em { font-family: "Instrument Serif", serif; font-style: italic; font-size: 52px; color: #087f4d; }
+      #s6-memory #s6-cb em { color: #5552c9; }
+    </style>
+
+    <div class="s6-sky" id="s6-sky"></div>
+    <div class="s6-moon" id="s6-moon"></div>
+    <div class="s6-grain" id="s6-grain"></div>
+
+    <div class="s6-content" id="s6-content">
+      <div class="s6-head">
+        <div class="s6-hl" id="s6-ha"><b>04</b><span>It keeps working — <em>on its own.</em></span></div>
+        <div class="s6-hl" id="s6-hb"><b>05</b><span>And it remembers — <em>even what you didn't say.</em></span></div>
+      </div>
+
+      <div class="s6-win" id="s6-win">
+        <div class="s6-layer" id="s6-la">
+          <img src="assets/screens/routines.png" alt="Automations page" />
+          <div class="s6-ring" id="s6-ring"></div>
+        </div>
+        <div class="s6-layer" id="s6-lb">
+          <img src="assets/screens/agent-detail.png" alt="Billing Clerk memory and dream journal" />
+          <div class="s6-mark" id="s6-m0" style="top: 390px"></div>
+          <div class="s6-mark" id="s6-m1" style="top: 413px"></div>
+          <div class="s6-mark" id="s6-m2" style="top: 435px"></div>
+          <div class="s6-mark" id="s6-m3" style="top: 457px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="s6-cap" id="s6-cap"></div>
+    <div class="s6-ct" id="s6-ca">Automations start the work — <em>on a schedule, or when something happens.</em></div>
+    <div class="s6-ct" id="s6-cb">While you're away it dreams: <em>memory tidied, every change undoable.</em></div>
+
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+        const D = 10;
+        const W = 1376, H = 860;
+        function cam(s, fx, fy) {
+          let x = W / 2 - fx * W * s, y = H / 2 - fy * H * s;
+          x = Math.min(0, Math.max(W - W * s, x));
+          y = Math.min(0, Math.max(H - H * s, y));
+          return { x: x, y: y, scale: s };
+        }
+
+        tl.fromTo("#s6-sky", { opacity: 0.6, x: -50 }, { opacity: 1, x: 50, duration: D, ease: "sine.inOut" }, 0);
+        tl.fromTo("#s6-grain", { x: 0 }, { x: -36, duration: D, ease: "none" }, 0);
+        tl.fromTo("#s6-moon", { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1.05, duration: 3.5, ease: "sine.out" }, 4.6);
+
+        // Window rises in.
+        tl.fromTo("#s6-ha", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 0.05);
+        tl.fromTo("#s6-win", { opacity: 0, y: 80, scale: 0.97 }, { opacity: 1, y: 0, scale: 1, duration: 1.0, ease: "expo.out" }, 0.15);
+
+        // Phase A — the real Automations page; push onto the invoice automation.
+        tl.fromTo("#s6-la", cam(1.0, 0.5, 0.5), Object.assign(cam(1.0, 0.5, 0.5), { duration: 0.01 }), 0);
+        tl.to("#s6-la", Object.assign(cam(1.3, 0.56, 0.66), { duration: 2.6, ease: "power2.inOut" }), 1.1);
+        tl.to("#s6-la", Object.assign(cam(1.34, 0.57, 0.67), { duration: 1.4, ease: "none" }), 3.71);
+        tl.fromTo("#s6-ring", { opacity: 0, scale: 1.04 }, { opacity: 1, scale: 1, duration: 0.5, ease: "back.out(2)", transformOrigin: "50% 50%" }, 2.9);
+        tl.fromTo("#s6-cap", { opacity: 0 }, { opacity: 1, duration: 0.6, ease: "power2.out" }, 1.4);
+        tl.fromTo("#s6-ca", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 1.5);
+
+        // Phase B — the agent's memory page: the dream journal.
+        tl.fromTo("#s6-lb", Object.assign(cam(1.22, 0.57, 0.45), { opacity: 0 }), Object.assign(cam(1.22, 0.57, 0.45), { opacity: 0, duration: 0.01 }), 0);
+        tl.to("#s6-lb", { opacity: 1, duration: 0.7, ease: "power2.inOut" }, 5.0);
+        tl.to("#s6-lb", Object.assign(cam(1.32, 0.55, 0.47), { duration: 4.4, ease: "sine.inOut" }), 5.0);
+        tl.to("#s6-ca", { opacity: 0, y: -16, duration: 0.4, ease: "power2.in" }, 4.8);
+        tl.fromTo("#s6-cb", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 5.4);
+        tl.to("#s6-ha", { opacity: 0, y: -30, duration: 0.45, ease: "power2.in" }, 4.8);
+        tl.fromTo("#s6-hb", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out" }, 5.15);
+        [0, 1, 2, 3].forEach(function (i) {
+          tl.fromTo("#s6-m" + i, { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power2.inOut" }, 6.3 + i * 0.32);
+        });
+
+        // Dip to paper.
+        tl.to(["#s6-content", "#s6-moon", "#s6-cap", "#s6-cb"], { opacity: 0, filter: "blur(12px)", duration: 0.55, ease: "power2.in" }, D - 0.6);
+
+        window.__timelines["s6-memory"] = tl;
+      })();
+    </script>
+  </div>
+</template>

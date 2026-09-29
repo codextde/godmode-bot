@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, Conversation, ConversationWithMessages } from "@godmode/shared";
 import { EFFORT_LABELS } from "@godmode/shared";
-import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, Moon, Pencil, Pin, PinOff, Share2, Trash2, Plug, Workflow } from "lucide-react";
+import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, Moon, Pencil, Pin, PinOff, Share2, SquareKanban, Trash2, Plug, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +33,7 @@ const ORIGIN_META = {
   slack: { label: "Slack", icon: PLATFORMS.slack.glyph },
   telegram: { label: "Telegram", icon: PLATFORMS.telegram.glyph },
   teams: { label: "Teams", icon: PLATFORMS.teams.glyph },
+  task: { label: "Task", icon: SquareKanban },
 } as const;
 
 export function ConversationHeader({

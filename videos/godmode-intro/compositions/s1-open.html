@@ -1,0 +1,86 @@
+<template id="s1-open-template">
+  <div id="s1-open" data-composition-id="s1-open" data-width="1920" data-height="1080" data-duration="6">
+    <style>
+      @font-face { font-family: "Geist"; src: url("assets/fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif.woff2") format("woff2"); font-style: normal; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
+
+      #s1-open { position: absolute; inset: 0; overflow: hidden; background: #faf9f5; color: #1a1a1a; font-family: "Geist", sans-serif; }
+      #s1-open .s1-sky { position: absolute; left: 260px; top: -520px; width: 1400px; height: 1000px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(255, 244, 214, 0.95), rgba(250, 238, 206, 0.45) 55%, rgba(250, 249, 245, 0) 100%); }
+      #s1-open .s1-glow { position: absolute; left: 610px; top: 190px; width: 700px; height: 700px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(14, 202, 123, 0.20), rgba(14, 202, 123, 0.06) 55%, rgba(14, 202, 123, 0) 100%); }
+      #s1-open .s1-grain { position: absolute; inset: -40px; opacity: 0.35; mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0.10 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+      #s1-open .s1-ring { position: absolute; left: 50%; top: 50%; border-radius: 50%; border: 2px solid rgba(38, 32, 22, 0.10); }
+      #s1-open .s1-r1 { width: 420px; height: 420px; margin: -210px 0 0 -210px; }
+      #s1-open .s1-r2 { width: 700px; height: 700px; margin: -350px 0 0 -350px; border-color: rgba(38, 32, 22, 0.07); }
+      #s1-open .s1-r3 { width: 1040px; height: 1040px; margin: -520px 0 0 -520px; border-color: rgba(38, 32, 22, 0.05); }
+
+      #s1-open .s1-content { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      #s1-open .s1-lockup { position: relative; display: flex; align-items: center; gap: 44px; height: 200px; }
+      #s1-open .s1-tile { width: 176px; height: 176px; flex: none; border-radius: 44px;
+        box-shadow: 0 40px 70px -30px rgba(38, 32, 22, 0.45), 0 6px 16px rgba(38, 32, 22, 0.10); }
+      #s1-open .s1-tile img { display: block; width: 176px; height: 176px; }
+      #s1-open .s1-words { display: flex; flex-direction: column; justify-content: center; }
+      #s1-open .s1-name { font-family: "Instrument Serif", serif; font-size: 196px; line-height: 0.9; letter-spacing: -0.025em; color: #1c1c1c; display: flex; }
+      #s1-open .s1-name span { display: inline-block; }
+      #s1-open .s1-kicker { font-family: "Geist Mono", monospace; font-size: 24px; letter-spacing: 0.34em; color: #6b675f; margin-top: 34px; padding-left: 6px; }
+      #s1-open .s1-tag { margin-top: 84px; font-size: 50px; font-weight: 400; letter-spacing: -0.02em; color: #1a1a1a; display: flex; gap: 16px; }
+      #s1-open .s1-tag span { display: inline-block; }
+      #s1-open .s1-tag em { font-family: "Instrument Serif", serif; font-style: italic; font-size: 60px; letter-spacing: -0.01em; color: #087f4d; }
+    </style>
+
+    <div class="s1-sky" id="s1-sky"></div>
+    <div class="s1-glow" id="s1-glow"></div>
+    <div class="s1-ring s1-r1" id="s1-r1"></div>
+    <div class="s1-ring s1-r2" id="s1-r2"></div>
+    <div class="s1-ring s1-r3" id="s1-r3"></div>
+    <div class="s1-grain" id="s1-grain"></div>
+
+    <div class="s1-content" id="s1-content">
+      <div class="s1-lockup" id="s1-lockup">
+        <div class="s1-tile" id="s1-tile"><img src="assets/img/logo.svg" alt="Godmode logo" /></div>
+        <div class="s1-words">
+          <div class="s1-name" id="s1-name"><span>G</span><span>o</span><span>d</span><span>m</span><span>o</span><span>d</span><span>e</span></div>
+          <div class="s1-kicker" id="s1-kicker">AI COWORKERS</div>
+        </div>
+      </div>
+      <div class="s1-tag" id="s1-tag"><span>AI</span><span>coworkers</span><span>that</span><span>do</span><em>real work</em><span>on</span><span>your</span><span>computer.</span></div>
+    </div>
+
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+        const D = 6;
+
+        // Ambient: skylight breathes, grain drifts, rings pulse outward once.
+        tl.fromTo("#s1-sky", { opacity: 0.55, scale: 0.92 }, { opacity: 1, scale: 1.04, duration: D, ease: "sine.inOut" }, 0);
+        tl.fromTo("#s1-grain", { x: 0, y: 0 }, { x: -30, y: -18, duration: D, ease: "none" }, 0);
+        tl.fromTo("#s1-glow", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 1.6, ease: "power2.out" }, 0.2);
+        tl.to("#s1-glow", { opacity: 0.55, scale: 1.08, duration: 3.6, ease: "sine.inOut" }, 1.8);
+        tl.fromTo(["#s1-r1", "#s1-r2", "#s1-r3"], { opacity: 0, scale: 0.7 }, { opacity: 1, scale: 1, duration: 1.8, ease: "expo.out", stagger: 0.12 }, 0.05);
+        tl.to(["#s1-r1", "#s1-r2", "#s1-r3"], { scale: 1.12, opacity: 0.35, duration: 3.8, ease: "sine.inOut", stagger: 0.1 }, 1.9);
+
+        // The mark blooms from zero at dead centre, then slides left as the wordmark reveals.
+        tl.fromTo("#s1-lockup", { x: 262 }, { x: 0, duration: 1.1, ease: "power3.inOut" }, 1.35);
+        tl.fromTo("#s1-tile", { scale: 0, rotation: -14 }, { scale: 1, rotation: 0, duration: 0.95, ease: "back.out(1.5)" }, 0.45);
+        tl.fromTo("#s1-name span", { opacity: 0, y: 46, filter: "blur(10px)" },
+          { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.7, ease: "power3.out", stagger: 0.05 }, 1.7);
+        tl.fromTo("#s1-kicker", { opacity: 0, x: 24 }, { opacity: 1, x: 0, duration: 0.9, ease: "power2.out" }, 2.25);
+
+        // Tagline words settle in, the accent phrase last.
+        tl.fromTo("#s1-tag span", { opacity: 0, y: 22 }, { opacity: 1, y: 0, duration: 0.55, ease: "power2.out", stagger: 0.06 }, 2.95);
+        tl.fromTo("#s1-tag em", { opacity: 0, y: 22, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "back.out(1.6)" }, 3.2);
+
+        // Slow push through the hold, then dip to paper.
+        tl.fromTo("#s1-content", { scale: 0.985 }, { scale: 1.02, duration: D, ease: "none" }, 0);
+        tl.to("#s1-content", { opacity: 0, filter: "blur(12px)", duration: 0.55, ease: "power2.in" }, D - 0.6);
+        tl.to(["#s1-glow", "#s1-r1", "#s1-r2", "#s1-r3"], { opacity: 0, duration: 0.55, ease: "power2.in" }, D - 0.6);
+
+        window.__timelines["s1-open"] = tl;
+      })();
+    </script>
+  </div>
+</template>
