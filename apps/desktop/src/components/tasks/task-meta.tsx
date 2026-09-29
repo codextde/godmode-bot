@@ -86,9 +86,12 @@ export function isWorking(task: Task): boolean {
   return task.status === "in_progress" && (task.runStatus === "queued" || task.runStatus === "running" || !!task.activity);
 }
 
+/** "owner/repo" of a clone URL (https, ssh or git@host:owner/repo), or its last path segment. */
 export function repoLabel(url: string): string {
-  const m = /[/:]([^/:]+\/[^/]+?)(?:\.git)?\/?$/.exec(url.trim());
-  return m?.[1] ?? url;
+  const u = url.trim();
+  const path = /^[\w.-]+@[\w.-]+:(?!\/\/)(.+)$/.exec(u)?.[1] ?? u.replace(/^[a-z][\w+.-]*:\/\/[^/]+/i, "");
+  const parts = path.replace(/\.git\/?$/i, "").split("/").filter(Boolean);
+  return parts.slice(-2).join("/") || u;
 }
 
 /** The workspace's git repositories; coding tasks use the first unless they name another. */
