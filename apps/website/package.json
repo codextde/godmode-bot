@@ -1,0 +1,35 @@
+{
+  "name": "@godmode/website",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "cp ../../scripts/install.sh public/install.sh && astro build",
+    "preview": "pnpm build && wrangler dev",
+    "typecheck": "astro check",
+    "deploy": "pnpm build && wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply godmode-site --remote",
+    "db:migrate:local": "wrangler d1 migrations apply godmode-site --local",
+    "stripe:setup": "node scripts/stripe-setup.mjs"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.3.3",
+    "@astrojs/sitemap": "^3.7.4",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
+    "@tailwindcss/vite": "^4.3",
+    "astro": "^7.3.5",
+    "sharp": "^0.35.5",
+    "stripe": "^22",
+    "tailwindcss": "^4.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@cloudflare/workers-types": "^5.20260929.1",
+    "lucide-static": "^1.48.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.144"
+  }
+}

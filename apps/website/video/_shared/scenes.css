@@ -1,0 +1,316 @@
+/* Shared scene styles — every scene is authored on a 1600x1000 stage (.scn) and scaled by its host. */
+.scn {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1600px;
+  height: 1000px;
+  transform-origin: 0 0;
+}
+.scn .abs {
+  position: absolute;
+}
+
+/* Caption block (top-left) */
+.scn-cap {
+  position: absolute;
+  left: 96px;
+  top: 86px;
+  width: 620px;
+}
+.scn-cap .k {
+  font-family: var(--mono);
+  font-size: 17px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--em);
+}
+.scn-cap h2 {
+  font-size: 76px;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  margin-top: 18px;
+  white-space: nowrap;
+}
+.scn-cap h2 .serif {
+  font-size: 86px;
+}
+.scn-cap p {
+  font-size: 23px;
+  line-height: 1.4;
+  color: var(--muted);
+  margin-top: 18px;
+  width: 560px;
+}
+
+/* Generic macOS-ish window */
+.win {
+  position: absolute;
+  border-radius: 18px;
+  background: var(--s1);
+  border: 1px solid var(--line-2);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 40px 100px rgba(0, 0, 0, 0.6), 0 12px 30px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+.win .tb {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 250, 240, 0.02);
+  white-space: nowrap;
+}
+.win .tb .ttl {
+  font-size: 15px;
+  color: #d8d4cc;
+  font-weight: 500;
+}
+.win .tb .ttl small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.win .tb .right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.win .body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50px;
+  bottom: 0;
+}
+.win.light .body {
+  background: #f3f2ee;
+}
+.urlpill {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: #1b1a18;
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 13px;
+  color: #cfcbc3;
+}
+.urlpill .ic {
+  width: 13px;
+  height: 13px;
+  color: var(--em);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1px solid var(--line-2);
+  font-size: 14px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.chip .ic {
+  width: 15px;
+  height: 15px;
+}
+.chip.em {
+  border-color: var(--em-line);
+  background: var(--em-soft);
+  color: var(--em);
+}
+.chip.em i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--em);
+  box-shadow: 0 0 8px rgba(47, 214, 144, 0.8);
+}
+.chip.mono {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+}
+.tag-pill {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: rgba(20, 20, 18, 0.9);
+  border: 1px solid var(--line-2);
+  font-size: 16px;
+  color: var(--fg);
+  white-space: nowrap;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.tag-pill .ic {
+  width: 17px;
+  height: 17px;
+}
+.tag-pill.em {
+  border-color: var(--em-line);
+}
+.tag-pill .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--em);
+  box-shadow: 0 0 10px rgba(47, 214, 144, 0.9);
+}
+
+/* Portal page (light) */
+.pp {
+  position: absolute;
+  inset: 0;
+  color: #15161a;
+}
+.pp .ph {
+  height: 54px;
+  background: #1b2560;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  color: #fff;
+}
+.pp .ph .pl {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: #f2b632;
+  color: #1b2560;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 16px;
+}
+.pp .ph b {
+  font-size: 17px;
+  font-weight: 600;
+}
+.pp .ph .nav {
+  margin-left: auto;
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.78);
+}
+.pp h3 {
+  font-size: 28px;
+  line-height: 36px;
+  height: 36px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+.pp .lbl {
+  font-size: 14px;
+  line-height: 18px;
+  height: 18px;
+  font-weight: 500;
+  color: #3c404a;
+}
+.pp .fld {
+  position: relative;
+  height: 50px;
+  border-radius: 10px;
+  border: 1.5px solid #d6d4cd;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 17px;
+  color: #15161a;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pp .fld.focus {
+  border-color: #1b2560;
+  box-shadow: 0 0 0 4px rgba(27, 37, 96, 0.12);
+}
+.pp .dots {
+  letter-spacing: 0.2em;
+  font-size: 21px;
+}
+.pp .vchip {
+  position: absolute;
+  right: 8px;
+  top: 9px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: #0f1a14;
+  color: var(--em);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.pp .vchip .ic {
+  width: 13px;
+  height: 13px;
+}
+.pp .otp {
+  display: flex;
+  gap: 10px;
+}
+.pp .otp span {
+  width: 54px;
+  height: 58px;
+  border-radius: 10px;
+  border: 1.5px solid #d6d4cd;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+}
+.pp .otp span.f {
+  border-color: #1b2560;
+}
+.pp .btn {
+  height: 50px;
+  border-radius: 10px;
+  background: #1b2560;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Redaction bar */
+.redact {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 7px;
+  background: repeating-linear-gradient(-45deg, #1d2b24 0 8px, #17231d 8px 16px);
+  border: 1px solid var(--em-line);
+  color: var(--em);
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.redact .ic {
+  width: 14px;
+  height: 14px;
+}

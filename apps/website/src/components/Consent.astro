@@ -1,0 +1,37 @@
+---
+// Marketing pixels (X) only load after an explicit "Accept". First-party analytics are cookieless
+// and anonymous, so they run without consent. "Only necessary" is as prominent as "Accept".
+import { TRACKING } from '@/config/site';
+const hasMarketing = Boolean(TRACKING.xPixelId);
+---
+
+{
+  hasMarketing && (
+    <div
+      id="consent"
+      hidden
+      class="fixed inset-x-3 bottom-3 z-[90] sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-[400px]"
+      role="dialog"
+      aria-labelledby="consent-title"
+      aria-describedby="consent-text"
+    >
+      <div class="window p-5 backdrop-blur-xl" style="background: rgb(19 19 18 / 0.92)">
+        <p id="consent-title" class="text-[15px] font-medium tracking-tight text-text">
+          Cookies, honestly
+        </p>
+        <p id="consent-text" class="mt-1.5 text-[13.5px] leading-relaxed text-muted">
+          We measure visits without cookies. With your OK we also use the X (Twitter) pixel to see which ads bring
+          people here. <a href="/legal/privacy" class="underline decoration-line-3 underline-offset-2 hover:text-text">Privacy</a>
+        </p>
+        <div class="mt-4 grid grid-cols-2 gap-2">
+          <button type="button" data-consent="necessary" class="btn btn-ghost btn-sm w-full">
+            Only necessary
+          </button>
+          <button type="button" data-consent="all" class="btn btn-primary btn-sm w-full">
+            Accept
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

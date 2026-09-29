@@ -1,0 +1,55 @@
+---
+import Logo from './ui/Logo.astro';
+import { LEGAL, SITE } from '@/config/site';
+const year = 2026;
+---
+
+<footer class="relative mt-16 border-t border-line">
+  <div class="container-x grid gap-12 py-16 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+    <div>
+      <a href="/" class="flex items-center gap-2.5">
+        <Logo size={28} />
+        <span class="text-[16px] font-semibold tracking-[-0.03em]">Godmode</span>
+      </a>
+      <p class="mt-4 max-w-[280px] text-[14px] leading-relaxed text-muted">
+        The AI coworker that works like a human on your computer. Made in Germany by {LEGAL.company}.
+      </p>
+      <p class="mt-6 flex items-center gap-2 font-mono text-[11px] text-dim">
+        <span class="live-dot !size-1.5"></span> All systems local
+      </p>
+    </div>
+    <nav aria-label="Product">
+      <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Product</p>
+      <ul class="mt-4 space-y-2.5 text-[14px] text-muted">
+        <li><a class="hover:text-text" href="/#features">Features</a></li>
+        <li><a class="hover:text-text" href="/#use-cases">Use cases</a></li>
+        <li><a class="hover:text-text" href="/#security">Security</a></li>
+        <li><a class="hover:text-text" href="/#pricing">Pricing</a></li>
+        <li><a class="hover:text-text" href="/playbook">Playbook</a></li>
+        <li><a class="hover:text-text" href="/download">Download (customers)</a></li>
+      </ul>
+    </nav>
+    <nav aria-label="Company">
+      <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Company</p>
+      <ul class="mt-4 space-y-2.5 text-[14px] text-muted">
+        <li><a class="hover:text-text" href={`mailto:${SITE.email}`}>Contact</a></li>
+        <li><a class="hover:text-text" href="https://codext.de" rel="noopener">Codext GmbH</a></li>
+        <li><a class="hover:text-text" href="/#faq">FAQ</a></li>
+      </ul>
+    </nav>
+    <nav aria-label="Legal">
+      <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Legal</p>
+      <ul class="mt-4 space-y-2.5 text-[14px] text-muted">
+        <li><a class="hover:text-text" href="/legal/imprint">Imprint</a></li>
+        <li><a class="hover:text-text" href="/legal/privacy">Privacy</a></li>
+        <li><a class="hover:text-text" href="/legal/terms">Terms</a></li>
+        <li><a class="hover:text-text" href="/legal/refunds">Refunds & cancellation</a></li>
+        <li><button type="button" class="hover:text-text" data-open-consent>Cookie settings</button></li>
+      </ul>
+    </nav>
+  </div>
+  <div class="container-x flex flex-col gap-2 border-t border-line py-6 text-[12px] text-dim sm:flex-row sm:justify-between">
+    <p>© {year} {LEGAL.company}. All rights reserved.</p>
+    <p>Claude is a trademark of Anthropic, PBC. Godmode is an independent product and not affiliated with Anthropic.</p>
+  </div>
+</footer>

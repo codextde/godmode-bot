@@ -1,0 +1,45 @@
+---
+import Icon from '../ui/Icon.astro';
+---
+
+<section class="relative pb-8">
+  <div class="container-x">
+    <div class="card grid items-center gap-8 p-7 sm:p-10 lg:grid-cols-[1.2fr_1fr]" data-reveal>
+      <div>
+        <span class="chip"><Icon name="book-open" size={11} /> Free playbook</span>
+        <h2 class="mt-5 text-[clamp(24px,3vw,34px)] leading-tight font-semibold tracking-[-0.035em]">
+          Not ready yet? Steal these 25 automations.
+        </h2>
+        <p class="mt-3 max-w-[520px] text-[15px] leading-relaxed text-muted">
+          Ready-to-use prompts for finance, sales, marketing, support and ops — paste one into Godmode and it runs. We’ll also send you launch news, nothing else.
+        </p>
+      </div>
+      <form data-lead="playbook" class="lead-form">
+        <div class="flex flex-col gap-2 sm:flex-row">
+          <label class="sr-only" for="lead-email">Work email</label>
+          <input
+            id="lead-email"
+            name="email"
+            type="email"
+            required
+            autocomplete="email"
+            placeholder="you@company.com"
+            class="h-[50px] flex-1 rounded-full bg-[rgb(255_250_240/0.04)] px-5 text-[15px] text-text ring-1 ring-line-2 outline-none placeholder:text-dim focus:ring-brand"
+          />
+          <button type="submit" class="btn btn-primary !h-[50px]">
+            <span class="btn-label">Get the playbook</span>
+            <span class="btn-spinner" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p data-status role="status" class="mt-3 min-h-[20px] text-[13px] text-muted"></p>
+        <a href="/playbook" class="lead-open btn btn-brand btn-sm mt-1" data-track="playbook_open">
+          Open the playbook <Icon name="arrow-right" size={14} class="arrow" />
+        </a>
+        <p class="mt-2 text-[12px] text-dim">
+          By subscribing you agree to receive emails from Codext GmbH about Godmode. Unsubscribe anytime.
+          <a href="/legal/privacy" class="underline decoration-line-3 underline-offset-2">Privacy</a>
+        </p>
+      </form>
+    </div>
+  </div>
+</section>

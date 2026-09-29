@@ -1,0 +1,44 @@
+---
+import Legal from '@/layouts/Legal.astro';
+import { LEGAL, PRICING } from '@/config/site';
+---
+
+<Legal title="Refunds & cancellation" description="Money-back guarantee, cancelling a subscription and the EU right of withdrawal.">
+  <h2>{PRICING.guaranteeDays}-day money-back guarantee</h2>
+  <p>
+    Not the right fit? Email <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a> within {PRICING.guaranteeDays} days of
+    your first payment. We refund the full amount to your original payment method — no questions, no forms — and your
+    license is deactivated.
+  </p>
+
+  <h2>Cancelling a monthly subscription</h2>
+  <p>
+    Cancel anytime from the billing portal (linked in your receipt and on your welcome page) or by email. You keep access
+    until the end of the month you’ve paid for; there are no further charges.
+  </p>
+
+  <h2>Right of withdrawal for consumers in the EU</h2>
+  <p>
+    If you are a consumer, you have the right to withdraw from this contract within 14 days without giving any reason.
+    The withdrawal period is 14 days from the day the contract is concluded. To exercise it, inform us
+    ({LEGAL.company}, {LEGAL.street}, {LEGAL.city}, {LEGAL.country}, <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a>,
+    {LEGAL.phone}) by a clear statement (e.g. an email). You may use the model form below, but you don’t have to. It is
+    enough to send your notice before the period expires.
+  </p>
+  <p>
+    <strong>Consequences:</strong> if you withdraw, we refund all payments received from you without undue delay and at
+    the latest within 14 days, using the same means of payment you used.
+  </p>
+  <p>
+    <strong>Early expiry for digital content:</strong> your right of withdrawal expires once we have started delivering the
+    Software, if you expressly agreed that we begin before the withdrawal period ends and confirmed you know you lose
+    your right of withdrawal this way. The voluntary money-back guarantee above still applies either way.
+  </p>
+
+  <h3>Model withdrawal form</h3>
+  <p>
+    To {LEGAL.company}, {LEGAL.street}, {LEGAL.city}, {LEGAL.country}, {LEGAL.email}:<br />
+    I/We hereby give notice that I/we withdraw from my/our contract for the supply of the following digital content:
+    Godmode ___ · Ordered on ___ · Name ___ · Address ___ · Date ___ · Signature (only on paper)
+  </p>
+</Legal>

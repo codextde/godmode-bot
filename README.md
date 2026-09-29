@@ -4,19 +4,19 @@
 
 # Godmode Bot
 
-### An AI teammate you can trust to get work done.
+### The AI coworker that works like a human on your computer.
 
 Godmode Bot gives Claude a real browser, your logins and your 2FA codes — **safely** — so it can finish tasks
 end-to-end without interrupting you. Start with one chat, or build a team of persistent agents with their own
 memory, routines and history.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-8b5cf6.svg)](LICENSE)
+[![License: Commercial](https://img.shields.io/badge/license-commercial-8b5cf6.svg)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-06b6d4.svg)](#-install)
 [![Built with Claude Code](https://img.shields.io/badge/brain-Claude%20Code%20·%20Opus%205.5-d97757.svg)](https://code.claude.com)
 [![browser-use](https://img.shields.io/badge/browser-browser--use-111.svg)](https://github.com/browser-use/browser-use)
 [![Tauri 2](https://img.shields.io/badge/desktop-Tauri%202-ffc131.svg)](https://tauri.app)
 
-[**Download**](https://github.com/codextde/godmode-bot/releases/latest) ·
+[**Get Godmode**](https://godmode.codext.de) ·
 [**Quick start**](#-quick-start) ·
 [**Features**](#-features) ·
 [**Security**](#-security) ·
@@ -126,15 +126,17 @@ needs to be useful:
 
 ### Desktop app
 
-Download the latest release for your platform from
-[**Releases**](https://github.com/codextde/godmode-bot/releases/latest):
+Buy a license at [**godmode.codext.de**](https://godmode.codext.de) ($500 lifetime or $50/month) and download the app
+from your welcome page — or later from [godmode.codext.de/download](https://godmode.codext.de/download) with your
+license key:
 
 - **macOS** — `.dmg` (Apple Silicon & Intel)
 - **Windows** — `.msi` / `.exe`
 - **Linux** — `.AppImage` / `.deb` / `.rpm`
 
-The app keeps itself up to date: new versions download in the background, and a **Restart** button appears in the
-sidebar once one is ready.
+The app keeps itself up to date: new versions download in the background (from `godmode.codext.de/api/update`,
+which mirrors the signed bundles of the latest release), and a **Restart** button appears in the sidebar once one is
+ready.
 
 On first launch the onboarding checks your system and installs what's missing with one click:
 
@@ -149,7 +151,7 @@ On first launch the onboarding checks your system and installs what's missing wi
 Run Godmode on a home server, NAS, VM or Raspberry Pi and connect from any browser:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/codextde/godmode-bot/main/scripts/install.sh | sh
+curl -fsSL https://godmode.codext.de/install.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX sh
 godmode serve --host 0.0.0.0     # prints the dashboard URL
 godmode token                    # access token for the first login
 godmode password 'a-strong-password'
@@ -322,4 +324,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 📄 License
 
-[MIT](LICENSE) © 2026 Codext GmbH and contributors.
+Commercial — see [LICENSE](LICENSE) and the [Terms](https://godmode.codext.de/legal/terms). © 2026 Codext GmbH.
+Versions published before the switch remain available under the MIT License to those who received them.

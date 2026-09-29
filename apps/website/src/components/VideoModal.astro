@@ -1,0 +1,17 @@
+---
+// Plays the hero film full size. The <dialog> gives us focus trapping and Esc for free.
+---
+
+<dialog data-video-modal class="video-modal" aria-label="Godmode demo video">
+  <div class="relative w-[min(1200px,92vw)]">
+    <button type="button" data-close class="absolute -top-12 right-0 grid size-9 place-items-center rounded-full text-text ring-1 ring-line-2 hover:bg-[rgb(255_250_240/0.08)]" aria-label="Close video">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2 2 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>
+    </button>
+    <div class="window overflow-hidden">
+      <video class="block aspect-video w-full bg-black" controls playsinline preload="none" poster="/media/hero-poster.jpg">
+        <source src="/media/hero.webm" type="video/webm" />
+        <source src="/media/hero.mp4" type="video/mp4" />
+      </video>
+    </div>
+  </div>
+</dialog>

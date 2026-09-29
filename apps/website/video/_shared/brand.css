@@ -1,0 +1,364 @@
+/* Godmode Bot — shared motion brand system (matches the website tokens). */
+@font-face {
+  font-family: "Geist";
+  src: url("fonts/geist.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("fonts/geist-mono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("fonts/instrument-serif-italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("fonts/instrument-serif.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+}
+
+:root {
+  --bg: #0b0b0a;
+  --bg-2: #0f0f0d;
+  --s1: #141412;
+  --s2: #1c1b19;
+  --s3: #252420;
+  --line: rgba(255, 250, 240, 0.08);
+  --line-2: rgba(255, 250, 240, 0.14);
+  --line-3: rgba(255, 250, 240, 0.22);
+  --fg: #f4f2ed;
+  --muted: #a29e96;
+  --em: #2fd690;
+  --em-soft: rgba(47, 214, 144, 0.14);
+  --em-line: rgba(47, 214, 144, 0.38);
+  --claude: #d97757;
+  --sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, monospace;
+  --serif: "Instrument Serif", Georgia, serif;
+  --expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  font-feature-settings: "ss01", "cv11";
+}
+#root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+.clip {
+  position: absolute;
+  inset: 0;
+}
+.abs {
+  position: absolute;
+}
+.serif {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.mono {
+  font-family: var(--mono);
+}
+
+/* ---------- Background layers ---------- */
+.bg-field {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 38%, #12120f 0%, var(--bg) 62%, #080807 100%);
+}
+.bg-glow {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(47, 214, 144, 0.16), rgba(47, 214, 144, 0.05) 55%, rgba(47, 214, 144, 0) 100%);
+}
+.bg-warm {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(255, 236, 210, 0.07), rgba(255, 236, 210, 0) 100%);
+}
+.grain {
+  position: absolute;
+  inset: -64px;
+  background-image: url("img/grain.png");
+  background-size: 256px 256px;
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+.guide-v {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed rgba(255, 250, 240, 0.07);
+}
+.guide-h {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed rgba(255, 250, 240, 0.07);
+}
+.reg {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+}
+.reg::before,
+.reg::after {
+  content: "";
+  position: absolute;
+  background: rgba(255, 250, 240, 0.28);
+}
+.reg::before {
+  left: 8px;
+  top: 0;
+  width: 2px;
+  height: 18px;
+}
+.reg::after {
+  top: 8px;
+  left: 0;
+  height: 2px;
+  width: 18px;
+}
+
+/* ---------- Type ---------- */
+.label {
+  font-family: var(--mono);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.headline {
+  font-family: var(--sans);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 0.98;
+  color: var(--fg);
+}
+.headline .serif {
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+.w {
+  display: inline-block;
+  will-change: transform, filter, opacity;
+}
+
+/* ---------- Live dot ---------- */
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--em);
+  box-shadow: 0 0 0 0 rgba(47, 214, 144, 0.5), 0 0 16px rgba(47, 214, 144, 0.7);
+  flex: none;
+}
+.live-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--em);
+  opacity: 0;
+}
+
+/* ---------- Window chrome ---------- */
+.window {
+  position: absolute;
+  background: var(--s1);
+  border-radius: 18px;
+  border: 1px solid var(--line-2);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 50px 120px rgba(0, 0, 0, 0.62), 0 18px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.titlebar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 250, 240, 0.015);
+}
+.traffic {
+  display: flex;
+  gap: 9px;
+}
+.traffic i {
+  display: block;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #3a3934;
+}
+.traffic.color i:nth-child(1) {
+  background: #ec6a5e;
+}
+.traffic.color i:nth-child(2) {
+  background: #f4bf4f;
+}
+.traffic.color i:nth-child(3) {
+  background: #61c554;
+}
+
+/* ---------- Pills & badges ---------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: rgba(255, 250, 240, 0.03);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  padding: 5px 11px;
+  white-space: nowrap;
+}
+.secret {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 8px;
+  border: 1px solid var(--em-line);
+  background: var(--em-soft);
+  color: var(--em);
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 14px;
+  padding: 5px 10px 5px 8px;
+  white-space: nowrap;
+}
+.secret svg {
+  width: 15px;
+  height: 15px;
+}
+.claude-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--claude);
+  box-shadow: 0 0 12px rgba(217, 119, 87, 0.6);
+  flex: none;
+}
+
+/* ---------- Cursors ---------- */
+.cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 30px;
+  height: 30px;
+  pointer-events: none;
+  z-index: 50;
+  will-change: transform;
+}
+.cursor svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.45));
+}
+.cursor-tag {
+  position: absolute;
+  left: 24px;
+  top: 26px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+.cursor.agent .cursor-tag {
+  background: var(--em);
+  color: #06140d;
+}
+.cursor.human .cursor-tag {
+  background: var(--fg);
+  color: #151412;
+}
+.ripple {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  border: 2px solid var(--em);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 49;
+}
+
+/* ---------- Caret ---------- */
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: -0.16em;
+  background: var(--em);
+  border-radius: 1px;
+}
+
+/* ---------- Logo ---------- */
+.logo-mark {
+  display: block;
+}
+
+/* ---------- Edge scrims keep HUD type legible over any world content ---------- */
+.scrim-top {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 230px;
+  background: linear-gradient(to bottom, rgba(11, 11, 10, 0.94) 0%, rgba(11, 11, 10, 0.72) 38%, rgba(11, 11, 10, 0) 100%);
+  pointer-events: none;
+}
+.scrim-bot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 320px;
+  background: linear-gradient(to top, rgba(11, 11, 10, 0.97) 0%, rgba(11, 11, 10, 0.82) 34%, rgba(11, 11, 10, 0) 100%);
+  pointer-events: none;
+}

@@ -1,0 +1,71 @@
+---
+import Icon from '../ui/Icon.astro';
+
+const rowA = [
+  ['file-down', 'Download every invoice from 14 supplier portals'],
+  ['messages-square', 'Answer new support tickets in Zendesk'],
+  ['contact', 'Update the CRM after every sales call'],
+  ['landmark', 'Reconcile Stripe payouts with the bank'],
+  ['newspaper', 'Publish the weekly newsletter'],
+  ['chart-column', 'Pull ad reports from Meta, Google & X'],
+  ['receipt', 'File expense receipts into accounting'],
+  ['bug', 'QA the checkout on staging, every night'],
+];
+const rowB = [
+  ['plane', 'Book the cheapest flight that fits my calendar'],
+  ['alarm-clock', 'Chase unpaid invoices, politely'],
+  ['briefcase', 'Post the job ad on five job boards'],
+  ['users', 'Research leads and enrich them in a sheet'],
+  ['eye', 'Watch competitor pricing and tell me what changed'],
+  ['globe', 'Renew domains before they expire'],
+  ['shopping-cart', 'Reorder office supplies when we run low'],
+  ['calendar-check', 'Prepare my Monday briefing from inbox & calendar'],
+];
+const tools =
+  'Gmail · Slack · HubSpot · Salesforce · Notion · Stripe · Shopify · QuickBooks · Xero · Zendesk · LinkedIn · Google Ads · Jira · Linear · Figma · Excel · DATEV · Amazon Seller Central · any bank portal · any website'.split(
+    ' · ',
+  );
+---
+
+<section class="relative py-14 sm:py-20" aria-label="Things Godmode does">
+  <div class="container-x text-center" data-reveal>
+    <p class="eyebrow justify-center"><span class="n">●</span> Monday, 08:00 — before you’re up</p>
+  </div>
+  <div class="marquee-wrap mask-x mt-8 flex flex-col gap-3 overflow-hidden">
+    {
+      [rowA, rowB].map((row, r) => (
+        <div class:list={['marquee gap-3', r === 1 && 'reverse']} style={`--dur:${r ? 70 : 60}s`}>
+          {[...row, ...row].map(([icon, text], i) => (
+            <div class="task-pill" aria-hidden={i >= row.length ? 'true' : undefined}>
+              <Icon name={icon} size={16} class="text-muted" />
+              <span>{text}</span>
+              <span class="task-done">
+                <Icon name="check" size={12} stroke={2.5} />
+              </span>
+            </div>
+          ))}
+        </div>
+      ))
+    }
+  </div>
+
+  <div class="container-x mt-14">
+    <p class="text-center text-[13px] text-dim" data-reveal>
+      If it runs in a browser or on a Mac, Godmode can use it — no integration required.
+    </p>
+    <div class="marquee-wrap mask-x mt-5 overflow-hidden" data-reveal style="--d:100">
+      <div class="marquee items-center gap-10" style="--dur:80s">
+        {
+          [...tools, ...tools].map((t, i) => (
+            <span
+              class="text-[17px] font-medium tracking-[-0.02em] whitespace-nowrap text-[rgb(244_242_237/0.38)]"
+              aria-hidden={i >= tools.length ? 'true' : undefined}
+            >
+              {t}
+            </span>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</section>

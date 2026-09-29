@@ -1,0 +1,554 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "./components.css";
+
+/* ------------------------------------------------------------------------------------------ */
+/* Godmode — anthracite night, warm paper type, one emerald accent for "alive".               */
+/* The site is dark-only by design (the product's hero mode); tokens still flip for a         */
+/* light preference on legal pages via [data-theme="light"].                                  */
+/* ------------------------------------------------------------------------------------------ */
+
+:root {
+  --bg: #0a0a09;
+  --bg-2: #0f0f0e;
+  --surface: #131312;
+  --surface-2: #1a1a18;
+  --surface-3: #22211f;
+  --line: rgb(255 250 240 / 0.075);
+  --line-2: rgb(255 250 240 / 0.12);
+  --line-3: rgb(255 250 240 / 0.2);
+  --text: #f4f2ed;
+  --text-2: #cfcbc3;
+  --muted: #a29e96;
+  --dim: #6f6b64;
+  --brand: #2fd690;
+  --brand-2: #7af0bd;
+  --brand-soft: rgb(47 214 144 / 0.12);
+  --brand-line: rgb(47 214 144 / 0.35);
+  --claude: #d97757;
+  --danger: #f0525b;
+  --warn: #e8a53a;
+  --dream: #a9a6ff;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
+
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-line-3: var(--line-3);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-muted: var(--muted);
+  --color-dim: var(--dim);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-soft: var(--brand-soft);
+  --color-claude: var(--claude);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+  --color-dream: var(--dream);
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+    scroll-padding-top: 88px;
+    interpolate-size: allow-keywords;
+  }
+  body {
+    background: var(--bg);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    overflow-x: clip;
+  }
+  ::selection {
+    background: rgb(47 214 144 / 0.28);
+    color: #fff;
+  }
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+  img,
+  video {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* Film grain over everything — barely there, keeps the blacks from looking flat. */
+.grain {
+  position: fixed;
+  inset: -50%;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='1'/></svg>");
+  animation: grain 1.2s steps(6) infinite;
+}
+@keyframes grain {
+  0% { transform: translate(0, 0); }
+  20% { transform: translate(-3%, 2%); }
+  40% { transform: translate(2%, -3%); }
+  60% { transform: translate(-2%, -1%); }
+  80% { transform: translate(3%, 3%); }
+  100% { transform: translate(0, 0); }
+}
+
+@layer components {
+  .container-x {
+    width: min(1200px, 100% - 32px);
+    margin-inline: auto;
+  }
+  @media (min-width: 640px) {
+    .container-x { width: min(1200px, 100% - 48px); }
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .eyebrow .n { color: var(--brand); }
+
+  .h-display {
+    font-weight: 600;
+    letter-spacing: -0.052em;
+    line-height: 0.96;
+    font-size: clamp(44px, 8.4vw, 112px);
+    text-wrap: balance;
+  }
+  .h-section {
+    font-weight: 600;
+    letter-spacing: -0.042em;
+    line-height: 1.02;
+    font-size: clamp(34px, 5.2vw, 64px);
+    text-wrap: balance;
+  }
+  .h-card {
+    font-weight: 560;
+    letter-spacing: -0.022em;
+    line-height: 1.15;
+    font-size: 19px;
+  }
+  .serif {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.02em;
+  }
+  .lead {
+    color: var(--muted);
+    font-size: clamp(17px, 1.6vw, 20px);
+    line-height: 1.55;
+    letter-spacing: -0.011em;
+    text-wrap: pretty;
+  }
+  .text-grad,
+  .text-grad[data-words] .w {
+    background: linear-gradient(180deg, #fff 0%, #f4f2ed 45%, #9c988f 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  /* Words animate individually, so each carries its own gradient (a parent's background-clip
+     text can't reach children that get their own compositing layer). */
+  .text-grad[data-words] { background: none; color: inherit; }
+  .text-grad[data-words] .w { padding-bottom: 0.08em; }
+
+  /* Buttons ---------------------------------------------------------------------------- */
+  .btn {
+    --h: 46px;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    height: var(--h);
+    padding: 0 22px;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 550;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    isolation: isolate;
+    overflow: hidden;
+    transition:
+      transform 0.35s var(--ease-out),
+      background-color 0.25s ease,
+      border-color 0.25s ease,
+      box-shadow 0.35s var(--ease-out),
+      color 0.25s ease;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn .arrow { transition: transform 0.35s var(--ease-out); }
+  .btn:hover .arrow { transform: translateX(3px); }
+  .btn-lg { --h: 54px; padding: 0 28px; font-size: 16px; }
+  .btn-sm { --h: 36px; padding: 0 16px; font-size: 14px; }
+
+  .btn-primary {
+    background: var(--text);
+    color: #0a0a09;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.4) inset,
+      0 1px 0 0 rgb(255 255 255 / 0.9) inset,
+      0 10px 30px -10px rgb(47 214 144 / 0.0);
+  }
+  .btn-primary:hover {
+    background: #fff;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.5) inset,
+      0 14px 40px -12px rgb(47 214 144 / 0.55);
+  }
+  /* A sheen that sweeps across on hover. */
+  .btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(105deg, transparent 30%, rgb(47 214 144 / 0.35) 50%, transparent 70%);
+    transform: translateX(-120%);
+    transition: transform 0.9s var(--ease-out);
+  }
+  .btn-primary:hover::after { transform: translateX(120%); }
+
+  .btn-ghost {
+    color: var(--text);
+    background: rgb(255 250 240 / 0.04);
+    box-shadow: 0 0 0 1px var(--line-2) inset;
+    backdrop-filter: blur(12px);
+  }
+  .btn-ghost:hover {
+    background: rgb(255 250 240 / 0.08);
+    box-shadow: 0 0 0 1px var(--line-3) inset;
+  }
+
+  .btn-brand {
+    background: var(--brand);
+    color: #04140c;
+    box-shadow:
+      0 1px 0 0 rgb(255 255 255 / 0.45) inset,
+      0 12px 36px -12px rgb(47 214 144 / 0.7);
+  }
+  .btn-brand:hover { background: var(--brand-2); }
+
+  /* Pills & chips ------------------------------------------------------------------------ */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: 34px;
+    padding: 0 14px 0 8px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    color: var(--text-2);
+    background: rgb(255 250 240 / 0.035);
+    box-shadow: 0 0 0 1px var(--line-2) inset;
+    backdrop-filter: blur(10px);
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 9px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    background: rgb(255 250 240 / 0.04);
+    box-shadow: 0 0 0 1px var(--line) inset;
+  }
+  .chip-brand {
+    color: var(--brand);
+    background: var(--brand-soft);
+    box-shadow: 0 0 0 1px var(--brand-line) inset;
+  }
+
+  .live-dot {
+    position: relative;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--brand);
+    box-shadow: 0 0 12px var(--brand);
+    flex: none;
+  }
+  .live-dot::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1px solid var(--brand);
+    animation: ping 2s var(--ease-out) infinite;
+  }
+  @keyframes ping {
+    0% { transform: scale(0.6); opacity: 0.9; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+
+  /* Cards with a cursor-following spotlight -------------------------------------------- */
+  .card {
+    --mx: 50%;
+    --my: 0%;
+    position: relative;
+    border-radius: 22px;
+    background:
+      linear-gradient(180deg, rgb(255 250 240 / 0.025), transparent 40%),
+      var(--surface);
+    box-shadow:
+      0 0 0 1px var(--line) inset,
+      0 1px 0 0 rgb(255 250 240 / 0.04) inset;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: radial-gradient(520px circle at var(--mx) var(--my), rgb(255 250 240 / 0.06), transparent 45%);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+  .card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: radial-gradient(380px circle at var(--mx) var(--my), rgb(47 214 144 / 0.45), transparent 50%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+  }
+  .card:hover::before,
+  .card:hover::after { opacity: 1; }
+
+  /* Hairline section divider with a soft light in the middle. */
+  .rule {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--line-2) 20%, var(--line-2) 80%, transparent);
+  }
+
+  /* Window chrome used around screenshots and mini-UIs. */
+  .window {
+    border-radius: 16px;
+    background: #111110;
+    box-shadow:
+      0 0 0 1px var(--line-2) inset,
+      0 40px 120px -40px rgb(0 0 0 / 0.9),
+      0 0 0 1px rgb(0 0 0 / 0.6);
+    overflow: hidden;
+  }
+  .window-bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 34px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--line);
+    background: rgb(255 250 240 / 0.02);
+  }
+  .window-bar i {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgb(255 250 240 / 0.12);
+  }
+
+  .kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgb(255 250 240 / 0.06);
+    box-shadow: 0 0 0 1px var(--line-2) inset, 0 -1px 0 0 rgb(0 0 0 / 0.4) inset;
+    color: var(--text-2);
+  }
+
+  .mask-x {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+  }
+  .mask-b {
+    -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent);
+    mask-image: linear-gradient(180deg, #000 60%, transparent);
+  }
+}
+
+/* Reveal-on-scroll ------------------------------------------------------------------------ */
+/* JS adds .is-in when an element enters the viewport; without JS everything is visible.     */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+  filter: blur(8px);
+  transition:
+    opacity 0.9s var(--ease-out),
+    transform 1.1s var(--ease-out),
+    filter 0.9s var(--ease-out);
+  transition-delay: calc(var(--d, 0) * 1ms);
+}
+.js [data-reveal="fade"] { transform: none; }
+.js [data-reveal="scale"] { transform: scale(0.96); }
+.js [data-reveal].is-in {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* Word-by-word headline reveal. */
+.js [data-words] .w {
+  display: inline-block;
+  opacity: 0;
+  transform: translate3d(0, 0.35em, 0);
+  filter: blur(10px);
+  transition:
+    opacity 0.9s var(--ease-out),
+    transform 1s var(--ease-out),
+    filter 0.9s var(--ease-out);
+  transition-delay: calc(var(--i) * 70ms + var(--d, 0) * 1ms);
+}
+.js [data-words].is-in .w {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* Marquee -------------------------------------------------------------------------------- */
+.marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee var(--dur, 60s) linear infinite;
+}
+.marquee-wrap:hover .marquee { animation-play-state: paused; }
+.marquee.reverse { animation-direction: reverse; }
+@keyframes marquee {
+  to { transform: translateX(-50%); }
+}
+
+/* Details/summary: animate open height (Chromium supports ::details-content). */
+details.faq::details-content {
+  block-size: 0;
+  overflow: hidden;
+  transition:
+    block-size 0.45s var(--ease-out),
+    content-visibility 0.45s allow-discrete;
+}
+details.faq[open]::details-content { block-size: auto; }
+details.faq summary::-webkit-details-marker { display: none; }
+details.faq summary { list-style: none; }
+details.faq .plus { transition: transform 0.45s var(--ease-out); }
+details.faq[open] .plus { transform: rotate(45deg); }
+
+/* Range input (ROI calculator). */
+input[type="range"].range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"].range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--brand) var(--p, 50%), rgb(255 250 240 / 0.1) var(--p, 50%));
+}
+input[type="range"].range::-moz-range-track {
+  height: 4px;
+  border-radius: 99px;
+  background: rgb(255 250 240 / 0.1);
+}
+input[type="range"].range::-moz-range-progress {
+  height: 4px;
+  border-radius: 99px;
+  background: var(--brand);
+}
+input[type="range"].range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 4px rgb(47 214 144 / 0.25), 0 4px 12px rgb(0 0 0 / 0.5);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s ease;
+}
+input[type="range"].range:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 8px rgb(47 214 144 / 0.2), 0 4px 12px rgb(0 0 0 / 0.5);
+}
+input[type="range"].range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 4px rgb(47 214 144 / 0.25);
+}
+
+/* Blinking caret used by typed text. */
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--brand);
+  animation: caret 1s steps(1) infinite;
+}
+@keyframes caret {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .js [data-reveal],
+  .js [data-words] .w {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  .grain { display: none; }
+}
