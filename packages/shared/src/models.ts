@@ -784,6 +784,12 @@ export interface VmSettings {
    */
   isolateHostShell: boolean;
   /**
+   * Agents may type saved logins and 2FA codes into their VM's screen (vm tools `fill_login` / `fill_totp`). Godmode
+   * types the values, so the model never sees them, and passwords only go into password fields (macOS secure input) —
+   * but unlike browser fills they can't be bound to the login's website. Turning it on needs a vault grant.
+   */
+  vaultFill: boolean;
+  /**
    * What happens to running VMs when Godmode quits: "suspend" saves their memory to disk so they resume where they
    * left off, "stop" shuts macOS down, "keep" leaves them running (Godmode picks them up again when it starts).
    * Disks are always kept.

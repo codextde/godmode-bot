@@ -1,18 +1,28 @@
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Box, CircleCheck, CircleDashed, Moon, Power, PowerOff, Wrench } from "lucide-react";
+import { ArrowRight, Box, CircleCheck, CircleDashed, EyeOff, Globe, KeyRound, Moon, Power, PowerOff, RectangleEllipsis, ScrollText, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import type { Settings, VmSettings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useShortPath } from "@/components/chat/folder-picker";
+import { useVaultGrant } from "@/components/vault/grant";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
 import { useVmStatus } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { Callout, ChoiceCards, CommitInput, InfoRow, NumberField, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
+
+function Fact({ icon, children, caution }: { icon: React.ReactNode; children: React.ReactNode; caution?: boolean }) {
+  return (
+    <li className="inline-flex items-center gap-1.5 rounded-md border bg-paper-2 px-2 py-1 text-xs text-muted-foreground [&_svg]:size-3.5">
+      <span className={caution ? "text-warning" : "text-foreground"}>{icon}</span>
+      {children}
+    </li>
+  );
+}
 
 function State({ ok, children }: { ok: boolean | null; children: React.ReactNode }) {
   return (
@@ -49,6 +59,17 @@ export function VmSection({ settings }: { settings: Settings }) {
   });
   const downloaded = s?.images.filter((i) => i.downloaded) ?? [];
   const set = (p: Partial<VmSettings>) => patch({ vm: p });
+  const ensureGrant = useVaultGrant();
+  const setVaultFill = async (vaultFill: boolean) => {
+    if (vaultFill) {
+      try {
+        await ensureGrant("Enter your vault passphrase to let agents type your logins and 2FA codes into their VMs.");
+      } catch {
+        return;
+      }
+    }
+    set({ vaultFill });
+  };
   // Another binary changes what the status reports (installed, version). Failures are toasted by the patch hook.
   const saveTartPath = (tartPath: string) =>
     void patchAsync({ vm: { tartPath: tartPath.trim() } })
@@ -108,6 +129,29 @@ export function VmSection({ settings }: { settings: Settings }) {
             onCommit={(n) => n !== null && set({ idleStopMinutes: n })}
           />
         </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup
+        title="Logins and 2FA codes"
+        icon={<KeyRound />}
+        description="Let agents sign in to websites and apps inside their VM with the logins and 2FA codes from your vault."
+      >
+        <SettingRow
+          label="Type logins and 2FA codes into VMs"
+          htmlFor="vm-vault-fill"
+          disabled={!v.enabled}
+          description="Godmode types the value into the field the agent clicked on the VM's screen, so it never passes through the AI. But the agent controls the VM: Godmode can't check which website a field belongs to, and a determined agent could capture what's typed there. Turning this on asks for your vault passphrase."
+        >
+          <Switch id="vm-vault-fill" checked={v.vaultFill} disabled={!v.enabled} onCheckedChange={(on) => void setVaultFill(on)} />
+        </SettingRow>
+        <ul aria-label="How it works" className="flex flex-wrap gap-2 py-3.5">
+          <Fact icon={<EyeOff />}>Typed by Godmode, not the AI</Fact>
+          <Fact icon={<RectangleEllipsis />}>Passwords only into password fields</Fact>
+          <Fact icon={<ScrollText />}>Every fill audited</Fact>
+          <Fact icon={<Globe />} caution>
+            Not bound to a website
+          </Fact>
+        </ul>
       </SettingsGroup>
 
       <SettingsGroup
