@@ -155,7 +155,8 @@ cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <a
 Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + result) and pushed as
 `run.delta` WS events; the final assistant message is stored in SQLite and in the agent repo.
 Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-conversation lock prevents
-two concurrent turns in the same conversation.
+two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
+works in its own tabs (see Browser).
 
 ## Godmode MCP gateway tools (`/mcp`)
 
@@ -226,19 +227,44 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
 * On macOS a visible browser never takes focus: it is started in the background through LaunchServices
   (`open -g`, no startup window) and its first window opens behind the active app.
 * Agents get browser tools from the **browser-use MCP server** (`uvx --from browser-use==0.13.10 browser-use --mcp`)
-  configured via `BROWSER_USE_CONFIG_DIR` → `<data>/browser-use/<profile>/<agent>/config.json` with
-  `browser_profile.cdp_url` pointing at that Chromium; downloads land in the agent's `workspace/downloads`.
+  configured per run via `BROWSER_USE_CONFIG_PATH` → `<data>/browser-use/<profile>/<agent>/runs/<run-id>/config.json`
+  (removed with the run, together with browser-use's scratch files next to it) with `browser_profile.cdp_url`
+  pointing at the run's chat endpoint (below); downloads land in the agent's `workspace/downloads`.
   LLM-backed browser-use tools (`browser_extract_content`, `retry_with_browser_use_agent`) are only offered when an
   OpenAI key is in the vault (passed via env, never written to disk); otherwise the runner disallows them.
-* One profile = one Chromium: runs that share a profile take turns (delegated child runs may use their parent's
-  browser while the parent waits).
+* **Chat tabs** — one profile = one Chromium, shared by every chat that uses it, but each chat works in its **own tabs**,
+  so runs on one profile run in parallel with the same cookies and logins (`browser/tabs.ts`, `browser/proxy.ts`):
+  * A chat's first tab is a spare blank page (the browser's first window, or a released tab) or a new background
+    window (`Target.createTarget { newWindow, background }` — it never takes focus). Tabs it opens itself and popups
+    of its tabs (`openerId`) are its own; iframes belong to their page (`parentId`). Tabs nobody owns (a human's) are
+    hidden from every chat.
+  * browser-use doesn't connect to Chromium directly: each run gets a loopback DevTools endpoint
+    `http://127.0.0.1:<port>/<256-bit token>` (`/json/version` + a browser WebSocket; requests with an `Origin` or
+    a foreign `Host` are refused) that forwards CDP to Chromium and back, filtered for the run's chat:
+    `Target.getTargets` and target events only list its tabs, commands naming another tab (`attachToTarget`,
+    `activateTarget`, `closeTarget`, …) or another tab's session answer like a missing target, `Browser.close` and
+    browser-target sessions are refused, auto-attach never makes other chats' new tabs wait for a debugger, and
+    `Target.createTarget` opens a background window (a plain new tab would land in whichever window was active last —
+    maybe another chat's). Target events that arrive before a `createTarget` answer are held until it's clear whose
+    tab it is. The endpoint dies with the run. This keeps chats from getting in each other's way; it is no security
+    boundary between agents (Chromium's own DevTools port on loopback is unauthenticated).
+  * Which tab a chat works in follows its agent (navigation, input and screenshots through the endpoint); live view,
+    vault fills (`vault_fill_*` type into the calling chat's tab only) and missing-login detection use that tab.
+  * A chat keeps its tabs between messages. They close when the chat is deleted, archived or moved to another
+    profile, or after `keepAliveMinutes` without use (an hour when the browser is kept alive) unless a run of the chat
+    is going or someone watches its live view; the browser's last page is kept, blank, for the next chat (closing the
+    last window would quit Chromium on Windows and Linux). Chromium has one download folder per profile, so two agents
+    downloading through one profile at the same moment may find the file in the folder of the one that set it last.
 * **Session import** (“continue where Chrome left off”): the importer uses the same technique as browser-use’s
   `profile-use` — copy the Chrome profile’s cookie store to a temp dir, start the real Chrome binary headless on it
   with CDP, read decrypted cookies via `Storage.getCookies`, inject them into the Godmode profile with
   `Storage.setCookies`. `profile-use` itself is supported for syncing to browser-use Cloud profiles.
 * **Live view**: CDP `Page.startScreencast` frames streamed to subscribed UIs; the human can take over
-  (click/type) e.g. to solve a CAPTCHA. Chats show a *passive* preview of their agent's browser next to the thread:
-  passive subscribers get frames but don't keep an idle browser running.
+  (click/type) e.g. to solve a CAPTCHA. A view shows the profile's active tab, or with `conversationId` the tab one chat
+  works in (`browser.subscribe { profileId, conversationId }`, frames carry `conversationId`; navigate and input take
+  it too). Chats show a *passive* preview of their own tab next to the thread once they have one: passive subscribers
+  get frames but don't keep an idle browser running. `BrowserProfile.chats` lists the chats with tabs open, and the
+  Browser page switches between them.
 
 ## Computer use
 

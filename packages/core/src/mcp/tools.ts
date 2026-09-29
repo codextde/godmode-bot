@@ -202,13 +202,13 @@ function scrub(detail: string, value: string): string {
   return redact(masked);
 }
 
-/** The browser a fill goes to: Godmode's Chromium for the agent's profile, or the Chrome in the run's VM. */
-type FillTarget = { vmId: string } | { profileId: string };
+/** The browser a fill goes to: the chat's tab in Godmode's Chromium for the run's profile, or the Chrome in the run's VM. */
+type FillTarget = { vmId: string } | { profileId: string; conversationId: string };
 
 function requireBrowser(agent: Agent, ctx: RunContext): FillTarget {
   if (!agent.browser.enabled) throw new HttpError(409, "The browser is disabled for this agent, so nothing can be filled into a page.");
   const vmId = vmOfRun(ctx.runId);
-  if (!vmId) return { profileId: runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id };
+  if (!vmId) return { profileId: runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id, conversationId: ctx.conversationId };
   // A run in a VM browses in the VM, where its shell shares the machine with the browser: secrets only go there when
   // the human allowed logins in VMs — never into a browser on this computer instead.
   if (!getSettings().vm.vaultFill) {
@@ -221,11 +221,11 @@ function requireBrowser(agent: Agent, ctx: RunContext): FillTarget {
 }
 
 function pageOf(target: FillTarget) {
-  return "vmId" in target ? currentVmPage(target.vmId) : currentPage(target.profileId);
+  return "vmId" in target ? currentVmPage(target.vmId) : currentPage(target.profileId, target.conversationId);
 }
 
 function fillInto(target: FillTarget, opts: Parameters<typeof fillIntoPage>[1]) {
-  return "vmId" in target ? fillIntoVm(target.vmId, opts) : fillIntoPage(target.profileId, opts);
+  return "vmId" in target ? fillIntoVm(target.vmId, opts) : fillIntoPage(target.profileId, { ...opts, conversationId: target.conversationId });
 }
 
 /**

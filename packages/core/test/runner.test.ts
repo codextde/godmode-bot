@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
-import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, browserRuns, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { insert, run as sql } from "../src/db";
 import { getSettings, updateSettings } from "../src/services/settings";
 import { config } from "../src/config";
@@ -214,22 +214,24 @@ describe("runner end-to-end with fake claude", () => {
     }
   });
 
-  test("runs sharing a browser profile take turns; delegated children may use the parent's browser", async () => {
+  test("runs sharing a browser profile run at the same time — every chat works in its own tabs", async () => {
     const browserA = await makeAgent({ name: "Browser A", browser: { enabled: true } });
     const browserB = await makeAgent({ name: "Browser B", browser: { enabled: true } });
     const a = await startChat({ agentId: browserA.id, content: "SLEEP a" });
     await until(() => getRun(a.run.id).status === "running", 10_000, "run a");
 
-    // Independent run on the same profile waits…
     const b = await startChat({ agentId: browserB.id, content: "hello b" });
-    // …but a run delegated by the holder may use the browser while the parent waits for it.
     const childConv = createConversation({ agentId: browserB.id, origin: "delegation" });
     const child = await sendMessage(childConv.id, { content: "hello child", trigger: "delegation", parentRunId: a.run.id, depth: 1 });
+    expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
     expect((await waitForRun(child.run.id, 20_000)).status).toBe("succeeded");
-    expect(getRun(b.run.id).status).toBe("queued");
+    expect(getRun(a.run.id).status).toBe("running");
+    // Each run's browser tools are bound to its own chat.
+    expect(browserRuns).toContainEqual(expect.objectContaining({ agentId: browserA.id, runId: a.run.id, conversationId: a.conversation.id }));
+    expect(browserRuns).toContainEqual(expect.objectContaining({ agentId: browserB.id, runId: b.run.id, conversationId: b.conversation.id }));
 
     await cancelRun(a.run.id);
-    expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
+    await waitForRun(a.run.id, 10_000);
   });
 
   test("a chat can work in its own browser profile", async () => {
@@ -253,20 +255,19 @@ describe("runner end-to-end with fake claude", () => {
     expect(getConversation(b.conversation.id).browserProfileId).toBeNull();
   });
 
-  test("switching a chat that waits for the browser to another profile starts it", async () => {
+  test("a chat's picked browser profile is the one its run drives — without waiting for other chats", async () => {
     const holder = await makeAgent({ name: "Browser E", browser: { enabled: true } });
-    const waiter = await makeAgent({ name: "Browser F", browser: { enabled: true } });
     const other = createProfile({ name: "Free profile", workspaceId: createWorkspace({ name: "Free" }).id });
     const a = await startChat({ agentId: holder.id, content: "SLEEP a" });
     await until(() => getRun(a.run.id).status === "running", 10_000, "run a");
-    const b = await startChat({ agentId: waiter.id, content: "hello b" });
-    await new Promise((r) => setTimeout(r, 300));
-    expect(getRun(b.run.id).status).toBe("queued");
-
-    updateConversation(b.conversation.id, { browserProfileId: other.id });
+    const conv = createConversation({ agentId: holder.id });
+    updateConversation(conv.id, { browserProfileId: other.id });
+    const b = await sendMessage(conv.id, { content: "hello b" });
     expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
+    expect(browserRuns).toContainEqual({ agentId: holder.id, runId: b.run.id, conversationId: conv.id, profileId: other.id });
     expect(getRun(a.run.id).status).toBe("running");
     await cancelRun(a.run.id);
+    await waitForRun(a.run.id, 10_000);
   });
 
   test("cancelling a queued run never starts it", async () => {

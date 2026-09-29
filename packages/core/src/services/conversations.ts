@@ -27,6 +27,7 @@ import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { redact } from "../vault/vault";
 import { getAgent, getDefaultAgentId } from "../agents/service";
 import { activeRunForConversation, cancelRun, listActiveRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
+import { closeChatTabs } from "../browser/manager";
 import { displayToolName } from "../runner/stream";
 import { normalizeWorkingDirectory } from "./folders";
 import { parseComputerTarget } from "../computer/targets";
@@ -277,6 +278,8 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
   bus.emit({ type: "conversation.updated", conversation });
   if (patch.vmId !== undefined) assignmentsChanged();
   if (patch.browserProfileId !== undefined) retryQueued();
+  // Archived, or moved to another browser profile: its tabs aren't needed where they are.
+  if (patch.archived || patch.browserProfileId !== undefined) void closeChatTabs(id);
   return conversation;
 }
 
@@ -325,6 +328,7 @@ export async function deleteConversation(id: string): Promise<void> {
   } catch (err) {
     log.warn(`could not remove transcript of conversation ${id}`, err);
   }
+  await closeChatTabs(id);
   bus.emit({ type: "conversation.deleted", id });
 }
 

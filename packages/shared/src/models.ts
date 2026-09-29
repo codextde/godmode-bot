@@ -655,8 +655,25 @@ export interface BrowserProfile {
   cookieCount: number;
   running: boolean;
   cdpUrl: string | null;
+  /** Chats with tabs open in the running browser, in the order they opened their first tab. */
+  chats: BrowserChat[];
   createdAt: ISODate;
   updatedAt: ISODate;
+}
+
+/** A chat's own tabs in a profile's browser: chats work in parallel, each in its own tabs, with the profile's logins. */
+export interface BrowserChat {
+  conversationId: ID;
+  /** null when the conversation no longer exists */
+  title: string | null;
+  agentId: ID | null;
+  /** The tab the chat's agent works in */
+  url: string;
+  pageTitle: string;
+  tabs: number;
+  /** A run of the chat is using the browser right now */
+  active: boolean;
+  lastUsedAt: ISODate;
 }
 
 export interface LocalChromeProfile {
