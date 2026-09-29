@@ -55,6 +55,7 @@ needs to be useful:
 | 🌙 **Dreaming** | While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned (even if nobody said "remember this"), merge duplicates, fix contradictions and update dates ("is going to Singapore in July" → "went to Singapore in July"). Memory loads into every new chat; every dream can be reviewed as a diff and undone. |
 | 📁 **Working folders** | Optionally point a chat or an agent at any folder on your machine — it works on the files there and keeps its memory in its own repo. |
 | ⚡ **Automations** | Work starts when it happens: on a schedule (“weekdays at 08:00”), when something happens in a connected app (a new email, a Slack message, a calendar event, a Notion update), when a condition you describe comes true (“competitor pricing changes”), or when a webhook is called. Describe it in one sentence and Godmode sets it up. |
+| ⏰ **Follow-ups** | When a task needs waiting — a reply to an email, a delivery, a build, office hours — the agent sets itself a time and picks the chat up again on its own, with all the context, like a coworker who says “I'll check back tomorrow at 10”. You see when it comes back and can continue now, move it or cancel it. |
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
@@ -119,6 +120,10 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/chat-own-tab.png" alt="A chat next to a live preview of its own browser tab" /><br /><sub><b>Own tab per chat</b> — the preview shows only this chat's page, while others browse alongside</sub></td>
     <td><img src="docs/screenshots/browser-chats.png" alt="Browser page with one tab per chat browsing in the profile" /><br /><sub><b>Parallel chats</b> — one browser profile, one tab per chat; switch between them live</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/followup-waiting.png" alt="An agent waiting for a signed contract, set to continue tomorrow at 09:00" /><br /><sub><b>Follow-ups</b> — the agent sets itself a time to continue; move it, cancel it or continue now</sub></td>
+    <td><img src="docs/screenshots/followup.png" alt="The agent picked the chat up again at the time it set and finished the task" /><br /><sub><b>Back on it</b> — at that time the agent picks the chat up again, with all the context</sub></td>
   </tr>
 </table>
 

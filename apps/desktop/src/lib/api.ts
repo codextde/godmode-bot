@@ -37,6 +37,8 @@ import type {
   DreamDetail,
   DreamOverview,
   FolderListing,
+  Followup,
+  FollowupPatch,
   GitCommit,
   LocalChromeProfile,
   LogEntry,
@@ -331,6 +333,14 @@ export const api = {
     update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     send: (id: string, input: SendMessageInput) => post<SendMessageResult>(`/api/conversations/${id}/messages`, input),
+  },
+
+  /** Times agents set to continue a chat on their own (one per chat, keyed by the conversation). */
+  followups: {
+    list: (q: { agentId?: string } = {}) => get<Followup[]>("/api/followups", q),
+    move: (conversationId: string, input: FollowupPatch) => patch<Followup>(`/api/conversations/${conversationId}/followup`, input),
+    cancel: (conversationId: string) => del<{ ok: true }>(`/api/conversations/${conversationId}/followup`),
+    runNow: (conversationId: string) => post<Run>(`/api/conversations/${conversationId}/followup/run`),
   },
 
   computer: {

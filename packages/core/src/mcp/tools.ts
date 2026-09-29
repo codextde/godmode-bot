@@ -41,6 +41,8 @@ import { assignVm, createVm, getVm, listVms, startVm, stopVm, suspendVm, vmInUse
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
 import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun } from "../runner/runner";
+import { describeNow } from "../runner/prompt";
+import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 
 const log = logger("mcp");
 
@@ -382,6 +384,9 @@ function isCheckRun(ctx: RunContext): boolean {
   }
 }
 
+/** Follow-up tools: not in condition checks, dreams or tasks delegated by another agent. */
+const canFollowUp = (_agent: Agent, ctx: RunContext) => !isCheckRun(ctx) && followupsAllowed(ctx.conversationId);
+
 /** The run is a dream (background memory consolidation): it gets `memory_dream_report` and nothing else. */
 function isDreamRun(ctx: RunContext): boolean {
   try {
@@ -583,6 +588,35 @@ const TOOLS: ToolDef[] = [
       notify(level ?? "info", `${agent.name}: ${redact(title)}`, redact(body ?? ""), `/chat/${ctx.conversationId}`);
       return "Notification sent.";
     },
+  }),
+
+  defineTool({
+    name: "followup_schedule",
+    description:
+      "Continue this chat later on your own, like a coworker who says \"I'll check back tomorrow at 10\". Use it when the task can't be finished now because you have to wait: a reply to an email or message, a delivery, a build or deployment, a status or price change, office hours, someone else's work. At that time Godmode resumes this conversation with your note and you pick up where you left off, with the whole conversation. Pass `at` (ISO 8601 date and time; without an offset it is in the time zone of the current date/time you were given) or `inMinutes`. One follow-up per chat: calling again moves it. After scheduling, end your turn with a short summary of what you're waiting for and when you'll continue.",
+    schema: z.object({
+      at: z.string().max(64).optional().describe('When to continue, e.g. "2026-10-01T09:00" (local time) or "2026-10-01T07:00:00Z"'),
+      inMinutes: z.number().int().min(1).max(527_040).optional().describe("Or: continue in this many minutes"),
+      note: z
+        .string()
+        .min(1)
+        .max(NOTE_MAX)
+        .describe('What to do when you continue, self-contained, e.g. "Check whether ACME answered the invoice email; if not, send a friendly reminder"'),
+    }),
+    when: canFollowUp,
+    run: ({ at, inMinutes, note }, { agent, ctx }) => {
+      const moved = getFollowup(ctx.conversationId) !== null;
+      const f = scheduleFollowup({ conversationId: ctx.conversationId, agentId: agent.id, dueAt: parseDueAt({ at, inMinutes }), note, runId: ctx.runId });
+      return `${moved ? "Follow-up moved" : "Follow-up scheduled"}: this chat continues ${describeNow(new Date(f.dueAt))}, ${inWords(f.dueAt)}. End your turn now with a short summary: what you did, what you're waiting for and when you'll continue.`;
+    },
+  }),
+
+  defineTool({
+    name: "followup_cancel",
+    description: "Remove this chat's follow-up: when what you were waiting for is settled, or the human doesn't want it anymore.",
+    schema: z.object({}),
+    when: canFollowUp,
+    run: (_args, { ctx }) => (cancelFollowup(ctx.conversationId) ? "Follow-up removed." : "This chat had no follow-up."),
   }),
 
   defineTool({

@@ -81,6 +81,11 @@ export function useWorkspaceName(id: string | null | undefined): string {
   return data?.find((w) => w.id === id)?.name ?? "Workspace";
 }
 
+/** Every pending follow-up, soonest first. */
+export function useFollowups() {
+  return useQuery({ queryKey: qk.followups, queryFn: () => api.followups.list() });
+}
+
 /** Routines, optionally for a single agent ("all" = every agent). */
 export function useRoutines(agentId: string = "all") {
   return useQuery({

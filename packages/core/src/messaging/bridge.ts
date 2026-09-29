@@ -427,6 +427,24 @@ function answerOf(run: Run): string {
   return "Sorry — something went wrong while working on this. The details are in Godmode.";
 }
 
+/** A follow-up the agent scheduled in a platform chat: its answer goes to that chat. False when it isn't one. */
+export async function deliverFollowup(conversationId: string, runId: string): Promise<boolean> {
+  const chat = get<ChatRow>("SELECT * FROM messaging_chats WHERE conversation_id = ? ORDER BY updated_at DESC LIMIT 1", conversationId);
+  if (!chat) return false;
+  const target = parseJson<ChatTarget | null>(chat.reply, null);
+  if (!target?.chatId) return true;
+  const run = await waitForRun(runId).catch(() => null);
+  const adapter = runtimeOf(chat.connection_id);
+  if (!run || run.status === "cancelled" || !adapter) return true;
+  try {
+    await adapter.send(target, answerOf(run));
+    patchChat(chat.id, { last_message_at: now() });
+  } catch (err) {
+    log.warn(`could not deliver the follow-up of run ${runId}`, err instanceof Error ? err.message : err);
+  }
+  return true;
+}
+
 async function deliver(adapter: MessagingAdapter, msg: InboundMessage, runId: string, stop: () => Promise<void>) {
   let run: Run;
   try {

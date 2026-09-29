@@ -174,6 +174,7 @@ works in its own tabs (see Browser).
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
 | `memory_dream_report({ summary, changes })` | Only in dream runs — and the only tool they get: report what a memory consolidation changed (see Dreaming) |
 | `notify_user({ title, body })` | Push a notification to the human |
+| `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
 
 ## HTTP API
 
@@ -419,6 +420,32 @@ use the watched account.
 
 The Godmode agent sets automations up from one sentence ("when X happens, do Y"): `automation_triggers_list` shows the
 connected Composio accounts and each app's events with their settings schema; `routine_create` takes the trigger.
+
+## Follow-ups
+
+An agent that has to wait — for a reply, a delivery, a build, office hours — sets a time to continue the chat on its
+own, like a coworker who says "I'll check back tomorrow at 10" (`services/followups.ts`, table `followups`):
+
+* **Setting one**: `followup_schedule({ at | inMinutes, note })` from any run but condition checks, dreams and tasks
+  delegated by another agent (those report back to it). `at` is ISO 8601; without an offset it is the core's time
+  zone. It must be 1 minute to 1 year ahead; the note loses anything that looks like a Godmode prompt tag. A chat has one follow-up (keyed by
+  the conversation): scheduling again moves it, `followup_cancel` removes it, deleting the chat or agent removes it too.
+  The system prompt explains when to use it ("Following up later"); resumed turns restate a pending one so a new message
+  can move or cancel it.
+* **Running it**: one timer armed for the earliest `due_at` of a chat that isn't busy (re-checked at least every
+  minute, so sleep and clock changes are caught); a follow-up whose chat is busy runs when that turn finishes. A due
+  follow-up is removed first (the run may schedule the next one), then the chat gets a
+  system message with a `followup` block (the marker in the thread) and a run with trigger `followup` that resumes the
+  same Claude session with a `<godmode-followup>` prompt carrying the note. Follow-ups that came due while Godmode was
+  off run on start, marked `late`. One that can't start (agent turned off) is dropped and the human is notified. When
+  the run finishes the human is notified too (unless the agent did it with `notify_user`); in a Slack, Telegram or
+  Teams chat the answer goes there instead.
+* **Runaway guard**: after 20 follow-up runs in a row without a message from the human, an automation or another
+  agent, scheduling is refused and the agent is told to ask the human.
+* **The human** sees a bar above the composer (continue now, change the time, cancel), a clock in Recent chats and all
+  pending follow-ups on the Automations page: `GET /api/followups`, `PATCH|DELETE /api/conversations/:id/followup`,
+  `POST /api/conversations/:id/followup/run`. `Conversation.followup` carries the pending one. Backups carry follow-ups;
+  a restore drops the ones already due.
 
 ## Integrations
 
