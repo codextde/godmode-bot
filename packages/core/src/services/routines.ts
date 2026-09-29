@@ -2,12 +2,13 @@
  * Routines = automations: CRUD, trigger validation and trigger state.
  * Scheduling lives in scheduler/scheduler.ts, event handling in automations/, app triggers in integrations/composioTriggers.ts.
  */
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Cron } from "croner";
 import type { Agent, Routine, RoutineInput, RoutineTrigger, RoutineTriggerStatus, RunStatus, Run } from "@godmode/shared";
-import { isModelId } from "@godmode/shared";
+import { isModelId, MAX_START_WINDOW_MINUTES, startWindowLimit, startWindowTooLong } from "@godmode/shared";
 import { all, bool, get, insert, int, run, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -237,6 +238,53 @@ function assertCheckInterval(cron: string, timezone: string) {
   }
 }
 
+/** Minutes of the random start window of a schedule; 0 = on time. */
+export function startWindowOf(trigger: RoutineTrigger): number {
+  return trigger.type === "schedule" ? (trigger.startWindowMinutes ?? 0) : 0;
+}
+
+function assertStartWindow(cron: string, timezone: string, minutes: number) {
+  const limit = startWindowLimit((after) => nextRunFor(cron, timezone, after), timezone);
+  if (minutes > limit) throw badRequest(startWindowTooLong(limit));
+}
+
+/** Offset into the window, fixed per routine and time slot so a restart or an unrelated edit keeps the drawn start. */
+function startOffsetMs(routineId: string, slot: Date, windowMinutes: number): number {
+  const hash = createHash("sha256").update(`${routineId}:${slot.toISOString()}`).digest();
+  return Math.floor((hash.readUInt32BE(0) / 2 ** 32) * windowMinutes * 60) * 1000;
+}
+
+/**
+ * Next start of a schedule with a random start window: the first time slot after `handledUntil` (ms) whose drawn
+ * start lies after `after`. Slots whose window is still open count, so a start drawn late in the window survives a restart.
+ */
+export function nextRandomStart(
+  routineId: string,
+  cron: string,
+  timezone: string,
+  windowMinutes: number,
+  after = new Date(),
+  handledUntil = 0,
+): { slot: Date; at: Date } {
+  let from = Math.max(after.getTime() - windowMinutes * 60_000, handledUntil);
+  for (let i = 0; i < 100; i++) {
+    const slot = nextRunFor(cron, timezone, new Date(from));
+    const at = new Date(slot.getTime() + startOffsetMs(routineId, slot, windowMinutes));
+    if (at > after) return { slot, at };
+    from = slot.getTime();
+  }
+  throw badRequest("Invalid cron expression: it never matches a future date");
+}
+
+/** When the scheduler last started this routine on its own (its latest schedule event); 0 = never. */
+export function lastScheduledStart(routineId: string): number {
+  const at = get<{ at: string | null }>(
+    "SELECT MAX(created_at) AS at FROM automation_events WHERE routine_id = ? AND source = 'schedule'",
+    routineId,
+  )?.at;
+  return at ? Date.parse(at) : 0;
+}
+
 /** Whether the trigger runs on the cron schedule (schedule: runs, condition: checks). */
 export function usesCron(trigger: RoutineTrigger): boolean {
   return trigger.type === "schedule" || trigger.type === "condition";
@@ -291,7 +339,13 @@ function text(value: unknown, what: string, max: number): string {
 export function normalizeTrigger(input: RoutineTrigger | undefined, agent: Pick<Agent, "id" | "workspaceId">): RoutineTrigger {
   const t = input ?? { type: "schedule" };
   switch (t?.type) {
-    case "schedule":
+    case "schedule": {
+      const minutes = t.startWindowMinutes ?? 0;
+      if (!Number.isInteger(minutes) || minutes < 0 || minutes > MAX_START_WINDOW_MINUTES) {
+        throw badRequest(`The random start window must be a whole number of minutes between 0 and ${MAX_START_WINDOW_MINUTES}`);
+      }
+      return minutes ? { type: "schedule", startWindowMinutes: minutes } : { type: "schedule" };
+    }
     case "webhook":
       return { type: t.type };
     case "condition": {
@@ -419,12 +473,23 @@ function normalizeFilter(value: string | undefined): string {
   return f;
 }
 
-/** Cron + next run for a trigger; "" / null for event triggers. */
-function scheduleFor(trigger: RoutineTrigger, cronInput: string | undefined, timezone: string): { cron: string; next: Date | null } {
+/** Cron + next run for a trigger; "" / null for event triggers. `checkWindow: false` keeps a saved start window as it is. */
+function scheduleFor(
+  id: string,
+  trigger: RoutineTrigger,
+  cronInput: string | undefined,
+  timezone: string,
+  checkWindow = true,
+): { cron: string; next: Date | null } {
   if (!usesCron(trigger)) return { cron: "", next: null };
   const cron = normalizeCron(requireText(cronInput, trigger.type === "condition" ? "check frequency (cron expression)" : "cron expression"));
-  const next = nextRunFor(cron, timezone);
+  let next = nextRunFor(cron, timezone);
   if (trigger.type === "condition") assertCheckInterval(cron, timezone);
+  const startWindow = startWindowOf(trigger);
+  if (startWindow) {
+    if (checkWindow) assertStartWindow(cron, timezone, startWindow);
+    next = nextRandomStart(id, cron, timezone, startWindow, new Date(), lastScheduledStart(id)).at;
+  }
   return { cron, next };
 }
 
@@ -434,10 +499,10 @@ export function createRoutine(input: RoutineInput): Routine {
   const prompt = requireText(input.prompt, "prompt");
   const trigger = normalizeTrigger(input.trigger, agent);
   const timezone = validateTimezone(input.timezone?.trim() || defaultTimezone());
-  const { cron, next } = scheduleFor(trigger, input.cron, timezone);
+  const id = newId("rtn");
+  const { cron, next } = scheduleFor(id, trigger, input.cron, timezone);
   const filter = trigger.type === "app" || trigger.type === "webhook" ? normalizeFilter(input.filter) : "";
   const enabled = input.enabled !== false;
-  const id = newId("rtn");
   // The webhook secret is sealed with the vault key: fail before anything is stored when the vault is locked.
   const webhook = trigger.type === "webhook" ? issueWebhookToken(id) : null;
   const ts = now();
@@ -481,7 +546,10 @@ export function updateRoutine(id: string, patch: Partial<RoutineInput>): Routine
     patch.trigger !== undefined || agentChanged ? normalizeTrigger(patch.trigger ?? current.trigger, agent) : current.trigger;
   const triggerChanged = !sameTrigger(trigger, current.trigger);
   const timezone = patch.timezone !== undefined ? validateTimezone(patch.timezone || defaultTimezone()) : current.timezone;
-  const { cron, next } = scheduleFor(trigger, patch.cron !== undefined ? patch.cron : current.cron, timezone);
+  const cronInput = patch.cron !== undefined ? patch.cron : current.cron;
+  const scheduleChanged =
+    normalizeCron(cronInput ?? "") !== current.cron || timezone !== current.timezone || startWindowOf(trigger) !== startWindowOf(current.trigger);
+  const { cron, next } = scheduleFor(id, trigger, cronInput, timezone, scheduleChanged);
   const filter =
     trigger.type === "app" || trigger.type === "webhook" ? normalizeFilter(patch.filter !== undefined ? patch.filter : current.filter) : "";
   const enabled = patch.enabled ?? current.enabled;

@@ -163,7 +163,14 @@ export interface Agent {
 export type RoutineTriggerType = "schedule" | "app" | "condition" | "webhook";
 
 export type RoutineTrigger =
-  | { type: "schedule" }
+  | {
+      type: "schedule";
+      /**
+       * Start at a random moment up to this many minutes after each scheduled time, drawn anew for every run
+       * ("0 8 * * 1-5" + 90 = weekdays somewhere between 08:00 and 09:30). Absent = on time.
+       */
+      startWindowMinutes?: number;
+    }
   | {
       type: "app";
       /** Godmode Composio connection (`ComposioConnection.id`) whose account is watched. */

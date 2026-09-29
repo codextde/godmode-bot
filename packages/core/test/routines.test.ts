@@ -3,8 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
+import { startWindowLimit } from "@godmode/shared";
 import { loadConfig } from "../src/config";
-import { closeDb, openDb } from "../src/db";
+import { closeDb, insert, openDb, run as exec } from "../src/db";
 import { bus } from "../src/events/bus";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache } from "../src/services/settings";
@@ -16,10 +17,11 @@ import {
   deleteRoutine,
   getRoutine,
   listRoutines,
+  nextRandomStart,
   nextRunFor,
   updateRoutine,
 } from "../src/services/routines";
-import { HttpError } from "../src/util";
+import { HttpError, newId, now } from "../src/util";
 
 let dataDir: string;
 let agent: Agent;
@@ -183,5 +185,129 @@ describe("routines CRUD", () => {
     expect(moved.conversationId).toBeNull();
     expect(listRoutines({ agentId: other.id }).map((r) => r.id)).toEqual([routine.id]);
     await repo.repoIdle(other.repoPath);
+  });
+});
+
+describe("random start window", () => {
+  test("starts somewhere in the window after the scheduled time", () => {
+    const routine = createRoutine({
+      agentId: agent.id,
+      name: "Office hours",
+      trigger: { type: "schedule", startWindowMinutes: 90 },
+      cron: "0 8 * * 1-5",
+      timezone: "Europe/Berlin",
+      prompt: "Start the day",
+    });
+    expect(routine.trigger).toEqual({ type: "schedule", startWindowMinutes: 90 });
+    const wall = partsIn(new Date(routine.nextRunAt!), "Europe/Berlin");
+    const minutes = wall.hour * 60 + wall.minute;
+    expect(minutes).toBeGreaterThanOrEqual(8 * 60);
+    expect(minutes).toBeLessThan(9 * 60 + 30);
+    expect(["Mon", "Tue", "Wed", "Thu", "Fri"]).toContain(wall.weekday);
+  });
+
+  test("draws a different start per slot, the same one every time for a slot", () => {
+    const from = new Date("2026-10-01T00:00:00Z");
+    const offsets = new Set<number>();
+    let after = from;
+    for (let i = 0; i < 20; i++) {
+      const { slot, at } = nextRandomStart("rtn_draw", "0 8 * * *", "UTC", 60, after);
+      expect(slot.getUTCHours()).toBe(8);
+      const offset = at.getTime() - slot.getTime();
+      expect(offset).toBeGreaterThanOrEqual(0);
+      expect(offset).toBeLessThan(60 * 60_000);
+      expect(nextRandomStart("rtn_draw", "0 8 * * *", "UTC", 60, after)).toEqual({ slot, at });
+      offsets.add(offset);
+      after = at;
+    }
+    expect(offsets.size).toBeGreaterThan(10);
+  });
+
+  test("keeps an open window across restarts and skips slots that already ran", () => {
+    const first = nextRandomStart("rtn_open", "0 8 * * *", "UTC", 120, new Date("2026-10-01T00:00:00Z"));
+    const midWindow = new Date(first.slot.getTime() + 1);
+    const resumed = nextRandomStart("rtn_open", "0 8 * * *", "UTC", 120, midWindow);
+    expect(resumed.slot).toEqual(first.slot);
+    const handled = nextRandomStart("rtn_open", "0 8 * * *", "UTC", 120, midWindow, first.slot.getTime());
+    expect(handled.slot.getTime() - first.slot.getTime()).toBe(86_400_000);
+    const late = nextRandomStart("rtn_open", "0 8 * * *", "UTC", 120, new Date(first.at.getTime() + 1));
+    expect(late.slot.getTime() - first.slot.getTime()).toBe(86_400_000);
+  });
+
+  test("does not start a slot again after a schedule event for it", () => {
+    const slot = new Date(Math.floor(Date.now() / 60_000) * 60_000 - 60_000);
+    const routine = createRoutine({
+      agentId: agent.id,
+      name: "Ran today",
+      trigger: { type: "schedule", startWindowMinutes: 120 },
+      cron: `${slot.getUTCMinutes()} ${slot.getUTCHours()} * * *`,
+      timezone: "UTC",
+      prompt: "x",
+    });
+    insert("automation_events", {
+      id: newId("aev"),
+      routine_id: routine.id,
+      source: "schedule",
+      title: "Scheduled time reached",
+      payload: "null",
+      status: "done",
+      created_at: now(),
+    });
+    const next = new Date(updateRoutine(routine.id, { prompt: "y" }).nextRunAt!);
+    expect(next.getTime()).toBeGreaterThanOrEqual(slot.getTime() + 86_400_000);
+    expect(next.getTime()).toBeLessThan(slot.getTime() + 86_400_000 + 120 * 60_000);
+  });
+
+  test("0 means on time", () => {
+    const routine = createRoutine({
+      agentId: agent.id,
+      name: "Punctual",
+      trigger: { type: "schedule", startWindowMinutes: 0 },
+      cron: "0 8 * * *",
+      timezone: "UTC",
+      prompt: "x",
+    });
+    expect(routine.trigger).toEqual({ type: "schedule" });
+    expect(new Date(routine.nextRunAt!).getUTCMinutes()).toBe(0);
+  });
+
+  test("rejects windows that are invalid or longer than the gap between runs", () => {
+    for (const startWindowMinutes of [-5, 1.5, 721]) {
+      const err = catchHttp(() =>
+        createRoutine({ agentId: agent.id, name: "Bad", trigger: { type: "schedule", startWindowMinutes }, cron: "0 8 * * *", prompt: "x" }),
+      );
+      expect(err.status).toBe(400);
+      expect(err.message).toContain("random start window");
+    }
+    const tooLong = catchHttp(() =>
+      createRoutine({ agentId: agent.id, name: "Hourly", trigger: { type: "schedule", startWindowMinutes: 90 }, cron: "0 * * * *", prompt: "x" }),
+    );
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.message).toBe("Runs are only 1 h apart — the random start window can be at most 1 h");
+    expect(listRoutines({ agentId: agent.id }).some((r) => r.name === "Hourly" || r.name === "Bad")).toBe(false);
+  });
+
+  test("the limit ignores gaps shortened by a daylight saving change", () => {
+    const limit = (cron: string, from: string) =>
+      startWindowLimit((after) => nextRunFor(cron, "Europe/Berlin", after), "Europe/Berlin", new Date(from));
+    expect(limit("0 */2 * * *", "2027-03-27T12:00:00Z")).toBe(120);
+    expect(limit("0 8,20 * * *", "2027-03-26T12:00:00Z")).toBe(720);
+    expect(limit("0 * * * *", "2027-03-27T20:00:00Z")).toBe(60);
+    expect(limit("*/15 * * * *", "2027-03-27T20:00:00Z")).toBe(15);
+  });
+
+  test("changes that leave the schedule alone don't check the window again", () => {
+    const routine = createRoutine({
+      agentId: agent.id,
+      name: "Saved window",
+      trigger: { type: "schedule", startWindowMinutes: 90 },
+      cron: "0 8 * * *",
+      timezone: "UTC",
+      prompt: "x",
+    });
+    exec("UPDATE routines SET cron = '0 * * * *' WHERE id = ?", routine.id);
+    expect(updateRoutine(routine.id, { enabled: false }).enabled).toBe(false);
+    expect(updateRoutine(routine.id, { name: "Renamed" }).name).toBe("Renamed");
+    expect(catchHttp(() => updateRoutine(routine.id, { cron: "30 * * * *" })).status).toBe(400);
   });
 });

@@ -18,6 +18,7 @@ import { TRIGGER_TYPES } from "./trigger-meta";
 
 const EXAMPLES: { kind: RoutineTriggerType; text: string }[] = [
   { kind: "schedule", text: "Every Monday at 9:00, collect last week's numbers and write a report" },
+  { kind: "schedule", text: "Every weekday, start sometime between 8:00 and 9:30 and work through my inbox" },
   { kind: "app", text: "When I get an email from a customer, draft a reply" },
   { kind: "app", text: "When a meeting is about to start, brief me on the attendees" },
   { kind: "app", text: "When someone posts in #support on Slack, draft an answer" },

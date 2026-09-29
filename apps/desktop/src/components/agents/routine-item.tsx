@@ -16,6 +16,7 @@ import {
   Play,
   RefreshCw,
   ScanSearch,
+  Shuffle,
   Trash2,
 } from "lucide-react";
 import type { Agent, Routine } from "@godmode/shared";
@@ -361,7 +362,17 @@ function UpcomingCell({ routine, onOpenEvents }: { routine: Routine; onOpenEvent
 
   const next = relative(routine.nextRunAt);
   const lastCheck = type === "condition" ? relative(status.lastCheckAt) : null;
+  const randomStart = routine.trigger.type === "schedule" && !!routine.trigger.startWindowMinutes;
+  const NextIcon = randomStart ? Shuffle : Clock;
   let tooltip: ReactNode = next?.full;
+  if (randomStart && next) {
+    tooltip = (
+      <div className="space-y-0.5">
+        <div>{next.full}</div>
+        <div className="opacity-80">Picked at random within the start window</div>
+      </div>
+    );
+  }
   if (type === "condition" && (lastCheck || status.observation)) {
     tooltip = (
       <div className="max-w-72 space-y-1">
@@ -379,7 +390,7 @@ function UpcomingCell({ routine, onOpenEvents }: { routine: Routine; onOpenEvent
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="flex items-center gap-1 font-medium tabular-nums">
-              <Clock className="size-3" /> {next.text}
+              <NextIcon className="size-3" /> {next.text}
             </span>
           </TooltipTrigger>
           <TooltipContent>{tooltip}</TooltipContent>
