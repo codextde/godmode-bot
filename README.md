@@ -66,7 +66,7 @@ needs to be useful:
 | 🔢 **2FA / TOTP** | Import Google Authenticator QR codes from screenshots — including multi-account *export* QR codes — or scan with your camera. |
 | 📬 **Missing-login inbox** | Agents report missing or broken logins, accounts and 2FA; add them in one click. |
 | 🧩 **Integrations** | Composio toolkits (Gmail, Slack, GitHub, Notion…) and custom MCP servers — globally, per workspace, or per agent. |
-| 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA and integrations, plus shared global ones. |
+| 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA, integrations and browser profile, plus shared global ones. Assign any browser profile to a workspace (Browser → profile menu, or in the workspace's settings) and its agents browse with it. |
 | 🎙️ **Voice mode** | Dictate and hear replies; hands-free conversation loop (Web Speech, OpenAI or ElevenLabs). |
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |

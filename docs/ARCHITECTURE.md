@@ -161,6 +161,10 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
 
 * One managed Chromium per **browser profile** (global default + optional per workspace/agent), launched with
   `--remote-debugging-port=<free port> --user-data-dir=~/.godmode/browser/<id>` on 127.0.0.1.
+* A run uses its agent's pinned profile, else its workspace's default profile (`Workspace.browserProfileId`), else the
+  global default. Profiles can be reassigned to another workspace (`PATCH /api/browser/profiles/:id { workspaceId }`) or
+  picked in the workspace's settings (`browserProfileId`, which moves a global profile into the workspace); cookies and
+  sessions travel with the profile. The global default always stays global.
 * On macOS a visible browser never takes focus: it is started in the background through LaunchServices
   (`open -g`, no startup window) and its first window opens behind the active app.
 * Agents get browser tools from the **browser-use MCP server** (`uvx --from browser-use==0.13.10 browser-use --mcp`)

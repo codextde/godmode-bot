@@ -34,6 +34,8 @@ export interface WorkspaceInput {
   instructions?: string;
   /** macOS VM for the workspace's agents; null = none. */
   vmId?: ID | null;
+  /** Browser profile for the workspace's agents, moved into the workspace if needed; null = the global default. */
+  browserProfileId?: ID | null;
 }
 
 export interface AgentInput {
