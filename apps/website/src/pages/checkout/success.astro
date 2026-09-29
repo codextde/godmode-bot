@@ -1,0 +1,253 @@
+---
+import Base from '@/layouts/Base.astro';
+import Logo from '@/components/ui/Logo.astro';
+import Icon from '@/components/ui/Icon.astro';
+import { PRICING, SITE } from '@/config/site';
+import { stripe } from '@/lib/stripe';
+import { upsertFromSession } from '@/lib/db';
+import { ORDER_COOKIE, publicId, sign, verify } from '@/lib/signed';
+import { allowed } from '@/lib/limit';
+import type Stripe from 'stripe';
+
+export const prerender = false;
+
+const SESSION_ID = /^cs_(test|live)_[A-Za-z0-9]+$/;
+const DAY = 86400;
+
+// Stripe sends buyers here with ?session_id=… . A Checkout Session ID never expires, so it must not act as a
+// password forever: exchange it (within a day of the purchase) for a signed, HttpOnly cookie and continue on
+// the clean URL — which is also what the X pixel and browser history see.
+const fromQuery = Astro.url.searchParams.get('session_id') ?? '';
+if (SESSION_ID.test(fromQuery)) {
+  let fresh = false;
+  if (await allowed('CHECKOUT_LIMIT', Astro.request)) {
+    try {
+      const s = await stripe().checkout.sessions.retrieve(fromQuery);
+      fresh = s.status === 'complete' && Boolean(s.metadata?.license_key) && Date.now() / 1000 - s.created < DAY;
+    } catch (e) {
+      console.error('success page lookup failed', e);
+    }
+  }
+  if (fresh) {
+    Astro.cookies.set(ORDER_COOKIE, await sign(fromQuery, 30 * DAY), {
+      httpOnly: true,
+      secure: Astro.url.protocol === 'https:',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 30 * DAY,
+    });
+  }
+  const hasCookie = fresh || Boolean(await verify(Astro.cookies.get(ORDER_COOKIE)?.value));
+  return Astro.redirect(hasCookie ? '/checkout/success' : '/checkout/success?expired=1', 303);
+}
+
+const id = await verify(Astro.cookies.get(ORDER_COOKIE)?.value);
+let session: Stripe.Checkout.Session | null = null;
+let state: 'paid' | 'processing' | 'invalid' | 'expired' = Astro.url.searchParams.has('expired') ? 'expired' : 'invalid';
+
+if (id) {
+  try {
+    session = await stripe().checkout.sessions.retrieve(id);
+    if (session.status === 'complete' && session.metadata?.license_key) {
+      const paid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
+      state = paid ? 'paid' : 'processing';
+      // Same idempotent write as the webhook, so the license works even if the webhook is late.
+      await upsertFromSession(session, paid ? 'paid' : 'pending').catch((e) => console.error(e));
+    }
+  } catch (e) {
+    console.error('success page lookup failed', e);
+  }
+}
+
+const plan = session?.metadata?.plan === 'monthly' ? 'monthly' : 'lifetime';
+const licenseKey = session?.metadata?.license_key ?? '';
+const email = session?.customer_details?.email ?? '';
+const purchase =
+  state === 'paid' && session
+    ? {
+        id: await publicId(session.id),
+        value: (session.amount_total ?? 0) / 100,
+        currency: (session.currency ?? 'usd').toUpperCase(),
+        plan,
+      }
+    : null;
+
+Astro.response.headers.set('cache-control', 'no-store');
+Astro.response.headers.set('referrer-policy', 'no-referrer');
+
+const steps = [
+  { icon: 'download', title: 'Install Godmode', text: 'Download the app below and open it. Onboarding installs Claude Code and everything else it needs.' },
+  { icon: 'sparkles', title: 'Connect Claude', text: 'Sign in with your Claude Pro or Max plan, or paste an Anthropic API key.' },
+  { icon: 'key-round', title: 'Give it access', text: 'Import your Chrome profile, your passwords and your 2FA codes (Vault → Import).' },
+  { icon: 'send', title: 'Hand over your first task', text: '“Log into … and …” — then watch it work, or go get a coffee.' },
+];
+---
+
+<Base title="Welcome to Godmode" noindex>
+  <main class="relative min-h-dvh overflow-hidden pt-16 pb-24">
+    <div class="final-glow pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
+    <div class="container-x max-w-[880px]">
+      <a href="/" class="inline-flex items-center gap-2.5" aria-label="Godmode home">
+        <Logo size={28} /><span class="font-semibold tracking-[-0.03em]">Godmode</span>
+      </a>
+
+      {
+        state === 'invalid' && (
+          <div class="mt-20 text-center">
+            <h1 class="h-section">We couldn’t find that purchase.</h1>
+            <p class="lead mx-auto mt-5 max-w-[520px]">
+              If you just paid, check your email for the receipt — or write to{' '}
+              <a class="text-text underline" href={`mailto:${SITE.email}`}>{SITE.email}</a> and we’ll sort it out right away.
+            </p>
+            <a href="/" class="btn btn-ghost mt-8">Back to the homepage</a>
+          </div>
+        )
+      }
+
+      {
+        state === 'expired' && (
+          <div class="mt-20 text-center">
+            <h1 class="h-section">This welcome link has expired.</h1>
+            <p class="lead mx-auto mt-5 max-w-[540px]">
+              For your security, purchase links only work for a day. Your license key is on your invoice and in the billing
+              portal — or email <a class="text-text underline" href={`mailto:${SITE.email}`}>{SITE.email}</a> and we’ll resend it.
+            </p>
+            <a href="/" class="btn btn-ghost mt-8">Back to the homepage</a>
+          </div>
+        )
+      }
+
+      {
+        state === 'processing' && (
+          <div class="mt-20 text-center">
+            <span class="chip mx-auto"><span class="live-dot !size-1.5" /> Payment processing</span>
+            <h1 class="h-section mt-6">Almost there.</h1>
+            <p class="lead mx-auto mt-5 max-w-[540px]">
+              Your bank is confirming the payment. As soon as it clears you’ll get an email{email && ` at ${email}`} with
+              your receipt — your license key is below and activates automatically.
+            </p>
+            {licenseKey && <p class="mt-8 font-mono text-[18px] tracking-wider">{licenseKey}</p>}
+          </div>
+        )
+      }
+
+      {
+        state === 'paid' && (
+          <>
+            <div class="mt-16 text-center sm:mt-24">
+              <div class="success-check mx-auto grid size-16 place-items-center rounded-full bg-brand-soft text-brand ring-1 ring-[rgb(47_214_144/0.35)]" data-reveal="scale">
+                <Icon name="check" size={30} stroke={2.4} />
+              </div>
+              <h1 class="h-display text-grad mx-auto mt-8 !text-[clamp(40px,7vw,80px)]" data-reveal style="--d:100">
+                Welcome to <span class="serif">Godmode.</span>
+              </h1>
+              <p class="lead mx-auto mt-5 max-w-[560px]" data-reveal style="--d:200">
+                {plan === 'lifetime' ? 'Your lifetime license is active.' : 'Your subscription is active.'} A receipt is on its way
+                {email ? ` to ${email}` : ''}. Let’s put your first agent to work.
+              </p>
+            </div>
+
+            <div class="card mt-12 p-6 sm:p-8" data-reveal style="--d:300">
+              <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Your license key</p>
+              <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <code class="flex-1 rounded-xl bg-[rgb(0_0_0/0.35)] px-4 py-3.5 font-mono text-[17px] tracking-[0.06em] text-text ring-1 ring-line-2 sm:text-[19px]">
+                  {licenseKey}
+                </code>
+                <button type="button" class="btn btn-ghost" data-copy={licenseKey}>
+                  <Icon name="copy" size={15} /> <span data-copy-label>Copy</span>
+                </button>
+              </div>
+              <p class="mt-3 text-[13px] text-muted">
+                Keep it somewhere safe — it’s also {plan === 'lifetime' ? 'printed on your invoice' : 'shown in your billing portal'}.
+              </p>
+            </div>
+
+            <div class="mt-3 grid gap-3 sm:grid-cols-3" data-reveal style="--d:350">
+              <a href="/download/mac" class="card flex items-center gap-4 p-5" data-track="download_mac">
+                <Icon name="apple" size={22} />
+                <span><b class="block text-[15px] font-medium">macOS</b><span class="text-[12.5px] text-muted">Apple silicon</span></span>
+              </a>
+              <a href="/download/windows" class="card flex items-center gap-4 p-5" data-track="download_windows">
+                <Icon name="monitor" size={22} />
+                <span><b class="block text-[15px] font-medium">Windows</b><span class="text-[12.5px] text-muted">.msi / .exe</span></span>
+              </a>
+              <a href="/download/linux" class="card flex items-center gap-4 p-5" data-track="download_linux">
+                <Icon name="terminal" size={22} />
+                <span><b class="block text-[15px] font-medium">Linux</b><span class="text-[12.5px] text-muted">AppImage</span></span>
+              </a>
+            </div>
+            <p class="mt-3 text-center text-[12.5px] text-dim">
+              Also: <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/mac-intel">macOS Intel</a> ·
+              <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/windows-msi">Windows MSI</a> ·
+              <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/linux-deb">.deb</a> ·
+              <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/linux-rpm">.rpm</a> ·
+              <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download">headless server & all builds</a>
+            </p>
+
+            <ol class="mt-12 grid gap-3 sm:grid-cols-2" data-reveal style="--d:400">
+              {steps.map((s, i) => (
+                <li class="card p-6">
+                  <div class="flex items-center gap-3">
+                    <span class="grid size-8 place-items-center rounded-full font-mono text-[13px] ring-1 ring-line-2">{i + 1}</span>
+                    <Icon name={s.icon} size={16} class="text-brand" />
+                  </div>
+                  <p class="mt-4 text-[16px] font-medium tracking-[-0.015em]">{s.title}</p>
+                  <p class="mt-1.5 text-[14px] leading-relaxed text-muted">{s.text}</p>
+                </li>
+              ))}
+            </ol>
+
+            <div class="mt-12 flex flex-col items-center justify-between gap-4 rounded-2xl p-6 ring-1 ring-line sm:flex-row">
+              <p class="text-[14px] text-muted">
+                Questions or stuck? Email <a class="text-text underline decoration-line-3 underline-offset-2" href={`mailto:${SITE.email}`}>{SITE.email}</a> —
+                you’ll hear back from a human. {PRICING.guaranteeDays}-day money-back guarantee, always.
+              </p>
+              {session?.customer && (
+                <a href="/api/portal" class="btn btn-ghost btn-sm flex-none">
+                  <Icon name="receipt-text" size={14} /> Billing & invoices
+                </a>
+              )}
+            </div>
+          </>
+        )
+      }
+    </div>
+  </main>
+
+  {
+    purchase && (
+      <script is:inline define:vars={{ purchase }}>
+        window.__gmPurchase = purchase;
+      </script>
+    )
+  }
+  <script>
+    import { consent, track, xEvent } from '@/scripts/analytics';
+    type Purchase = { id: string; value: number; currency: string; plan: string };
+    const p = (window as unknown as { __gmPurchase?: Purchase }).__gmPurchase;
+    const once = (key: string) => {
+      try {
+        if (sessionStorage.getItem(key) === '1') return false;
+        sessionStorage.setItem(key, '1');
+      } catch {
+        /* ignore */
+      }
+      return true;
+    };
+    if (p) {
+      track('purchase_view', p.plan);
+      // The X conversion needs marketing consent — fire it now, or as soon as the visitor accepts.
+      const fireX = () => {
+        if (consent() !== 'all' || !once(`gm.purchase.x.${p.id}`)) return;
+        xEvent('purchase', {
+          value: p.value,
+          currency: p.currency,
+          conversion_id: p.id,
+          contents: [{ content_id: p.plan, content_name: `Godmode ${p.plan}`, content_price: p.value, num_items: 1 }],
+        });
+      };
+      fireX();
+      window.addEventListener('gm:consent', fireX, { once: true });
+    }
+  </script>
+</Base>

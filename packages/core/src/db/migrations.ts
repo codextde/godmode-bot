@@ -470,6 +470,31 @@ ALTER TABLE conversations ADD COLUMN browser_profile_id TEXT;
   },
   {
     id: 12,
+    name: "chat_workspace",
+    sql: /* sql */ `
+-- Workspace a chat with a global agent was started in: it browses with that workspace's default profile.
+ALTER TABLE conversations ADD COLUMN workspace_id TEXT;
+`,
+  },
+  {
+    id: 13,
+    name: "followups",
+    sql: /* sql */ `
+-- A time an agent set to continue a chat on its own (one per chat). Removed when it runs or is cancelled.
+CREATE TABLE IF NOT EXISTS followups (
+  conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  note TEXT NOT NULL,
+  due_at TEXT NOT NULL,
+  run_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_followups_due ON followups(due_at);
+`,
+  },
+  {
+    id: 14,
     name: "api_tools",
     sql: /* sql */ `
 -- APIs agents may call with a stored key (\`key_enc\`, sealed): what they're for, their docs, where the key may be sent

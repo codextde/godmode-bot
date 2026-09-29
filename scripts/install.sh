@@ -1,16 +1,18 @@
 #!/bin/sh
 # Installs the standalone Godmode Bot server (`godmode`) on Linux or macOS.
 #
-#   curl -fsSL https://raw.githubusercontent.com/codextde/godmode-bot/main/scripts/install.sh | sh
+#   curl -fsSL https://godmode.codext.de/install.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX sh
 #
 # Environment:
+#   GODMODE_LICENSE       your license key (welcome page, invoice or billing portal) — required
 #   GODMODE_VERSION       release tag to install, e.g. v0.2.0 (default: latest)
 #   GODMODE_INSTALL_DIR   target directory (default: ~/.local/bin)
 #
 # Then: `godmode doctor` to check dependencies and `godmode serve --host 0.0.0.0` for the web dashboard.
 set -eu
 
-REPO="codextde/godmode-bot"
+SITE="https://godmode.codext.de"
+LICENSE_KEY="${GODMODE_LICENSE:-}"
 VERSION="${GODMODE_VERSION:-latest}"
 INSTALL_DIR="${GODMODE_INSTALL_DIR:-$HOME/.local/bin}"
 
@@ -39,7 +41,7 @@ os=$(uname -s)
 case "$os" in
   Linux) os=linux ;;
   Darwin) os=darwin ;;
-  MINGW* | MSYS* | CYGWIN*) err "on Windows, download godmode-windows-x64.exe from https://github.com/$REPO/releases" ;;
+  MINGW* | MSYS* | CYGWIN*) err "on Windows, download the headless server from $SITE/download" ;;
   *) err "unsupported operating system: $os" ;;
 esac
 
@@ -57,7 +59,7 @@ fi
 
 if [ "$os" = linux ]; then
   if ldd --version 2>&1 | grep -qi musl; then
-    err "musl-based distributions (e.g. Alpine) are not supported; use the Docker image ghcr.io/$REPO"
+    err "musl-based distributions (e.g. Alpine) are not supported; use the Docker image"
   fi
   # CPUs without AVX2 need the baseline build.
   if [ "$arch" = x64 ] && ! grep -qw avx2 /proc/cpuinfo 2>/dev/null; then
@@ -65,21 +67,19 @@ if [ "$os" = linux ]; then
   fi
 fi
 
+[ -n "$LICENSE_KEY" ] || err "set GODMODE_LICENSE to your license key — get one at $SITE"
+
 asset="godmode-$os-$arch"
-if [ "$VERSION" = latest ]; then
-  base="https://github.com/$REPO/releases/latest/download"
-else
-  case "$VERSION" in v*) ;; *) VERSION="v$VERSION" ;; esac
-  base="https://github.com/$REPO/releases/download/$VERSION"
-fi
+case "$VERSION" in latest | v*) ;; *) VERSION="v$VERSION" ;; esac
+query="key=$LICENSE_KEY&version=$VERSION"
 
 tmp=$(mktemp -d 2>/dev/null || mktemp -d -t godmode)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 say "Downloading $asset ($VERSION)…"
-download "$base/$asset" "$tmp/godmode" || err "download failed: $base/$asset"
+download "$SITE/download/file/$asset?$query" "$tmp/godmode" || err "download failed — check your license key ($SITE/download)"
 
-if download "$base/$asset.sha256" "$tmp/godmode.sha256" 2>/dev/null; then
+if download "$SITE/download/file/$asset.sha256?$query" "$tmp/godmode.sha256" 2>/dev/null; then
   expected=$(cut -d' ' -f1 < "$tmp/godmode.sha256")
   actual=$(sha256 "$tmp/godmode")
   if [ -z "$actual" ]; then

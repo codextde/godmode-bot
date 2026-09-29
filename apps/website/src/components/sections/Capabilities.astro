@@ -1,0 +1,220 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+---
+
+<section id="features" class="relative py-20 sm:py-28" data-track-view="features">
+  <div class="container-x">
+    <div class="max-w-[820px]">
+      <p class="eyebrow" data-reveal><span class="n">02</span> What it can do</p>
+      <Words text="Everything a coworker needs. *Nothing* you have to build." class="h-section mt-6" />
+      <p class="lead mt-6 max-w-[620px]" data-reveal style="--d:200">
+        The best parts of today’s AI agents — browser use, computer use, memory, automations, chat apps — in one app
+        that runs on your device, with your access.
+      </p>
+    </div>
+
+    <div class="bento mt-16 grid gap-3 md:grid-cols-6">
+      <!-- 1. Browser with your sessions -->
+      <article class="card flex flex-col md:col-span-4" data-reveal>
+        <div class="p-7 pb-0 sm:p-9 sm:pb-0">
+          <span class="chip chip-brand"><Icon name="globe" size={12} /> Browser use</span>
+          <h3 class="h-card mt-5 text-[24px]">Picks up where you left off — signed in as you.</h3>
+          <p class="mt-2.5 max-w-[520px] text-[15px] leading-relaxed text-muted">
+            Import your Chrome profile and Godmode continues your sessions: cookies, logins, open work. It browses the
+            real web in a real Chromium, not a sandbox that gets flagged as a bot.
+          </p>
+        </div>
+        <div class="relative mt-8 flex-1 px-7 sm:px-9" aria-hidden="true">
+          <div class="mini-browser window !rounded-b-none">
+            <div class="window-bar">
+              <i></i><i></i><i></i>
+              <div class="ml-3 flex h-[22px] flex-1 items-center gap-2 rounded-md bg-[rgb(255_250_240/0.05)] px-2.5 font-mono text-[11px] text-muted">
+                <Icon name="lock" size={10} />
+                <span class="url-type">app.hubspot.com/contacts/deals</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-[1fr_auto] gap-4 p-5">
+              <div class="space-y-2.5">
+                <div class="sk w-2/5"></div>
+                <div class="sk w-4/5 opacity-60"></div>
+                <div class="sk w-3/5 opacity-60"></div>
+                <div class="mt-4 grid grid-cols-3 gap-2">
+                  <div class="sk-box"></div><div class="sk-box"></div><div class="sk-box"></div>
+                </div>
+              </div>
+              <div class="flex flex-col items-end gap-2">
+                <span class="chip chip-brand session-chip"><span class="live-dot !size-1.5"></span> Signed in as you</span>
+                <span class="chip">2,418 cookies imported</span>
+                <span class="chip">Chrome · Default profile</span>
+              </div>
+            </div>
+            <div class="agent-cursor" style="--x1:18%;--y1:62%;--x2:62%;--y2:78%"></div>
+          </div>
+        </div>
+      </article>
+
+      <!-- 2. Background computer use -->
+      <article class="card flex flex-col md:col-span-2" data-reveal style="--d:80">
+        <div class="p-7 sm:p-8">
+          <span class="chip chip-brand"><Icon name="mouse-pointer-click" size={12} /> Computer use</span>
+          <h3 class="h-card mt-5">Works in the background. Your mouse stays yours.</h3>
+          <p class="mt-2.5 text-[15px] leading-relaxed text-muted">
+            Share a window and Godmode clicks and types into it behind the scenes — even when it’s covered. Keep working,
+            or go to bed.
+          </p>
+        </div>
+        <div class="relative mt-auto h-[190px] overflow-hidden" aria-hidden="true">
+          <div class="bg-win bg-win-back"><div class="window-bar"><i></i><i></i><i></i></div><div class="p-3 space-y-2"><div class="sk w-3/4"></div><div class="sk w-1/2 opacity-50"></div><div class="ghost-field"><span class="ghost-type">Q3 forecast — final.xlsx</span></div></div><div class="agent-cursor small" style="--x1:30%;--y1:70%;--x2:70%;--y2:70%"></div></div>
+          <div class="bg-win bg-win-front"><div class="window-bar"><i></i><i></i><i></i><span class="ml-2 font-mono text-[10px] text-dim">You</span></div><div class="p-3 space-y-2"><div class="sk w-2/3"></div><div class="sk w-5/6 opacity-50"></div><div class="sk w-1/2 opacity-50"></div></div><div class="user-cursor"></div></div>
+        </div>
+      </article>
+
+      <!-- 3. Its own Mac -->
+      <article class="card flex flex-col md:col-span-2" data-reveal>
+        <div class="p-7 sm:p-8">
+          <span class="chip chip-brand"><Icon name="monitor-smartphone" size={12} /> Virtual machines</span>
+          <h3 class="h-card mt-5">Give it its own Mac.</h3>
+          <p class="mt-2.5 text-[15px] leading-relaxed text-muted">
+            One click spins up an isolated macOS VM on your device. The agent installs, runs and breaks things in
+            there — your Mac stays untouched.
+          </p>
+        </div>
+        <div class="mt-auto px-7 pb-7 sm:px-8 sm:pb-8" aria-hidden="true">
+          <div class="window terminal font-mono text-[11.5px] leading-[1.75]">
+            <div class="window-bar"><i></i><i></i><i></i><span class="ml-2 text-[10px] text-dim">admin@godmode-vm</span></div>
+            <div class="p-3.5">
+              <p class="t-line" style="--l:0"><span class="text-brand">~ %</span> brew install node</p>
+              <p class="t-line text-dim" style="--l:1">==> Pouring node--24.bottle.tar.gz</p>
+              <p class="t-line" style="--l:2"><span class="text-brand">~ %</span> npm test</p>
+              <p class="t-line text-dim" style="--l:3">✓ 248 passed <span class="text-brand">(9.2s)</span></p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- 4. Vault -->
+      <article class="card flex flex-col md:col-span-4" data-reveal style="--d:80">
+        <div class="grid flex-1 gap-8 p-7 sm:p-9 md:grid-cols-2">
+          <div>
+            <span class="chip chip-brand"><Icon name="key-round" size={12} /> Vault + 2FA</span>
+            <h3 class="h-card mt-5 text-[24px]">Your logins. The AI never sees them.</h3>
+            <p class="mt-2.5 text-[15px] leading-relaxed text-muted">
+              Passwords and 2FA codes live in an encrypted vault on your device. Godmode types them into the page
+              <em>for</em> the agent — the model only ever sees <span class="font-mono text-[13px] text-text-2">[secret hidden]</span>.
+              Import from Chrome, 1Password, Bitwarden or a Google Authenticator QR screenshot.
+            </p>
+          </div>
+          <div class="vault-demo self-center" aria-hidden="true">
+            <div class="window p-5">
+              <p class="text-[13px] font-medium">Sign in to Acme Billing</p>
+              <div class="mt-4 space-y-2.5">
+                <div class="v-field"><span class="text-dim">Email</span><span class="v-val" style="--v:1">ops@yourcompany.com</span></div>
+                <div class="v-field"><span class="text-dim">Password</span><span class="v-val dots" style="--v:2">••••••••••••••</span></div>
+                <div class="v-field"><span class="text-dim">2FA code</span><span class="v-val dots tracking-[0.3em]" style="--v:3">••••••</span></div>
+              </div>
+              <div class="mt-4 flex items-center justify-between">
+                <span class="chip chip-brand v-badge"><Icon name="lock-keyhole" size={11} /> Secret hidden</span>
+                <span class="v-ok flex items-center gap-1.5 text-[12px] text-brand"><Icon name="check" size={13} stroke={2.4} /> Signed in</span>
+              </div>
+            </div>
+            <div class="mt-3 rounded-xl bg-[rgb(0_0_0/0.35)] p-3.5 font-mono text-[11px] leading-relaxed text-dim ring-1 ring-line">
+              <span class="text-muted">what the AI sees →</span> vault_fill_login(<span class="text-text-2">"billing.acme.com"</span>)<br />
+              <span class="text-brand">✓</span> filled username, password, totp · <span class="text-text-2">[secret hidden]</span>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- 5. Memory -->
+      <article class="card flex flex-col md:col-span-2" data-reveal>
+        <div class="p-7 sm:p-8">
+          <span class="chip"><Icon name="brain" size={12} /> Memory</span>
+          <h3 class="h-card mt-5">Agents that remember — and dream.</h3>
+          <p class="mt-2.5 text-[15px] leading-relaxed text-muted">
+            Persistent agents with their own instructions, memory and history, each in its own git repo. At night they
+            review their day and tidy up what they learned.
+          </p>
+        </div>
+        <div class="mt-auto px-7 pb-7 font-mono text-[11.5px] leading-[1.8] sm:px-8 sm:pb-8" aria-hidden="true">
+          <div class="rounded-xl bg-[rgb(0_0_0/0.3)] p-3.5 ring-1 ring-line">
+            <p class="text-dream">◐ dreaming · MEMORY.md</p>
+            <p class="text-[rgb(240_82_91/0.8)]">- Anna is going to Singapore in July</p>
+            <p class="text-brand">+ Anna went to Singapore in July</p>
+            <p class="text-brand">+ Prefers invoices as one PDF, not zip</p>
+          </div>
+        </div>
+      </article>
+
+      <!-- 6. Automations -->
+      <article class="card flex flex-col md:col-span-2" data-reveal style="--d:80">
+        <div class="p-7 sm:p-8">
+          <span class="chip"><Icon name="zap" size={12} /> Automations</span>
+          <h3 class="h-card mt-5">Runs on its own.</h3>
+          <p class="mt-2.5 text-[15px] leading-relaxed text-muted">
+            On a schedule, when an email arrives, when a webhook fires — or when something you describe in plain words
+            becomes true.
+          </p>
+        </div>
+        <ul class="mt-auto space-y-2 px-7 pb-7 sm:px-8 sm:pb-8" aria-hidden="true">
+          {
+            [
+              ['clock', 'Weekdays at 08:00', 'Monday briefing'],
+              ['mail', 'New email with an invoice', 'File + log it'],
+              ['eye', '“Competitor changes pricing”', 'Alert me'],
+            ].map(([icon, trigger, action], i) => (
+              <li class="auto-row" style={`--r:${i}`}>
+                <Icon name={icon} size={14} class="text-muted" />
+                <span class="flex-1 truncate text-[13px] text-text-2">{trigger}</span>
+                <span class="font-mono text-[10.5px] text-dim">{action}</span>
+                <span class="toggle" />
+              </li>
+            ))
+          }
+        </ul>
+      </article>
+
+      <!-- 7. Messaging -->
+      <article class="card flex flex-col md:col-span-2" data-reveal style="--d:160">
+        <div class="p-7 sm:p-8">
+          <span class="chip"><Icon name="send" size={12} /> Chat apps · Voice</span>
+          <h3 class="h-card mt-5">Message it from anywhere.</h3>
+          <p class="mt-2.5 text-[15px] leading-relaxed text-muted">
+            Talk to your agents from Slack, Telegram or Microsoft Teams — or just speak to it.
+          </p>
+        </div>
+        <div class="mt-auto space-y-2 px-7 pb-7 sm:px-8 sm:pb-8" aria-hidden="true">
+          <div class="bubble bubble-me" style="--b:0">Did the supplier invoices come in?</div>
+          <div class="bubble bubble-bot" style="--b:1"><Icon name="zap" size={12} class="mr-1 inline -translate-y-px text-brand" />Yes — 23 downloaded, matched to payouts. 2 look off, sent you the list.</div>
+          <div class="flex gap-1.5 pt-1 font-mono text-[10.5px] text-dim"><span>Slack</span>·<span>Telegram</span>·<span>Teams</span></div>
+        </div>
+      </article>
+
+      <!-- 8. Delegation + integrations (wide, compact) -->
+      <article class="card md:col-span-3" data-reveal>
+        <div class="flex h-full items-start gap-5 p-7 sm:p-8">
+          <span class="grid size-11 flex-none place-items-center rounded-xl bg-[rgb(255_250_240/0.05)] ring-1 ring-line"><Icon name="network" size={19} /></span>
+          <div>
+            <h3 class="h-card">A team, not a bot.</h3>
+            <p class="mt-2 text-[15px] leading-relaxed text-muted">
+              Agents hand tasks to each other and spin up helpers for side quests. Ask the main agent to create, check
+              or reconfigure any of them — in plain words.
+            </p>
+          </div>
+        </div>
+      </article>
+      <article class="card md:col-span-3" data-reveal style="--d:80">
+        <div class="flex h-full items-start gap-5 p-7 sm:p-8">
+          <span class="grid size-11 flex-none place-items-center rounded-xl bg-[rgb(255_250_240/0.05)] ring-1 ring-line"><Icon name="blocks" size={19} /></span>
+          <div>
+            <h3 class="h-card">APIs when you want them. Never required.</h3>
+            <p class="mt-2 text-[15px] leading-relaxed text-muted">
+              Hundreds of apps via Composio and any MCP server — optional speed-ups on top of an agent that can simply
+              use the app like you would.
+            </p>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>

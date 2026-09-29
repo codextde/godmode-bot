@@ -69,7 +69,7 @@ export class MessagingError extends Error {
   }
 }
 
-export const MESSAGING_USER_AGENT = "GodmodeBot (+https://github.com/codextde/godmode-bot)";
+export const MESSAGING_USER_AGENT = "GodmodeBot (+https://godmode.codext.de)";
 
 /** fetch with a timeout; network failures become MessagingErrors. */
 export async function fetchWithTimeout(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Response> {

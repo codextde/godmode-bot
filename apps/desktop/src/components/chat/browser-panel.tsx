@@ -24,22 +24,35 @@ import { cn } from "@/lib/utils";
 
 export type BrowserFocusMode = "watch" | "control";
 
-/** Mirrors the core's resolveProfileForAgent: the chat's profile → pinned profile → workspace default → global default. */
-export function agentBrowserProfile(agent: Agent, profiles: BrowserProfile[], chatProfileId: string | null = null): BrowserProfile | null {
+/** The profile new chats in a workspace browse with: its default, else the global default. */
+export function defaultProfileFor(profiles: BrowserProfile[], workspaceId: string | null | undefined): BrowserProfile | null {
+  const workspaceDefault = workspaceId ? profiles.find((p) => p.workspaceId === workspaceId && p.isDefault) : undefined;
+  return workspaceDefault ?? profiles.find((p) => !p.workspaceId && p.isDefault) ?? null;
+}
+
+/**
+ * Mirrors the core's resolveProfileForAgent: the chat's profile → pinned profile → default of the agent's (or the
+ * chat's) workspace → global default.
+ */
+export function agentBrowserProfile(
+  agent: Agent,
+  profiles: BrowserProfile[],
+  chatProfileId: string | null = null,
+  chatWorkspaceId: string | null = null,
+): BrowserProfile | null {
   const own = chatProfileId ? profiles.find((p) => p.id === chatProfileId) : undefined;
   if (own) return own;
   const pinned = agent.browser.profileId ? profiles.find((p) => p.id === agent.browser.profileId) : undefined;
   if (pinned) return pinned;
-  const workspaceDefault = agent.workspaceId ? profiles.find((p) => p.workspaceId === agent.workspaceId && p.isDefault) : undefined;
-  return workspaceDefault ?? profiles.find((p) => !p.workspaceId && p.isDefault) ?? null;
+  return defaultProfileFor(profiles, agent.workspaceId ?? chatWorkspaceId);
 }
 
 /** The browser profile this chat drives (null when its agent has no browser). */
-export function useChatBrowser(agent: Agent | undefined, chatProfileId: string | null = null): BrowserProfile | null {
+export function useChatBrowser(agent: Agent | undefined, chatProfileId: string | null = null, chatWorkspaceId: string | null = null): BrowserProfile | null {
   const { data: settings } = useSettings();
   const enabled = !!agent?.browser.enabled && settings?.browser.enabled !== false;
   const { data: profiles } = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles, enabled });
-  return enabled && agent && profiles ? agentBrowserProfile(agent, profiles, chatProfileId) : null;
+  return enabled && agent && profiles ? agentBrowserProfile(agent, profiles, chatProfileId, chatWorkspaceId) : null;
 }
 
 /** The chat's own tab in its agent's browser (undefined until the agent opens one). */

@@ -1,0 +1,71 @@
+---
+// Single-series column chart (one hue, no legend — the title names it). Hover shows the exact value.
+interface Props {
+  title: string;
+  data: { label: string; value: number }[];
+  format?: 'number' | 'usd';
+}
+const { title, data, format = 'number' } = Astro.props;
+const max = Math.max(1, ...data.map((d) => d.value));
+// Round the axis top up to a clean number.
+const pow = 10 ** Math.floor(Math.log10(max));
+const top = Math.ceil(max / pow) * pow;
+const fmt = (v: number) =>
+  format === 'usd' ? `$${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : v.toLocaleString('en-US');
+const W = 640;
+const H = 180;
+const padL = 44;
+const padB = 22;
+const band = (W - padL) / Math.max(1, data.length);
+const barW = Math.min(24, band * 0.62);
+const y = (v: number) => (H - padB) * (1 - v / top);
+const ticks = [0, top / 2, top];
+const total = data.reduce((s, d) => s + d.value, 0);
+---
+
+<figure class="card p-5">
+  <figcaption class="flex items-baseline justify-between">
+    <span class="text-[13px] text-muted">{title}</span>
+    <span class="text-[13px] font-medium text-text">{fmt(total)} total</span>
+  </figcaption>
+  <svg viewBox={`0 0 ${W} ${H}`} class="mt-3 w-full overflow-visible" role="img" aria-label={`${title}: ${fmt(total)} total`}>
+    {
+      ticks.map((t) => (
+        <g>
+          <line x1={padL} x2={W} y1={y(t)} y2={y(t)} stroke="rgb(255 250 240 / 0.07)" stroke-width="1" />
+          <text x={padL - 8} y={y(t) + 4} text-anchor="end" font-size="11" fill="#6f6b64">
+            {fmt(t)}
+          </text>
+        </g>
+      ))
+    }
+    {
+      data.map((d, i) => {
+        const h = (H - padB) - y(d.value);
+        const x = padL + i * band + (band - barW) / 2;
+        const r = Math.min(4, h / 2);
+        return (
+          <g class="bar-hit">
+            <rect x={padL + i * band} y="0" width={band} height={H - padB} fill="transparent" />
+            {d.value > 0 && (
+              <path
+                d={`M${x},${H - padB} V${y(d.value) + r} Q${x},${y(d.value)} ${x + r},${y(d.value)} H${x + barW - r} Q${x + barW},${y(d.value)} ${x + barW},${y(d.value) + r} V${H - padB} Z`}
+                fill="#1a9e66"
+              />
+            )}
+            <title>{`${d.label}: ${fmt(d.value)}`}</title>
+            {(i === 0 || i === data.length - 1 || data.length <= 14) && (
+              <text x={padL + i * band + band / 2} y={H - 6} text-anchor="middle" font-size="10.5" fill="#6f6b64">
+                {d.label.slice(5)}
+              </text>
+            )}
+          </g>
+        );
+      })
+    }
+  </svg>
+</figure>
+
+<style>
+  .bar-hit:hover path { fill: #2fd690; }
+</style>

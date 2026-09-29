@@ -19,6 +19,7 @@ import { AttachmentChip } from "./attachments";
 import { CopyButton } from "./copy-button";
 import { CommandText } from "./slash-commands";
 import { describeTool } from "./tool-meta";
+import { FollowupMarker, followupBlock } from "./followup";
 
 const FALLBACK_AGENT = { avatar: "🤖", color: "violet" };
 
@@ -78,6 +79,8 @@ export function UserMessage({ message, queued, pending }: { message: Message; qu
 }
 
 export function SystemMessage({ message }: { message: Message }) {
+  const followup = followupBlock(message);
+  if (followup) return <FollowupMarker block={followup} />;
   return (
     <div className="flex justify-center">
       <span className="max-w-[80%] rounded-md border bg-card px-3 py-1 text-center text-xs text-muted-foreground">{message.content}</span>

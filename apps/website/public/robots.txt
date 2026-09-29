@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /admin
+Disallow: /api/
+Disallow: /checkout/
+
+Sitemap: https://godmode.codext.de/sitemap-index.xml

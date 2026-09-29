@@ -174,6 +174,7 @@ works in its own tabs (see Browser).
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
 | `memory_dream_report({ summary, changes })` | Only in dream runs — and the only tool they get: report what a memory consolidation changed (see Dreaming) |
 | `notify_user({ title, body })` | Push a notification to the human |
+| `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
 | `api_tools_list()`, `api_tool_docs({ tool })`, `api_tool_request({ tool, method, path, json \| form \| body, query, saveAs })` | Only for agents with API tools: list them, read one's docs, call its API with the key added by Godmode (see Integrations) |
 
 ## HTTP API
@@ -219,9 +220,10 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
   `--remote-debugging-port=<free port> --user-data-dir=~/.godmode/browser/<id>` on 127.0.0.1.
 * A run on this computer uses its chat's profile (`conversations.browser_profile_id`, picked in the composer), else its
   agent's pinned profile, else its workspace's default profile (`Workspace.browserProfileId`), else the global default
-  (a run in a VM browses in the VM instead). Delegated work
-  for an agent without a pinned profile keeps the profile picked for the caller's chat when it's global or in the target's
-  workspace; deleting a profile sends its chats back to their default. Profiles can be reassigned to another workspace
+  (a run in a VM browses in the VM instead). A global agent's chat remembers the workspace selected in the sidebar when
+  it started (`conversations.workspace_id`) and uses that workspace's default. Delegated work stays in the caller's
+  workspace, and for an agent without a pinned profile keeps the profile picked for the caller's chat when it's global or
+  in the target's workspace; deleting a profile sends its chats back to their default. Profiles can be reassigned to another workspace
   (`PATCH /api/browser/profiles/:id { workspaceId }`) or picked in the workspace's settings (`browserProfileId`, which
   moves a global profile into the workspace); cookies and sessions travel with the profile. The global default always
   stays global.
@@ -256,6 +258,11 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
     is going or someone watches its live view; the browser's last page is kept, blank, for the next chat (closing the
     last window would quit Chromium on Windows and Linux). Chromium has one download folder per profile, so two agents
     downloading through one profile at the same moment may find the file in the folder of the one that set it last.
+* **On demand**: a run's endpoint only starts Chromium when browser-use first asks for `/json/version`, on its first
+  browser tool call, so a run that never browses never opens a browser. A start that fails or outlasts browser-use's
+  15 s connect timeout becomes a warning in that run. Idle browsers (no CDP client attached, no watcher, window not
+  focused) stop after `browser.keepAliveMinutes` (default 5); browsers an earlier core left running are adopted at
+  startup and closed unless something still uses them.
 * **Session import** (“continue where Chrome left off”): the importer uses the same technique as browser-use’s
   `profile-use` — copy the Chrome profile’s cookie store to a temp dir, start the real Chrome binary headless on it
   with CDP, read decrypted cookies via `Storage.getCookies`, inject them into the Godmode profile with
@@ -419,6 +426,32 @@ use the watched account.
 
 The Godmode agent sets automations up from one sentence ("when X happens, do Y"): `automation_triggers_list` shows the
 connected Composio accounts and each app's events with their settings schema; `routine_create` takes the trigger.
+
+## Follow-ups
+
+An agent that has to wait — for a reply, a delivery, a build, office hours — sets a time to continue the chat on its
+own, like a coworker who says "I'll check back tomorrow at 10" (`services/followups.ts`, table `followups`):
+
+* **Setting one**: `followup_schedule({ at | inMinutes, note })` from any run but condition checks, dreams and tasks
+  delegated by another agent (those report back to it). `at` is ISO 8601; without an offset it is the core's time
+  zone. It must be 1 minute to 1 year ahead; the note loses anything that looks like a Godmode prompt tag. A chat has one follow-up (keyed by
+  the conversation): scheduling again moves it, `followup_cancel` removes it, deleting the chat or agent removes it too.
+  The system prompt explains when to use it ("Following up later"); resumed turns restate a pending one so a new message
+  can move or cancel it.
+* **Running it**: one timer armed for the earliest `due_at` of a chat that isn't busy (re-checked at least every
+  minute, so sleep and clock changes are caught); a follow-up whose chat is busy runs when that turn finishes. A due
+  follow-up is removed first (the run may schedule the next one), then the chat gets a
+  system message with a `followup` block (the marker in the thread) and a run with trigger `followup` that resumes the
+  same Claude session with a `<godmode-followup>` prompt carrying the note. Follow-ups that came due while Godmode was
+  off run on start, marked `late`. One that can't start (agent turned off) is dropped and the human is notified. When
+  the run finishes the human is notified too (unless the agent did it with `notify_user`); in a Slack, Telegram or
+  Teams chat the answer goes there instead.
+* **Runaway guard**: after 20 follow-up runs in a row without a message from the human, an automation or another
+  agent, scheduling is refused and the agent is told to ask the human.
+* **The human** sees a bar above the composer (continue now, change the time, cancel), a clock in Recent chats and all
+  pending follow-ups on the Automations page: `GET /api/followups`, `PATCH|DELETE /api/conversations/:id/followup`,
+  `POST /api/conversations/:id/followup/run`. `Conversation.followup` carries the pending one. Backups carry follow-ups;
+  a restore drops the ones already due.
 
 ## Integrations
 

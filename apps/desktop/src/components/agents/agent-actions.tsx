@@ -6,6 +6,7 @@ import { Play } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useLive, type LiveRun } from "@/stores/live";
 import { AgentAvatar, Kbd } from "@/components/common";
@@ -43,8 +44,9 @@ export function useAgentLiveRun(agentId: string | undefined): LiveRun | null {
 export function useStartAgentChat() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const workspace = useScopeWorkspace();
   return useMutation({
-    mutationFn: (agentId: string) => api.conversations.create({ agentId }),
+    mutationFn: (agentId: string) => api.conversations.create({ agentId, workspaceId: workspace?.id }),
     onSuccess: (conversation) => {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${conversation.id}`);
@@ -90,9 +92,10 @@ export function RunTaskDialog({
   const agent = useLatest(agentProp);
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const workspace = useScopeWorkspace();
   const [prompt, setPrompt] = useState("");
   const run = useMutation({
-    mutationFn: () => api.agents.run(agent!.id, prompt.trim()),
+    mutationFn: () => api.agents.run(agent!.id, prompt.trim(), workspace?.id),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.runs });

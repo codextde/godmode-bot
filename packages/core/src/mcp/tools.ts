@@ -33,7 +33,7 @@ import { createAgent, deleteAgent, getAgent, listAgents, peersFor, updateAgent }
 import { addCredentialDomain, credentialsForAgent, findCredentialsForAgent, getCredential, listCredentials, markCredentialUsed, revealForAgent } from "../vault/credentials";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
 import { nameGuessMatchesHost } from "../vault/match";
-import { currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
+import { chatWorkspaceId, currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
 import { currentVmPage, fillIntoVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
@@ -46,6 +46,8 @@ import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspe
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
 import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun } from "../runner/runner";
+import { describeNow } from "../runner/prompt";
+import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 
 const log = logger("mcp");
 
@@ -408,6 +410,9 @@ function isCheckRun(ctx: RunContext): boolean {
   }
 }
 
+/** Follow-up tools: not in condition checks, dreams or tasks delegated by another agent. */
+const canFollowUp = (_agent: Agent, ctx: RunContext) => !isCheckRun(ctx) && followupsAllowed(ctx.conversationId);
+
 /** The run is a dream (background memory consolidation): it gets `memory_dream_report` and nothing else. */
 function isDreamRun(ctx: RunContext): boolean {
   try {
@@ -612,6 +617,35 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
+    name: "followup_schedule",
+    description:
+      "Continue this chat later on your own, like a coworker who says \"I'll check back tomorrow at 10\". Use it when the task can't be finished now because you have to wait: a reply to an email or message, a delivery, a build or deployment, a status or price change, office hours, someone else's work. At that time Godmode resumes this conversation with your note and you pick up where you left off, with the whole conversation. Pass `at` (ISO 8601 date and time; without an offset it is in the time zone of the current date/time you were given) or `inMinutes`. One follow-up per chat: calling again moves it. After scheduling, end your turn with a short summary of what you're waiting for and when you'll continue.",
+    schema: z.object({
+      at: z.string().max(64).optional().describe('When to continue, e.g. "2026-10-01T09:00" (local time) or "2026-10-01T07:00:00Z"'),
+      inMinutes: z.number().int().min(1).max(527_040).optional().describe("Or: continue in this many minutes"),
+      note: z
+        .string()
+        .min(1)
+        .max(NOTE_MAX)
+        .describe('What to do when you continue, self-contained, e.g. "Check whether ACME answered the invoice email; if not, send a friendly reminder"'),
+    }),
+    when: canFollowUp,
+    run: ({ at, inMinutes, note }, { agent, ctx }) => {
+      const moved = getFollowup(ctx.conversationId) !== null;
+      const f = scheduleFollowup({ conversationId: ctx.conversationId, agentId: agent.id, dueAt: parseDueAt({ at, inMinutes }), note, runId: ctx.runId });
+      return `${moved ? "Follow-up moved" : "Follow-up scheduled"}: this chat continues ${describeNow(new Date(f.dueAt))}, ${inWords(f.dueAt)}. End your turn now with a short summary: what you did, what you're waiting for and when you'll continue.`;
+    },
+  }),
+
+  defineTool({
+    name: "followup_cancel",
+    description: "Remove this chat's follow-up: when what you were waiting for is settled, or the human doesn't want it anymore.",
+    schema: z.object({}),
+    when: canFollowUp,
+    run: (_args, { ctx }) => (cancelFollowup(ctx.conversationId) ? "Follow-up removed." : "This chat had no follow-up."),
+  }),
+
+  defineTool({
     name: "api_tools_list",
     description:
       "List the API tools the human set up for you: what each API is for, its address and whether its key is also in an environment variable. Read a tool's documentation with api_tool_docs, then call it with api_tool_request.",
@@ -757,11 +791,13 @@ const TOOLS: ToolDef[] = [
       if (refusal) return fail(refusal);
       // From a VM, work for an agent without its own VM stays in the caller's VM.
       const vmId = lockedVm(ctx) && !resolveVmId(null, target) ? lockedVm(ctx) : null;
-      // Work for an agent without its own profile stays in the browser profile picked for the caller's chat, within the
-      // target's reach (global or its workspace's).
+      // Work stays in the caller's workspace, and for an agent without its own profile in the browser profile picked for
+      // the caller's chat, within the target's reach (global or its workspace's).
+      const workspaceId = agent.workspaceId ?? chatWorkspaceId(ctx.conversationId);
       const inherited = target.browser.profileId ? null : runChatBrowserProfile(ctx.runId);
-      const browserProfileId = inherited && (!inherited.workspaceId || inherited.workspaceId === target.workspaceId) ? inherited.id : null;
-      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId });
+      const reach = target.workspaceId ?? workspaceId;
+      const browserProfileId = inherited && (!inherited.workspaceId || inherited.workspaceId === reach) ? inherited.id : null;
+      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId, workspaceId });
       const { run } = await sendMessage(conversation.id, {
         content: `[Delegated by ${agent.name}]\n\n${task}`,
         trigger: "delegation",
