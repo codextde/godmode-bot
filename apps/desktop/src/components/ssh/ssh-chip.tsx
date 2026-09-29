@@ -44,7 +44,8 @@ export function SshChip({
   const active = [...own, ...inherited];
   const first = active[0];
 
-  const toggle = (id: string) => void onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  const known = value.filter((id) => servers.some((s) => s.id === id));
+  const toggle = (id: string) => void onChange(known.includes(id) ? known.filter((x) => x !== id) : [...known, id]);
   const go = (to: string) => {
     setOpen(false);
     navigate(to);

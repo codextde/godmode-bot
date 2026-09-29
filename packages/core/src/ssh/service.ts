@@ -257,6 +257,7 @@ export function updateServer(id: string, patch: SshServerPatch): SshServer {
     updated_at: now(),
   });
   dropConnection(id);
+  if (moved) osProbed.delete(id);
   audit("user", "ssh.update", id, {
     name: patch.name ?? current.name,
     ...(moved ? { host: addressOf({ host, port }) } : {}),
@@ -278,6 +279,13 @@ export function deleteServer(id: string): void {
   audit("user", "ssh.delete", id, { name: current.name });
   bus.changed("ssh-servers");
   if (removed.agents.length) bus.changed("agents");
+  for (const conversationId of removed.conversations) {
+    try {
+      bus.emit({ type: "conversation.updated", conversation: getConversationSummary(conversationId) });
+    } catch {
+      /* deleted meanwhile */
+    }
+  }
 }
 
 /** Give an agent or a chat the server, or take it away (human-only). */
@@ -312,10 +320,13 @@ function targetOf(r: SshServerRow, secrets = secretsOf(r)): ConnectTarget {
   };
 }
 
-/** Remember a successful connection: pin the host key the first time, clear the last error. */
-function recordConnected(id: string, hostKey: SshHostKey, os?: string | null): void {
+/**
+ * Remember a successful connection: pin the host key the first time, clear the last error. A connection made before the
+ * server moved to another address says nothing about the new one.
+ */
+function recordConnected(id: string, to: { host: string; port: number }, hostKey: SshHostKey, os?: string | null): void {
   const r = row(id);
-  if (!r) return;
+  if (!r || r.host !== to.host || r.port !== to.port) return;
   update("ssh_servers", id, {
     ...(r.host_key_fingerprint ? {} : { host_key_type: hostKey.type, host_key_fingerprint: hostKey.fingerprint }),
     ...(os ? { os } : {}),
@@ -351,16 +362,23 @@ export async function useServer<T>(id: string, fn: (conn: Connection) => Promise
     {
       version: r.updated_at,
       target: () => targetOf(requireRow(id)),
-      onConnect: (session) => {
+      onConnect: (session, target) => {
         connected = true;
-        recordConnected(id, session.hostKey);
+        recordConnected(id, target, session.hostKey);
       },
       onError: (err) => recordFailure(id, err.message),
     },
     async (conn) => {
       if (connected && !r.os && !osProbed.has(id)) {
         osProbed.add(id);
-        void useServer(id, probeOs).then((os) => os && update("ssh_servers", id, { os }), () => undefined);
+        void useServer(id, probeOs).then(
+          (os) => {
+            if (!os || !row(id)) return;
+            update("ssh_servers", id, { os });
+            bus.changed("ssh-servers");
+          },
+          () => undefined,
+        );
       }
       return fn(conn);
     },
@@ -386,7 +404,7 @@ async function probe(target: ConnectTarget): Promise<SshTestResult> {
 export async function testServer(id: string): Promise<SshTestResult> {
   const r = requireRow(id);
   const result = await probe(targetOf(r));
-  if (result.ok && result.hostKey) recordConnected(id, result.hostKey, result.os);
+  if (result.ok && result.hostKey) recordConnected(id, r, result.hostKey, result.os);
   else if (result.error) recordFailure(id, result.error);
   return result;
 }
@@ -473,12 +491,13 @@ export function promptServers(ids: string[]): PromptSshServer[] {
   });
 }
 
-/** The secrets of a server that must never reach the model (masked in tool results). */
+/** The secrets of a server that must never reach the model (masked in tool results): also every line of the key. */
 export function serverSecrets(id: string): string[] {
   const r = row(id);
   if (!r) return [];
   const s = secretsOf(r);
-  return [s.password, s.passphrase].filter((v): v is string => !!v && v.length >= 4);
+  const keyLines = (s.privateKey ?? "").split(/\r?\n/).filter((l) => l.length >= 20 && !l.startsWith("-----"));
+  return [s.password, s.passphrase, ...keyLines].filter((v): v is string => !!v && v.length >= 4);
 }
 
 /** The password sudo asks for, when one is saved. */

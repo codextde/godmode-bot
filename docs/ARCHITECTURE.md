@@ -417,15 +417,19 @@ Remote machines agents sign in to and control (`packages/core/src/ssh/`, `/api/s
   and records the OS (`uname` + `/etc/os-release`); `POST /api/ssh/test` tries unsaved settings (secrets left out come
   from the saved server) without recording anything; `POST /api/ssh/servers/:id/exec` is the card's *Run command*.
 * **`ssh` MCP tools** (`/mcp/ssh`, `ssh/tools.ts`, only for runs that had servers when they started; the allowed servers
-  are re-read on every call, so taking one away applies at once): `list_servers`, `shell` (command, `cwd`, `stdin`,
-  `timeout_seconds`; `sudo: true` runs `sudo -n` when sudo needs no password, else `sudo -S -k -p ''` with the saved
-  password as the first stdin line — `-k` so the line is always consumed), `read_file` / `write_file` / `edit_file`
-  (SFTP; `cat` through the shell when a server has no SFTP subsystem) and `upload` / `download` (SFTP, any size; local
-  paths must resolve — symlinks followed — into the run's folders: its working directory, the agent repo, the VM's
-  shared folder and the workspace's sources; downloads default to `workspace/downloads`). The saved password and
-  passphrase are masked in every result. Ending the run aborts its in-flight commands. The system prompt lists the
-  servers (address, OS, description, whether sudo can be answered) with rules for working on real machines; resumed
-  turns restate them. Audit: `ssh.use` (first call per run and server), `ssh.sudo`, `ssh.assign` / `ssh.unassign`.
+  are re-read on every call, so taking one away applies at once; unknown ids in assignments are dropped):
+  `list_servers`, `shell` (command, `cwd`, `stdin`, `timeout_seconds`; `sudo: true` runs `sudo -n` when sudo needs no
+  password, else `sudo -S -k -p <random marker>` and writes the saved password only once that marker shows up on
+  stderr — so it never becomes input for the command — then the command's stdin; a second prompt means it was
+  rejected), `read_file` / `write_file` / `edit_file` (SFTP; `cat` through the shell when a server has no SFTP
+  subsystem) and `upload` / `download` (SFTP, any size; local paths must resolve — symlinks followed, dangling ones
+  refused — into the run's folders: its working directory, the agent repo, the VM's shared folder and the workspace's
+  sources; downloads default to `workspace/downloads`, go to a new file that is renamed into place, and never into a
+  `.git` or `.claude` folder). Every result masks the saved password, passphrase and the key's lines. Ending the run
+  aborts its in-flight commands (a timed-out command whose process ignores the closed session may keep running). The
+  system prompt lists the servers (address, OS, description, whether sudo can be answered) with rules for working on
+  real machines; resumed turns restate them. Audit: `ssh.use` (first call per run and server), `ssh.sudo`,
+  `ssh.assign` / `ssh.unassign`.
 
 ## Automations
 

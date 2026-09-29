@@ -199,6 +199,12 @@ export interface ExecOptions {
   stdin?: string | Buffer | null;
   timeoutMs: number;
   signal?: AbortSignal;
+  /**
+   * Answer a prompt the command prints to stderr (sudo's, with this marker as its prompt) — only once it is asked for,
+   * so the answer never ends up as input for the command itself. stdin follows the answer, or goes out right away
+   * when the command prints output first or `waitMs` passes without a prompt.
+   */
+  prompt?: { marker: string; answer: string; waitMs: number };
 }
 
 export interface ExecOutcome {
@@ -211,6 +217,8 @@ export interface ExecOutcome {
   cancelled: boolean;
   /** The connection dropped while the command ran. */
   lost: boolean;
+  /** How often the `prompt` marker appeared (more than once: the answer was rejected). */
+  prompts: number;
   durationMs: number;
 }
 
@@ -229,7 +237,9 @@ export function shellPath(path: string): string {
 export function execOn(client: Client, command: string, opts: ExecOptions): Promise<ExecOutcome> {
   return new Promise<ExecOutcome>((resolve, reject) => {
     const started = performance.now();
-    if (opts.signal?.aborted) return resolve({ exitCode: null, exitSignal: null, stdout: "", stderr: "", timedOut: false, cancelled: true, lost: false, durationMs: 0 });
+    if (opts.signal?.aborted) {
+      return resolve({ exitCode: null, exitSignal: null, stdout: "", stderr: "", timedOut: false, cancelled: true, lost: false, prompts: 0, durationMs: 0 });
+    }
     client.exec(command, (err, stream) => {
       if (err) return reject(new SshError(`The command couldn't start: ${err.message}`, "command"));
       const out = new Capture();
@@ -240,6 +250,21 @@ export function execOn(client: Client, command: string, opts: ExecOptions): Prom
       let cancelled = false;
       let lost = false;
       let done = false;
+      let prompts = 0;
+      let inputSent = false;
+      let promptTail = "";
+      let promptTimer: ReturnType<typeof setTimeout> | null = null;
+      const sendInput = (answer?: string) => {
+        if (inputSent) return;
+        inputSent = true;
+        if (promptTimer) clearTimeout(promptTimer);
+        try {
+          if (answer !== undefined) stream.write(`${answer}\n`);
+          stream.end(opts.stdin ?? "");
+        } catch {
+          /* the command already ended */
+        }
+      };
       const stop = () => {
         try {
           stream.signal("KILL");
@@ -260,9 +285,11 @@ export function execOn(client: Client, command: string, opts: ExecOptions): Prom
         if (done) return;
         done = true;
         clearTimeout(timer);
+        if (promptTimer) clearTimeout(promptTimer);
         opts.signal?.removeEventListener("abort", onAbort);
         client.removeListener("close", onLost);
-        resolve({ exitCode, exitSignal, stdout: out.text(), stderr: errOut.text(), timedOut, cancelled, lost, durationMs: Math.round(performance.now() - started) });
+        const stderr = opts.prompt ? errOut.text().split(opts.prompt.marker).join("") : errOut.text();
+        resolve({ exitCode, exitSignal, stdout: out.text(), stderr, timedOut, cancelled, lost, prompts, durationMs: Math.round(performance.now() - started) });
       };
       const onLost = () => {
         lost = exitCode === null && exitSignal === null;
@@ -270,15 +297,34 @@ export function execOn(client: Client, command: string, opts: ExecOptions): Prom
       };
       opts.signal?.addEventListener("abort", onAbort, { once: true });
       client.once("close", onLost);
-      stream.on("data", (d: Buffer) => out.push(d));
-      stream.stderr.on("data", (d: Buffer) => errOut.push(d));
+      const prompt = opts.prompt;
+      stream.on("data", (d: Buffer) => {
+        out.push(d);
+        // Output before any prompt: nothing will be asked.
+        if (prompt) sendInput();
+      });
+      stream.stderr.on("data", (d: Buffer) => {
+        errOut.push(d);
+        if (!prompt) return;
+        const seen = promptTail + d.toString("utf8");
+        const found = seen.split(prompt.marker).length - 1;
+        promptTail = seen.slice(-prompt.marker.length);
+        if (!found) return;
+        prompts += found;
+        // Only the first prompt is answered: a second one means the answer was wrong.
+        if (prompts === found) sendInput(prompt.answer);
+        else sendInput();
+      });
       stream.on("exit", (code: number | null, sig?: string) => {
         exitCode = typeof code === "number" ? code : null;
         exitSignal = sig ?? null;
       });
       stream.on("close", finish);
       stream.on("error", finish);
-      stream.end(opts.stdin ?? "");
+      if (prompt) {
+        promptTimer = setTimeout(() => sendInput(), prompt.waitMs);
+        promptTimer.unref?.();
+      } else sendInput();
     });
   });
 }
@@ -291,8 +337,8 @@ export interface PoolOptions {
   /** Changes whenever the server's settings change; a connection made for other settings isn't reused. */
   version: string;
   target: () => ConnectTarget;
-  /** A new connection signed in (pin the host key, remember when). */
-  onConnect?: (session: Session) => void;
+  /** A new connection signed in to `target` (pin the host key, remember when). */
+  onConnect?: (session: Session, target: ConnectTarget) => void;
   onError?: (err: SshError) => void;
 }
 
@@ -353,7 +399,8 @@ function retire(entry: Pooled) {
 }
 
 function open(id: string, opts: PoolOptions): Pooled {
-  const session = connect(opts.target());
+  const target = opts.target();
+  const session = connect(target);
   const entry = new Pooled(id, opts.version, session);
   pool.set(id, entry);
   session.then(
@@ -364,7 +411,7 @@ function open(id: string, opts: PoolOptions): Pooled {
         if (pool.get(id) === entry) pool.delete(id);
       });
       s.client.on("error", (err) => log.debug("connection error", { server: id, error: err.message }));
-      opts.onConnect?.(s);
+      opts.onConnect?.(s, target);
     },
     (err: unknown) => {
       if (pool.get(id) === entry) pool.delete(id);
@@ -502,7 +549,14 @@ export class Connection {
   }
 
   private sftpCall<T>(fn: (sftp: SFTPWrapper) => Promise<T>): Promise<T> {
-    return this.entry.channel(async () => fn(await this.entry.sftp()));
+    const cancelled = () => {
+      if (this.signal?.aborted) throw new SshError("Cancelled", "command");
+    };
+    cancelled();
+    return this.entry.channel(async () => {
+      cancelled();
+      return fn(await this.entry.sftp());
+    });
   }
 
   /** SFTP works on this server (some turn the subsystem off). */

@@ -1,9 +1,10 @@
 /**
  * The `ssh` MCP server (POST /mcp/ssh, per-run bearer token): shell, file and transfer tools on the SSH servers a run
  * may use — its chat's and its agent's, re-read on every call so a server taken away stops working at once. Godmode
- * signs in with the saved password or key and types sudo's password itself; the model never sees either.
+ * signs in with the saved password or key and answers sudo's prompt itself; the secrets are masked in every result.
  */
-import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { existsSync, lstatSync, mkdirSync, realpathSync, renameSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
 import { z } from "zod";
@@ -41,7 +42,7 @@ function clip(s: string, max = MAX_OUTPUT): string {
   return `${s.slice(0, head)}\n\n… [${(s.length - max).toLocaleString("en-US")} characters omitted] …\n\n${s.slice(-(max - head))}`;
 }
 
-/** Whatever a command prints, the server's password and passphrase never reach the model. */
+/** Whatever a command prints, the server's saved secrets are masked before it reaches the model. */
 function mask(s: string, secrets: string[]): string {
   let out = s;
   for (const secret of secrets) if (out.includes(secret)) out = out.split(secret).join("••••••••");
@@ -82,23 +83,39 @@ function inside(path: string, folder: string): boolean {
 function realPath(path: string): string {
   try {
     return realpathSync(path);
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    // A link that points nowhere would be followed when the file is created.
+    let link = false;
+    try {
+      link = lstatSync(path).isSymbolicLink();
+    } catch {
+      /* doesn't exist */
+    }
+    if (link) throw new RemoteFileError(`${path} is a link to a file that doesn't exist; use another path.`);
     const parent = dirname(path);
     return parent === path ? path : join(realPath(parent), basename(path));
   }
 }
 
+/** Settings and hooks there would run programs on this computer (Claude Code's own file tools can't edit them either). */
+const PROTECTED_DIRS = new Set([".git", ".claude"]);
+
 /**
  * A path on this computer inside the run's folders (relative ones are relative to the first, the run's working
- * directory). Symlinks can't lead out of them.
+ * directory). Symlinks can't lead out of them; files are never written into a .git or .claude folder.
  */
-function localPath(input: string, folders: string[], mustExist: boolean): string {
+function localPath(input: string, folders: string[], mode: "read" | "write"): string {
   if (!folders.length) throw new RemoteFileError("This run has no folders on this computer to copy files from or to.");
   const real = realPath(resolve(folders[0]!, input.replace(/^~(?=$|[\\/])/, homedir())));
-  if (!folders.some((f) => inside(real, realPath(f)))) {
+  const folder = folders.map(realPath).find((f) => inside(real, f));
+  if (!folder) {
     throw new RemoteFileError(`${input} is outside the folders of this run. Use a path in ${folders.map((f) => `\`${f}\``).join(", ")}.`);
   }
-  if (mustExist && !existsSync(real)) throw new RemoteFileError(`No such file on this computer: ${input}`);
+  if (mode === "write" && relative(folder, real).split(/[\\/]/).some((part) => PROTECTED_DIRS.has(part))) {
+    throw new RemoteFileError(`Godmode doesn't write files into .git or .claude folders on this computer. Use another path.`);
+  }
+  if (mode === "read" && !existsSync(real)) throw new RemoteFileError(`No such file on this computer: ${input}`);
   return real;
 }
 
@@ -118,7 +135,7 @@ async function runShell(
   const timeoutMs = (args.timeout_seconds ?? 120) * 1000;
   const script = commandScript(args.command, args.cwd);
   let command = script;
-  let stdin = args.stdin ?? "";
+  let prompt: { marker: string; answer: string; waitMs: number } | undefined;
   if (args.sudo && env.server.username !== "root") {
     // The same shell as without sudo: the user's login shell.
     const asRoot = `-- "\${SHELL:-/bin/sh}" -c ${shellQuote(script)}`;
@@ -133,21 +150,19 @@ async function runShell(
           true,
         );
       }
-      // -k: always ask, so the password line is never left over as input for the command.
-      command = `sudo -S -k -p '' ${asRoot}`;
-      stdin = `${password}\n${stdin}`;
+      // The password only goes out when sudo prints this prompt (-k: it always asks when it needs one).
+      const marker = `godmode-sudo-${randomBytes(8).toString("hex")}:`;
+      command = `sudo -S -k -p ${shellQuote(marker)} ${asRoot}`;
+      prompt = { marker, answer: password, waitMs: 10_000 };
       audit(`agent:${env.agentId}`, "ssh.sudo", env.server.id, { runId: env.runId });
     }
   }
-  const res = await env.conn.exec(command, { timeoutMs, stdin });
-  const secrets = serverSecrets(env.server.id);
-  const stdout = mask(res.stdout, secrets);
-  let stderr = mask(res.stderr, secrets);
-  if (args.sudo && res.exitCode === 1 && /incorrect password|sorry, try again/i.test(stderr)) {
-    stderr += `\nThe saved password was rejected by sudo. Ask the human to check the password saved for ${env.server.name}.`;
-  }
+  const res = await env.conn.exec(command, { timeoutMs, stdin: args.stdin ?? "", prompt });
+  const stdout = res.stdout;
+  let stderr = res.stderr;
+  if (res.prompts > 1) stderr += `\nsudo rejected the saved password. Ask the human to check the password saved for ${env.server.name}.`;
   const status = res.timedOut
-    ? `Timed out after ${args.timeout_seconds ?? 120} s (the command was stopped).`
+    ? `Timed out after ${args.timeout_seconds ?? 120} s. Godmode closed the session; a command that ignores that may still be running on the server (check with ps).`
     : res.cancelled
       ? "Cancelled."
       : res.lost
@@ -221,7 +236,7 @@ const TOOLS: SshTool[] = [
       limit: z.number().int().min(1).max(20_000).optional().describe(`Number of lines (default ${DEFAULT_READ_LINES})`),
     }),
     run: async (args, env) => {
-      const content = mask(await readText(env, args.path), serverSecrets(env.server.id));
+      const content = await readText(env, args.path);
       if (content.includes("\u0000")) return text(`${args.path} is a binary file. Inspect it with shell (file, xxd, …) or download it.`, true);
       if (!content) return text(`${args.path} is empty.`);
       const lines = content.replace(/\n$/, "").split("\n");
@@ -279,7 +294,7 @@ const TOOLS: SshTool[] = [
       remote_path: z.string().max(4096).optional().describe("Where to put it on the server (a folder that exists keeps the file's name)"),
     }),
     run: async (args, env) => {
-      const local = localPath(args.local_path, env.folders, true);
+      const local = localPath(args.local_path, env.folders, "read");
       if (!statSync(local).isFile()) return text(`${args.local_path} isn't a file. Upload files one at a time (pack a folder with tar first).`, true);
       if (!(await env.conn.hasSftp())) return text(NO_SFTP, true);
       let remote = args.remote_path?.trim() || basename(local);
@@ -304,10 +319,17 @@ const TOOLS: SshTool[] = [
       if (size === null) return text(`No such file on ${env.server.name}: ${args.remote_path}`, true);
       const name = posix.basename(args.remote_path.replace(/\/+$/, "")) || "download";
       const target = args.local_path?.trim() || join(getAgent(env.agentId).repoPath, "workspace", "downloads", name);
-      let local = localPath(target, env.folders, false);
-      if (existsSync(local) && statSync(local).isDirectory()) local = localPath(join(local, name), env.folders, false);
+      let local = localPath(target, env.folders, "write");
+      if (existsSync(local) && statSync(local).isDirectory()) local = localPath(join(local, name), env.folders, "write");
       mkdirSync(dirname(local), { recursive: true });
-      await env.conn.download(args.remote_path, local);
+      // Into a new file next to the target, then renamed over it: nothing is written through a link.
+      const partial = join(dirname(local), `.${basename(local)}.${randomBytes(4).toString("hex")}.part`);
+      try {
+        await env.conn.download(args.remote_path, partial);
+        renameSync(partial, local);
+      } finally {
+        rmSync(partial, { force: true });
+      }
       return text(`Downloaded ${args.remote_path} (${formatBytes(size)}) from ${env.server.name} to ${local}.`);
     },
   }),
@@ -396,11 +418,18 @@ export async function callSshTool(ctx: RunContext, name: string, args: unknown):
       setTimeout(() => audited.delete(key), 6 * 3600_000).unref?.();
       audit(`agent:${ctx.agentId}`, "ssh.use", server.id, { runId: ctx.runId });
     }
-    return await useServer(
-      server.id,
-      (conn) => tool.run(parsed as never, { server, conn, runId: ctx.runId, agentId: ctx.agentId, folders: run.folders }),
-      run.signal,
-    );
+    const secrets = serverSecrets(server.id);
+    try {
+      const result = await useServer(
+        server.id,
+        (conn) => tool.run(parsed as never, { server, conn, runId: ctx.runId, agentId: ctx.agentId, folders: run.folders }),
+        run.signal,
+      );
+      return { ...result, content: result.content.map((c) => ({ ...c, text: mask(c.text, secrets) })) };
+    } catch (err) {
+      if (err instanceof Error) err.message = mask(err.message, secrets);
+      throw err;
+    }
   } catch (err) {
     if (err instanceof z.ZodError) return text(`Invalid arguments: ${err.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`, true);
     if (err instanceof SshError) return text(err.message === "Cancelled" ? "Cancelled." : `Couldn't connect: ${err.message}`, true);

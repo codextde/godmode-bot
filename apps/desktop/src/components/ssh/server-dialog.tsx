@@ -572,7 +572,7 @@ export function ServerDialog({
                       </>
                     }
                     htmlFor="ssh-sudo"
-                    hint="Godmode types it when an agent runs a command with sudo."
+                    hint="Godmode types it when an agent runs a command with sudo. An agent with a shell on this account could capture it — a narrow NOPASSWD sudo rule is safer."
                   >
                     <PasswordInput
                       id="ssh-sudo"

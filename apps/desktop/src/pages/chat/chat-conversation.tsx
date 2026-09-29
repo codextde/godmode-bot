@@ -245,6 +245,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   });
 
   const setSshServers = useMutation({
+    // One change at a time, in the order they were made.
+    scope: { id: `ssh-servers:${conversationId}` },
     mutationFn: (sshServerIds: string[]) => api.conversations.update(conversationId, { sshServerIds }),
     onMutate: (next) => {
       const prev = qc.getQueryData<ConversationWithMessages>(key)?.sshServerIds ?? [];
@@ -265,8 +267,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         });
       else if (removed) toast.success(`Removed ${nameOf(removed)}`, { description: "Runs in this chat can't sign in to it anymore." });
     },
-    onError: (err, _next, ctx) => {
-      if (ctx) qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, sshServerIds: ctx.prev } : c));
+    onError: (err) => {
+      void qc.invalidateQueries({ queryKey: key });
       toast.error("Couldn't change the SSH servers", { description: errorMessage(err) });
     },
   });

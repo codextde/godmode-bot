@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { utils } from "ssh2";
@@ -286,6 +286,65 @@ describe("ssh MCP tools", () => {
     }
   });
 
+  test("sudo: the password only answers sudo's own prompt, and a rejected one is reported", async () => {
+    const partial = await startSshServer({ sudoNopasswdSome: true });
+    const strict = await startSshServer({ sudoPassword: "not-the-login-password" });
+    const a = createServer({ name: "partial", host: "127.0.0.1", port: partial.port, username: partial.username, auth: "password", password: partial.password });
+    const b = createServer({ name: "strict", host: "127.0.0.1", port: strict.port, username: strict.username, auth: "password", password: strict.password });
+    const run = runWith([a.id, b.id]);
+    try {
+      // The probe fails, yet sudo doesn't ask for this command: the saved password must not become its input.
+      expect(await call(run.token, "shell", { server: "partial", command: "echo root=$FAKE_ROOT; cat", sudo: true, stdin: "only stdin" })).toEqual({
+        text: "Exit code: 0\nroot=1\nonly stdin",
+        isError: false,
+      });
+      const rejected = await call(run.token, "shell", { server: "strict", command: "id", sudo: true });
+      expect(rejected.isError).toBe(true);
+      expect(rejected.text).toContain("sudo rejected the saved password");
+      expect(rejected.text).not.toContain("godmode-sudo-");
+    } finally {
+      run.done();
+      deleteServer(a.id);
+      deleteServer(b.id);
+      await partial.close();
+      await strict.close();
+    }
+  });
+
+  test("downloads never follow dangling links or write into .git and .claude", async () => {
+    const run = runWith([web.id]);
+    try {
+      writeFileSync(join(sshd.home, "payload.txt"), "data\n");
+      const outside = join(tmpdir(), `godmode-outside-${Date.now()}.txt`);
+      symlinkSync(outside, join(folder, "dangling.txt"));
+      expect((await call(run.token, "download", { remote_path: "payload.txt", local_path: "dangling.txt" })).text).toContain("link to a file that doesn't exist");
+      expect(existsSync(outside)).toBe(false);
+      for (const target of [".git/hooks/pre-commit", ".claude/settings.json", "sub/.git/config"]) {
+        expect((await call(run.token, "download", { remote_path: "payload.txt", local_path: target })).text).toContain(".git or .claude");
+      }
+      writeFileSync(join(folder, "payload.txt"), "old\n");
+      expect((await call(run.token, "download", { remote_path: "payload.txt", local_path: "payload.txt" })).isError).toBe(false);
+      expect(readFileSync(join(folder, "payload.txt"), "utf8")).toBe("data\n");
+      expect(readdirSync(folder).filter((f) => f.endsWith(".part"))).toEqual([]);
+    } finally {
+      run.done();
+    }
+  });
+
+  test("the saved key is masked in results, line by line", async () => {
+    const run = runWith([db.id]);
+    try {
+      writeFileSync(join(sshd.home, "copied-key"), sshd.userKey);
+      const read = await call(run.token, "read_file", { path: "copied-key" });
+      const lines = sshd.userKey.split("\n").filter((l) => l.length >= 20 && !l.startsWith("-----"));
+      expect(lines.length).toBeGreaterThan(0);
+      for (const line of lines) expect(read.text).not.toContain(line);
+      expect(read.text).toContain("••••••••");
+    } finally {
+      run.done();
+    }
+  });
+
   test("runs without SSH servers get no tools", async () => {
     const conv = createConversation({ agentId: agent.id });
     const token = issueRunToken({ runId: "run_ssh_none", agentId: agent.id, conversationId: conv.id, workspaceId: null, depth: 0 });
@@ -358,7 +417,8 @@ describe("assignments and runs", () => {
     const other = passwordServer({ name: "other" });
     await updateAgent(worker.id, { sshServerIds: [server.id, other.id] }, `agent:${worker.id}`);
     expect(getAgent(worker.id).sshServerIds).toEqual([server.id]);
-    await expect(updateAgent(worker.id, { sshServerIds: ["ssh_missing"] })).rejects.toThrow(/doesn't exist/);
+    // A server deleted meanwhile is dropped instead of blocking the change.
+    expect((await updateAgent(worker.id, { sshServerIds: ["ssh_missing", server.id] })).sshServerIds).toEqual([server.id]);
 
     deleteServer(server.id);
     expect(getAgent(worker.id).sshServerIds).toEqual([]);

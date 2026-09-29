@@ -126,6 +126,10 @@ needs to be useful:
     <td><img src="docs/screenshots/followup-waiting.png" alt="An agent waiting for a signed contract, set to continue tomorrow at 09:00" /><br /><sub><b>Follow-ups</b> — the agent sets itself a time to continue; move it, cancel it or continue now</sub></td>
     <td><img src="docs/screenshots/followup.png" alt="The agent picked the chat up again at the time it set and finished the task" /><br /><sub><b>Back on it</b> — at that time the agent picks the chat up again, with all the context</sub></td>
   </tr>
+  <tr>
+    <td><img src="docs/screenshots/ssh-servers.png" alt="SSH servers with their connection status, pinned host keys and the agents and chats using them" /><br /><sub><b>SSH servers</b> — password or key, sealed in the vault; host keys pinned on the first connection</sub></td>
+    <td><img src="docs/screenshots/ssh-chat.png" alt="An agent reading a config and a log on a server over SSH and changing the config after backing it up" /><br /><sub><b>Work on servers</b> — pick servers for a chat; the agent runs commands and edits files there</sub></td>
+  </tr>
 </table>
 
 ## 📦 Install
@@ -233,7 +237,7 @@ trusts only that key from then on. Then pick the server for a **chat** (the *SSH
 | | |
 |---|---|
 | **What the agent gets** | An `ssh` tool set: `shell` (a command in the user's shell; `sudo: true` runs it as root and Godmode types the saved password into sudo's prompt), `read_file` / `write_file` / `edit_file` (SFTP, or the shell when a server has none), and `upload` / `download` between the chat's folders on your computer and the server. |
-| **Secrets** | The password, key and passphrase are sealed in the vault, masked in transcripts and never part of a tool result — also when a command prints them. |
+| **Secrets** | The password, key and passphrase are sealed in the vault and never part of the prompt; transcripts and tool results mask them, also when a command prints them. The agent works in that account's shell, so give it an account with only the rights it needs — a narrow `NOPASSWD` sudo rule is safer than a saved sudo password. |
 | **Checking in** | Each server card shows whether it was reachable, its OS and pinned host key, which agents and chats use it, and a **Run command** box for a quick look yourself. |
 
 ### Good to know

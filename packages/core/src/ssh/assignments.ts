@@ -4,7 +4,7 @@
  */
 import type { SshAssignment } from "@godmode/shared";
 import { all, get, run } from "../db";
-import { badRequest, parseJson } from "../util";
+import { parseJson } from "../util";
 
 /** Every SSH server id that exists, of the given ones. */
 function existing(ids: string[]): Set<string> {
@@ -17,13 +17,15 @@ export function parseServerIds(value: string | null | undefined): string[] {
   return Array.isArray(list) ? [...new Set(list.filter((x): x is string => typeof x === "string" && x.length > 0))] : [];
 }
 
-/** Normalize a list from an API input: undefined = unchanged, else existing server ids (unknown ones are refused). */
+/**
+ * Normalize a list from an API input: undefined = unchanged, else the ids of servers that exist (a server deleted while
+ * a screen still showed it is dropped).
+ */
 export function normalizeSshServerIds(value: string[] | null | undefined): string[] | undefined {
   if (value === undefined) return undefined;
   const ids = [...new Set((value ?? []).map((v) => v.trim()).filter(Boolean))];
   const found = existing(ids);
-  if (ids.some((id) => !found.has(id))) throw badRequest("That SSH server doesn't exist anymore");
-  return ids;
+  return ids.filter((id) => found.has(id));
 }
 
 /** The servers a run may use: its chat's and its agent's, in that order (deleted ones are skipped). */

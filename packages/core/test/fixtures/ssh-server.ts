@@ -14,6 +14,8 @@ export interface TestSshServerOptions {
   password?: string;
   /** Password sudo expects; null = sudo needs none (NOPASSWD). Default: the login password. */
   sudoPassword?: string | null;
+  /** sudo needs no password for anything but \`true\` (so a \`sudo -n true\` probe fails). */
+  sudoNopasswdSome?: boolean;
   /** OpenSSH private host key; default: a new Ed25519 key. */
   hostKey?: string;
   /** Offer the SFTP subsystem (default true). */
@@ -36,24 +38,29 @@ export interface TestSshServer {
 }
 
 const FAKE_SUDO = `#!/bin/sh
-nopass=""; stdin_pw=""
+nopass=""; stdin_pw=""; prompt="Password:"
 while [ $# -gt 0 ]; do
   case "$1" in
     -n) nopass=1; shift;;
     -S) stdin_pw=1; shift;;
     -k) shift;;
-    -p) shift 2;;
+    -p) prompt="$2"; shift 2;;
     --) shift; break;;
     *) break;;
   esac
 done
-if [ "$SUDO_NOPASSWD" = "1" ]; then FAKE_ROOT=1 exec "$@"; fi
+if [ "$SUDO_MODE" = "nopasswd" ]; then FAKE_ROOT=1 exec "$@"; fi
+# NOPASSWD for everything but \`true\`: the probe fails, the command itself runs without asking.
+if [ "$SUDO_MODE" = "nopasswd-some" ] && [ "$1" != "true" ]; then FAKE_ROOT=1 exec "$@"; fi
 if [ -n "$nopass" ]; then echo "sudo: a password is required" >&2; exit 1; fi
 if [ -n "$stdin_pw" ]; then
+  printf '%s' "$prompt" >&2
   IFS= read -r pw
   if [ "$pw" = "$SUDO_EXPECT" ]; then FAKE_ROOT=1 exec "$@"; fi
   echo "Sorry, try again." >&2
-  echo "sudo: 1 incorrect password attempt" >&2
+  printf '%s' "$prompt" >&2
+  IFS= read -r pw || { echo "sudo: no password was provided" >&2; exit 1; }
+  echo "sudo: 2 incorrect password attempts" >&2
   exit 1
 fi
 exit 1
@@ -112,7 +119,7 @@ export async function startSshServer(opts: TestSshServerOptions = {}): Promise<T
               HOME: home,
               PATH: `${bin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
               SUDO_EXPECT: sudoPassword ?? "",
-              SUDO_NOPASSWD: sudoPassword === null ? "1" : "0",
+              SUDO_MODE: sudoPassword === null ? "nopasswd" : opts.sudoNopasswdSome ? "nopasswd-some" : "password",
             },
             stdin: "pipe",
             stdout: "pipe",
