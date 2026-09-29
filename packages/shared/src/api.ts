@@ -8,6 +8,7 @@ import type {
   Credential,
   Effort,
   ID,
+  ISODate,
   Message,
   MissingLoginStatus,
   Routine,
@@ -132,7 +133,14 @@ export interface StartChatInput {
   vmId?: ID | null;
   /** Browse in this profile instead of the agent's. */
   browserProfileId?: ID | null;
+  /** Workspace selected in the sidebar: a global agent browses with its default profile. */
+  workspaceId?: ID | null;
   instructions?: string;
+}
+
+/** Move a chat's follow-up to another time. */
+export interface FollowupPatch {
+  dueAt: ISODate;
 }
 
 export interface ConversationPatch {

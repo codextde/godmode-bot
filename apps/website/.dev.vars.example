@@ -1,0 +1,6 @@
+# Runtime secrets for `astro dev` / `wrangler dev`. In production use `wrangler secret put <NAME>`.
+STRIPE_SECRET_KEY=rk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+ADMIN_PASSWORD=change-me
+SESSION_SECRET=generate-with-openssl-rand-hex-32
+# GITHUB_TOKEN=github_pat_…   (optional locally while the repo is public)

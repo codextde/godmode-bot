@@ -46,6 +46,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   tasks: [qk.tasks],
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
+  followups: [qk.followups],
 };
 
 export function startRealtime(queryClient: QueryClient) {
@@ -143,13 +144,17 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "conversation.updated":
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
+      // Follow-ups show the chat's title.
+      qc.invalidateQueries({ queryKey: qk.followups });
       break;
     case "conversation.deleted":
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries({ queryKey: qk.followups });
       break;
     case "agent.updated":
     case "agent.deleted":
       qc.invalidateQueries({ queryKey: qk.agents });
+      if (event.type === "agent.deleted") qc.invalidateQueries({ queryKey: qk.followups });
       break;
     case "routine.updated":
     case "routine.deleted":

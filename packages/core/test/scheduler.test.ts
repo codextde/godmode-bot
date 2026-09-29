@@ -146,6 +146,7 @@ describe("triggering", () => {
         computerTarget: null,
         vmId: null,
         browserProfileId: null,
+        workspaceId: null,
         instructions: "",
         pinned: false,
         archived: false,

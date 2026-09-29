@@ -1,0 +1,125 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+import Logo from '../ui/Logo.astro';
+
+type Cell = ['yes' | 'no' | 'partial' | '?' | 'text', string];
+const cols = ['Godmode', 'Grok Bot', 'ChatGPT Dots', 'OpenClaw', 'Hermes Agent', 'Claude Cowork'];
+const rows: { label: string; cells: Cell[] }[] = [
+  {
+    label: 'Runs on your own device',
+    cells: [['yes', 'Mac · Windows · Linux'], ['no', 'Cloud computer'], ['no', 'Cloud computer'], ['yes', 'Self-hosted'], ['yes', 'Self-hosted'], ['partial', 'Cloud by default']],
+  },
+  {
+    label: 'Its own computer',
+    cells: [['yes', 'macOS VMs on your Mac'], ['partial', 'One cloud PC for all bots'], ['yes', 'Cloud computer'], ['no', 'Sandbox off by default'], ['partial', 'Containers / remote'], ['partial', 'Fresh sandbox each session']],
+  },
+  {
+    label: 'Continues your browser sessions',
+    cells: [['yes', 'Chrome profile import'], ['no', 'Cloud browser'], ['no', 'Cloud browser'], ['yes', 'Browser Relay'], ['?', ''], ['yes', 'Claude in Chrome']],
+  },
+  {
+    label: 'Encrypted vault + 2FA, hidden from the model',
+    cells: [['yes', 'AES-256-GCM · TOTP'], ['?', ''], ['partial', 'Passwords; 2FA not stated'], ['no', 'Not encrypted at rest'], ['no', 'Display-only redaction'], ['?', '']],
+  },
+  {
+    label: 'Persistent agents with memory',
+    cells: [['yes', 'Versioned in git'], ['yes', ''], ['yes', ''], ['yes', ''], ['yes', ''], ['partial', 'Fresh per session']],
+  },
+  {
+    label: 'Automations & triggers',
+    cells: [['yes', 'Schedules · events · webhooks'], ['yes', 'Routines'], ['yes', 'Scheduled tasks'], ['yes', 'Cron · webhooks'], ['yes', 'Scheduling'], ['yes', 'Scheduled tasks']],
+  },
+  {
+    label: 'Slack · Telegram · Teams',
+    cells: [['yes', 'All three'], ['partial', 'Slack via plugins'], ['partial', 'Slack · Teams'], ['yes', '29+ channels'], ['partial', 'No Teams'], ['?', '']],
+  },
+  {
+    label: 'Keeps working with your laptop shut',
+    cells: [['partial', 'On an always-on machine'], ['yes', ''], ['yes', ''], ['partial', 'On a server'], ['partial', 'On a VPS'], ['yes', 'Cloud tasks']],
+  },
+  {
+    label: 'Model',
+    cells: [['text', 'Claude Opus 5.5'], ['text', 'Grok'], ['text', 'GPT-6 Astra'], ['text', 'Any'], ['text', 'Any'], ['text', 'Claude']],
+  },
+  {
+    label: 'Price',
+    cells: [['text', '$500 once or $50/mo'], ['text', '$20–$40/mo, weekly cap'], ['text', 'From $100/mo (Pro)'], ['text', 'Free + model'], ['text', 'Free + model'], ['text', 'In Claude Pro / Max']],
+  },
+];
+const mark = {
+  yes: { icon: 'check', cls: 'text-brand', sr: 'Yes' },
+  no: { icon: 'x', cls: 'text-[rgb(240_82_91/0.8)]', sr: 'No' },
+  partial: { icon: 'minus', cls: 'text-warn', sr: 'Partly' },
+  '?': { icon: 'circle-help', cls: 'text-dim', sr: 'Not documented' },
+} as const;
+---
+
+<section id="compare" class="relative py-20 sm:py-28" data-track-view="compare">
+  <div class="container-x">
+    <div class="mx-auto max-w-[820px] text-center">
+      <p class="eyebrow justify-center" data-reveal><span class="n">07</span> Compare</p>
+      <Words text="The best of every agent. *On a machine you own.*" class="h-section mx-auto mt-6" />
+      <p class="lead mx-auto mt-6 max-w-[620px]" data-reveal style="--d:200">
+        Grok Bot’s teammates, Dots’ own computer, OpenClaw’s local control, Hermes’ memory — plus a vault for passwords
+        <em>and</em> 2FA codes that the model never sees. All in one app, running on your device.
+      </p>
+    </div>
+
+    <p class="mt-12 flex items-center justify-end gap-1.5 text-[12px] text-dim md:hidden">Swipe to compare <Icon name="arrow-right" size={12} /></p>
+    <div class="card mt-3 overflow-hidden md:mt-14" data-reveal style="--d:100">
+      <div class="overflow-x-auto">
+        <table class="compare w-full min-w-[980px] border-collapse text-left">
+          <caption class="sr-only">Godmode compared with other AI agents</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="w-[22%]"><span class="sr-only">Feature</span></th>
+              {
+                cols.map((c, i) => (
+                  <th scope="col" class:list={['col-head', i === 0 && 'is-us']}>
+                    {i === 0 ? (
+                      <span class="flex items-center gap-2">
+                        <Logo size={20} />
+                        {c}
+                      </span>
+                    ) : (
+                      c
+                    )}
+                  </th>
+                ))
+              }
+            </tr>
+          </thead>
+          <tbody>
+            {
+              rows.map((r) => (
+                <tr>
+                  <th scope="row">{r.label}</th>
+                  {r.cells.map(([kind, note], i) => (
+                    <td class:list={[i === 0 && 'is-us']}>
+                      {kind === 'text' ? (
+                        <span class:list={['text-[13.5px]', i === 0 ? 'font-medium text-text' : 'text-text-2']}>{note}</span>
+                      ) : (
+                        <span class="flex items-start gap-2">
+                          <Icon name={mark[kind].icon} size={16} stroke={2.2} class:list={['mt-px flex-none', mark[kind].cls]} />
+                          <span class="sr-only">{mark[kind].sr}.</span>
+                          {note && <span class="text-[12.5px] leading-snug text-muted">{note}</span>}
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="mt-4 text-[12px] leading-relaxed text-dim" data-reveal>
+      Based on each vendor’s public pages, docs and press coverage as of September 29, 2026. “?” means we couldn’t find it
+      documented. Prices exclude taxes; Godmode also needs a Claude plan or an Anthropic API key. Spotted something out of
+      date? <a href="mailto:kontakt@codext.de" class="underline decoration-line-3 underline-offset-2 hover:text-text">Tell us</a>
+      and we’ll fix it. All trademarks belong to their owners.
+    </p>
+  </div>
+</section>

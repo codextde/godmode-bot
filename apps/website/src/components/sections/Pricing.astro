@@ -1,0 +1,130 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+import CheckoutButton from '../ui/CheckoutButton.astro';
+import { PRICING, SITE } from '@/config/site';
+
+const { lifetime, monthly } = PRICING.plans;
+const included = [
+  'Unlimited agents, chats and automations',
+  'Browser use with your Chrome sessions',
+  'Background computer use',
+  'Its own macOS VMs (Apple silicon)',
+  'Encrypted vault, 2FA, password import',
+  'Slack, Telegram, Teams & voice',
+  'Desktop app + headless web dashboard',
+  'macOS, Windows and Linux',
+];
+const monthsToBreakEven = Math.ceil(lifetime.price / monthly.price);
+---
+
+<section id="pricing" class="relative py-20 sm:py-28" data-track-view="pricing">
+  <div class="pricing-glow pointer-events-none absolute inset-x-0 top-40 -z-10 h-[700px]" aria-hidden="true"></div>
+  <div class="container-x">
+    <div class="mx-auto max-w-[760px] text-center">
+      <p class="eyebrow justify-center" data-reveal><span class="n">09</span> Pricing</p>
+      <Words text="One price. *No seats, no credits, no caps.*" class="h-section mx-auto mt-6" />
+      <p class="lead mx-auto mt-6 max-w-[560px]" data-reveal style="--d:200">
+        Everything Godmode can do, in both plans. Pick how you want to pay.
+      </p>
+    </div>
+
+    <div class="mx-auto mt-16 grid max-w-[980px] gap-4 md:grid-cols-[1.08fr_1fr] md:items-stretch">
+      <!-- Lifetime -->
+      <div class="price-card is-featured" data-reveal>
+        <div class="price-inner p-8 sm:p-10">
+          <div class="flex items-center justify-between">
+            <p class="text-[15px] font-medium">{lifetime.name}</p>
+            <span class="chip chip-brand"><Icon name="sparkles" size={11} /> Best value · launch offer</span>
+          </div>
+          <p class="mt-7 flex items-baseline gap-2">
+            <span class="text-[64px] leading-none font-semibold tracking-[-0.055em]">${lifetime.price}</span>
+            <span class="text-[15px] text-muted">once</span>
+          </p>
+          <p class="mt-3 text-[15px] text-text-2">{lifetime.blurb}</p>
+          <p class="mt-1 text-[13px] text-muted">Costs the same as {monthsToBreakEven} months of monthly — then it’s free forever.</p>
+          <CheckoutButton plan="lifetime" label={lifetime.cta} source="pricing" full size="lg" class="mt-8" />
+          <ul class="mt-8 space-y-3 text-[14.5px]">
+            {
+              included.map((f) => (
+                <li class="flex items-start gap-3 text-text-2">
+                  <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-brand" />
+                  {f}
+                </li>
+              ))
+            }
+            <li class="flex items-start gap-3 text-text">
+              <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-brand" />
+              All future updates, included
+            </li>
+            <li class="flex items-start gap-3 text-text">
+              <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-brand" />
+              Priority email support from the founder
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Monthly -->
+      <div class="price-card" data-reveal style="--d:100">
+        <div class="price-inner p-8 sm:p-10">
+          <p class="text-[15px] font-medium">{monthly.name}</p>
+          <p class="mt-7 flex items-baseline gap-2">
+            <span class="text-[64px] leading-none font-semibold tracking-[-0.055em]">${monthly.price}</span>
+            <span class="text-[15px] text-muted">/ month</span>
+          </p>
+          <p class="mt-3 text-[15px] text-text-2">{monthly.blurb}</p>
+          <p class="mt-1 text-[13px] text-muted">Start small. Switch to lifetime whenever you like.</p>
+          <CheckoutButton plan="monthly" label={monthly.cta} source="pricing" variant="ghost" full size="lg" class="mt-8" />
+          <ul class="mt-8 space-y-3 text-[14.5px]">
+            {
+              included.map((f) => (
+                <li class="flex items-start gap-3 text-text-2">
+                  <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-muted" />
+                  {f}
+                </li>
+              ))
+            }
+            <li class="flex items-start gap-3 text-text-2">
+              <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-muted" />
+              Updates while subscribed · cancel anytime
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="mx-auto mt-6 grid max-w-[980px] gap-3 md:grid-cols-3" data-reveal style="--d:150">
+      <div class="flex items-start gap-3 rounded-2xl p-4 ring-1 ring-line">
+        <Icon name="shield-check" size={18} class="mt-0.5 flex-none text-brand" />
+        <p class="text-[13px] leading-relaxed text-muted">
+          <span class="text-text">{PRICING.guaranteeDays}-day money-back guarantee.</span> Not for you? Email us, get every cent back.
+        </p>
+      </div>
+      <div class="flex items-start gap-3 rounded-2xl p-4 ring-1 ring-line">
+        <span class="mt-0.5 grid size-[18px] flex-none place-items-center text-claude">
+          <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l1.9 6.2L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.8z"></path></svg>
+        </span>
+        <p class="text-[13px] leading-relaxed text-muted">
+          <span class="text-text">Runs on your Claude plan.</span> Sign in with Claude Pro or Max, or use an Anthropic API key — not
+          included. <a href="#faq" class="underline decoration-line-3 underline-offset-2 hover:text-text">Details</a>
+        </p>
+      </div>
+      <div class="flex items-start gap-3 rounded-2xl p-4 ring-1 ring-line">
+        <Icon name="receipt-text" size={18} class="mt-0.5 flex-none text-muted" />
+        <p class="text-[13px] leading-relaxed text-muted">
+          <span class="text-text">Business-ready.</span> Invoice with your VAT ID, paid securely via Stripe. Card, Apple Pay, Google Pay
+          & more.
+        </p>
+      </div>
+    </div>
+
+    <p class="mx-auto mt-8 max-w-[640px] text-center text-[13px] text-muted" data-reveal>
+      <Icon name="hourglass" size={13} class="mr-1 inline -translate-y-px text-[#f0a488]" />
+      {PRICING.launchNote}
+    </p>
+    <p class="mt-3 text-center text-[13px] text-dim" data-reveal>
+      Need it for a team? <a href={`mailto:${SITE.email}?subject=Godmode%20for%20teams`} class="underline decoration-line-3 underline-offset-2 hover:text-text" data-track="teams_mail">Talk to us</a>.
+    </p>
+  </div>
+</section>

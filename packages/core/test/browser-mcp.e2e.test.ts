@@ -1,7 +1,8 @@
 /**
  * End-to-end: the browser-use MCP server Godmode configures for an agent must drive Godmode's managed
- * Chromium (via cdp_url), not a browser of its own. Needs uvx, a Chromium-family browser and network access
- * (downloads browser-use on first run and opens https://example.com), so it only runs with GODMODE_E2E=1:
+ * Chromium (via cdp_url), not a browser of its own, and that browser only starts on the first browser tool call.
+ * Needs uvx, a Chromium-family browser and network access (downloads browser-use on first run and opens
+ * https://example.com), so it only runs with GODMODE_E2E=1:
  *
  *   GODMODE_E2E=1 bun test test/browser-mcp.e2e.test.ts
  */
@@ -145,8 +146,7 @@ suite("browser-use MCP drives the managed Chromium", () => {
     const env = server.env!;
     expect(env.ANONYMIZED_TELEMETRY).toBe("false");
     const profile = manager.resolveProfileForAgent(a);
-    const rb = getRunning(profile.id)!;
-    expect(rb).toBeTruthy();
+    expect(getRunning(profile.id)).toBeNull();
 
     // browser-use reaches the browser through the run's own endpoint, configured in a file of its own.
     expect(env.BROWSER_USE_CONFIG_PATH).toBe(join(env.BROWSER_USE_CONFIG_DIR!, "runs", "run_e2e", "config.json"));
@@ -160,9 +160,12 @@ suite("browser-use MCP drives the managed Chromium", () => {
     const tools = (list.result as { tools: { name: string }[] }).tools.map((t) => t.name);
     expect(tools).toContain("browser_navigate");
     expect(tools).toContain("browser_get_state");
+    expect(getRunning(profile.id)).toBeNull();
 
     const nav = await mcp.request("tools/call", { name: "browser_navigate", arguments: { url: "https://example.com" } }, 180_000);
     expect(nav.error).toBeUndefined();
+    const rb = getRunning(profile.id)!;
+    expect(rb).toBeTruthy();
     const pagesAfter = await listPages(rb.client);
     console.log(JSON.stringify({ serverInfo: init.serverInfo, toolCount: tools.length, navigateResult: text(nav).slice(0, 200), pagesAfter: pagesAfter.map((p) => p.url) }, null, 2));
     expect(rb.tabs.currentPage("cnv_e2e")?.url).toStartWith("https://example.com");

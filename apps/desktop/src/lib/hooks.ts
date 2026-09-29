@@ -18,6 +18,13 @@ export function useWorkspaces() {
   return useQuery({ queryKey: qk.workspaces, queryFn: api.workspaces.list });
 }
 
+/** The workspace picked in the sidebar; null for "All workspaces" and "Global". */
+export function useScopeWorkspace() {
+  const scope = useUi((s) => s.workspace);
+  const { data } = useWorkspaces();
+  return data?.find((w) => w.id === scope) ?? null;
+}
+
 export function useAgents(workspaceId?: ScopeFilter) {
   const scope = useUi((s) => s.workspace);
   const ws = workspaceId ?? scope;
@@ -79,6 +86,11 @@ export function useWorkspaceName(id: string | null | undefined): string {
   const { data } = useWorkspaces();
   if (!id) return "Global";
   return data?.find((w) => w.id === id)?.name ?? "Workspace";
+}
+
+/** Every pending follow-up, soonest first. */
+export function useFollowups() {
+  return useQuery({ queryKey: qk.followups, queryFn: () => api.followups.list() });
 }
 
 /** Routines, optionally for a single agent ("all" = every agent). */

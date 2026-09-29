@@ -1,0 +1,60 @@
+---
+import Base from '@/layouts/Base.astro';
+import Nav from '@/components/Nav.astro';
+import Footer from '@/components/Footer.astro';
+import Icon from '@/components/ui/Icon.astro';
+import { PLATFORMS } from '@/lib/releases';
+import { SITE } from '@/config/site';
+
+export const prerender = false;
+
+const selected = Astro.url.searchParams.get('platform') ?? 'mac';
+const invalid = Astro.url.searchParams.has('invalid');
+---
+
+<Base title="Download" description="Download Godmode with your license key." noindex>
+  <Nav home={false} />
+  <main class="pt-36 pb-24">
+    <div class="container-x max-w-[640px]">
+      <p class="eyebrow"><span class="n">●</span> Customers</p>
+      <h1 class="h-section mt-5">Download Godmode</h1>
+      <p class="lead mt-5">Enter the license key from your welcome page, invoice or billing portal.</p>
+
+      <form method="get" action="/download/go" class="card mt-10 grid gap-4 p-6 sm:p-8">
+        {
+          invalid && (
+            <p class="flex items-start gap-2 rounded-xl p-3 text-[13.5px] text-text-2 ring-1 ring-[rgb(240_82_91/0.35)]" style="background: rgb(240 82 91 / 0.06)">
+              <Icon name="triangle-alert" size={16} class="mt-0.5 flex-none text-danger" />
+              That key isn’t active. Check for typos — or email {SITE.email} and we’ll sort it out.
+            </p>
+          )
+        }
+        <label class="grid gap-2">
+          <span class="text-[13px] text-muted">License key</span>
+          <input
+            name="key"
+            required
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="GM-XXXXX-XXXXX-XXXXX-XXXXX"
+            pattern="\s*[Gg][Mm](-[0-9A-Za-z]{5}){4}\s*"
+            class="h-[50px] rounded-xl bg-[rgb(0_0_0/0.3)] px-4 font-mono text-[15px] tracking-[0.06em] text-text uppercase ring-1 ring-line-2 outline-none placeholder:text-dim focus:ring-brand"
+          />
+        </label>
+        <label class="grid gap-2">
+          <span class="text-[13px] text-muted">Platform</span>
+          <select name="platform" class="h-[50px] rounded-xl bg-[rgb(0_0_0/0.3)] px-4 text-[15px] text-text ring-1 ring-line-2 outline-none focus:ring-brand">
+            {Object.entries(PLATFORMS).map(([id, p]) => <option value={id} selected={id === selected}>{p.label}</option>)}
+          </select>
+        </label>
+        <button type="submit" class="btn btn-primary btn-lg mt-2">
+          <Icon name="download" size={16} /> Download
+        </button>
+      </form>
+      <p class="mt-6 text-[14px] text-muted">
+        Don’t have a license yet? <a href="/#pricing" class="text-text underline decoration-line-3 underline-offset-2">See pricing</a>.
+      </p>
+    </div>
+  </main>
+  <Footer />
+</Base>
