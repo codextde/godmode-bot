@@ -38,9 +38,11 @@ export function withoutHeadless(userAgent: string): string {
 type Launch = (opts: LaunchOptions) => Promise<Pick<ChromeProcess, "userAgent" | "kill" | "exited">>;
 
 const userAgents = new Map<string, Promise<string | null>>();
-const probes = new Set<Pick<ChromeProcess, "kill">>();
+const probes = new Set<AbortController>();
+/** A browser that can't be probed isn't asked again for a while: every headless start would wait for it. */
+const RETRY_AFTER_MS = 10 * 60_000;
 
-/** The user agent `executable` sends with a window; null when it can't be learned (the next launch tries again). */
+/** The user agent `executable` sends with a window; null when it can't be learned (then headless keeps its own). */
 export function windowedUserAgent(executable: string, launch: Launch = launchChrome): Promise<string | null> {
   let key = executable;
   try {
@@ -53,28 +55,29 @@ export function windowedUserAgent(executable: string, launch: Launch = launchChr
     ua = probeUserAgent(executable, launch);
     userAgents.set(key, ua);
     void ua.then((v) => {
-      if (!v) userAgents.delete(key);
+      if (!v) setTimeout(() => userAgents.delete(key), RETRY_AFTER_MS).unref?.();
     });
   }
   return ua;
 }
 
 async function probeUserAgent(executable: string, launch: Launch): Promise<string | null> {
+  const abort = new AbortController();
+  probes.add(abort);
   let dir: string | null = null;
   let proc: Awaited<ReturnType<Launch>> | null = null;
   try {
     dir = mkdtempSync(join(tmpdir(), "godmode-ua-"));
-    proc = await launch({ executable, userDataDir: dir, headless: true, timeoutMs: 15_000 });
-    probes.add(proc);
+    proc = await launch({ executable, userDataDir: dir, headless: true, timeoutMs: 5_000, signal: abort.signal });
     return proc.userAgent ? withoutHeadless(proc.userAgent) : null;
   } catch (err) {
     log.warn("could not learn the browser's user agent; headless keeps its own", err);
     return null;
   } finally {
+    probes.delete(abort);
     if (proc) {
       proc.kill("SIGKILL");
       await Promise.race([proc.exited, sleep(3000)]);
-      probes.delete(proc);
     }
     if (dir) {
       try {
@@ -86,8 +89,8 @@ async function probeUserAgent(executable: string, launch: Launch): Promise<strin
   }
 }
 
-/** Kill user-agent probes still running (core shutdown). */
+/** Kill user-agent probes still starting (core shutdown). */
 export function stopProbes() {
-  for (const proc of probes) proc.kill("SIGKILL");
+  for (const abort of probes) abort.abort();
   probes.clear();
 }

@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { CircleAlert, Clock, Plus, Search, Workflow, Zap } from "lucide-react";
 import type { Routine, RoutineTriggerType } from "@godmode/shared";
-import { useAgents, useAllAgents, useAutomationEvents, useRoutines } from "@/lib/hooks";
+import { useAgents, useAllAgents, useAutomationEvents, useFollowups, useRoutines } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { RoutineDialog } from "@/components/agents/routine-dialog";
 import { RoutineItem } from "@/components/agents/routine-item";
 import { OnePromptCard } from "@/components/automations/one-prompt-card";
+import { FollowupsSection } from "@/components/automations/followups-section";
 import { TRIGGER_ORDER, TRIGGER_TYPES, triggerText } from "@/components/automations/trigger-meta";
 
 type Filter = "all" | "active" | "paused" | "failing";
@@ -27,6 +28,7 @@ const isFailing = (r: Routine) => r.lastStatus === "failed" || r.triggerStatus.s
 export default function AutomationsPage() {
   const routinesQ = useRoutines();
   const eventsQ = useAutomationEvents(20);
+  const followupsQ = useFollowups();
   const agentsQ = useAgents();
   const scopedAgents = useMemo(() => agentsQ.data ?? [], [agentsQ.data]);
   const { data: allAgents = [] } = useAllAgents();
@@ -40,6 +42,7 @@ export default function AutomationsPage() {
   const inScope = useMemo(() => new Set(scopedAgents.map((a) => a.id)), [scopedAgents]);
 
   const scoped = useMemo(() => (routinesQ.data ?? []).filter((r) => inScope.has(r.agentId)), [routinesQ.data, inScope]);
+  const followups = useMemo(() => (followupsQ.data ?? []).filter((f) => inScope.has(f.agentId)), [followupsQ.data, inScope]);
   const routineById = useMemo(() => new Map(scoped.map((r) => [r.id, r])), [scoped]);
 
   const counts: Record<Filter, number> = {
@@ -153,6 +156,8 @@ export default function AutomationsPage() {
             />
           </div>
         )}
+
+        <FollowupsSection followups={followups} agentById={agentById} />
 
         {scoped.length > 0 && (
           <div className="space-y-3">

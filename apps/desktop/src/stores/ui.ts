@@ -15,6 +15,8 @@ interface UiState {
   vmPanel: boolean;
   /** Claude Code version whose update prompt was dismissed; a newer release shows it again. */
   skippedClaudeVersion: string | null;
+  /** Task board columns folded to a narrow strip. */
+  collapsedColumns: string[];
   setWorkspace: (id: string) => void;
   setCommandOpen: (open: boolean) => void;
   setVoiceMode: (on: boolean) => void;
@@ -23,6 +25,7 @@ interface UiState {
   setComputerPanel: (v: boolean) => void;
   setVmPanel: (v: boolean) => void;
   skipClaudeVersion: (version: string | null) => void;
+  toggleColumn: (status: string) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -36,6 +39,7 @@ export const useUi = create<UiState>()(
       computerPanel: true,
       vmPanel: true,
       skippedClaudeVersion: null,
+      collapsedColumns: ["cancelled"],
       setWorkspace: (workspace) => set({ workspace }),
       setCommandOpen: (commandOpen) => set({ commandOpen }),
       setVoiceMode: (voiceMode) => set({ voiceMode }),
@@ -44,6 +48,10 @@ export const useUi = create<UiState>()(
       setComputerPanel: (computerPanel) => set({ computerPanel }),
       setVmPanel: (vmPanel) => set({ vmPanel }),
       skipClaudeVersion: (skippedClaudeVersion) => set({ skippedClaudeVersion }),
+      toggleColumn: (status) =>
+        set((s) => ({
+          collapsedColumns: s.collapsedColumns.includes(status) ? s.collapsedColumns.filter((c) => c !== status) : [...s.collapsedColumns, status],
+        })),
     }),
     {
       name: "godmode-ui",
@@ -55,6 +63,7 @@ export const useUi = create<UiState>()(
         computerPanel: s.computerPanel,
         vmPanel: s.vmPanel,
         skippedClaudeVersion: s.skippedClaudeVersion,
+        collapsedColumns: s.collapsedColumns,
       }),
     },
   ),

@@ -60,7 +60,7 @@ describe("stealth launch", () => {
     expect(withoutHeadless(edge)).toBe(edge.replace("HeadlessChrome/", "Chrome/"));
   });
 
-  test("learns the windowed user agent once per executable; failures aren't cached and never throw", async () => {
+  test("learns the windowed user agent once per executable; a failed probe never throws and isn't retried right away", async () => {
     let launches = 0;
     const ok = async () => {
       launches++;
@@ -77,7 +77,7 @@ describe("stealth launch", () => {
     };
     expect(await windowedUserAgent("/nonexistent/broken-chrome", broken)).toBeNull();
     expect(await windowedUserAgent("/nonexistent/broken-chrome", broken)).toBeNull();
-    expect(failures).toBe(2);
+    expect(failures).toBe(1);
   });
 
   test("is on by default", () => {

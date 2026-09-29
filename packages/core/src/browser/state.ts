@@ -26,8 +26,9 @@ export interface RunningBrowser {
   startedAt: number;
   lastUsedAt: number;
   stopping: boolean;
-  /** Started just for a bot check or an import, which stop it again — unless someone else got it meanwhile. */
+  /** Started just for bot checks or imports, stopped when the last of them (`borrowers`) is done — unless anyone else got it meanwhile. */
   transient: boolean;
+  borrowers: number;
 }
 
 const running = new Map<string, RunningBrowser>();

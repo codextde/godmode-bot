@@ -173,12 +173,22 @@ export function resolveChrome(): string | null {
   return findChrome(settingsOrNull()?.browser.chromePath ?? "")?.path ?? null;
 }
 
-function resolveGit(): string | null {
+export function resolveGit(): string | null {
   return firstExisting([
     which("git"),
     ...(isWin()
       ? [join(process.env.ProgramFiles || "C:\\Program Files", "Git", "cmd", "git.exe")]
       : ["/opt/homebrew/bin/git", "/usr/local/bin/git", "/usr/bin/git"]),
+  ]);
+}
+
+/** Absolute path to the GitHub CLI (opens pull requests for coding tasks), or null. */
+export function resolveGh(): string | null {
+  return firstExisting([
+    which("gh"),
+    ...(isWin()
+      ? [join(process.env.ProgramFiles || "C:\\Program Files", "GitHub CLI", "gh.exe")]
+      : ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"]),
   ]);
 }
 

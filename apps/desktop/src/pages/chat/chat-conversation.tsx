@@ -17,6 +17,7 @@ import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { useArchiveChat } from "@/components/chat/chat-actions";
 import { ConversationHeader } from "@/components/chat/conversation-header";
+import { FollowupBar } from "@/components/chat/followup";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { InstructionsChip } from "@/components/instructions/instructions";
@@ -363,6 +364,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               <AnimatePresence initial={false}>
                 {conv.archived && (
                   <motion.div
+                    key="archived"
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
@@ -378,6 +380,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                         <ArchiveRestore /> Unarchive
                       </Button>
                     </div>
+                  </motion.div>
+                )}
+                {conv.followup && (
+                  <motion.div
+                    key="followup"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <FollowupBar conversationId={conversationId} followup={conv.followup} agentName={agent?.name ?? "The agent"} running={!!activeRunId} />
                   </motion.div>
                 )}
               </AnimatePresence>

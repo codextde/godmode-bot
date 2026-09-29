@@ -54,7 +54,9 @@ needs to be useful:
 | 🤖 **Persistent agents** | Bots with their own instructions, conversations, memory (`MEMORY.md`), routines and history — each in its own git repo. |
 | 🌙 **Dreaming** | While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned (even if nobody said "remember this"), merge duplicates, fix contradictions and update dates ("is going to Singapore in July" → "went to Singapore in July"). Memory loads into every new chat; every dream can be reviewed as a diff and undone. |
 | 📁 **Working folders** | Optionally point a chat or an agent at any folder on your machine — it works on the files there and keeps its memory in its own repo. |
+| 📋 **Task board** | A Trello-style Kanban board per workspace: create tickets, assign them to agents, drag them across *Backlog → Todo → In progress → In review → Done*. A ticket that lands in *Todo* starts its agent. **Coding** tickets clone one of the workspace's git repositories onto a fresh branch, and when the agent is done Godmode pushes it and opens a pull request — merged pull requests close their ticket. Reply to a ticket to ask for changes; the pull request updates. |
 | ⚡ **Automations** | Work starts when it happens: on a schedule (“weekdays at 08:00”), when something happens in a connected app (a new email, a Slack message, a calendar event, a Notion update), when a condition you describe comes true (“competitor pricing changes”), or when a webhook is called. Describe it in one sentence and Godmode sets it up. |
+| ⏰ **Follow-ups** | When a task needs waiting — a reply to an email, a delivery, a build, office hours — the agent sets itself a time and picks the chat up again on its own, with all the context, like a coworker who says “I'll check back tomorrow at 10”. You see when it comes back and can continue now, move it or cancel it. |
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
@@ -80,6 +82,10 @@ needs to be useful:
   <tr>
     <td width="50%"><img src="docs/screenshots/home.png" alt="Home — start a chat with your AI coworker" /><br /><sub><b>Chat first</b> — hand over a task, pick up where you left off</sub></td>
     <td width="50%"><img src="docs/screenshots/agents.png" alt="Agents" /><br /><sub><b>Agents</b> — persistent coworkers with memory, schedules and tools</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/tasks.png" alt="Kanban task board with tickets agents work on" /><br /><sub><b>Task board</b> — tickets for your agents; Todo starts them, coding tickets end in a pull request</sub></td>
+    <td><img src="docs/screenshots/task-detail.png" alt="A coding task with its branch and open pull request" /><br /><sub><b>Task detail</b> — live progress, branch, pull request and follow-ups</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/agent-detail.png" alt="Agent detail with routines and memory" /><br /><sub><b>Agent detail</b> — runs, routines, memory (git), history, settings</sub></td>
@@ -122,8 +128,13 @@ needs to be useful:
     <td><img src="docs/screenshots/browser-chats.png" alt="Browser page with one tab per chat browsing in the profile" /><br /><sub><b>Parallel chats</b> — one browser profile, one tab per chat; switch between them live</sub></td>
   </tr>
   <tr>
+<<<<<<< HEAD
     <td><img src="docs/screenshots/bot-check.png" alt="Bot check of a hardened headless browser: 9 of 10 checks pass" /><br /><sub><b>Bot check</b> — what bot detection sees in the agents' browser</sub></td>
     <td><img src="docs/screenshots/bot-check-off.png" alt="Bot check without hardening: the headless user agent and screen give the browser away" /><br /><sub><b>Without hardening</b> — headless Chrome gives itself away</sub></td>
+=======
+    <td><img src="docs/screenshots/followup-waiting.png" alt="An agent waiting for a signed contract, set to continue tomorrow at 09:00" /><br /><sub><b>Follow-ups</b> — the agent sets itself a time to continue; move it, cancel it or continue now</sub></td>
+    <td><img src="docs/screenshots/followup.png" alt="The agent picked the chat up again at the time it set and finished the task" /><br /><sub><b>Back on it</b> — at that time the agent picks the chat up again, with all the context</sub></td>
+>>>>>>> origin/main
   </tr>
 </table>
 
@@ -256,7 +267,11 @@ stop when a third is needed.
 - Each turn runs `claude -p --output-format stream-json` inside the agent's git repository and streams every
   thought, tool call and screenshot to the UI in real time.
 - The **Godmode MCP gateway** gives agents vault tools (`vault_fill_login`, `vault_fill_totp`, …), delegation
-  (`agent_delegate`), management tools for the main agent, and `report_missing_login`.
+  (`agent_delegate`), management tools for the main agent (agents, automations, the task board), and
+  `report_missing_login`.
+- **Tasks**: a ticket in *Todo* starts its agent in the ticket's own conversation. Coding tickets work in a checkout of
+  one of the workspace's repositories on their own branch; Godmode pushes it with your git login and opens the pull request
+  with the GitHub CLI (`gh`) — or links to the page that opens one.
 - Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Agent repositories

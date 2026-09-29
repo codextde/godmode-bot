@@ -251,6 +251,8 @@ export interface LaunchOptions {
   /** URL to open instead of the browser's default start page. */
   startUrl?: string;
   timeoutMs?: number;
+  /** Kills the browser (or the launch in progress) when aborted. */
+  signal?: AbortSignal;
 }
 
 export interface ChromeProcess {
@@ -313,7 +315,7 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
     } else {
       cmd = [opts.executable, ...args, ...(opts.startUrl ? [opts.startUrl] : [])];
     }
-    const proc = Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+    const proc = Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "pipe", signal: opts.signal, killSignal: "SIGKILL" });
 
     let tail = "";
     let alive = true;

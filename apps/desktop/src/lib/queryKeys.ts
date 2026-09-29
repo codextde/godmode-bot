@@ -19,6 +19,9 @@ export const qk = {
   totpList: (workspaceId: string) => ["totp", "list", workspaceId],
   totpCodes: ["totp", "codes"] as unknown[],
   workspaces: ["workspaces"] as unknown[],
+  /** Task board; lists are patched in place by `task.updated` events (see realtime.ts). */
+  tasks: ["tasks"] as unknown[],
+  taskList: (workspaceId: string) => ["tasks", "list", workspaceId],
   agents: ["agents"] as unknown[],
   agentList: (workspaceId: string) => ["agents", "list", workspaceId],
   agent: (id: string) => ["agents", "detail", id],
@@ -45,6 +48,8 @@ export const qk = {
   archivedConversationLists: ["conversations", "archived"] as unknown[],
   archivedConversations: (agentId: string, search: string) => ["conversations", "archived", agentId, search],
   conversation: (id: string) => ["conversations", "detail", id],
+  /** Times agents set to continue their chats on their own. */
+  followups: ["followups"] as unknown[],
   runs: ["runs"] as unknown[],
   runList: (agentId: string, status: string) => ["runs", "list", agentId, status],
   run: (id: string) => ["runs", "detail", id],

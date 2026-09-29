@@ -31,7 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
     chromePath: "",
     headless: false,
     browserUseCommand: "",
-    keepAliveMinutes: 15,
+    keepAliveMinutes: 5,
     liveView: true,
     stealth: true,
   },

@@ -43,7 +43,7 @@ export function BrowserSection({ settings }: { settings: Settings }) {
           label="Keep browser alive"
           htmlFor="keep-alive"
           disabled={!b.enabled}
-          description="Close an idle browser after this many minutes. Sessions and cookies are kept either way."
+          description="A browser only starts when an agent opens a website and closes after this many idle minutes (0 keeps it open). Sessions and cookies are kept either way."
         >
           <NumberField
             id="keep-alive"

@@ -74,7 +74,12 @@ const COLLECT = `(async () => {
 })()`;
 
 /** Load the check page in a background tab of the browser behind `client` and collect what it sees. */
-export async function collectBotSignals(client: CdpClient): Promise<{ signals: BotSignals; headers: BotHeaders }> {
+export async function collectBotSignals(
+  client: CdpClient,
+  close = async (targetId: string) => {
+    await client.send("Target.closeTarget", { targetId }, undefined, 5000);
+  },
+): Promise<{ signals: BotSignals; headers: BotHeaders }> {
   let headers: BotHeaders | null = null;
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -101,7 +106,7 @@ export async function collectBotSignals(client: CdpClient): Promise<{ signals: B
       await page.detach();
     }
   } finally {
-    if (targetId) await client.send("Target.closeTarget", { targetId }, undefined, 5000).catch(() => {});
+    if (targetId) await close(targetId).catch(() => {});
     server.stop(true);
   }
 }
@@ -168,7 +173,11 @@ export function judgeBotSignals(s: BotSignals, h: BotHeaders): BotCheckItem[] {
   return checks;
 }
 
-export async function botCheckReport(client: CdpClient, meta: { profileId: string; browser: string; headless: boolean; stealth: boolean }): Promise<BotCheckReport> {
-  const { signals, headers } = await collectBotSignals(client);
+export async function botCheckReport(
+  client: CdpClient,
+  meta: { profileId: string; browser: string; headless: boolean; stealth: boolean },
+  close?: (targetId: string) => Promise<void>,
+): Promise<BotCheckReport> {
+  const { signals, headers } = await collectBotSignals(client, close);
   return { ...meta, checks: judgeBotSignals(signals, headers), checkedAt: now() };
 }
