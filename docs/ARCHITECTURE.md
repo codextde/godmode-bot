@@ -173,6 +173,7 @@ two concurrent turns in the same conversation.
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
 | `memory_dream_report({ summary, changes })` | Only in dream runs — and the only tool they get: report what a memory consolidation changed (see Dreaming) |
 | `notify_user({ title, body })` | Push a notification to the human |
+| `api_tools_list()`, `api_tool_docs({ tool })`, `api_tool_request({ tool, method, path, json \| form \| body, query, saveAs })` | Only for agents with API tools: list them, read one's docs, call its API with the key added by Godmode (see Integrations) |
 
 ## HTTP API
 
@@ -396,6 +397,23 @@ connected Composio accounts and each app's events with their settings schema; `r
 ## Integrations
 
 * **Custom MCP servers** (stdio/http/sse), scoped global / workspace / agent; env + headers encrypted.
+* **API tools** (`api_tools`, `integrations/apiTools.ts`, `/api/api-tools`, Integrations → Tools): an API key with what
+  it's for, docs (Markdown and/or a link), the API's address (`base_url`) and where the key goes (`auth`: a header with an
+  optional prefix, or a query parameter), scoped global / workspace / agent like MCP servers (shared ones only for agents
+  that inherit shared integrations). The key is sealed (`key_enc`, AAD `api_tools.key:<id>`) and write-only.
+  * Agents with tools get an "API tools" section in the system prompt (restated on resumed turns) and the gateway tools
+    `api_tools_list` / `api_tool_docs` / `api_tool_request` (`integrations/apiToolRequest.ts`). A request goes to a path
+    relative to `base_url` (or a full URL under it — anything else is refused, `..` included); Godmode adds the key, drops
+    a header of the same name from the agent, follows redirects only while they stay under the address, masks the key in
+    everything returned and audits the call (`api_tool.request`).
+  * Files both ways: `{ "$file": path }` sends a file (base64 or a data URL in `json`, an upload in `form`, raw bytes as
+    `body`); binary responses and base64/data-URL files inside JSON (sniffed or typed by a sibling `mimeType`) are saved to
+    `workspace/api-tools/` (the VM's shared folder in VM runs) or `saveAs`. Both only reach the run's own folders (agent
+    repo, chat folder, workspace folders, VM shared folder), symlinks resolved.
+  * `env_var` (opt-in) also puts the key into runs' environment for scripts and SDKs; the agent can then read it (the most
+    specific tool wins a name; Godmode's, Claude's and system variables are refused). Turning that on for a saved key, or
+    moving a saved key to an address outside the current one, needs a vault grant unless a new key comes with it.
+  * `POST /api/api-tools/:id/test` GETs `test_path` with the key (Test / Save & test in the UI).
 * **Composio** (v3.1 REST, `x-api-key`): browse toolkits, connect accounts via `connected_accounts/link`
   (`user_id` = `global` | `ws_<workspaceId>` | `agent_<agentId>`), and expose them to agents through a Tool Router
   session MCP URL (`POST /api/v3.1/tool_router/session`). Connected accounts can also start automations (app

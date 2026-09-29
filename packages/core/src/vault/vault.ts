@@ -338,6 +338,14 @@ function loadKnownSecrets() {
         }
       }
     }
+    for (const row of all<{ id: string; key_enc: string | null }>("SELECT id, key_enc FROM api_tools")) {
+      if (!row.key_enc) continue;
+      try {
+        rememberSecret(decrypt(dek, row.key_enc, `api_tools.key:${row.id}`));
+      } catch {
+        /* ignore */
+      }
+    }
     for (const row of all<{ id: string; secrets_enc: string | null }>("SELECT id, secrets_enc FROM messaging_connections")) {
       if (!row.secrets_enc) continue;
       try {

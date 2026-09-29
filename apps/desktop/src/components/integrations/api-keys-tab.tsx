@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, AudioLines, Boxes, BrainCircuit, Check, CircleDashed, CircleCheck, Cloud, ExternalLink, KeyRound, Mic, Pencil, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowRight, AudioLines, Boxes, BrainCircuit, Check, CircleDashed, CircleCheck, Cloud, ExternalLink, KeyRound, Mic, Pencil, ShieldCheck, Trash2, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -75,7 +75,7 @@ export const KNOWN_KEYS: KeyMeta[] = [
 type SecretRow = { key: string; set: boolean; updatedAt: string | null };
 
 /** App-level API keys stored in the vault. Values are write-only. */
-export function ApiKeysTab({ onOpenComposio }: { onOpenComposio: () => void }) {
+export function ApiKeysTab({ onOpenComposio, onOpenTools }: { onOpenComposio: () => void; onOpenTools: () => void }) {
   const secrets = useQuery({ queryKey: qk.appSecrets, queryFn: api.vault.secrets.list });
   const byKey = new Map((secrets.data ?? []).map((s) => [s.key, s] as const));
   const unknown = (secrets.data ?? []).filter((s) => !KNOWN_KEYS.some((k) => k.key === s.key));
@@ -92,6 +92,21 @@ export function ApiKeysTab({ onOpenComposio }: { onOpenComposio: () => void }) {
           </p>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={onOpenTools}
+        className="group flex w-full items-center gap-3 rounded-xl border border-dashed bg-card/60 p-4 text-left transition hover:border-foreground/20 hover:bg-card"
+      >
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2">
+          <Wrench className="size-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">Want an agent to use an API?</span>
+          <span className="block text-xs text-muted-foreground">These keys power Godmode itself. Keys for agents — Nano Banana, OpenAI, anything — go under Tools.</span>
+        </span>
+        <ArrowRight className="size-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
+      </button>
 
       {secrets.isError ? (
         <QueryError error={secrets.error} onRetry={() => secrets.refetch()} title="Couldn't load API keys" />

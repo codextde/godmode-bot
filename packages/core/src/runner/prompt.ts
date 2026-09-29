@@ -28,6 +28,8 @@ export interface PromptContext {
   workingDirectory?: string | null;
   /** Folders and repositories of the agent's workspace (passed with --add-dir). */
   sources?: PromptSources | null;
+  /** APIs the human gave the agent keys for (Integrations → Tools). */
+  apiTools?: PromptApiTool[];
   /** Rendered by `instructionsSection`. */
   standingInstructions?: string;
   /** MEMORY.md, loaded into the prompt (null = not loaded: disabled in settings, or the agent has none). */
@@ -38,6 +40,15 @@ export interface PromptContext {
 export interface PromptSources {
   workspace: string;
   items: RunSource[];
+}
+
+export interface PromptApiTool {
+  id: string;
+  name: string;
+  description: string;
+  baseUrl: string;
+  /** The run's environment has the key in this variable. */
+  envVar: string | null;
 }
 
 /** The macOS VM a run works in, as the prompt describes it. */
@@ -139,7 +150,7 @@ You are "${agent.name}", an autonomous AI coworker running inside Godmode Bot on
 ${workplace}`);
 
   out.push(`## Tools
-Godmode tools come from the \`godmode\` MCP server (vault logins and 2FA, missing-login reports, notifications${perms.allowDelegation || perms.canManageAgents ? ", other agents" : ""}).`);
+Godmode tools come from the \`godmode\` MCP server (vault logins and 2FA, missing-login reports, notifications${ctx.apiTools?.length ? ", API tools" : ""}${perms.allowDelegation || perms.canManageAgents ? ", other agents" : ""}). Never ask ${human} to paste an API key or token into the chat: if a task needs an API you have no tool for, say which one and that ${human} can add it under Integrations → Tools.`);
 
   if (ctx.browserAvailable) {
     const where = ctx.vm ? ` It is Google Chrome inside the VM "${ctx.vm.name}", not a browser on ${human}'s computer.` : "";
@@ -154,6 +165,7 @@ No browser could be set up in the VM for this run. If a task needs a website, sa
 No browser tools are attached to this run. If a task needs a website, say so in your final summary instead of guessing.`);
   }
 
+  if (ctx.apiTools?.length) out.push(apiToolsSection(ctx.apiTools, human));
   if (ctx.sources?.items.length) out.push(sourcesSection(ctx.sources, human, !!ctx.vm));
   if (ctx.vm) out.push(vmSection(ctx.vm, human, settings.browser.enabled && agent.browser.enabled));
   if (ctx.computer) out.push(computerSection(ctx.computer, human, perms.secretAccess === "reveal"));
@@ -254,6 +266,22 @@ You are "${agent.name}", an AI coworker running inside Godmode Bot for ${human}.
 - Only edit \`MEMORY.md\` and files in \`memory/\`. Godmode snapshots them before the dream, and ${human} can review and undo every change.`;
 }
 
+function apiToolLine(t: PromptApiTool): string {
+  const where = [t.baseUrl ? `\`${t.baseUrl}\`` : "", t.envVar ? `key in \`$${t.envVar}\`` : ""].filter(Boolean).join(", ");
+  return `- **${t.name}** (\`${t.id}\`)${t.description ? ` — ${oneLine(t.description, 300)}` : ""}${where ? ` (${where})` : ""}`;
+}
+
+function apiToolsSection(tools: PromptApiTool[], human: string): string {
+  const env = tools.some((t) => t.envVar);
+  return `### API tools
+${human} gave you these APIs with their keys. Use one whenever a task fits what it's for (e.g. generating an image) — work out the calls yourself from its documentation instead of asking how.
+${tools.map(apiToolLine).join("\n")}
+1. Read \`api_tool_docs({ tool })\` before your first call to a tool in this chat (endpoints, models, examples). If it's thin, look up the API's official documentation on the web.
+2. Call it with \`api_tool_request({ tool, method, path, json | form | body, query })\` — Godmode adds the key and only sends it to the tool's address; you never see or need the key. \`path\` is relative to that address.
+3. Files in a response (images, audio, PDFs, base64 data in JSON) are saved and you get their paths (\`saveAs\` picks the file or folder). To send a file, put \`{ "$file": "<path>" }\` where its base64 goes in \`json\`, as a \`form\` field (an upload) or as \`body\`.
+4. Show ${human} what you made: mention the saved file paths in your answer.${env ? `\nWhere a key is in an environment variable, you may also use it from Bash scripts or SDKs (e.g. \`"$VAR"\` in curl). Never print, log or write it anywhere.` : ""}`;
+}
+
 function sourceLine(s: RunSource): string {
   return s.kind === "folder" ? `\`${s.path}\` (folder)` : `\`${s.path}\` (clone of ${s.url}${s.branch ? `, branch \`${s.branch}\`` : ""})`;
 }
@@ -316,9 +344,9 @@ ${scope}
 export function resumeContextPrefix(
   folder: string | null,
   repoPath: string,
-  opts: { now?: Date; instructions?: string; memoryChanged?: boolean; vm?: PromptVm | null; sources?: PromptSources | null } = {},
+  opts: { now?: Date; instructions?: string; memoryChanged?: boolean; vm?: PromptVm | null; sources?: PromptSources | null; apiTools?: PromptApiTool[] } = {},
 ): string {
-  const { now = new Date(), instructions, memoryChanged, vm, sources } = opts;
+  const { now = new Date(), instructions, memoryChanged, vm, sources, apiTools } = opts;
   const where = folder
     ? `Working directory: \`${folder}\` (the folder attached to this chat). Your own repository with CLAUDE.md and MEMORY.md: \`${repoPath}\`.`
     : `Working directory: your own repository \`${repoPath}\`.`;
@@ -337,5 +365,9 @@ export function resumeContextPrefix(
     : "";
   // Folders and repositories can be attached or removed between turns.
   const attached = sources?.items.length ? `\nWorkspace folders and repositories (added to this session): ${sources.items.map(sourceLine).join(", ")}.` : "";
-  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${machine}${update}${memory}</godmode-context>\n\n`;
+  // API tools can be added or removed between turns too.
+  const tools = apiTools?.length
+    ? `\nAPI tools you can use (api_tool_docs, then api_tool_request): ${apiTools.map((t) => `${t.name} (\`${t.id}\`${t.envVar ? `, $${t.envVar}` : ""})`).join(", ")}.`
+    : "";
+  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${tools}${machine}${update}${memory}</godmode-context>\n\n`;
 }

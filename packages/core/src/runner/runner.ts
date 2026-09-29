@@ -44,7 +44,8 @@ import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor } from "./models";
-import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix, type PromptVm } from "./prompt";
+import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix, type PromptApiTool, type PromptVm } from "./prompt";
+import { apiToolEnv, apiToolsForAgent } from "../integrations/apiTools";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
 import { attachVm, detachVm, type RunVm } from "../vm/service";
 import { CUA_HIDDEN_TOOLS, currentVmPage, prepareGuest, type GuestTools } from "../vm/guest";
@@ -684,11 +685,13 @@ function writeTempFile(res: Resources, name: string, content: string): string {
   return path;
 }
 
-export function buildEnv(agent: Agent, inFolder = false): Record<string, string | undefined> {
+export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record<string, string | undefined> {
   const env = claudeEnv();
   // Load CLAUDE.md files from --add-dir folders: the agent's repo when the cwd is an attached folder, and the workspace's folders.
   if (inFolder) env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
   if (getSettings().memory.backend === "claude-mem" && claudeMemPluginDir()) Object.assign(env, claudeMemEnv(agent));
+  // API tools that hand their key to runs (Integrations → Tools).
+  if (apiKeys) Object.assign(env, apiToolEnv(agent));
   return env;
 }
 
@@ -1006,6 +1009,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     ? get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", agent.workspaceId)
     : null;
   const promptSources = workspace && sources.length ? { workspace: workspace.name, items: sources } : null;
+  const apiTools: PromptApiTool[] = dreaming
+    ? []
+    : apiToolsForAgent(agent).map((t) => ({ id: t.id, name: t.name, description: t.description, baseUrl: t.baseUrl, envVar: t.hasKey && !(vm && settings.vm.isolateHostShell) ? t.envVar : null }));
   const standing = instructionsSection(settings, {
     workspace: workspace ? { name: workspace.name, text: workspace.instructions } : null,
     chat: conv.instructions ?? "",
@@ -1023,6 +1029,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         voice: job.voice,
         workingDirectory: folder,
         sources: promptSources,
+        apiTools,
         standingInstructions: standing,
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath) : null,
@@ -1101,7 +1108,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   }
   const extraArgs = (settings.runner.extraArgs ?? []).filter((a) => typeof a === "string" && a.length > 0);
 
-  const env = buildEnv(agent, !!folder || sources.length > 0);
+  const env = buildEnv(agent, !!folder || sources.length > 0, !dreaming);
   const logPath = runLogPath(agent, getRun(job.runId));
   mkdirSync(join(logPath, ".."), { recursive: true });
   const logSink = Bun.file(logPath).writer();
@@ -1136,7 +1143,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const memoryChanged = resuming && !dreaming && conv.memory_digest != null && conv.memory_digest !== memoryNow;
     const prompt =
       resuming && !command
-        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources }) + job.prompt
+        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, apiTools }) + job.prompt
         : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 

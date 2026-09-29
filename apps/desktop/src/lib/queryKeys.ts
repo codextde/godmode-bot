@@ -50,6 +50,7 @@ export const qk = {
   run: (id: string) => ["runs", "detail", id],
   missingLogins: ["missing-logins"] as unknown[],
   mcpServers: ["mcp-servers"] as unknown[],
+  apiTools: ["api-tools"] as unknown[],
   composio: ["composio"] as unknown[],
   composioStatus: ["composio", "status"] as unknown[],
   composioToolkits: (search: string, category: string) => ["composio", "toolkits", search, category],

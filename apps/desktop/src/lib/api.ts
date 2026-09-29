@@ -1,6 +1,9 @@
 import type {
   Agent,
   AgentFileEntry,
+  ApiTool,
+  ApiToolInput,
+  ApiToolTestResult,
   AgentInput,
   AgentTemplate,
   ApiError,
@@ -407,6 +410,15 @@ export const api = {
     update: (id: string, input: Partial<McpServerInput>) => patch<McpServer>(`/api/mcp-servers/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/mcp-servers/${id}`),
     test: (id: string) => post<{ ok: boolean; tools?: string[]; error?: string }>(`/api/mcp-servers/${id}/test`),
+  },
+
+  apiTools: {
+    list: (q: { workspaceId?: ScopeFilter; agentId?: string } = {}) => get<ApiTool[]>("/api/api-tools", q),
+    create: (input: ApiToolInput) => post<ApiTool>("/api/api-tools", input),
+    /** Handing a saved key to runs' environment or moving it to another address needs a vault grant. */
+    update: (id: string, input: Partial<ApiToolInput>, grant?: string) => request<ApiTool>("PATCH", `/api/api-tools/${id}`, input, withGrant(grant)),
+    delete: (id: string) => del<{ ok: true }>(`/api/api-tools/${id}`),
+    test: (id: string) => post<ApiToolTestResult>(`/api/api-tools/${id}/test`),
   },
 
   messaging: {
