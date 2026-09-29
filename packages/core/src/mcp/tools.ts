@@ -4,7 +4,7 @@
  * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management.
  */
 import { z } from "zod";
-import type { Agent, Credential, MissingLoginKind, Routine, RoutineTrigger, Run } from "@godmode/shared";
+import type { Agent, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Vm } from "@godmode/shared";
 import { isModelId } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
@@ -28,6 +28,9 @@ import { currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/ma
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { loginFillScope } from "../browser/fill";
 import { createConversation, sendMessage } from "../services/conversations";
+import { assignVm, createVm, getVm, listVms, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
+import { resolveVmId } from "../vm/assignments";
+import { getSettings } from "../services/settings";
 import { getRun, listRuns, markMissingLoginReported, waitForRun } from "../runner/runner";
 
 const log = logger("mcp");
@@ -121,6 +124,21 @@ function requireReachable(agent: Agent, targetId: string): Agent {
 }
 
 const ASK_HUMAN = "ask the human to change this in Settings";
+
+/** The VM this run works in when it is kept off the human's computer (settings.vm.isolateHostShell), else null. */
+function lockedVm(ctx: RunContext): string | null {
+  const vmId = vmOfRun(ctx.runId);
+  return vmId && getSettings().vm.isolateHostShell ? vmId : null;
+}
+
+/**
+ * A run kept in a VM must not get work done on the human's computer through agents that work there (their runs have
+ * Bash and may bypass permissions). Returns the refusal, or null.
+ */
+function offHostRefusal(ctx: RunContext, target: Agent, what: string): string | null {
+  if (!lockedVm(ctx) || resolveVmId(null, target)) return null;
+  return `This task runs in a virtual machine and is kept off the human's computer, and ${target.name} works on the computer — only the human can ${what}.`;
+}
 
 /**
  * A reveal-mode agent gets plaintext secrets, so it only takes work (tasks, schedules, instructions) from a
@@ -594,7 +612,9 @@ const TOOLS: ToolDef[] = [
       }
       const refusal = revealTargetRefusal(agent, target, "hand it tasks");
       if (refusal) return fail(refusal);
-      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation" });
+      // From a VM, work for an agent without its own VM stays in the caller's VM.
+      const vmId = lockedVm(ctx) && !resolveVmId(null, target) ? lockedVm(ctx) : null;
+      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId });
       const { run } = await sendMessage(conversation.id, {
         content: `[Delegated by ${agent.name}]\n\n${task}`,
         trigger: "delegation",
@@ -644,10 +664,11 @@ const TOOLS: ToolDef[] = [
       routine: z.object({ name: z.string().min(1), cron: routineFields.cron, prompt: z.string().min(1), timezone: z.string().optional() }).optional(),
     }),
     when: isManager,
-    run: async ({ routine, ...input }, { agent }) => {
+    run: async ({ routine, ...input }, { agent, ctx }) => {
       assertAgentPatchAllowed(null, input);
       // Secret access, management rights and login allow-lists stay human-only (enforced by createAgent for agent actors).
-      const created = await createAgent(input, `agent:${agent.id}`);
+      // Agents created from a VM work in that VM.
+      const created = await createAgent({ ...input, vmId: lockedVm(ctx) }, `agent:${agent.id}`);
       audit(`agent:${agent.id}`, "agent.create", created.id, { name: created.name });
       let routineInfo: unknown = null;
       if (routine) {
@@ -664,9 +685,9 @@ const TOOLS: ToolDef[] = [
       "Update an agent's name, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope) or subagents. Workspace, browser profile, secret access and login permissions can only be changed by the human in Settings.",
     schema: z.object({ agentId: z.string(), name: z.string().min(1).max(100).optional(), ...agentFields }),
     when: isManager,
-    run: async ({ agentId, ...patch }, { agent }) => {
+    run: async ({ agentId, ...patch }, { agent, ctx }) => {
       const target = getAgent(agentId);
-      const refusal = target.id === agent.id ? null : revealTargetRefusal(agent, target, "change its settings");
+      const refusal = offHostRefusal(ctx, target, "change its settings") ?? (target.id === agent.id ? null : revealTargetRefusal(agent, target, "change its settings"));
       if (refusal) return fail(refusal);
       assertAgentPatchAllowed(target, patch);
       const updated = await updateAgent(agentId, patch, `agent:${agent.id}`);
@@ -680,10 +701,12 @@ const TOOLS: ToolDef[] = [
     description: "Delete an agent and its routines. Only do this when the human explicitly asked for it.",
     schema: z.object({ agentId: z.string() }),
     when: isManager,
-    run: async ({ agentId }, { agent }) => {
+    run: async ({ agentId }, { agent, ctx }) => {
       if (agentId === agent.id) return fail("You cannot delete yourself.");
       const target = getAgent(agentId);
       if (target.isDefault) return fail("The default Godmode agent cannot be deleted.");
+      const offHost = offHostRefusal(ctx, target, "delete it");
+      if (offHost) return fail(offHost);
       await deleteAgent(agentId);
       audit(`agent:${agent.id}`, "agent.delete", agentId, { name: target.name });
       return `Deleted agent "${target.name}".`;
@@ -761,8 +784,9 @@ const TOOLS: ToolDef[] = [
       "Create an automation for an agent: when the trigger fires, the agent runs the prompt. Triggers: schedule (cron), app (an event in a connected app — see automation_triggers_list), condition (checked on a cron schedule) or webhook (a secret URL the human copies from the app).",
     schema: z.object({ agentId: z.string(), ...routineFields }),
     when: isManager,
-    run: async ({ timezone, trigger, ...input }, { agent }) => {
-      const refusal = revealTargetRefusal(agent, getAgent(input.agentId), "schedule its tasks");
+    run: async ({ timezone, trigger, ...input }, { agent, ctx }) => {
+      const target = getAgent(input.agentId);
+      const refusal = offHostRefusal(ctx, target, "schedule its tasks") ?? revealTargetRefusal(agent, target, "schedule its tasks");
       if (refusal) return fail(refusal);
       const resolved = await resolveAppTrigger(trigger as RoutineTrigger | undefined, input.agentId);
       const r = createRoutine({ ...input, trigger: resolved, timezone: timezone ?? localTimezone() });
@@ -786,9 +810,10 @@ const TOOLS: ToolDef[] = [
       reuseConversation: routineFields.reuseConversation,
     }),
     when: isManager,
-    run: async ({ routineId, trigger, ...patch }, { agent }) => {
+    run: async ({ routineId, trigger, ...patch }, { agent, ctx }) => {
       const current = getRoutine(routineId);
-      const refusal = revealTargetRefusal(agent, getAgent(current.agentId), "schedule its tasks");
+      const target = getAgent(current.agentId);
+      const refusal = offHostRefusal(ctx, target, "change its automations") ?? revealTargetRefusal(agent, target, "schedule its tasks");
       if (refusal) return fail(refusal);
       const resolved = trigger ? await resolveAppTrigger(trigger as RoutineTrigger, current.agentId) : undefined;
       const r = updateRoutine(routineId, { ...patch, ...(resolved ? { trigger: resolved } : {}) });
@@ -803,8 +828,9 @@ const TOOLS: ToolDef[] = [
       "Try an automation now: a schedule runs its prompt, a condition is checked, app and webhook automations get a test event (the agent does a dry run). Returns the run to follow with runs_list.",
     schema: z.object({ routineId: z.string() }),
     when: isManager,
-    run: async ({ routineId }, { agent }) => {
-      const refusal = revealTargetRefusal(agent, getAgent(getRoutine(routineId).agentId), "run its tasks");
+    run: async ({ routineId }, { agent, ctx }) => {
+      const target = getAgent(getRoutine(routineId).agentId);
+      const refusal = offHostRefusal(ctx, target, "run its tasks") ?? revealTargetRefusal(agent, target, "run its tasks");
       if (refusal) return fail(refusal);
       const started = await runRoutineNow(routineId);
       audit(`agent:${agent.id}`, "routine.run", routineId, { runId: started.id });
@@ -817,7 +843,9 @@ const TOOLS: ToolDef[] = [
     description: "Delete an automation.",
     schema: z.object({ routineId: z.string() }),
     when: isManager,
-    run: ({ routineId }, { agent }) => {
+    run: ({ routineId }, { agent, ctx }) => {
+      const offHost = offHostRefusal(ctx, getAgent(getRoutine(routineId).agentId), "delete its automations");
+      if (offHost) return fail(offHost);
       deleteRoutine(routineId);
       audit(`agent:${agent.id}`, "routine.delete", routineId, {});
       return "Automation deleted.";
@@ -952,6 +980,84 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
+    name: "vms_list",
+    description:
+      "macOS virtual machines on this computer (isolated Macs agents can work in): id, name, state, image, resources and who uses them. Also whether VMs work here and which images are downloaded.",
+    schema: z.object({}),
+    when: isManager,
+    run: async () => {
+      const [status, vms] = await Promise.all([vmStatus(), listVms()]);
+      if (!status.supported) return `Virtual machines are not available here: ${status.reason}`;
+      return json({
+        running: `${status.running} of at most ${status.maxRunning}`,
+        images: status.images.map((i) => ({ id: i.id, name: i.name, downloaded: i.downloaded, downloadGb: i.downloadGb })),
+        vms: vms.map(vmSummary),
+      });
+    },
+  }),
+
+  defineTool({
+    name: "vm_create",
+    description:
+      "Create a macOS VM — an isolated Mac an agent can work in (then vm_assign it). image: tahoe (macOS 26, default), sequoia (macOS 15) or tahoe-xcode (with Xcode). " +
+      "The first VM from an image downloads it (tens of GB — this can take a long time); later ones are ready in seconds. Confirm with the human before creating one.",
+    schema: z.object({
+      name: z.string().min(1).max(60),
+      image: z.enum(["tahoe", "sequoia", "tahoe-xcode"]).optional(),
+      cpu: z.number().int().min(1).max(64).optional(),
+      memoryGb: z.number().int().min(2).max(1024).optional(),
+      start: z.boolean().optional().describe("Start it once it's ready"),
+    }),
+    when: isManager,
+    run: async ({ memoryGb, ...input }, { agent }) => {
+      const vm = await createVm({ ...input, memoryMb: memoryGb ? memoryGb * 1024 : undefined }, `agent:${agent.id}`);
+      return json(vmSummary(vm));
+    },
+  }),
+
+  defineTool({
+    name: "vm_assign",
+    description:
+      "Let an agent, a workspace or this chat work in a VM: their runs then do their shell, file and screen work inside the VM instead of on this computer (from their next run). " +
+      "Only the human can take an assignment away again.",
+    schema: z.object({
+      vmId: z.string(),
+      target: z.enum(["agent", "workspace", "this_chat"]),
+      id: z.string().optional().describe("Agent or workspace id (not needed for this_chat)"),
+    }),
+    when: isManager,
+    run: async ({ vmId, target, id }, { agent, ctx }) => {
+      if (target !== "this_chat" && !id) return fail(`Pass the ${target}'s id.`);
+      if (target === "agent") {
+        const refusal = id === agent.id ? null : revealTargetRefusal(agent, getAgent(id!), "move it into a VM");
+        if (refusal) return fail(refusal);
+      }
+      const kind = target === "this_chat" ? "conversation" : target;
+      const vm = await assignVm(vmId, { kind, id: target === "this_chat" ? ctx.conversationId : id!, assigned: true }, `agent:${agent.id}`);
+      return json({ ...vmSummary(vm), note: "Applies from the next run." });
+    },
+  }),
+
+  defineTool({
+    name: "vm_power",
+    description: "Start, stop or suspend a VM. Runs that use a VM start it on their own; starting takes about a minute. macOS runs at most two VMs at once.",
+    schema: z.object({ vmId: z.string(), action: z.enum(["start", "stop", "suspend"]) }),
+    when: isManager,
+    run: async ({ vmId, action }, { agent }) => {
+      if (action === "start") {
+        await startVm(vmId);
+        return json(vmSummary(await getVm(vmId)));
+      }
+      if (vmInUse(vmId)) return fail("An agent is working in this VM right now; stop it later or ask the human.");
+      if (action === "stop" && (await getVm(vmId)).state === "suspended") {
+        return fail("The VM is suspended; stopping it would discard its saved session — ask the human.");
+      }
+      const vm = action === "stop" ? await stopVm(vmId, `agent:${agent.id}`) : await suspendVm(vmId, `agent:${agent.id}`);
+      return json(vmSummary(vm));
+    },
+  }),
+
+  defineTool({
     name: "missing_logins_list",
     description: "Missing or broken logins reported by agents (default: open ones).",
     schema: z.object({ status: z.enum(["open", "resolved", "dismissed", "all"]).optional() }),
@@ -964,6 +1070,21 @@ const TOOLS: ToolDef[] = [
 ];
 
 const BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));
+
+function vmSummary(vm: Vm) {
+  return {
+    id: vm.id,
+    name: vm.name,
+    state: vm.state,
+    ...(vm.progress ? { progress: `${vm.progress.label}${vm.progress.percent !== null ? ` ${Math.round(vm.progress.percent)}%` : ""}` } : {}),
+    ...(vm.error ? { error: vm.error } : {}),
+    image: vm.image,
+    cpu: vm.cpu,
+    memoryGb: Math.round(vm.memoryMb / 1024),
+    diskGb: vm.diskGb,
+    usedBy: vm.assignments.map((a) => `${a.kind} ${a.name} (${a.id})`),
+  };
+}
 
 /** The run was delegated by this agent (in this run or an earlier one). */
 function delegatedBy(r: Run, agent: Agent, ctx: RunContext): boolean {

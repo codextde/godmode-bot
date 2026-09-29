@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { AutomationEvent, ClientEvent, EntityName, ServerEvent } from "@godmode/shared";
+import type { AutomationEvent, ClientEvent, EntityName, ServerEvent, Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { qk } from "./queryKeys";
@@ -39,6 +39,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   runs: [qk.runs],
   models: [qk.models],
   computer: [qk.computer],
+  // VM list + status (installs, image downloads, assignment changes).
+  vms: [qk.vms],
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
 };
@@ -196,6 +198,13 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "computer.action":
       live.computerAction(event.view, { runId: event.runId, action: event.action, x: event.x, y: event.y, at: Date.now() });
       break;
+    case "vm.updated":
+      void upsertVm(qc, event.vm);
+      break;
+    case "vm.deleted":
+      qc.setQueryData<Vm[]>(qk.vmList, (old) => (Array.isArray(old) ? old.filter((v) => v.id !== event.id) : old));
+      qc.invalidateQueries({ queryKey: qk.vmStatus });
+      break;
     case "entity.changed":
       for (const key of ENTITY_KEYS[event.entity] ?? []) qc.invalidateQueries({ queryKey: key });
       break;
@@ -230,6 +239,29 @@ async function upsertAutomationEvent(qc: QueryClient, event: AutomationEvent) {
     qc.setQueryData<AutomationEvent[]>(query.queryKey, (old) => mergeEvent(old, event, limit));
   }
   void qc.invalidateQueries({ ...filters, refetchType: "none" });
+}
+
+/**
+ * Patch a VM into the cached list in place: image downloads report progress every second, which must not refetch the
+ * list each time. The status (running count, downloaded images) only changes with the state, so it refreshes then.
+ */
+async function upsertVm(qc: QueryClient, vm: Vm) {
+  const old = qc.getQueryData<Vm[]>(qk.vmList);
+  const prev = Array.isArray(old) ? old.find((v) => v.id === vm.id) : undefined;
+  if (!prev || prev.state !== vm.state) void qc.invalidateQueries({ queryKey: qk.vmStatus });
+  if (!Array.isArray(old)) {
+    void qc.invalidateQueries({ queryKey: qk.vmList });
+    return;
+  }
+  // A list fetch that started before this event would land without it: cancel it, patch, and fetch again (the cancelled
+  // one may have carried other changes, e.g. assignments).
+  const fetching = qc.isFetching({ queryKey: qk.vmList }) > 0;
+  if (fetching) await qc.cancelQueries({ queryKey: qk.vmList });
+  qc.setQueryData<Vm[]>(qk.vmList, (list) => {
+    if (!Array.isArray(list)) return list;
+    return list.some((v) => v.id === vm.id) ? list.map((v) => (v.id === vm.id ? vm : v)) : [...list, vm];
+  });
+  if (fetching) void qc.invalidateQueries({ queryKey: qk.vmList });
 }
 
 /** Computer live view subscribers per view in this UI; the core only hears about the first and the last. */

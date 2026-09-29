@@ -23,6 +23,7 @@ import { all, bool, get, insert, int, run as sql, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
+import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { redact } from "../vault/vault";
 import { getAgent, getDefaultAgentId } from "../agents/service";
 import { activeRunForConversation, cancelRun, listActiveRuns, startRun, waitForRun } from "../runner/runner";
@@ -49,6 +50,7 @@ interface ConversationRow {
   effort: Effort | null;
   working_directory: string | null;
   computer_target: string | null;
+  vm_id: string | null;
   instructions: string;
   pinned: number;
   archived: number;
@@ -101,6 +103,7 @@ function toConversation(r: ConversationRow): Conversation {
     effort: r.effort || null,
     workingDirectory: r.working_directory,
     computerTarget: parseComputerTarget(parseJson<unknown>(r.computer_target, null)),
+    vmId: r.vm_id ?? null,
     instructions: r.instructions,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
@@ -172,10 +175,11 @@ export interface ModelChoice {
 }
 
 export function createConversation(
-  input: { agentId: string; title?: string; origin?: ConversationOrigin; workingDirectory?: string | null; instructions?: string } & ModelChoice,
+  input: { agentId: string; title?: string; origin?: ConversationOrigin; workingDirectory?: string | null; vmId?: string | null; instructions?: string } & ModelChoice,
 ): Conversation {
   getAgent(input.agentId); // 404 if the agent doesn't exist
   const workingDirectory = normalizeWorkingDirectory(input.workingDirectory);
+  const vmId = normalizeVmId(input.vmId) ?? null;
   const ts = now();
   const id = newId("cnv");
   const title = input.title?.trim() ? input.title.trim().slice(0, 200) : DEFAULT_CONVERSATION_TITLE;
@@ -188,6 +192,7 @@ export function createConversation(
     model: input.model?.trim() || null,
     effort: input.effort ?? null,
     working_directory: workingDirectory,
+    vm_id: vmId,
     instructions: input.instructions?.trim() ?? "",
     pinned: 0,
     archived: 0,
@@ -197,6 +202,7 @@ export function createConversation(
   });
   const conversation = getConversationSummary(id);
   bus.emit({ type: "conversation.updated", conversation });
+  if (vmId) assignmentsChanged();
   return conversation;
 }
 
@@ -242,11 +248,13 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     effort: patch.effort,
     working_directory: patch.workingDirectory === undefined ? undefined : normalizeWorkingDirectory(patch.workingDirectory),
     computer_target: patch.computerTarget === undefined ? undefined : patch.computerTarget ? JSON.stringify(parseComputerTarget(patch.computerTarget)) : null,
+    vm_id: normalizeVmId(patch.vmId),
     instructions: patch.instructions?.trim(),
     updated_at: now(),
   });
   const conversation = getConversationSummary(id);
   bus.emit({ type: "conversation.updated", conversation });
+  if (patch.vmId !== undefined) assignmentsChanged();
   return conversation;
 }
 
@@ -474,6 +482,8 @@ export async function startChat(
     workingDirectory?: string | null;
     /** Screen, window or tab the human shares with this chat (already validated). */
     computerTarget?: ComputerTarget | null;
+    /** macOS VM for this chat (null/omitted = the agent's). */
+    vmId?: string | null;
     instructions?: string;
   } & ModelChoice,
 ): Promise<StartChatResult> {
@@ -489,6 +499,7 @@ export async function startChat(
     title,
     origin: input.origin ?? "chat",
     workingDirectory: input.workingDirectory,
+    vmId: input.vmId,
     instructions: input.instructions,
     model: input.model,
     effort: input.effort,

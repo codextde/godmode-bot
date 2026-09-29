@@ -32,6 +32,8 @@ export interface WorkspaceInput {
   color?: string;
   icon?: string;
   instructions?: string;
+  /** macOS VM for the workspace's agents; null = none. */
+  vmId?: ID | null;
 }
 
 export interface AgentInput {
@@ -51,6 +53,8 @@ export interface AgentInput {
   inheritMcp?: boolean;
   subagents?: SubagentDefinition[];
   workingDirectory?: string | null;
+  /** macOS VM the agent works in; null = the workspace's. */
+  vmId?: ID | null;
 }
 
 export interface AgentTemplate {
@@ -118,6 +122,8 @@ export interface StartChatInput {
   workingDirectory?: string | null;
   /** Share a screen, window or browser tab with the new chat. */
   computerTarget?: ComputerTarget | null;
+  /** Work in this macOS VM instead of the agent's. */
+  vmId?: ID | null;
   instructions?: string;
 }
 
@@ -132,6 +138,8 @@ export interface ConversationPatch {
   workingDirectory?: string | null;
   /** Share a screen, window or browser tab with the agent; null = stop sharing. */
   computerTarget?: ComputerTarget | null;
+  /** macOS VM for this chat; null = back to the agent's (or workspace's). */
+  vmId?: ID | null;
   /** "" = none. */
   instructions?: string;
 }

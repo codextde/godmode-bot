@@ -9,6 +9,7 @@ const workspaceSchema = z.object({
   color: z.string().trim().max(32).optional(),
   icon: z.string().trim().max(64).optional(),
   instructions: z.string().max(MAX_INSTRUCTIONS_LENGTH).optional(),
+  vmId: z.string().trim().max(100).nullable().optional(),
 });
 
 export function registerWorkspaceRoutes(app: Hono): void {

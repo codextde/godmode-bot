@@ -8,6 +8,7 @@ import { arch, platform } from "node:os";
 import { join } from "node:path";
 import type { Agent, ComputerTarget, Settings } from "@godmode/shared";
 import { computerTargetLabel } from "@godmode/shared";
+import { vmSupport } from "../vm/tart";
 
 export interface PromptContext {
   agent: Agent;
@@ -18,6 +19,8 @@ export interface PromptContext {
   browserAvailable: boolean;
   /** Screen, window or browser tab this run may see and control (computer MCP tools). */
   computer?: ComputerTarget | null;
+  /** macOS VM this run works in (vm MCP tools). */
+  vm?: PromptVm | null;
   /** The message was dictated — answer in speakable prose. */
   voice?: boolean;
   /** Folder attached to the chat (Claude's cwd). null = the agent's own repository. */
@@ -27,6 +30,16 @@ export interface PromptContext {
   /** MEMORY.md, loaded into the prompt (null = not loaded: disabled in settings, or the agent has none). */
   memory?: { text: string; truncated: boolean } | null;
   now?: Date;
+}
+
+/** The macOS VM a run works in, as the prompt describes it. */
+export interface PromptVm {
+  name: string;
+  guestUser: string;
+  guestSharedDir: string;
+  hostSharedDir: string;
+  /** Claude Code's Bash tool (which runs on the host) is off for this run. */
+  hostShellOff: boolean;
 }
 
 /** Standing instructions from the human besides the global ones, most general first. The agent's own live in its CLAUDE.md. */
@@ -122,6 +135,7 @@ Use the \`browser\` MCP tools for anything on the web (navigate, click, type, re
 No browser tools are attached to this run. If a task needs a website, say so in your final summary instead of guessing.`);
   }
 
+  if (ctx.vm) out.push(vmSection(ctx.vm, human));
   if (ctx.computer) out.push(computerSection(ctx.computer, human, perms.secretAccess === "reveal"));
 
   out.push(`### Logging in to websites
@@ -150,7 +164,11 @@ ${lines.length ? `Agents you can delegate to:\n${lines.join("\n")}` : "There are
 
   if (perms.canManageAgents) {
     out.push(`### Managing agents
-You are the orchestrator. You can create, update and delete agents (\`agent_create\`, \`agent_update\`, \`agent_delete\`), manage their automations (\`routine_list\`, \`routine_create\`, \`routine_update\`, \`routine_run\`, \`routine_delete\`, \`automation_events_list\`), inspect recent work with \`runs_list\` (results and errors of every agent), and review \`workspaces_list\`, \`logins_overview\` and \`missing_logins_list\`. When asked to "check on all agents", use \`runs_list\` and \`missing_logins_list\` and summarize what succeeded, what failed and what the human must do (e.g. add a login in the vault). When you create an agent, give it a clear description and concrete standing instructions, and add an automation when the job is recurring. Never delete an agent unless ${human} explicitly asked for it.
+You are the orchestrator. You can create, update and delete agents (\`agent_create\`, \`agent_update\`, \`agent_delete\`), manage their automations (\`routine_list\`, \`routine_create\`, \`routine_update\`, \`routine_run\`, \`routine_delete\`, \`automation_events_list\`), inspect recent work with \`runs_list\` (results and errors of every agent), and review \`workspaces_list\`, \`logins_overview\` and \`missing_logins_list\`. When asked to "check on all agents", use \`runs_list\` and \`missing_logins_list\` and summarize what succeeded, what failed and what the human must do (e.g. add a login in the vault). When you create an agent, give it a clear description and concrete standing instructions, and add an automation when the job is recurring. Never delete an agent unless ${human} explicitly asked for it.${
+      settings.vm.enabled && vmSupport().supported
+        ? `\n\nAgents can work in their own macOS virtual machine instead of on ${human}'s computer — good for builds, installs, experiments and macOS apps: \`vms_list\`, \`vm_create\` (ask ${human} first — the first VM from an image downloads tens of GB), \`vm_assign\` (an agent, a workspace or this chat) and \`vm_power\`.`
+        : ""
+    }
 
 ### Automations
 An automation runs an agent's prompt when its trigger fires:
@@ -216,6 +234,16 @@ You are "${agent.name}", an AI coworker running inside Godmode Bot for ${human}.
 - Only edit \`MEMORY.md\` and files in \`memory/\`. Godmode snapshots them before the dream, and ${human} can review and undo every change.`;
 }
 
+function vmSection(vm: PromptVm, human: string): string {
+  return `### macOS virtual machine
+This task runs in a dedicated macOS virtual machine, **${vm.name}** — not on ${human}'s own computer. Do the work (commands, code, installs, builds, apps) inside the VM.
+- Use the \`vm\` MCP tools: \`shell\` runs a command (a fresh zsh login shell as user \`${vm.guestUser}\` with passwordless sudo and Homebrew; pass \`cwd\`), \`read_file\` / \`write_file\` / \`edit_file\` work on files in the VM, \`screen\` sees and controls its display (mouse and keyboard, like computer use) for GUI apps, \`info\` describes the VM.${vm.hostShellOff ? ` Claude Code's own Bash tool is turned off in this run because it would run on ${human}'s computer, and your other file tools only reach your repository, the chat's folder and the shared folder.` : ` Claude Code's own Bash tool still runs on ${human}'s computer — only use it for your own repository.`}
+- The VM keeps its disk between tasks: tools you install, repositories you clone and files you create stay until ${human} resets the VM. Keep your work in the home folder (\`/Users/${vm.guestUser}\`).
+- Shared folder: \`${vm.guestSharedDir}\` in the VM is \`${vm.hostSharedDir}\` on ${human}'s computer. Put results ${human} should get (reports, builds, exports) there; you can also read and write it with your normal file tools.
+- Your own repository (CLAUDE.md, MEMORY.md) stays on ${human}'s computer — keep using your normal file tools for it.
+- Start servers and other long-running processes in the background (\`nohup … > /tmp/x.log 2>&1 &\`); \`shell\` returns when a command's output closes.`;
+}
+
 function computerSection(target: ComputerTarget, human: string, canReveal: boolean): string {
   const what = computerTargetLabel(target);
   const scope =
@@ -242,9 +270,9 @@ ${scope}
 export function resumeContextPrefix(
   folder: string | null,
   repoPath: string,
-  opts: { now?: Date; instructions?: string; memoryChanged?: boolean } = {},
+  opts: { now?: Date; instructions?: string; memoryChanged?: boolean; vm?: PromptVm | null } = {},
 ): string {
-  const { now = new Date(), instructions, memoryChanged } = opts;
+  const { now = new Date(), instructions, memoryChanged, vm } = opts;
   const where = folder
     ? `Working directory: \`${folder}\` (the folder attached to this chat). Your own repository with CLAUDE.md and MEMORY.md: \`${repoPath}\`.`
     : `Working directory: your own repository \`${repoPath}\`.`;
@@ -257,5 +285,9 @@ export function resumeContextPrefix(
   const memory = memoryChanged
     ? `\n\nYour MEMORY.md changed since you last saw it in this chat (another chat, a dream or the human updated it). Re-read it before relying on what you remember.`
     : "";
-  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${update}${memory}</godmode-context>\n\n`;
+  // The VM can be assigned or changed between turns: always restate where the work happens.
+  const machine = vm
+    ? `\nYou work in the macOS VM "${vm.name}": use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen) for all work in it. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""}`
+    : "";
+  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${machine}${update}${memory}</godmode-context>\n\n`;
 }

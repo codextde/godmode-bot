@@ -43,8 +43,10 @@ import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor } from "./models";
-import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix } from "./prompt";
+import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix, type PromptVm } from "./prompt";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
+import { attachVm, detachVm, type RunVm } from "../vm/service";
+import { resolveVmId } from "../vm/assignments";
 import { parseComputerTarget } from "../computer/targets";
 import { StreamAccumulator, detectLoginFailure, redactBlocks } from "./stream";
 
@@ -861,9 +863,33 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const computer = fresh && decided && computerLockKey(fresh) === computerLockKey(decided) ? fresh : null;
   if (decided && !computer && fresh) job.acc.addNotice("info", "What you share changed while this message started — it applies from your next message.");
   if (computer) attachComputer(job.runId, agent.id, job.conversationId, computer, job.computerFromAgent ? "agent" : "share");
+  // The macOS VM this run works in (the chat's, the agent's or the workspace's), booted when needed. Work meant for a
+  // VM never falls back to this computer: a VM that can't be used fails the run.
+  let vm: RunVm | null = null;
+  const vmId = dreaming ? null : resolveVmId(job.conversationId, agent);
+  if (vmId) {
+    if (!settings.vm.enabled) {
+      return { status: "failed", error: "This work is set to run in a virtual machine, but virtual machines are turned off (Settings → Virtual machines). Turn them on, or remove the VM from the chat, agent or workspace." };
+    }
+    const cancelled = new AbortController();
+    const watch = setInterval(() => job.cancelReason && cancelled.abort(), 250);
+    try {
+      vm = await attachVm(job.runId, vmId, (label) => emitActivity(job, label), cancelled.signal);
+    } catch (err) {
+      if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+      return { status: "failed", error: `The virtual machine can't be used: ${errorText(err)}` };
+    } finally {
+      clearInterval(watch);
+    }
+    if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+  }
+  const promptVm: PromptVm | null = vm
+    ? { name: vm.name, guestUser: vm.guestUser, guestSharedDir: vm.guestSharedDir, hostSharedDir: vm.hostSharedDir, hostShellOff: settings.vm.isolateHostShell }
+    : null;
   const mcp = await buildMcpConfig(agent, res.token, {
     onNotice: (text) => job.acc.addNotice("warning", text),
     computer: !!computer,
+    vm: !!vm,
     gatewayOnly: dreaming,
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
@@ -895,6 +921,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         peers,
         browserAvailable: "browser" in mcp.mcpServers,
         computer,
+        vm: promptVm,
         voice: job.voice,
         workingDirectory: folder,
         standingInstructions: standing,
@@ -915,25 +942,32 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const baseArgs = ["-p", "--input-format", "text", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", model];
   if (effort) baseArgs.push("--effort", effort);
   if (fallback && fallback !== model && isModelId(fallback)) baseArgs.push("--fallback-model", fallback);
+  // A run in a VM stays off the host: no bypass, so Claude Code's file tools only reach its folders (cwd + --add-dir).
+  const hostLocked = !!vm && settings.vm.isolateHostShell;
   if (dreaming) {
     // Never bypass permissions for a dream: it may only write its memory files (print mode denies the rest).
     baseArgs.push("--permission-mode", "default", "--allowedTools", ...DREAM_ALLOWED);
-  } else if (settings.runner.bypassPermissions) baseArgs.push("--dangerously-skip-permissions");
+  } else if (settings.runner.bypassPermissions && !hostLocked) baseArgs.push("--dangerously-skip-permissions");
   else {
     // Non-bypass mode: allow Godmode-provided MCP tools without prompts (print mode cannot ask).
     baseArgs.push("--permission-mode", "acceptEdits", "--allowedTools", Object.keys(mcp.mcpServers).map((n) => `mcp__${n}`).join(","));
   }
   baseArgs.push("--mcp-config", mcpPath, "--strict-mcp-config");
   if (dreaming) baseArgs.push("--tools", DREAM_TOOLS);
+  const disallowed: string[] = [];
   // Hide browser-use tools that need their own LLM key when none is configured (they would only error).
-  if (mcp.mcpServers[BROWSER_MCP_NAME] && !browserLlmKey()) {
-    baseArgs.push("--disallowedTools", BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`).join(","));
-  }
+  if (mcp.mcpServers[BROWSER_MCP_NAME] && !browserLlmKey()) disallowed.push(...BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`));
+  // Shell work belongs in the VM: Claude Code's own Bash tool would run on the host.
+  if (vm && settings.vm.isolateHostShell) disallowed.push("Bash");
+  if (disallowed.length) baseArgs.push("--disallowedTools", disallowed.join(","));
   if (viaFiles) baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));
   else baseArgs.push("--append-system-prompt", systemPrompt);
-  // Dreams load no settings files: the repository's own .claude/settings*.json could widen their permissions.
-  baseArgs.push("--setting-sources", dreaming ? "" : "project,local");
+  // Dreams and runs kept off the host load no settings files: .claude/settings*.json in a folder the run can write to
+  // could add hooks (shell commands on this computer) or widen its permissions.
+  baseArgs.push("--setting-sources", dreaming || hostLocked ? "" : "project,local");
   if (folder) baseArgs.push("--add-dir", agent.repoPath);
+  // The VM's shared folder: how files move between the VM and the host.
+  if (vm) baseArgs.push("--add-dir", vm.hostSharedDir);
   if (budget != null && budget > 0) baseArgs.push("--max-budget-usd", String(budget));
   if (agent.subagents.length && !dreaming) {
     const defs: Record<string, { description: string; prompt: string; model?: string }> = {};
@@ -993,7 +1027,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const memoryChanged = resuming && !dreaming && conv.memory_digest != null && conv.memory_digest !== memoryNow;
     const prompt =
       resuming && !command
-        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged }) + job.prompt
+        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm }) + job.prompt
         : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 
@@ -1059,6 +1093,7 @@ async function execute(job: Job): Promise<void> {
     if (res.token) revokeRunToken(res.token);
     for (const f of res.files) removeMcpConfigFile(f);
     await detachComputer(job.runId).catch(() => {});
+    detachVm(job.runId);
   }
   // Always push the final streamed state (a throttled delta may still be pending).
   if (job.status === "running") safely("emit final delta", () => emitDelta(job));

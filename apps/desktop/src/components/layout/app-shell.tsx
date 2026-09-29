@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Bot,
+  Box,
   Globe,
   MonitorUp,
   Inbox,
@@ -110,6 +111,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/integrations", label: "Integrations", icon: <Plug /> },
     { to: "/browser", label: "Browser", icon: <Globe /> },
     { to: "/computer", label: "Computer", icon: <MonitorUp /> },
+    { to: "/vms", label: "Virtual machines", icon: <Box /> },
   ];
 
   return (

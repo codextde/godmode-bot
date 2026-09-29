@@ -125,6 +125,29 @@ export function useRuns(agentId: string = "all", status: string = "all", limit =
   });
 }
 
+/** macOS VM support, Tart, image presets and host resources (GET /api/vms/status). */
+export function useVmStatus(enabled = true) {
+  return useQuery({ queryKey: qk.vmStatus, queryFn: api.vms.status, enabled, staleTime: 10_000 });
+}
+
+/** Every macOS VM; kept live (progress included) by `vm.updated` events in realtime.ts. */
+export function useVms(enabled = true) {
+  return useQuery({ queryKey: qk.vmList, queryFn: api.vms.list, enabled });
+}
+
+/**
+ * VMs for assignment controls (agent form, chat composer, workspace dialog): `available` is false when VMs are turned
+ * off in settings or this machine can't run them — callers then hide their VM controls entirely.
+ */
+export function useVmChoices() {
+  const { data: boot } = useBootstrap();
+  const enabled = boot?.settings.vm?.enabled ?? false;
+  const status = useVmStatus(enabled);
+  const available = enabled && status.data?.supported === true;
+  const list = useVms(available);
+  return { available, vms: list.data ?? [], isLoading: list.isLoading };
+}
+
 export function useAgentTemplates() {
   return useQuery({ queryKey: qk.agentTemplates, queryFn: api.agents.templates, staleTime: 5 * 60_000 });
 }

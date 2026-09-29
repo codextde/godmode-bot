@@ -59,6 +59,7 @@ needs to be useful:
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
+| 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent runs commands, edits files and uses apps *inside the VM* — your computer stays untouched. VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
 | 🔐 **Vault** | Logins with password generator, per-workspace or global, AES-256-GCM encrypted, fully audited. |
 | 📥 **Password import** | Bring logins over from Chrome (and Edge, Brave, Arc), 1Password (.1pux or CSV), Bitwarden, Apple Passwords, Firefox and more — with a preview that updates saved logins instead of duplicating them. |
@@ -178,6 +179,24 @@ desktop access for routines (agent settings → *Computer*). Setup lives in **Se
 - **Windows / Linux**: single windows need Cua Driver; the whole desktop uses a built-in PowerShell helper (Windows) or
   `xrandr` + ImageMagick + `xdotool` (Linux/X11), and falls back to Cua Driver's primary display.
 
+### Virtual machines — give an agent its own Mac
+
+Open **Virtual machines** in the sidebar and click **New VM** (first time: **Set up** downloads Godmode's own copy of
+[Tart](https://tart.run) — no Homebrew needed). Pick an image — *macOS Tahoe* is a ~27 GB download once; every further
+VM from it is ready in seconds — and assign the VM to an **agent** (agent settings → *Virtual machine*), a **chat**
+(the *VM* chip in the message box) or a **workspace**. A run works in its chat's VM, else its agent's, else its
+workspace's, and boots it when needed.
+
+| | |
+|---|---|
+| **What the agent gets** | A `vm` tool set: `shell` (zsh as `admin`, passwordless sudo, Homebrew), `read_file` / `write_file` / `edit_file`, and `screen` — screenshots, clicks and typing on the VM's display for GUI apps. Claude Code's own Bash tool is turned off for these runs and its file tools only reach the agent's own folders (Settings → Virtual machines → *Keep agents with a VM off this Mac*), so the work stays in the VM. |
+| **Moving files** | Every VM has a shared folder: `~/Godmode` in the VM is `~/.godmode/vm/shared/<vm>` on your Mac (**Shared folder** opens it in Finder). |
+| **Watching & taking over** | The VM card shows a live preview; **Screen** opens it in Screen Sharing, **Terminal** opens an SSH session. |
+| **Keeping & recreating** | Disks are stored under `~/.godmode/vm` and keep everything (installed tools, repos, logins) between tasks and restarts. When Godmode quits, running VMs are suspended and resume where they left off. **Reset** recreates a clean macOS from the image (shared folder and assignments stay), **Duplicate** copies a VM with its whole disk. |
+
+Needs a Mac with Apple silicon. macOS allows **two** macOS VMs to run at the same time; Godmode tells you which one to
+stop when a third is needed.
+
 ### Good to know
 
 - **macOS — Chrome session import** reads your Chrome profile, which macOS protects: grant Godmode
@@ -247,7 +266,8 @@ Every run is committed, so you can see exactly what an agent learned and did —
   your passphrase after every restart.
 
 > ⚠️ Agents run Claude Code with **bypass permissions** by default. Treat them like a trusted coworker with access to
-> your machine; for sensitive setups run Godmode in a VM or container. See [SECURITY.md](SECURITY.md).
+> your machine; for sensitive work give the agent its own **macOS VM** (see above), or run Godmode in a VM or
+> container. See [SECURITY.md](SECURITY.md).
 
 ## 🛠️ Development
 
@@ -271,7 +291,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Working folders, Claude Code slash commands, live browser preview in chat, desktop auto-update
 - [x] Computer use: share a window (background control via Cua Driver), a display, every monitor or a browser tab
 - [x] Automations: schedules, app events (Composio triggers), plain-language conditions and webhooks
-- [ ] Agents working in a dedicated macOS / Windows / Linux VM (Cua sandboxes / lume)
+- [x] Agents working in a dedicated macOS VM (Tart / Virtualization.framework): shell, files and screen, assigned per agent, chat or workspace
+- [ ] Windows / Linux VMs
 - [ ] Mobile companion app & push notifications
 - [ ] Team mode: shared workspaces and approvals
 
@@ -280,7 +301,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 [Claude Code](https://code.claude.com) · [browser-use](https://github.com/browser-use/browser-use) · [Cua](https://github.com/trycua/cua) ·
 [Composio](https://composio.dev) · [Model Context Protocol](https://modelcontextprotocol.io) ·
 [Tauri](https://tauri.app) · [shadcn/ui](https://ui.shadcn.com) · [aicss](https://www.aicss.dev) ·
-[claude-mem](https://github.com/thedotmack/claude-mem) · [Bun](https://bun.sh)
+[claude-mem](https://github.com/thedotmack/claude-mem) · [Tart](https://tart.run) · [Bun](https://bun.sh)
 
 ## 📄 License
 

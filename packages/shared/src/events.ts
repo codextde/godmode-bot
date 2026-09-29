@@ -1,4 +1,5 @@
 import type { ComputerView } from "./computer";
+import type { Vm } from "./vm";
 import type {
   Agent,
   AppNotification,
@@ -82,6 +83,8 @@ export type ServerEvent =
       x?: number;
       y?: number;
     }
+  | { type: "vm.updated"; vm: Vm }
+  | { type: "vm.deleted"; id: ID }
   | { type: "entity.changed"; entity: EntityName };
 
 export type EntityName =
@@ -99,7 +102,8 @@ export type EntityName =
   | "runs"
   | "dreams"
   | "models"
-  | "computer";
+  | "computer"
+  | "vms";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =

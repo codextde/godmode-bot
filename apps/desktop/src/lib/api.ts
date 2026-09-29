@@ -62,6 +62,12 @@ import type {
   TestEventInput,
   TotpInput,
   VaultStatus,
+  Vm,
+  VmAssignInput,
+  VmExecResult,
+  VmInput,
+  VmPatch,
+  VmStatus,
   WebhookRotateResult,
   Workspace,
   WorkspaceInput,
@@ -157,6 +163,9 @@ function importForm(file: File, workspaceId: string | null): FormData {
 
 /** Workspace filter: "all" (default), "global" (only global), or a workspace id. */
 export type ScopeFilter = "all" | "global" | string;
+
+/** What `api.vms.open` shows on this Mac: the VM's screen (Screen Sharing), a Terminal (SSH) or its shared folder (Finder). */
+export type VmOpenTarget = "screen" | "terminal" | "folder";
 
 export const api = {
   auth: {
@@ -313,6 +322,35 @@ export const api = {
     /** Human takeover in a computer live view; coordinates are in the frame the human saw (`frame`). */
     input: (view: string, event: ComputerInputEvent, frame?: { width: number; height: number }) =>
       post<{ ok: true }>("/api/computer/input", { view, event, frame }),
+  },
+
+  vms: {
+    /** Support, Tart install state, image presets, host resources and the running count. */
+    status: () => get<VmStatus>("/api/vms/status"),
+    /** Download Godmode's own copy of Tart. */
+    install: () => post<{ ok: boolean; output: string }>("/api/vms/install"),
+    list: () => get<Vm[]>("/api/vms"),
+    get: (id: string) => get<Vm>(`/api/vms/${id}`),
+    /** Answers right away with state "creating"; progress arrives as `vm.updated` events. */
+    create: (input: VmInput) => post<Vm>("/api/vms", input),
+    /** CPU, memory and display apply on the next start; the disk can only grow (while stopped). */
+    update: (id: string, input: VmPatch) => patch<Vm>(`/api/vms/${id}`, input),
+    delete: (id: string, opts: { keepFiles?: boolean } = {}) => del<{ ok: true }>(`/api/vms/${id}`, { keepFiles: opts.keepFiles ? 1 : undefined }),
+    /** Boots in the background; fails right away when two VMs already run or the disk is missing. */
+    start: (id: string) => post<Vm>(`/api/vms/${id}/start`),
+    stop: (id: string) => post<Vm>(`/api/vms/${id}/stop`),
+    suspend: (id: string) => post<Vm>(`/api/vms/${id}/suspend`),
+    restart: (id: string) => post<Vm>(`/api/vms/${id}/restart`),
+    /** Recreate the disk from the VM's image (keeps the shared folder and assignments). */
+    reset: (id: string, input: { start?: boolean } = {}) => post<Vm>(`/api/vms/${id}/reset`, input),
+    /** Copy of a stopped VM. */
+    duplicate: (id: string, name?: string) => post<Vm>(`/api/vms/${id}/duplicate`, name ? { name } : {}),
+    exec: (id: string, input: { command: string; cwd?: string; timeoutSeconds?: number }) => post<VmExecResult>(`/api/vms/${id}/exec`, input),
+    /** Screen and Terminal boot the VM first when needed. */
+    open: (id: string, what: VmOpenTarget) => post<{ ok: true }>(`/api/vms/${id}/open`, { what }),
+    /** A picture of a running VM's screen (never boots it). */
+    screenshot: (id: string, size = 640) => get<{ data: string; mime: string; width: number; height: number }>(`/api/vms/${id}/screenshot`, { size }),
+    assign: (id: string, input: VmAssignInput) => post<Vm>(`/api/vms/${id}/assign`, input),
   },
 
   chat: {

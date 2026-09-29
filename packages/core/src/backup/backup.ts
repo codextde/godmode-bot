@@ -86,6 +86,7 @@ const ALL_ENTITIES: EntityName[] = [
   "notifications",
   "settings",
   "runs",
+  "vms",
 ];
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
@@ -97,6 +98,7 @@ const EXECUTABLE_SETTINGS: Record<string, string[]> = {
   runner: ["extraArgs", "claudePath"],
   browser: ["chromePath", "browserUseCommand"],
   computer: ["cuaDriverCommand"],
+  vm: ["tartPath"],
   voice: ["openaiBaseUrl"],
 };
 
@@ -429,6 +431,14 @@ function sanitizeDump(dump: DbDump): string[] {
   }
   if (brokenTriggers) warnings.push(`Paused ${brokenTriggers} automation(s) whose trigger couldn't be read — set their trigger again.`);
 
+  // VM ids become Tart VM names and folder names.
+  const vms = rowsOf("vms");
+  const safeVms = vms.filter((row) => typeof row.id === "string" && /^vm_[A-Za-z0-9]{8,64}$/.test(row.id));
+  if (safeVms.length !== vms.length) {
+    tables.vms = safeVms;
+    warnings.push(`Skipped ${vms.length - safeVms.length} virtual machine(s) with an unsafe id.`);
+  }
+
   const profiles = rowsOf("browser_profiles");
   const safeProfiles = profiles.filter((row) => typeof row.id === "string" && SAFE_ID.test(row.id));
   if (safeProfiles.length !== profiles.length) {
@@ -494,6 +504,11 @@ function restoreDatabase(dump: DbDump, vaultMeta: { kdf?: unknown; wrappedDek?: 
         }
       } else if (table === "settings") {
         db.run(`DELETE FROM settings WHERE key NOT IN (${[...DEVICE_SETTINGS].map((k) => `'${k}'`).join(", ")})`);
+      } else if (table === "vms") {
+        // VM disks live on this Mac: its VMs stay (the backup's version of a VM replaces the local record).
+        for (const r of Array.isArray(dump.tables.vms) ? dump.tables.vms : []) {
+          if (typeof r.id === "string") db.query("DELETE FROM vms WHERE id = ?").run(r.id);
+        }
       } else {
         db.run(`DELETE FROM ${q(table)}`);
       }

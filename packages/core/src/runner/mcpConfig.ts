@@ -1,14 +1,14 @@
 /**
  * Builds the `--mcp-config` file for a run: the Godmode gateway (per-run bearer token), the browser
- * (browser-use MCP bound to the agent's Chromium profile), computer use (when a screen, window or tab is shared)
- * and the agent's external MCP servers.
+ * (browser-use MCP bound to the agent's Chromium profile), computer use (when a screen, window or tab is shared),
+ * the macOS VM tools (when the run works in a VM) and the agent's external MCP servers.
  * The file contains the run token and decrypted MCP secrets, so it is written 0600 and deleted after the run.
  */
 import { rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
-import { BROWSER_MCP_NAME, COMPUTER_MCP_NAME, GODMODE_MCP_NAME } from "@godmode/shared";
+import { BROWSER_MCP_NAME, COMPUTER_MCP_NAME, GODMODE_MCP_NAME, VM_MCP_NAME } from "@godmode/shared";
 import { config, isLoopbackHost } from "../config";
 import { browserMcpServer } from "../browser/manager";
 import { mcpServersForAgent } from "../integrations/mcpServers";
@@ -34,7 +34,7 @@ function errorText(err: unknown): string {
 export async function buildMcpConfig(
   agent: Agent,
   runToken: string,
-  opts: { onNotice?: (text: string) => void; computer?: boolean; gatewayOnly?: boolean } = {},
+  opts: { onNotice?: (text: string) => void; computer?: boolean; vm?: boolean; gatewayOnly?: boolean } = {},
 ): Promise<McpConfigFile> {
   const servers: Record<string, McpServerJson> = {};
   // Dreams get the Godmode gateway only: no integrations, browser or computer.
@@ -46,7 +46,7 @@ export async function buildMcpConfig(
   try {
     const external = await mcpServersForAgent(agent);
     for (const [name, server] of Object.entries(external)) {
-      if (name === GODMODE_MCP_NAME || name === BROWSER_MCP_NAME || name === COMPUTER_MCP_NAME) {
+      if (name === GODMODE_MCP_NAME || name === BROWSER_MCP_NAME || name === COMPUTER_MCP_NAME || name === VM_MCP_NAME) {
         log.warn(`MCP server name "${name}" is reserved; skipping it for agent ${agent.id}`);
         opts.onNotice?.(`The MCP server "${name}" was skipped because its name is reserved by Godmode.`);
         continue;
@@ -79,6 +79,15 @@ export async function buildMcpConfig(
     servers[COMPUTER_MCP_NAME] = {
       type: "http",
       url: `${gatewayUrl()}/computer`,
+      headers: { Authorization: `Bearer ${runToken}` },
+    };
+  }
+
+  // macOS VM: shell and file tools inside the VM the run works in (scoped by the run token).
+  if (opts.vm) {
+    servers[VM_MCP_NAME] = {
+      type: "http",
+      url: `${gatewayUrl()}/vm`,
       headers: { Authorization: `Bearer ${runToken}` },
     };
   }

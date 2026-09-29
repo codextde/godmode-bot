@@ -17,6 +17,8 @@ export interface CoreConfig {
   browserDir: string;
   attachmentsDir: string;
   backupsDir: string;
+  /** macOS VMs: Tart's home (disks, image cache), shared folders and Godmode's copy of Tart. */
+  vmDir: string;
   logsDir: string;
   host: string;
   port: number;
@@ -57,6 +59,7 @@ export function loadConfig(overrides: Partial<CoreConfig> = {}): CoreConfig {
     browserDir: join(dataDir, "browser"),
     attachmentsDir: join(dataDir, "attachments"),
     backupsDir: join(dataDir, "backups"),
+    vmDir: join(dataDir, "vm"),
     logsDir: join(dataDir, "logs"),
     host: process.env.GODMODE_HOST || "127.0.0.1",
     port: Number(process.env.GODMODE_PORT || DEFAULT_PORT),

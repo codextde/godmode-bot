@@ -10,6 +10,7 @@ import { listAgents, refreshAgentFiles, removeFromDelegateLists, stopAgentRuns, 
 import { deleteProfile } from "../browser/manager";
 import { reloadSchedules } from "../scheduler/scheduler";
 import { HttpError, badRequest, newId, notFound, now, slugify } from "../util";
+import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 
 const log = logger("workspaces");
 
@@ -21,6 +22,7 @@ interface WorkspaceRow {
   color: string;
   icon: string;
   instructions: string;
+  vm_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +36,7 @@ function toModel(r: WorkspaceRow): Workspace {
     color: r.color,
     icon: r.icon,
     instructions: r.instructions,
+    vmId: r.vm_id ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -73,11 +76,13 @@ export function createWorkspace(input: WorkspaceInput): Workspace {
     color: input.color?.trim() || "violet",
     icon: input.icon?.trim() || "🗂️",
     instructions: input.instructions?.trim() ?? "",
+    vm_id: normalizeVmId(input.vmId) ?? null,
     created_at: ts,
     updated_at: ts,
   };
   insert("workspaces", { ...row });
   bus.changed("workspaces");
+  if (row.vm_id) assignmentsChanged();
   return toModel(row);
 }
 
@@ -91,10 +96,12 @@ export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Wor
     color: patch.color !== undefined ? patch.color.trim() || "violet" : undefined,
     icon: patch.icon !== undefined ? patch.icon.trim() || "🗂️" : undefined,
     instructions: patch.instructions?.trim(),
+    vm_id: normalizeVmId(patch.vmId),
     updated_at: now(),
   });
   const next = getWorkspace(id);
   bus.changed("workspaces");
+  if (next.vmId !== current.vmId) assignmentsChanged();
 
   // Workspace name/description are part of each member agent's CLAUDE.md.
   if (next.name !== current.name || next.description !== current.description) {

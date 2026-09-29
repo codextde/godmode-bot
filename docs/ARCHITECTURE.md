@@ -39,6 +39,8 @@ agents/<slug>/        one git repository per agent (see below)
 browser/<profile-id>/ Chromium user-data-dirs managed by Godmode
 attachments/          chat uploads
 backups/              automatic + manual backups (*.godmode-backup)
+vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, tart/ (TART_HOME: vms/<vm-id>
+                      disks, cache/ images), shared/<vm-id>/ shared folders, logs/<vm-id>.log, ssh/ key
 logs/core.log
 ```
 
@@ -106,7 +108,8 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
-       [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key]
+       [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key; Bash when the run works in a VM]
+       [--add-dir <VM shared folder> when the run works in a VM]
        (prompt is written to stdin)
 cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <agent repo>)
 ```
@@ -207,6 +210,44 @@ Live view: `computer.subscribe { view }` over the WebSocket (`display:<id>`, `wi
 (`PATCH /api/conversations/:id { computerTarget }`, or `computerTarget` on `POST /api/chat`) validates the target; stopping
 revokes a running run's access immediately. Shares and first use per run are audited (`computer.share`,
 `computer.unshare`, `computer.control`). Backups never restore shares, unattended access or the Cua Driver command.
+
+## macOS virtual machines
+
+Agents can work in isolated macOS VMs instead of on the host (`packages/core/src/vm/`):
+
+* **Backend: [Tart](https://tart.run)** on Apple's Virtualization.framework. Godmode installs a pinned, SHA-256-verified,
+  notarized release into `<data>/vm/bin` on demand (`POST /api/vms/install`, or implicitly on the first VM) and runs it
+  with `TART_HOME=<data>/vm/tart`, so the user's own `~/.tart` is never touched (`settings.vm.tartPath` overrides the
+  binary). Images are the Cirrus Labs OCI images (`ghcr.io/cirruslabs/macos-{tahoe,sequoia}-base`, `…-tahoe-xcode`),
+  which ship the Tart guest agent, auto-login as `admin` and passwordless sudo. An image is pulled once
+  (`tart pull --concurrency 8`, progress parsed into `vm.updated` events); a VM is an APFS copy-on-write
+  `tart clone` of it with a random MAC (`tart set`), so creating and resetting take seconds.
+* **Records**: table `vms` (name, image, CPU, memory, disk, display, `provisioned_at`, last error/start/use); the Tart
+  VM name is the VM id. Disk and shared folder paths derive from the id. `agents.vm_id`, `conversations.vm_id` and
+  `workspaces.vm_id` assign VMs; a run uses the chat's, else the agent's, else the workspace's (`vm/assignments.ts`).
+  Assigning is human-only (agent-originated updates can't set `vmId`).
+* **Lifecycle** (`vm/service.ts`): `tart run <id> --no-graphics --vnc-experimental --suspendable --no-clipboard
+  --dir=godmode:<shared>` is spawned detached with its output in `<data>/vm/logs/<id>.log`; Godmode waits for the VNC
+  line and for the guest agent (`tart exec <id> /usr/bin/true`), then — on first boot or after a rename/reset — sets
+  the guest up (link `~/Godmode` → the virtiofs mount, computer name, Godmode's SSH key, no display sleep). VMs outlive
+  a Godmode restart and are adopted on start (VNC address read back from the log). `settings.vm.onQuit` suspends
+  (default), stops or keeps them when Godmode quits; `idleStopMinutes` stops unused ones. At most two macOS VMs run at
+  once (Apple's limit) — a third start answers 409 naming the running ones. Reset = `tart delete` + clone again
+  (shared folder and assignments kept); duplicate = `tart clone <id> <new>` of a stopped VM.
+* **Runs** (`runner.ts`): when a run has a VM, `attachVm` boots it if needed (activity "Starting the VM …"; a VM that
+  can't be used fails the run with the reason), the MCP config gets the `vm` server (`/mcp/vm`, same run token), the
+  system prompt a "macOS virtual machine" section (restated in every resumed turn), `--add-dir <shared folder>`, and —
+  with `settings.vm.isolateHostShell` (default) — `--disallowedTools Bash`, so shell work can't reach the host.
+* **`vm` MCP tools** (`vm/tools.ts`): `shell` (`tart exec <id> /bin/zsh -l -c …`, exit code + stdout/stderr, timeout),
+  `read_file` / `write_file` / `edit_file` (through the same channel, content via stdin), `info`, and `screen` — the
+  computer-use action vocabulary (screenshot, clicks, drag, scroll, type, key, zoom) over the VM's VNC server
+  (`vm/vnc.ts`: RFB 3.8 client with VNC auth, raw 32-bit updates, pointer/key events; `vm/raster.ts`: crop, area-average
+  downscale, PNG). Screenshots remember their frame, so model coordinates map back to framebuffer pixels. Screen input
+  works at the virtual-hardware level: no Screen Recording/Accessibility grants inside the guest.
+* **Human access**: `POST /api/vms/:id/open { what }` opens Screen Sharing (`vnc://` with the VNC password), Terminal
+  (SSH with Godmode's key) or the shared folder in Finder; `GET /api/vms/:id/screenshot` feeds the card preview (never
+  boots a VM). Backups carry VM records and assignments, not disks; a restored VM whose disk is missing shows an error
+  and can be reset.
 
 ## Automations
 

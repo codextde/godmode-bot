@@ -7,7 +7,7 @@
  * key names are readable without the vault.
  */
 import type { Agent, McpServer, McpServerInput, McpSource, McpTransport } from "@godmode/shared";
-import { BROWSER_MCP_NAME, GODMODE_MCP_NAME, SECRET_MASK } from "@godmode/shared";
+import { BROWSER_MCP_NAME, GODMODE_MCP_NAME, SECRET_MASK, VM_MCP_NAME } from "@godmode/shared";
 import type { McpServerJson } from "../types";
 import { all, bool, get, insert, run, update } from "../db";
 import { bus } from "../events/bus";
@@ -22,7 +22,7 @@ const log = logger("mcp-servers");
 export const TRANSPORTS: readonly McpTransport[] = ["stdio", "http", "sse"];
 
 /** Server names Godmode injects itself; custom servers never get these keys. */
-const RESERVED_NAMES = new Set<string>([GODMODE_MCP_NAME, BROWSER_MCP_NAME, ...COMPOSIO_SERVER_NAMES]);
+const RESERVED_NAMES = new Set<string>([GODMODE_MCP_NAME, BROWSER_MCP_NAME, VM_MCP_NAME, ...COMPOSIO_SERVER_NAMES]);
 
 const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** RFC 9110 token characters. */

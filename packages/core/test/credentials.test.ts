@@ -84,6 +84,7 @@ function makeAgent(workspaceId: string | null, permissions: Partial<AgentPermiss
     inheritMcp: true,
     subagents: [],
     workingDirectory: null,
+    vmId: null,
     repoPath: "/tmp/agent",
     lastRunAt: null,
     createdAt: ts,

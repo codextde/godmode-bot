@@ -17,13 +17,14 @@ import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { FolderChip } from "@/components/chat/folder-picker";
 import { ComputerShareChip } from "@/components/computer/computer-panel";
 import { InstructionsChip } from "@/components/instructions/instructions";
+import { VmChip } from "@/components/vms/vm-picker";
 import { ChatDropZone } from "@/components/chat/thread";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useConversations } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useConversations, useWorkspaces } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useLive, type LiveRun } from "@/stores/live";
@@ -79,6 +80,9 @@ export default function ChatHome() {
   /** Shared with the chat this message starts (a window, a screen or a browser tab). */
   const [shared, setShared] = useState<ComputerTarget | null>(null);
   const [instructions, setInstructions] = useState("");
+  /** macOS VM for the new chat; null = the agent's (or its workspace's). */
+  const [vmId, setVmId] = useState<string | null>(null);
+  const { data: workspaces = [] } = useWorkspaces();
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
   const selected =
@@ -86,6 +90,7 @@ export default function ChatHome() {
     available.find((a) => a.id === boot?.defaultAgentId) ??
     available.find((a) => a.isDefault) ??
     available[0];
+  const selectedWorkspace = selected?.workspaceId ? workspaces.find((w) => w.id === selected.workspaceId) : undefined;
 
   // Deep links: /?prompt=…&agent=…
   useEffect(() => {
@@ -164,6 +169,14 @@ export default function ChatHome() {
                     onChange={setFolder}
                   />
                   <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />
+                  <VmChip
+                    value={vmId}
+                    inherited={[
+                      selected?.vmId ? { vmId: selected.vmId, from: selected.name } : null,
+                      selectedWorkspace?.vmId ? { vmId: selectedWorkspace.vmId, from: `the ${selectedWorkspace.name} workspace` } : null,
+                    ]}
+                    onChange={setVmId}
+                  />
                   <InstructionsChip value={instructions} agent={selected} onChange={setInstructions} />
                 </>
               )
@@ -178,6 +191,7 @@ export default function ChatHome() {
                 ...choice,
                 workingDirectory: folder ?? undefined,
                 computerTarget: shared ?? undefined,
+                vmId: vmId ?? undefined,
                 instructions: instructions || undefined,
               })
             }
@@ -219,6 +233,7 @@ export default function ChatHome() {
             voice: true,
             workingDirectory: folder ?? undefined,
             computerTarget: shared ?? undefined,
+            vmId: vmId ?? undefined,
             instructions: instructions || undefined,
             ...choice,
           });

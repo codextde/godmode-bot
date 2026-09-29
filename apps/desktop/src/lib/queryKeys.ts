@@ -58,6 +58,11 @@ export const qk = {
   computerStatus: ["computer", "status"] as unknown[],
   computerSources: ["computer", "sources"] as unknown[],
   computerThumbnail: (view: string, size: number) => ["computer", "thumbnail", view, size],
+  /** macOS VMs; the list is patched in place by `vm.updated` events (see realtime.ts). */
+  vms: ["vms"] as unknown[],
+  vmList: ["vms", "list"] as unknown[],
+  vmStatus: ["vms", "status"] as unknown[],
+  vmScreen: (id: string, size: number) => ["vm-screen", id, size],
   chromeProfiles: ["chrome-profiles"] as unknown[],
   folders: ["folders"] as unknown[],
   folderList: (path: string, hidden: boolean) => ["folders", "list", path, hidden],

@@ -83,6 +83,21 @@ export function registerSystemRoutes(app: Hono) {
         throw badRequest("Invalid model id for dreaming");
       }
     }
+    const vm = patch.vm as Record<string, unknown> | undefined;
+    if (vm !== undefined) {
+      if (typeof vm !== "object" || vm === null || Array.isArray(vm)) throw badRequest("Invalid virtual machine settings");
+      for (const key of ["enabled", "isolateHostShell"] as const) {
+        if (vm[key] !== undefined && typeof vm[key] !== "boolean") throw badRequest(`vm.${key} must be true or false`);
+      }
+      if (vm.onQuit !== undefined && !["suspend", "stop", "keep"].includes(vm.onQuit as string)) throw badRequest('vm.onQuit must be "suspend", "stop" or "keep"');
+      const idle = vm.idleStopMinutes;
+      if (idle !== undefined && !(typeof idle === "number" && Number.isInteger(idle) && idle >= 0 && idle <= 24 * 60)) {
+        throw badRequest("Stopping idle VMs takes a whole number of minutes between 0 and 1440");
+      }
+      if (vm.tartPath !== undefined && (typeof vm.tartPath !== "string" || vm.tartPath.length > 4096 || (vm.tartPath.trim() !== "" && !vm.tartPath.trim().startsWith("/")))) {
+        throw badRequest("The tart binary must be an absolute path (or empty)");
+      }
+    }
     const next = updateSettings(patch as never);
     applyRuntimeSettings(next);
     return c.json(next);

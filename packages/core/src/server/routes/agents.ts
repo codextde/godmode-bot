@@ -89,6 +89,7 @@ export const agentSchema = z.object({
   inheritMcp: z.boolean().optional(),
   subagents: z.array(subagentSchema).max(20).optional(),
   workingDirectory: z.string().trim().max(4096).nullable().optional(),
+  vmId: id.nullable().optional(),
 });
 
 const triggerSchema = z.discriminatedUnion("type", [

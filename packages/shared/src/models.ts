@@ -25,6 +25,8 @@ export interface Workspace {
   icon: string; // emoji or lucide icon name
   /** Agent context: standing instructions for every agent in this workspace, on every run. */
   instructions: string;
+  /** macOS VM the workspace's agents work in (unless their chat or the agent has its own). null = none. */
+  vmId: ID | null;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -102,6 +104,8 @@ export interface Agent {
   subagents: SubagentDefinition[];
   /** Folder the agent works in by default (Claude's cwd). null = its own repository. */
   workingDirectory: string | null;
+  /** macOS VM the agent works in (unless its chat has its own). null = the workspace's VM, if any. */
+  vmId: ID | null;
   /** Absolute path of the agent's git repository. */
   repoPath: string;
   lastRunAt: ISODate | null;
@@ -251,6 +255,8 @@ export interface Conversation {
   workingDirectory: string | null;
   /** What the human shared with the agent in this chat (screen, window or browser tab). null = nothing. */
   computerTarget: ComputerTarget | null;
+  /** macOS VM this chat works in, overriding the agent's and the workspace's. null = theirs. */
+  vmId: ID | null;
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
   instructions: string;
   pinned: boolean;
@@ -769,11 +775,32 @@ export interface DreamingSettings {
   refreshDays: number;
 }
 
+export interface VmSettings {
+  /** Agents may work in macOS VMs assigned to them, their chat or their workspace. */
+  enabled: boolean;
+  /**
+   * Runs with a VM stay off this Mac: Claude Code's own Bash tool (which would run here) is turned off, and permissions
+   * aren't bypassed, so its file tools only reach the agent's repository, the chat's folder and the VM's shared folder.
+   */
+  isolateHostShell: boolean;
+  /**
+   * What happens to running VMs when Godmode quits: "suspend" saves their memory to disk so they resume where they
+   * left off, "stop" shuts macOS down, "keep" leaves them running (Godmode picks them up again when it starts).
+   * Disks are always kept.
+   */
+  onQuit: "suspend" | "stop" | "keep";
+  /** Stop a VM after it was not used by any run for this many minutes. 0 = never. */
+  idleStopMinutes: number;
+  /** Custom tart binary; empty = Godmode's own copy (installed on demand) or one on PATH. */
+  tartPath: string;
+}
+
 export interface Settings {
   general: GeneralSettings;
   runner: RunnerSettings;
   browser: BrowserSettings;
   computer: ComputerSettings;
+  vm: VmSettings;
   voice: VoiceSettings;
   security: SecuritySettings;
   server: ServerSettings;

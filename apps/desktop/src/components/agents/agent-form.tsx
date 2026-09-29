@@ -4,6 +4,7 @@ import { useLocation } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Bot,
+  Box,
   BrainCircuit,
   Eye,
   FolderOpen,
@@ -23,7 +24,7 @@ import type { Agent, AgentInput, Effort, SecretAccessMode, SubagentDefinition } 
 import { DEFAULT_MODEL, EFFORT_LABELS, EFFORT_OPTIONS, effortForModel, findModel } from "@godmode/shared";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useModelCatalog, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useModelCatalog, useVmChoices, useWorkspaces } from "@/lib/hooks";
 import { isMac, modKey } from "@/lib/desktop";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ import { ModelOptions } from "./model-options";
 import { useVaultGrant } from "@/components/vault/grant";
 import { FolderPickerDialog, folderName, useShortPath } from "@/components/chat/folder-picker";
 import { InheritedInstructions, useInheritedInstructions } from "@/components/instructions/instructions";
+import { VmSelectField } from "@/components/vms/vm-picker";
 
 export interface AgentFormValues {
   name: string;
@@ -69,6 +71,8 @@ export interface AgentFormValues {
   mcpServerIds: string[];
   subagents: SubagentDefinition[];
   workingDirectory: string | null;
+  /** macOS VM the agent works in; null = its workspace's (if any). */
+  vmId: string | null;
 }
 
 /** Seed values for the form from an existing agent, a template, or nothing. */
@@ -99,6 +103,7 @@ export function agentToValues(
     mcpServerIds: source?.mcpServerIds ?? [],
     subagents: source?.subagents ?? [],
     workingDirectory: source?.workingDirectory ?? null,
+    vmId: source?.vmId ?? null,
   };
 }
 
@@ -128,6 +133,7 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
       .map((s) => ({ ...s, name: slugify(s.name), description: s.description.trim(), prompt: s.prompt, model: s.model || undefined }))
       .filter((s) => s.name),
     workingDirectory: v.workingDirectory,
+    vmId: v.vmId,
   };
 }
 
@@ -165,6 +171,7 @@ const SECTIONS = [
   { id: "permissions", label: "Permissions" },
   { id: "browser", label: "Browser" },
   { id: "computer", label: "Computer" },
+  { id: "vm", label: "Virtual machine" },
   { id: "tools", label: "Tools" },
   { id: "subagents", label: "Subagents" },
 ];
@@ -265,12 +272,15 @@ export function AgentForm({
   const err = (k: string) => (showErrors ? errors[k] : undefined);
   const preview = { id: agentId, avatar: values.avatar, color: values.color };
   const inherited = useInheritedInstructions(values.workspaceId);
+  const vmChoices = useVmChoices();
+  const sections = vmChoices.available ? SECTIONS : SECTIONS.filter((s) => s.id !== "vm");
 
   const { hash } = useLocation();
+  // Again once the VM section shows up: it waits for the VM status (links from the VMs page go to #vm).
   useEffect(() => {
     const id = hash.slice(1);
     if (SECTIONS.some((s) => s.id === id)) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: "start" }));
-  }, [hash]);
+  }, [hash, vmChoices.available]);
 
   return (
     <form
@@ -560,6 +570,16 @@ export function AgentForm({
             </div>
           </FormSection>
 
+          {vmChoices.available && (
+            <FormSection
+              id="vm"
+              title="Virtual machine"
+              description="Let this agent work in its own macOS VM: it installs tools, runs builds and uses apps there instead of on this Mac. A single chat can still pick another VM."
+            >
+              <VmField value={values.vmId} workspaceId={values.workspaceId} onChange={(v) => set("vmId", v)} />
+            </FormSection>
+          )}
+
           <FormSection id="tools" title="Tools & integrations" description="MCP servers and connected apps this agent can use.">
             <div className="space-y-5">
               <ToggleRow
@@ -613,6 +633,12 @@ export function AgentForm({
                 <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{findModel(catalog.models, values.model)?.label ?? (values.model || "Default model")}</span>
                 {values.browserEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">Browser</span>}
                 {values.computerEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">Computer</span>}
+                {vmChoices.available && values.vmId && (
+                  <span className="flex max-w-full items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
+                    <Box className="size-3 shrink-0" />
+                    <span className="truncate">{vmChoices.vms.find((v) => v.id === values.vmId)?.name ?? "VM"}</span>
+                  </span>
+                )}
                 {values.workingDirectory && (
                   <span className="flex max-w-full items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
                     <FolderOpen className="size-3 shrink-0" />
@@ -623,7 +649,7 @@ export function AgentForm({
               </div>
             </div>
             <nav aria-label="Form sections" className="space-y-0.5">
-              {SECTIONS.map((s) => (
+              {sections.map((s) => (
                 <a
                   key={s.id}
                   href={`#${s.id}`}
@@ -801,6 +827,31 @@ function FolderField({ value, onChange }: { value: string | null; onChange: (v: 
         description="New chats and automations of this agent run inside this folder. Each chat can still switch to another one."
       />
     </>
+  );
+}
+
+function VmField({ value, workspaceId, onChange }: { value: string | null; workspaceId: string | null; onChange: (v: string | null) => void }) {
+  const { data: workspaces = [] } = useWorkspaces();
+  const { vms } = useVmChoices();
+  const workspace = workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
+  const workspaceVm = workspace?.vmId ? vms.find((v) => v.id === workspace.vmId) : undefined;
+  return (
+    <div className="@xl:max-w-md">
+      <VmSelectField
+        id="agent-vm"
+        label="Works in"
+        value={value}
+        onChange={onChange}
+        noneLabel={workspaceVm ? `None — use the workspace's VM (${workspaceVm.name})` : "None — use the workspace's VM"}
+        hint={
+          value
+            ? "Its runs start the VM when they need it."
+            : workspaceVm
+              ? `Runs work in ${workspaceVm.name}, the VM of ${workspace?.name}.`
+              : "Runs work on this Mac, unless its workspace or a chat has a VM."
+        }
+      />
+    </div>
   );
 }
 

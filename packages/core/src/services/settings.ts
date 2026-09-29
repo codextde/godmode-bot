@@ -44,6 +44,13 @@ export const DEFAULT_SETTINGS: Settings = {
     liveViewFps: 4,
     screenshotMaxSize: 1280,
   },
+  vm: {
+    enabled: true,
+    isolateHostShell: true,
+    onQuit: "suspend",
+    idleStopMinutes: 0,
+    tartPath: "",
+  },
   voice: {
     enabled: true,
     sttProvider: "browser",

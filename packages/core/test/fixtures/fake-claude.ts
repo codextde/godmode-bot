@@ -11,6 +11,8 @@
  *   CALL_MCP    call the Godmode MCP gateway from --mcp-config (initialize, tools/list, report_missing_login)
  *   CALL_COMPUTER  call the `computer` MCP server from --mcp-config (initialize, tools/list, computer_info) and answer
  *              with a JSON summary; "no computer server" when the run has none
+ *   CALL_VM     call the `vm` MCP server from --mcp-config (initialize, tools/list, shell, write_file, edit_file, read_file)
+ *              and answer "VM {json}"; "no vm server" when the run has none
  *   CRASH       print to stderr and exit 3 without a result
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
@@ -317,6 +319,51 @@ if (slash?.[1] === "clear") {
       info: call.result.content[0].text as string,
     };
     const text = `COMPUTER ${JSON.stringify(summary)}`;
+    textTurn(text);
+    result(text);
+  }
+} else if (prompt.includes("CALL_VM")) {
+  out(init);
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const server = cfg.mcpServers.vm;
+  if (!server) {
+    textTurn("no vm server");
+    result("no vm server");
+  } else {
+    let id = 0;
+    const rpc = async (method: string, params?: unknown) => {
+      const res = await fetch(server.url, {
+        method: "POST",
+        headers: { ...server.headers, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, ...(params ? { params } : {}) }),
+      });
+      const raw = await res.text();
+      return raw ? JSON.parse(raw) : null;
+    };
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const r = await rpc("tools/call", { name, arguments: args });
+      return { text: r.result.content[0].text as string, isError: !!r.result.isError };
+    };
+    const initRes = await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } });
+    const list = await rpc("tools/list");
+    const shell = await call("shell", { command: "echo hello-from-vm && whoami >/dev/null; echo oops >&2; exit 3" });
+    const write = await call("write_file", { path: "project/notes.txt", content: "alpha\nbeta\n" });
+    const edit = await call("edit_file", { path: "project/notes.txt", old_string: "beta", new_string: "gamma" });
+    const read = await call("read_file", { path: "~/project/notes.txt" });
+    const cwd = await call("shell", { command: "pwd", cwd: "project" });
+    const summary = {
+      server: initRes.result.serverInfo.name,
+      sameToken: server.headers.Authorization === cfg.mcpServers.godmode!.headers.Authorization,
+      tools: (list.result.tools as { name: string }[]).map((t) => t.name),
+      shell,
+      write,
+      edit,
+      read,
+      cwd,
+    };
+    const text = `VM ${JSON.stringify(summary)}`;
     textTurn(text);
     result(text);
   }

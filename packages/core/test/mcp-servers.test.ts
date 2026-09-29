@@ -56,6 +56,7 @@ function agentModel(p: Partial<Agent> & { id: string }): Agent {
     inheritMcp: p.inheritMcp ?? true,
     subagents: [],
     workingDirectory: null,
+    vmId: null,
     repoPath: "",
     lastRunAt: null,
     createdAt: "",

@@ -350,4 +350,32 @@ CREATE INDEX IF NOT EXISTS idx_dreams_run ON dreams(run_id);
 ALTER TABLE conversations ADD COLUMN memory_digest TEXT;
 `,
   },
+  {
+    id: 8,
+    name: "vms",
+    sql: /* sql */ `
+-- macOS VMs (Tart). A VM's disk lives in <data>/vm/tart/vms/<id>, its shared folder in <data>/vm/shared/<id> (both
+-- derived from the id, so the data dir can move; a restored backup brings the records, not the disks).
+CREATE TABLE IF NOT EXISTS vms (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  image TEXT NOT NULL,
+  cpu INTEGER NOT NULL,
+  memory_mb INTEGER NOT NULL,
+  disk_gb INTEGER NOT NULL,
+  display TEXT NOT NULL,
+  -- Set once Godmode prepared the guest (shared folder link, SSH key, computer name).
+  provisioned_at TEXT,
+  last_error TEXT,
+  last_started_at TEXT,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+-- Where agents work: the chat's VM, else the agent's, else the workspace's.
+ALTER TABLE agents ADD COLUMN vm_id TEXT;
+ALTER TABLE conversations ADD COLUMN vm_id TEXT;
+ALTER TABLE workspaces ADD COLUMN vm_id TEXT;
+`,
+  },
 ];

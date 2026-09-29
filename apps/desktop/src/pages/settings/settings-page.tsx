@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   AudioLines,
   BrainCircuit,
+  Box,
   DatabaseBackup,
   Globe,
   HeartPulse,
@@ -27,6 +28,7 @@ import { InstructionsSection } from "@/components/settings/instructions-section"
 import { MemorySection } from "@/components/settings/memory-section";
 import { SecuritySection } from "@/components/settings/security-section";
 import { SystemSection } from "@/components/settings/system-section";
+import { VmSection } from "@/components/settings/vm-section";
 import { VoiceSection } from "@/components/settings/voice-section";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +42,7 @@ const SECTIONS = [
   { id: "instructions", label: "Instructions", icon: <ScrollText />, group: "Preferences" },
   { id: "browser", label: "Browser", icon: <Globe />, group: "Preferences" },
   { id: "computer", label: "Computer", icon: <MonitorUp />, group: "Preferences" },
+  { id: "vms", label: "Virtual machines", icon: <Box />, group: "Preferences" },
   { id: "voice", label: "Voice", icon: <AudioLines />, group: "Preferences" },
   { id: "memory", label: "Memory", icon: <BrainCircuit />, group: "Preferences" },
   { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
@@ -85,6 +88,7 @@ export default function SettingsPage() {
       instructions: () => <InstructionsSection settings={s} />,
       browser: () => <BrowserSection settings={s} />,
       computer: () => <ComputerSection settings={s} />,
+      vms: () => <VmSection settings={s} />,
       voice: () => <VoiceSection settings={s} />,
       memory: () => <MemorySection settings={s} />,
       security: () => <SecuritySection settings={s} />,

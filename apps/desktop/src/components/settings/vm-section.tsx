@@ -1,0 +1,187 @@
+import { Link } from "react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Box, CircleCheck, CircleDashed, Moon, Power, PowerOff, Wrench } from "lucide-react";
+import { toast } from "sonner";
+import type { Settings, VmSettings } from "@godmode/shared";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import { useShortPath } from "@/components/chat/folder-picker";
+import { toastApiError } from "@/components/vault/vault-utils";
+import { api } from "@/lib/api";
+import { useVmStatus } from "@/lib/hooks";
+import { qk } from "@/lib/queryKeys";
+import { cn } from "@/lib/utils";
+import { Callout, ChoiceCards, CommitInput, InfoRow, NumberField, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
+
+function State({ ok, children }: { ok: boolean | null; children: React.ReactNode }) {
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-[13px]", ok ? "text-foreground" : "text-muted-foreground")}>
+      {ok ? <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" /> : <CircleDashed className="size-3.5" />}
+      {children}
+    </span>
+  );
+}
+
+export function VmSection({ settings }: { settings: Settings }) {
+  const { patch, patchAsync } = useSettingsPatch();
+  const v = settings.vm;
+  const qc = useQueryClient();
+  const status = useVmStatus();
+  const s = status.data;
+  const short = useShortPath();
+  const install = useMutation({
+    mutationFn: api.vms.install,
+    onSuccess: (res) => {
+      if (res.ok) toast.success("Tart is ready");
+      else toast.error("Tart couldn't be installed", { description: res.output || undefined });
+      void qc.invalidateQueries({ queryKey: qk.vms });
+    },
+    onError: (e) => toastApiError(e, "Tart couldn't be installed", qc),
+  });
+  const set = (p: Partial<VmSettings>) => patch({ vm: p });
+  // Another binary changes what the status reports (installed, version). Failures are toasted by the patch hook.
+  const saveTartPath = (tartPath: string) =>
+    void patchAsync({ vm: { tartPath: tartPath.trim() } })
+      .then(() => qc.invalidateQueries({ queryKey: qk.vms }))
+      .catch(() => undefined);
+
+  return (
+    <div className="space-y-5">
+      <SectionHeading
+        title="Virtual machines"
+        description="Give agents their own macOS: they install tools, run builds and use apps in an isolated VM on this Mac instead of on your computer. A run uses its chat's VM, else its agent's, else its workspace's."
+      />
+
+      {s && !s.supported && (
+        <Callout tone="warning" title="Virtual machines aren't available on this machine">
+          {s.reason ?? "macOS VMs need a Mac with Apple silicon."}
+        </Callout>
+      )}
+
+      <SettingsGroup
+        title="Virtual machines"
+        icon={<Box />}
+        actions={
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/vms">
+              Manage VMs <ArrowRight />
+            </Link>
+          </Button>
+        }
+      >
+        <SettingRow
+          label="Let agents work in virtual machines"
+          htmlFor="vm-enabled"
+          description="Agents, chats and workspaces with a VM assigned run there. Turned off, every run works on this Mac and VM controls are hidden in chats and agent settings."
+        >
+          <Switch id="vm-enabled" checked={v.enabled} onCheckedChange={(enabled) => set({ enabled })} />
+        </SettingRow>
+        <SettingRow
+          label="Keep agents with a VM off this Mac"
+          htmlFor="vm-isolate"
+          disabled={!v.enabled}
+          description="Claude Code's own Bash tool — which runs on this Mac — is turned off for their runs and permissions aren't bypassed, so commands can't touch your computer and file tools only reach the agent's repository, the chat's folder and the VM's shared folder."
+        >
+          <Switch id="vm-isolate" checked={v.isolateHostShell} disabled={!v.enabled} onCheckedChange={(isolateHostShell) => set({ isolateHostShell })} />
+        </SettingRow>
+        <SettingRow
+          label="Stop idle VMs after"
+          htmlFor="vm-idle"
+          description="Frees memory and CPU when no run used a VM for this long. 0 = keep them running."
+        >
+          <NumberField
+            id="vm-idle"
+            min={0}
+            max={1440}
+            suffix="min"
+            value={v.idleStopMinutes}
+            onCommit={(n) => n !== null && set({ idleStopMinutes: n })}
+          />
+        </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup
+        title="When Godmode quits"
+        icon={<Power />}
+        description="What happens to running VMs. Their disks are always kept."
+        bodyClassName="py-4"
+      >
+        <ChoiceCards<VmSettings["onQuit"]>
+          name="vm-on-quit"
+          value={v.onQuit}
+          onChange={(onQuit) => set({ onQuit })}
+          className="@xl:grid-cols-3"
+          options={[
+            {
+              value: "suspend",
+              title: "Suspend",
+              icon: <Moon />,
+              badge: <span className="rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-px text-[10px] font-medium text-brand-strong">Default</span>,
+              description: "Their memory is saved to disk — they resume where they left off.",
+            },
+            { value: "stop", title: "Stop", icon: <PowerOff />, description: "macOS shuts down in each VM; the next start boots fresh." },
+            { value: "keep", title: "Keep running", icon: <Power />, description: "They stay up; Godmode picks them up again when it starts." },
+          ]}
+        />
+      </SettingsGroup>
+
+      <SettingsGroup
+        title="Tart"
+        icon={<Wrench />}
+        description={
+          <>
+            Runs the VMs with Apple's Virtualization framework —{" "}
+            <a href="https://tart.run" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+              tart.run
+            </a>
+            , free for personal use.
+          </>
+        }
+        actions={
+          s?.supported && !s.tart.installed ? (
+            <Button size="sm" onClick={() => install.mutate()} disabled={install.isPending}>
+              {install.isPending && <Spinner />} {install.isPending ? "Installing…" : "Install"}
+            </Button>
+          ) : undefined
+        }
+      >
+        <InfoRow label="Status">
+          {s ? (
+            <State ok={s.tart.installed}>
+              {s.tart.installed
+                ? [s.tart.version ? `Tart ${s.tart.version}` : "Installed", s.tart.managed ? "Godmode's own copy" : "from this Mac"].join(" · ")
+                : s.supported
+                  ? `Not installed — Godmode installs Tart ${s.tart.bundledVersion} when you set up or create a VM`
+                  : "Not available"}
+            </State>
+          ) : (
+            <State ok={null}>Checking…</State>
+          )}
+        </InfoRow>
+        {s?.tart.path && (
+          <InfoRow label="Binary" mono>
+            <span className="break-all">{short(s.tart.path)}</span>
+          </InfoRow>
+        )}
+        <InfoRow label="VMs and shared folders" mono>
+          <span className="break-all">{s ? short(s.storageDir) : "…"}</span>
+        </InfoRow>
+        {s?.host.freeDiskGb != null && <InfoRow label="Free space">{s.host.freeDiskGb} GB</InfoRow>}
+        <SettingRow
+          label="Custom tart binary"
+          htmlFor="vm-tart-path"
+          description="Leave empty to use Godmode's own copy (installed on demand) or one on your PATH."
+        >
+          <CommitInput
+            id="vm-tart-path"
+            className="w-72 font-mono text-[13px]"
+            placeholder="Godmode's own copy"
+            value={v.tartPath}
+            onCommit={saveTartPath}
+          />
+        </SettingRow>
+      </SettingsGroup>
+    </div>
+  );
+}

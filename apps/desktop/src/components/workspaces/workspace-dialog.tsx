@@ -12,7 +12,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { VmSelectField } from "@/components/vms/vm-picker";
 import { api } from "@/lib/api";
+import { useVmChoices } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
@@ -49,6 +51,8 @@ export function WorkspaceDialog({
   const [color, setColor] = useState<string>("violet");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [vmId, setVmId] = useState<string | null>(null);
+  const vmChoices = useVmChoices();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [customEmoji, setCustomEmoji] = useState("");
 
@@ -59,12 +63,21 @@ export function WorkspaceDialog({
     setColor(workspace?.color || AGENT_COLORS[Math.floor(Math.random() * AGENT_COLORS.length)]);
     setDescription(workspace?.description ?? "");
     setInstructions(workspace?.instructions ?? "");
+    setVmId(workspace?.vmId ?? null);
     setCustomEmoji("");
   }, [open, workspace]);
 
   const save = useMutation({
     mutationFn: () => {
-      const input = { name: name.trim(), icon, color, description: description.trim(), instructions: instructions.trim() };
+      const input = {
+        name: name.trim(),
+        icon,
+        color,
+        description: description.trim(),
+        instructions: instructions.trim(),
+        // Only when the VM control is shown: otherwise leave the assignment as it is.
+        ...(vmChoices.available ? { vmId } : {}),
+      };
       return workspace ? api.workspaces.update(workspace.id, input) : api.workspaces.create(input);
     },
     onSuccess: (ws) => {
@@ -231,6 +244,20 @@ export function WorkspaceDialog({
                 className="max-h-72 min-h-28 resize-y leading-relaxed"
               />
             </div>
+            {vmChoices.available && (
+              <VmSelectField
+                id="ws-vm"
+                label={
+                  <>
+                    Virtual machine <span className="font-normal text-muted-foreground">(optional)</span>
+                  </>
+                }
+                value={vmId}
+                onChange={setVmId}
+                noneLabel="None — agents work on this Mac"
+                hint="The workspace's agents work in this macOS VM, unless an agent or a chat has its own."
+              />
+            )}
           </div>
 
           <DialogFooter className="border-t bg-paper-2 px-6 py-4">

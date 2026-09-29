@@ -12,6 +12,7 @@ import type { RunContext } from "../types";
 import { resolveRunToken } from "./tokens";
 import { UnknownToolError, callTool, listToolsFor, toolErrorMessage } from "./tools";
 import { COMPUTER_INSTRUCTIONS, UnknownComputerToolError, callComputerTool, listComputerTools } from "../computer/tools";
+import { UnknownVmToolError, VM_INSTRUCTIONS, callVmTool, listVmTools } from "../vm/tools";
 
 const log = logger("mcp");
 
@@ -44,7 +45,7 @@ function idOf(msg: unknown): JsonRpcId {
 const ok = (id: JsonRpcId, result: unknown): JsonRpcResponse => ({ jsonrpc: "2.0", id, result });
 const rpcError = (id: JsonRpcId, code: number, message: string): JsonRpcResponse => ({ jsonrpc: "2.0", id, error: { code, message } });
 
-/** One MCP server behind the gateway: `/mcp` (Godmode tools) or `/mcp/computer` (computer use). */
+/** One MCP server behind the gateway: `/mcp` (Godmode tools), `/mcp/computer` (computer use) or `/mcp/vm` (macOS VM). */
 export interface McpServerDef {
   name: string;
   instructions: string;
@@ -67,6 +68,14 @@ export const COMPUTER_SERVER: McpServerDef = {
   list: listComputerTools,
   call: callComputerTool,
   isUnknownTool: (err) => err instanceof UnknownComputerToolError,
+};
+
+export const VM_SERVER: McpServerDef = {
+  name: "vm",
+  instructions: VM_INSTRUCTIONS,
+  list: listVmTools,
+  call: callVmTool,
+  isUnknownTool: (err) => err instanceof UnknownVmToolError,
 };
 
 /** Handle one JSON-RPC message. Returns null for notifications and client responses (nothing to send). */
@@ -121,7 +130,8 @@ function bearer(c: Context): string {
   return header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
 }
 
-function disableIdleTimeout(c: Context) {
+/** Long requests (tool calls, VM boots, downloads) must not be cut off by Bun's idle timeout. */
+export function disableIdleTimeout(c: Context) {
   try {
     const server = (c.env as { server?: { timeout?: (req: Request, seconds: number) => void } } | undefined)?.server;
     server?.timeout?.(c.req.raw, 0);
@@ -203,9 +213,10 @@ async function serve(c: Context, server: McpServerDef): Promise<Response> {
 export function registerMcpRoutes(app: Hono): void {
   app.post("/mcp", (c) => serve(c, GODMODE_SERVER));
   app.post("/mcp/computer", (c) => serve(c, COMPUTER_SERVER));
+  app.post("/mcp/vm", (c) => serve(c, VM_SERVER));
 
   // Stateless servers: no server-initiated SSE stream and no sessions to terminate.
-  for (const path of ["/mcp", "/mcp/computer"]) {
+  for (const path of ["/mcp", "/mcp/computer", "/mcp/vm"]) {
     app.get(path, (c) => c.body(null, 405, { Allow: "POST, DELETE" }));
     app.delete(path, (c) => c.body(null, 200));
   }

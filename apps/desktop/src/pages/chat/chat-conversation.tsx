@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, ComputerTarget, ConversationWithMessages, Message, SendMessageInput } from "@godmode/shared";
+import type { Agent, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, Vm } from "@godmode/shared";
 import { computerTargetLabel } from "@godmode/shared";
 import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import { ConversationHeader } from "@/components/chat/conversation-header";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { InstructionsChip } from "@/components/instructions/instructions";
+import { VmChip } from "@/components/vms/vm-picker";
 import { ChatDropZone, Thread } from "@/components/chat/thread";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -26,7 +27,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { useVoiceSettings } from "@/hooks/use-voice";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useConversation } from "@/lib/hooks";
+import { useAllAgents, useConversation, useWorkspaces } from "@/lib/hooks";
 import { onServerEvent } from "@/lib/realtime";
 import { speak, useVoicePrefs, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
@@ -44,6 +45,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const { data: conv, isLoading, error } = useConversation(conversationId);
   const { data: agents = [] } = useAllAgents();
   const agent = agents.find((a) => a.id === conv?.agentId);
+  const { data: workspaces = [] } = useWorkspaces();
+  const agentWorkspace = agent?.workspaceId ? workspaces.find((w) => w.id === agent.workspaceId) : undefined;
   const live = useConversationLiveRun(conversationId);
   const voiceSettings = useVoiceSettings();
   const setVoiceMode = useUi((s) => s.setVoiceMode);
@@ -188,6 +191,22 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       });
     },
     onError: (err) => toast.error("Couldn't save the instructions", { description: errorMessage(err) }),
+  });
+
+  const setVm = useMutation({
+    mutationFn: (vmId: string | null) => api.conversations.update(conversationId, { vmId }),
+    onSuccess: (updated) => {
+      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
+      // "Used by" on the VMs page.
+      qc.invalidateQueries({ queryKey: qk.vmList });
+      const vm = updated.vmId ? qc.getQueryData<Vm[]>(qk.vmList)?.find((v) => v.id === updated.vmId) : undefined;
+      if (updated.vmId)
+        toast.success(`Working in ${vm?.name ?? "the VM"}`, {
+          description: vm?.state === "running" ? "The next messages run in this VM." : "The next messages run in this VM — it starts when the agent needs it.",
+        });
+      else toast.success("Back to the default", { description: `${agent?.name ?? "The agent"} uses its own or its workspace's VM again, if there is one.` });
+    },
+    onError: (err) => toast.error("Couldn't change the VM", { description: errorMessage(err) }),
   });
 
   const share = useMutation({
@@ -346,6 +365,15 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                       onShare={(t) => share.mutateAsync(t)}
                       onWatch={() => setComputerFocus("watch")}
                       busy={share.isPending}
+                    />
+                    <VmChip
+                      value={conv.vmId ?? null}
+                      inherited={[
+                        agent?.vmId ? { vmId: agent.vmId, from: agent.name } : null,
+                        agentWorkspace?.vmId ? { vmId: agentWorkspace.vmId, from: `the ${agentWorkspace.name} workspace` } : null,
+                      ]}
+                      onChange={(vmId) => setVm.mutateAsync(vmId).catch(() => undefined)}
+                      busy={setVm.isPending}
                     />
                     <InstructionsChip
                       value={conv.instructions ?? ""}

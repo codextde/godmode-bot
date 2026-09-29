@@ -26,6 +26,7 @@ import { startAutomationEvents, stopAutomationEvents } from "./automations/event
 import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
 import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
 import { shutdownComputer } from "./computer/service";
+import { shutdownVms, startVms } from "./vm/service";
 import { runDoctor } from "./services/doctor";
 import { getModelCatalog } from "./runner/models";
 import { newId } from "./util";
@@ -118,6 +119,8 @@ async function serve(values: Record<string, unknown>) {
   startDreaming();
   startAutomationEvents();
   startAppTriggers();
+  // Adopt VMs that kept running while Godmode was closed.
+  startVms().catch((err) => log.warn("could not check VMs", err));
 
   const app = createApp();
   const token = getAccessToken();
@@ -192,6 +195,7 @@ async function serve(values: Record<string, unknown>) {
     await shutdownRunner();
     await shutdownBrowsers();
     await shutdownComputer();
+    await shutdownVms().catch((err) => log.warn("could not stop VMs", err));
     server.stop(true);
     closeDb();
     process.exit(0);

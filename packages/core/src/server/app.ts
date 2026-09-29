@@ -18,6 +18,7 @@ import { registerVoiceRoutes } from "./routes/voice";
 import { registerFolderRoutes } from "./routes/folders";
 import { registerMcpRoutes } from "../mcp/http";
 import { registerComputerRoutes } from "./routes/computer";
+import { registerVmRoutes } from "./routes/vms";
 import { serveStatic } from "./static";
 import { handleWebhook } from "../automations/webhooks";
 
@@ -83,6 +84,7 @@ export function createApp() {
   registerIntegrationRoutes(app);
   registerBrowserRoutes(app);
   registerComputerRoutes(app);
+  registerVmRoutes(app);
   registerBackupRoutes(app);
   registerVoiceRoutes(app);
   registerFolderRoutes(app);

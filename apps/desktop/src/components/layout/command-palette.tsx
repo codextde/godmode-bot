@@ -4,6 +4,7 @@ import {
   Activity,
   Archive,
   Bot,
+  Box,
   Globe,
   Inbox,
   KeyRound,
@@ -120,6 +121,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => go("/computer")}>
             <MonitorUp /> Computer
+          </CommandItem>
+          <CommandItem value="virtual machines vms macos tart" onSelect={() => go("/vms")}>
+            <Box /> Virtual machines
           </CommandItem>
           <CommandItem onSelect={() => go("/workspaces")}>
             <Layers /> Workspaces
