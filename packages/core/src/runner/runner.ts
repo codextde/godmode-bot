@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { FileSink, Subprocess } from "bun";
 import type { Agent, ComputerTarget, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
-import { BROWSER_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
+import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { excerpt, logger } from "../log";
@@ -47,6 +47,7 @@ import { effortFor } from "./models";
 import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix, type PromptVm } from "./prompt";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
 import { attachVm, detachVm, type RunVm } from "../vm/service";
+import { CUA_HIDDEN_TOOLS, currentVmPage, prepareGuest, type GuestTools } from "../vm/guest";
 import { resolveVmId } from "../vm/assignments";
 import { parseComputerTarget } from "../computer/targets";
 import { StreamAccumulator, detectLoginFailure, redactBlocks } from "./stream";
@@ -222,8 +223,15 @@ interface Job {
   lastPersistAt: number;
   deltaTimer: ReturnType<typeof setTimeout> | null;
   done: Promise<void> | null;
-  /** Browser profile this run drives (undefined = not resolved yet, null = no browser). */
-  browserProfileId?: string | null;
+  /**
+   * What this run's browser work locks (undefined = not resolved yet, null = no browser): the browser profile, or
+   * `vm:<id>` for a run in a VM (its browser and screen are the VM's).
+   */
+  browserLock?: string | null;
+  /** The VM the run works in (undefined = not resolved yet, null = none). */
+  vmId?: string | null;
+  /** The run drove the Chrome in its VM. */
+  vmBrowser?: boolean;
   /** Screen, window or tab this run may control (undefined = not resolved yet, null = none). */
   computerTarget?: ComputerTarget | null;
   /** The target is the agent's own unattended access, not something shared in the chat. */
@@ -488,9 +496,12 @@ function pump() {
       blocked.add(job.conversationId);
       continue;
     }
+    // Re-read the VM right before deciding: the chat's VM may have changed while the run was queued.
+    job.vmId = undefined;
+    job.browserLock = undefined;
     const holder = browserHolder(job);
     if (holder) {
-      emitActivity(job, `Waiting for the browser (in use by another run)`);
+      emitActivity(job, vmOf(job) ? "Waiting for the VM (another run is working in it)" : "Waiting for the browser (in use by another run)");
       blocked.add(job.conversationId);
       continue;
     }
@@ -524,17 +535,31 @@ function memoryHolder(job: Job): Job | null {
   return null;
 }
 
-function browserProfileOf(job: Job): string | null {
-  if (job.browserProfileId !== undefined) return job.browserProfileId;
-  if (job.trigger === "dream") return (job.browserProfileId = null);
+/** The VM the run works in: its chat's, else its agent's, else its workspace's. */
+function vmOf(job: Job): string | null {
+  if (job.vmId !== undefined) return job.vmId;
+  if (job.trigger === "dream") return (job.vmId = null);
+  try {
+    job.vmId = resolveVmId(job.conversationId, getAgent(job.agentId));
+  } catch {
+    job.vmId = null;
+  }
+  return job.vmId;
+}
+
+function browserLockOf(job: Job): string | null {
+  if (job.browserLock !== undefined) return job.browserLock;
+  if (job.trigger === "dream") return (job.browserLock = null);
+  // One screen, one mouse and one Chrome per VM: runs working in the same VM take turns.
+  const vmId = vmOf(job);
+  if (vmId) return (job.browserLock = `vm:${vmId}`);
   try {
     const agent = getAgent(job.agentId);
-    job.browserProfileId =
-      getSettings().browser.enabled && agent.browser.enabled ? resolveProfileForAgent(agent).id : null;
+    job.browserLock = getSettings().browser.enabled && agent.browser.enabled ? resolveProfileForAgent(agent).id : null;
   } catch {
-    job.browserProfileId = null;
+    job.browserLock = null;
   }
-  return job.browserProfileId;
+  return job.browserLock;
 }
 
 function isAncestor(candidate: Job, job: Job): boolean {
@@ -549,6 +574,7 @@ function isAncestor(candidate: Job, job: Job): boolean {
 /**
  * What the run may control: the screen, window or tab shared in its conversation, else — for agents allowed to use
  * the computer on their own (routines, delegated work) — their configured target (default: the whole desktop).
+ * Nothing for a run in a VM: it uses the VM's screen and apps, never this computer's.
  */
 export function computerTargetOf(job: {
   agentId: string;
@@ -562,18 +588,13 @@ export function computerTargetOf(job: {
   let fromAgent = false;
   try {
     // Dreams only read and edit memory files.
-    if (getSettings().computer.enabled && job.trigger !== "dream") {
+    const agent = getAgent(job.agentId);
+    if (getSettings().computer.enabled && job.trigger !== "dream" && !resolveVmId(job.conversationId, agent)) {
       const conv = get<{ computer_target: string | null }>("SELECT computer_target FROM conversations WHERE id = ?", job.conversationId);
       target = parseComputerTarget(parseJson<unknown>(conv?.computer_target, null));
-      if (!target) {
-        const agent = getAgent(job.agentId);
-        // A run kept off this computer (it works in a VM) gets no unattended access to its desktop either.
-        const settings = getSettings();
-        const keptOff = settings.vm.enabled && settings.vm.isolateHostShell && !!resolveVmId(job.conversationId, agent);
-        if (agent.computer.enabled && !keptOff) {
-          target = agent.computer.target ?? { kind: "desktop" };
-          fromAgent = true;
-        }
+      if (!target && agent.computer.enabled) {
+        target = agent.computer.target ?? { kind: "desktop" };
+        fromAgent = true;
       }
     }
   } catch {
@@ -597,13 +618,13 @@ function computerHolder(job: Job): Job | null {
   return null;
 }
 
-/** The running job currently holding `job`'s browser profile (excluding its own ancestors), if any. */
+/** The running job currently holding `job`'s browser profile or VM (excluding its own ancestors), if any. */
 function browserHolder(job: Job): Job | null {
-  const profileId = browserProfileOf(job);
-  if (!profileId) return null;
+  const lock = browserLockOf(job);
+  if (!lock) return null;
   for (const other of jobs.values()) {
     if (other === job || other.status !== "running") continue;
-    if (browserProfileOf(other) === profileId && !isAncestor(other, job)) return other;
+    if (browserLockOf(other) === lock && !isAncestor(other, job)) return other;
   }
   return null;
 }
@@ -868,27 +889,51 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   if (decided && !computer && fresh) job.acc.addNotice("info", "What you share changed while this message started — it applies from your next message.");
   if (computer) attachComputer(job.runId, agent.id, job.conversationId, computer, job.computerFromAgent ? "agent" : "share");
   // The macOS VM this run works in (the chat's, the agent's or the workspace's), booted when needed. Work meant for a
-  // VM never falls back to this computer: a VM that can't be used fails the run.
+  // VM never falls back to this computer: a VM that can't be used fails the run, and its browser and computer use run
+  // inside the VM (tools that can't be set up there are left out, not replaced by this computer's).
   let vm: RunVm | null = null;
-  const vmId = dreaming ? null : resolveVmId(job.conversationId, agent);
+  let guest: GuestTools | null = null;
+  // The VM the queue decided on (its lock is what keeps other runs out of it).
+  const vmId = dreaming ? null : vmOf(job);
   if (vmId) {
     if (!settings.vm.enabled) {
       return { status: "failed", error: "This work is set to run in a virtual machine, but virtual machines are turned off (Settings → Virtual machines). Turn them on, or remove the VM from the chat, agent or workspace." };
     }
     const cancelled = new AbortController();
     const watch = setInterval(() => job.cancelReason && cancelled.abort(), 250);
+    const onActivity = (label: string) => emitActivity(job, label);
     try {
-      vm = await attachVm(job.runId, vmId, (label) => emitActivity(job, label), cancelled.signal);
-    } catch (err) {
+      try {
+        vm = await attachVm(job.runId, vmId, onActivity, cancelled.signal);
+      } catch (err) {
+        if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+        return { status: "failed", error: `The virtual machine can't be used: ${errorText(err)}` };
+      }
       if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
-      return { status: "failed", error: `The virtual machine can't be used: ${errorText(err)}` };
+      const browser = settings.browser.enabled && agent.browser.enabled;
+      guest = await prepareGuest(vm.id, { browser, onActivity, signal: cancelled.signal }).catch((err: unknown) => ({
+        browser: null,
+        cua: null,
+        problems: [`The VM's browser and computer-use tools are unavailable in this run: ${errorText(err)}`],
+      }));
+      if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+      job.vmBrowser = !!guest.browser;
+      for (const problem of guest.problems) job.acc.addNotice("warning", problem);
     } finally {
       clearInterval(watch);
     }
-    if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
   }
   const promptVm: PromptVm | null = vm
-    ? { name: vm.name, guestUser: vm.guestUser, guestSharedDir: vm.guestSharedDir, hostSharedDir: vm.hostSharedDir, hostShellOff: settings.vm.isolateHostShell, vaultFill: settings.vm.vaultFill }
+    ? {
+        name: vm.name,
+        guestUser: vm.guestUser,
+        guestSharedDir: vm.guestSharedDir,
+        hostSharedDir: vm.hostSharedDir,
+        hostShellOff: settings.vm.isolateHostShell,
+        browser: !!guest?.browser,
+        cua: !!guest?.cua,
+        vaultFill: settings.vm.vaultFill,
+      }
     : null;
   // The workspace's folders and repositories; a missing clone is cloned first. A dream only works on its memory.
   let sources: RunSource[] = [];
@@ -907,7 +952,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const mcp = await buildMcpConfig(agent, res.token, {
     onNotice: (text) => job.acc.addNotice("warning", text),
     computer: !!computer,
-    vm: !!vm,
+    vm: vm ? { id: vm.id, browser: guest?.browser ?? null, cua: guest?.cua ?? null } : null,
     gatewayOnly: dreaming,
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
@@ -975,8 +1020,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   baseArgs.push("--mcp-config", mcpPath, "--strict-mcp-config");
   if (dreaming) baseArgs.push("--tools", DREAM_TOOLS);
   const disallowed: string[] = [];
-  // Hide browser-use tools that need their own LLM key when none is configured (they would only error).
-  if (mcp.mcpServers[BROWSER_MCP_NAME] && !browserLlmKey()) disallowed.push(...BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`));
+  // Hide browser-use tools that need their own LLM key when none is configured (they would only error). The key never
+  // goes into a VM, so a VM's browser has none.
+  if (mcp.mcpServers[BROWSER_MCP_NAME] && (vm || !browserLlmKey())) disallowed.push(...BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`));
+  if (mcp.mcpServers[CUA_MCP_NAME]) disallowed.push(...CUA_HIDDEN_TOOLS.map((t) => `mcp__${CUA_MCP_NAME}__${t}`));
   // Shell work belongs in the VM: Claude Code's own Bash tool would run on the host. Settings files (hooks run shell
   // commands on this computer) can't be planted for later runs in the folders this run may write to.
   if (hostLocked) disallowed.push("Bash", "Edit(**/.claude/**)"); // Edit rules cover every file-editing tool
@@ -1323,9 +1370,9 @@ async function detectMissingLogin(job: Job, agent: Agent, text: string) {
   if (!reason) return;
   let service = "Unknown service";
   let url = "";
-  if (agent.browser.enabled) {
+  if (agent.browser.enabled && (!job.vmId || job.vmBrowser)) {
     try {
-      const page = await currentPage(resolveProfileForAgent(agent).id);
+      const page = job.vmId ? await currentVmPage(job.vmId) : await currentPage(resolveProfileForAgent(agent).id);
       if (page?.url && /^https?:/i.test(page.url)) {
         url = page.url;
         service = hostnameOf(page.url) || service;

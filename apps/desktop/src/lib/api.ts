@@ -444,7 +444,7 @@ export const api = {
   browser: {
     profiles: () => get<BrowserProfile[]>("/api/browser/profiles"),
     createProfile: (input: { name: string; workspaceId: string | null }) => post<BrowserProfile>("/api/browser/profiles", input),
-    updateProfile: (id: string, input: { name?: string; isDefault?: boolean }) => patch<BrowserProfile>(`/api/browser/profiles/${id}`, input),
+    updateProfile: (id: string, input: { name?: string; isDefault?: boolean; workspaceId?: string | null }) => patch<BrowserProfile>(`/api/browser/profiles/${id}`, input),
     deleteProfile: (id: string) => del<{ ok: true }>(`/api/browser/profiles/${id}`),
     launch: (id: string, headless?: boolean) => post<{ cdpUrl: string; port: number }>(`/api/browser/profiles/${id}/launch`, { headless }),
     stop: (id: string) => post<{ ok: true }>(`/api/browser/profiles/${id}/stop`),

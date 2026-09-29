@@ -1,17 +1,19 @@
 /**
  * Builds the `--mcp-config` file for a run: the Godmode gateway (per-run bearer token), the browser
  * (browser-use MCP bound to the agent's Chromium profile), computer use (when a screen, window or tab is shared),
- * the macOS VM tools (when the run works in a VM) and the agent's external MCP servers.
+ * the macOS VM tools (when the run works in a VM — then the browser and computer use run inside the VM too, see
+ * vm/guest.ts) and the agent's external MCP servers.
  * The file contains the run token and decrypted MCP secrets, so it is written 0600 and deleted after the run.
  */
 import { rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
-import { BROWSER_MCP_NAME, COMPUTER_MCP_NAME, GODMODE_MCP_NAME, VM_MCP_NAME } from "@godmode/shared";
+import { BROWSER_MCP_NAME, COMPUTER_MCP_NAME, CUA_MCP_NAME, GODMODE_MCP_NAME, VM_MCP_NAME } from "@godmode/shared";
 import { config, isLoopbackHost } from "../config";
 import { browserMcpServer } from "../browser/manager";
 import { mcpServersForAgent } from "../integrations/mcpServers";
+import { guestBrowserServer, guestCuaServer } from "../vm/guest";
 import { getSettings } from "../services/settings";
 import { logger } from "../log";
 import type { McpConfigFile, McpServerJson } from "../types";
@@ -31,10 +33,17 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** The VM a run works in and the tools its guest provides (paths of the programs in the guest, null = unavailable). */
+export interface McpVm {
+  id: string;
+  browser: string | null;
+  cua: string | null;
+}
+
 export async function buildMcpConfig(
   agent: Agent,
   runToken: string,
-  opts: { onNotice?: (text: string) => void; computer?: boolean; vm?: boolean; gatewayOnly?: boolean } = {},
+  opts: { onNotice?: (text: string) => void; computer?: boolean; vm?: McpVm | null; gatewayOnly?: boolean } = {},
 ): Promise<McpConfigFile> {
   const servers: Record<string, McpServerJson> = {};
   // Dreams get the Godmode gateway only: no integrations, browser or computer.
@@ -46,7 +55,8 @@ export async function buildMcpConfig(
   try {
     const external = await mcpServersForAgent(agent);
     for (const [name, server] of Object.entries(external)) {
-      if (name === GODMODE_MCP_NAME || name === BROWSER_MCP_NAME || name === COMPUTER_MCP_NAME || name === VM_MCP_NAME) {
+      // "cua" is only taken in a VM run (the human may have their own Cua Driver server for runs on this computer).
+      if ([GODMODE_MCP_NAME, BROWSER_MCP_NAME, COMPUTER_MCP_NAME, VM_MCP_NAME].includes(name) || (opts.vm && name === CUA_MCP_NAME)) {
         log.warn(`MCP server name "${name}" is reserved; skipping it for agent ${agent.id}`);
         opts.onNotice?.(`The MCP server "${name}" was skipped because its name is reserved by Godmode.`);
         continue;
@@ -58,7 +68,10 @@ export async function buildMcpConfig(
     opts.onNotice?.(`Some integrations (MCP servers) are unavailable for this run: ${errorText(err)}`);
   }
 
-  if (agent.browser.enabled && getSettings().browser.enabled) {
+  if (opts.vm) {
+    // Work in a VM stays in the VM: its browser runs there, and no browser starts on this computer.
+    if (opts.vm.browser) servers[BROWSER_MCP_NAME] = guestBrowserServer(opts.vm.id, opts.vm.browser);
+  } else if (agent.browser.enabled && getSettings().browser.enabled) {
     try {
       const browser = await browserMcpServer(agent);
       if (browser) servers[BROWSER_MCP_NAME] = browser;
@@ -83,13 +96,15 @@ export async function buildMcpConfig(
     };
   }
 
-  // macOS VM: shell and file tools inside the VM the run works in (scoped by the run token).
+  // macOS VM: shell, file and screen tools inside the VM the run works in (scoped by the run token), and Cua Driver
+  // for its apps and windows.
   if (opts.vm) {
     servers[VM_MCP_NAME] = {
       type: "http",
       url: `${gatewayUrl()}/vm`,
       headers: { Authorization: `Bearer ${runToken}` },
     };
+    if (opts.vm.cua) servers[CUA_MCP_NAME] = guestCuaServer(opts.vm.id, opts.vm.cua);
   }
 
   return { mcpServers: servers };

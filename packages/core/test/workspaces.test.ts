@@ -10,6 +10,7 @@ import { setLogLevel } from "../src/log";
 import { resetSettingsCache } from "../src/services/settings";
 import { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../src/services/workspaces";
 import { createAgent, ensureDefaultAgent, getAgent } from "../src/agents/service";
+import { createProfile, ensureDefaultProfile, getProfile, shutdownBrowsers } from "../src/browser/manager";
 import * as repo from "../src/agents/repo";
 import { HttpError } from "../src/util";
 
@@ -23,7 +24,8 @@ beforeAll(() => {
   resetSettingsCache();
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await shutdownBrowsers();
   closeDb();
   resetSettingsCache();
   rmSync(dataDir, { recursive: true, force: true });
@@ -74,6 +76,29 @@ describe("workspaces", () => {
     expect(ws.instructions).toBe("Bill in EUR.");
     expect(updateWorkspace(ws.id, { color: "rose" }).instructions).toBe("Bill in EUR.");
     expect(updateWorkspace(ws.id, { instructions: "" }).instructions).toBe("");
+  });
+
+  test("a browser profile can be assigned on create and changed on update", async () => {
+    const globalDefault = ensureDefaultProfile();
+    const shared = createProfile({ name: "Shared", workspaceId: null });
+    const ws = createWorkspace({ name: "Browsing", browserProfileId: shared.id });
+    expect(ws.browserProfileId).toBe(shared.id);
+    expect(getProfile(shared.id)).toMatchObject({ workspaceId: ws.id, isDefault: true });
+
+    const own = createProfile({ name: "Own", workspaceId: ws.id });
+    expect(getWorkspace(ws.id).browserProfileId).toBe(shared.id);
+    expect(updateWorkspace(ws.id, { browserProfileId: own.id }).browserProfileId).toBe(own.id);
+    expect(getProfile(shared.id).isDefault).toBe(false);
+
+    const cleared = updateWorkspace(ws.id, { browserProfileId: null });
+    expect(cleared.browserProfileId).toBeNull();
+    expect(getProfile(own.id)).toMatchObject({ workspaceId: ws.id, isDefault: false });
+    expect(updateWorkspace(ws.id, { color: "rose" }).browserProfileId).toBeNull();
+
+    expect((await catchHttp(() => createWorkspace({ name: "Rejected", browserProfileId: globalDefault.id }))).status).toBe(400);
+    expect(listWorkspaces().some((w) => w.name === "Rejected")).toBe(false);
+    expect((await catchHttp(() => updateWorkspace(ws.id, { name: "Renamed", browserProfileId: "bpr_missing" }))).status).toBe(404);
+    expect(getWorkspace(ws.id).name).toBe("Browsing");
   });
 
   test("renaming a workspace refreshes its agents' CLAUDE.md", async () => {

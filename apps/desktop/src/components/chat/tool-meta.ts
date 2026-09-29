@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
   Bell,
+  Box,
   Bot,
   BotMessageSquare,
   Camera,
@@ -205,6 +206,40 @@ function computerMeta(tool: string, input: Input): Omit<ToolMeta, "kind" | "serv
   }
 }
 
+/** The `vm` server: shell, files and the whole screen of the VM a run works in. */
+function vmMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "tool"> {
+  const path = str(input.path);
+  switch (tool) {
+    case "shell":
+      return { kind: "shell", icon: Terminal, title: "Ran a command in the VM", detail: truncate(str(input.command), 120) || undefined };
+    case "read_file":
+      return { kind: "file", icon: FileText, title: path ? `Read ${basename(path)} in the VM` : "Read a file in the VM", detail: path || undefined };
+    case "write_file":
+      return { kind: "file", icon: FilePlus2, title: path ? `Wrote ${basename(path)} in the VM` : "Wrote a file in the VM", detail: path || undefined };
+    case "edit_file":
+      return { kind: "file", icon: FilePen, title: path ? `Edited ${basename(path)} in the VM` : "Edited a file in the VM", detail: path || undefined };
+    case "info":
+      return { kind: "other", icon: Box, title: "Checked the VM" };
+    default:
+      return { ...computerMeta(tool, input), kind: "computer" };
+  }
+}
+
+/** The `cua` server: Cua Driver controlling the apps and windows inside the VM. */
+function cuaMeta(tool: string, input: Input): Omit<ToolMeta, "kind" | "server" | "tool"> {
+  const app = str(input.app_name ?? input.app ?? input.name ?? input.bundle_id);
+  if (/launch|open_app/.test(tool)) return { icon: AppWindow, title: app ? `Opened ${app}` : "Opened an app" };
+  if (/list_(windows|apps)/.test(tool)) return { icon: AppWindow, title: tool === "list_apps" ? "Listed apps" : "Listed windows" };
+  if (/window_state|desktop_state|accessibility|tree/.test(tool)) return { icon: ListTree, title: "Read the window's controls" };
+  if (/screenshot/.test(tool)) return { icon: Camera, title: "Looked at the screen" };
+  if (/click/.test(tool)) return { icon: MousePointerClick, title: /double/.test(tool) ? "Double-clicked" : /right/.test(tool) ? "Right-clicked" : "Clicked" };
+  if (/type|set_value/.test(tool)) return { icon: Type, title: "Typed text", detail: truncate(str(input.text ?? input.value), 80) || undefined };
+  if (/key/.test(tool)) return { icon: Keyboard, title: `Pressed ${truncate(str(input.key ?? input.keys ?? input.text), 40) || "keys"}` };
+  if (/scroll/.test(tool)) return { icon: ScrollText, title: "Scrolled" };
+  if (/drag|move/.test(tool)) return { icon: Move, title: humanize(tool) };
+  return { icon: MonitorUp, title: humanize(tool) };
+}
+
 const GODMODE_TOOLS = new Set([
   "vault_list_logins",
   "vault_fill_login",
@@ -372,6 +407,8 @@ export function describeTool(name: string, rawInput: unknown, ctx: ToolContext =
   if (server === "computer") {
     return { ...computerMeta(tool, input), kind: "computer", server, tool };
   }
+  if (server === "vm") return { ...vmMeta(tool, input), server, tool };
+  if (server === "cua") return { ...cuaMeta(tool, input), kind: "computer", server, tool };
   if (server === "godmode" || (server === null && GODMODE_TOOLS.has(tool)) || GODMODE_TOOLS.has(tool)) {
     const m = godmodeMeta(tool, input, ctx);
     if (m) return { ...m, server, tool };
