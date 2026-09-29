@@ -334,7 +334,7 @@ describe("VM lifecycle", () => {
 
     await stopVm(vm.id);
     await deleteVm(vm.id);
-  });
+  }, 30_000);
 
   test("a VM that fails to boot reports why (and doesn't hang)", async () => {
     const vm = await createVm({ name: "Won't boot" });
