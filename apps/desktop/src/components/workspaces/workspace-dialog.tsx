@@ -1,8 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, FolderGit2, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
-import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace } from "@godmode/shared";
+import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace, type WorkspaceSourceInput } from "@godmode/shared";
 import { colorSwatch } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,12 +12,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { WorkspaceProfileField } from "@/components/browser/workspace-profile-field";
 import { VmSelectField } from "@/components/vms/vm-picker";
 import { api } from "@/lib/api";
 import { useVmChoices } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
+import { WorkspaceSourcesField, toSourceInput } from "./workspace-sources";
 import { WorkspaceTile } from "./workspace-tile";
 
 const EMOJIS = [
@@ -40,8 +42,8 @@ export function WorkspaceDialog({
   onOpenChange: (open: boolean) => void;
   /** Edit this workspace; omitted = create */
   workspace?: Workspace | null;
-  /** Start in the agent context (or repository) field instead of the name. */
-  focus?: "instructions" | "repository";
+  /** Start in the agent context field or at the folders and repositories instead of the name. */
+  focus?: "instructions" | "sources";
 }) {
   const qc = useQueryClient();
   const setScope = useUi((s) => s.setWorkspace);
@@ -52,8 +54,10 @@ export function WorkspaceDialog({
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [vmId, setVmId] = useState<string | null>(null);
-  const [repoUrl, setRepoUrl] = useState("");
-  const [repoBranch, setRepoBranch] = useState("");
+  const [browserProfileId, setBrowserProfileId] = useState<string | null>(null);
+  const [sources, setSources] = useState<WorkspaceSourceInput[]>([]);
+  const sourcesRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const vmChoices = useVmChoices();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [customEmoji, setCustomEmoji] = useState("");
@@ -66,10 +70,23 @@ export function WorkspaceDialog({
     setDescription(workspace?.description ?? "");
     setInstructions(workspace?.instructions ?? "");
     setVmId(workspace?.vmId ?? null);
-    setRepoUrl(workspace?.repoUrl ?? "");
-    setRepoBranch(workspace?.repoBranch ?? "");
+    setBrowserProfileId(workspace?.browserProfileId ?? null);
+    setSources(workspace?.sources.map(toSourceInput) ?? []);
     setCustomEmoji("");
-  }, [open, workspace]);
+    // Only when the dialog opens or switches workspace: live updates (clone progress) must not reset the form.
+  }, [open, workspace?.id]);
+
+  useEffect(() => {
+    if (!open || focus !== "sources") return;
+    const t = setTimeout(() => {
+      const list = scrollRef.current;
+      const section = sourcesRef.current;
+      if (!list || !section) return;
+      const top = section.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop - 16;
+      list.scrollTo({ top, behavior: "smooth" });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [open, focus]);
 
   const save = useMutation({
     mutationFn: () => {
@@ -79,16 +96,17 @@ export function WorkspaceDialog({
         color,
         description: description.trim(),
         instructions: instructions.trim(),
-        repoUrl: repoUrl.trim(),
-        repoBranch: repoBranch.trim(),
+        sources,
         // Only when the VM control is shown: otherwise leave the assignment as it is.
         ...(vmChoices.available ? { vmId } : {}),
+        ...(browserProfileId !== (workspace?.browserProfileId ?? null) ? { browserProfileId } : {}),
       };
       return workspace ? api.workspaces.update(workspace.id, input) : api.workspaces.create(input);
     },
     onSuccess: (ws) => {
       void qc.invalidateQueries({ queryKey: qk.workspaces });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
+      void qc.invalidateQueries({ queryKey: qk.browserProfiles });
       if (editing) toast.success("Workspace updated");
       else
         toast.success(`${ws.icon} ${ws.name} created`, {
@@ -107,8 +125,14 @@ export function WorkspaceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-xl">
-        <form onSubmit={submit}>
+      <DialogContent
+        className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-xl"
+        onEscapeKeyDown={(e) => {
+          // Escape inside an inline editor closes that editor, not the dialog with its unsaved changes.
+          if (e.target instanceof Element && e.target.closest("[data-escape-local]")) e.preventDefault();
+        }}
+      >
+        <form onSubmit={submit} className="min-w-0">
           <div className="relative overflow-hidden border-b bg-paper-2 px-6 pt-6 pb-5">
             <DialogHeader className="relative">
               <DialogTitle>{editing ? "Edit workspace" : "New workspace"}</DialogTitle>
@@ -185,7 +209,7 @@ export function WorkspaceDialog({
             </div>
           </div>
 
-          <div className="max-h-[min(36rem,calc(100dvh-18rem))] space-y-5 overflow-y-auto px-6 py-5">
+          <div ref={scrollRef} className="max-h-[min(36rem,calc(100dvh-18rem))] space-y-5 overflow-y-auto px-6 py-5">
             <div className="space-y-2">
               <Label htmlFor="ws-name">Name</Label>
               <Input
@@ -250,31 +274,18 @@ export function WorkspaceDialog({
                 className="max-h-72 min-h-28 resize-y leading-relaxed"
               />
             </div>
-            <div className="space-y-2">
+            <div ref={sourcesRef} className="space-y-2">
               <div className="space-y-0.5">
-                <Label htmlFor="ws-repo" className="flex items-center gap-1.5">
-                  <FolderGit2 className="size-3.5 text-muted-foreground" /> Git repository <span className="font-normal text-muted-foreground">(optional)</span>
+                <Label>
+                  Folders &amp; repositories <span className="font-normal text-muted-foreground">(optional)</span>
                 </Label>
-                <p className="text-xs text-muted-foreground">Coding tasks clone it onto a new branch and open a pull request when the agent is done.</p>
+                <p className="text-xs text-muted-foreground">
+                  Every agent in this workspace can read and edit these and follows their CLAUDE.md. Repositories are cloned for them.
+                </p>
               </div>
-              <div className="grid gap-2 sm:grid-cols-[1fr_9.5rem]">
-                <Input
-                  id="ws-repo"
-                  autoFocus={focus === "repository"}
-                  placeholder="https://github.com/acme/app.git"
-                  value={repoUrl}
-                  onChange={(e) => setRepoUrl(e.target.value)}
-                  className="font-mono text-[13px]"
-                />
-                <Input
-                  aria-label="Base branch"
-                  placeholder="default branch"
-                  value={repoBranch}
-                  onChange={(e) => setRepoBranch(e.target.value)}
-                  className="font-mono text-[13px]"
-                />
-              </div>
+              <WorkspaceSourcesField workspaceId={workspace?.id ?? null} value={sources} onChange={setSources} />
             </div>
+            <WorkspaceProfileField id="ws-browser" workspaceId={workspace?.id ?? null} value={browserProfileId} onChange={setBrowserProfileId} />
             {vmChoices.available && (
               <VmSelectField
                 id="ws-vm"

@@ -7,7 +7,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { Hono } from "hono";
 import type { BackupManifest } from "@godmode/shared";
 import { config, loadConfig } from "../src/config";
-import { closeDb, get, getMeta, insert, openDb, setMeta } from "../src/db";
+import { all, closeDb, get, getMeta, insert, openDb, setMeta } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { getSettings, resetSettingsCache, updateSettings } from "../src/services/settings";
 import { stopScheduler } from "../src/scheduler/scheduler";
@@ -382,6 +382,30 @@ describe("untrusted backup contents", () => {
     expect(dirOf("agt_folder_root")).toBeNull();
     expect(dirOf("agt_folder_gone")).toBeNull();
     expect((result.warnings ?? []).some((w) => w.includes("Cleared 2 working folder(s)"))).toBe(true);
+    rmSync(folder, { recursive: true, force: true });
+  });
+
+  test("keeps usable workspace folders and repositories, drops unsafe ones, and resets clone state", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "godmode-backup-source-"));
+    const ts = new Date().toISOString();
+    const evil = tamper((dump) => {
+      dump.tables.workspaces = [...(dump.tables.workspaces ?? []), { id: "wsp_src", name: "Sources", slug: "sources", created_at: ts, updated_at: ts }];
+      const row = (id: string, extra: Record<string, unknown>) => ({ id, workspace_id: "wsp_src", position: 0, created_at: ts, updated_at: ts, ...extra });
+      dump.tables.workspace_sources = [
+        row("src_folder", { kind: "folder", path: folder }),
+        row("src_gone", { kind: "folder", path: join(folder, "gone") }),
+        row("src_git", { kind: "git", path: "app", url: "https://github.com/acme/app.git", commit_sha: "abc1234", head_branch: "main", synced_at: ts }),
+        row("src_ext", { kind: "git", path: "evil", url: "ext::sh -c touch% /tmp/pwned" }),
+        row("src_token", { kind: "git", path: "tok", url: "https://ghp_token@github.com/acme/app.git" }),
+        row("src_escape", { kind: "git", path: "../../agents", url: "https://github.com/acme/app.git" }),
+        row("src_branch", { kind: "git", path: "br", url: "https://github.com/acme/app.git", branch: "--upload-pack=x" }),
+      ];
+    });
+    const result = await importBackup(evil, BACKUP_PASSPHRASE);
+    const rows = all<{ id: string; commit_sha: string | null; synced_at: string | null }>("SELECT id, commit_sha, synced_at FROM workspace_sources ORDER BY id");
+    expect(rows.map((r) => r.id)).toEqual(["src_folder", "src_git"]);
+    expect(rows.find((r) => r.id === "src_git")).toMatchObject({ commit_sha: null, synced_at: null });
+    expect((result.warnings ?? []).some((w) => w.includes("Removed 5 workspace folder(s) or repositories"))).toBe(true);
     rmSync(folder, { recursive: true, force: true });
   });
 });

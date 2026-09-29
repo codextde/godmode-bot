@@ -18,6 +18,7 @@ import { requireGrant } from "../grants";
 import { body, z } from "../validate";
 import { badRequest } from "../../util";
 import { isValidDreamSchedule } from "../../memory/dreaming";
+import { pendingRequestCount } from "../../messaging/service";
 
 function count(sql: string): number {
   return get<{ c: number }>(sql)?.c ?? 0;
@@ -44,6 +45,7 @@ export function registerSystemRoutes(app: Hono) {
         openMissingLogins: count("SELECT COUNT(*) AS c FROM missing_logins WHERE status = 'open'"),
         runningRuns: count("SELECT COUNT(*) AS c FROM runs WHERE status IN ('queued','running')"),
         unreadNotifications: unreadCount(),
+        messagingRequests: pendingRequestCount(),
       },
     };
     return c.json(data);
@@ -86,9 +88,11 @@ export function registerSystemRoutes(app: Hono) {
     const vm = patch.vm as Record<string, unknown> | undefined;
     if (vm !== undefined) {
       if (typeof vm !== "object" || vm === null || Array.isArray(vm)) throw badRequest("Invalid virtual machine settings");
-      for (const key of ["enabled", "isolateHostShell"] as const) {
+      for (const key of ["enabled", "isolateHostShell", "vaultFill"] as const) {
         if (vm[key] !== undefined && typeof vm[key] !== "boolean") throw badRequest(`vm.${key} must be true or false`);
       }
+      // Fills in a VM can't be bound to the login's website, so allowing them needs the vault passphrase.
+      if (vm.vaultFill === true && !getSettings().vm.vaultFill) requireGrant(c);
       if (vm.onQuit !== undefined && !["suspend", "stop", "keep"].includes(vm.onQuit as string)) throw badRequest('vm.onQuit must be "suspend", "stop" or "keep"');
       const idle = vm.idleStopMinutes;
       if (idle !== undefined && !(typeof idle === "number" && Number.isInteger(idle) && idle >= 0 && idle <= 24 * 60)) {

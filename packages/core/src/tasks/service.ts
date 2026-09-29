@@ -11,7 +11,7 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, PullRequestState, Run, RunStatus, ServerEvent, Task, TaskInput, TaskPatch, TaskStatus, TaskType } from "@godmode/shared";
-import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES } from "@godmode/shared";
+import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES, isValidBranch, parseGitUrl } from "@godmode/shared";
 import { config } from "../config";
 import { all, get, getMeta, insert, run as sql, setMeta, tx, update } from "../db";
 import { bus } from "../events/bus";
@@ -22,18 +22,7 @@ import { getAgent } from "../agents/service";
 import { activeRunForConversation, cancelRun, getRun, waitForRun } from "../runner/runner";
 import { conversationExists, createConversation, sendMessage } from "../services/conversations";
 import { notify } from "../services/notifications";
-import {
-  branchDiff,
-  commitWork,
-  hideCredentials,
-  openPullRequest,
-  prepareCheckout,
-  pullRequestState,
-  pushBranch,
-  secretFilesAdded,
-  validBranchName,
-  validRepoUrl,
-} from "./git";
+import { branchDiff, commitWork, openPullRequest, prepareCheckout, pullRequestState, pushBranch, secretFilesAdded } from "./git";
 
 const log = logger("tasks");
 
@@ -190,14 +179,15 @@ function cleanStatus(status: string): TaskStatus {
 }
 
 function cleanRepoUrl(url: string | undefined): string {
-  const u = (url ?? "").trim();
-  if (u && !validRepoUrl(u)) throw badRequest("Use a git URL like https://github.com/acme/app.git or git@github.com:acme/app.git");
-  return u;
+  if (!url?.trim()) return "";
+  const parsed = parseGitUrl(url);
+  if ("error" in parsed) throw badRequest(parsed.error);
+  return parsed.url;
 }
 
 function cleanBranch(branch: string | undefined): string {
   const b = (branch ?? "").trim();
-  if (b && !validBranchName(b)) throw badRequest(`"${b}" isn't a valid branch name`);
+  if (b && !isValidBranch(b)) throw badRequest(`"${b}" isn't a valid branch name`);
   return b;
 }
 
@@ -384,13 +374,19 @@ function transition(id: string, status: TaskStatus, from: readonly TaskStatus[],
 
 function block(id: string, reason: string, from: readonly TaskStatus[] = WORKING) {
   activity.delete(id);
-  transition(id, "blocked", from, hideCredentials(redact(reason)).slice(0, 2000));
+  transition(id, "blocked", from, redact(reason).slice(0, 2000));
   emit(id);
 }
 
+/** The workspace's first git repository: what coding tasks clone unless they name another one. */
 function workspaceRepo(workspaceId: string | null): { url: string; branch: string } {
-  const ws = workspaceId ? get<{ repo_url: string; repo_branch: string }>("SELECT repo_url, repo_branch FROM workspaces WHERE id = ?", workspaceId) : null;
-  return { url: ws?.repo_url ?? "", branch: ws?.repo_branch ?? "" };
+  const source = workspaceId
+    ? get<{ url: string | null; branch: string | null }>(
+        "SELECT url, branch FROM workspace_sources WHERE workspace_id = ? AND kind = 'git' AND url IS NOT NULL ORDER BY position, created_at LIMIT 1",
+        workspaceId,
+      )
+    : null;
+  return { url: source?.url ?? "", branch: source?.branch ?? "" };
 }
 
 function branchName(task: TaskRow): string {
@@ -404,7 +400,7 @@ const TYPE_BRIEF: Record<TaskType, (t: { repo: string; base: string; branch: str
     "Research this thoroughly and answer with a well-structured report in Markdown: the key findings first, then details, sources (with links) and a recommendation where it helps.",
   coding: ({ repo, base, branch }) =>
     [
-      `You work in a fresh checkout of ${hideCredentials(repo)} (your current directory), on the branch \`${branch}\` created from \`${base}\`.`,
+      `You work in a fresh checkout of ${repo} (your current directory), on the branch \`${branch}\` created from \`${base}\`. Make every change here — not in other copies of the repository you may see.`,
       "Implement the change, keep to the project's conventions, run its tests and linters when it has them, and commit your work with clear commit messages.",
       "Don't push and don't open a pull request: Godmode pushes the branch and opens the pull request when you finish.",
       "End with a summary of the changes — it becomes the pull request description.",
@@ -457,7 +453,7 @@ export async function dispatch(id: string): Promise<void> {
     if (task.type === "coding") {
       const fallback = workspaceRepo(task.workspace_id);
       const repo = task.repo_url || fallback.url;
-      if (!repo) return block(id, "Coding tasks need a git repository — add one to the task or its workspace.");
+      if (!repo) return block(id, "Coding tasks need a git repository — add one to the workspace (or the task).", STARTABLE);
       const branch = task.branch ?? branchName(task);
       workDir = checkoutDir(id);
       setActivity(id, task.branch ? "Updating the checkout…" : "Cloning the repository…");
@@ -640,7 +636,7 @@ async function publish(task: TaskRow, summary: string | null, runId: string): Pr
     if (pullRequest?.number) notify("success", `Task #${task.number}: pull request #${pullRequest.number} is open`, title, link);
     else notify("warning", `Task #${task.number}: open the pull request`, `The branch ${task.branch} was pushed. ${problem ?? ""}`.trim(), link);
   } catch (err) {
-    const message = hideCredentials(err instanceof Error ? err.message : String(err));
+    const message = err instanceof Error ? err.message : String(err);
     block(id, `Couldn't push the branch: ${message}`);
     notify("error", `Task #${task.number} is blocked`, message, link);
   }

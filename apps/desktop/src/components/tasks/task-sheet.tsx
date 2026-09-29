@@ -21,7 +21,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { AgentSelect, StatusSelect, agentsInReach } from "./task-fields";
 import { PullRequestChip, useTaskActivity } from "./task-card";
-import { TYPE_META, TypeIcon, isWorking, repoLabel } from "./task-meta";
+import { TYPE_META, TypeIcon, isWorking, repoLabel, workspaceRepos } from "./task-meta";
 import { TASK_TYPES } from "@godmode/shared";
 
 export function TaskSheet({
@@ -68,6 +68,7 @@ function TaskDetail({
   const agent = agents.find((a) => a.id === task.agentId);
   const reachable = agentsInReach(agents, task.workspaceId, task.agentId);
   const started = !!task.conversationId;
+  const defaultRepo = workspaceRepos(workspace)[0];
 
   const save = useMutation({
     mutationFn: (patch: TaskPatch) => api.tasks.update(task.id, patch),
@@ -155,12 +156,12 @@ function TaskDetail({
                 <Prop label="Repository">
                   {started ? (
                     <span className="flex min-w-0 items-center gap-1.5 font-mono text-[13px]">
-                      <span className="truncate">{repoLabel(task.repoUrl || workspace?.repoUrl || "")}</span>
+                      <span className="truncate">{repoLabel(task.repoUrl || defaultRepo?.url || "")}</span>
                     </span>
                   ) : (
                     <BlurInput
                       value={task.repoUrl}
-                      placeholder={workspace?.repoUrl || "https://github.com/acme/app.git"}
+                      placeholder={defaultRepo?.url || "https://github.com/acme/app.git"}
                       onSave={(repoUrl) => save.mutate({ repoUrl })}
                     />
                   )}
@@ -176,7 +177,7 @@ function TaskDetail({
                   ) : (
                     <BlurInput
                       value={task.baseBranch}
-                      placeholder={workspace?.repoBranch || "default branch"}
+                      placeholder={defaultRepo?.branch || "default branch"}
                       onSave={(baseBranch) => save.mutate({ baseBranch })}
                     />
                   )}

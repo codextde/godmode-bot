@@ -2,18 +2,22 @@
  * The `vm` MCP server (POST /mcp/vm, per-run bearer token): shell, file and screen tools that act inside the macOS VM
  * the run works in (see vm/service.ts `attachVm`). Commands run through `tart exec` as the guest user in a fresh login
  * shell; files are read and written through the same channel, so nothing on the host is reachable except the VM's
- * shared folder. `screen` sees and controls the VM's display over VNC with the computer-use action vocabulary.
+ * shared folder. `screen` sees and controls the VM's display over VNC with the computer-use action vocabulary;
+ * `fill_login` / `fill_totp` type vault secrets into it without the model seeing them (when settings.vm.vaultFill).
  */
 import { z } from "zod";
+import { getAgent } from "../agents/service";
 import { imageToFrame, inImage, regionToFrame, type Point, type Shot } from "../computer/geometry";
 import { KeyError, normalizeModifier } from "../computer/keys";
 import { logger } from "../log";
 import { audit } from "../services/audit";
 import { getSettings } from "../services/settings";
 import type { RunContext } from "../types";
-import { sleep } from "../util";
+import { HttpError, sleep } from "../util";
+import { credentialsForAgent, getCredential, markCredentialUsed, revealForAgent } from "../vault/credentials";
+import { codeForAgent, totpForAgent } from "../vault/totp";
 import { GUEST_SHARED_DIR, GUEST_USER, execInVm, getVm, guestPathWord, runSignal, vmOfRun } from "./service";
-import { captureScreen, click, drag, move, pressKeys, scroll, typeText, type Button } from "./screen";
+import { TYPABLE_SECRET, captureScreen, click, drag, eraseTyped, move, pressKeys, scroll, secureInputOwner, typeSecret, typeText, type Button } from "./screen";
 import { VncError } from "./vnc";
 
 const log = logger("vm");
@@ -28,7 +32,7 @@ const MAX_READ_BYTES = 2_000_000;
 const DEFAULT_READ_LINES = 2000;
 
 export const VM_INSTRUCTIONS =
-  "Tools for the macOS virtual machine this task runs in: run shell commands, read, write and edit files, and see and control its screen. " +
+  "Tools for the macOS virtual machine this task runs in: run shell commands, read, write and edit files, see and control its screen, and type saved logins and 2FA codes into it. " +
   "Each shell call is a fresh login shell (zsh) as the guest user; pass cwd instead of relying on an earlier cd.";
 
 function text(t: string, isError = false): VmToolResult {
@@ -51,6 +55,7 @@ export { guestPathWord };
 interface ToolEnv {
   vmId: string;
   runId: string;
+  agentId: string;
   /** Aborts when the run ends. */
   signal?: AbortSignal;
 }
@@ -236,6 +241,44 @@ async function writeRaw(vmId: string, path: string, content: string, signal?: Ab
   return { ok: true };
 }
 
+/* ------------------------------------------------------------------ */
+/* Logins and 2FA                                                       */
+/* ------------------------------------------------------------------ */
+
+const VAULT_FILL_OFF =
+  'Typing saved logins and 2FA codes into the VM is turned off. Ask the human to turn on "Logins and 2FA codes" in Settings → Virtual machines, then try again.';
+
+const fillFields = {
+  coordinate: coordinate.optional().describe("Click this point of your latest screenshot first to focus the field"),
+  submit: z.boolean().optional().describe("Press Return after typing"),
+  screenshot: z.boolean().optional().describe("Return a new screenshot afterwards (default true)"),
+};
+
+/** Apps whose "Secure Keyboard Entry" turns on secure input for everything typed into them. */
+const TERMINALS = new Set(["Terminal", "iTerm", "iTerm2", "Warp", "Alacritty", "kitty", "WezTerm", "Ghostty", "Hyper", "Tabby"]);
+
+function passwordFieldRefusal(app: string | null): string | null {
+  if (!app) return "The focused field in the VM isn't a password field, so the password wasn't typed. Click into the password field (or pass its coordinate) and try again.";
+  if (TERMINALS.has(app)) return `${app} has secure keyboard entry on — that's a terminal, not a password field. Godmode doesn't type passwords into terminals.`;
+  return null;
+}
+
+async function focusField(env: ToolEnv, c: [number, number] | undefined): Promise<void> {
+  if (!c) return;
+  const p = toScreen(env, c, "coordinate");
+  await click(env.vmId, p.x, p.y);
+  // Let the field take focus (a password field turns secure input on).
+  await sleep(300);
+}
+
+async function afterFill(env: ToolEnv, note: string, a: { submit?: boolean; screenshot?: boolean }): Promise<VmToolResult> {
+  if (a.submit) await pressKeys(env.vmId, "Return");
+  const done = `${note}${a.submit ? " and pressed Return" : ""}`;
+  if (a.screenshot === false) return text(`${done}.`);
+  await sleep(a.submit ? 1000 : 400);
+  return screenshotResult(env, done);
+}
+
 const TOOLS: VmTool[] = [
   defineTool({
     name: "shell",
@@ -356,10 +399,98 @@ const TOOLS: VmTool[] = [
       "See and control the VM's screen (macOS desktop) with the mouse and keyboard — for apps and anything without a command line.",
       'Start with {action:"screenshot"}. Coordinates are pixels of your latest screenshot; after every action you get a fresh screenshot (pass screenshot:false to skip it).',
       'Actions: screenshot, left_click, right_click, middle_click, double_click, triple_click (coordinate; hold keys with modifiers:"cmd"), mouse_move, left_click_drag (start_coordinate → coordinate), scroll (coordinate, scroll_direction, scroll_amount), type (text), key (text like "Return" or "cmd+space"), hold_key (text, duration), wait (duration), zoom (region — a sharper look; keep using full-screenshot coordinates).',
-      "Prefer the shell for anything a command can do; use the screen for GUI apps. It is a US keyboard layout.",
+      "Prefer the shell for anything a command can do; use the screen for GUI apps. It is a US keyboard layout. Never type passwords or 2FA codes with it — use fill_login / fill_totp.",
     ].join("\n"),
     schema: screenSchema,
     run: (_vmId, args, env) => screenAction(env, args),
+  }),
+  defineTool({
+    name: "fill_login",
+    description:
+      "Type the username or password of a saved login (id from vault_list_logins) into the focused field on the VM's screen — Godmode types it, you never see it. " +
+      "Click the field first or pass its coordinate. Passwords only go into password fields. Godmode can't tell which website or app a field in the VM belongs to: only fill a login on its own site or app.",
+    schema: z.object({
+      credentialId: z.string().describe("Login id from vault_list_logins"),
+      field: z.enum(["username", "password"]),
+      ...fillFields,
+    }),
+    run: async (vmId, args, env) => {
+      if (!getSettings().vm.vaultFill) return text(VAULT_FILL_OFF, true);
+      const agent = getAgent(env.agentId);
+      const secret = revealForAgent(agent, args.credentialId);
+      const value = args.field === "username" ? secret.username : secret.password;
+      if (!value) return text(`This login has no ${args.field} saved. Call report_missing_login (kind "invalid_credential") so the human can complete it.`, true);
+      if (!TYPABLE_SECRET.test(value)) return text(`The ${args.field} has characters Godmode can't type into the VM (it only types plain ASCII). Ask the human to sign in there themselves.`, true);
+      const login = getCredential(args.credentialId);
+      const record = (ok: boolean, more: Record<string, unknown> = {}) =>
+        audit(`agent:${agent.id}`, "credential.fill", args.credentialId, { field: args.field, runId: env.runId, vmId, ok, ...more });
+      await focusField(env, args.coordinate);
+      let app: string | null = null;
+      try {
+        if (args.field === "password") {
+          app = await secureInputOwner(vmId, env.signal);
+          const refusal = passwordFieldRefusal(app);
+          if (refusal) {
+            record(false, app ? { app } : {});
+            return text(refusal, true);
+          }
+        }
+        await typeSecret(vmId, value, env.signal);
+        // Focus may have moved while the password was typed: take it back out of whatever field got it.
+        if (app && (await secureInputOwner(vmId, env.signal)) !== app) {
+          await eraseTyped(vmId, value.length);
+          record(false, { app, error: "focus_moved" });
+          return text("The focus left the password field while Godmode was typing, so what was typed was erased again. Click into the password field and try again.", true);
+        }
+      } catch (err) {
+        record(false, { ...(app ? { app } : {}), error: err instanceof Error ? err.message : String(err) });
+        throw err;
+      }
+      record(true, app ? { app } : {});
+      markCredentialUsed(args.credentialId);
+      return afterFill(env, `Typed the ${args.field} of "${login.name}" into ${app ? `a password field of ${app}` : "the focused field"}`, args);
+    },
+  }),
+  defineTool({
+    name: "fill_totp",
+    description:
+      "Type the current 2FA (authenticator) code into the focused field on the VM's screen — Godmode types it, you never see it. " +
+      "Pass the login's credentialId (its linked 2FA is used) or a totpId. Click the code field first or pass its coordinate.",
+    schema: z.object({
+      credentialId: z.string().optional().describe("Login id whose linked 2FA should be used"),
+      totpId: z.string().optional().describe("2FA entry id (alternative to credentialId)"),
+      ...fillFields,
+    }),
+    run: async (vmId, args, env) => {
+      if (!getSettings().vm.vaultFill) return text(VAULT_FILL_OFF, true);
+      const agent = getAgent(env.agentId);
+      let id = args.totpId ?? null;
+      if (args.credentialId) {
+        const login = credentialsForAgent(agent).find((c) => c.id === args.credentialId);
+        if (!login) return text(`Login ${args.credentialId} is not available to you.`, true);
+        id ??= login.totpId ?? totpForAgent(agent).find((t) => t.credentialId === login.id)?.id ?? null;
+        if (!id) return text(`No 2FA code is linked to "${login.name}". Call report_missing_login with kind "missing_totp" so the human can add it, then continue with other work.`, true);
+      }
+      if (!id) return text("Pass credentialId or totpId.", true);
+      const entry = totpForAgent(agent).find((t) => t.id === id);
+      if (!entry) return text(`2FA entry ${id} is not available to you.`, true);
+      await focusField(env, args.coordinate);
+      let code = codeForAgent(agent, id);
+      if (code.remaining < 3) {
+        // Too close to rollover — wait for the next period so the code isn't rejected as stale.
+        await sleep(code.remaining * 1000 + 300);
+        code = codeForAgent(agent, id);
+      }
+      const meta = { field: "totp", runId: env.runId, vmId, credentialId: args.credentialId ?? null };
+      try {
+        await typeSecret(vmId, code.code, env.signal);
+      } catch (err) {
+        audit(`agent:${agent.id}`, "totp.fill", id, { ...meta, ok: false, error: err instanceof Error ? err.message : String(err) });
+        throw err;
+      }
+      audit(`agent:${agent.id}`, "totp.fill", id, { ...meta, ok: true });
+      return afterFill(env, `Typed the current 2FA code of "${entry.issuer || entry.accountName}" into the focused field`, args);
+    },
   }),
 ];
 
@@ -403,10 +534,11 @@ export async function callVmTool(ctx: RunContext, name: string, args: unknown): 
     }
     // Screenshots of finished runs are no longer needed.
     for (const runId of shots.keys()) if (!vmOfRun(runId)) shots.delete(runId);
-    return await tool.run(vmId, parsed as never, { vmId, runId: ctx.runId, signal: runSignal(ctx.runId) });
+    return await tool.run(vmId, parsed as never, { vmId, runId: ctx.runId, agentId: ctx.agentId, signal: runSignal(ctx.runId) });
   } catch (err) {
     if (err instanceof z.ZodError) return text(`Invalid arguments: ${err.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`, true);
     if (err instanceof VncError || err instanceof KeyError) return text(err.message, true);
+    if (err instanceof HttpError) return text(err.status === 423 ? "The vault is locked; ask the human to unlock Godmode." : err.message, true);
     log.warn(`vm tool ${name} failed`, err);
     return text(`The VM tool failed: ${err instanceof Error ? err.message : String(err)}`, true);
   }

@@ -16,9 +16,10 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { AgentSelect, TypePicker, agentsInReach } from "./task-fields";
-import { repoLabel } from "./task-meta";
+import { workspaceRepos } from "./task-meta";
 
 const GLOBAL = "__global";
+const OTHER_REPO = "__other";
 
 export function TaskDialog({
   open,
@@ -44,6 +45,7 @@ export function TaskDialog({
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [agentId, setAgentId] = useState<string | null>(null);
   const [start, setStart] = useState(true);
+  const [repoChoice, setRepoChoice] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [baseBranch, setBaseBranch] = useState("");
 
@@ -55,14 +57,19 @@ export function TaskDialog({
     setWorkspaceId(defaultWorkspaceId);
     setAgentId(null);
     setStart(defaultStatus !== "backlog");
+    setRepoChoice("");
     setRepoUrl("");
     setBaseBranch("");
   }, [open, defaultWorkspaceId, defaultStatus]);
 
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
+  const repos = workspaceRepos(workspace);
+  const choice = repos.length ? (repoChoice === OTHER_REPO || repos.some((r) => r.url === repoChoice) ? repoChoice : repos[0]!.url) : OTHER_REPO;
+  const picked = repos.find((r) => r.url === choice);
+  const chosenUrl = choice === OTHER_REPO ? repoUrl.trim() : choice;
   const reachable = useMemo(() => agentsInReach(agents, workspaceId), [agents, workspaceId]);
   const agent = reachable.find((a) => a.id === agentId);
-  const needsRepo = type === "coding" && !repoUrl.trim() && !workspace?.repoUrl;
+  const needsRepo = type === "coding" && !chosenUrl;
   const starting = !!agent && start;
 
   const create = useMutation({
@@ -74,7 +81,7 @@ export function TaskDialog({
         type,
         agentId,
         status: starting ? "todo" : agentId ? "backlog" : (defaultStatus ?? "backlog"),
-        ...(type === "coding" ? { repoUrl: repoUrl.trim(), baseBranch: baseBranch.trim() } : {}),
+        ...(type === "coding" ? { repoUrl: chosenUrl, baseBranch: baseBranch.trim() || picked?.branch || "" } : {}),
       }),
     onSuccess: (task) => {
       void qc.invalidateQueries({ queryKey: qk.tasks });
@@ -132,31 +139,48 @@ export function TaskDialog({
                   <Label htmlFor="task-repo" className="flex items-center gap-1.5">
                     <FolderGit2 className="size-3.5 text-muted-foreground" /> Repository
                   </Label>
-                  <Input
-                    id="task-repo"
-                    placeholder={workspace?.repoUrl || "https://github.com/acme/app.git"}
-                    value={repoUrl}
-                    onChange={(e) => setRepoUrl(e.target.value)}
-                    aria-invalid={needsRepo && !!title.trim()}
-                    className="bg-card font-mono text-[13px]"
-                  />
+                  {repos.length > 0 && (
+                    <Select value={choice} onValueChange={setRepoChoice}>
+                      <SelectTrigger id="task-repo" className="w-full bg-card">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent position="popper">
+                        {repos.map((r) => (
+                          <SelectItem key={r.id} value={r.url}>
+                            <span className="font-mono text-[13px]">{r.name}</span>
+                            {r.branch && <span className="text-xs text-muted-foreground">{r.branch}</span>}
+                          </SelectItem>
+                        ))}
+                        <SelectSeparator />
+                        <SelectItem value={OTHER_REPO}>Another repository…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {choice === OTHER_REPO && (
+                    <Input
+                      id={repos.length ? undefined : "task-repo"}
+                      aria-label="Repository URL"
+                      autoFocus={repos.length > 0}
+                      placeholder="https://github.com/acme/app.git"
+                      value={repoUrl}
+                      onChange={(e) => setRepoUrl(e.target.value)}
+                      aria-invalid={needsRepo && !!title.trim()}
+                      className="bg-card font-mono text-[13px]"
+                    />
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="task-base">Base branch</Label>
                   <Input
                     id="task-base"
-                    placeholder={workspace?.repoBranch || "default"}
+                    placeholder={picked?.branch || "default"}
                     value={baseBranch}
                     onChange={(e) => setBaseBranch(e.target.value)}
                     className="bg-card font-mono text-[13px]"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground sm:col-span-2">
-                  {workspace?.repoUrl && !repoUrl.trim()
-                    ? `Uses the workspace's repository (${repoLabel(workspace.repoUrl)}). `
-                    : needsRepo
-                      ? "Add a repository here or in the workspace settings. "
-                      : ""}
+                  {!repos.length && "Tip: add repositories to the workspace to pick them here. "}
                   Godmode clones it onto a new branch and opens a pull request when the agent is done — with your own git and GitHub CLI login.
                 </p>
               </div>

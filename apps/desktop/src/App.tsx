@@ -27,6 +27,7 @@ const TasksPage = lazy(() => import("@/pages/tasks/tasks-page"));
 const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
 const TotpPage = lazy(() => import("@/pages/vault/totp-page"));
 const IntegrationsPage = lazy(() => import("@/pages/integrations/integrations-page"));
+const MessagingPage = lazy(() => import("@/pages/messaging/messaging-page"));
 const BrowserPage = lazy(() => import("@/pages/browser/browser-page"));
 const ComputerPage = lazy(() => import("@/pages/computer/computer-page"));
 const VmsPage = lazy(() => import("@/pages/vms/vms-page"));
@@ -111,6 +112,7 @@ export function App() {
           <Route path="/vault/logins" element={<LoginsPage />} />
           <Route path="/vault/2fa" element={<TotpPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
+          <Route path="/messaging" element={<MessagingPage />} />
           <Route path="/browser" element={<BrowserPage />} />
           <Route path="/computer" element={<ComputerPage />} />
           <Route path="/vms" element={<VmsPage />} />

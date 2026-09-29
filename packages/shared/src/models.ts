@@ -27,12 +27,44 @@ export interface Workspace {
   instructions: string;
   /** macOS VM the workspace's agents work in (unless their chat or the agent has its own). null = none. */
   vmId: ID | null;
-  /** Git remote coding tasks clone ("" = none). */
-  repoUrl: string;
-  /** Branch coding tasks start from and open pull requests against ("" = the repository's default branch). */
-  repoBranch: string;
+  /** The workspace's default browser profile (unless an agent pins its own). null = the global default. */
+  browserProfileId: ID | null;
+  /** Folders and git repositories every agent in the workspace works with. */
+  sources: WorkspaceSource[];
   createdAt: ISODate;
   updatedAt: ISODate;
+}
+
+/**
+ * A folder on this computer or a git repository attached to a workspace. Godmode clones repositories into its data
+ * directory; every run of an agent in the workspace gets them (`--add-dir`).
+ *  - `ready`: usable (a repository is cloned)
+ *  - `cloning` / `syncing`: a clone or an update is in progress
+ *  - `missing`: the folder is gone, or the repository isn't cloned yet (the next run or a sync clones it)
+ *  - `error`: cloning failed (`error`)
+ */
+export type WorkspaceSourceStatus = "ready" | "cloning" | "syncing" | "missing" | "error";
+
+export interface WorkspaceSource {
+  id: ID;
+  kind: "folder" | "git";
+  name: string;
+  /** The folder, or where the repository is cloned. */
+  path: string;
+  /** Clone URL (git only). */
+  url: string | null;
+  /** Branch to check out (git only); null = the repository's default branch. */
+  branch: string | null;
+  status: WorkspaceSourceStatus;
+  /** Why the folder can't be used, or why the last clone or update failed (a clone stays usable). */
+  error: string | null;
+  /** Why the last update left the clone as it was (local changes, no tracking branch). */
+  note: string | null;
+  /** Checked out commit and branch (git only). */
+  commit: string | null;
+  headBranch: string | null;
+  /** Last successful clone or update (git only). */
+  syncedAt: ISODate | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -241,8 +273,11 @@ export interface ComposioTriggerType {
 /* Conversations, messages, runs                                        */
 /* ------------------------------------------------------------------ */
 
-/** `dream`: the archived conversation an agent's dreams (memory consolidation) run in · `task`: an agent works on a board task. */
-export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream" | "task";
+/**
+ * `dream`: the archived conversation an agent's dreams (memory consolidation) run in ·
+ * `slack` / `telegram` / `teams`: a chat on that platform (see Messaging) · `task`: an agent works on a board task.
+ */
+export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream" | "slack" | "telegram" | "teams" | "task";
 
 export interface Conversation {
   id: ID;
@@ -788,6 +823,12 @@ export interface VmSettings {
    */
   isolateHostShell: boolean;
   /**
+   * Agents may type saved logins and 2FA codes into their VM's screen (vm tools `fill_login` / `fill_totp`). Godmode
+   * types the values, so the model never sees them, and passwords only go into password fields (macOS secure input) —
+   * but unlike browser fills they can't be bound to the login's website. Turning it on needs a vault grant.
+   */
+  vaultFill: boolean;
+  /**
    * What happens to running VMs when Godmode quits: "suspend" saves their memory to disk so they resume where they
    * left off, "stop" shuts macOS down, "keep" leaves them running (Godmode picks them up again when it starts).
    * Disks are always kept.
@@ -904,5 +945,7 @@ export interface Bootstrap {
     openMissingLogins: number;
     runningRuns: number;
     unreadNotifications: number;
+    /** People waiting for approval to talk to a messaging bot. */
+    messagingRequests: number;
   };
 }

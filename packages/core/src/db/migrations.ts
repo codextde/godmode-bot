@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS runs (
   prompt TEXT NOT NULL,
   result TEXT,
   error TEXT,
+  note TEXT,
   cost_usd REAL,
   duration_ms INTEGER,
   num_turns INTEGER,
@@ -340,6 +341,7 @@ CREATE TABLE IF NOT EXISTS dreams (
   files TEXT NOT NULL DEFAULT '[]',
   snapshot TEXT,
   error TEXT,
+  note TEXT,
   created_at TEXT NOT NULL,
   started_at TEXT,
   finished_at TEXT
@@ -380,11 +382,90 @@ ALTER TABLE workspaces ADD COLUMN vm_id TEXT;
   },
   {
     id: 9,
+    name: "workspace_sources",
+    sql: /* sql */ `
+-- Folders and git repositories attached to a workspace. \`path\` is the folder, or for git the clone's directory name
+-- under <data>/repos/<workspace id>/ (derived, so the data dir can move).
+CREATE TABLE IF NOT EXISTS workspace_sources (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  path TEXT NOT NULL,
+  url TEXT,
+  branch TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  note TEXT,
+  commit_sha TEXT,
+  head_branch TEXT,
+  synced_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workspace_sources_workspace ON workspace_sources(workspace_id, position);
+`,
+  },
+  {
+    id: 10,
+    name: "messaging",
+    sql: /* sql */ `
+-- Bots on Slack, Telegram and Teams that people use to talk to agents. \`secrets_enc\` holds the tokens (sealed JSON),
+-- \`endpoint_hash\` the SHA-256 of a Teams bot's secret endpoint token, \`state\` runtime data (Telegram update offset).
+CREATE TABLE IF NOT EXISTS messaging_connections (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  bot TEXT NOT NULL DEFAULT '{}',
+  config TEXT NOT NULL DEFAULT '{}',
+  secrets_enc TEXT,
+  agent_ids TEXT NOT NULL DEFAULT '[]',
+  default_agent_id TEXT,
+  access TEXT NOT NULL DEFAULT 'approved',
+  endpoint_hash TEXT,
+  state TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messaging_endpoint ON messaging_connections(endpoint_hash) WHERE endpoint_hash IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS messaging_users (
+  id TEXT PRIMARY KEY,
+  connection_id TEXT NOT NULL REFERENCES messaging_connections(id) ON DELETE CASCADE,
+  external_id TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  username TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  last_seen_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messaging_users_external ON messaging_users(connection_id, external_id);
+
+-- \`reply\` says where answers go (Teams service URL, Slack thread, Telegram topic); \`user_id\` is the person of a direct chat.
+CREATE TABLE IF NOT EXISTS messaging_chats (
+  id TEXT PRIMARY KEY,
+  connection_id TEXT NOT NULL REFERENCES messaging_connections(id) ON DELETE CASCADE,
+  external_id TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'direct',
+  user_id TEXT,
+  title TEXT NOT NULL DEFAULT '',
+  agent_id TEXT,
+  conversation_id TEXT,
+  reply TEXT NOT NULL DEFAULT '{}',
+  last_message_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messaging_chats_external ON messaging_chats(connection_id, external_id);
+`,
+  },
+  {
+    id: 11,
     name: "tasks",
     sql: /* sql */ `
 -- Kanban tasks agents work on. Coding tasks work in a checkout at <data>/tasks/<id> (derived from the id).
-ALTER TABLE workspaces ADD COLUMN repo_url TEXT NOT NULL DEFAULT '';
-ALTER TABLE workspaces ADD COLUMN repo_branch TEXT NOT NULL DEFAULT '';
+-- repo_url "" = the workspace's first git repository (workspace_sources).
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
   workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,

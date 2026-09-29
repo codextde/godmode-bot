@@ -107,6 +107,7 @@ export type EntityName =
   | "models"
   | "computer"
   | "vms"
+  | "messaging"
   | "tasks";
 
 /** Messages the UI may send over the WebSocket. */

@@ -7,7 +7,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { PullRequestState, TaskPullRequest } from "@godmode/shared";
-import { resolveGh, resolveGit, runCommand, stripAnsi, toolPath } from "../services/doctor";
+import { resolveGh, runCommand, stripAnsi, toolPath } from "../services/doctor";
+import { gitFailure, runGit } from "../services/workspaceSources";
 import { childEnv, newId } from "../util";
 
 const CLONE_TIMEOUT_MS = 15 * 60_000;
@@ -22,22 +23,13 @@ export function __setGhForTests(path: string | null | undefined) {
   ghOverride = path;
 }
 
-export class GitError extends Error {
-  constructor(message: string) {
-    super(hideCredentials(message));
-  }
-}
-
-/** A remote URL without the user/token part (`https://user:token@host/…` → `https://host/…`), for prompts and messages. */
-export function hideCredentials(text: string): string {
-  return text.replace(/([a-z][\w+.-]*:\/\/)[^\s/@]+@/gi, "$1");
-}
+export class GitError extends Error {}
 
 /** New files that look like secrets (env files, keys, keystores); they are never committed. */
 const SECRET_FILE = /(^|\/)(\.env(\.(?!example$|sample$|template$|dist$)[\w.-]+)?|[^/]*\.(pem|key|p12|pfx|keystore|jks)|id_(rsa|dsa|ecdsa|ed25519)|credentials\.json|\.netrc)$/i;
 
 function env() {
-  return childEnv({ PATH: toolPath(), GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never", GH_PROMPT_DISABLED: "1", NO_COLOR: "1" });
+  return childEnv({ PATH: toolPath(), GIT_TERMINAL_PROMPT: "0", GH_PROMPT_DISABLED: "1", NO_COLOR: "1" });
 }
 
 function lastLines(text: string, n = 4): string {
@@ -50,11 +42,9 @@ function lastLines(text: string, n = 4): string {
 }
 
 async function git(args: string[], cwd: string, timeoutMs = GIT_TIMEOUT_MS): Promise<string> {
-  const bin = resolveGit();
-  if (!bin) throw new GitError("git is not installed (Settings → System).");
-  const res = await runCommand([bin, ...args], { cwd, env: env(), timeoutMs });
+  const res = await runGit(args, { cwd, timeoutMs });
   if (res.timedOut) throw new GitError(`git ${args[0]} timed out`);
-  if (res.code !== 0) throw new GitError(lastLines(res.stderr || res.stdout) || `git ${args[0]} failed`);
+  if (!res.ok) throw new GitError(lastLines(res.stderr || res.stdout) || `git ${args[0]} failed`);
   return res.stdout.trim();
 }
 
@@ -65,18 +55,6 @@ async function gitOk(args: string[], cwd: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/** A remote that can be cloned: https/ssh/git URL, scp-like `git@host:owner/repo`, or a local path (tests). */
-export function validRepoUrl(url: string): boolean {
-  const u = url.trim();
-  if (!u || /\s/.test(u) || u.startsWith("-")) return false;
-  return /^(https?|ssh|git|file):\/\//i.test(u) || /^[\w.-]+@[\w.-]+:[\w./~-]+$/.test(u) || u.startsWith("/");
-}
-
-/** Branch name git accepts (subset of `git check-ref-format`). */
-export function validBranchName(name: string): boolean {
-  return /^[\w][\w./-]*$/.test(name) && !name.includes("..") && !name.endsWith("/") && !name.endsWith(".lock") && !name.includes("//");
 }
 
 async function defaultBranch(dir: string): Promise<string> {
@@ -102,7 +80,11 @@ export async function prepareCheckout(opts: { dir: string; url: string; base: st
   } else {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dirname(dir), { recursive: true });
-    await git(["clone", "--origin", "origin", "--", url, dir], dirname(dir), CLONE_TIMEOUT_MS);
+    const res = await runGit(["clone", "--quiet", "--origin", "origin", "--", url, dir], { cwd: dirname(dir), timeoutMs: CLONE_TIMEOUT_MS });
+    if (!res.ok) {
+      rmSync(dir, { recursive: true, force: true });
+      throw new GitError(gitFailure(res, url, opts.base || null));
+    }
   }
   const base = opts.base || (await defaultBranch(dir));
   if (!(await gitOk(["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${base}`], dir))) {
@@ -136,13 +118,9 @@ export async function secretFilesAdded(dir: string, base: string): Promise<strin
   return added.split("\0").filter((f) => f && SECRET_FILE.test(f));
 }
 
-/** The branch's changes on top of its base (for checks before pushing), cut at `max` characters. */
-export async function branchDiff(dir: string, base: string, max = 5_000_000): Promise<string> {
-  const bin = resolveGit();
-  if (!bin) throw new GitError("git is not installed (Settings → System).");
-  const res = await runCommand([bin, "diff", "--no-color", "--no-ext-diff", `origin/${base}...HEAD`], { cwd: dir, env: env(), timeoutMs: GIT_TIMEOUT_MS, maxOutput: max });
-  if (res.code !== 0) throw new GitError(lastLines(res.stderr) || "git diff failed");
-  return res.stdout;
+/** The branch's changes on top of its base (for checks before pushing). */
+export function branchDiff(dir: string, base: string): Promise<string> {
+  return git(["diff", "--no-color", "--no-ext-diff", `origin/${base}...HEAD`], dir);
 }
 
 /**

@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import { ClipboardList, CodeXml, Telescope } from "lucide-react";
-import type { Task, TaskStatus, TaskType } from "@godmode/shared";
+import type { Task, TaskStatus, TaskType, Workspace, WorkspaceSource } from "@godmode/shared";
 import { cn } from "@/lib/utils";
 
 export const BOARD_COLUMNS: TaskStatus[] = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
@@ -89,4 +89,9 @@ export function isWorking(task: Task): boolean {
 export function repoLabel(url: string): string {
   const m = /[/:]([^/:]+\/[^/]+?)(?:\.git)?\/?$/.exec(url.trim());
   return m?.[1] ?? url;
+}
+
+/** The workspace's git repositories; coding tasks use the first unless they name another. */
+export function workspaceRepos(workspace: Workspace | null | undefined): (WorkspaceSource & { url: string })[] {
+  return (workspace?.sources ?? []).filter((s): s is WorkspaceSource & { url: string } => s.kind === "git" && !!s.url);
 }

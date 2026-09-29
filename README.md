@@ -54,20 +54,22 @@ needs to be useful:
 | 🤖 **Persistent agents** | Bots with their own instructions, conversations, memory (`MEMORY.md`), routines and history — each in its own git repo. |
 | 🌙 **Dreaming** | While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned (even if nobody said "remember this"), merge duplicates, fix contradictions and update dates ("is going to Singapore in July" → "went to Singapore in July"). Memory loads into every new chat; every dream can be reviewed as a diff and undone. |
 | 📁 **Working folders** | Optionally point a chat or an agent at any folder on your machine — it works on the files there and keeps its memory in its own repo. |
-| 📋 **Task board** | A Trello-style Kanban board per workspace: create tickets, assign them to agents, drag them across *Backlog → Todo → In progress → In review → Done*. A ticket that lands in *Todo* starts its agent. **Coding** tickets clone the workspace's git repository onto a fresh branch, and when the agent is done Godmode pushes it and opens a pull request — merged pull requests close their ticket. Reply to a ticket to ask for changes; the pull request updates. |
+| 📋 **Task board** | A Trello-style Kanban board per workspace: create tickets, assign them to agents, drag them across *Backlog → Todo → In progress → In review → Done*. A ticket that lands in *Todo* starts its agent. **Coding** tickets clone one of the workspace's git repositories onto a fresh branch, and when the agent is done Godmode pushes it and opens a pull request — merged pull requests close their ticket. Reply to a ticket to ask for changes; the pull request updates. |
 | ⚡ **Automations** | Work starts when it happens: on a schedule (“weekdays at 08:00”), when something happens in a connected app (a new email, a Slack message, a calendar event, a Notion update), when a condition you describe comes true (“competitor pricing changes”), or when a webhook is called. Describe it in one sentence and Godmode sets it up. |
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
-| 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent runs commands, edits files and uses apps *inside the VM* — your computer stays untouched. VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
+| 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent runs commands, edits files and uses apps *inside the VM* — your computer stays untouched. VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. Allow it once and agents sign in inside the VM too: Godmode types your saved logins and 2FA codes into it for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
 | 🔐 **Vault** | Logins with password generator, per-workspace or global, AES-256-GCM encrypted, fully audited. |
 | 📥 **Password import** | Bring logins over from Chrome (and Edge, Brave, Arc), 1Password (.1pux or CSV), Bitwarden, Apple Passwords, Firefox and more — with a preview that updates saved logins instead of duplicating them. |
 | 🔢 **2FA / TOTP** | Import Google Authenticator QR codes from screenshots — including multi-account *export* QR codes — or scan with your camera. |
 | 📬 **Missing-login inbox** | Agents report missing or broken logins, accounts and 2FA; add them in one click. |
 | 🧩 **Integrations** | Composio toolkits (Gmail, Slack, GitHub, Notion…) and custom MCP servers — globally, per workspace, or per agent. |
-| 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA and integrations, plus shared global ones. |
+| 💬 **Messaging** | Talk to your agents from **Slack**, **Telegram** and **Microsoft Teams**. Connect a bot, pick which agents it reaches, and approve who may use it; `/agent`, `/new` and `/stop` work right in the chat, and every chat is also a Godmode conversation. |
+| 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA, integrations and browser profile, plus shared global ones. Assign any browser profile to a workspace (Browser → profile menu, or in the workspace's settings) and its agents browse with it. |
+| 🧬 **Workspace folders & repos** | Attach project folders and git repositories to a workspace — paste `https://github.com/you/app` and Godmode clones it with your git sign-in, keeps it up to date and hands it to every agent in the workspace. |
 | 🎙️ **Voice mode** | Dictate and hear replies; hands-free conversation loop (Web Speech, OpenAI or ElevenLabs). |
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
@@ -108,6 +110,14 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/activity.png" alt="Activity across agents" /><br /><sub><b>Activity</b> — every run, its cost, duration and result</sub></td>
     <td><img src="docs/screenshots/settings.png" alt="Security settings" /><br /><sub><b>Security</b> — fill-only secrets, device keychain and auto-lock</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/workspace-sources.png" alt="Folders and git repositories attached to a workspace" /><br /><sub><b>Workspace folders & repos</b> — every agent in the workspace works with them</sub></td>
+    <td><img src="docs/screenshots/workspace-add-repo.png" alt="Add a git repository to a workspace" /><br /><sub><b>Add a repository</b> — paste a URL, Godmode clones it and keeps it up to date</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/messaging.png" alt="Slack, Telegram and Teams bots connected to agents" /><br /><sub><b>Messaging</b> — talk to agents from Slack, Telegram and Microsoft Teams</sub></td>
+    <td><img src="docs/screenshots/messaging-bot.png" alt="A bot's access requests, agents and who may use it" /><br /><sub><b>Bot settings</b> — approve people, pick agents, see every chat</sub></td>
   </tr>
 </table>
 
@@ -241,7 +251,7 @@ stop when a third is needed.
   (`agent_delegate`), management tools for the main agent (agents, automations, the task board), and
   `report_missing_login`.
 - **Tasks**: a ticket in *Todo* starts its agent in the ticket's own conversation. Coding tickets work in a checkout of
-  the workspace's repository on their own branch; Godmode pushes it with your git login and opens the pull request
+  one of the workspace's repositories on their own branch; Godmode pushes it with your git login and opens the pull request
   with the GitHub CLI (`gh`) — or links to the page that opens one.
 - Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

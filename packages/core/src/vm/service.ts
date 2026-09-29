@@ -1159,6 +1159,18 @@ export async function execInVm(id: string, command: string, opts: ExecOptions = 
   return { exitCode: res.code, stdout: res.stdout, stderr: res.stderr, timedOut: res.timedOut };
 }
 
+/**
+ * Run one program in the VM without a shell: nothing the guest user set up (shell startup files, functions, PATH) can
+ * stand in for it. For checks Godmode relies on while the agent controls the VM.
+ */
+export async function execProgramInVm(id: string, argv: string[], opts: Pick<ExecOptions, "timeoutMs" | "signal"> = {}): Promise<VmExecResult> {
+  await ensureVmRunning(id);
+  touch(id);
+  const res = await tart.tart(["exec", id, ...argv], { timeoutMs: opts.timeoutMs ?? 30_000, signal: opts.signal, maxOutput: 2_000_000 });
+  touch(id);
+  return { exitCode: res.code, stdout: res.stdout, stderr: res.stderr, timedOut: res.timedOut };
+}
+
 /* ------------------------------------------------------------------ */
 /* Screen                                                               */
 /* ------------------------------------------------------------------ */

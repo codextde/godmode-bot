@@ -22,6 +22,8 @@ import { registerVmRoutes } from "./routes/vms";
 import { registerTaskRoutes } from "./routes/tasks";
 import { serveStatic } from "./static";
 import { handleWebhook } from "../automations/webhooks";
+import { registerMessagingRoutes } from "./routes/messaging";
+import { handleMessagingHook } from "../messaging/service";
 
 const log = logger("http");
 
@@ -68,6 +70,8 @@ export function createApp() {
 
   // Automation webhooks (the secret token in the path is the credential)
   app.post("/hooks/:token", handleWebhook);
+  // Microsoft Teams deliveries (secret path + Bot Framework signature)
+  app.post("/hooks/messaging/:token", handleMessagingHook);
 
   // Protected API
   app.use("/api/*", async (c, next) => {
@@ -83,6 +87,7 @@ export function createApp() {
   registerChatRoutes(app);
   registerMissingLoginRoutes(app);
   registerIntegrationRoutes(app);
+  registerMessagingRoutes(app);
   registerBrowserRoutes(app);
   registerComputerRoutes(app);
   registerVmRoutes(app);

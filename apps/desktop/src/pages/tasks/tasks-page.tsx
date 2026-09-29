@@ -22,7 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TaskBoard } from "@/components/tasks/task-board";
 import { TaskDialog } from "@/components/tasks/task-dialog";
 import { TaskSheet } from "@/components/tasks/task-sheet";
-import { STATUS_META, isWorking, repoLabel } from "@/components/tasks/task-meta";
+import { STATUS_META, isWorking, workspaceRepos } from "@/components/tasks/task-meta";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
 import { api } from "@/lib/api";
@@ -63,6 +63,7 @@ export default function TasksPage() {
   const [deleting, setDeleting] = useState<Task | null>(null);
 
   const workspace = workspaceList.find((w) => w.id === scope) ?? null;
+  const repos = workspaceRepos(workspace);
   const workspaces = useMemo(() => new Map(workspaceList.map((w) => [w.id, w])), [workspaceList]);
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const listKey = qk.taskList(scope);
@@ -170,10 +171,11 @@ export default function TasksPage() {
             {workspace && (
               <Button variant="outline" className="max-w-64 font-normal" onClick={() => setEditingWorkspace(workspace)}>
                 <FolderGit2 className="text-muted-foreground" />
-                {workspace.repoUrl ? (
+                {repos[0] ? (
                   <span className="truncate font-mono text-[13px]">
-                    {repoLabel(workspace.repoUrl)}
-                    {workspace.repoBranch && <span className="text-muted-foreground"> · {workspace.repoBranch}</span>}
+                    {repos[0].name}
+                    {repos[0].branch && <span className="text-muted-foreground"> · {repos[0].branch}</span>}
+                    {repos.length > 1 && <span className="text-muted-foreground"> +{repos.length - 1}</span>}
                   </span>
                 ) : (
                   "Connect a repository"
@@ -251,7 +253,7 @@ export default function TasksPage() {
         onDelete={setDeleting}
       />
       {editingWorkspace && (
-        <WorkspaceDialog open onOpenChange={(open) => !open && setEditingWorkspace(null)} workspace={editingWorkspace} focus="repository" />
+        <WorkspaceDialog open onOpenChange={(open) => !open && setEditingWorkspace(null)} workspace={editingWorkspace} focus="sources" />
       )}
 
       <AlertDialog open={!!stopping} onOpenChange={(open) => !open && setStopping(null)}>

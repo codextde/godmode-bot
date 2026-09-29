@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, Task } from "@godmode/shared";
 import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { startSmartGitServer, type SmartGitServer } from "./fixtures/smart-git-server";
 import { get, run as sql } from "../src/db";
 import { getRun, activeRunForConversation } from "../src/runner/runner";
 import { createWorkspace, deleteWorkspace, updateWorkspace } from "../src/services/workspaces";
@@ -19,13 +20,14 @@ import {
   stopTasks,
   updateTask,
 } from "../src/tasks/service";
-import { __setGhForTests, compareUrl, hostedRepo, openPullRequest, validBranchName, validRepoUrl } from "../src/tasks/git";
+import { __setGhForTests, compareUrl, hostedRepo, openPullRequest } from "../src/tasks/git";
 import { HttpError } from "../src/util";
 import { rememberSecret } from "../src/vault/vault";
 import { updateSettings } from "../src/services/settings";
 import { mkdtempSync } from "node:fs";
 
 let env: TestEnv;
+let gitServer: SmartGitServer;
 let agent: Agent;
 let wsAgent: Agent;
 let workspaceId: string;
@@ -39,18 +41,8 @@ const git = async (args: string[], cwd: string) => {
   return out.trim();
 };
 
-async function makeRemote(name: string): Promise<string> {
-  const bare = join(env.dataDir, "remotes", `${name}.git`);
-  const seed = join(env.dataDir, "remotes", `${name}-seed`);
-  mkdirSync(seed, { recursive: true });
-  await git(["init", "--bare", "--initial-branch=main", bare], env.dataDir);
-  await git(["init", "--initial-branch=main"], seed);
-  writeFileSync(join(seed, "README.md"), "# demo\n");
-  await git(["add", "-A"], seed);
-  await git(["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "init"], seed);
-  await git(["remote", "add", "origin", bare], seed);
-  await git(["push", "origin", "main"], seed);
-  return bare;
+function makeRemote(name: string): { url: string; bare: string } {
+  return gitServer.create(name);
 }
 
 const settled = (id: string, statuses: Task["status"][]) =>
@@ -68,6 +60,7 @@ async function catchHttp(fn: () => unknown): Promise<HttpError> {
 
 beforeAll(async () => {
   env = await setupEnv("godmode-tasks-");
+  gitServer = startSmartGitServer();
   __setGhForTests(null);
   startTasks();
   agent = await makeAgent({ name: "Task Bot" });
@@ -80,6 +73,7 @@ afterAll(async () => {
   stopTasks();
   __setGhForTests(undefined);
   await env.close();
+  gitServer.close();
 });
 
 describe("board", () => {
@@ -104,6 +98,8 @@ describe("board", () => {
     expect((await catchHttp(() => createTask({ workspaceId, title: "  " }))).status).toBe(400);
     expect((await catchHttp(() => createTask({ workspaceId, title: "x", type: "nope" as never }))).status).toBe(400);
     expect((await catchHttp(() => createTask({ workspaceId, title: "x", repoUrl: "not a url" }))).status).toBe(400);
+    expect((await catchHttp(() => createTask({ workspaceId, title: "x", repoUrl: "https://me:token@github.com/acme/app.git" }))).status).toBe(400);
+    expect(createTask({ workspaceId, title: "web link", repoUrl: "https://github.com/acme/app/tree/main", status: "backlog" }).repoUrl).toBe("https://github.com/acme/app.git");
     expect((await catchHttp(() => createTask({ workspaceId, title: "x", baseBranch: "bad..branch" }))).status).toBe(400);
     const err = await catchHttp(() => createTask({ workspaceId: otherWorkspaceId, title: "x", agentId: wsAgent.id }));
     expect(err.message).toContain("another workspace");
@@ -202,12 +198,12 @@ describe("coding tasks", () => {
   });
 
   test("clone onto a branch, commit and push the agent's work, update it after follow-ups", async () => {
-    const remote = await makeRemote("app");
-    updateWorkspace(workspaceId, { repoUrl: remote });
+    const { url, bare: remote } = makeRemote("app");
+    updateWorkspace(workspaceId, { sources: [{ kind: "git", url }] });
     const task = createTask({ workspaceId, title: "TASK_EDIT add a change file", type: "coding", agentId: wsAgent.id });
     await settled(task.id, ["in_review"]);
     const t = getTask(task.id);
-    expect(t.repoUrl).toBe(remote);
+    expect(t.repoUrl).toBe(url);
     expect(t.baseBranch).toBe("main");
     expect(t.branch).toBe(`godmode/${t.number}-task-edit-add-a-change-file`);
     expect(t.pullRequest).toBeNull();
@@ -247,9 +243,10 @@ describe("coding tasks", () => {
 
 describe("races and safety", () => {
   let remote = "";
-  beforeAll(async () => {
-    remote = await makeRemote("safety");
-    updateWorkspace(workspaceId, { repoUrl: remote });
+  let url = "";
+  beforeAll(() => {
+    ({ url, bare: remote } = makeRemote("safety"));
+    updateWorkspace(workspaceId, { sources: [{ kind: "git", url }] });
   });
 
   test("a restart asked for while the repository is being cloned isn't lost", async () => {
@@ -285,7 +282,7 @@ describe("races and safety", () => {
     await settled(task.id, ["in_review"]);
     const branch = getTask(task.id).branch!;
     const other = mkdtempSync(join(env.dataDir, "reviewer-"));
-    await git(["clone", "-q", "--branch", branch, remote, other], env.dataDir);
+    await git(["clone", "-q", "--branch", branch, url, other], env.dataDir);
     writeFileSync(join(other, "REVIEW.md"), "reviewer fix\n");
     await git(["add", "-A"], other);
     await git(["-c", "user.name=Reviewer", "-c", "user.email=r@example.com", "commit", "-qm", "Reviewer fix"], other);
@@ -390,21 +387,12 @@ exit 1
     expect(hostedRepo("git@github.com:acme/app.git")).toEqual({ host: "github", path: "acme/app" });
     expect(hostedRepo("https://git.example.com/acme/app.git")).toBeNull();
     expect(compareUrl("https://example.com/x.git", "main", "b")).toBeNull();
-    expect(validRepoUrl("https://github.com/acme/app")).toBe(true);
-    expect(validRepoUrl("git@github.com:acme/app.git")).toBe(true);
-    expect(validRepoUrl("--upload-pack=evil")).toBe(false);
-    expect(validRepoUrl("acme/app")).toBe(false);
-    expect(validBranchName("feature/x-1")).toBe(true);
-    expect(validBranchName("-x")).toBe(false);
+
   });
 });
 
 describe("workspaces", () => {
-  test("repository settings are validated and deleting a workspace with tasks needs force", async () => {
-    expect((await catchHttp(() => updateWorkspace(otherWorkspaceId, { repoUrl: "nope nope" }))).status).toBe(400);
-    const ws = updateWorkspace(otherWorkspaceId, { repoUrl: "https://github.com/acme/app.git", repoBranch: "develop" });
-    expect(ws.repoUrl).toBe("https://github.com/acme/app.git");
-    expect(ws.repoBranch).toBe("develop");
+  test("deleting a workspace with tasks needs force", async () => {
     const err = await catchHttp(() => deleteWorkspace(otherWorkspaceId));
     expect(err.status).toBe(409);
     expect(err.message).toContain("task");

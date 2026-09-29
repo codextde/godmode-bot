@@ -24,6 +24,7 @@ import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startAutomationEvents, stopAutomationEvents } from "./automations/events";
 import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
+import { startMessaging, stopMessaging } from "./messaging/service";
 import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
 import { shutdownComputer } from "./computer/service";
 import { shutdownVms, startVms } from "./vm/service";
@@ -120,6 +121,7 @@ async function serve(values: Record<string, unknown>) {
   startDreaming();
   startAutomationEvents();
   startAppTriggers();
+  startMessaging();
   startTasks();
   // Adopt VMs that kept running while Godmode was closed.
   startVms().catch((err) => log.warn("could not check VMs", err));
@@ -194,6 +196,7 @@ async function serve(values: Record<string, unknown>) {
     stopDreaming();
     stopAppTriggers();
     stopAutomationEvents();
+    await stopMessaging();
     stopTasks();
     await shutdownRunner();
     await shutdownBrowsers();

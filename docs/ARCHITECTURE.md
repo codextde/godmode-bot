@@ -38,6 +38,7 @@ access-token          0600 — bearer token for server mode / dev
 agents/<slug>/        one git repository per agent (see below)
 browser/<profile-id>/ Chromium user-data-dirs managed by Godmode
 attachments/          chat uploads
+repos/<workspace-id>/ clones of the workspaces' git repositories (removed ones go to repos/.trash/)
 backups/              automatic + manual backups (*.godmode-backup)
 vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, tart/ (TART_HOME: vms/<vm-id>
                       disks and gm-image-* templates), downloads/ (image layers while downloading),
@@ -74,6 +75,35 @@ system prompt is a snapshot of its first turn. Folders must exist, be absolute a
 only the human sets them (agent-made changes are ignored). The UI picks them via `GET /api/folders?path=` (subfolders on
 the core's machine) and `GET /api/folders/recent`.
 
+### Workspace folders and repositories
+
+A workspace can attach folders and git repositories (`workspace_sources`, `Workspace.sources`, set as a whole list with
+`sources` on `POST/PATCH /api/workspaces`; `services/workspaceSources.ts`). Every run of an agent in the workspace gets
+the usable ones with `--add-dir` (their CLAUDE.md loads too), a "Workspace folders and repositories" section in the
+system prompt, and a one-line restatement on resumed turns. Dreams don't get them. Only the human attaches them.
+
+* **Folders** follow the working-folder rules (absolute, existing, outside the data directory). One that goes missing
+  shows as `missing` and is skipped by runs with a notice; the workspace can still be saved.
+* **Repositories** are cloned with the system `git` into `repos/<workspace-id>/<name>` as soon as they are added, so the
+  machine's own git sign-in applies (SSH keys, credential helpers). Accepted URLs: https, `ssh://`, `git@host:owner/repo`
+  and `git://`; GitHub/GitLab/Bitbucket/Codeberg web links (also `…/tree/<branch>`) become clone URLs (`parseGitUrl` in
+  `@godmode/shared`). Credentials in URLs, local paths and other transports are refused. Nothing waits for a prompt
+  (`GIT_TERMINAL_PROMPT=0`, no askpass, SSH in batch mode with `StrictHostKeyChecking=accept-new` unless the user set
+  their own SSH command). A clone lands in `<name>.cloning-*` and is only renamed into place when complete.
+* **Updates** (`POST /api/workspaces/:id/sources/:sourceId/sync`, which clones a missing one) fetch, then
+  `merge --ff-only` only when the tree has no local changes — agents' work is never overwritten; `note` says why a clone
+  was left as it was. Before a run, all sources are prepared at once: a missing clone is cloned (the run waits up to
+  90 s, then goes on without it while the clone continues), one not updated for 15 minutes is fast-forwarded (20 s,
+  retried at most every 15 minutes). Failures are stored on the source (`error`) in words a human can act on; a clone
+  whose update failed stays usable.
+* **Agents can write into clones, git runs there on the host.** Godmode's git ignores the clone's hooks and fsmonitor
+  (`core.hooksPath`, `core.fsmonitor` on the command line), pins the SSH command through the environment, and runs that
+  may edit files but not run commands (no permission bypass, VM runs) get `Edit(**/.git/**)` plus the clones' `.git`
+  denied, so a clone's git settings can't be used to run programs on this computer.
+* Removing a repository or deleting its workspace stops a running clone and moves the clone to `repos/.trash/` (it may
+  hold unpushed work). Backups carry the records, not the clones: restored repositories are cloned again, restored
+  folders must exist on the new machine.
+
 ## Security model
 
 * **Vault**: passphrase → scrypt (N=2^17) → KEK → unwraps a random 256-bit DEK. Every secret column is
@@ -84,6 +114,12 @@ the core's machine) and `GET /api/folders/recent`.
   Fills are **site-bound**: the frame that owns the target field must be on one of the login's domains (https, or http
   only when the saved URL is http), and passwords only go into `input[type=password]`.
   `"reveal"` mode lets an agent read raw secrets (needed for API-only tools) and is audited.
+* **Secrets in VMs** (`settings.vm.vaultFill`, off by default; turning it on needs a grant): the `vm` tools `fill_login` /
+  `fill_totp` type a login or the current 2FA code into the field focused on the VM's screen, key by key over VNC (never
+  through the guest clipboard; secrets that aren't plain ASCII are refused). Passwords only go in while macOS secure
+  keyboard input is on and not owned by a terminal, checked before and after typing (when focus moved away, the typed characters
+  are erased again) with `ioreg` / `ps` run without a shell. Unlike browser fills they can't be bound to a website, and the agent
+  controls the VM, so this is best effort against a determined agent — closer to "reveal" than to fill-only.
 * **Grants**: revealing secrets and enabling reveal/remember-device require `X-Godmode-Grant`, obtained from
   `POST /api/vault/grant {passphrase}` (10 min, in memory).
 * **Redaction**: every known secret is masked in transcripts, run logs and the UI stream.
@@ -112,6 +148,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        --setting-sources project,local
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key; Bash when the run works in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
+       [--add-dir <folder or clone> for each usable workspace folder and repository]
        (prompt is written to stdin)
 cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <agent repo>)
 ```
@@ -157,6 +194,10 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
 
 * One managed Chromium per **browser profile** (global default + optional per workspace/agent), launched with
   `--remote-debugging-port=<free port> --user-data-dir=~/.godmode/browser/<id>` on 127.0.0.1.
+* A run uses its agent's pinned profile, else its workspace's default profile (`Workspace.browserProfileId`), else the
+  global default. Profiles can be reassigned to another workspace (`PATCH /api/browser/profiles/:id { workspaceId }`) or
+  picked in the workspace's settings (`browserProfileId`, which moves a global profile into the workspace); cookies and
+  sessions travel with the profile. The global default always stays global.
 * On macOS a visible browser never takes focus: it is started in the background through LaunchServices
   (`open -g`, no startup window) and its first window opens behind the active app.
 * Agents get browser tools from the **browser-use MCP server** (`uvx --from browser-use==0.13.10 browser-use --mcp`)
@@ -265,7 +306,9 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   Remote Desktop authentication, raw 32-bit updates, pointer/key events; `vm/raster.ts`: crop, area-average downscale,
   PNG). Long or non-ASCII text is pasted through the guest clipboard. Screenshots remember their frame, so model
   coordinates map back to framebuffer pixels. (Tart's `--vnc-experimental` server is not used: it listens on every
-  network interface.)
+  network interface.) `fill_login` / `fill_totp` type vault secrets into the focused field (optionally clicking a
+  `coordinate` first) when `settings.vm.vaultFill` allows it; a password needs `kCGSSessionSecureInputPID` in the guest's
+  `ioreg` (the app that owns it is named in the result and the audit entry). The value is never in a tool result.
 * **Human access**: `POST /api/vms/:id/open { what }` opens Screen Sharing (`vnc://admin:admin@<NAT IP>`), Terminal
   (SSH with Godmode's key) or the shared folder in Finder; `GET /api/vms/:id/screenshot` feeds the card preview (never
   boots a VM). Backups carry VM records and assignments, not disks; a restore keeps this Mac's own VM records, and a
@@ -319,11 +362,13 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   and the agent gets the task in its conversation (`origin = 'task'`, created archived so it stays off the chat list;
   reused while the agent and folder stay the same) as a `trigger = "task"` run. The prompt carries the title,
   description and what to deliver per type: `general` (do it, summarize), `research` (a Markdown report) or `coding`.
-* **Coding tasks** (`tasks/git.ts`): Godmode clones the repository (the task's `repoUrl`, else the workspace's) into
-  `<data>/tasks/<id>` with the system git (the human's credential helper / SSH keys; `GIT_TERMINAL_PROMPT=0`, so nothing
-  ever prompts) and checks out `godmode/<number>-<slug>` from `origin/<base>` (the task's, the workspace's, else the
-  remote's default branch). The URL and resolved base are pinned on the task. The checkout is the conversation's
-  working folder — the only folder inside the data directory allowed as one. When a run succeeds, Godmode commits what
+* **Coding tasks** (`tasks/git.ts`): Godmode clones the repository (the task's `repoUrl` — any URL `parseGitUrl`
+  accepts — else the workspace's first git repository, see Workspace folders and repositories) into `<data>/tasks/<id>`
+  with the same hardened git as workspace clones (the human's credential helper / SSH keys, no prompts, no clone hooks)
+  and checks out `godmode/<number>-<slug>` from `origin/<base>` (the task's, the repository's configured branch, else
+  the remote's default branch). The URL and resolved base are pinned on the task. The checkout is the conversation's
+  working folder — the only folder inside the data directory allowed as one — and the workspace's shared clone of the
+  same repository is left out of the run's `--add-dir` folders, so the agent changes the task's branch only. When a run succeeds, Godmode commits what
   the agent left uncommitted (new `.env`/key files are left out), refuses to push when the branch adds such files or its
   diff contains a secret from the vault, merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks
   the task), and pushes with an explicit lease on what it saw — so nothing pushed meanwhile is overwritten. It then
@@ -342,7 +387,7 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   from the status the work expects — a move the human made meanwhile wins — and put the task at the top of its column.
 * **Agents managing the board**: `task_create` / `task_update` follow the delegation rules (no reveal-mode or unattended
   computer agents from callers that couldn't use them, VM-kept runs stay off the host); coding tasks created by agents
-  use the workspace's repository; and a run working on a task — or delegated from one — can't start a manager agent
+  use the workspace's repositories; and a run working on a task — or delegated from one — can't start a manager agent
   (itself included), so tasks can't spawn tasks without end. Follow-ups wait while Godmode prepares or publishes a task. Task numbers are never reused.
 * **Restart**: tasks left `in_progress` without a live run are blocked ("Interrupted"), tasks waiting in `todo` with an
   agent are started. Deleting a task cancels its run and removes the checkout (the conversation stays); deleting a
@@ -355,6 +400,32 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   (`user_id` = `global` | `ws_<workspaceId>` | `agent_<agentId>`), and expose them to agents through a Tool Router
   session MCP URL (`POST /api/v3.1/tool_router/session`). Connected accounts can also start automations (app
   triggers, see Automations); an automation may only watch accounts its agent could use.
+
+## Messaging
+
+People talk to agents from Slack, Telegram and Microsoft Teams through a bot the human connects (`messaging/`,
+`/api/messaging`, the **Messaging** page). A connection (`messaging_connections`) holds the bot's tokens sealed in the
+vault (`secrets_enc`, redacted like other secrets), the agents it reaches (`agent_ids`, new chats start with
+`default_agent_id`) and who may use it (`access`). Adapters run while the connection is enabled and the vault is
+unlocked (tokens stay in memory when it locks later):
+
+| Platform | Transport | Setup |
+|---|---|---|
+| Telegram | Bot API long polling (`getUpdates`, offset kept in `state`); a webhook set elsewhere is removed | token from @BotFather |
+| Slack | Socket Mode (`apps.connections.open` → WebSocket, acks every envelope, pings to detect dead sockets); DMs, mentions in channels (answered in the thread), the `/godmode` slash command (answered privately via `response_url`) | app from Godmode's manifest (`slackManifest`), bot token `xoxb-` + app-level token `xapp-` |
+| Teams | Azure Bot (single tenant) delivering to `POST /hooks/messaging/<token>` (public, exempt from the loopback Host check like webhooks; the token is stored as a SHA-256 hash and sealed). Every delivery must carry a Bot Framework JWT (RS256 against the published keys, `iss`, `aud` = app id, expiry, `msteams` endorsement, `serviceurl` claim), come from `msteams` and the configured tenant. Answers go to the Teams connector hosts only, with a client-credentials token | app id, tenant, client secret, public https address; the UI builds the Teams app package (manifest + icons) |
+
+**Access**: with `approved` (default), someone new is recorded in `messaging_users` as pending, told the bot is private
+and the human is notified; approving sends them a welcome in their direct chat. Blocked people are ignored. `anyone`
+lets everyone who reaches the bot in (it needs a vault grant, and so does widening an open bot: more agents, turning it
+back on). **Chats** (`messaging_chats`): one per DM, group, Telegram topic or Slack thread, each continuing one
+conversation (origin `slack` / `telegram` / `teams`, with standing instructions naming the platform and saying names are
+unverified). Messages of a chat are accepted in order; each starts a normal chat run, the platform shows typing (Slack:
+an 👀 reaction) and the answer is converted (Telegram HTML, Slack mrkdwn, Teams Markdown) and split. Chat commands:
+`/help`, `/agents`, `/agent <name>` (switch; in a Slack thread the channel follows), `/new`, `/stop`; Slack uses
+`/godmode <command>`. Claude Code's own slash commands are not available from chats. Attachments (≤ 25 MB, Telegram ≤ 20 MB)
+are downloaded into the agent's uploads. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
+connections but restore them turned off, so two machines never answer for one bot.
 
 ## Memory
 
