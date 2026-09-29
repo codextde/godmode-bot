@@ -107,7 +107,7 @@ export function VmChip({
       <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
         <div className="border-b px-3 pt-2.5 pb-2">
           <p className="text-[13px] font-medium">Virtual machine</p>
-          <p className="text-xs text-muted-foreground">Runs in this chat browse, run commands and use apps inside this macOS VM — nothing runs on your Mac.</p>
+          <p className="text-xs text-muted-foreground">Runs in this chat browse, run commands and use apps inside this macOS VM instead of on your Mac.</p>
         </div>
         {vms.length === 0 ? (
           <div className="space-y-3 px-3 py-4 text-center">

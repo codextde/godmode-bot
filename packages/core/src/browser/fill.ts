@@ -453,14 +453,13 @@ export function fillPrecheck(opts: Pick<FillOptions, "text" | "allowedHosts">): 
 
 /**
  * Fill into the active page (or the one whose URL contains `urlContains`) of a browser reached over CDP — Godmode's
- * Chromium on this computer or the Chrome in a VM. The typed value never appears in the result.
+ * Chromium on this computer or the Chrome in a VM. Callers check `fillPrecheck` first. The typed value never appears in
+ * the result.
  */
 export async function fillIntoActivePage(
   browser: { client: CdpClient; port?: number },
   opts: FillOptions & { urlContains?: string },
 ): Promise<FillResult> {
-  const refused = fillPrecheck(opts);
-  if (refused) return refused;
   // Belt and braces: error texts come from CDP/our scripts, but never let the typed value through.
   const scrub = (detail: string) => detail.split(opts.text).join("••••••••");
   try {

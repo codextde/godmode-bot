@@ -83,6 +83,12 @@ the core's machine) and `GET /api/folders/recent`.
   Fills are **site-bound**: the frame that owns the target field must be on one of the login's domains (https, or http
   only when the saved URL is http), and passwords only go into `input[type=password]`.
   `"reveal"` mode lets an agent read raw secrets (needed for API-only tools) and is audited.
+* **Secrets in VMs** (`settings.vm.vaultFill`, off by default; turning it on needs a grant): the `vm` tools `fill_login` /
+  `fill_totp` type a login or the current 2FA code into the field focused on the VM's screen, key by key over VNC (never
+  through the guest clipboard; secrets that aren't plain ASCII are refused). Passwords only go in while macOS secure
+  keyboard input is on and not owned by a terminal, checked before and after typing (when focus moved away, the typed characters
+  are erased again) with `ioreg` / `ps` run without a shell. Unlike browser fills they can't be bound to a website, and the agent
+  controls the VM, so this is best effort against a determined agent — closer to "reveal" than to fill-only.
 * **Grants**: revealing secrets and enabling reveal/remember-device require `X-Godmode-Grant`, obtained from
   `POST /api/vault/grant {passphrase}` (10 min, in memory).
 * **Redaction**: every known secret is masked in transcripts, run logs and the UI stream.
@@ -267,10 +273,13 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   Remote Desktop authentication, raw 32-bit updates, pointer/key events; `vm/raster.ts`: crop, area-average downscale,
   PNG). Long or non-ASCII text is pasted through the guest clipboard. Screenshots remember their frame, so model
   coordinates map back to framebuffer pixels. (Tart's `--vnc-experimental` server is not used: it listens on every
-  network interface.)
+  network interface.) `fill_login` / `fill_totp` type vault secrets into the focused field (optionally clicking a
+  `coordinate` first) when `settings.vm.vaultFill` allows it; a password needs `kCGSSessionSecureInputPID` in the guest's
+  `ioreg` (the app that owns it is named in the result and the audit entry). The value is never in a tool result.
 * **Godmode's agent in the VM** (`vm/guest.ts`): the browser and computer use of a VM run live in the guest. Claude
-  Code starts two stdio MCP servers as `tart exec -i <vm> /bin/zsh -l -c …` (stdio through the Tart guest agent, which
-  runs in the guest user's GUI session; ending the process kills the command's process group): `browser` — browser-use
+  Code starts two stdio MCP servers as `tart exec -i <vm> /bin/zsh -f -c …` (stdio through the Tart guest agent, which
+  runs in the guest user's GUI session; no startup files, so nothing the agent puts there can print into the JSON-RPC
+  stream; ending the process kills the command's process group): `browser` — browser-use
   (`browser-use --mcp`, pinned like on the host) connected to Google Chrome in the guest (`~/Applications`, own profile
   in `~/.godmode/browser-profile`, DevTools on the guest's `127.0.0.1:9322`, visible on the VM's screen, downloads in
   `~/Downloads`), started again when it was closed — and `cua` — Cua Driver (`cua-driver mcp --direct`), which controls
@@ -278,8 +287,8 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   Accessibility and Screen Recording. Everything is installed on first use, shared by concurrent runs: uv is copied
   from the host (the official installer as fallback), Chrome comes from Google's disk image, browser-use and Cua Driver
   are fetched through uv (`uv tool run --from <pinned spec> python …` records the program's path in
-  `~/.godmode/stamps`). A tool that failed isn't retried for 10 minutes. Vault fills (`vault_fill_login`,
-  `vault_fill_totp`) and the missing-login check reach the guest's Chrome over CDP through an SSH port forward
+  `~/.godmode/stamps`). A tool that failed isn't retried for 10 minutes (or until the VM stops). Vault fills
+  (`vault_fill_login`, `vault_fill_totp` — only with `settings.vm.vaultFill`, like `fill_login`) and the missing-login check reach the guest's Chrome over CDP through an SSH port forward
   (`ssh -N -L 127.0.0.1:<free port>:127.0.0.1:9322` with Godmode's key; one per VM, closed when the VM stops). The
   OpenAI key never goes into a VM, so browser-use's LLM tools are hidden there.
 * **Human access**: `POST /api/vms/:id/open { what }` opens Screen Sharing (`vnc://admin:admin@<NAT IP>`), Terminal

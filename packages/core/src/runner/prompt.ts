@@ -44,6 +44,8 @@ export interface PromptVm {
   browser: boolean;
   /** The `cua` tools (Cua Driver in the VM) control the VM's apps and windows. */
   cua: boolean;
+  /** Saved logins and 2FA codes may be typed into the VM (settings.vm.vaultFill). */
+  vaultFill: boolean;
 }
 
 /** Standing instructions from the human besides the global ones, most general first. The agent's own live in its CLAUDE.md. */
@@ -136,7 +138,7 @@ Godmode tools come from the \`godmode\` MCP server (vault logins and 2FA, missin
     const takeover = ctx.vm ? "on the VM's screen" : "in Godmode's live browser view";
     out.push(`### Browser
 Use the \`browser\` MCP tools for anything on the web (navigate, click, type, read pages, take screenshots).${where} The browser keeps its cookies between runs, so you are often already logged in — check before logging in again. If a CAPTCHA or an unexpected human check blocks you, tell ${human} in your final summary (they can take over ${takeover}).`);
-  } else if (ctx.vm) {
+  } else if (ctx.vm && settings.browser.enabled && agent.browser.enabled) {
     out.push(`### Browser
 No browser could be set up in the VM for this run. If a task needs a website, say so in your final summary — never open a browser on ${human}'s computer instead.`);
   } else {
@@ -144,7 +146,7 @@ No browser could be set up in the VM for this run. If a task needs a website, sa
 No browser tools are attached to this run. If a task needs a website, say so in your final summary instead of guessing.`);
   }
 
-  if (ctx.vm) out.push(vmSection(ctx.vm, human));
+  if (ctx.vm) out.push(vmSection(ctx.vm, human, settings.browser.enabled && agent.browser.enabled));
   if (ctx.computer) out.push(computerSection(ctx.computer, human, perms.secretAccess === "reveal"));
 
   out.push(`### Logging in to websites
@@ -243,7 +245,7 @@ You are "${agent.name}", an AI coworker running inside Godmode Bot for ${human}.
 - Only edit \`MEMORY.md\` and files in \`memory/\`. Godmode snapshots them before the dream, and ${human} can review and undo every change.`;
 }
 
-function vmSection(vm: PromptVm, human: string): string {
+function vmSection(vm: PromptVm, human: string, browserOn: boolean): string {
   const home = `/Users/${vm.guestUser}`;
   const apps = vm.cua
     ? `- Apps: the \`cua\` tools (Cua Driver) control the VM's apps and windows — list windows, read a window's controls (accessibility elements), click, type, press keys, launch apps. Prefer them for apps; use \`screen\` for a picture of the whole display or when an element can't be reached.`
@@ -251,12 +253,17 @@ function vmSection(vm: PromptVm, human: string): string {
   return `### macOS virtual machine
 This task runs in a dedicated macOS virtual machine, **${vm.name}** — not on ${human}'s own computer. Do all of the work inside the VM: commands, code, installs, builds, apps and websites. Nothing of it runs on ${human}'s computer.
 - Use the \`vm\` MCP tools: \`shell\` runs a command (a fresh zsh login shell as user \`${vm.guestUser}\` with passwordless sudo and Homebrew; pass \`cwd\`), \`read_file\` / \`write_file\` / \`edit_file\` work on files in the VM, \`screen\` sees and controls its whole display (mouse and keyboard, like computer use), \`info\` describes the VM.${vm.hostShellOff ? ` Claude Code's own Bash tool is turned off in this run because it would run on ${human}'s computer, and your other file tools only reach your repository, the chat's folder and the shared folder.` : ` Claude Code's own Bash tool still runs on ${human}'s computer — only use it for your own repository.`}
-- Websites: ${vm.browser ? `the \`browser\` tools drive Google Chrome inside the VM (it is on the VM's screen too). Downloads land in \`${home}/Downloads\` in the VM.` : `no browser could be set up in the VM for this run.`}
+- Websites: ${vm.browser ? `the \`browser\` tools drive Google Chrome inside the VM (it is on the VM's screen too). Downloads land in \`${home}/Downloads\` in the VM.` : browserOn ? "no browser could be set up in the VM for this run." : "the browser is turned off for you."}
 ${apps}
 - The VM keeps its disk between tasks: tools you install, repositories you clone and files you create stay until ${human} resets the VM. Keep your work in the home folder (\`/Users/${vm.guestUser}\`).
 - Shared folder: \`${vm.guestSharedDir}\` in the VM is \`${vm.hostSharedDir}\` on ${human}'s computer. Put results ${human} should get (reports, builds, exports) there; you can also read and write it with your normal file tools.
 - Your own repository (CLAUDE.md, MEMORY.md) stays on ${human}'s computer — keep using your normal file tools for it.
-- Start servers and other long-running processes in the background (\`nohup … > /tmp/x.log 2>&1 &\`); \`shell\` returns when a command's output closes.`;
+- Start servers and other long-running processes in the background (\`nohup … > /tmp/x.log 2>&1 &\`); \`shell\` returns when a command's output closes.
+${
+  vm.vaultFill
+    ? `- Signing in inside the VM: find the login with \`vault_list_logins\`.${vm.browser ? " On a website in the VM's Chrome, use \`vault_fill_login\` / \`vault_fill_totp\` as described under \"Logging in to websites\" — Godmode finds the field and checks that it is on the login's site." : ""} In an app${vm.browser ? " (anything but the VM's Chrome)" : " or a website"}, click the field on the VM's screen, then call \`fill_login({ credentialId, field })\` or \`fill_totp({ credentialId })\` from the \`vm\` server (both take \`coordinate\` to click first and \`submit: true\`). Godmode types the value — you never see it — and only types passwords into password fields; it can't check which app or site that field belongs to, so only fill a login on its own site or app. Never type passwords or 2FA codes with \`screen\` or the \`cua\` tools.`
+    : `- Godmode doesn't type saved logins or 2FA codes into this VM: ${human} hasn't allowed it. If a task needs to sign in inside the VM, tell ${human} they can turn on "Logins and 2FA codes" in Settings → Virtual machines.`
+}`;
 }
 
 function computerSection(target: ComputerTarget, human: string, canReveal: boolean): string {
@@ -302,7 +309,7 @@ export function resumeContextPrefix(
     : "";
   // The VM can be assigned or changed between turns: always restate where the work happens.
   const machine = vm
-    ? `\nYou work in the macOS VM "${vm.name}" — everything happens inside it: use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen)${vm.browser ? ", the `browser` tools (Chrome in the VM)" : ""}${vm.cua ? " and the `cua` tools (the VM's apps)" : ""}. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""}`
+    ? `\nYou work in the macOS VM "${vm.name}" — everything happens inside it: use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen)${vm.browser ? ", the `browser` tools (Chrome in the VM)" : ""}${vm.cua ? " and the `cua` tools (the VM's apps)" : ""}. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""} ${vm.vaultFill ? `Saved logins and 2FA codes can be typed into the VM with ${vm.browser ? "vault_fill_login / vault_fill_totp (in its Chrome) and " : ""}fill_login / fill_totp.` : "Typing saved logins and 2FA codes into the VM is turned off."}`
     : "";
   return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${machine}${update}${memory}</godmode-context>\n\n`;
 }

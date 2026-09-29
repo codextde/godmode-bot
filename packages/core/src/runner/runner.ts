@@ -229,6 +229,8 @@ interface Job {
   browserLock?: string | null;
   /** The VM the run works in (undefined = not resolved yet, null = none). */
   vmId?: string | null;
+  /** The run drove the Chrome in its VM. */
+  vmBrowser?: boolean;
   /** Screen, window or tab this run may control (undefined = not resolved yet, null = none). */
   computerTarget?: ComputerTarget | null;
   /** The target is the agent's own unattended access, not something shared in the chat. */
@@ -890,8 +892,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // inside the VM (tools that can't be set up there are left out, not replaced by this computer's).
   let vm: RunVm | null = null;
   let guest: GuestTools | null = null;
-  const vmId = dreaming ? null : resolveVmId(job.conversationId, agent);
-  job.vmId = vmId;
+  // The VM the queue decided on (its lock is what keeps other runs out of it).
+  const vmId = dreaming ? null : vmOf(job);
   if (vmId) {
     if (!settings.vm.enabled) {
       return { status: "failed", error: "This work is set to run in a virtual machine, but virtual machines are turned off (Settings → Virtual machines). Turn them on, or remove the VM from the chat, agent or workspace." };
@@ -914,6 +916,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         problems: [`The VM's browser and computer-use tools are unavailable in this run: ${errorText(err)}`],
       }));
       if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+      job.vmBrowser = !!guest.browser;
       for (const problem of guest.problems) job.acc.addNotice("warning", problem);
     } finally {
       clearInterval(watch);
@@ -928,6 +931,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         hostShellOff: settings.vm.isolateHostShell,
         browser: !!guest?.browser,
         cua: !!guest?.cua,
+        vaultFill: settings.vm.vaultFill,
       }
     : null;
   const mcp = await buildMcpConfig(agent, res.token, {
@@ -1311,7 +1315,7 @@ async function detectMissingLogin(job: Job, agent: Agent, text: string) {
   if (!reason) return;
   let service = "Unknown service";
   let url = "";
-  if (agent.browser.enabled) {
+  if (agent.browser.enabled && (!job.vmId || job.vmBrowser)) {
     try {
       const page = job.vmId ? await currentVmPage(job.vmId) : await currentPage(resolveProfileForAgent(agent).id);
       if (page?.url && /^https?:/i.test(page.url)) {

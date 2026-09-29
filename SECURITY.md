@@ -61,7 +61,8 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
   (delegated work runs in the same VM). Work meant for a VM never falls back to the host. The VM shares nothing else
   with the host: no clipboard, the shared folder is the only mount, and a firewall rule inside each guest lets only this
   Mac reach its SSH and Screen Sharing (the Cirrus Labs images use the well-known login `admin` / `admin`, so other VMs
-  must not). Vault fills reach the guest's Chrome over an SSH port forward; your OpenAI key (browser-use's LLM tools)
+  must not). Logins and 2FA codes only go into a VM when you allow it (*Logins and 2FA codes*, off by default): then
+  fills reach the guest's Chrome over an SSH port forward (still bound to the login's site); your OpenAI key (browser-use's LLM tools)
   never goes into a VM. Claude Code itself, the Godmode gateway and your Claude login stay on the host, so a VM strongly
   contains the agent's work but is not a boundary against a deliberately malicious model that can still use the tools
   Godmode gives it — the agent's shell shares the guest with its browser (it could read what a fill typed into a page

@@ -11,7 +11,7 @@ import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
 import { Orb } from "@/components/aicss/Orb";
 import { useNow } from "@/components/vault/use-now";
 import { api } from "@/lib/api";
-import { useVmChoices } from "@/lib/hooks";
+import { useSettings, useVmChoices } from "@/lib/hooks";
 import { isTauri } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
@@ -24,8 +24,11 @@ import { resolveInherited, type InheritedVm } from "./vm-picker";
 export function useChatVm(value: string | null, inherited: (InheritedVm | null | undefined)[]): { vm: Vm; from: string | null } | null {
   const { available, vms } = useVmChoices();
   if (!available) return null;
-  const own = value ? vms.find((v) => v.id === value) : undefined;
-  if (own) return { vm: own, from: null };
+  // A chat whose own VM is gone doesn't fall back to another one (its runs fail until another VM is picked).
+  if (value) {
+    const own = vms.find((v) => v.id === value);
+    return own ? { vm: own, from: null } : null;
+  }
   return resolveInherited(inherited, vms);
 }
 
@@ -106,6 +109,8 @@ export function VmPanel({
   onFocus: () => void;
 }) {
   const { shot, live, failed } = useVmScreen(vm, 640, !!activity);
+  const { data: settings } = useSettings();
+  const hostShellOff = settings?.vm.isolateHostShell !== false;
   const actions = useVmActions();
   const starting = actions.start.isPending && actions.start.variables?.id === vm.id;
   const opening = actions.open.isPending && actions.open.variables?.vm.id === vm.id;
@@ -190,7 +195,9 @@ export function VmPanel({
                 </span>
               ))}
             </div>
-            <p className="mt-2 text-[11px] leading-4 text-muted-foreground">Nothing opens on your Mac — no browser, no apps, no shell.</p>
+            <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
+              {hostShellOff ? "Nothing opens on your Mac — no browser, no apps, no shell." : "No browser or apps open on your Mac."}
+            </p>
           </div>
 
           <AnimatePresence initial={false}>

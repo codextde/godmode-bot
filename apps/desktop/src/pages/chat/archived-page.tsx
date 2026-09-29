@@ -5,7 +5,7 @@ import { differenceInCalendarDays, format, formatDistanceToNowStrict, isToday, i
 import { Archive, ArchiveRestore, RefreshCw, Search, Trash2 } from "lucide-react";
 import type { Agent, Conversation } from "@godmode/shared";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
-import { DeleteChatDialog, useArchiveChat } from "@/components/chat/chat-actions";
+import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,8 +34,7 @@ export default function ArchivedPage() {
   const { data: agents = [] } = useAllAgents();
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const { setArchived } = useArchiveChat();
-  const [deleting, setDeleting] = useState<Conversation | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const { askDelete, deleteDialog } = useDeleteChat();
 
   const list = useMemo(() => archived.data ?? [], [archived.data]);
   const groups = useMemo(() => {
@@ -149,10 +148,7 @@ export default function ArchivedPage() {
                         conversation={c}
                         agent={agentById.get(c.agentId)}
                         onRestore={() => setArchived(c, false)}
-                        onDelete={() => {
-                          setDeleting(c);
-                          setConfirmDelete(true);
-                        }}
+                        onDelete={() => askDelete(c)}
                       />
                     ))}
                   </AnimatePresence>
@@ -163,7 +159,7 @@ export default function ArchivedPage() {
         )}
       </PageBody>
 
-      <DeleteChatDialog chat={deleting} open={confirmDelete} onOpenChange={setConfirmDelete} />
+      {deleteDialog}
     </>
   );
 }

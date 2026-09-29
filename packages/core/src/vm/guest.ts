@@ -147,6 +147,8 @@ interface Installed {
 
 async function probe(vmId: string, signal?: AbortSignal): Promise<Installed> {
   const res = await execInVm(vmId, PROBE, { timeoutMs: 30_000, signal });
+  // Unanswered is not "nothing installed": that would start (and hold back) every install.
+  if (res.exitCode !== 0) throw new Error(`the VM didn't answer (${failure(res)})`);
   const lines = res.stdout.split("\n").map((l) => l.trim());
   const value = (key: string) => lines.find((l) => l.startsWith(`${key}=`))?.slice(key.length + 1) || null;
   return { uv: lines.includes("uv"), chrome: lines.includes("chrome"), browserUse: value("browser-use"), cua: value("cua") };
@@ -186,9 +188,16 @@ async function installUv(vmId: string): Promise<void> {
     if (copied.exitCode === 0) return;
     log.info(`copying uv into VM ${vmId} failed (${failure(copied)}); using the installer`);
   }
-  const res = await execInVm(vmId, `set -e\nmkdir -p ${KIT}/bin\ncurl -LsSf ${shq(UV_INSTALLER)} | env UV_UNMANAGED_INSTALL=${KIT}/bin INSTALLER_NO_MODIFY_PATH=1 sh`, {
-    timeoutMs: INSTALL_TIMEOUT_MS,
-  });
+  const script = [
+    "set -e",
+    `mkdir -p ${KIT}/bin`,
+    'installer=$(mktemp /tmp/godmode-uv.XXXXXX)',
+    `trap 'rm -f "$installer"' EXIT`,
+    `curl -LsSf -o "$installer" ${shq(UV_INSTALLER)}`,
+    `env UV_UNMANAGED_INSTALL=${KIT}/bin INSTALLER_NO_MODIFY_PATH=1 sh "$installer"`,
+    `[ -x ${UV} ]`,
+  ].join("\n");
+  const res = await execInVm(vmId, script, { timeoutMs: INSTALL_TIMEOUT_MS });
   if (res.exitCode !== 0) throw new Error(failure(res));
 }
 
@@ -260,6 +269,7 @@ export async function prepareGuest(
   vmId: string,
   opts: { browser: boolean; onActivity?: (label: string) => void; signal?: AbortSignal },
 ): Promise<GuestTools> {
+  watchStops();
   const problems: string[] = [];
   let have = await probe(vmId, opts.signal);
   const wanted: Tool[] = [...(opts.browser ? (["chrome", "browser-use"] as const) : []), "cua"];
@@ -276,7 +286,7 @@ export async function prepareGuest(
       });
     } catch (err) {
       if (opts.signal?.aborted) throw err;
-      problems.push(`The VM's browser and computer-use tools need uv, which couldn't be installed: ${err instanceof Error ? err.message : String(err)}`);
+      problems.push(`${joinNames(missing.map((t) => TOOL_LABEL[t]))} couldn't be installed in the VM: uv, which installs them, failed (${err instanceof Error ? err.message : String(err)})`);
     }
     have = await probe(vmId, opts.signal);
   }
@@ -287,6 +297,7 @@ export async function prepareGuest(
     opts.onActivity?.(`Opening Google Chrome in "${vmName(vmId)}"…`);
     const config = browserUseConfig(
       {
+        configDir: `${home}/.godmode/browser-use`,
         cdpUrl: `http://127.0.0.1:${GUEST_CDP_PORT}`,
         headless: false,
         userDataDir: `${home}/.godmode/browser-profile`,
@@ -295,7 +306,6 @@ export async function prepareGuest(
       },
       BROWSER_PROFILE_ID,
       "2026-01-01T00:00:00.000Z",
-      `${home}/.godmode/browser-use`,
     );
     const script = `mkdir -p ${KIT}/browser-use/files && cat > ${KIT}/browser-use/config.json\n${START_CHROME}`;
     const res = await execInVm(vmId, script, { stdin: JSON.stringify(config, null, 2), timeoutMs: 90_000, signal: opts.signal });
@@ -315,7 +325,8 @@ function inGuest(vmId: string, script: string): McpServerJson {
   const all = tartEnv();
   const env: Record<string, string> = {};
   for (const key of ["TART_HOME", "TART_NO_AUTO_PRUNE", "PATH", "HOME", "USER", "LOGNAME", "LANG", "TMPDIR"]) if (all[key]) env[key] = all[key];
-  return { command: bin.path, args: ["exec", "-i", vmId, "/bin/zsh", "-l", "-c", script], env };
+  // -f: no startup files — nothing the agent puts in them can print into the JSON-RPC stream.
+  return { command: bin.path, args: ["exec", "-i", vmId, "/bin/zsh", "-f", "-c", script], env };
 }
 
 /** browser-use's MCP server in the VM, connected to the VM's Chrome (started again if it was closed). */
@@ -359,6 +370,8 @@ export function guestCuaServer(vmId: string, cua: string): McpServerJson {
 interface Tunnel {
   port: number;
   proc: Subprocess;
+  /** ssh's latest complaint (read continuously: a full pipe would stall the tunnel). */
+  lastError: string;
 }
 
 const tunnels = new Map<string, Promise<Tunnel>>();
@@ -397,13 +410,28 @@ async function openTunnel(vmId: string): Promise<Tunnel> {
     ],
     { stdin: "ignore", stdout: "ignore", stderr: "pipe" },
   );
+  const tunnel: Tunnel = { port, proc, lastError: "" };
+  const drained = (async () => {
+    const decoder = new TextDecoder();
+    const reader = (proc.stderr as ReadableStream<Uint8Array>).getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const lines = decoder.decode(value, { stream: true }).trim().split("\n").filter(Boolean);
+        if (lines.length) tunnel.lastError = lines.at(-1)!;
+      }
+    } catch {
+      /* ssh exited */
+    }
+  })();
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     if (proc.exitCode !== null || proc.signalCode !== null) {
-      const err = (await new Response(proc.stderr as ReadableStream<Uint8Array>).text().catch(() => "")).trim();
-      throw new Error(err.split("\n").pop() || "SSH to the VM failed");
+      await Promise.race([drained, Bun.sleep(500)]);
+      throw new Error(tunnel.lastError || "SSH to the VM failed");
     }
-    if (await listening(port)) return { port, proc };
+    if (await listening(port)) return tunnel;
     await Bun.sleep(150);
   }
   proc.kill();
@@ -412,12 +440,19 @@ async function openTunnel(vmId: string): Promise<Tunnel> {
 
 let watching = false;
 
-async function tunnelPort(vmId: string): Promise<number> {
+/** A stopped VM loses its tunnel, and may try failed installs again (it may have been reset). */
+function watchStops() {
   // Registered on first use: vm/service is still loading when this module is (they import each other indirectly).
-  if (!watching) {
-    watching = true;
-    onVmStopped(closeTunnel);
-  }
+  if (watching) return;
+  watching = true;
+  onVmStopped((vmId) => {
+    closeTunnel(vmId);
+    for (const key of [...failed.keys()]) if (key.startsWith(`${vmId}:`)) failed.delete(key);
+  });
+}
+
+async function tunnelPort(vmId: string): Promise<number> {
+  watchStops();
   if (cdpOverride) {
     const port = cdpOverride(vmId);
     if (!port) throw new Error("The VM isn't running.");
@@ -429,6 +464,9 @@ async function tunnelPort(vmId: string): Promise<number> {
     if (t && t.proc.exitCode === null && t.proc.signalCode === null) return t.port;
     if (tunnels.get(vmId) === existing) tunnels.delete(vmId);
   }
+  // Another caller may have opened a new one meanwhile.
+  const newer = tunnels.get(vmId);
+  if (newer) return (await newer).port;
   const p = openTunnel(vmId);
   tunnels.set(vmId, p);
   p.catch(() => {

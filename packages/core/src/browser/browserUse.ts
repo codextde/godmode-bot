@@ -83,12 +83,7 @@ interface ConfigShape {
 }
 
 /** The `config.json` content: one default profile that connects to the browser at `cdpUrl`. */
-export function browserUseConfig(
-  input: Omit<BrowserUseConfigInput, "configDir">,
-  profileId: string,
-  createdAt: string,
-  configDir: string,
-): ConfigShape {
+export function browserUseConfig(input: BrowserUseConfigInput, profileId: string, createdAt: string): ConfigShape {
   return {
     browser_profile: {
       [profileId]: {
@@ -99,7 +94,7 @@ export function browserUseConfig(
         headless: input.headless,
         // browser-use copies any user_data_dir whose path contains "chrome" into a temp dir on every start;
         // never hand it such a path.
-        user_data_dir: /chrome/i.test(input.userDataDir) ? join(configDir, "user-data") : input.userDataDir,
+        user_data_dir: /chrome/i.test(input.userDataDir) ? join(input.configDir, "user-data") : input.userDataDir,
         downloads_path: input.downloadsPath,
         file_system_path: input.fileSystemPath,
         keep_alive: true,
@@ -132,7 +127,7 @@ export function writeBrowserUseConfig(input: BrowserUseConfigInput): string {
     }
   }
 
-  const config = browserUseConfig(input, profileId, createdAt, input.configDir);
+  const config = browserUseConfig(input, profileId, createdAt);
   const tmp = `${path}.${process.pid}.tmp`;
   writeFileSync(tmp, JSON.stringify(config, null, 2), { mode: 0o600 });
   renameSync(tmp, path);

@@ -140,7 +140,8 @@ describe("agent routes", () => {
     await call("PATCH", `/api/agents/${agent.id}`, { enabled: false });
     const res = await call<{ error: string }>("POST", `/api/agents/${agent.id}/run`, { prompt: "hello" });
     expect(res.status).toBe(409);
-    expect((await call("POST", `/api/agents/${agent.id}/run`, { prompt: "" })).status).toBe(400);
+    expect((await call("POST", `/api/agents/${agent.id}/run`, { prompt: "" })).status).toBe(409);
+    expect((await call("POST", `/api/agents/${agent.id}/run`, { prompt: "x".repeat(100_001) })).status).toBe(400);
   });
 
   test("DELETE /api/agents/:id", async () => {

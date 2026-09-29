@@ -12,6 +12,7 @@ import { AgentAvatar, Kbd } from "@/components/common";
 import { LiveDot } from "@/components/aicss/Motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import {
   Dialog,
@@ -76,7 +77,7 @@ function useLatest<T>(value: T | null): T | null {
   return value ?? latest;
 }
 
-/** Quick "give this agent a task" dialog → new conversation with the task running. */
+/** Quick "give this agent a task" dialog → new conversation with the task running (empty = follow its instructions). */
 export function RunTaskDialog({
   agent: agentProp,
   open,
@@ -102,7 +103,7 @@ export function RunTaskDialog({
     },
     onError: (err) => toast.error("Couldn't start the task", { description: errorMessage(err) }),
   });
-  const canRun = !!agent && prompt.trim().length > 0 && !run.isPending;
+  const canRun = !!agent && !run.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -123,20 +124,29 @@ export function RunTaskDialog({
           }}
           className="space-y-4"
         >
-          <Textarea
-            autoFocus
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                if (canRun) run.mutate();
-              }
-            }}
-            placeholder={agent?.description ? `e.g. ${agent.description}` : "Describe what it should do…"}
-            aria-label="Task"
-            className="min-h-32 resize-none text-[15px]"
-          />
+          <div className="space-y-1.5">
+            <Label htmlFor="run-task-prompt">
+              Task <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea
+              id="run-task-prompt"
+              autoFocus
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  if (canRun) run.mutate();
+                }
+              }}
+              placeholder={agent?.description ? `e.g. ${agent.description}` : "Describe what it should do…"}
+              aria-describedby="run-task-hint"
+              className="min-h-32 resize-none text-[15px]"
+            />
+            <p id="run-task-hint" className="text-xs text-muted-foreground">
+              Leave it empty and {agent?.name ?? "the agent"} works from its instructions.
+            </p>
+          </div>
           <DialogFooter className="items-center sm:justify-between">
             <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
               <Kbd>{modKey}</Kbd>
