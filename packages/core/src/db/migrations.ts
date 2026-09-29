@@ -378,4 +378,28 @@ ALTER TABLE conversations ADD COLUMN vm_id TEXT;
 ALTER TABLE workspaces ADD COLUMN vm_id TEXT;
 `,
   },
+  {
+    id: 9,
+    name: "workspace_sources",
+    sql: /* sql */ `
+-- Folders and git repositories attached to a workspace. \`path\` is the folder, or for git the clone's directory name
+-- under <data>/repos/<workspace id>/ (derived, so the data dir can move).
+CREATE TABLE IF NOT EXISTS workspace_sources (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  path TEXT NOT NULL,
+  url TEXT,
+  branch TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  commit_sha TEXT,
+  head_branch TEXT,
+  synced_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workspace_sources_workspace ON workspace_sources(workspace_id, position);
+`,
+  },
 ];

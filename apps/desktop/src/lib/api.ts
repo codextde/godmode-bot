@@ -71,6 +71,7 @@ import type {
   WebhookRotateResult,
   Workspace,
   WorkspaceInput,
+  WorkspaceSource,
 } from "@godmode/shared";
 import { getCoreInfo } from "./core";
 
@@ -252,6 +253,7 @@ export const api = {
     create: (input: WorkspaceInput) => post<Workspace>("/api/workspaces", input),
     update: (id: string, input: Partial<WorkspaceInput>) => patch<Workspace>(`/api/workspaces/${id}`, input),
     delete: (id: string, force = false) => del<{ ok: true }>(`/api/workspaces/${id}`, { force: force ? 1 : undefined }),
+    syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/workspaces/${id}/sources/${sourceId}/sync`),
   },
 
   agents: {

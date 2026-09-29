@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
@@ -426,6 +427,30 @@ describe("standing instructions", () => {
       body: JSON.stringify({ runner: { appendSystemPrompt: tooLong } }),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("workspace folders and repositories", () => {
+  test("runs get them with --add-dir, their CLAUDE.md and a prompt section; missing ones are skipped", async () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "godmode-ws-folder-")));
+    const gone = realpathSync(mkdtempSync(join(tmpdir(), "godmode-ws-gone-")));
+    const ws = createWorkspace({ name: "Sourced", sources: [{ kind: "folder", path: dir }, { kind: "folder", path: gone }] });
+    rmSync(gone, { recursive: true });
+    const bot = await makeAgent({ name: "Sourced Bot", workspaceId: ws.id });
+    const { conversation, run } = await startChat({ agentId: bot.id, content: "Hi" });
+    expect((await waitForRun(run.id, 20_000)).status).toBe("succeeded");
+    const inv = invocations(env).at(-1)!;
+    const added = inv.args.flatMap((a, i) => (inv.args[i - 1] === "--add-dir" ? [a] : []));
+    expect(added).toEqual([dir]);
+    expect(inv.env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD).toBe("1");
+    expect(argValue(inv, "--append-system-prompt")).toContain(`- \`${dir}\` (folder)`);
+    const notices = getConversation(conversation.id).messages.at(-1)!.blocks.filter((b) => b.type === "notice");
+    expect(notices.map((b) => (b.type === "notice" ? b.text : ""))).toEqual([expect.stringContaining("was skipped")]);
+
+    const next = await sendMessage(conversation.id, { content: "again" });
+    await waitForRun(next.run.id, 20_000);
+    expect(invocations(env).at(-1)!.prompt).toContain(`Workspace folders and repositories (added to this session): \`${dir}\` (folder).`);
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 

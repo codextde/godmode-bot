@@ -22,6 +22,7 @@ import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, pars
 import { redact } from "../vault/vault";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentStatus, touchAgentRun } from "../agents/service";
 import { isDirectory, workingDirectoryProblem } from "../services/folders";
+import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
 import { BROWSER_LLM_TOOLS, browserLlmKey, currentPage, resolveProfileForAgent } from "../browser/manager";
@@ -631,7 +632,7 @@ function writeTempFile(res: Resources, name: string, content: string): string {
 
 export function buildEnv(agent: Agent, inFolder = false): Record<string, string | undefined> {
   const env = claudeEnv();
-  // Load the agent's CLAUDE.md from its repo (passed with --add-dir) when the cwd is an attached folder.
+  // Load CLAUDE.md files from --add-dir folders: the agent's repo when the cwd is an attached folder, and the workspace's folders.
   if (inFolder) env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
   if (getSettings().memory.backend === "claude-mem" && claudeMemPluginDir()) Object.assign(env, claudeMemEnv(agent));
   return env;
@@ -889,6 +890,20 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const promptVm: PromptVm | null = vm
     ? { name: vm.name, guestUser: vm.guestUser, guestSharedDir: vm.guestSharedDir, hostSharedDir: vm.hostSharedDir, hostShellOff: settings.vm.isolateHostShell }
     : null;
+  // The workspace's folders and repositories; a missing clone is cloned first. A dream only works on its memory.
+  let sources: RunSource[] = [];
+  if (!dreaming && agent.workspaceId) {
+    const cancelled = new AbortController();
+    const watch = setInterval(() => job.cancelReason && cancelled.abort(), 250);
+    try {
+      const prepared = await prepareSources(agent.workspaceId, { onActivity: (label) => emitActivity(job, label), signal: cancelled.signal });
+      sources = prepared.sources.filter((s) => s.path !== cwd && s.path !== agent.repoPath);
+      for (const text of prepared.notices) job.acc.addNotice("warning", text);
+    } finally {
+      clearInterval(watch);
+    }
+    if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+  }
   const mcp = await buildMcpConfig(agent, res.token, {
     onNotice: (text) => job.acc.addNotice("warning", text),
     computer: !!computer,
@@ -911,6 +926,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const workspace = agent.workspaceId
     ? get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", agent.workspaceId)
     : null;
+  const promptSources = workspace && sources.length ? { workspace: workspace.name, items: sources } : null;
   const standing = instructionsSection(settings, {
     workspace: workspace ? { name: workspace.name, text: workspace.instructions } : null,
     chat: conv.instructions ?? "",
@@ -927,6 +943,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         vm: promptVm,
         voice: job.voice,
         workingDirectory: folder,
+        sources: promptSources,
         standingInstructions: standing,
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath) : null,
@@ -972,6 +989,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   if (folder) baseArgs.push("--add-dir", agent.repoPath);
   // The VM's shared folder: how files move between the VM and the host.
   if (vm) baseArgs.push("--add-dir", vm.hostSharedDir);
+  for (const source of sources) baseArgs.push("--add-dir", source.path);
   if (budget != null && budget > 0) baseArgs.push("--max-budget-usd", String(budget));
   if (agent.subagents.length && !dreaming) {
     const defs: Record<string, { description: string; prompt: string; model?: string }> = {};
@@ -996,7 +1014,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   }
   const extraArgs = (settings.runner.extraArgs ?? []).filter((a) => typeof a === "string" && a.length > 0);
 
-  const env = buildEnv(agent, !!folder);
+  const env = buildEnv(agent, !!folder || sources.length > 0);
   const logPath = runLogPath(agent, getRun(job.runId));
   mkdirSync(join(logPath, ".."), { recursive: true });
   const logSink = Bun.file(logPath).writer();
@@ -1031,7 +1049,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const memoryChanged = resuming && !dreaming && conv.memory_digest != null && conv.memory_digest !== memoryNow;
     const prompt =
       resuming && !command
-        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm }) + job.prompt
+        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources }) + job.prompt
         : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 
