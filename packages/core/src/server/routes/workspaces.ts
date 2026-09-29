@@ -10,6 +10,8 @@ const workspaceSchema = z.object({
   icon: z.string().trim().max(64).optional(),
   instructions: z.string().max(MAX_INSTRUCTIONS_LENGTH).optional(),
   vmId: z.string().trim().max(100).nullable().optional(),
+  repoUrl: z.string().max(1000).optional(),
+  repoBranch: z.string().max(200).optional(),
 });
 
 export function registerWorkspaceRoutes(app: Hono): void {

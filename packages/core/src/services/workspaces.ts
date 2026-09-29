@@ -11,6 +11,8 @@ import { deleteProfile } from "../browser/manager";
 import { reloadSchedules } from "../scheduler/scheduler";
 import { HttpError, badRequest, newId, notFound, now, slugify } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
+import { validBranchName, validRepoUrl } from "../tasks/git";
+import { removeWorkspaceTasks } from "../tasks/service";
 
 const log = logger("workspaces");
 
@@ -23,6 +25,8 @@ interface WorkspaceRow {
   icon: string;
   instructions: string;
   vm_id: string | null;
+  repo_url: string;
+  repo_branch: string;
   created_at: string;
   updated_at: string;
 }
@@ -37,6 +41,8 @@ function toModel(r: WorkspaceRow): Workspace {
     icon: r.icon,
     instructions: r.instructions,
     vmId: r.vm_id ?? null,
+    repoUrl: r.repo_url ?? "",
+    repoBranch: r.repo_branch ?? "",
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -47,6 +53,20 @@ function uniqueSlug(name: string): string {
   let candidate = base;
   for (let i = 2; get<{ id: string }>("SELECT id FROM workspaces WHERE slug = ?", candidate); i++) candidate = `${base}-${i}`;
   return candidate;
+}
+
+function cleanRepoUrl(url: string | undefined): string | undefined {
+  if (url === undefined) return undefined;
+  const u = url.trim();
+  if (u && !validRepoUrl(u)) throw badRequest("Use a git URL like https://github.com/acme/app.git or git@github.com:acme/app.git");
+  return u;
+}
+
+function cleanRepoBranch(branch: string | undefined): string | undefined {
+  if (branch === undefined) return undefined;
+  const b = branch.trim();
+  if (b && !validBranchName(b)) throw badRequest(`"${b}" isn't a valid branch name`);
+  return b;
 }
 
 function cleanName(name: string | undefined): string {
@@ -77,6 +97,8 @@ export function createWorkspace(input: WorkspaceInput): Workspace {
     icon: input.icon?.trim() || "🗂️",
     instructions: input.instructions?.trim() ?? "",
     vm_id: normalizeVmId(input.vmId) ?? null,
+    repo_url: cleanRepoUrl(input.repoUrl) ?? "",
+    repo_branch: cleanRepoBranch(input.repoBranch) ?? "",
     created_at: ts,
     updated_at: ts,
   };
@@ -97,6 +119,8 @@ export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Wor
     icon: patch.icon !== undefined ? patch.icon.trim() || "🗂️" : undefined,
     instructions: patch.instructions?.trim(),
     vm_id: normalizeVmId(patch.vmId),
+    repo_url: cleanRepoUrl(patch.repoUrl),
+    repo_branch: cleanRepoBranch(patch.repoBranch),
     updated_at: now(),
   });
   const next = getWorkspace(id);
@@ -124,6 +148,7 @@ const DEPENDENTS = [
   { table: "mcp_servers", key: "mcpServers" },
   { table: "browser_profiles", key: "browserProfiles" },
   { table: "composio_connections", key: "composioConnections" },
+  { table: "tasks", key: "tasks" },
 ] as const;
 
 type DependentCounts = Record<(typeof DEPENDENTS)[number]["key"], number>;
@@ -144,6 +169,7 @@ function describeCounts(counts: DependentCounts): string {
     mcpServers: ["MCP server", "MCP servers"],
     browserProfiles: ["browser profile", "browser profiles"],
     composioConnections: ["Composio connection", "Composio connections"],
+    tasks: ["task", "tasks"],
   };
   return (Object.keys(labels) as (keyof DependentCounts)[])
     .filter((k) => counts[k] > 0)
@@ -170,6 +196,7 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
   }
 
   const agents = listAgents({ workspaceId: id }).filter((a) => a.workspaceId === id && !a.isDefault);
+  await removeWorkspaceTasks(id);
   for (const agent of agents) await stopAgentRuns(agent.id);
 
   // Let the browser manager stop Chromium and clean up each profile; the cascade below removes leftovers.
@@ -215,4 +242,5 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
   if (counts.mcpServers) bus.changed("mcp-servers");
   if (counts.browserProfiles) bus.changed("browser-profiles");
   if (counts.composioConnections) bus.changed("composio");
+  if (counts.tasks) bus.changed("tasks");
 }

@@ -464,7 +464,7 @@ export async function sendMessage(
   }
 
   // Writing in an archived chat brings it back; routines and delegations keep it archived.
-  const restore = bool(conv.archived) && (input.trigger ?? "chat") === "chat";
+  const restore = bool(conv.archived) && (input.trigger ?? "chat") === "chat" && conv.origin !== "task";
   setConversationState(conversationId, { lastMessageAt: message.createdAt, archived: restore ? false : undefined });
   emitConversationUpdated(conversationId);
   return { message: getMessage(message.id), run: started };
@@ -544,6 +544,7 @@ function toolSummary(blocks: MessageBlock[]): string {
 function speaker(runTrigger: RunTrigger): string {
   if (runTrigger === "routine") return "Automation";
   if (runTrigger === "delegation") return "Delegated task";
+  if (runTrigger === "task") return "Task";
   return getSettings().general.userName.trim() || "User";
 }
 

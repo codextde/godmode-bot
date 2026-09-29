@@ -67,6 +67,13 @@ export function useMissingLogins(status = "open") {
   return useQuery({ queryKey: [...qk.missingLogins, status], queryFn: () => api.missingLogins.list({ status }) });
 }
 
+/** Tasks of the board in the sidebar scope (or the given one). */
+export function useTasks(workspaceId?: ScopeFilter) {
+  const scope = useUi((s) => s.workspace);
+  const ws = workspaceId ?? scope;
+  return useQuery({ queryKey: qk.taskList(ws), queryFn: () => api.tasks.list({ workspaceId: ws }) });
+}
+
 /** Resolve the workspace name for display. */
 export function useWorkspaceName(id: string | null | undefined): string {
   const { data } = useWorkspaces();

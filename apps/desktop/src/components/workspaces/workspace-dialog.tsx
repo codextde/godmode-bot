@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, SmilePlus } from "lucide-react";
+import { Check, FolderGit2, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace } from "@godmode/shared";
 import { colorSwatch } from "@/components/common";
@@ -40,8 +40,8 @@ export function WorkspaceDialog({
   onOpenChange: (open: boolean) => void;
   /** Edit this workspace; omitted = create */
   workspace?: Workspace | null;
-  /** Start in the agent context field instead of the name. */
-  focus?: "instructions";
+  /** Start in the agent context (or repository) field instead of the name. */
+  focus?: "instructions" | "repository";
 }) {
   const qc = useQueryClient();
   const setScope = useUi((s) => s.setWorkspace);
@@ -52,6 +52,8 @@ export function WorkspaceDialog({
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [vmId, setVmId] = useState<string | null>(null);
+  const [repoUrl, setRepoUrl] = useState("");
+  const [repoBranch, setRepoBranch] = useState("");
   const vmChoices = useVmChoices();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [customEmoji, setCustomEmoji] = useState("");
@@ -64,6 +66,8 @@ export function WorkspaceDialog({
     setDescription(workspace?.description ?? "");
     setInstructions(workspace?.instructions ?? "");
     setVmId(workspace?.vmId ?? null);
+    setRepoUrl(workspace?.repoUrl ?? "");
+    setRepoBranch(workspace?.repoBranch ?? "");
     setCustomEmoji("");
   }, [open, workspace]);
 
@@ -75,6 +79,8 @@ export function WorkspaceDialog({
         color,
         description: description.trim(),
         instructions: instructions.trim(),
+        repoUrl: repoUrl.trim(),
+        repoBranch: repoBranch.trim(),
         // Only when the VM control is shown: otherwise leave the assignment as it is.
         ...(vmChoices.available ? { vmId } : {}),
       };
@@ -184,7 +190,7 @@ export function WorkspaceDialog({
               <Label htmlFor="ws-name">Name</Label>
               <Input
                 id="ws-name"
-                autoFocus={focus !== "instructions"}
+                autoFocus={!focus}
                 required
                 maxLength={MAX_NAME}
                 placeholder="e.g. ACME Corp, Side project, Household"
@@ -243,6 +249,31 @@ export function WorkspaceDialog({
                 onChange={(e) => setInstructions(e.target.value)}
                 className="max-h-72 min-h-28 resize-y leading-relaxed"
               />
+            </div>
+            <div className="space-y-2">
+              <div className="space-y-0.5">
+                <Label htmlFor="ws-repo" className="flex items-center gap-1.5">
+                  <FolderGit2 className="size-3.5 text-muted-foreground" /> Git repository <span className="font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <p className="text-xs text-muted-foreground">Coding tasks clone it onto a new branch and open a pull request when the agent is done.</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_9.5rem]">
+                <Input
+                  id="ws-repo"
+                  autoFocus={focus === "repository"}
+                  placeholder="https://github.com/acme/app.git"
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  className="font-mono text-[13px]"
+                />
+                <Input
+                  aria-label="Base branch"
+                  placeholder="default branch"
+                  value={repoBranch}
+                  onChange={(e) => setRepoBranch(e.target.value)}
+                  className="font-mono text-[13px]"
+                />
+              </div>
             </div>
             {vmChoices.available && (
               <VmSelectField

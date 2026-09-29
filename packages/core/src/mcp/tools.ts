@@ -4,7 +4,8 @@
  * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management.
  */
 import { z } from "zod";
-import type { Agent, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Vm } from "@godmode/shared";
+import type { Agent, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Task, Vm } from "@godmode/shared";
+import { TASK_STATUSES, TASK_TYPES } from "@godmode/shared";
 import { isModelId } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
@@ -32,6 +33,7 @@ import { assignVm, createVm, getVm, listVms, startVm, stopVm, suspendVm, vmInUse
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
 import { getRun, listRuns, markMissingLoginReported, waitForRun } from "../runner/runner";
+import { createTask, getTask, listTasks, reportBlocked, taskForConversation, updateTask } from "../tasks/service";
 
 const log = logger("mcp");
 
@@ -351,6 +353,39 @@ function isDreamRun(ctx: RunContext): boolean {
 }
 
 const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report"]);
+
+/** The run works on a board task (its conversation is the task's). */
+function isTaskRun(ctx: RunContext): boolean {
+  try {
+    return taskForConversation(ctx.conversationId) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function taskSummary(t: Task, names: Map<string, string>, agentNames: Map<string, string>) {
+  return {
+    id: t.id,
+    number: t.number,
+    title: t.title,
+    type: t.type,
+    status: t.status,
+    workspace: scopeName(t.workspaceId, names),
+    workspaceId: t.workspaceId,
+    agent: t.agentId ? (agentNames.get(t.agentId) ?? t.agentId) : null,
+    agentId: t.agentId,
+    ...(t.pullRequest ? { pullRequest: t.pullRequest.url } : {}),
+    ...(t.blockedReason ? { blockedReason: t.blockedReason } : {}),
+    description: snippet(t.description, 400),
+  };
+}
+
+/** A manager handing a task to an agent follows the same rules as delegating or scheduling work for it. */
+function taskAssignRefusal(caller: Agent, ctx: RunContext, agentId: string | null | undefined): string | null {
+  if (!agentId) return null;
+  const target = getAgent(agentId);
+  return offHostRefusal(ctx, target, "give it tasks") ?? revealTargetRefusal(caller, target, "give it tasks");
+}
 
 function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -884,6 +919,82 @@ const TOOLS: ToolDef[] = [
     }),
     when: (_agent, ctx) => isCheckRun(ctx),
     run: (result, { ctx }) => reportCheckResult(ctx.runId, result),
+  }),
+
+  defineTool({
+    name: "task_report_blocked",
+    description:
+      "You work on a task from the task board and can't finish it: something is missing (access, information, a decision). Say exactly what you need; the task moves to Blocked when you stop, and the human is notified.",
+    schema: z.object({ reason: z.string().min(1).max(2000) }),
+    when: (_agent, ctx) => isTaskRun(ctx),
+    run: ({ reason }, { ctx }) => {
+      const t = reportBlocked(ctx.conversationId, reason);
+      return `Noted — task #${t.number} will move to Blocked when you stop. Finish your turn now with a short summary.`;
+    },
+  }),
+
+  defineTool({
+    name: "tasks_list",
+    description: "Tasks on the task board (Kanban): title, type, status, workspace, assigned agent, pull request. Filter by workspace or status.",
+    schema: z.object({
+      workspaceId: z.string().optional().describe('A workspace id, or "global"; omitted = every task'),
+      status: z.enum(TASK_STATUSES as [string, ...string[]]).optional(),
+    }),
+    when: isManager,
+    run: ({ workspaceId, status }) => {
+      const names = workspaceNames();
+      const agentNames = new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]));
+      const tasks = listTasks({ workspaceId: workspaceId || "all" }).filter((t) => !status || t.status === status);
+      return json(tasks.map((t) => taskSummary(t, names, agentNames)));
+    },
+  }),
+
+  defineTool({
+    name: "task_create",
+    description:
+      "Add a task to the task board. type: general (do it and report), research (a written report) or coding (Godmode clones the workspace's git repository onto a new branch, the agent changes the code, and Godmode opens a pull request). With an agent and start=true (default) the agent starts right away (status todo); otherwise it waits in the backlog.",
+    schema: z.object({
+      title: z.string().min(1).max(200),
+      description: z.string().max(20_000).optional(),
+      type: z.enum(TASK_TYPES as [string, ...string[]]).optional(),
+      workspaceId: z.string().nullable().optional().describe("Workspace of the task; null/omitted = global"),
+      agentId: z.string().nullable().optional().describe("Agent of that workspace (or a global one) to work on it"),
+      start: z.boolean().optional(),
+      repoUrl: z.string().max(1000).optional().describe("Coding: git remote; omitted = the workspace's repository"),
+    }),
+    when: isManager,
+    run: ({ start, ...input }, { agent, ctx }) => {
+      const refusal = taskAssignRefusal(agent, ctx, input.agentId);
+      if (refusal) return fail(refusal);
+      const t = createTask({
+        ...(input as Parameters<typeof createTask>[0]),
+        status: input.agentId && start !== false ? "todo" : "backlog",
+      });
+      audit(`agent:${agent.id}`, "task.create", t.id, { agentId: t.agentId, type: t.type });
+      return json(taskSummary(t, workspaceNames(), new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]))));
+    },
+  }),
+
+  defineTool({
+    name: "task_update",
+    description:
+      "Change a task on the board: title, description, type, assigned agent or status (backlog, todo = start the agent, in_progress, in_review, blocked, done, cancelled). Moving a task away from in_progress stops its agent.",
+    schema: z.object({
+      taskId: z.string(),
+      title: z.string().min(1).max(200).optional(),
+      description: z.string().max(20_000).optional(),
+      type: z.enum(TASK_TYPES as [string, ...string[]]).optional(),
+      status: z.enum(TASK_STATUSES as [string, ...string[]]).optional(),
+      agentId: z.string().nullable().optional(),
+    }),
+    when: isManager,
+    run: ({ taskId, ...patch }, { agent, ctx }) => {
+      const refusal = taskAssignRefusal(agent, ctx, patch.agentId ?? (patch.status ? getTask(taskId).agentId : null));
+      if (refusal) return fail(refusal);
+      const t = updateTask(taskId, patch as Parameters<typeof updateTask>[1]);
+      audit(`agent:${agent.id}`, "task.update", taskId, { fields: Object.keys(patch) });
+      return json(taskSummary(t, workspaceNames(), new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]))));
+    },
   }),
 
   defineTool({

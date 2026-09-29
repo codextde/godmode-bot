@@ -53,6 +53,9 @@ import type {
   SlashCommand,
   StartChatInput,
   StartChatResult,
+  Task,
+  TaskInput,
+  TaskPatch,
   TotpCode,
   TotpEntry,
   TotpImportInput,
@@ -252,6 +255,18 @@ export const api = {
     create: (input: WorkspaceInput) => post<Workspace>("/api/workspaces", input),
     update: (id: string, input: Partial<WorkspaceInput>) => patch<Workspace>(`/api/workspaces/${id}`, input),
     delete: (id: string, force = false) => del<{ ok: true }>(`/api/workspaces/${id}`, { force: force ? 1 : undefined }),
+  },
+
+  tasks: {
+    list: (q: { workspaceId?: ScopeFilter } = {}) => get<Task[]>("/api/tasks", q),
+    get: (id: string) => get<Task>(`/api/tasks/${id}`),
+    /** With an agent and status todo (the default then), the agent starts right away. */
+    create: (input: TaskInput) => post<Task>("/api/tasks", input),
+    /** Moving to todo starts the agent; moving away from in_progress stops it. */
+    update: (id: string, input: TaskPatch) => patch<Task>(`/api/tasks/${id}`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/tasks/${id}`),
+    /** Follow-up for the agent in the task's conversation (review feedback); the task goes back to work. */
+    message: (id: string, content: string) => post<Task>(`/api/tasks/${id}/messages`, { content }),
   },
 
   agents: {

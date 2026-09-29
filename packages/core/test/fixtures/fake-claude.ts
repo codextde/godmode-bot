@@ -13,6 +13,8 @@
  *              with a JSON summary; "no computer server" when the run has none
  *   CALL_VM     call the `vm` MCP server from --mcp-config (initialize, tools/list, shell, write_file, edit_file, read_file)
  *              and answer "VM {json}"; "no vm server" when the run has none
+ *   TASK_EDIT   write TASK_CHANGE.md into the cwd (a coding task's checkout) and answer with a summary
+ *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
  *   CRASH       print to stderr and exit 3 without a result
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
@@ -243,6 +245,30 @@ if (slash?.[1] === "clear") {
     hadMemory,
   };
   const text = `DREAM ${JSON.stringify(summary)}`;
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_EDIT")) {
+  out(init);
+  appendFileSync(join(process.cwd(), "TASK_CHANGE.md"), `${prompt.split("\n")[0]}\n`);
+  const text = "Added TASK_CHANGE.md with the requested change.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_BLOCKED")) {
+  out(init);
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  const list = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+  const call = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "task_report_blocked", arguments: { reason: "Need admin access to the billing portal" } } });
+  const tools = (list.result.tools as { name: string }[]).map((t) => t.name);
+  const text = `BLOCKED ${JSON.stringify({ listed: tools.includes("task_report_blocked"), call: call.result.content[0].text })}`;
   textTurn(text);
   result(text);
 } else if (prompt.includes("CRASH")) {

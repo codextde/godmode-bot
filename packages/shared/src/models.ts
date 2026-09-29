@@ -27,6 +27,10 @@ export interface Workspace {
   instructions: string;
   /** macOS VM the workspace's agents work in (unless their chat or the agent has its own). null = none. */
   vmId: ID | null;
+  /** Git remote coding tasks clone ("" = none). */
+  repoUrl: string;
+  /** Branch coding tasks start from and open pull requests against ("" = the repository's default branch). */
+  repoBranch: string;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -237,8 +241,8 @@ export interface ComposioTriggerType {
 /* Conversations, messages, runs                                        */
 /* ------------------------------------------------------------------ */
 
-/** `dream`: the archived conversation an agent's dreams (memory consolidation) run in. */
-export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream";
+/** `dream`: the archived conversation an agent's dreams (memory consolidation) run in · `task`: an agent works on a board task. */
+export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream" | "task";
 
 export interface Conversation {
   id: ID;
@@ -335,9 +339,9 @@ export interface Message {
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 /**
  * `routine`: an automation ran (schedule, app event, condition met, webhook) · `check`: an automation checked its condition ·
- * `dream`: the agent consolidated its memory in the background.
+ * `dream`: the agent consolidated its memory in the background · `task`: the agent worked on a board task.
  */
-export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api";
+export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api" | "task";
 
 export interface RunUsage {
   inputTokens: number;

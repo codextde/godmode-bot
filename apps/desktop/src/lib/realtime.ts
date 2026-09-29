@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { AutomationEvent, ClientEvent, EntityName, ServerEvent, Vm } from "@godmode/shared";
+import type { AutomationEvent, ClientEvent, EntityName, ServerEvent, Task, Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { qk } from "./queryKeys";
@@ -41,6 +41,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   computer: [qk.computer],
   // VM list + status (installs, image downloads, assignment changes).
   vms: [qk.vms],
+  tasks: [qk.tasks],
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
 };
@@ -151,6 +152,12 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "routine.updated":
     case "routine.deleted":
       qc.invalidateQueries({ queryKey: qk.routines });
+      break;
+    case "task.updated":
+      upsertTask(qc, event.task);
+      break;
+    case "task.deleted":
+      qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.filter((t) => t.id !== event.id));
       break;
     case "automation.event":
       void upsertAutomationEvent(qc, event.event);
@@ -322,4 +329,19 @@ export function subscribeBrowser(profileId: string, { passive = false }: { passi
       sendClientEvent({ type: "browser.unsubscribe", profileId });
     } else if (wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(profileId, viewers));
   };
+}
+
+/** Patch every cached task list the task belongs to (the key's third segment is the scope: all, global or a workspace id). */
+function upsertTask(qc: QueryClient, task: Task) {
+  for (const [key, list] of qc.getQueriesData<Task[]>({ queryKey: qk.tasks })) {
+    if (!list) continue;
+    const scope = key[2];
+    const belongs = scope === "all" || (scope === "global" ? task.workspaceId === null : task.workspaceId === scope);
+    const idx = list.findIndex((t) => t.id === task.id);
+    if (!belongs) {
+      if (idx >= 0) qc.setQueryData(key, list.filter((t) => t.id !== task.id));
+      continue;
+    }
+    qc.setQueryData(key, idx >= 0 ? list.map((t) => (t.id === task.id ? task : t)) : [...list, task]);
+  }
 }

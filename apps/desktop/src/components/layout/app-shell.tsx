@@ -18,6 +18,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  SquareKanban,
   Workflow,
 } from "lucide-react";
 import {
@@ -100,6 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [navigate, setCommandOpen]);
 
   const workNav: NavItem[] = [
+    { to: "/tasks", label: "Tasks", icon: <SquareKanban /> },
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
     { to: "/automations", label: "Automations", icon: <Workflow /> },
     { to: "/activity", label: "Activity", icon: <Activity /> },

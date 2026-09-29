@@ -34,6 +34,8 @@ export interface WorkspaceInput {
   instructions?: string;
   /** macOS VM for the workspace's agents; null = none. */
   vmId?: ID | null;
+  repoUrl?: string;
+  repoBranch?: string;
 }
 
 export interface AgentInput {

@@ -23,6 +23,7 @@ const AgentDetailPage = lazy(() => import("@/pages/agents/agent-detail"));
 const AutomationsPage = lazy(() => import("@/pages/automations/automations-page"));
 const ActivityPage = lazy(() => import("@/pages/activity/activity-page"));
 const WorkspacesPage = lazy(() => import("@/pages/workspaces/workspaces-page"));
+const TasksPage = lazy(() => import("@/pages/tasks/tasks-page"));
 const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
 const TotpPage = lazy(() => import("@/pages/vault/totp-page"));
 const IntegrationsPage = lazy(() => import("@/pages/integrations/integrations-page"));
@@ -101,6 +102,7 @@ export function App() {
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/agents/new" element={<AgentNewPage />} />
           <Route path="/agents/:agentId/*" element={<AgentDetailPage />} />
+          <Route path="/tasks" element={<TasksPage />} />
           <Route path="/automations" element={<AutomationsPage />} />
           <Route path="/routines" element={<Navigate to="/automations" replace />} />
           <Route path="/activity" element={<ActivityPage />} />
