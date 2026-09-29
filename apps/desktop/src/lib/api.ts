@@ -40,6 +40,14 @@ import type {
   LocalChromeProfile,
   McpServer,
   McpServerInput,
+  MessagingChat,
+  MessagingConnection,
+  MessagingConnectionInput,
+  MessagingConnectionPatch,
+  MessagingCredentials,
+  MessagingUser,
+  MessagingUserStatus,
+  MessagingVerifyResult,
   MissingLogin,
   MissingLoginPatch,
   ModelCatalog,
@@ -386,6 +394,22 @@ export const api = {
     update: (id: string, input: Partial<McpServerInput>) => patch<McpServer>(`/api/mcp-servers/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/mcp-servers/${id}`),
     test: (id: string) => post<{ ok: boolean; tools?: string[]; error?: string }>(`/api/mcp-servers/${id}/test`),
+  },
+
+  messaging: {
+    list: () => get<MessagingConnection[]>("/api/messaging"),
+    /** Check tokens without saving them: who the bot is, and anything to know before connecting. */
+    verify: (credentials: MessagingCredentials) => post<MessagingVerifyResult>("/api/messaging/verify", { credentials }),
+    /** Open access ("anyone") needs a vault grant. */
+    create: (input: MessagingConnectionInput, grant?: string) => request<MessagingConnection>("POST", "/api/messaging", input, withGrant(grant)),
+    update: (id: string, input: MessagingConnectionPatch, grant?: string) => request<MessagingConnection>("PATCH", `/api/messaging/${id}`, input, withGrant(grant)),
+    delete: (id: string) => del<{ ok: true }>(`/api/messaging/${id}`),
+    users: (id: string) => get<MessagingUser[]>(`/api/messaging/${id}/users`),
+    setUser: (id: string, userId: string, status: MessagingUserStatus) => patch<MessagingUser>(`/api/messaging/${id}/users/${userId}`, { status }),
+    removeUser: (id: string, userId: string) => del<{ ok: true }>(`/api/messaging/${id}/users/${userId}`),
+    chats: (id: string) => get<MessagingChat[]>(`/api/messaging/${id}/chats`),
+    /** Teams app package (zip) to upload in Teams. */
+    teamsApp: (id: string) => request<Blob>("GET", `/api/messaging/${id}/teams-app`),
   },
 
   composio: {

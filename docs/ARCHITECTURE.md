@@ -351,6 +351,32 @@ connected Composio accounts and each app's events with their settings schema; `r
   session MCP URL (`POST /api/v3.1/tool_router/session`). Connected accounts can also start automations (app
   triggers, see Automations); an automation may only watch accounts its agent could use.
 
+## Messaging
+
+People talk to agents from Slack, Telegram and Microsoft Teams through a bot the human connects (`messaging/`,
+`/api/messaging`, the **Messaging** page). A connection (`messaging_connections`) holds the bot's tokens sealed in the
+vault (`secrets_enc`, redacted like other secrets), the agents it reaches (`agent_ids`, new chats start with
+`default_agent_id`) and who may use it (`access`). Adapters run while the connection is enabled and the vault is
+unlocked (tokens stay in memory when it locks later):
+
+| Platform | Transport | Setup |
+|---|---|---|
+| Telegram | Bot API long polling (`getUpdates`, offset kept in `state`); a webhook set elsewhere is removed | token from @BotFather |
+| Slack | Socket Mode (`apps.connections.open` → WebSocket, acks every envelope, pings to detect dead sockets); DMs, mentions in channels (answered in the thread), the `/godmode` slash command (answered privately via `response_url`) | app from Godmode's manifest (`slackManifest`), bot token `xoxb-` + app-level token `xapp-` |
+| Teams | Azure Bot (single tenant) delivering to `POST /hooks/messaging/<token>` (public, exempt from the loopback Host check like webhooks; the token is stored as a SHA-256 hash and sealed). Every delivery must carry a Bot Framework JWT (RS256 against the published keys, `iss`, `aud` = app id, expiry, `msteams` endorsement, `serviceurl` claim), come from `msteams` and the configured tenant. Answers go to the Teams connector hosts only, with a client-credentials token | app id, tenant, client secret, public https address; the UI builds the Teams app package (manifest + icons) |
+
+**Access**: with `approved` (default), someone new is recorded in `messaging_users` as pending, told the bot is private
+and the human is notified; approving sends them a welcome in their direct chat. Blocked people are ignored. `anyone`
+lets everyone who reaches the bot in (it needs a vault grant, and so does widening an open bot: more agents, turning it
+back on). **Chats** (`messaging_chats`): one per DM, group, Telegram topic or Slack thread, each continuing one
+conversation (origin `slack` / `telegram` / `teams`, with standing instructions naming the platform and saying names are
+unverified). Messages of a chat are accepted in order; each starts a normal chat run, the platform shows typing (Slack:
+an 👀 reaction) and the answer is converted (Telegram HTML, Slack mrkdwn, Teams Markdown) and split. Chat commands:
+`/help`, `/agents`, `/agent <name>` (switch; in a Slack thread the channel follows), `/new`, `/stop`; Slack uses
+`/godmode <command>`. Claude Code's own slash commands are not available from chats. Attachments (≤ 25 MB, Telegram ≤ 20 MB)
+are downloaded into the agent's uploads. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
+connections but restore them turned off, so two machines never answer for one bot.
+
 ## Memory
 
 Default: file-based (`MEMORY.md` + `memory/` in the agent repo, committed to git). Optional:
