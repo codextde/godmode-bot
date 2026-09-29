@@ -84,3 +84,11 @@ export function config(): CoreConfig {
 export function isLoopbackHost(host: string): boolean {
   return host === "127.0.0.1" || host === "localhost" || host === "::1";
 }
+
+/** URL local processes (claude, MCP servers) use to reach the core. Wildcard/loopback binds are reached over 127.0.0.1. */
+export function localCoreUrl(): string {
+  const { host, port } = config();
+  const wildcard = host === "0.0.0.0" || host === "::" || host === "[::]" || host === "";
+  const reachable = wildcard || isLoopbackHost(host) ? "127.0.0.1" : host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+  return `http://${reachable}:${port}`;
+}

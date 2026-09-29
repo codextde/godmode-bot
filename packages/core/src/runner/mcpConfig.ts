@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
 import { BROWSER_MCP_NAME, COMPUTER_MCP_NAME, GODMODE_MCP_NAME, VM_MCP_NAME } from "@godmode/shared";
-import { config, isLoopbackHost } from "../config";
+import { localCoreUrl } from "../config";
 import { browserMcpServer } from "../browser/manager";
 import { mcpServersForAgent } from "../integrations/mcpServers";
 import { getSettings } from "../services/settings";
@@ -18,13 +18,9 @@ import type { McpConfigFile, McpServerJson } from "../types";
 
 const log = logger("runner");
 
-/** URL Claude uses to reach the gateway. Wildcard/loopback binds are reached over 127.0.0.1. */
+/** URL Claude uses to reach the gateway. */
 export function gatewayUrl(): string {
-  const cfg = config();
-  const host = cfg.host;
-  const wildcard = host === "0.0.0.0" || host === "::" || host === "[::]" || host === "";
-  const reachable = wildcard || isLoopbackHost(host) ? "127.0.0.1" : host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-  return `http://${reachable}:${cfg.port}/mcp`;
+  return `${localCoreUrl()}/mcp`;
 }
 
 function errorText(err: unknown): string {

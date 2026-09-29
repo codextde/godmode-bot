@@ -200,7 +200,14 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
   (`open -g`, no startup window) and its first window opens behind the active app.
 * Agents get browser tools from the **browser-use MCP server** (`uvx --from browser-use==0.13.10 browser-use --mcp`)
   configured via `BROWSER_USE_CONFIG_DIR` → `<data>/browser-use/<profile>/<agent>/config.json` with
-  `browser_profile.cdp_url` pointing at that Chromium; downloads land in the agent's `workspace/downloads`.
+  `browser_profile.cdp_url` pointing at the core's discovery endpoint for that Chromium; downloads land in the agent's
+  `workspace/downloads`.
+* **On demand**: that `cdp_url` is `/cdp/<secret token>` on the core, and browser-use only resolves
+  `<cdp_url>/json/version` on its first browser tool call — so a run that never browses never starts Chromium. The core
+  launches (or reuses) the profile's browser right then and answers with its `webSocketDebuggerUrl`; a launch that
+  fails or outlasts browser-use's 15 s connect timeout becomes a warning in the runs driving that profile. Idle browsers
+  (no other CDP client attached, no watcher, window not focused) stop after `browser.keepAliveMinutes` (default 5), and
+  browsers an earlier core left running are adopted at startup and closed unless something still uses them.
   LLM-backed browser-use tools (`browser_extract_content`, `retry_with_browser_use_agent`) are only offered when an
   OpenAI key is in the vault (passed via env, never written to disk); otherwise the runner disallows them.
 * One profile = one Chromium: runs that share a profile take turns (delegated child runs may use their parent's

@@ -2,11 +2,12 @@
  * CONTRACT (owner: browser agent). Managed Chromium instances (one per browser profile), CDP access,
  * secure secret filling, cookie/session import from the user's Chrome and live view.
  */
+import { randomBytes } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { join, relative, resolve, isAbsolute } from "node:path";
 import type { Agent, BrowserProfile, ChromeImportInput, ChromeImportResult, LocalChromeProfile } from "@godmode/shared";
 import type { McpServerJson } from "../types";
-import { config, ensureDir } from "../config";
+import { config, ensureDir, localCoreUrl } from "../config";
 import { bool, get, all, insert, run, update, tx } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -16,7 +17,7 @@ import { getAppSecret, isUnlocked } from "../vault/vault";
 import { onSettingsApplied } from "../services/runtime";
 import { resolveUvx, toolPath } from "../services/doctor";
 import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
-import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type PageSession } from "./cdp";
+import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type BrowserVersion, type PageSession } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillOnPage, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
@@ -197,6 +198,7 @@ function isInside(parent: string, child: string): boolean {
 export async function deleteProfile(id: string): Promise<void> {
   const r = requireRow(id);
   if (!r.workspace_id && r.is_default) throw badRequest("The global default profile can't be deleted. Make another global profile the default first.");
+  for (const [token, ticket] of cdpTickets) if (ticket.profileId === id) cdpTickets.delete(token);
   await stopBrowser(id);
   run("DELETE FROM browser_profiles WHERE id = ?", id);
   // Only ever delete directories Godmode created.
@@ -275,14 +277,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
     log.info(`adopting running browser for profile ${profileId} (pid ${pid}, port ${port})`);
   } else {
     if (marker) clearLaunchMarker(profile.user_data_dir);
-    const chrome = findChrome(settings.browser.chromePath);
-    if (!chrome) {
-      throw new HttpError(
-        400,
-        "No Chrome or Chromium browser found. Install Google Chrome, or install Chromium from Settings → Dependencies.",
-        "chrome_missing",
-      );
-    }
+    const chrome = requireChrome(settings.browser.chromePath);
     headless = opts.headless ?? settings.browser.headless;
     try {
       proc = await launchChrome({ executable: chrome.path, userDataDir: profile.user_data_dir, headless });
@@ -335,8 +330,20 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
   return rb;
 }
 
-/** Take over browsers a previous core process left running, so idle shutdown and the UI cover them. */
-async function adoptOrphans() {
+function requireChrome(customPath: string) {
+  const chrome = findChrome(customPath);
+  if (!chrome) {
+    throw new HttpError(400, "No Chrome or Chromium browser found. Install Google Chrome, or install Chromium from Settings → Dependencies.", "chrome_missing");
+  }
+  return chrome;
+}
+
+/**
+ * Take over browsers a previous core process left running, so idle shutdown and the UI cover them. This core doesn't use
+ * them, so they close right away unless something else still does (another CDP client, a focused window).
+ */
+export async function adoptOrphans() {
+  let adopted = false;
   for (const r of all<ProfileRow>("SELECT * FROM browser_profiles")) {
     const marker = readLaunchMarker(r.user_data_dir);
     if (!marker || getRegistered(r.id)) continue;
@@ -344,8 +351,13 @@ async function adoptOrphans() {
       clearLaunchMarker(r.user_data_dir);
       continue;
     }
-    await ensureBrowser(r.id).catch((err) => log.warn(`could not adopt browser for profile ${r.id}`, err));
+    const rb = await ensureBrowser(r.id).catch((err) => log.warn(`could not adopt browser for profile ${r.id}`, err));
+    if (rb && !rb.process) {
+      rb.lastUsedAt = 0;
+      adopted = true;
+    }
   }
+  if (adopted) await sweepIdleBrowsers();
 }
 
 function pidAlive(rb: RunningBrowser): boolean {
@@ -467,6 +479,8 @@ export async function sweepIdleBrowsers(): Promise<void> {
       continue;
     }
     if (Date.now() - rb.lastUsedAt < keepAlive * 60_000) continue;
+    const checkedAt = Date.now();
+    const reason = rb.lastUsedAt ? `unused for ${keepAlive} min` : "left running by an earlier core";
     // Passive previews attach our own screencast to the tab; pause it so it doesn't look like another CDP client.
     const previewing = hasBrowserSubscribers(rb.profileId);
     if (previewing) await stopLiveView(rb.profileId);
@@ -477,7 +491,8 @@ export async function sweepIdleBrowsers(): Promise<void> {
       if (previewing && hasBrowserSubscribers(rb.profileId)) void startLiveView(rb.profileId);
       continue;
     }
-    log.info(`stopping idle browser for profile ${rb.profileId} (unused for ${keepAlive} min)`);
+    if ((handedOut.get(rb.profileId) ?? 0) >= checkedAt) continue;
+    log.info(`stopping idle browser for profile ${rb.profileId} (${reason})`);
     await stopBrowser(rb.profileId).catch((err) => log.warn("idle stop failed", err));
   }
 }
@@ -614,6 +629,72 @@ export function requireRunning(profileId: string): RunningBrowser {
 }
 
 /* ------------------------------------------------------------------ */
+/* On-demand launch                                                     */
+/* ------------------------------------------------------------------ */
+
+/** Secret discovery tokens handed to browser-use as its `cdp_url`, one per profile and mode, valid while this core runs. */
+const cdpTickets = new Map<string, { profileId: string; headless: boolean }>();
+/** When a profile's browser was last handed to browser-use (the idle sweep must not close it right after). */
+const handedOut = new Map<string, number>();
+/** browser-use gives up on connecting after 15 s and can't recover within the same run. */
+const BROWSER_USE_CONNECT_BUDGET_MS = 14_000;
+
+type LaunchProblemListener = (profileId: string, text: string) => void;
+const launchProblemListeners = new Set<LaunchProblemListener>();
+
+/** Told when a browser couldn't be started on demand in time, so the runs driving it can tell the human. */
+export function onLaunchProblem(fn: LaunchProblemListener): () => void {
+  launchProblemListeners.add(fn);
+  return () => {
+    launchProblemListeners.delete(fn);
+  };
+}
+
+function reportLaunchProblem(profileId: string, text: string) {
+  for (const fn of [...launchProblemListeners]) {
+    try {
+      fn(profileId, text);
+    } catch (err) {
+      log.warn("launch problem listener failed", err);
+    }
+  }
+}
+
+/** browser-use resolves `<cdp_url>/json/version` on its first browser tool call, so the browser starts only then. */
+function onDemandCdpUrl(profileId: string, headless: boolean): string {
+  let token = [...cdpTickets].find(([, t]) => t.profileId === profileId && t.headless === headless)?.[0];
+  if (!token) {
+    token = randomBytes(24).toString("base64url");
+    cdpTickets.set(token, { profileId, headless });
+  }
+  return `${localCoreUrl()}/cdp/${token}`;
+}
+
+/** `GET /cdp/:token/json/version`: start (or reuse) the ticket's browser and answer like Chromium's own endpoint. */
+export async function discoverCdp(token: string): Promise<BrowserVersion> {
+  const ticket = cdpTickets.get(token);
+  if (!ticket) throw notFound("Browser");
+  const startedAt = Date.now();
+  let rb: RunningBrowser;
+  try {
+    rb = await ensureBrowser(ticket.profileId, { headless: ticket.headless });
+    if (rb.stopping) rb = await ensureBrowser(ticket.profileId, { headless: ticket.headless });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn(`could not start the browser for profile ${ticket.profileId} on demand: ${message}`);
+    reportLaunchProblem(ticket.profileId, `The browser couldn't start, so browser tools won't work in this run. ${message}`);
+    throw err;
+  }
+  const took = Date.now() - startedAt;
+  if (took > BROWSER_USE_CONNECT_BUDGET_MS) {
+    reportLaunchProblem(ticket.profileId, `The browser took ${Math.round(took / 1000)} s to start, too long for this run's browser tools. It's running now, so the next message can use it.`);
+  }
+  rb.lastUsedAt = Date.now();
+  handedOut.set(ticket.profileId, rb.lastUsedAt);
+  return (await probeCdp(rb.port)) ?? { Browser: "", "User-Agent": "", webSocketDebuggerUrl: rb.wsUrl };
+}
+
+/* ------------------------------------------------------------------ */
 /* Agent browser tools (browser-use MCP)                                */
 /* ------------------------------------------------------------------ */
 
@@ -633,14 +714,14 @@ export async function browserMcpServer(agent: Agent): Promise<McpServerJson | nu
 
   const profile = resolveProfileForAgent(agent);
   const headless = agent.browser.headless ?? settings.browser.headless;
-  const { cdpUrl } = await launchBrowser(profile.id, { headless });
+  if (!getRunning(profile.id)) requireChrome(settings.browser.chromePath);
 
   const cfg = config();
   const configDir = join(cfg.dataDir, "browser-use", profile.id, agent.id);
   const workspace = agent.repoPath ? join(agent.repoPath, "workspace") : join(cfg.dataDir, "browser-use", profile.id, agent.id, "files");
   writeBrowserUseConfig({
     configDir,
-    cdpUrl,
+    cdpUrl: onDemandCdpUrl(profile.id, headless),
     headless,
     userDataDir: profile.userDataDir,
     downloadsPath: join(workspace, "downloads"),
@@ -648,6 +729,8 @@ export async function browserMcpServer(agent: Agent): Promise<McpServerJson | nu
   });
   touchBrowser(profile.id);
   const env = browserUseEnv(configDir, toolPath());
+  // The discovery URL carries its secret: never route it through a proxy.
+  env.NO_PROXY = [env.NO_PROXY, new URL(localCoreUrl()).hostname].filter(Boolean).join(",");
   // browser-use's content extraction tools need an OpenAI-compatible LLM. Pass the key via env only (never into
   // browser-use's config file); without one, the runner hides those tools from Claude.
   const llmKey = browserLlmKey();

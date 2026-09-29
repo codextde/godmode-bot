@@ -23,6 +23,7 @@ import { serveStatic } from "./static";
 import { handleWebhook } from "../automations/webhooks";
 import { registerMessagingRoutes } from "./routes/messaging";
 import { handleMessagingHook } from "../messaging/service";
+import { discoverCdp } from "../browser/manager";
 
 const log = logger("http");
 
@@ -71,6 +72,8 @@ export function createApp() {
   app.post("/hooks/:token", handleWebhook);
   // Microsoft Teams deliveries (secret path + Bot Framework signature)
   app.post("/hooks/messaging/:token", handleMessagingHook);
+  // browser-use finds (and so starts) an agent's browser here (the secret token in the path is the credential)
+  app.get("/cdp/:token/json/version", async (c) => c.json(await discoverCdp(c.req.param("token"))));
 
   // Protected API
   app.use("/api/*", async (c, next) => {

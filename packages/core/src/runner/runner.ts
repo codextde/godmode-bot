@@ -25,7 +25,7 @@ import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
-import { BROWSER_LLM_TOOLS, browserLlmKey, currentPage, resolveProfileForAgent } from "../browser/manager";
+import { BROWSER_LLM_TOOLS, browserLlmKey, currentPage, onLaunchProblem, resolveProfileForAgent } from "../browser/manager";
 import {
   addMessage,
   appendTranscript,
@@ -596,6 +596,14 @@ function computerHolder(job: Job): Job | null {
   }
   return null;
 }
+
+onLaunchProblem((profileId, text) => {
+  for (const job of jobs.values()) {
+    if (job.status !== "running" || browserProfileOf(job) !== profileId) continue;
+    job.acc.addNotice("warning", text);
+    scheduleDelta(job);
+  }
+});
 
 /** The running job currently holding `job`'s browser profile (excluding its own ancestors), if any. */
 function browserHolder(job: Job): Job | null {
