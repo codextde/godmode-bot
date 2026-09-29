@@ -52,6 +52,7 @@ interface ConversationRow {
   computer_target: string | null;
   vm_id: string | null;
   browser_profile_id: string | null;
+  workspace_id: string | null;
   instructions: string;
   pinned: number;
   archived: number;
@@ -106,6 +107,7 @@ function toConversation(r: ConversationRow): Conversation {
     computerTarget: parseComputerTarget(parseJson<unknown>(r.computer_target, null)),
     vmId: r.vm_id ?? null,
     browserProfileId: r.browser_profile_id ?? null,
+    workspaceId: r.workspace_id ?? null,
     instructions: r.instructions,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
@@ -178,6 +180,13 @@ function normalizeBrowserProfileId(value: string | null | undefined): string | n
   return id;
 }
 
+/** A global agent's chat keeps the workspace it was started in; a workspace agent's chat is in the agent's workspace. */
+function normalizeWorkspaceId(agent: Agent, value: string | null | undefined): string | null {
+  const id = value?.trim();
+  if (!id || agent.workspaceId) return null;
+  return get<{ id: string }>("SELECT id FROM workspaces WHERE id = ?", id)?.id ?? null;
+}
+
 export interface ModelChoice {
   /** `claude --model` value; null/empty = the agent's model. */
   model?: string | null;
@@ -192,10 +201,11 @@ export function createConversation(
     workingDirectory?: string | null;
     vmId?: string | null;
     browserProfileId?: string | null;
+    workspaceId?: string | null;
     instructions?: string;
   } & ModelChoice,
 ): Conversation {
-  getAgent(input.agentId); // 404 if the agent doesn't exist
+  const agent = getAgent(input.agentId); // 404 if the agent doesn't exist
   const workingDirectory = normalizeWorkingDirectory(input.workingDirectory);
   const vmId = normalizeVmId(input.vmId) ?? null;
   const browserProfileId = normalizeBrowserProfileId(input.browserProfileId) ?? null;
@@ -213,6 +223,7 @@ export function createConversation(
     working_directory: workingDirectory,
     vm_id: vmId,
     browser_profile_id: browserProfileId,
+    workspace_id: normalizeWorkspaceId(agent, input.workspaceId),
     instructions: input.instructions?.trim() ?? "",
     pinned: 0,
     archived: 0,
@@ -508,6 +519,8 @@ export async function startChat(
     vmId?: string | null;
     /** Browser profile for this chat (null/omitted = the agent's). */
     browserProfileId?: string | null;
+    /** Workspace the chat is started in (the sidebar's); a global agent browses with its default profile. */
+    workspaceId?: string | null;
     instructions?: string;
   } & ModelChoice,
 ): Promise<StartChatResult> {
@@ -525,6 +538,7 @@ export async function startChat(
     workingDirectory: input.workingDirectory,
     vmId: input.vmId,
     browserProfileId: input.browserProfileId,
+    workspaceId: input.workspaceId,
     instructions: input.instructions,
     model: input.model,
     effort: input.effort,

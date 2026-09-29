@@ -217,21 +217,34 @@ export async function deleteProfile(id: string): Promise<void> {
   if (r.workspace_id && r.is_default) bus.changed("workspaces");
 }
 
-/** Profile picked for the chat itself (not inherited from its agent). */
-export function chatProfileId(conversationId: string): string | null {
-  return get<{ browser_profile_id: string | null }>("SELECT browser_profile_id FROM conversations WHERE id = ?", conversationId)?.browser_profile_id ?? null;
+function chatRow(conversationId: string) {
+  return get<{ browser_profile_id: string | null; workspace_id: string | null }>(
+    "SELECT browser_profile_id, workspace_id FROM conversations WHERE id = ?",
+    conversationId,
+  );
 }
 
-/** Profile a run uses: its chat's ?? agent.browser.profileId ?? workspace default ?? global default. */
+/** Profile picked for the chat itself (not inherited from its agent). */
+export function chatProfileId(conversationId: string): string | null {
+  return chatRow(conversationId)?.browser_profile_id ?? null;
+}
+
+/** Workspace a chat was started in (set for global agents only). */
+export function chatWorkspaceId(conversationId: string | null | undefined): string | null {
+  return conversationId ? (chatRow(conversationId)?.workspace_id ?? null) : null;
+}
+
+/** Profile a run uses: its chat's ?? agent.browser.profileId ?? default of the agent's (or the chat's) workspace ?? global default. */
 export function resolveProfileForAgent(agent: Agent, conversationId?: string | null): BrowserProfile {
-  const chosen = conversationId ? chatProfileId(conversationId) : null;
-  const forChat = chosen ? row(chosen) : null;
+  const chat = conversationId ? chatRow(conversationId) : null;
+  const forChat = chat?.browser_profile_id ? row(chat.browser_profile_id) : null;
   if (forChat) return toProfile(forChat);
   const pinned = agent.browser?.profileId ? row(agent.browser.profileId) : null;
   if (pinned) return toProfile(pinned);
   if (agent.browser?.profileId) log.warn(`agent ${agent.id} references missing browser profile ${agent.browser.profileId}; using default`);
-  if (agent.workspaceId) {
-    const wsDefault = get<ProfileRow>("SELECT * FROM browser_profiles WHERE workspace_id = ? AND is_default = 1 ORDER BY created_at LIMIT 1", agent.workspaceId);
+  const workspaceId = agent.workspaceId ?? chat?.workspace_id ?? null;
+  if (workspaceId) {
+    const wsDefault = get<ProfileRow>("SELECT * FROM browser_profiles WHERE workspace_id = ? AND is_default = 1 ORDER BY created_at LIMIT 1", workspaceId);
     if (wsDefault) return toProfile(wsDefault);
   }
   return ensureDefaultProfile();

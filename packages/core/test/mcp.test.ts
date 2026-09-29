@@ -392,23 +392,27 @@ describe("agents + delegation", () => {
     expect(other.isError).toBeUndefined();
   });
 
-  test("agent_delegate keeps the browser profile picked for the caller's chat, within the target's reach", async () => {
+  test("agent_delegate keeps the caller's workspace and its chat's browser profile, within the target's reach", async () => {
     const browsing = await makeAgent({ name: "Browsing delegator", browser: { enabled: true }, permissions: { allowDelegation: true } });
     const global = createProfile({ name: "Delegation profile", workspaceId: null });
     const elsewhere = createProfile({ name: "Other workspace profile", workspaceId: createWorkspace({ name: "Delegation" }).id });
-    const delegate = async (profileId: string) => {
-      const parent = await startChat({ agentId: browsing.id, content: "SLEEP", browserProfileId: profileId });
+    const delegate = async (profileId: string | null, workspaceId: string | null = null) => {
+      const parent = await startChat({ agentId: browsing.id, content: "SLEEP", browserProfileId: profileId, workspaceId });
       const token = issueRunToken({ runId: parent.run.id, agentId: browsing.id, conversationId: parent.conversation.id, workspaceId: null, depth: 0 });
       const r = await call(token, "agent_delegate", { agentId: worker.id, task: "Profile check", wait: false });
       const runId = /run (run_[A-Za-z0-9]+)/.exec(r.content[0]!.text)![1]!;
-      const inherited = getConversation(getRun(runId).conversationId).browserProfileId;
+      const child = getConversation(getRun(runId).conversationId);
       revokeRunToken(token);
       await cancelRun(parent.run.id);
       await waitForRun(runId, 20_000);
-      return inherited;
+      return { profileId: child.browserProfileId, workspaceId: child.workspaceId };
     };
-    expect(await delegate(global.id)).toBe(global.id);
-    expect(await delegate(elsewhere.id)).toBeNull();
+    expect(await delegate(global.id)).toEqual({ profileId: global.id, workspaceId: null });
+    expect(await delegate(elsewhere.id)).toEqual({ profileId: null, workspaceId: null });
+    const home = createWorkspace({ name: "Delegation home" });
+    const homeProfile = createProfile({ name: "Home profile", workspaceId: home.id });
+    expect(await delegate(null, home.id)).toEqual({ profileId: null, workspaceId: home.id });
+    expect(await delegate(homeProfile.id, home.id)).toEqual({ profileId: homeProfile.id, workspaceId: home.id });
   });
 
   test("delegation limits: depth, self, non-peers", async () => {

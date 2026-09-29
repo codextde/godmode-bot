@@ -160,9 +160,12 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post("/api/agents/:id/run", async (c) => {
     const agent = getAgent(c.req.param("id"));
-    const { prompt } = await body(c, z.object({ prompt: z.string().trim().max(100_000).optional() }));
+    const { prompt, workspaceId } = await body(
+      c,
+      z.object({ prompt: z.string().trim().max(100_000).optional(), workspaceId: z.string().trim().max(100).nullable().optional() }),
+    );
     if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
-    return c.json(await startChat({ agentId: agent.id, content: prompt || DEFAULT_TASK_PROMPT, origin: "api" }));
+    return c.json(await startChat({ agentId: agent.id, content: prompt || DEFAULT_TASK_PROMPT, origin: "api", workspaceId }));
   });
 
   app.get("/api/agents/:id/commands", async (c) => c.json(await listSlashCommands(getAgent(c.req.param("id")))));

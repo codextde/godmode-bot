@@ -23,7 +23,17 @@ import { cn } from "@/lib/utils";
 const SUGGESTED_DOMAINS = ["google.com", "github.com", "linkedin.com", "notion.so", "slack.com"];
 
 /** Import cookies/sessions from local Chrome (or a cookie JSON) into a Godmode browser profile. */
-export function ImportSessionsCard({ profiles, targetId, onTargetChange }: { profiles: BrowserProfile[]; targetId: string | null; onTargetChange: (id: string) => void }) {
+export function ImportSessionsCard({
+  profiles,
+  defaultId,
+  targetId,
+  onTargetChange,
+}: {
+  profiles: BrowserProfile[];
+  defaultId: string | null;
+  targetId: string | null;
+  onTargetChange: (id: string) => void;
+}) {
   const target = profiles.find((p) => p.id === targetId) ?? null;
   return (
     <section className="@container rounded-xl border bg-card p-5 shadow-card">
@@ -52,7 +62,7 @@ export function ImportSessionsCard({ profiles, targetId, onTargetChange }: { pro
                 {profiles.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
-                    {p.isDefault && <span className="text-muted-foreground"> · default</span>}
+                    {p.id === defaultId && <span className="text-muted-foreground"> · default</span>}
                   </SelectItem>
                 ))}
               </SelectContent>

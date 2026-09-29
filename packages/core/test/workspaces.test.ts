@@ -10,7 +10,8 @@ import { setLogLevel } from "../src/log";
 import { resetSettingsCache } from "../src/services/settings";
 import { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../src/services/workspaces";
 import { createAgent, ensureDefaultAgent, getAgent } from "../src/agents/service";
-import { createProfile, ensureDefaultProfile, getProfile, shutdownBrowsers } from "../src/browser/manager";
+import { chatWorkspaceId, createProfile, ensureDefaultProfile, getProfile, resolveProfileForAgent, shutdownBrowsers } from "../src/browser/manager";
+import { createConversation } from "../src/services/conversations";
 import * as repo from "../src/agents/repo";
 import { HttpError } from "../src/util";
 
@@ -99,6 +100,29 @@ describe("workspaces", () => {
     expect(listWorkspaces().some((w) => w.name === "Rejected")).toBe(false);
     expect((await catchHttp(() => updateWorkspace(ws.id, { name: "Renamed", browserProfileId: "bpr_missing" }))).status).toBe(404);
     expect(getWorkspace(ws.id).name).toBe("Browsing");
+  });
+
+  test("a global agent's chat browses with the default profile of the workspace it was started in", async () => {
+    const globalDefault = ensureDefaultProfile();
+    const godmode = await ensureDefaultAgent();
+    const ws = createWorkspace({ name: "Chat Scope" });
+    const wsProfile = createProfile({ name: "Chat Scope browser", workspaceId: ws.id });
+    const member = await createAgent({ name: "Scoped member", workspaceId: ws.id });
+
+    const chat = createConversation({ agentId: godmode.id, workspaceId: ws.id });
+    expect(chat.workspaceId).toBe(ws.id);
+    expect(resolveProfileForAgent(godmode, chat.id).id).toBe(wsProfile.id);
+    expect(resolveProfileForAgent(godmode).id).toBe(globalDefault.id);
+
+    const picked = createConversation({ agentId: godmode.id, workspaceId: ws.id, browserProfileId: globalDefault.id });
+    expect(resolveProfileForAgent(godmode, picked.id).id).toBe(globalDefault.id);
+
+    expect(createConversation({ agentId: member.id, workspaceId: ws.id }).workspaceId).toBeNull();
+    expect(createConversation({ agentId: godmode.id, workspaceId: "wsp_missing" }).workspaceId).toBeNull();
+
+    await deleteWorkspace(ws.id, true);
+    expect(chatWorkspaceId(chat.id)).toBeNull();
+    expect(resolveProfileForAgent(godmode, chat.id).id).toBe(globalDefault.id);
   });
 
   test("renaming a workspace refreshes its agents' CLAUDE.md", async () => {
