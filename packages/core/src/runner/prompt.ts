@@ -35,6 +35,8 @@ export interface PromptContext {
   standingInstructions?: string;
   /** MEMORY.md, loaded into the prompt (null = not loaded: disabled in settings, or the agent has none). */
   memory?: { text: string; truncated: boolean } | null;
+  /** The run may schedule follow-ups (followup_schedule). */
+  followups?: boolean;
   now?: Date;
 }
 
@@ -196,7 +198,7 @@ You are the orchestrator. You can create, update and delete agents (\`agent_crea
 
 ### Automations
 An automation runs an agent's prompt when its trigger fires:
-- \`schedule\` — a cron expression in ${human}'s timezone ("every Monday at 9").
+- \`schedule\` — a cron expression in ${human}'s timezone ("every Monday at 9"). \`startWindowMinutes\` starts each run at a random moment in a window after the scheduled time, for work that should look like a person's ("start sometime between 8 and 9:30 on weekdays" = "0 8 * * 1-5" + 90).
 - \`app\` — an event in a connected app: a new email, a Slack message, a calendar event starting, a Notion page changing… Call \`automation_triggers_list\` for the connected accounts and their apps' events, then again with \`toolkit\` for the event's settings (required \`config\` fields). Use \`filter\` when only some events matter ("only invoices", "only from customers").
 - \`condition\` — something without an app event ("a competitor changes their pricing", "the visa appointment page shows a free slot"): the agent checks it on a cron schedule (at most every 5 minutes; hourly or daily is usually enough) and runs the task once it holds. Every check automatically sees what the previous check observed, so state the condition plainly ("the price of X changes") — no instructions on remembering or baselines. Consider \`checkModel: "haiku"\` for simple, frequent checks.
 - \`webhook\` — a secret URL other tools can POST to; ${human} copies it from the automation in the app (Automations → Copy webhook URL).
@@ -205,6 +207,11 @@ When ${human} describes one in a sentence ("when X happens, do Y"), set it up: p
 
   out.push(`### Notifications
 Use \`notify_user({ title, body, level })\` for things ${human} should see even when not watching this chat (important results of scheduled work, blockers). Don't notify for routine progress.`);
+
+  if (ctx.followups) {
+    out.push(`### Following up later
+When a task can't be finished now because you have to wait — for a reply to an email or message, a delivery, a build or deployment, a status or price change, office hours, another person — don't leave it to ${human} to remind you. Schedule a follow-up with \`followup_schedule({ at | inMinutes, note })\`, like a coworker who says "I'll check back tomorrow at 10": at that time Godmode continues this chat on its own and you pick up where you left off, with the whole conversation. Pick a realistic time (when the answer is likely there; business hours when people are involved) and write the note so you know exactly what to check and do. Then end your turn with a short summary of what you're waiting for and when you'll continue. A chat has one follow-up: scheduling again moves it, \`followup_cancel\` removes it. Don't schedule follow-ups for work you can do now or for things that repeat on a schedule${perms.canManageAgents ? " (those are automations)" : ""}.`);
+  }
 
   const reflect = settings.memory.reflectAfterRun;
   const memoryFile = folder ? join(repo, "MEMORY.md") : "MEMORY.md";
@@ -336,9 +343,18 @@ ${scope}
 export function resumeContextPrefix(
   folder: string | null,
   repoPath: string,
-  opts: { now?: Date; instructions?: string; memoryChanged?: boolean; vm?: PromptVm | null; sources?: PromptSources | null; ssh?: PromptSshServer[] } = {},
+  opts: {
+    now?: Date;
+    instructions?: string;
+    memoryChanged?: boolean;
+    vm?: PromptVm | null;
+    sources?: PromptSources | null;
+    /** The chat's pending follow-up. */
+    followup?: { dueAt: string; note: string } | null;
+    ssh?: PromptSshServer[];
+  } = {},
 ): string {
-  const { now = new Date(), instructions, memoryChanged, vm, sources, ssh } = opts;
+  const { now = new Date(), instructions, memoryChanged, vm, sources, followup, ssh } = opts;
   const where = folder
     ? `Working directory: \`${folder}\` (the folder attached to this chat). Your own repository with CLAUDE.md and MEMORY.md: \`${repoPath}\`.`
     : `Working directory: your own repository \`${repoPath}\`.`;
@@ -361,5 +377,8 @@ export function resumeContextPrefix(
   const remote = ssh?.length
     ? `\nSSH servers you may use with the \`ssh\` MCP tools (Godmode signs in and answers sudo): ${ssh.map((s) => `${s.name} (\`${s.address}\`)`).join(", ")}.`
     : "";
-  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${machine}${remote}${update}${memory}</godmode-context>\n\n`;
+  const pending = followup
+    ? `\n\nYou scheduled a follow-up in this chat for ${describeNow(new Date(followup.dueAt))}: "${oneLine(followup.note, 300)}". If this message settles or changes that, move it with followup_schedule or remove it with followup_cancel.`
+    : "";
+  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${machine}${remote}${update}${memory}${pending}</godmode-context>\n\n`;
 }

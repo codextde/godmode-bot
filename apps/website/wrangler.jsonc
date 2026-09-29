@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "godmode-website",
+  "account_id": "a511f1dbd91f9fb01269b6be0af25ca9",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "assets": { "binding": "ASSETS", "directory": "./dist" },
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "godmode.codext.de", "custom_domain": true }],
+  // Per-IP limits: Stripe-backed endpoints, and the analytics beacon.
+  "ratelimits": [
+    { "name": "CHECKOUT_LIMIT", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } },
+    { "name": "TRACK_LIMIT", "namespace_id": "1002", "simple": { "limit": 120, "period": 60 } }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "godmode-site",
+      "database_id": "245f8c8c-63aa-46e5-8551-c88c9c03e0f7",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "STRIPE_AUTOMATIC_TAX": "false",
+    "STRIPE_MANAGED_PAYMENTS": "false",
+    "STRIPE_REQUIRE_TOS": "false",
+    "STRIPE_COLLECT_PROMOTIONS": "false"
+  }
+  // Secrets (wrangler secret put …): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, ADMIN_PASSWORD, SESSION_SECRET,
+  // GITHUB_TOKEN (fine-grained, read-only Contents on codextde/godmode-bot — serves downloads and updates)
+}

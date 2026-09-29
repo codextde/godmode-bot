@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Godmode Bot — hero loop</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="assets/brand.css" />
+    <style>
+      @font-face { font-family: "Geist"; src: url("assets/fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
+      html, body { width: 1920px; height: 1080px; }
+
+      #stage { position: absolute; inset: 0; overflow: hidden; }
+      #world { position: absolute; left: 0; top: 0; width: 1600px; height: 1000px; }
+
+      /* ---------- App window ---------- */
+      #app { position: absolute; left: 0; top: 0; width: 1600px; height: 1000px; }
+      #app-frame { position: absolute; inset: 0; border-radius: 20px; background: var(--s1);
+        border: 1px solid var(--line-2);
+        box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 60px 140px rgba(0,0,0,0.7), 0 20px 50px rgba(0,0,0,0.5); }
+      .layer { position: absolute; }
+      #titlebar { left: 0; top: 0; width: 1600px; height: 52px; display: flex; align-items: center; padding: 0 22px;
+        border-bottom: 1px solid var(--line); }
+      #titlebar .ttl { position: absolute; left: 0; right: 0; text-align: center; font-family: var(--mono); font-size: 13px;
+        letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+
+      /* Sidebar */
+      #sidebar { left: 0; top: 52px; width: 264px; height: 948px; border-right: 1px solid var(--line); background: #11110f;
+        border-bottom-left-radius: 20px; padding: 18px 14px; }
+      .brand { display: flex; align-items: center; gap: 12px; padding: 6px 8px 18px; }
+      .brand .logo { width: 38px; height: 38px; }
+      .brand b { display: block; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+      .brand small { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; color: var(--muted); margin-top: 2px; }
+      .ws { display: flex; align-items: center; gap: 10px; height: 44px; border: 1px solid var(--line-2); border-radius: 12px; padding: 0 12px;
+        font-size: 15px; color: var(--fg); margin-bottom: 12px; }
+      .ws .ic { width: 18px; height: 18px; color: var(--muted); }
+      .newchat { display: flex; align-items: center; gap: 10px; height: 44px; border-radius: 12px; padding: 0 14px; background: var(--fg);
+        color: #151412; font-size: 15px; font-weight: 500; margin-bottom: 16px; }
+      .newchat .ic { width: 18px; height: 18px; }
+      .newchat kbd { margin-left: auto; font-family: var(--mono); font-size: 11px; color: #6b675f; }
+      .nav { display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 12px; border-radius: 10px; font-size: 16px; color: #cfcbc3; }
+      .nav .ic { width: 19px; height: 19px; color: var(--muted); flex: none; }
+      .nav.on { background: var(--s2); color: var(--fg); }
+      .nav .count { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); background: var(--s2); border-radius: 6px; padding: 2px 7px; }
+      .sec { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; color: var(--muted); padding: 22px 12px 8px; }
+      .online { position: absolute; left: 14px; right: 14px; bottom: 18px; height: 50px; border: 1px solid var(--line-2); border-radius: 12px;
+        display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 15px; color: #cfcbc3; }
+      .online i { width: 9px; height: 9px; border-radius: 50%; background: var(--em); box-shadow: 0 0 10px rgba(47,214,144,0.7); }
+
+      /* Chat column */
+      #chathead { left: 264px; top: 52px; width: 660px; height: 64px; border-bottom: 1px solid var(--line); display: flex; align-items: center;
+        gap: 12px; padding: 0 26px; font-size: 16px; white-space: nowrap; overflow: hidden; }
+      #chathead .av { width: 30px; height: 30px; border-radius: 9px; background: #2a2440; display: grid; place-items: center; color: #f3c64b; flex: none; }
+      #chathead .av svg { width: 14px; height: 18px; }
+      #chathead .sep { color: #6b675f; }
+      #chathead .task { color: var(--fg); overflow: hidden; text-overflow: ellipsis; }
+      #msgs { left: 264px; top: 116px; width: 660px; height: 706px; overflow: hidden; }
+      #thread { position: absolute; left: 0; top: 0; width: 660px; padding: 26px 30px 0; }
+      .today { display: flex; align-items: center; gap: 14px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--muted); margin-bottom: 18px; }
+      .today::before, .today::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+      #ubub { margin-left: auto; width: 500px; background: var(--s2); border: 1px solid var(--line); border-radius: 18px; padding: 16px 20px;
+        font-size: 17.5px; line-height: 1.5; color: var(--fg); }
+      .agent { display: flex; align-items: center; gap: 12px; margin: 26px 0 14px; }
+      .agent .av { width: 38px; height: 38px; border-radius: 11px; background: #2a2440; display: grid; place-items: center; color: #f3c64b; }
+      .agent .av svg { width: 16px; height: 22px; }
+      .agent b { font-size: 17px; font-weight: 600; }
+      .status { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 11px; border-radius: 999px;
+        border: 1px solid var(--line-2); font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+      .status .s-work, .status .s-done { display: inline-flex; align-items: center; gap: 8px; }
+      .status .s-done { position: absolute; left: 11px; top: 0; height: 28px; color: var(--em); }
+      .spin { width: 14px; height: 14px; }
+      #steps { position: relative; width: 600px; }
+      #stepsbg { position: absolute; left: 0; top: 0; width: 600px; height: 470px; border: 1px solid var(--line-2); border-radius: 18px; background: #171715; }
+      .shead { position: relative; height: 62px; display: flex; align-items: center; gap: 14px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+      .shead .icons { display: flex; }
+      .shead .icons span { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line-2); background: #1d1c1a; display: grid; place-items: center;
+        margin-right: -8px; color: var(--em); }
+      .shead .icons .ic { width: 15px; height: 15px; }
+      .shead .t1 { font-size: 16.5px; font-weight: 500; margin-left: 10px; }
+      .shead .t2 { font-size: 13.5px; color: var(--muted); font-family: var(--mono); margin-left: 10px; margin-top: 2px; }
+      .row { position: relative; height: 58px; display: flex; align-items: center; gap: 14px; padding: 0 18px; }
+      .row .ico { position: relative; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line-2); background: #1d1c1a;
+        display: grid; place-items: center; color: #cfcbc3; flex: none; }
+      .row.vault .ico { color: var(--em); border-color: var(--em-line); background: rgba(47,214,144,0.08); }
+      .row .ico .ic { width: 16px; height: 16px; }
+      .row .ico .spin { position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px 0 0 -19px; }
+      .row .t1 { font-size: 16.5px; color: var(--fg); white-space: nowrap; }
+      .row .t2 { font-size: 13.5px; color: var(--muted); margin-top: 3px; white-space: nowrap; }
+      .row .secret { margin-left: auto; }
+      .row .chev { margin-left: auto; width: 16px; height: 16px; color: #6b675f; }
+      .row .secret + .chev { margin-left: 14px; }
+      #donemsg { margin-top: 22px; display: flex; gap: 14px; }
+      #donemsg .ck { width: 38px; height: 38px; border-radius: 50%; background: var(--em); color: #05170e; display: grid; place-items: center; flex: none; }
+      #donemsg .ck .ic { width: 20px; height: 20px; stroke-width: 2.6; }
+      #donemsg b { display: block; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+      #donemsg p { font-size: 17px; line-height: 1.5; color: #cfcbc3; margin-top: 6px; width: 520px; }
+
+      /* Headline above composer (opening) */
+      #ask { left: 288px; top: 742px; width: 612px; font-size: 34px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.1; }
+      #ask span { color: #6f6b64; }
+      /* Composer */
+      #composer { left: 288px; top: 838px; width: 612px; height: 134px; border-radius: 20px; background: var(--s2); border: 1px solid var(--line-3);
+        box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
+      #cmp-text { position: absolute; left: 22px; top: 18px; width: 568px; font-size: 18.5px; line-height: 1.45; color: var(--fg); }
+      #ph { color: #88847b; }
+      #cmp-tools { position: absolute; left: 14px; right: 14px; bottom: 12px; height: 38px; display: flex; align-items: center; gap: 6px; color: var(--muted); }
+      #cmp-tools .tb { width: 34px; height: 34px; display: grid; place-items: center; }
+      #cmp-tools .tb .ic { width: 18px; height: 18px; }
+      #model { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: #d8d4cc; padding: 0 12px; height: 34px;
+        border-radius: 10px; }
+      #model .claude-dot { width: 9px; height: 9px; }
+      #send { width: 38px; height: 38px; border-radius: 12px; background: #34322d; color: var(--fg); display: grid; place-items: center; }
+      #send .ic { width: 18px; height: 18px; stroke-width: 2.2; }
+      #send-glow { position: absolute; right: 14px; bottom: 12px; width: 38px; height: 38px; border-radius: 12px; background: var(--em); opacity: 0; }
+      #foot { left: 264px; top: 978px; width: 660px; text-align: center; font-size: 12.5px; color: #8a867e; }
+
+      /* Browser panel */
+      #bpanel { left: 924px; top: 52px; width: 676px; height: 948px; border-left: 1px solid var(--line); background: #121210;
+        border-bottom-right-radius: 20px; overflow: hidden; }
+      .bhead { position: absolute; left: 0; top: 0; width: 676px; height: 60px; display: flex; align-items: center; gap: 12px; padding: 0 20px; }
+      .bhead b { font-size: 17px; font-weight: 600; }
+      .livechip { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--em-line);
+        background: var(--em-soft); color: var(--em); font-size: 13px; font-weight: 500; }
+      .livechip i { width: 8px; height: 8px; border-radius: 50%; background: var(--em); box-shadow: 0 0 8px rgba(47,214,144,0.8); }
+      .profile { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--line-2);
+        color: var(--muted); font-size: 13px; }
+      .profile .ic { width: 14px; height: 14px; }
+      .takectl { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 9px; background: var(--fg);
+        color: #151412; font-size: 13.5px; font-weight: 500; }
+      .takectl .ic { width: 15px; height: 15px; }
+      .urlrow { position: absolute; left: 16px; top: 62px; width: 644px; height: 44px; display: flex; align-items: center; gap: 10px; }
+      .urlrow .rf { width: 34px; height: 34px; display: grid; place-items: center; color: var(--muted); }
+      .urlrow .rf .ic { width: 17px; height: 17px; }
+      .url { flex: 1; height: 38px; border-radius: 10px; background: #1b1a18; border: 1px solid var(--line); display: flex; align-items: center; gap: 9px;
+        padding: 0 12px; font-family: var(--mono); font-size: 14px; color: #d8d4cc; white-space: nowrap; overflow: hidden; }
+      .url .ic { width: 14px; height: 14px; color: var(--em); flex: none; }
+      .url .dim { color: #858178; }
+      #loadbar { position: absolute; left: 16px; top: 110px; width: 644px; height: 2px; background: var(--em); transform-origin: 0 50%; opacity: 0; }
+      .bnote { position: absolute; left: 20px; top: 118px; width: 640px; display: flex; align-items: center; gap: 9px; font-size: 13px; color: #8f8b83; }
+      .bnote i { width: 7px; height: 7px; border-radius: 50%; background: var(--em); }
+      #vp { position: absolute; left: 16px; top: 150px; width: 644px; height: 782px; border-radius: 14px; background: #f3f2ee; overflow: hidden; }
+      #vp-blank { position: absolute; inset: 0; background: #1a1917; }
+
+      /* Portal pages (light) */
+      .page { position: absolute; inset: 0; color: #15161a; font-family: var(--sans); }
+      .phead { height: 64px; background: #1b2560; display: flex; align-items: center; gap: 12px; padding: 0 26px; color: #fff; }
+      .phead .pl { width: 32px; height: 32px; border-radius: 8px; background: #f2b632; color: #1b2560; display: grid; place-items: center; font-weight: 700; font-size: 17px; }
+      .phead b { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+      .phead .pnav { margin-left: auto; display: flex; gap: 22px; font-size: 14.5px; color: rgba(255,255,255,0.78); }
+      .phead .pnav .on { color: #fff; }
+      .pcard { position: absolute; left: 92px; width: 460px; background: #fff; border: 1px solid #e3e1da; border-radius: 16px; padding: 34px 34px;
+        box-shadow: 0 10px 30px rgba(20,20,40,0.07); }
+      .pcard h3 { font-size: 27px; line-height: 36px; height: 36px; font-weight: 600; letter-spacing: -0.025em; white-space: nowrap; }
+      .pcard .sub { font-size: 15px; color: #5d616c; margin-top: 6px; line-height: 22px; height: 44px; }
+      .flabel { font-size: 13.5px; line-height: 18px; height: 18px; font-weight: 500; color: #3c404a; margin-top: 22px; margin-bottom: 8px; }
+      .field { position: relative; height: 48px; border-radius: 10px; border: 1.5px solid #d6d4cd; background: #fff; display: flex; align-items: center;
+        padding: 0 14px; font-size: 16px; color: #15161a; white-space: nowrap; }
+      .field.focus { border-color: #1b2560; box-shadow: 0 0 0 4px rgba(27,37,96,0.12); }
+      .field .dots { letter-spacing: 0.18em; font-size: 20px; }
+      .vaultchip { position: absolute; right: 8px; top: 8px; height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 8px;
+        background: #0f1a14; color: var(--em); font-size: 12.5px; font-weight: 500; }
+      .vaultchip .ic { width: 13px; height: 13px; }
+      .pbtn { margin-top: 26px; height: 50px; border-radius: 10px; background: #1b2560; color: #fff; display: grid; place-items: center; font-size: 16px; font-weight: 600; }
+      .otp { display: flex; gap: 10px; margin-top: 26px; }
+      .otp span { width: 56px; height: 64px; border-radius: 10px; border: 1.5px solid #d6d4cd; background: #fff; display: grid; place-items: center; font-size: 26px; color: #15161a; }
+      .otp span.f { border-color: #1b2560; }
+      .shieldbig { width: 52px; height: 52px; border-radius: 14px; background: #eef0fa; color: #1b2560; display: grid; place-items: center; margin-bottom: 16px; }
+      .shieldbig .ic { width: 26px; height: 26px; }
+      /* invoices */
+      .inv { position: absolute; left: 30px; top: 96px; width: 584px; }
+      .inv h3 { font-size: 30px; line-height: 36px; height: 36px; font-weight: 600; letter-spacing: -0.025em; }
+      .invbar { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+      .fchip { height: 36px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 9px; border: 1.5px solid #1b2560; color: #1b2560;
+        font-size: 14px; font-weight: 500; background: #eef0fa; }
+      .fchip .ic { width: 15px; height: 15px; }
+      .dlall { margin-left: auto; height: 38px; display: inline-flex; align-items: center; gap: 8px; padding: 0 14px; border-radius: 9px; background: #1b2560; color: #fff;
+        font-size: 14px; font-weight: 600; }
+      .dlall .ic { width: 15px; height: 15px; }
+      .tbl { margin-top: 18px; background: #fff; border: 1px solid #e3e1da; border-radius: 14px; overflow: hidden; }
+      .tr { position: relative; height: 58px; display: flex; align-items: center; padding: 0 18px; font-size: 14.5px; border-top: 1px solid #eeede8; }
+      .tr.th { border-top: 0; height: 46px; font-size: 13px; color: #6a6e79; font-weight: 500; background: #fafaf7; }
+      .tr .c1 { width: 170px; font-family: var(--mono); font-size: 13.5px; }
+      .tr .c2 { width: 110px; color: #4a4e59; }
+      .tr .c3 { width: 150px; font-weight: 500; }
+      .tr .c4 { width: 90px; }
+      .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: #fdf1d4; color: #9a6400; }
+      .tag.paid { background: #e5f4ec; color: #1f7a4d; }
+      .tr .dl { margin-left: auto; width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: #1b2560; background: #eef0fa; }
+      .tr .dl .ic { width: 15px; height: 15px; }
+      .tr .hl { position: absolute; inset: 0; background: rgba(47,214,144,0.10); border-left: 3px solid var(--em); opacity: 0; }
+      .muted-row { opacity: 0.45; }
+      .total { margin-top: 14px; font-size: 14px; color: #474b56; display: flex; justify-content: space-between; }
+      .total b { color: #15161a; }
+
+      /* Downloads tray */
+      #tray { left: 16px; top: 668px; width: 644px; height: 264px; border-radius: 16px; background: #1b1a17; border: 1px solid var(--line-2);
+        box-shadow: 0 -20px 50px rgba(0,0,0,0.5); padding: 16px 18px; }
+      #tray .th2 { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+      #tray .th2 .ic { width: 17px; height: 17px; color: var(--em); }
+      #tray .th2 span { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--muted); font-weight: 400; }
+      .dlrow { position: relative; height: 62px; display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line); }
+      .dlrow .fi { width: 36px; height: 36px; border-radius: 9px; background: #2a2622; color: #f08c6b; display: grid; place-items: center; flex: none; }
+      .dlrow .fi .ic { width: 18px; height: 18px; }
+      .dlrow .nm { font-family: var(--mono); font-size: 14px; color: var(--fg); }
+      .dlrow .sz { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+      .dlrow .pb { position: absolute; left: 48px; bottom: 8px; width: 420px; height: 3px; border-radius: 2px; background: rgba(255,250,240,0.08); overflow: hidden; }
+      .dlrow .pb i { display: block; width: 100%; height: 100%; background: var(--em); transform-origin: 0 50%; }
+      .dlrow .ok { margin-left: auto; width: 26px; height: 26px; border-radius: 50%; background: var(--em); color: #05170e; display: grid; place-items: center; }
+      .dlrow .ok .ic { width: 15px; height: 15px; stroke-width: 2.8; }
+
+      /* Slack card */
+      #slack { position: absolute; left: 990px; top: 590px; width: 590px; border-radius: 18px; background: #1a1917; border: 1px solid var(--line-3);
+        box-shadow: 0 40px 100px rgba(0,0,0,0.7), 0 10px 30px rgba(0,0,0,0.5); overflow: hidden; }
+      .sh { height: 58px; display: flex; align-items: center; gap: 10px; padding: 0 20px; border-bottom: 1px solid var(--line); font-size: 17px; font-weight: 600; }
+      .sh .ic { width: 18px; height: 18px; color: var(--muted); }
+      .sh .via { margin-left: auto; font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--muted); font-weight: 400; }
+      .sm { display: flex; gap: 14px; padding: 18px 20px 20px; }
+      .sm .lg { width: 44px; height: 44px; border-radius: 11px; overflow: hidden; flex: none; }
+      .sm .lg svg { width: 44px; height: 44px; }
+      .sm .who { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; }
+      .sm .app { font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; padding: 2px 5px; border-radius: 4px; background: #2d2b27; color: #bdb9b0; }
+      .sm .tm { font-size: 13px; color: var(--muted); font-weight: 400; }
+      .sm p { font-size: 16px; line-height: 1.5; color: #e2ded6; margin-top: 4px; width: 470px; }
+      .att { margin-top: 12px; width: 470px; border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; }
+      .att div { height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 13.5px; }
+      .att div:first-child { border-top: 0; }
+      .att .ic { width: 16px; height: 16px; color: #f08c6b; }
+      .att em { margin-left: auto; font-style: normal; color: var(--muted); font-family: var(--sans); font-size: 13.5px; }
+
+      /* ---------- HUD ---------- */
+      #hud { position: absolute; inset: 0; pointer-events: none; }
+      .hud-tl { position: absolute; left: 64px; top: 50px; display: flex; align-items: center; gap: 14px; }
+      .hud-tl .logo { width: 40px; height: 40px; }
+      .hud-tl b { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+      .hud-tr { position: absolute; right: 56px; top: 44px; display: flex; align-items: center; gap: 14px; font-size: 18px; height: 48px; padding: 0 20px 0 18px; border-radius: 999px; background: rgba(16,16,14,0.78); border: 1px solid var(--line-2); backdrop-filter: blur(18px); }
+      .hud-tr .sep { width: 1px; height: 18px; background: var(--line-3); }
+      .hud-bl { position: absolute; left: 64px; bottom: 54px; width: 900px; height: 80px; }
+      .cap { position: absolute; left: 0; bottom: 0; }
+      .cap .k { font-family: var(--mono); font-size: 17px; letter-spacing: 0.16em; color: var(--em); text-transform: uppercase; }
+      .cap .k span { color: var(--muted); }
+      .cap .v { font-size: 30px; font-weight: 500; letter-spacing: -0.025em; margin-top: 8px; white-space: nowrap; }
+      .hud-br { position: absolute; right: 64px; bottom: 58px; display: flex; align-items: center; gap: 12px; font-size: 18px; }
+      .hud-br .by { font-family: var(--mono); font-size: 14px; letter-spacing: 0.16em; color: var(--muted); }
+
+      /* ---------- Tagline ---------- */
+      #tag { position: absolute; inset: 0; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      #tag .tlogo { width: 104px; height: 104px; margin-bottom: 44px; }
+      #tag h1 { font-size: 118px; text-align: center; width: 1500px; }
+      #tag h1 .serif { font-size: 132px; color: var(--fg); }
+      #tag .tsub { display: flex; align-items: center; gap: 16px; margin-top: 48px; font-size: 22px; color: #d8d4cc; }
+      #tag .tsub .div { width: 1px; height: 22px; background: var(--line-3); }
+      #tag .tsub .m { font-family: var(--mono); font-size: 17px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="25" data-width="1920" data-height="1080">
+      <div id="scene" class="clip" data-start="0" data-duration="25" data-track-index="0">
+        <div class="bg-field"></div>
+        <div class="bg-warm" id="warm" style="left: 260px; top: -260px; width: 1400px; height: 900px"></div>
+        <div class="bg-glow" id="glow" style="left: 410px; top: 90px; width: 1100px; height: 1100px"></div>
+        <div class="guide-v" style="left: 240px"></div>
+        <div class="guide-v" style="left: 1680px"></div>
+        <div class="guide-h" style="top: 150px"></div>
+        <div class="guide-h" style="top: 930px"></div>
+        <div class="reg" style="left: 231px; top: 141px"></div>
+        <div class="reg" style="left: 1671px; top: 141px"></div>
+        <div class="reg" style="left: 231px; top: 921px"></div>
+        <div class="reg" style="left: 1671px; top: 921px"></div>
+
+        <div id="stage">
+          <div id="world">
+            <div id="app">
+              <div id="app-frame"></div>
+
+              <div id="titlebar" class="layer">
+                <div class="traffic color"><i></i><i></i><i></i></div>
+                <div class="ttl">Godmode</div>
+              </div>
+
+              <div id="sidebar" class="layer">
+                <div class="brand"><div class="logo" data-logo></div><div><b>Godmode</b><small>AI COWORKER</small></div></div>
+                <div class="ws" data-icon="layers">All workspaces</div>
+                <div class="newchat" data-icon="plus">New chat<kbd>⌘N</kbd></div>
+                <div class="nav on" data-icon="chat">Chat</div>
+                <div class="nav" data-icon="bot">Agents</div>
+                <div class="nav" data-icon="routines">Routines</div>
+                <div class="nav" data-icon="activity">Activity</div>
+                <div class="nav" data-icon="inbox">Inbox<span class="count">3</span></div>
+                <div class="sec">ACCESS</div>
+                <div class="nav" data-icon="key">Logins</div>
+                <div class="nav" data-icon="shield">2FA Codes</div>
+                <div class="nav" data-icon="plug">Integrations</div>
+                <div class="nav" data-icon="globe">Browser</div>
+                <div class="nav" data-icon="monitor">Computer</div>
+                <div class="nav" data-icon="box">Virtual machines</div>
+                <div class="online"><i></i>Online</div>
+              </div>
+
+              <div id="chathead" class="layer">
+                <div class="av" data-logo="bolt"></div><span>Godmode</span><span class="sep">›</span>
+                <span class="task">Log into our billing portal, download September's invoices…</span>
+              </div>
+
+              <div id="msgs" class="layer">
+                <div id="thread">
+                  <div class="today">TODAY</div>
+                  <div id="ubub">Log into our billing portal, download September's invoices and send them to accounting.</div>
+                  <div class="agent" id="agenthead">
+                    <div class="av" data-logo="bolt"></div><b>Godmode</b>
+                    <div class="status">
+                      <span class="s-work" id="s-work"><svg class="spin" id="spin-main" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="rgba(255,250,240,0.15)" stroke-width="2.4"/><path d="M12 3a9 9 0 0 1 9 9" stroke="#2fd690" stroke-width="2.4" stroke-linecap="round"/></svg>Working</span>
+                      <span class="s-done" id="s-done" data-icon="check">Done</span>
+                    </div>
+                  </div>
+                  <div id="steps">
+                    <div id="stepsbg"></div>
+                    <div class="shead" id="shead"><div class="icons"><span data-icon="globe"></span><span data-icon="key"></span><span data-icon="download"></span></div>
+                      <div><div class="t1">Acme Billing · invoices</div></div><div class="t2" id="stepcount">1 step</div></div>
+                    <div class="row" id="r1"><div class="ico" data-icon="globe"></div><div><div class="t1">Opened billing.acme.example</div><div class="t2">Your browser profile · signed-in sessions</div></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></div>
+                    <div class="row vault" id="r2"><div class="ico" data-icon="key"></div><div><div class="t1">Looked up login for Acme Billing</div><div class="t2">Encrypted vault</div></div><span class="secret" data-icon="lock">Secret hidden</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></div>
+                    <div class="row vault" id="r3"><div class="ico" data-icon="key"></div><div><div class="t1">Filled password</div><div class="t2">from vault · never shown to the AI</div></div><span class="secret" data-icon="lock">Secret hidden</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></div>
+                    <div class="row vault" id="r4"><div class="ico" data-icon="shield"></div><div><div class="t1">Filled 2FA code</div><div class="t2">TOTP · never shown to the AI</div></div><span class="secret" data-icon="lock">Secret hidden</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></div>
+                    <div class="row" id="r5"><div class="ico" data-icon="download"></div><div><div class="t1">Downloaded 3 invoices</div><div class="t2">September 2026 · EUR 4,242.00</div></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></div>
+                    <div class="row" id="r6"><div class="ico" data-icon="hash"></div><div><div class="t1">Sent to #accounting</div><div class="t2">Slack · 3 attachments</div></div><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></div>
+                  </div>
+                  <div id="donemsg"><div class="ck" data-icon="check"></div><div><b>Done.</b><p>September's 3 invoices from Acme Billing (EUR 4,242.00) are in #accounting on Slack.</p></div></div>
+                </div>
+              </div>
+
+              <div id="ask" class="layer">What should we get done?</div>
+              <div id="composer" class="layer">
+                <div id="cmp-text"><span id="typed"></span><span class="caret" id="caret"></span><span id="ph">Ask Godmode anything, or hand over a task…</span></div>
+                <div id="cmp-tools">
+                  <div class="tb" data-icon="folder"></div><div class="tb" data-icon="clip"></div><div class="tb" data-icon="mic"></div>
+                  <div id="model"><span class="claude-dot"></span>Claude Opus 5.5</div>
+                  <div id="send" data-icon="up"></div>
+                </div>
+                <div id="send-glow"></div>
+              </div>
+              <div id="foot" class="layer">Agents act for you with your saved logins — secrets are filled into the browser, never shown to the AI.</div>
+
+              <div id="bpanel" class="layer">
+                <div class="bhead"><b>Browser</b><span class="livechip"><i></i>Live</span><span class="profile" data-icon="user">Your profile</span><span class="takectl" data-icon="hand">Take control</span></div>
+                <div class="urlrow"><div class="rf" data-icon="refresh"></div><div class="url" data-icon="lock"><span id="urltext"></span></div></div>
+                <div id="loadbar"></div>
+                <div class="bnote"><i></i>Agents work in this browser — take over anytime.</div>
+                <div id="vp">
+                  <div id="vp-blank"></div>
+                  <!-- Page A: login -->
+                  <div class="page" id="pgA">
+                    <div class="phead"><div class="pl">A</div><b>Acme Billing</b><div class="pnav"><span>Pricing</span><span>Support</span></div></div>
+                    <div class="pcard" style="top: 120px">
+                      <h3>Sign in</h3>
+                      <div class="sub">Access invoices and statements for your account.</div>
+                      <div class="flabel">Email</div>
+                      <div class="field" id="f-email"><span id="emailtext"></span></div>
+                      <div class="flabel">Password</div>
+                      <div class="field" id="f-pass"><span class="dots" id="passdots"></span><span class="vaultchip" id="vc1" data-icon="lock">From vault</span></div>
+                      <div class="pbtn" id="signin">Sign in</div>
+                    </div>
+                  </div>
+                  <!-- Page B: 2FA -->
+                  <div class="page" id="pgB">
+                    <div class="phead"><div class="pl">A</div><b>Acme Billing</b><div class="pnav"><span>Pricing</span><span>Support</span></div></div>
+                    <div class="pcard" style="top: 130px">
+                      <div class="shieldbig" data-icon="shield"></div>
+                      <h3>Two-factor authentication</h3>
+                      <div class="sub">Enter the 6-digit code from your authenticator app.</div>
+                      <div class="otp" id="otp"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+                      <div class="pbtn" id="verify">Verify</div>
+                    </div>
+                  </div>
+                  <!-- Page C: invoices -->
+                  <div class="page" id="pgC">
+                    <div class="phead"><div class="pl">A</div><b>Acme Billing</b><div class="pnav"><span>Dashboard</span><span class="on">Invoices</span><span>Account</span></div></div>
+                    <div class="inv">
+                      <h3>Invoices</h3>
+                      <div class="invbar"><span class="fchip" data-icon="calendar">September 2026</span><span class="dlall" id="dlall" data-icon="download">Download all (3)</span></div>
+                      <div class="tbl">
+                        <div class="tr th"><span class="c1">Invoice</span><span class="c2">Date</span><span class="c3">Amount</span><span class="c4">Status</span></div>
+                        <div class="tr" id="iv1"><div class="hl"></div><span class="c1">INV-2026-0931</span><span class="c2">Sep 21</span><span class="c3">EUR 1,890.00</span><span class="c4"><span class="tag">Due</span></span><span class="dl" data-icon="download"></span></div>
+                        <div class="tr" id="iv2"><div class="hl"></div><span class="c1">INV-2026-0917</span><span class="c2">Sep 14</span><span class="c3">EUR 1,512.00</span><span class="c4"><span class="tag">Due</span></span><span class="dl" data-icon="download"></span></div>
+                        <div class="tr" id="iv3"><div class="hl"></div><span class="c1">INV-2026-0904</span><span class="c2">Sep 04</span><span class="c3">EUR 840.00</span><span class="c4"><span class="tag paid">Paid</span></span><span class="dl" data-icon="download"></span></div>
+                        <div class="tr muted-row"><span class="c1">INV-2026-0828</span><span class="c2">Aug 28</span><span class="c3">EUR 1,204.00</span><span class="c4"><span class="tag paid">Paid</span></span><span class="dl" data-icon="download"></span></div>
+                      </div>
+                      <div class="total"><span>3 invoices in September</span><b>EUR 4,242.00</b></div>
+                    </div>
+                  </div>
+                </div>
+                <div id="tray" class="layer">
+                  <div class="th2" data-icon="download">Downloads<span id="dlcount">0 of 3</span></div>
+                  <div class="dlrow" id="d1"><div class="fi" data-icon="file"></div><div><div class="nm">INV-2026-0931.pdf</div><div class="sz">Acme Billing · 184 KB</div></div><div class="pb"><i></i></div><div class="ok" data-icon="check"></div></div>
+                  <div class="dlrow" id="d2"><div class="fi" data-icon="file"></div><div><div class="nm">INV-2026-0917.pdf</div><div class="sz">Acme Billing · 176 KB</div></div><div class="pb"><i></i></div><div class="ok" data-icon="check"></div></div>
+                  <div class="dlrow" id="d3"><div class="fi" data-icon="file"></div><div><div class="nm">INV-2026-0904.pdf</div><div class="sz">Acme Billing · 162 KB</div></div><div class="pb"><i></i></div><div class="ok" data-icon="check"></div></div>
+                </div>
+              </div>
+
+              <div class="cursor agent" id="acur" data-kind="agent"><span class="cursor-tag">Godmode</span></div>
+              <div class="ripple" id="rip"></div>
+            </div>
+
+            <div id="slack">
+              <div class="sh" data-icon="hash">accounting<span class="via">SLACK</span></div>
+              <div class="sm">
+                <div class="lg" data-logo></div>
+                <div>
+                  <div class="who">Godmode <span class="app">APP</span><span class="tm">9:41 AM</span></div>
+                  <p>September's invoices from Acme Billing — 3 files, EUR 4,242.00 total.</p>
+                  <div class="att">
+                    <div data-icon="file">INV-2026-0931.pdf<em>EUR 1,890.00</em></div>
+                    <div data-icon="file">INV-2026-0917.pdf<em>EUR 1,512.00</em></div>
+                    <div data-icon="file">INV-2026-0904.pdf<em>EUR 840.00</em></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="scrim-top" data-layout-allow-occlusion></div>
+        <div class="scrim-bot" data-layout-allow-occlusion></div>
+        <div id="hud">
+          <div class="hud-tl"><div class="logo" data-logo></div><b>Godmode Bot</b></div>
+          <div class="hud-tr"><span class="live-dot" id="hdot"><span class="live-ring" id="hring"></span></span><span class="label" style="font-size: 16px">Runs locally on your Mac</span></div>
+          <div class="hud-bl">
+            <div class="cap" id="c1"><div class="k">01 <span>— Task</span></div><div class="v">Hand it a task in one line.</div></div>
+            <div class="cap" id="c2"><div class="k">02 <span>— Browser</span></div><div class="v">It opens the portal in your browser.</div></div>
+            <div class="cap" id="c3"><div class="k">03 <span>— Vault</span></div><div class="v">Fills your login. The AI never sees it.</div></div>
+            <div class="cap" id="c4"><div class="k">04 <span>— 2FA</span></div><div class="v">Types the 2FA code for you.</div></div>
+            <div class="cap" id="c5"><div class="k">05 <span>— Files</span></div><div class="v">Downloads September's invoices.</div></div>
+            <div class="cap" id="c6"><div class="k">06 <span>— Slack</span></div><div class="v">Sends them to #accounting.</div></div>
+            <div class="cap" id="c7"><div class="k">07 <span>— Done</span></div><div class="v">Done. You didn't touch a thing.</div></div>
+          </div>
+          <div class="hud-br"><span class="by">POWERED BY</span><span class="claude-dot"></span><span>Claude Opus 5.5</span></div>
+        </div>
+
+        <div id="tag">
+          <div class="tlogo" data-logo id="tlogo"></div>
+          <h1 class="headline" id="tagh">Your AI coworker that <span class="serif">actually</span> does the work.</h1>
+          <div class="tsub" id="tsub"><span class="m">Browser · Vault &amp; 2FA · Its own Mac · Agents</span><span class="div"></span><span class="claude-dot"></span><span>Powered by Claude Opus 5.5</span></div>
+        </div>
+
+        <div class="grain"></div>
+      </div>
+    </div>
+
+    <script src="assets/lib.js"></script>
+    <script>
+      GM.hydrate(document);
+      const D = 25;
+      const tl = gsap.timeline({ paused: true });
+      const $ = (s) => document.querySelector(s);
+      const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+      // ---------- Initial states ----------
+      const appParts = ["#app-frame", "#titlebar", "#sidebar", "#chathead", "#msgs", "#bpanel", "#foot"];
+      gsap.set(appParts, { opacity: 0 });
+      gsap.set(["#s-done", "#slack", "#acur", "#pgA", "#pgB", "#pgC"], { opacity: 0 });
+      gsap.set(".cap", { opacity: 0 });
+      gsap.set(["#tag"], { opacity: 0 });
+      const words = GM.splitWords($("#tagh"));
+
+      // ---------- Camera (window coordinates, 1600x1000) ----------
+      const cam = new GM.Camera(tl, $("#world"), 1920, 1080);
+      cam.set(594, 872, 1.9);
+      cam.to(594, 880, 2.0, 0.0, 4.8, "sine.inOut");       // slow push while typing
+      cam.to(800, 506, 0.9, 5.0, 1.7, "power4.inOut");     // zoom-out: the app assembles
+      cam.to(850, 500, 0.93, 6.7, 1.5, "sine.inOut");      // drift toward the browser
+      cam.to(1236, 540, 1.6, 8.2, 1.0, "power4.inOut");    // push: login form
+      cam.to(1250, 548, 1.66, 9.2, 2.4, "sine.inOut");     //   micro drift through login + 2FA
+      cam.to(640, 520, 1.46, 11.65, 1.0, "power4.inOut");  // glance: "Secret hidden" rows
+      cam.to(650, 524, 1.5, 12.65, 0.35, "sine.inOut");
+      cam.to(1030, 540, 1.1, 13.0, 1.0, "power4.inOut");   // invoices
+      cam.to(1060, 560, 1.14, 14.0, 1.0, "sine.inOut");
+      cam.to(1285, 748, 1.46, 15.0, 1.0, "power4.inOut");  // Slack message
+      cam.to(1295, 752, 1.5, 16.0, 0.8, "sine.inOut");
+      cam.to(600, 650, 1.66, 16.85, 1.0, "power4.inOut");  // Done.
+      cam.to(606, 654, 1.72, 17.85, 0.75, "sine.inOut");
+      cam.to(800, 500, 0.72, 18.6, 1.2, "power3.inOut");   // recede
+      cam.to(594, 872, 1.9, 23.4, 0.05, "none");           // loop reset (window hidden)
+
+      // ---------- Opening: the composer ----------
+      const TASK = "Log into our billing portal, download September's invoices and send them to accounting.";
+      const sched = GM.typeSchedule(TASK, 0.75, 26, 11);
+      tl.fromTo("#send-glow", { opacity: 0 }, { opacity: 1, duration: 0.12 }, 4.62);
+      tl.to("#send-glow", { opacity: 0, duration: 0.5 }, 5.1);
+      tl.fromTo("#send", { scale: 1 }, { scale: 0.86, duration: 0.09, ease: "power2.in" }, 4.62);
+      tl.to("#send", { scale: 1, duration: 0.3, ease: "back.out(3)" }, 4.71);
+      tl.fromTo("#ask", { opacity: 1, y: 0 }, { opacity: 0, y: -16, duration: 0.5, ease: "power2.in" }, 4.95);
+
+      // App assembles around the composer
+      tl.to("#app-frame", { opacity: 1, duration: 0.9, ease: "power2.out" }, 5.3);
+      tl.to(["#titlebar", "#sidebar", "#chathead", "#msgs", "#foot"], { opacity: 1, duration: 0.8, stagger: 0.06, ease: "power2.out" }, 5.6);
+      tl.to("#bpanel", { opacity: 1, duration: 0.8, ease: "power2.out" }, 5.75);
+      tl.fromTo("#ubub", { opacity: 0, y: 30, filter: "blur(8px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.8, ease: "expo.out" }, 5.6);
+      tl.fromTo("#agenthead", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.7, ease: "expo.out" }, 6.0);
+      tl.fromTo("#steps", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.7, ease: "expo.out" }, 6.25);
+
+      // Steps card grows row by row
+      const ROW_T = [6.5, 7.7, 9.95, 11.05, 13.5, 14.85];
+      const ROW_DONE = [7.55, 9.1, 10.8, 11.6, 14.85, 15.6];
+      const cardH = (n) => 62 + n * 58 + 10;
+      tl.fromTo("#stepsbg", { clipPath: `inset(0px 0px ${470 - cardH(1)}px 0px round 18px)` }, { clipPath: `inset(0px 0px ${470 - cardH(1)}px 0px round 18px)`, duration: 0.01 }, 6.25);
+      ROW_T.forEach((t, i) => {
+        tl.fromTo(`#r${i + 1}`, { opacity: 0, y: 14, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.6, ease: "expo.out" }, t);
+        if (i > 0) tl.to("#stepsbg", { clipPath: `inset(0px 0px ${470 - cardH(i + 1)}px 0px round 18px)`, duration: 0.55, ease: "expo.out" }, t - 0.05);
+      });
+      [["#r2", 7.75], ["#r3", 10.0], ["#r4", 11.1]].forEach(([r, t]) => {
+        tl.fromTo(`${r} .secret`, { scale: 0.7 }, { scale: 1, duration: 0.5, ease: "back.out(2.5)", immediateRender: false }, t + 0.15);
+      });
+      // Thread scrolls as the answer lands
+      tl.fromTo("#thread", { y: 0 }, { y: -130, duration: 0.9, ease: "power3.inOut" }, 16.6);
+      tl.fromTo("#donemsg", { opacity: 0, y: 18, filter: "blur(8px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.8, ease: "expo.out" }, 16.95);
+      tl.fromTo("#donemsg .ck", { scale: 0.4 }, { scale: 1, duration: 0.6, ease: "back.out(2.4)" }, 17.0);
+      tl.fromTo("#s-work", { opacity: 1 }, { opacity: 0, duration: 0.25 }, 16.9);
+      tl.to("#s-done", { opacity: 1, duration: 0.3 }, 17.0);
+
+      // ---------- Browser ----------
+      const URL = "billing.acme.example/login";
+      const urlSched = GM.typeSchedule(URL, 6.55, 34, 3);
+      tl.fromTo("#loadbar", { opacity: 1, scaleX: 0 }, { opacity: 1, scaleX: 1, duration: 0.8, ease: "power2.inOut", immediateRender: false }, 7.2);
+      tl.to("#loadbar", { opacity: 0, duration: 0.2 }, 8.0);
+      tl.fromTo("#vp-blank", { opacity: 1 }, { opacity: 0, duration: 0.4 }, 7.6);
+      tl.to("#pgA", { opacity: 1, duration: 0.4 }, 7.55);
+      tl.fromTo("#pgA .pcard", { y: 18 }, { y: 0, duration: 0.8, ease: "expo.out" }, 7.55);
+
+      // Agent cursor (window coords). Field centers: email (1262,514) password (1262,610) sign-in (1262,685) verify (1262,661)
+      GM.cursorPath(tl, $("#acur"), { x: 1250, y: 1000 }, [
+        { x: 1180, y: 510, t: 8.5, dur: 0.7 },
+        { x: 1180, y: 606, t: 9.55, dur: 0.3 },
+        { x: 1262, y: 680, t: 10.3, dur: 0.4 },
+        { x: 1262, y: 656, t: 11.1, dur: 0.3 },
+        { x: 1462, y: 364, t: 13.2, dur: 0.55 },
+        { x: 1490, y: 430, t: 14.05, dur: 0.5 }
+      ]);
+      tl.fromTo("#acur", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 8.4);
+      tl.to("#acur", { opacity: 0, duration: 0.3 }, 14.5);
+      GM.click(tl, $("#acur"), $("#rip"), 1182, 512, 9.2);
+      GM.click(tl, $("#acur"), $("#rip"), 1182, 608, 9.9);
+      GM.click(tl, $("#acur"), $("#rip"), 1264, 682, 10.75);
+      GM.click(tl, $("#acur"), $("#rip"), 1264, 658, 11.55);
+      GM.click(tl, $("#acur"), $("#rip"), 1464, 366, 13.75);
+      tl.fromTo("#vc1", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }, 10.05);
+      tl.fromTo("#signin", { scale: 1 }, { scale: 0.97, duration: 0.08 }, 10.75);
+      tl.to("#signin", { scale: 1, duration: 0.25, ease: "back.out(3)" }, 10.83);
+      tl.to("#pgA", { opacity: 0, duration: 0.3 }, 10.95);
+      tl.to("#pgB", { opacity: 1, duration: 0.3 }, 10.95);
+      tl.fromTo("#pgB .pcard", { y: 16 }, { y: 0, duration: 0.7, ease: "expo.out" }, 10.95);
+      tl.fromTo("#verify", { scale: 1 }, { scale: 0.97, duration: 0.08 }, 11.55);
+      tl.to("#verify", { scale: 1, duration: 0.25, ease: "back.out(3)" }, 11.63);
+      tl.to("#pgB", { opacity: 0, duration: 0.35 }, 11.8);
+      tl.to("#pgC", { opacity: 1, duration: 0.35 }, 11.8);
+      tl.fromTo("#pgC .inv", { y: 18 }, { y: 0, duration: 0.8, ease: "expo.out" }, 11.8);
+      tl.fromTo(["#iv1 .hl", "#iv2 .hl", "#iv3 .hl"], { opacity: 0 }, { opacity: 1, duration: 0.35, stagger: 0.12 }, 13.05);
+      tl.fromTo("#dlall", { scale: 1 }, { scale: 0.95, duration: 0.08 }, 13.75);
+      tl.to("#dlall", { scale: 1, duration: 0.25, ease: "back.out(3)" }, 13.83);
+      // Downloads tray
+      tl.fromTo("#tray", { opacity: 0, y: 80 }, { opacity: 1, y: 0, duration: 0.7, ease: "expo.out" }, 13.85);
+      const DL = [[14.0, 0.6], [14.15, 0.65], [14.3, 0.55]];
+      DL.forEach(([t, d], i) => {
+        tl.fromTo(`#d${i + 1} .pb i`, { scaleX: 0 }, { scaleX: 1, duration: d, ease: "power1.inOut" }, t);
+        tl.fromTo(`#d${i + 1} .ok`, { opacity: 0, scale: 0.4 }, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2.5)" }, t + d);
+        tl.fromTo(`#d${i + 1} .pb`, { opacity: 1 }, { opacity: 0, duration: 0.3 }, t + d + 0.1);
+      });
+      // Slack message
+      tl.fromTo("#slack", { opacity: 0, y: 60, scale: 0.94, filter: "blur(10px)" }, { opacity: 1, y: 0, scale: 1, filter: "blur(0px)", duration: 0.9, ease: "expo.out", immediateRender: false }, 14.9);
+      tl.fromTo("#slack .att div", { opacity: 0, x: -12 }, { opacity: 1, x: 0, duration: 0.5, stagger: 0.1, ease: "expo.out" }, 15.35);
+      tl.to("#slack", { opacity: 0, y: 30, duration: 0.5, ease: "power2.in" }, 16.75);
+
+      // ---------- Recede + loop reset ----------
+      tl.fromTo("#app", { opacity: 1, filter: "blur(0px)" }, { opacity: 0, filter: "blur(10px)", duration: 0.9, ease: "power2.in" }, 18.6);
+      const resetT = 23.45;
+      tl.set(appParts.concat(["#ubub", "#agenthead", "#steps", "#donemsg", "#tray", "#pgC", "#composer", "#ask", ".row"]), { opacity: 0 }, resetT);
+      tl.set("#vp-blank", { opacity: 1 }, resetT);
+      tl.set("#s-work", { opacity: 1 }, resetT);
+      tl.set(["#s-done", "#vc1"], { opacity: 0 }, resetT);
+      tl.set("#thread", { y: 0 }, resetT);
+      tl.set("#app", { opacity: 1, filter: "blur(0px)" }, resetT + 0.02);
+      tl.fromTo(["#composer", "#ask"], { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 1.0, ease: "expo.out", immediateRender: false }, 23.6);
+
+      // ---------- Captions ----------
+      const CAPS = [
+        ["#c1", 0.0, 4.9], ["#c2", 5.4, 8.1], ["#c3", 8.4, 10.8], ["#c4", 11.1, 12.65],
+        ["#c5", 12.95, 14.65], ["#c6", 14.95, 16.65], ["#c7", 16.95, 18.6]
+      ];
+      CAPS.forEach(([id, a, b], i) => {
+        if (i === 0) {
+          tl.fromTo(id, { opacity: 1, y: 0, filter: "blur(0px)" }, { opacity: 0, y: -10, filter: "blur(6px)", duration: 0.4, ease: "power2.in" }, b);
+        } else {
+          tl.fromTo(id, { opacity: 0, y: 16, filter: "blur(8px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.6, ease: "expo.out" }, a);
+          tl.to(id, { opacity: 0, y: -10, filter: "blur(6px)", duration: 0.3, ease: "power2.in" }, b);
+        }
+      });
+      tl.fromTo("#c1", { opacity: 0, y: 16, filter: "blur(8px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.8, ease: "expo.out", immediateRender: false }, 23.75);
+      tl.fromTo(".hud-tl", { opacity: 1 }, { opacity: 0, duration: 0.5 }, 5.0);
+      tl.fromTo([".hud-tr", ".hud-br"], { opacity: 1 }, { opacity: 0, duration: 0.5 }, 18.7);
+      tl.to([".hud-tr", ".hud-br", ".hud-tl"], { opacity: 1, duration: 0.8 }, 23.7);
+
+      // ---------- Tagline ----------
+      tl.set("#tag", { opacity: 1 }, 19.2);
+      tl.fromTo("#tlogo", { opacity: 0, scale: 0.7, filter: "blur(12px)" }, { opacity: 1, scale: 1, filter: "blur(0px)", duration: 1.0, ease: "expo.out" }, 19.3);
+      GM.reveal(tl, words, 19.6, { y: 30, blur: 16, dur: 1.0, stagger: 0.07 });
+      tl.fromTo("#tsub", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.9, ease: "expo.out" }, 20.6);
+      tl.to(["#tlogo", "#tsub"], { opacity: 0, filter: "blur(10px)", duration: 0.6, ease: "power2.in" }, 22.65);
+      GM.conceal(tl, words, 22.6, { stagger: 0.02, dur: 0.5 });
+      tl.set("#tag", { opacity: 0 }, 23.35);
+
+      // Background glow follows the story
+      tl.fromTo("#glow", { opacity: 0.7, scale: 0.62, x: 0, y: 40 }, { opacity: 0.9, scale: 1, x: 0, y: 0, duration: 2.2, ease: "power2.inOut" }, 4.8);
+      tl.to("#glow", { x: 240, y: 60, duration: 5, ease: "sine.inOut" }, 8.0);
+      tl.to("#glow", { x: 0, y: 40, scale: 1.1, opacity: 1, duration: 3, ease: "sine.inOut" }, 16.6);
+      tl.to("#glow", { opacity: 0.7, scale: 0.62, x: 0, y: 40, duration: 1.2, ease: "power2.inOut" }, 23.3);
+      GM.livePulse(tl, $("#hring"), 0.2, 24.8, 1.6);
+
+      // ---------- Per-frame state: typing, spinners, dots ----------
+      const typed = $("#typed"), ph = $("#ph"), caret = $("#caret"), urlEl = $("#urltext");
+      const emailEl = $("#emailtext"), passEl = $("#passdots"), otp = $$("#otp span");
+      const fEmail = $("#f-email"), fPass = $("#f-pass");
+      const EMAIL = "finance@codext.example";
+      const emailSched = GM.typeSchedule(EMAIL, 9.25, 62, 5);
+      const spins = [];
+      ROW_T.forEach((t, i) => {
+        const ico = $(`#r${i + 1} .ico`);
+        ico.insertAdjacentHTML("beforeend", '<svg class="spin" viewBox="0 0 24 24" fill="none"><path d="M12 2.5a9.5 9.5 0 0 1 9.5 9.5" stroke="#2fd690" stroke-width="1.6" stroke-linecap="round"/></svg>');
+        spins.push(ico.querySelector(".spin"));
+      });
+      const mainSpin = $("#spin-main"), stepCount = $("#stepcount"), dlCount = $("#dlcount");
+      function update(t) {
+        cam.apply(t);
+        const reset = t >= resetT;
+        const txt = reset || t >= 5.02 ? "" : GM.typedAt(sched, TASK, t);
+        typed.textContent = txt;
+        ph.style.display = txt.length ? "none" : "inline";
+        caret.style.opacity = t > 0.72 && t < 4.62 ? 1 : GM.blinkOn(t, 1.0) ? 1 : 0;
+        urlEl.innerHTML = t < 6.55 || reset ? '<span class="dim">about:blank</span>' : "https://" + GM.typedAt(urlSched, URL, t);
+        emailEl.textContent = t < 9.25 ? "" : GM.typedAt(emailSched, EMAIL, t);
+        passEl.textContent = "•".repeat(t < 9.95 ? 0 : Math.min(14, Math.floor((t - 9.95) / 0.035)));
+        fEmail.classList.toggle("focus", t >= 9.2 && t < 9.9);
+        fPass.classList.toggle("focus", t >= 9.9 && t < 10.75);
+        const on = t < 11.12 ? 0 : Math.min(6, Math.floor((t - 11.12) / 0.07) + 1);
+        otp.forEach((s, i) => { s.textContent = i < on ? "•" : ""; s.classList.toggle("f", i < on); });
+        ROW_T.forEach((a, i) => {
+          const active = t >= a && t < ROW_DONE[i];
+          spins[i].style.opacity = active ? 1 : 0;
+          spins[i].style.transform = `rotate(${(t * 420) % 360}deg)`;
+          spins[i].parentNode.querySelector(".ic").style.opacity = active ? 0.25 : 1;
+        });
+        mainSpin.style.transform = `rotate(${(t * 360) % 360}deg)`;
+        const n = ROW_T.filter((a) => t >= a).length;
+        stepCount.textContent = n <= 1 ? "1 step" : n + " steps";
+        dlCount.textContent = DL.filter(([a, d]) => t >= a + d).length + " of 3";
+      }
+      GM.driver(tl, D, update);
+      GM.markLayered(["#world"], [".scrim-top", ".scrim-bot", "#slack", "#tray", "#tag"]);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

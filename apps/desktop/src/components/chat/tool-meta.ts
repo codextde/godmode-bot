@@ -1,5 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  AlarmClock,
+  AlarmClockOff,
   ArrowLeft,
   Bell,
   Box,
@@ -305,7 +307,20 @@ const GODMODE_TOOLS = new Set([
   "runs_list",
   "workspaces_list",
   "notify_user",
+  "followup_schedule",
+  "followup_cancel",
 ]);
+
+/** "in 90 min" or the `at` time of a followup_schedule call. */
+function followupTime(input: Input): string {
+  if (typeof input.inMinutes === "number") {
+    const m = input.inMinutes;
+    return m < 90 ? `in ${m} min` : m < 48 * 60 ? `in ${Math.round(m / 60)} h` : `in ${Math.round(m / 1440)} days`;
+  }
+  const at = new Date(str(input.at).replace(" ", "T"));
+  if (Number.isNaN(at.getTime())) return "later";
+  return `on ${at.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+}
 
 /** What starts an automation, for routine_create / routine_update: the app event, the condition or the cron. */
 function automationDetail(input: Input): string | undefined {
@@ -382,6 +397,10 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       return { kind: "agents", icon: Layers, title: "Listed workspaces" };
     case "notify_user":
       return { kind: "notify", icon: Bell, title: "Sent you a notification", detail: str(input.title) || undefined };
+    case "followup_schedule":
+      return { kind: "notify", icon: AlarmClock, title: `Will continue ${followupTime(input)}`, detail: truncate(str(input.note), 120) || undefined };
+    case "followup_cancel":
+      return { kind: "notify", icon: AlarmClockOff, title: "Cancelled its follow-up" };
     default:
       return null;
   }

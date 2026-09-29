@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Godmode Bot — X ad (16x9)</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="assets/brand.css" />
+    <link rel="stylesheet" href="assets/scenes.css" />
+    <link rel="stylesheet" href="assets/ad.css" />
+    <style>
+      @font-face { font-family: "Geist"; src: url("assets/fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
+      html, body { width: 1920px; height: 1080px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="18" data-width="1920" data-height="1080">
+      <div id="scene" class="clip" data-start="0" data-duration="18" data-track-index="0"></div>
+    </div>
+    <script src="assets/lib.js"></script>
+    <script src="assets/scenes/vm.js"></script>
+    <script src="assets/ad.js"></script>
+    <script src="assets/ads/ad-main.js"></script>
+    <script>
+      window.__timelines["main"] = GM.buildAdMain("16x9");
+    </script>
+  </body>
+</html>

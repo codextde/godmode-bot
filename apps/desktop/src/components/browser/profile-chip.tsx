@@ -32,12 +32,15 @@ function ProfileTile({ profile, quiet }: { profile: BrowserProfile | null; quiet
 export function BrowserProfileChip({
   agent,
   value,
+  workspaceId = null,
   onChange,
   busy,
 }: {
   agent: Agent | undefined;
   /** The chat's own profile; null = the agent's. */
   value: string | null;
+  /** Workspace the chat is in: a global agent browses with its default. */
+  workspaceId?: string | null;
   onChange: (profileId: string | null) => void | Promise<unknown>;
   busy?: boolean;
 }) {
@@ -53,7 +56,7 @@ export function BrowserProfileChip({
 
   const scopeName = (p: BrowserProfile) => (p.workspaceId ? (workspaces.find((w) => w.id === p.workspaceId)?.name ?? "Workspace") : "Global");
   const own = value ? (profiles.find((p) => p.id === value) ?? null) : null;
-  const fallback = agentBrowserProfile(agent, profiles);
+  const fallback = agentBrowserProfile(agent, profiles, null, workspaceId);
   const fallbackFrom = !fallback
     ? "Loading profiles…"
     : agent.browser.profileId === fallback.id

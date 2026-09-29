@@ -75,6 +75,11 @@ export const AGENT_COLORS = [
   "fuchsia",
 ] as const;
 
+/** Key of a browser live view: the profile's active tab, or the tab one chat works in. */
+export function browserView(profileId: string, conversationId?: string | null): string {
+  return conversationId ? `${profileId}:${conversationId}` : profileId;
+}
+
 /** Name of the MCP server Godmode injects into every agent run. */
 export const GODMODE_MCP_NAME = "godmode";
 export const BROWSER_MCP_NAME = "browser";

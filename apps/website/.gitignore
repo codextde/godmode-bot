@@ -1,0 +1,10 @@
+dist/
+.astro/
+.wrangler/
+.dev.vars
+.env
+.secrets.local
+# copied from scripts/install.sh at build time
+public/install.sh
+# local secret files (never commit)
+*.local

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, BrowserProfile } from "@godmode/shared";
+import { browserView, type Agent, type BrowserProfile } from "@godmode/shared";
 import { ArrowUpRight, Globe, Hand, Layers, Maximize2, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -24,32 +24,51 @@ import { cn } from "@/lib/utils";
 
 export type BrowserFocusMode = "watch" | "control";
 
-/** Mirrors the core's resolveProfileForAgent: the chat's profile → pinned profile → workspace default → global default. */
-export function agentBrowserProfile(agent: Agent, profiles: BrowserProfile[], chatProfileId: string | null = null): BrowserProfile | null {
+/** The profile new chats in a workspace browse with: its default, else the global default. */
+export function defaultProfileFor(profiles: BrowserProfile[], workspaceId: string | null | undefined): BrowserProfile | null {
+  const workspaceDefault = workspaceId ? profiles.find((p) => p.workspaceId === workspaceId && p.isDefault) : undefined;
+  return workspaceDefault ?? profiles.find((p) => !p.workspaceId && p.isDefault) ?? null;
+}
+
+/**
+ * Mirrors the core's resolveProfileForAgent: the chat's profile → pinned profile → default of the agent's (or the
+ * chat's) workspace → global default.
+ */
+export function agentBrowserProfile(
+  agent: Agent,
+  profiles: BrowserProfile[],
+  chatProfileId: string | null = null,
+  chatWorkspaceId: string | null = null,
+): BrowserProfile | null {
   const own = chatProfileId ? profiles.find((p) => p.id === chatProfileId) : undefined;
   if (own) return own;
   const pinned = agent.browser.profileId ? profiles.find((p) => p.id === agent.browser.profileId) : undefined;
   if (pinned) return pinned;
-  const workspaceDefault = agent.workspaceId ? profiles.find((p) => p.workspaceId === agent.workspaceId && p.isDefault) : undefined;
-  return workspaceDefault ?? profiles.find((p) => !p.workspaceId && p.isDefault) ?? null;
+  return defaultProfileFor(profiles, agent.workspaceId ?? chatWorkspaceId);
 }
 
 /** The browser profile this chat drives (null when its agent has no browser). */
-export function useChatBrowser(agent: Agent | undefined, chatProfileId: string | null = null): BrowserProfile | null {
+export function useChatBrowser(agent: Agent | undefined, chatProfileId: string | null = null, chatWorkspaceId: string | null = null): BrowserProfile | null {
   const { data: settings } = useSettings();
   const enabled = !!agent?.browser.enabled && settings?.browser.enabled !== false;
   const { data: profiles } = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles, enabled });
-  return enabled && agent && profiles ? agentBrowserProfile(agent, profiles, chatProfileId) : null;
+  return enabled && agent && profiles ? agentBrowserProfile(agent, profiles, chatProfileId, chatWorkspaceId) : null;
 }
 
-function useFrame(profile: BrowserProfile) {
-  const frame = useLive((s) => (profile.running ? s.frames[profile.id] : undefined));
+/** The chat's own tab in its agent's browser (undefined until the agent opens one). */
+export function useChatTab(profile: BrowserProfile | null, conversationId: string) {
+  return profile?.running ? profile.chats.find((c) => c.conversationId === conversationId) : undefined;
+}
+
+function useFrame(profile: BrowserProfile, conversationId: string) {
+  const frame = useLive((s) => (profile.running ? s.frames[browserView(profile.id, conversationId)] : undefined));
   const now = useNow(1000);
   return { frame, live: !!frame && now - frame.at < 4000 };
 }
 
 export function BrowserPanel({
   profile,
+  conversationId,
   agent,
   forChat,
   activity,
@@ -57,6 +76,7 @@ export function BrowserPanel({
   onFocus,
 }: {
   profile: BrowserProfile;
+  conversationId: string;
   agent: Agent;
   /** The profile was picked for this chat rather than inherited from the agent. */
   forChat?: boolean;
@@ -65,22 +85,26 @@ export function BrowserPanel({
   onHide: () => void;
   onFocus: (mode: BrowserFocusMode) => void;
 }) {
-  const { frame, live: streaming } = useFrame(profile);
+  const { frame, live: streaming } = useFrame(profile, conversationId);
   const hasFrame = !!frame;
+  const chat = useChatTab(profile, conversationId);
   const { data: settings } = useSettings();
   const liveViewOff = settings?.browser.liveView === false;
   const [waitedLong, setWaitedLong] = useState(false);
 
-  useEffect(() => subscribeBrowser(profile.id, { passive: true }), [profile.id]);
+  useEffect(() => subscribeBrowser(profile.id, { passive: true, conversationId }), [profile.id, conversationId]);
 
   useEffect(() => {
     setWaitedLong(false);
     if (hasFrame) return;
     const t = setTimeout(() => setWaitedLong(true), 5000);
     return () => clearTimeout(t);
-  }, [hasFrame, profile.id]);
+  }, [hasFrame, profile.id, conversationId]);
 
-  const domain = domainFromUrl(frame?.url);
+  const url = frame?.url ?? chat?.url;
+  const pageTitle = frame?.title || chat?.pageTitle;
+  const domain = domainFromUrl(url);
+  const parallel = profile.chats.filter((c) => c.conversationId !== conversationId && c.active).length;
 
   return (
     <motion.aside
@@ -160,9 +184,12 @@ export function BrowserPanel({
               </span>
             )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] leading-5 font-medium">{frame?.title || domain || "New tab"}</p>
+              <p className="truncate text-[13px] leading-5 font-medium">{pageTitle || domain || "New tab"}</p>
               <p className="truncate font-mono text-[11px] leading-4 text-muted-foreground">{domain || "about:blank"}</p>
             </div>
+            {chat && chat.tabs > 1 && (
+              <span className="shrink-0 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">{chat.tabs} tabs</span>
+            )}
           </div>
 
           <AnimatePresence initial={false}>
@@ -202,22 +229,36 @@ export function BrowserPanel({
           )}
         </div>
 
-        <ProfileFooter profile={profile} forChat={!!forChat} pinned={agent.browser.profileId === profile.id} />
+        <ProfileFooter profile={profile} conversationId={conversationId} forChat={!!forChat} pinned={agent.browser.profileId === profile.id} parallel={parallel} />
       </div>
     </motion.aside>
   );
 }
 
-function ProfileFooter({ profile, forChat, pinned }: { profile: BrowserProfile; forChat: boolean; pinned: boolean }) {
+function ProfileFooter({
+  profile,
+  conversationId,
+  forChat,
+  pinned,
+  parallel,
+}: {
+  profile: BrowserProfile;
+  conversationId: string;
+  forChat: boolean;
+  pinned: boolean;
+  parallel: number;
+}) {
   const workspace = useWorkspaceName(profile.workspaceId);
-  const shared = forChat
-    ? "Picked for this chat"
-    : pinned
-      ? "Pinned in this agent's settings"
-      : profile.workspaceId ? `Shared by every chat in ${workspace}` : "Shared by every chat without a workspace profile";
+  const detail = parallel
+    ? `Own tab · ${parallel} more ${parallel === 1 ? "chat" : "chats"} browsing alongside`
+    : forChat
+      ? "Own tab · profile picked for this chat"
+      : pinned
+        ? "Own tab · profile pinned in this agent's settings"
+        : `Own tab · logins shared with every chat${profile.workspaceId ? ` in ${workspace}` : ""}`;
   return (
     <Link
-      to={`/browser?profile=${profile.id}`}
+      to={`/browser?profile=${profile.id}&chat=${conversationId}`}
       className="group flex shrink-0 items-center gap-3 border-t px-4 py-3 transition hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
     >
       <span className="grid size-8 shrink-0 place-items-center rounded-md border bg-card text-muted-foreground shadow-card">
@@ -225,15 +266,25 @@ function ProfileFooter({ profile, forChat, pinned }: { profile: BrowserProfile; 
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-xs font-medium">{profile.name} profile</span>
-        <span className="block truncate text-[11px] text-muted-foreground">{shared}</span>
+        <span className="block truncate text-[11px] text-muted-foreground">{detail}</span>
       </span>
       <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
     </Link>
   );
 }
 
-/** Full-size live view on top of the chat, optionally starting in takeover mode. */
-export function BrowserFocus({ profile, mode, onClose }: { profile: BrowserProfile | null; mode: BrowserFocusMode | null; onClose: () => void }) {
+/** Full-size live view of the chat's tab on top of the chat, optionally starting in takeover mode. */
+export function BrowserFocus({
+  profile,
+  conversationId,
+  mode,
+  onClose,
+}: {
+  profile: BrowserProfile | null;
+  conversationId: string;
+  mode: BrowserFocusMode | null;
+  onClose: () => void;
+}) {
   const actions = useProfileActions();
   return (
     <AnimatePresence>
@@ -241,6 +292,7 @@ export function BrowserFocus({ profile, mode, onClose }: { profile: BrowserProfi
         <LiveView
           key={`${profile.id}:${mode}`}
           profile={profile}
+          conversationId={conversationId}
           expanded
           onExpandedChange={(expanded) => !expanded && onClose()}
           defaultTakeover={mode === "control"}

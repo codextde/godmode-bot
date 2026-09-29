@@ -127,9 +127,16 @@ describe("agent routes", () => {
     const listed = await call<Routine[]>("GET", `/api/routines?agentId=${agent.id}`);
     expect(listed.data.map((r) => r.id)).toEqual([created.data.id]);
 
+    const randomStart = await call<Routine>("PATCH", `/api/routines/${created.data.id}`, { trigger: { type: "schedule", startWindowMinutes: 90 } });
+    expect(randomStart.data.trigger).toEqual({ type: "schedule", startWindowMinutes: 90 });
+    const tooLong = await call<{ error: string }>("PATCH", `/api/routines/${created.data.id}`, { trigger: { type: "schedule", startWindowMinutes: 900 } });
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.data.error).toContain("random start window");
+
     const patched = await call<Routine>("PATCH", `/api/routines/${created.data.id}`, { enabled: false });
     expect(patched.data.enabled).toBe(false);
     expect(patched.data.nextRunAt).toBeNull();
+    expect(patched.data.trigger).toEqual({ type: "schedule", startWindowMinutes: 90 });
 
     expect((await call("DELETE", `/api/routines/${created.data.id}`)).data).toEqual({ ok: true });
     expect((await call("POST", `/api/routines/${created.data.id}/run`)).status).toBe(404);

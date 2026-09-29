@@ -26,7 +26,7 @@ import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useConversations, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useConversations, useScopeWorkspace, useWorkspaces } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useLive, type LiveRun } from "@/stores/live";
@@ -89,6 +89,7 @@ export default function ChatHome() {
   /** SSH servers for the new chat, on top of the agent's. */
   const [sshServerIds, setSshServerIds] = useState<string[]>([]);
   const { data: workspaces = [] } = useWorkspaces();
+  const scopeWorkspaceId = useScopeWorkspace()?.id ?? null;
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
   const selected =
@@ -174,7 +175,7 @@ export default function ChatHome() {
                     agentName={selected?.name}
                     onChange={setFolder}
                   />
-                  <BrowserProfileChip agent={selected} value={browserProfileId} onChange={setBrowserProfileId} />
+                  <BrowserProfileChip agent={selected} value={browserProfileId} workspaceId={scopeWorkspaceId} onChange={setBrowserProfileId} />
                   <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />
                   <SshChip agent={selected} value={sshServerIds} onChange={setSshServerIds} />
                   <VmChip
@@ -201,6 +202,7 @@ export default function ChatHome() {
                 computerTarget: shared ?? undefined,
                 vmId: vmId ?? undefined,
                 browserProfileId: browserProfileId ?? undefined,
+                workspaceId: scopeWorkspaceId ?? undefined,
                 sshServerIds: sshServerIds.length ? sshServerIds : undefined,
                 instructions: instructions || undefined,
               })
@@ -245,6 +247,7 @@ export default function ChatHome() {
             computerTarget: shared ?? undefined,
             vmId: vmId ?? undefined,
             browserProfileId: browserProfileId ?? undefined,
+            workspaceId: scopeWorkspaceId ?? undefined,
             sshServerIds: sshServerIds.length ? sshServerIds : undefined,
             instructions: instructions || undefined,
             ...choice,

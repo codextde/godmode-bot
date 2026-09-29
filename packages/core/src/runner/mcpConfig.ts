@@ -49,6 +49,8 @@ export async function buildMcpConfig(
     vm?: McpVm | null;
     gatewayOnly?: boolean;
     browserProfileId?: string | null;
+    /** The run and its chat: browser tools only reach that chat's tabs. */
+    run?: { runId: string; conversationId: string };
     /** The run may use SSH servers. */
     ssh?: boolean;
   } = {},
@@ -79,9 +81,9 @@ export async function buildMcpConfig(
   if (opts.vm) {
     // Work in a VM stays in the VM: its browser runs there, and no browser starts on this computer.
     if (opts.vm.browser) servers[BROWSER_MCP_NAME] = guestBrowserServer(opts.vm.id, opts.vm.browser);
-  } else if (agent.browser.enabled && getSettings().browser.enabled) {
+  } else if (agent.browser.enabled && getSettings().browser.enabled && opts.run) {
     try {
-      const browser = await browserMcpServer(agent, opts.browserProfileId);
+      const browser = await browserMcpServer(agent, opts.run, opts.browserProfileId);
       if (browser) servers[BROWSER_MCP_NAME] = browser;
     } catch (err) {
       log.warn(`browser tools unavailable for agent ${agent.id}`, err);

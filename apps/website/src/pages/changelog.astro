@@ -1,0 +1,70 @@
+---
+import Base from '@/layouts/Base.astro';
+import Nav from '@/components/Nav.astro';
+import Footer from '@/components/Footer.astro';
+import { recentReleases } from '@/lib/releases';
+
+export const prerender = false;
+Astro.response.headers.set('cache-control', 'public, max-age=300');
+
+let releases: Awaited<ReturnType<typeof recentReleases>> = [];
+try {
+  releases = (await recentReleases()).filter((r) => !r.prerelease);
+} catch (e) {
+  console.error('changelog failed', e);
+}
+
+// Release notes are Markdown; render the bits we use (headings, bullets, bold, code) and escape the rest.
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const inline = (s: string) =>
+  esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" rel="noopener">$1</a>');
+function render(md: string) {
+  const out: string[] = [];
+  let list = false;
+  for (const raw of md.replace(/\r/g, '').split('\n')) {
+    const line = raw.trimEnd();
+    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+    if (bullet) {
+      if (!list) out.push('<ul>'), (list = true);
+      out.push(`<li>${inline(bullet[1])}</li>`);
+      continue;
+    }
+    if (list) out.push('</ul>'), (list = false);
+    const h = /^#{1,6}\s+(.*)$/.exec(line);
+    if (h) out.push(`<h3>${inline(h[1])}</h3>`);
+    else if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+  }
+  if (list) out.push('</ul>');
+  return out.join('\n');
+}
+const date = (iso: string) => new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+---
+
+<Base title="Changelog" description="What's new in Godmode — every release, newest first.">
+  <Nav home={false} />
+  <main class="pt-36 pb-16">
+    <div class="container-x max-w-[760px]">
+      <p class="eyebrow"><span class="n">●</span> Changelog</p>
+      <h1 class="h-section mt-5">What’s new</h1>
+      <p class="lead mt-4">Godmode updates itself in the background. Here’s what each release brought.</p>
+      {releases.length === 0 && <p class="mt-12 text-muted">Release notes are on their way.</p>}
+      <div class="mt-14 space-y-14">
+        {
+          releases.map((r) => (
+            <article id={r.tag_name} class="scroll-mt-28">
+              <div class="flex items-baseline gap-3">
+                <h2 class="text-[22px] font-semibold tracking-[-0.03em]">{r.tag_name}</h2>
+                <span class="text-[13px] text-dim">{date(r.published_at)}</span>
+              </div>
+              <div class="prose-gm mt-4" set:html={render(r.body ?? '')} />
+            </article>
+          ))
+        }
+      </div>
+    </div>
+  </main>
+  <Footer />
+</Base>

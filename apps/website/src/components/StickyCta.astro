@@ -1,0 +1,14 @@
+---
+import CheckoutButton from './ui/CheckoutButton.astro';
+import { PRICING } from '@/config/site';
+---
+
+<div data-sticky-cta class="sticky-cta fixed inset-x-3 bottom-3 z-40 sm:left-1/2 sm:right-auto sm:bottom-5 sm:w-auto sm:-translate-x-1/2">
+  <div class="flex items-center gap-3 rounded-full py-1.5 pr-1.5 pl-4 sm:pl-5 ring-1 ring-line-2 backdrop-blur-xl" style="background: rgb(19 19 18 / 0.86); box-shadow: 0 20px 60px -20px rgb(0 0 0 / 0.8)">
+    <span class="live-dot !size-1.5"></span>
+    <span class="min-w-0 flex-1 truncate text-[13.5px] whitespace-nowrap text-text-2 sm:flex-none">
+      <span class="text-text">${PRICING.plans.lifetime.price} once</span><span class="hidden sm:inline"> · or ${PRICING.plans.monthly.price}/mo</span><span class="hidden min-[400px]:inline"> · {PRICING.guaranteeDays}-day guarantee</span>
+    </span>
+    <CheckoutButton plan="lifetime" label="Get Godmode" source="sticky" size="sm" />
+  </div>
+</div>

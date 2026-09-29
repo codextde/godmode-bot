@@ -37,6 +37,8 @@ import type {
   DreamDetail,
   DreamOverview,
   FolderListing,
+  Followup,
+  FollowupPatch,
   GitCommit,
   LocalChromeProfile,
   LogEntry,
@@ -295,7 +297,7 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/agents/${id}`),
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
     /** Start a fresh task conversation for the agent */
-    run: (id: string, prompt?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt }),
+    run: (id: string, prompt?: string, workspaceId?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt, workspaceId }),
     files: (id: string, path = "") => get<AgentFileEntry[]>(`/api/agents/${id}/files`, { path }),
     readFile: (id: string, path: string) => get<{ path: string; content: string }>(`/api/agents/${id}/file`, { path }),
     writeFile: (id: string, path: string, content: string) => put<{ ok: true }>(`/api/agents/${id}/file`, { path, content }),
@@ -337,10 +339,18 @@ export const api = {
     list: (q: { agentId?: string; search?: string; limit?: number; archived?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
-    create: (input: { agentId: string; title?: string }) => post<Conversation>("/api/conversations", input),
+    create: (input: { agentId: string; title?: string; workspaceId?: string | null }) => post<Conversation>("/api/conversations", input),
     update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     send: (id: string, input: SendMessageInput) => post<SendMessageResult>(`/api/conversations/${id}/messages`, input),
+  },
+
+  /** Times agents set to continue a chat on their own (one per chat, keyed by the conversation). */
+  followups: {
+    list: (q: { agentId?: string } = {}) => get<Followup[]>("/api/followups", q),
+    move: (conversationId: string, input: FollowupPatch) => patch<Followup>(`/api/conversations/${conversationId}/followup`, input),
+    cancel: (conversationId: string) => del<{ ok: true }>(`/api/conversations/${conversationId}/followup`),
+    runNow: (conversationId: string) => post<Run>(`/api/conversations/${conversationId}/followup/run`),
   },
 
   computer: {
@@ -477,8 +487,10 @@ export const api = {
     stop: (id: string) => post<{ ok: true }>(`/api/browser/profiles/${id}/stop`),
     chromeProfiles: () => get<LocalChromeProfile[]>("/api/browser/chrome-profiles"),
     import: (id: string, input: ChromeImportInput) => post<ChromeImportResult>(`/api/browser/profiles/${id}/import`, input),
-    navigate: (id: string, url: string) => post<{ ok: true }>(`/api/browser/profiles/${id}/navigate`, { url }),
-    /** Human takeover in live view: forward a click / key / text to the page */
+    /** With `conversationId`: that chat's tab (opened if it has none) instead of the active one. */
+    navigate: (id: string, url: string, conversationId?: string | null) =>
+      post<{ ok: true }>(`/api/browser/profiles/${id}/navigate`, { url, conversationId: conversationId ?? null }),
+    /** Human takeover in live view: forward a click / key / text to the page (the chat's tab, with `conversationId`) */
     input: (
       id: string,
       event:
@@ -486,7 +498,8 @@ export const api = {
         | { type: "scroll"; x: number; y: number; deltaY: number }
         | { type: "key"; key: string }
         | { type: "text"; text: string },
-    ) => post<{ ok: true }>(`/api/browser/profiles/${id}/input`, event),
+      conversationId?: string | null,
+    ) => post<{ ok: true }>(`/api/browser/profiles/${id}/input`, { ...event, conversationId: conversationId ?? null }),
     /** browser-use `profile-use` (sync local Chrome cookies to a browser-use Cloud profile) */
     profileUse: () => get<import("@godmode/shared").ProfileUseStatus>("/api/browser/profile-use"),
     /** Downloads the profile-use binary into <dataDir>/bin */

@@ -165,7 +165,14 @@ export interface Agent {
 export type RoutineTriggerType = "schedule" | "app" | "condition" | "webhook";
 
 export type RoutineTrigger =
-  | { type: "schedule" }
+  | {
+      type: "schedule";
+      /**
+       * Start at a random moment up to this many minutes after each scheduled time, drawn anew for every run
+       * ("0 8 * * 1-5" + 90 = weekdays somewhere between 08:00 and 09:30). Absent = on time.
+       */
+      startWindowMinutes?: number;
+    }
   | {
       type: "app";
       /** Godmode Composio connection (`ComposioConnection.id`) whose account is watched. */
@@ -300,6 +307,8 @@ export interface Conversation {
   vmId: ID | null;
   /** Browser profile this chat works in, overriding the agent's and the workspace / global default. null = theirs. */
   browserProfileId: ID | null;
+  /** Workspace a global agent's chat was started in; it browses with that workspace's default profile. */
+  workspaceId: ID | null;
   /** SSH servers runs in this chat may use, in addition to the agent's. */
   sshServerIds: ID[];
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
@@ -312,6 +321,27 @@ export interface Conversation {
   /** Denormalized for lists */
   preview?: string;
   running?: boolean;
+  /** When the agent continues this chat on its own (see Followup). */
+  followup?: ConversationFollowup | null;
+}
+
+export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt">;
+
+/**
+ * A time an agent set to continue a chat on its own — like a coworker who says "I'll check back tomorrow at 10" while
+ * waiting for a reply, a delivery or a build. One per chat; it goes away when it fires or is cancelled.
+ */
+export interface Followup {
+  conversationId: ID;
+  agentId: ID;
+  /** Title of the chat it continues. */
+  title: string;
+  /** What the agent will do then, in its own words. */
+  note: string;
+  dueAt: ISODate;
+  /** When the agent set it. */
+  createdAt: ISODate;
+  updatedAt: ISODate;
 }
 
 export type MessageRole = "user" | "assistant" | "system";
@@ -345,7 +375,12 @@ export type MessageBlock =
   | { type: "error"; text: string }
   | { type: "notice"; level: "info" | "warning" | "success"; text: string }
   /** Output of a Claude Code slash command that ran locally (e.g. /context, /usage, /model). */
-  | { type: "command"; name: string; args: string; output: string };
+  | { type: "command"; name: string; args: string; output: string }
+  /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
+  | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason };
+
+/** Why a follow-up ran: it was due, it was overdue (Godmode was off or asleep), or the human said "continue now". */
+export type FollowupReason = "due" | "late" | "now";
 
 /** A slash command offered by the installed Claude Code CLI for an agent. */
 export interface SlashCommand {
@@ -380,9 +415,9 @@ export interface Message {
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 /**
  * `routine`: an automation ran (schedule, app event, condition met, webhook) · `check`: an automation checked its condition ·
- * `dream`: the agent consolidated its memory in the background.
+ * `dream`: the agent consolidated its memory in the background · `followup`: the agent continued a chat at the time it set.
  */
-export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api";
+export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api" | "followup";
 
 export interface RunUsage {
   inputTokens: number;
@@ -652,8 +687,25 @@ export interface BrowserProfile {
   cookieCount: number;
   running: boolean;
   cdpUrl: string | null;
+  /** Chats with tabs open in the running browser, in the order they opened their first tab. */
+  chats: BrowserChat[];
   createdAt: ISODate;
   updatedAt: ISODate;
+}
+
+/** A chat's own tabs in a profile's browser: chats work in parallel, each in its own tabs, with the profile's logins. */
+export interface BrowserChat {
+  conversationId: ID;
+  /** null when the conversation no longer exists */
+  title: string | null;
+  agentId: ID | null;
+  /** The tab the chat's agent works in */
+  url: string;
+  pageTitle: string;
+  tabs: number;
+  /** A run of the chat is using the browser right now */
+  active: boolean;
+  lastUsedAt: ISODate;
 }
 
 export interface LocalChromeProfile {

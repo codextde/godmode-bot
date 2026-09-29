@@ -1,0 +1,98 @@
+<template id="s8-end-template">
+  <div id="s8-end" data-composition-id="s8-end" data-width="1920" data-height="1080" data-duration="10.5">
+    <style>
+      @font-face { font-family: "Geist"; src: url("assets/fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif.woff2") format("woff2"); font-style: normal; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
+
+      #s8-end { position: absolute; inset: 0; overflow: hidden; background: #faf9f5; color: #1a1a1a; font-family: "Geist", sans-serif; }
+      #s8-end .s8-sky { position: absolute; left: 260px; top: -560px; width: 1400px; height: 1000px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(255, 244, 214, 0.95), rgba(250, 238, 206, 0.4) 55%, rgba(250, 249, 245, 0) 100%); }
+      #s8-end .s8-glow { position: absolute; left: 560px; top: 140px; width: 800px; height: 800px; border-radius: 50%;
+        background: radial-gradient(closest-side, rgba(14, 202, 123, 0.16), rgba(14, 202, 123, 0.05) 55%, rgba(14, 202, 123, 0) 100%); }
+      #s8-end .s8-grain { position: absolute; inset: -40px; opacity: 0.35; mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='67' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.15  0 0 0 0 0.12  0 0 0 0 0.08  0 0 0 0.10 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+
+      #s8-end .s8-content { position: absolute; inset: 0; }
+      #s8-end .s8-team { position: absolute; left: 0; right: 0; top: 214px; height: 140px; }
+      #s8-end .s8-av { position: absolute; top: 0; width: 132px; height: 132px; margin-left: -66px; border-radius: 36px; display: flex; align-items: center; justify-content: center; font-size: 84px;
+        box-shadow: 0 26px 40px -26px rgba(38, 32, 22, 0.45); }
+
+      #s8-end .s8-lockup { position: absolute; left: 0; right: 0; top: 190px; display: flex; justify-content: center; }
+      #s8-end .s8-row { display: flex; flex-direction: column; align-items: center; gap: 34px; }
+      #s8-end .s8-tile { width: 180px; height: 180px; flex: none; border-radius: 42px; box-shadow: 0 40px 70px -30px rgba(38, 32, 22, 0.45), 0 6px 16px rgba(38, 32, 22, 0.1); }
+      #s8-end .s8-tile img { display: block; width: 180px; height: 180px; }
+      #s8-end .s8-name { font-family: "Instrument Serif", serif; font-size: 176px; line-height: 0.92; letter-spacing: -0.025em; color: #1c1c1c; display: flex; gap: 0.2em; white-space: nowrap; }
+      #s8-end .s8-name span { display: inline-block; }
+      #s8-end .s8-name em { font-style: italic; }
+      #s8-end .s8-tag { position: absolute; left: 0; right: 0; top: 598px; text-align: center; font-size: 50px; letter-spacing: -0.02em; color: #1a1a1a; }
+      #s8-end .s8-tag em { font-family: "Instrument Serif", serif; font-style: italic; font-size: 62px; color: #087f4d; }
+      #s8-end .s8-meta { position: absolute; left: 0; right: 0; top: 724px; display: flex; justify-content: center; gap: 26px; font-family: "Geist Mono", monospace; font-size: 23px; letter-spacing: 0.16em; color: #5f5b54; }
+      #s8-end .s8-meta i { width: 7px; height: 7px; border-radius: 50%; background: #b3ada2; align-self: center; display: block; }
+      #s8-end .s8-url { position: absolute; left: 0; right: 0; top: 800px; display: flex; justify-content: center; }
+      #s8-end .s8-url div { display: flex; align-items: center; gap: 14px; height: 70px; padding: 0 30px; border-radius: 35px; background: #1c1c1c; color: #faf9f5; font-size: 27px; font-weight: 500; letter-spacing: -0.005em; }
+      #s8-end .s8-url svg { width: 26px; height: 26px; }
+      #s8-end .s8-by { position: absolute; left: 0; right: 0; bottom: 70px; text-align: center; font-size: 22px; color: #6b675f; }
+    </style>
+
+    <div class="s8-sky" id="s8-sky"></div>
+    <div class="s8-glow" id="s8-glow"></div>
+    <div class="s8-grain" id="s8-grain"></div>
+
+    <div class="s8-content" id="s8-content">
+      <div class="s8-team" id="s8-team">
+        <div class="s8-av" id="s8-v0" style="left: 600px; background: #e7effb">🔎</div>
+        <div class="s8-av" id="s8-v1" style="left: 780px; background: #fbefd9">🧾</div>
+        <div class="s8-av" id="s8-v2" style="left: 960px; background: #fbe6e1">🚀</div>
+        <div class="s8-av" id="s8-v3" style="left: 1140px; background: #e3f4ea">📬</div>
+        <div class="s8-av" id="s8-v4" style="left: 1320px; background: #ece6f6">📱</div>
+      </div>
+
+      <div class="s8-lockup">
+        <div class="s8-row" id="s8-row">
+          <div class="s8-tile" id="s8-tile"><img src="assets/img/logo.svg" alt="Godmode logo" /></div>
+          <div class="s8-name" id="s8-name"><span>Godmode</span><span><em>Bot</em></span></div>
+        </div>
+      </div>
+      <div class="s8-tag" id="s8-tag">An AI teammate you can trust to <em>get work done.</em></div>
+      <div class="s8-meta" id="s8-meta"><span>OPEN SOURCE</span><i></i><span>MACOS</span><i></i><span>WINDOWS</span><i></i><span>LINUX</span></div>
+      <div class="s8-url" id="s8-url"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3" /><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /></svg>github.com/codextde/godmode-bot</div></div>
+      <div class="s8-by" id="s8-by">Powered by Claude Code and browser-use</div>
+    </div>
+
+    <script>
+      (function () {
+        const tl = gsap.timeline({ paused: true });
+        const D = 10.5;
+
+        tl.fromTo("#s8-sky", { opacity: 0.5, scale: 0.94 }, { opacity: 1, scale: 1.04, duration: D, ease: "sine.inOut" }, 0);
+        tl.fromTo("#s8-grain", { x: 0, y: 0 }, { x: -30, y: -20, duration: D, ease: "none" }, 0);
+        tl.fromTo("#s8-glow", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 2.2, ease: "power2.out" }, 1.2);
+
+        // The team gathers…
+        const XS = [600, 780, 960, 1140, 1320];
+        for (let i = 0; i < 5; i++) {
+          tl.fromTo("#s8-v" + i, { opacity: 0, scale: 0.3, y: 30 }, { opacity: 1, scale: 1, y: 0, duration: 0.6, ease: "back.out(1.8)" }, 0.2 + i * 0.09);
+        }
+        // …and converges into the mark.
+        for (let i = 0; i < 5; i++) {
+          tl.to("#s8-v" + i, { x: 960 - XS[i], y: 0, scale: 0.45, opacity: 0, duration: 0.75, ease: "power3.in" }, 1.55 + Math.abs(i - 2) * 0.06);
+        }
+        tl.fromTo("#s8-tile", { scale: 0, rotation: -12 }, { scale: 1, rotation: 0, duration: 0.9, ease: "back.out(1.6)" }, 2.05);
+        tl.fromTo("#s8-name span", { opacity: 0, y: 50, filter: "blur(10px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 0.8, ease: "power3.out", stagger: 0.18 }, 2.75);
+
+        tl.fromTo("#s8-tag", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" }, 3.8);
+        tl.fromTo("#s8-meta span, #s8-meta i", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", stagger: 0.06 }, 4.6);
+        tl.fromTo("#s8-url", { opacity: 0, y: 20, scale: 0.94 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "back.out(1.6)" }, 5.2);
+        tl.fromTo("#s8-by", { opacity: 0 }, { opacity: 1, duration: 0.8, ease: "power2.out" }, 5.8);
+
+        // Gentle settle, then fade to paper.
+        tl.fromTo("#s8-content", { scale: 1 }, { scale: 1.018, duration: D, ease: "none", transformOrigin: "50% 50%" }, 0);
+        tl.to(["#s8-content", "#s8-glow"], { opacity: 0, duration: 0.8, ease: "power2.in" }, D - 0.85);
+
+        window.__timelines["s8-end"] = tl;
+      })();
+    </script>
+  </div>
+</template>

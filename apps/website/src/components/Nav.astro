@@ -1,0 +1,76 @@
+---
+import Logo from './ui/Logo.astro';
+import Icon from './ui/Icon.astro';
+import CheckoutButton from './ui/CheckoutButton.astro';
+
+interface Props {
+  home?: boolean;
+}
+const { home = true } = Astro.props;
+const base = home ? '' : '/';
+const links = [
+  { href: '#features', label: 'Features' },
+  { href: '#use-cases', label: 'Use cases' },
+  { href: '#security', label: 'Security' },
+  { href: '#compare', label: 'Compare' },
+  { href: '#pricing', label: 'Pricing' },
+  { href: '#faq', label: 'FAQ' },
+];
+---
+
+<header data-nav class="nav fixed inset-x-0 top-0 z-50">
+  <div class="container-x flex h-[68px] items-center justify-between gap-6">
+    <a href="/" class="group flex items-center gap-2.5" aria-label="Godmode home">
+      <Logo size={30} class="transition-transform duration-500 ease-[var(--ease-spring)] group-hover:rotate-[-8deg]" />
+      <span class="text-[17px] font-semibold tracking-[-0.03em]">Godmode</span>
+    </a>
+
+    <nav class="hidden items-center gap-1 lg:flex" aria-label="Main">
+      {
+        links.map((l) => (
+          <a href={base + l.href} data-nav-link class="nav-link">
+            {l.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="flex items-center gap-2">
+      <a href={base + '#pricing'} class="btn btn-ghost btn-sm hidden sm:inline-flex" data-track="nav_pricing">
+        $500 lifetime
+      </a>
+      <CheckoutButton plan="lifetime" label="Get Godmode" source="nav" size="sm" class="hidden sm:block" />
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm !px-2.5 lg:hidden"
+        data-menu-toggle
+        aria-expanded="false"
+        aria-controls="mobile-menu"
+        aria-label="Menu"
+      >
+        <span class="menu-icon" aria-hidden="true"><i></i><i></i></span>
+      </button>
+    </div>
+  </div>
+
+  <div id="mobile-menu" data-menu class="mobile-menu lg:hidden">
+    <nav class="container-x flex flex-col py-4" aria-label="Mobile">
+      {
+        links.map((l, i) => (
+          <a
+            href={base + l.href}
+            class="flex items-center justify-between border-b border-line py-4 text-[22px] font-medium tracking-tight"
+            style={`--i:${i}`}
+          >
+            {l.label}
+            <Icon name="arrow-up-right" size={18} class="text-dim" />
+          </a>
+        ))
+      }
+      <div class="mt-6 grid gap-2">
+        <CheckoutButton plan="lifetime" label="Get lifetime — $500" source="menu" full size="lg" />
+        <CheckoutButton plan="monthly" label="Or $50 / month" source="menu" variant="ghost" full size="lg" />
+      </div>
+    </nav>
+  </div>
+</header>

@@ -52,9 +52,9 @@
     "targets": "all",
     "publisher": "Codext GmbH",
     "copyright": "Copyright © 2026 Codext GmbH. MIT License.",
-    "license": "MIT",
+    "license": "Proprietary",
     "licenseFile": "../../../LICENSE",
-    "homepage": "https://github.com/codextde/godmode-bot",
+    "homepage": "https://godmode.codext.de",
     "category": "Productivity",
     "shortDescription": "Your AI coworker with real logins, 2FA and a browser.",
     "longDescription": "Godmode Bot is an open-source AI coworker that runs on your machine. It drives Claude Code as its brain, uses a real browser for web work and keeps website logins and 2FA in an encrypted vault so agents can finish tasks without interrupting you.",
@@ -101,7 +101,10 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBNTYyMDhDNkU1MDI1ODYKUldTR0pWQnVqQ0JXeXR3ZUlWZHRLOWVaZTRSd0h1UUhpbCtCUnJGL0txRTlyVnFIOTBvZkU1dE4K",
-      "endpoints": ["https://github.com/codextde/godmode-bot/releases/latest/download/latest.json"],
+      "endpoints": [
+        "https://godmode.codext.de/api/update/latest.json",
+        "https://github.com/codextde/godmode-bot/releases/latest/download/latest.json"
+      ],
       "windows": {
         "installMode": "passive"
       }

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
-import { AppWindow, ArrowUpRight, Bot, CircleArrowDown, Code, ExternalLink, Globe, Heart, Layers, Plug, RefreshCw, RotateCw, Scale } from "lucide-react";
+import { AppWindow, ArrowUpRight, Bot, CircleArrowDown, ExternalLink, Globe, Heart, Layers, Plug, RefreshCw, RotateCw, Scale } from "lucide-react";
 import { Backdrop, Logo } from "@/components/brand";
 import { useRestartToUpdate } from "@/components/layout/update-button";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-kit";
@@ -12,7 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { openExternal } from "@/lib/desktop";
 import { checkForUpdates, useUpdater } from "@/stores/updater";
 
-const REPO = "https://github.com/codextde/godmode-bot";
+const SITE = "https://godmode.codext.de";
 
 const CREDITS: { name: string; description: string; url: string; icon: ReactNode }[] = [
   { name: "Claude Code", description: "The agentic brain behind every coworker.", url: "https://docs.anthropic.com/en/docs/claude-code", icon: <Bot /> },
@@ -44,13 +44,13 @@ export function AboutSection({ version }: { version: string | undefined }) {
               v{version}
             </Badge>
           )}
-          <p className="mt-3 max-w-md text-balance text-muted-foreground">An AI teammate you can trust to get work done.</p>
+          <p className="mt-3 max-w-md text-balance text-muted-foreground">The AI coworker that works like a human on your computer.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <Button onClick={() => void openExternal(REPO)}>
-              <Code /> Source on GitHub
+            <Button onClick={() => void openExternal(SITE)}>
+              <Globe /> Website
             </Button>
-            <Button variant="outline" onClick={() => void openExternal(`${REPO}/blob/main/LICENSE`)}>
-              <Scale /> MIT License
+            <Button variant="outline" onClick={() => void openExternal(`${SITE}/legal/terms`)}>
+              <Scale /> License terms
             </Button>
           </div>
         </div>
@@ -144,7 +144,7 @@ function UpdatesCard({ version }: { version: string | undefined }) {
           Downloaded in the background. Restart whenever it suits you — it only takes a few seconds.{" "}
           <button
             type="button"
-            onClick={() => void openExternal(`${REPO}/releases/tag/v${update.version}`)}
+            onClick={() => void openExternal(`${SITE}/changelog#v${update.version}`)}
             className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-4 hover:underline"
           >
             What's new <ArrowUpRight className="size-3" />

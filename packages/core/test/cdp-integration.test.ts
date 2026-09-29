@@ -4,11 +4,11 @@
  * cookie round-trips and importing sessions from another profile's cookie store.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
-import type { ServerEvent } from "@godmode/shared";
+import type { Agent, ServerEvent } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 import { bus } from "../src/events/bus";
@@ -20,6 +20,7 @@ import { websocketHandler, type WsData } from "../src/server/ws";
 import { startLiveView, stopLiveView, dispatchInput } from "../src/browser/screencast";
 import * as manager from "../src/browser/manager";
 import { loginFillScope, originRefusal } from "../src/browser/fill";
+import type { McpServerJson } from "../src/types";
 
 const chrome = findChrome();
 const suite = chrome && !process.env.GODMODE_SKIP_BROWSER_TESTS ? describe : describe.skip;
@@ -64,6 +65,16 @@ const LOCAL = { allowedHosts: ["127.0.0.1"], httpHosts: ["127.0.0.1"] };
 let server: ReturnType<typeof Bun.serve>;
 let origin = "";
 let dataDir = "";
+
+function onDemandAgent(profileId: string): Agent {
+  return { id: "agt_on_demand", workspaceId: null, repoPath: null, browser: { profileId, enabled: true, headless: true } } as unknown as Agent;
+}
+
+function browserUseCdpUrl(entry: McpServerJson | null): string {
+  if (!entry || !("env" in entry)) throw new Error("expected a stdio server");
+  const config = JSON.parse(readFileSync(entry.env!.BROWSER_USE_CONFIG_PATH!, "utf8"));
+  return (Object.values(config.browser_profile)[0] as { cdp_url: string }).cdp_url;
+}
 
 async function waitFor<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, timeoutMs = 10_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -478,6 +489,63 @@ suite("managed Chromium (CDP integration)", () => {
     } finally {
       // Never leak the original process if adoption failed.
       if (rb.process!.isAlive()) rb.process!.kill("SIGKILL");
+    }
+  }, 60_000);
+
+  test("startup closes a left-over browser nothing uses", async () => {
+    await manager.launchBrowser(profileId, { headless: true });
+    const rb = getRunning(profileId)!;
+    unregisterBrowser(rb);
+    rb.client.close();
+    try {
+      await manager.adoptOrphans();
+      expect(getRunning(profileId)).toBeNull();
+      await Promise.race([rb.process!.exited, Bun.sleep(8000)]);
+      expect(rb.process!.isAlive()).toBe(false);
+    } finally {
+      if (rb.process!.isAlive()) rb.process!.kill("SIGKILL");
+    }
+  }, 60_000);
+
+  test("agent browser tools start the browser only when browser-use first connects", async () => {
+    await manager.stopBrowser(profileId);
+    updateSettings({ browser: { browserUseCommand: "browser-use --mcp" } });
+    const run = { runId: "run_on_demand", conversationId: "cnv_on_demand" };
+    try {
+      const cdpUrl = browserUseCdpUrl(await manager.browserMcpServer(onDemandAgent(profileId), run, profileId));
+      expect(manager.getProfile(profileId).running).toBe(false);
+
+      const res = await fetch(`${cdpUrl}/json/version`);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { webSocketDebuggerUrl: string }).webSocketDebuggerUrl).toStartWith(cdpUrl.replace("http:", "ws:"));
+      const rb = getRunning(profileId)!;
+      expect(rb.headless).toBe(true);
+      expect(rb.tabs.currentPage(run.conversationId)).toBeTruthy();
+    } finally {
+      manager.releaseChatBrowser(run.runId);
+      updateSettings({ browser: { browserUseCommand: "" } });
+    }
+  }, 60_000);
+
+  test("a browser that can't start on demand is reported to the run", async () => {
+    await manager.stopBrowser(profileId);
+    updateSettings({ browser: { browserUseCommand: "browser-use --mcp" } });
+    const squatter = await launchChrome({ executable: chrome!.path, userDataDir: manager.getProfile(profileId).userDataDir, headless: true });
+    const run = { runId: "run_blocked", conversationId: "cnv_blocked" };
+    const problems: string[] = [];
+    const off = manager.onLaunchProblem((runId, text) => void (runId === run.runId && problems.push(text)));
+    try {
+      const cdpUrl = browserUseCdpUrl(await manager.browserMcpServer(onDemandAgent(profileId), run, profileId));
+      expect((await fetch(`${cdpUrl}/json/version`)).status).toBe(503);
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain("won't work in this run");
+      expect(problems[0]).toContain("already in use");
+    } finally {
+      off();
+      manager.releaseChatBrowser(run.runId);
+      squatter.kill("SIGKILL");
+      await Promise.race([squatter.exited, Bun.sleep(5000)]);
+      updateSettings({ browser: { browserUseCommand: "" } });
     }
   }, 60_000);
 

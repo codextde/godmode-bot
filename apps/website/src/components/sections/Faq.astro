@@ -1,0 +1,100 @@
+---
+import Words from '../ui/Words.astro';
+import { PRICING, SITE } from '@/config/site';
+
+const faqs: { key: string; q: string; a: string }[] = [
+  {
+    key: 'what',
+    q: 'What exactly do I get?',
+    a: `The Godmode desktop app for macOS, Windows and Linux (plus the headless server with its web dashboard), a license key, and every feature on this page. Lifetime is a one-time payment with all future updates included. Monthly includes everything while you’re subscribed.`,
+  },
+  {
+    key: 'claude',
+    q: 'Do I need a Claude subscription?',
+    a: `Yes. Godmode runs on Anthropic’s official Claude Code, so it thinks with Claude Opus 5.5 — and with every newer Claude model the day you get access. Sign in with a Claude Pro or Max plan, or add an Anthropic API key. For heavy automation, Max or an API key fits better than Pro. Anthropic has changed how subscriptions cover this kind of use before; if it happens again, an API key keeps working.`,
+  },
+  {
+    key: 'passwords',
+    q: 'Is it really safe to give an AI my passwords?',
+    a: `Your logins and 2FA secrets live in a vault on your device, encrypted with AES-256-GCM. In the browser, Godmode types them into the page itself — the model only learns that a secret was filled, never its value — and only into the login’s own website. Every access is logged. One honest exception: inside a macOS VM the agent controls the whole machine, so signing in there is best effort and off until you allow it.`,
+  },
+  {
+    key: 'data',
+    q: 'Where does my data go?',
+    a: `Your vault, browser profiles, agents, memory, history and VMs stay on your device. Godmode has no telemetry and sends nothing to us. The tasks you give and the pages your agents read are processed by Claude under your own Anthropic account — exactly as when you use Claude Code directly.`,
+  },
+  {
+    key: 'mouse',
+    q: 'Will it take over my mouse and keyboard?',
+    a: `Not when you share a window: Godmode clicks and types into it in the background, even when it’s covered, and your cursor stays yours. If you share a whole display it uses the real mouse (like screen-sharing with a person), and agents with their own VM work entirely inside it.`,
+  },
+  {
+    key: 'mac',
+    q: 'Do I need a Mac?',
+    a: `No. The app runs on macOS, Windows and Linux. Only the “own Mac” virtual machines need a Mac with Apple silicon (Apple allows two macOS VMs running at the same time). Browser use, the vault, agents, automations and chat apps work everywhere.`,
+  },
+  {
+    key: 'offline',
+    q: 'Does it work when my computer is off?',
+    a: `Not on that computer — Godmode works on your machine, which is the point. For 24/7 agents, run the headless server on an always-on Mac mini, PC or home server and use the web dashboard from anywhere.`,
+  },
+  {
+    key: 'cant',
+    q: 'What can’t it do?',
+    a: `It won’t solve CAPTCHAs — when one appears you click “Take control” and it carries on afterwards. Like any AI it can make mistakes, so review consequential work (payments, contracts, anything public) until you trust a routine.`,
+  },
+  {
+    key: 'free',
+    q: 'Why pay when open-source agents are free?',
+    a: `Because your logins are worth protecting and your time is worth more than tinkering. Popular open-source agents store secrets unencrypted or show them to the model, and leave sandboxing off by default. Godmode is secure by default and point-and-click: encrypted vault with 2FA, isolated VMs, Chrome session import, a native app and automatic updates — ready in minutes.`,
+  },
+  {
+    key: 'cloud',
+    q: 'Why not ChatGPT Dots or Grok Bot?',
+    a: `Both run on the vendor’s cloud computer, so your cookies and logins live on their servers, behind plan limits they can change. Godmode runs on your device, with your sessions, and your price doesn’t change after you buy. The trade-off: cloud agents keep going with your laptop closed — for that, run Godmode on an always-on machine.`,
+  },
+  {
+    key: 'refund',
+    q: 'What if it’s not for me?',
+    a: `Email us within ${PRICING.guaranteeDays} days of buying and we’ll refund you in full — no questions, no forms. Monthly plans can be cancelled anytime and run until the end of the paid month.`,
+  },
+  {
+    key: 'invoice',
+    q: 'Can I get an invoice for my company?',
+    a: `Yes. Add your company name and VAT ID at checkout and you’ll get a proper invoice by email. Payments are handled by Stripe; we never see your card.`,
+  },
+];
+---
+
+<section id="faq" class="relative py-20 sm:py-28" data-track-view="faq">
+  <div class="container-x grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
+    <div class="lg:sticky lg:top-28 lg:self-start">
+      <p class="eyebrow" data-reveal><span class="n">10</span> FAQ</p>
+      <Words text="Questions, *answered straight.*" class="h-section mt-6" />
+      <p class="mt-6 max-w-[360px] text-[15px] leading-relaxed text-muted" data-reveal style="--d:200">
+        Something else? Email <a href={`mailto:${SITE.email}`} class="text-text underline decoration-line-3 underline-offset-2">{SITE.email}</a> —
+        a human answers, usually within a day.
+      </p>
+    </div>
+    <div class="divide-y divide-line border-y border-line">
+      {
+        faqs.map((f, i) => (
+          <details class="faq group" data-faq={f.key} data-reveal style={`--d:${Math.min(i, 6) * 40}`}>
+            <summary class="flex cursor-pointer items-center justify-between gap-6 py-6 text-[17px] font-medium tracking-[-0.015em] transition-colors hover:text-white">
+              {f.q}
+              <span class="plus grid size-8 flex-none place-items-center rounded-full ring-1 ring-line-2 transition-colors group-hover:ring-line-3" aria-hidden="true">
+                <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+              </span>
+            </summary>
+            <p class="max-w-[640px] pb-7 text-[15px] leading-[1.7] text-muted">{f.a}</p>
+          </details>
+        ))
+      }
+    </div>
+  </div>
+  <script type="application/ld+json" set:html={JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+  })} />
+</section>

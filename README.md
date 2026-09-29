@@ -4,19 +4,19 @@
 
 # Godmode Bot
 
-### An AI teammate you can trust to get work done.
+### The AI coworker that works like a human on your computer.
 
 Godmode Bot gives Claude a real browser, your logins and your 2FA codes — **safely** — so it can finish tasks
 end-to-end without interrupting you. Start with one chat, or build a team of persistent agents with their own
 memory, routines and history.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-8b5cf6.svg)](LICENSE)
+[![License: Commercial](https://img.shields.io/badge/license-commercial-8b5cf6.svg)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-06b6d4.svg)](#-install)
 [![Built with Claude Code](https://img.shields.io/badge/brain-Claude%20Code%20·%20Opus%205.5-d97757.svg)](https://code.claude.com)
 [![browser-use](https://img.shields.io/badge/browser-browser--use-111.svg)](https://github.com/browser-use/browser-use)
 [![Tauri 2](https://img.shields.io/badge/desktop-Tauri%202-ffc131.svg)](https://tauri.app)
 
-[**Download**](https://github.com/codextde/godmode-bot/releases/latest) ·
+[**Get Godmode**](https://godmode.codext.de) ·
 [**Quick start**](#-quick-start) ·
 [**Features**](#-features) ·
 [**Security**](#-security) ·
@@ -55,9 +55,11 @@ needs to be useful:
 | 🌙 **Dreaming** | While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned (even if nobody said "remember this"), merge duplicates, fix contradictions and update dates ("is going to Singapore in July" → "went to Singapore in July"). Memory loads into every new chat; every dream can be reviewed as a diff and undone. |
 | 📁 **Working folders** | Optionally point a chat or an agent at any folder on your machine — it works on the files there and keeps its memory in its own repo. |
 | ⚡ **Automations** | Work starts when it happens: on a schedule (“weekdays at 08:00”), when something happens in a connected app (a new email, a Slack message, a calendar event, a Notion update), when a condition you describe comes true (“competitor pricing changes”), or when a webhook is called. Describe it in one sentence and Godmode sets it up. |
+| ⏰ **Follow-ups** | When a task needs waiting — a reply to an email, a delivery, a build, office hours — the agent sets itself a time and picks the chat up again on its own, with all the context, like a coworker who says “I'll check back tomorrow at 10”. You see when it comes back and can continue now, move it or cancel it. |
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
+| 🗂️ **Parallel chats, own tabs** | Every chat gets its own tab (in its own background window) in the shared browser profile, so several chats and agents browse at the same time — signed in with the same logins, without ever touching each other's pages. |
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
 | 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent works *entirely inside the VM* — commands, files, apps (computer use with Cua Driver) and the web (Google Chrome with browser-use) — and no browser opens on your Mac. Watch the VM's screen next to the chat and take control anytime. Allow it once and agents sign in inside the VM too: Godmode fills your saved logins and 2FA codes for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
 | 🔌 **SSH servers** | Let agents work on your servers: save a server with a password or an SSH key (paste it, pick one from `~/.ssh` or generate a new one) and give it to a chat or an agent. Godmode signs in and answers `sudo` — the AI never sees the password or the key. Agents run commands, edit config files and copy files back and forth; the host key is pinned on the first connection. |
@@ -116,21 +118,31 @@ needs to be useful:
     <td><img src="docs/screenshots/messaging.png" alt="Slack, Telegram and Teams bots connected to agents" /><br /><sub><b>Messaging</b> — talk to agents from Slack, Telegram and Microsoft Teams</sub></td>
     <td><img src="docs/screenshots/messaging-bot.png" alt="A bot's access requests, agents and who may use it" /><br /><sub><b>Bot settings</b> — approve people, pick agents, see every chat</sub></td>
   </tr>
+  <tr>
+    <td><img src="docs/screenshots/chat-own-tab.png" alt="A chat next to a live preview of its own browser tab" /><br /><sub><b>Own tab per chat</b> — the preview shows only this chat's page, while others browse alongside</sub></td>
+    <td><img src="docs/screenshots/browser-chats.png" alt="Browser page with one tab per chat browsing in the profile" /><br /><sub><b>Parallel chats</b> — one browser profile, one tab per chat; switch between them live</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/followup-waiting.png" alt="An agent waiting for a signed contract, set to continue tomorrow at 09:00" /><br /><sub><b>Follow-ups</b> — the agent sets itself a time to continue; move it, cancel it or continue now</sub></td>
+    <td><img src="docs/screenshots/followup.png" alt="The agent picked the chat up again at the time it set and finished the task" /><br /><sub><b>Back on it</b> — at that time the agent picks the chat up again, with all the context</sub></td>
+  </tr>
 </table>
 
 ## 📦 Install
 
 ### Desktop app
 
-Download the latest release for your platform from
-[**Releases**](https://github.com/codextde/godmode-bot/releases/latest):
+Buy a license at [**godmode.codext.de**](https://godmode.codext.de) ($500 lifetime or $50/month) and download the app
+from your welcome page — or later from [godmode.codext.de/download](https://godmode.codext.de/download) with your
+license key:
 
 - **macOS** — `.dmg` (Apple Silicon & Intel)
 - **Windows** — `.msi` / `.exe`
 - **Linux** — `.AppImage` / `.deb` / `.rpm`
 
-The app keeps itself up to date: new versions download in the background, and a **Restart** button appears in the
-sidebar once one is ready.
+The app keeps itself up to date: new versions download in the background (from `godmode.codext.de/api/update`,
+which mirrors the signed bundles of the latest release), and a **Restart** button appears in the sidebar once one is
+ready.
 
 On first launch the onboarding checks your system and installs what's missing with one click:
 
@@ -145,7 +157,7 @@ On first launch the onboarding checks your system and installs what's missing wi
 Run Godmode on a home server, NAS, VM or Raspberry Pi and connect from any browser:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/codextde/godmode-bot/main/scripts/install.sh | sh
+curl -fsSL https://godmode.codext.de/install.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX sh
 godmode serve --host 0.0.0.0     # prints the dashboard URL
 godmode token                    # access token for the first login
 godmode password 'a-strong-password'
@@ -333,4 +345,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 📄 License
 
-[MIT](LICENSE) © 2026 Codext GmbH and contributors.
+Commercial — see [LICENSE](LICENSE) and the [Terms](https://godmode.codext.de/legal/terms). © 2026 Codext GmbH.
+Versions published before the switch remain available under the MIT License to those who received them.

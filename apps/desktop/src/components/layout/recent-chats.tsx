@@ -1,7 +1,7 @@
 import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Archive, Pin, Trash2 } from "lucide-react";
+import { AlarmClock, Archive, Pin, Trash2 } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
+import { followupWhen } from "@/components/chat/followup";
 import { api } from "@/lib/api";
 import { useAllAgents, useConversations } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
@@ -69,6 +70,11 @@ export function RecentChats() {
                       <span className="block truncate text-[11px] text-muted-foreground">
                         {running ? (
                           <span className="text-shimmer font-medium">Working…</span>
+                        ) : c.followup ? (
+                          <span className="flex items-center gap-1" title={c.followup.note}>
+                            <AlarmClock className="size-3 shrink-0 text-brand-strong" aria-hidden />
+                            <span className="truncate">Continues {followupWhen(c.followup.dueAt)}</span>
+                          </span>
                         ) : (
                           <>
                             {agent?.name ?? "Agent"} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false })}

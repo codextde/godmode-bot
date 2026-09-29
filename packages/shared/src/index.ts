@@ -7,3 +7,4 @@ export * from "./vm";
 export * from "./ssh";
 export * from "./git";
 export * from "./messaging";
+export * from "./schedule";

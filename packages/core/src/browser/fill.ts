@@ -11,7 +11,7 @@
  * typing — so a prompt-injected page cannot get a secret typed into a foreign site.
  */
 import { domainMatches, hostnameOf, randomToken } from "../util";
-import { PageSession, attachToPage, pickActivePage, type CdpClient } from "./cdp";
+import { PageSession, attachToPage, pickActivePage, type CdpClient, type PageTarget } from "./cdp";
 
 export type FillKind = "username" | "password" | "totp" | "text";
 
@@ -453,19 +453,27 @@ export function fillPrecheck(opts: Pick<FillOptions, "text" | "allowedHosts">): 
 
 /**
  * Fill into the active page (or the one whose URL contains `urlContains`) of a browser reached over CDP — Godmode's
- * Chromium on this computer or the Chrome in a VM. Callers check `fillPrecheck` first. The typed value never appears in
- * the result.
+ * Chromium on this computer or the Chrome in a VM — or into the page `chatPage` picks (a chat's own tab). Callers check
+ * `fillPrecheck` first. The typed value never appears in the result.
  */
 export async function fillIntoActivePage(
-  browser: { client: CdpClient; port?: number },
+  browser: { client: CdpClient; port?: number; chatPage?: (urlContains?: string) => PageTarget | null },
   opts: FillOptions & { urlContains?: string },
 ): Promise<FillResult> {
   // Belt and braces: error texts come from CDP/our scripts, but never let the typed value through.
   const scrub = (detail: string) => detail.split(opts.text).join("••••••••");
   try {
-    const target = await pickActivePage(browser.client, { port: browser.port, urlContains: opts.urlContains });
+    const chat = !!browser.chatPage;
+    const target = browser.chatPage
+      ? browser.chatPage(opts.urlContains)
+      : await pickActivePage(browser.client, { port: browser.port, urlContains: opts.urlContains });
     if (!target) {
-      return { ok: false, url: "", detail: opts.urlContains ? `No open tab has a URL containing "${opts.urlContains}".` : "The browser has no open tab." };
+      const detail = opts.urlContains
+        ? `No open tab${chat ? " of this chat" : ""} has a URL containing "${opts.urlContains}".`
+        : chat
+          ? "This chat has no open tab yet. Open the login page with the browser tools first."
+          : "The browser has no open tab.";
+      return { ok: false, url: "", detail };
     }
     const page = await attachToPage(browser.client, target.targetId);
     try {

@@ -30,6 +30,7 @@ import { audit } from "../services/audit";
 import { applyRuntimeSettings } from "../services/runtime";
 import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/settings";
 import { startScheduler, stopScheduler } from "../scheduler/scheduler";
+import { startFollowups, stopFollowups } from "../services/followups";
 import { startAutomationEvents, stopAutomationEvents } from "../automations/events";
 import { startAppTriggers, stopAppTriggers } from "../integrations/composioTriggers";
 import { startMessaging, stopMessaging } from "../messaging/service";
@@ -92,6 +93,7 @@ const ALL_ENTITIES: EntityName[] = [
   "vms",
   "ssh-servers",
   "messaging",
+  "followups",
 ];
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
@@ -690,6 +692,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     stopScheduler();
+    stopFollowups();
     stopAppTriggers();
     stopAutomationEvents();
     await stopMessaging();
@@ -704,6 +707,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       // are stale now: don't replay them.
       recoverInterruptedRuns();
       exec("UPDATE automation_events SET status = 'skipped', note = 'Restored from a backup' WHERE status = 'pending'");
+      exec("DELETE FROM followups WHERE due_at <= ?", new Date().toISOString());
       // The restored vault has a different key: a key remembered on this device is obsolete.
       try {
         await vault.setRememberDevice(false);
@@ -731,6 +735,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       return { ok: true as const, counts: result, warnings };
     } finally {
       startScheduler();
+      startFollowups();
       startAutomationEvents();
       startAppTriggers();
       startMessaging();
