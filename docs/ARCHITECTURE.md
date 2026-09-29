@@ -43,6 +43,7 @@ backups/              automatic + manual backups (*.godmode-backup)
 vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, tart/ (TART_HOME: vms/<vm-id>
                       disks and gm-image-* templates), downloads/ (image layers while downloading),
                       shared/<vm-id>/ shared folders, logs/<vm-id>.log, ssh/ key
+tasks/<task-id>/      checkout of a coding task's repository (see "Tasks")
 logs/godmode.jsonl    diagnostic log (see "Diagnostic log"); godmode.1.jsonl is the previous 2 MB, desktop.log the shell's
 ```
 
@@ -170,8 +171,9 @@ works in its own tabs (see Browser).
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |
 | `agents_list()`, `agent_get({id})` | Discover peer agents |
 | `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result) |
-| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent) |
+| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list`, `tasks_list`, `task_create`, `task_update` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent) |
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
+| `task_report_blocked({ reason })` | Only in runs working on a board task: say what's missing; the task moves to Blocked when the run ends (see Tasks) |
 | `memory_dream_report({ summary, changes })` | Only in dream runs — and the only tool they get: report what a memory consolidation changed (see Dreaming) |
 | `notify_user({ title, body })` | Push a notification to the human |
 | `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
@@ -451,6 +453,50 @@ own, like a coworker who says "I'll check back tomorrow at 10" (`services/follow
   pending follow-ups on the Automations page: `GET /api/followups`, `PATCH|DELETE /api/conversations/:id/followup`,
   `POST /api/conversations/:id/followup/run`. `Conversation.followup` carries the pending one. Backups carry follow-ups;
   a restore drops the ones already due.
+
+## Tasks
+
+A Kanban board of tickets agents work on (table `tasks`, `/api/tasks`, `tasks/service.ts`), per workspace or global.
+Columns are the statuses: `backlog` (parked — assigning an agent never starts it), `todo` (queued — entering it with an
+agent, or getting one while in it, starts that agent), `in_progress`, `in_review` (delivered, waiting for the human),
+`blocked`, `done` and `cancelled`. Positions are REAL values within a column (a move places the task between its new
+neighbours; a column is re-spaced when they get too close). A task may only be assigned to an agent of its workspace or
+a global one. Every change is pushed as `task.updated` / `task.deleted` and patched into the UI's cached lists.
+
+* **Starting** (`dispatch`): an active run of the task is cancelled first (restart), the task moves to `in_progress`,
+  and the agent gets the task in its conversation (`origin = 'task'`, created archived so it stays off the chat list;
+  reused while the agent and folder stay the same) as a `trigger = "task"` run. The prompt carries the title,
+  description and what to deliver per type: `general` (do it, summarize), `research` (a Markdown report) or `coding`.
+* **Coding tasks** (`tasks/git.ts`): Godmode clones the repository (the task's `repoUrl` — any URL `parseGitUrl`
+  accepts — else the workspace's first git repository, see Workspace folders and repositories) into `<data>/tasks/<id>`
+  with the same hardened git as workspace clones (the human's credential helper / SSH keys, no prompts, no clone hooks)
+  and checks out `godmode/<number>-<slug>` from `origin/<base>` (the task's, the repository's configured branch, else
+  the remote's default branch). The URL and resolved base are pinned on the task. The checkout is the conversation's
+  working folder — the only folder inside the data directory allowed as one — and the workspace's shared clone of the
+  same repository is left out of the run's `--add-dir` folders, so the agent changes the task's branch only. When a run succeeds, Godmode commits what
+  the agent left uncommitted (new `.env`/key files are left out), refuses to push when the branch adds such files or its
+  diff contains a secret from the vault, merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks
+  the task), and pushes with an explicit lease on what it saw — so nothing pushed meanwhile is overwritten. It then
+  opens a pull request with `gh pr create` (body: the agent's summary, redacted); without `gh`, or for GitLab, the task
+  links to the page that opens one. A branch without commits on top of its base goes to review without a pull request.
+  Restarting fast-forwards the checkout to the remote branch first.
+* **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
+  `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
+  `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
+  blocked task back to `in_progress`; for coding tasks the next push updates the open pull request.
+* **Moving on the board**: away from `in_progress` cancels the run (the UI asks first); into `todo` (or
+  `in_progress`) with an agent starts it. Every 5 minutes, tasks in review with an open pull request are checked with
+  `gh pr view`: merged → `done`, closed → noted on the task.
+* **Races**: one start or publish per task at a time; a start the board asks for meanwhile runs once the task is free,
+  and a run that ended meanwhile is handled then. Moves caused by the work (to In review, Blocked, Done) only apply
+  from the status the work expects — a move the human made meanwhile wins — and put the task at the top of its column.
+* **Agents managing the board**: `task_create` / `task_update` follow the delegation rules (no reveal-mode or unattended
+  computer agents from callers that couldn't use them, VM-kept runs stay off the host); coding tasks created by agents
+  use the workspace's repositories; and a run working on a task — or delegated from one — can't start a manager agent
+  (itself included), so tasks can't spawn tasks without end. Follow-ups wait while Godmode prepares or publishes a task. Task numbers are never reused.
+* **Restart**: tasks left `in_progress` without a live run are blocked ("Interrupted"), tasks waiting in `todo` with an
+  agent are started. Deleting a task cancels its run and removes the checkout (the conversation stays); deleting a
+  workspace counts its tasks as dependents.
 
 ## Integrations
 

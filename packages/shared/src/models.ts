@@ -282,9 +282,9 @@ export interface ComposioTriggerType {
 
 /**
  * `dream`: the archived conversation an agent's dreams (memory consolidation) run in ·
- * `slack` / `telegram` / `teams`: a chat on that platform (see Messaging).
+ * `slack` / `telegram` / `teams`: a chat on that platform (see Messaging) · `task`: an agent works on a board task.
  */
-export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream" | "slack" | "telegram" | "teams";
+export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream" | "slack" | "telegram" | "teams" | "task";
 
 export interface Conversation {
   id: ID;
@@ -411,9 +411,10 @@ export interface Message {
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 /**
  * `routine`: an automation ran (schedule, app event, condition met, webhook) · `check`: an automation checked its condition ·
- * `dream`: the agent consolidated its memory in the background · `followup`: the agent continued a chat at the time it set.
+ * `dream`: the agent consolidated its memory in the background · `followup`: the agent continued a chat at the time it set ·
+ * `task`: the agent worked on a board task.
  */
-export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api" | "followup";
+export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api" | "followup" | "task";
 
 export interface RunUsage {
   inputTokens: number;

@@ -20,6 +20,7 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  SquareKanban,
   Workflow,
 } from "lucide-react";
 import {
@@ -93,6 +94,9 @@ export function CommandPalette() {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Navigate">
+          <CommandItem value="tasks board kanban tickets issues" onSelect={() => go("/tasks")}>
+            <SquareKanban /> Tasks
+          </CommandItem>
           <CommandItem onSelect={() => go("/agents")}>
             <Bot /> Agents
           </CommandItem>

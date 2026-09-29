@@ -20,6 +20,7 @@ import { registerMcpRoutes } from "../mcp/http";
 import { registerComputerRoutes } from "./routes/computer";
 import { registerVmRoutes } from "./routes/vms";
 import { registerLogRoutes } from "./routes/logs";
+import { registerTaskRoutes } from "./routes/tasks";
 import { serveStatic } from "./static";
 import { handleWebhook } from "../automations/webhooks";
 import { registerMessagingRoutes } from "./routes/messaging";
@@ -142,6 +143,7 @@ export function createApp() {
   registerBrowserRoutes(app);
   registerComputerRoutes(app);
   registerVmRoutes(app);
+  registerTaskRoutes(app);
   registerBackupRoutes(app);
   registerVoiceRoutes(app);
   registerFolderRoutes(app);

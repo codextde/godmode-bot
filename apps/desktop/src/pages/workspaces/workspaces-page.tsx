@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Bot, EllipsisVertical, Globe2, KeyRound, Layers, Pencil, Plug, Plus, ScrollText, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowRight, Bot, EllipsisVertical, Globe2, KeyRound, Layers, Pencil, Plug, Plus, ScrollText, ShieldCheck, SquareKanban, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { Workspace, WorkspaceSource } from "@godmode/shared";
 import { PageBody, PageHeader } from "@/components/common";
@@ -115,9 +115,9 @@ export default function WorkspacesPage() {
     setParams(next, { replace: true });
   };
 
-  const open = (ws: Workspace | null) => {
+  const open = (ws: Workspace | null, to = "/agents") => {
     setScope(ws ? ws.id : "global");
-    navigate("/agents");
+    navigate(to);
   };
 
   const remove = useMutation({
@@ -185,6 +185,7 @@ export default function WorkspacesPage() {
               counts={counts.get(null)}
               countsLoading={counts.loading}
               onOpen={() => open(null)}
+              onBoard={() => open(null, "/tasks")}
               context={{
                 label: hasGlobalInstructions ? "Instructions for every agent" : "Add instructions for every agent",
                 set: hasGlobalInstructions,
@@ -203,6 +204,7 @@ export default function WorkspacesPage() {
                   counts={counts.get(ws.id)}
                   countsLoading={counts.loading}
                   onOpen={() => open(ws)}
+                  onBoard={() => open(ws, "/tasks")}
                   context={{
                     label: ws.instructions.trim() ? "Agent context" : "Add agent context",
                     set: !!ws.instructions.trim(),
@@ -355,6 +357,7 @@ function ScopeCard({
   counts,
   countsLoading,
   onOpen,
+  onBoard,
   menu,
   context,
   sources,
@@ -368,6 +371,7 @@ function ScopeCard({
   counts: Counts;
   countsLoading: boolean;
   onOpen: () => void;
+  onBoard: () => void;
   menu?: ReactNode;
   context?: { label: string; set: boolean; onClick: () => void };
   sources?: { list: WorkspaceSource[]; onClick: () => void };
@@ -462,10 +466,15 @@ function ScopeCard({
           );
         })}
       </div>
-      <Button variant="outline" className="relative mt-4 w-full justify-between" onClick={onOpen}>
-        Open {title === "Global" ? "Global" : "workspace"}
-        <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
-      </Button>
+      <div className="relative mt-4 flex gap-2">
+        <Button variant="outline" className="flex-1 justify-between" onClick={onOpen}>
+          Open {title === "Global" ? "Global" : "workspace"}
+          <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
+        </Button>
+        <Button variant="outline" onClick={onBoard} aria-label={`Tasks of ${title}`}>
+          <SquareKanban /> Tasks
+        </Button>
+      </div>
     </motion.article>
   );
 }

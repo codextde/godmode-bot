@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, SmilePlus } from "lucide-react";
+import { Check, FolderGit2, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace, type WorkspaceSourceInput } from "@godmode/shared";
 import { colorSwatch } from "@/components/common";
