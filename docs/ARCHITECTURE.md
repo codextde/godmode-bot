@@ -83,6 +83,12 @@ the core's machine) and `GET /api/folders/recent`.
   Fills are **site-bound**: the frame that owns the target field must be on one of the login's domains (https, or http
   only when the saved URL is http), and passwords only go into `input[type=password]`.
   `"reveal"` mode lets an agent read raw secrets (needed for API-only tools) and is audited.
+* **Secrets in VMs** (`settings.vm.vaultFill`, off by default; turning it on needs a grant): the `vm` tools `fill_login` /
+  `fill_totp` type a login or the current 2FA code into the field focused on the VM's screen, key by key over VNC (never
+  through the guest clipboard; secrets that aren't plain ASCII are refused). Passwords only go in while macOS secure
+  keyboard input is on and not owned by a terminal, checked before and after typing (when focus moved away, the typed characters
+  are erased again) with `ioreg` / `ps` run without a shell. Unlike browser fills they can't be bound to a website, and the agent
+  controls the VM, so this is best effort against a determined agent — closer to "reveal" than to fill-only.
 * **Grants**: revealing secrets and enabling reveal/remember-device require `X-Godmode-Grant`, obtained from
   `POST /api/vault/grant {passphrase}` (10 min, in memory).
 * **Redaction**: every known secret is masked in transcripts, run logs and the UI stream.
@@ -263,7 +269,9 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   Remote Desktop authentication, raw 32-bit updates, pointer/key events; `vm/raster.ts`: crop, area-average downscale,
   PNG). Long or non-ASCII text is pasted through the guest clipboard. Screenshots remember their frame, so model
   coordinates map back to framebuffer pixels. (Tart's `--vnc-experimental` server is not used: it listens on every
-  network interface.)
+  network interface.) `fill_login` / `fill_totp` type vault secrets into the focused field (optionally clicking a
+  `coordinate` first) when `settings.vm.vaultFill` allows it; a password needs `kCGSSessionSecureInputPID` in the guest's
+  `ioreg` (the app that owns it is named in the result and the audit entry). The value is never in a tool result.
 * **Human access**: `POST /api/vms/:id/open { what }` opens Screen Sharing (`vnc://admin:admin@<NAT IP>`), Terminal
   (SSH with Godmode's key) or the shared folder in Finder; `GET /api/vms/:id/screenshot` feeds the card preview (never
   boots a VM). Backups carry VM records and assignments, not disks; a restore keeps this Mac's own VM records, and a

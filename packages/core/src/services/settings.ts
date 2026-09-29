@@ -47,6 +47,7 @@ export const DEFAULT_SETTINGS: Settings = {
   vm: {
     enabled: true,
     isolateHostShell: true,
+    vaultFill: false,
     onQuit: "suspend",
     idleStopMinutes: 0,
     tartPath: "",
