@@ -75,7 +75,7 @@ export function logGeneration(): number {
 const SECRET_KEY = String.raw`[\w-]*(?:password|passwd|passphrase|secret|token|api[_-]?key|apikey|access[_-]?key|auth|authorization|signature|credential|cookie|session[_-]?id)`;
 const SECRET_PATTERNS: [RegExp, string][] = [
   [
-    /\b(?:sk-(?:ant-)?[A-Za-z0-9_-]{16,}|[sr]k_(?:live|test)_[A-Za-z0-9]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[a-z]-[A-Za-z0-9-]{10,}|xapp-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|\d{6,12}:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})/g,
+    /\b(?:sk-(?:ant-)?[A-Za-z0-9_-]{16,}|[sr]k_(?:live|test)_[A-Za-z0-9]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[a-z]-[A-Za-z0-9-]{10,}|xapp-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|\d{6,12}:AA[A-Za-z0-9_-]{30,}|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|gmd_[A-Za-z0-9_-]{20,}|godmode:\/\/pair\?d=[A-Za-z0-9_-]{20,})/g,
     MASK,
   ],
   [/\b(Bearer|Basic|Token|Bot)\s+[A-Za-z0-9._~+/=-]{8,}/gi, `$1 ${MASK}`],

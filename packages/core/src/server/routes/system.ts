@@ -105,6 +105,15 @@ export function registerSystemRoutes(app: Hono) {
         throw badRequest("The tart binary must be an absolute path (or empty)");
       }
     }
+    const mobile = patch.mobile as Record<string, unknown> | undefined;
+    if (mobile !== undefined) {
+      if (typeof mobile !== "object" || mobile === null || Array.isArray(mobile)) throw badRequest("Invalid phone settings");
+      if (mobile.enabled !== undefined && typeof mobile.enabled !== "boolean") throw badRequest("mobile.enabled must be true or false");
+      const port = mobile.port;
+      if (port !== undefined && !(typeof port === "number" && Number.isInteger(port) && port >= 1024 && port <= 65535)) {
+        throw badRequest("The phone port must be a whole number between 1024 and 65535");
+      }
+    }
     const next = updateSettings(patch as never);
     applyRuntimeSettings(next);
     return c.json(next);

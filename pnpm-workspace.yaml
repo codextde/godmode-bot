@@ -1,3 +1,5 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # The phone app has its own toolchain (Expo, bun); see apps/mobile/README.md.
+  - "!apps/mobile"

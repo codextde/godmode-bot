@@ -70,6 +70,8 @@ export const qk = {
   vmList: ["vms", "list"] as unknown[],
   vmStatus: ["vms", "status"] as unknown[],
   vmScreen: (id: string, size: number) => ["vm-screen", id, size],
+  /** Phone access: Tailscale status and paired phones. */
+  mobile: ["mobile"] as unknown[],
   chromeProfiles: ["chrome-profiles"] as unknown[],
   folders: ["folders"] as unknown[],
   folderList: (path: string, hidden: boolean) => ["folders", "list", path, hidden],

@@ -468,4 +468,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_messaging_chats_external ON messaging_chat
 ALTER TABLE conversations ADD COLUMN browser_profile_id TEXT;
 `,
   },
+  {
+    id: 12,
+    name: "mobile_devices",
+    sql: /* sql */ `
+-- Phones paired with the Godmode app. \`token_hash\` is the SHA-256 of the phone's device token.
+CREATE TABLE IF NOT EXISTS mobile_devices (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  model TEXT,
+  app_version TEXT,
+  token_hash TEXT NOT NULL UNIQUE,
+  last_seen_at TEXT,
+  last_address TEXT,
+  created_at TEXT NOT NULL
+);
+`,
+  },
 ];

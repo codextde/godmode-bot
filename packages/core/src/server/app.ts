@@ -24,6 +24,7 @@ import { serveStatic } from "./static";
 import { handleWebhook } from "../automations/webhooks";
 import { registerMessagingRoutes } from "./routes/messaging";
 import { handleMessagingHook } from "../messaging/service";
+import { registerMobileRoutes } from "./routes/mobile";
 
 const log = logger("http");
 const SLOW_REQUEST_MS = 1000;
@@ -37,9 +38,9 @@ function isApiPath(path: string) {
   return path.startsWith("/api/") || path.startsWith("/mcp") || path.startsWith("/hooks/");
 }
 
-/** Sign-in and webhook endpoints answer anyone: their refusals must not let strangers fill (or write into) the log. */
+/** Sign-in, phone pairing and webhook endpoints answer anyone: their refusals must not let strangers fill (or write into) the log. */
 function isPublicPath(path: string) {
-  return path.startsWith("/api/auth/") || path.startsWith("/hooks/");
+  return path.startsWith("/api/auth/") || path === "/api/mobile/pair" || path.startsWith("/hooks/");
 }
 
 const REJECTIONS_PER_MINUTE = 30;
@@ -127,7 +128,7 @@ export function createApp() {
   // Protected API
   app.use("/api/*", async (c, next) => {
     const path = c.req.path;
-    if (path === "/api/health" || path.startsWith("/api/auth/")) return next();
+    if (path === "/api/health" || path.startsWith("/api/auth/") || path === "/api/mobile/pair") return next();
     return requireAuth(c, next);
   });
 
@@ -146,6 +147,7 @@ export function createApp() {
   registerVoiceRoutes(app);
   registerFolderRoutes(app);
   registerLogRoutes(app);
+  registerMobileRoutes(app);
 
   app.all("/api/*", (c) => {
     if (!isPublicPath(c.req.path)) logRejection("warn", "unknown API route", { method: c.req.method, path: c.req.path.slice(0, 200) });

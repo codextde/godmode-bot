@@ -47,16 +47,16 @@ export const BACKUP_EXTENSION = ".godmode-backup";
 export const MAX_BACKUP_BYTES = 2 * 1024 ** 3;
 const FILE_PREFIX = "godmode-backup-";
 
-/** Never exported: login sessions and the migration ledger. */
-const EXCLUDED_TABLES = new Set(["sessions", "_migrations"]);
+/** Never exported: login sessions, paired phones and the migration ledger. */
+const EXCLUDED_TABLES = new Set(["sessions", "mobile_devices", "_migrations"]);
 /** Vault key material travels in vault.json, not db.json. */
 const VAULT_META_KEYS = new Set(["vault.kdf", "vault.wrapped_dek", "vault.canary"]);
-/** Settings sections that belong to this machine (bind address, remote access, allowed origins). */
-const DEVICE_SETTINGS = new Set(["server"]);
+/** Settings sections that belong to this machine (bind address, remote access, allowed origins, phone access). */
+const DEVICE_SETTINGS = new Set(["server", "mobile"]);
 
-/** Meta keys that stay with the machine: dashboard auth, remembered vault key, cached Composio sessions. */
+/** Meta keys that stay with the machine: dashboard auth, remembered vault key, cached Composio sessions, phone pairing. */
 function isDeviceMetaKey(key: string): boolean {
-  return key.startsWith("auth.") || key.startsWith("vault.remember_") || key.startsWith("composio.session.");
+  return key.startsWith("auth.") || key.startsWith("vault.remember_") || key.startsWith("composio.session.") || key.startsWith("mobile.");
 }
 
 /** Chromium profile content that is cache or lock files — never worth backing up. */

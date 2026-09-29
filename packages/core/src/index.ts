@@ -14,9 +14,9 @@ import { logger, setLogDir } from "./log";
 import { openDb, closeDb } from "./db";
 import { createApp } from "./server/app";
 import { websocketHandler, type WsData } from "./server/ws";
-import { authenticate, getAccessToken, isAllowedOrigin, setDashboardPassword } from "./server/auth";
+import { authenticateRequest, getAccessToken, isAllowedOrigin, setDashboardPassword } from "./server/auth";
 import { getSettings, updateSettings } from "./services/settings";
-import { applyRuntimeSettings } from "./services/runtime";
+import { applyRuntimeSettings, onSettingsApplied } from "./services/runtime";
 import * as vault from "./vault/vault";
 import { ensureDefaultAgent } from "./agents/service";
 import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
@@ -32,6 +32,7 @@ import { closeGuestTunnels } from "./vm/guest";
 import { runDoctor } from "./services/doctor";
 import { resourceSnapshot, startDiagnostics, stopDiagnostics } from "./diagnostics/monitor";
 import { getModelCatalog } from "./runner/models";
+import { refreshMobileAccess, startMobileAccess, stopMobileAccess } from "./mobile/access";
 import { newId } from "./util";
 
 const log = logger("core");
@@ -152,9 +153,9 @@ async function serve(values: Record<string, unknown>) {
         if (origin && !isAllowedOrigin(origin, req.headers.get("host") ?? undefined)) {
           return new Response("Origin not allowed", { status: 403 });
         }
-        const auth = authenticate(shim as never);
+        const auth = authenticateRequest(shim as never);
         if (!auth) return new Response("Unauthorized", { status: 401 });
-        const ok = server.upgrade(req, { data: { id: newId("ws"), subscriptions: new Set<string>(), auth } });
+        const ok = server.upgrade(req, { data: { id: newId("ws"), subscriptions: new Set<string>(), auth: auth.kind, deviceId: auth.device?.id } });
         return ok ? undefined : new Response("Upgrade failed", { status: 400 });
       }
       return app.fetch(req, { server });
@@ -174,6 +175,8 @@ async function serve(values: Record<string, unknown>) {
     }
   }
   cfg.port = server.port ?? cfg.port;
+  startMobileAccess({ app, websocket: websocketHandler });
+  onSettingsApplied(() => void refreshMobileAccess());
 
   const displayHost = isLoopbackHost(cfg.host) ? "127.0.0.1" : cfg.host;
   const url = `http://${displayHost}:${cfg.port}`;
@@ -202,6 +205,7 @@ async function serve(values: Record<string, unknown>) {
     stopDreaming();
     stopAppTriggers();
     stopAutomationEvents();
+    stopMobileAccess();
     await stopMessaging();
     await shutdownRunner();
     await shutdownBrowsers();

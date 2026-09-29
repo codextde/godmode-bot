@@ -1,5 +1,6 @@
 import type { ComputerView } from "./computer";
 import type { Vm } from "./vm";
+import type { MobileDevice } from "./mobile";
 import type {
   Agent,
   AppNotification,
@@ -85,6 +86,8 @@ export type ServerEvent =
     }
   | { type: "vm.updated"; vm: Vm }
   | { type: "vm.deleted"; id: ID }
+  /** A phone was paired (the pairing QR code was used). */
+  | { type: "mobile.paired"; device: MobileDevice }
   | { type: "entity.changed"; entity: EntityName };
 
 export type EntityName =
@@ -104,7 +107,8 @@ export type EntityName =
   | "models"
   | "computer"
   | "vms"
-  | "messaging";
+  | "messaging"
+  | "mobile";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =
@@ -114,4 +118,9 @@ export type ClientEvent =
   | { type: "browser.unsubscribe"; profileId: ID }
   /** Computer live view frames (see computerView). */
   | { type: "computer.subscribe"; view: ComputerView }
-  | { type: "computer.unsubscribe"; view: ComputerView };
+  | { type: "computer.unsubscribe"; view: ComputerView }
+  /**
+   * Phones only get `run.delta` (the streaming reply) for conversations they have open; other clients get all of them.
+   */
+  | { type: "conversation.subscribe"; conversationId: ID }
+  | { type: "conversation.unsubscribe"; conversationId: ID };

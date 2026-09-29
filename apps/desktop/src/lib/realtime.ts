@@ -43,6 +43,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   vms: [qk.vms],
   // Bot status, access requests and chats (the sidebar badge counts requests).
   messaging: [qk.messaging, qk.bootstrap],
+  // A phone was paired, removed, or connected.
+  mobile: [qk.mobile],
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
 };

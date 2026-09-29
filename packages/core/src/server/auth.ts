@@ -3,9 +3,12 @@ import { join } from "node:path";
 import type { Context, MiddlewareHandler } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { getConnInfo } from "hono/bun";
+import { MOBILE_TOKEN_PREFIX, type MobileDevice } from "@godmode/shared";
 import { config, isLoopbackHost } from "../config";
 import { get, getMeta, insert, run, setMeta } from "../db";
 import { getSettings } from "../services/settings";
+import { authenticateDevice } from "../mobile/devices";
+import { deviceBodyKeys, deviceMayCall, deviceMayUseView } from "../mobile/scope";
 import { hashPassword, safeEqual, sha256, verifyPassword } from "../vault/crypto";
 import { HttpError, newId, now, randomToken } from "../util";
 import { closeSessionSockets } from "./ws";
@@ -104,19 +107,47 @@ function validSession(token: string | undefined): boolean {
   return true;
 }
 
-export type AuthKind = "token" | "session" | null;
+export type AuthKind = "token" | "session" | "device" | null;
 
-export function authenticate(c: Context): AuthKind {
+export interface AuthResult {
+  kind: Exclude<AuthKind, null>;
+  /** The paired phone behind a device token. */
+  device?: MobileDevice;
+}
+
+export function authenticateRequest(c: Context): AuthResult | null {
   const header = c.req.header("authorization");
   if (header?.startsWith("Bearer ")) {
-    if (safeEqual(header.slice(7).trim(), getAccessToken())) return "token";
+    const value = header.slice(7).trim();
+    if (value.startsWith(MOBILE_TOKEN_PREFIX)) {
+      // Phones only come in over the Tailscale listener, and only while phone access is on.
+      if (!isMobileChannel(c) || !getSettings().mobile.enabled) return null;
+      const ip = clientIp(c);
+      const device = authenticateDevice(value, ip === "unknown" ? undefined : ip);
+      return device ? { kind: "device", device } : null;
+    }
+    if (safeEqual(value, getAccessToken())) return { kind: "token" };
   }
   // Browsers can't set headers on WebSocket handshakes, so only /api/ws accepts the token as a query parameter
   // (elsewhere it would leak into logs, history and Referer headers).
   const q = c.req.query("token");
-  if (q && new URL(c.req.url).pathname === "/api/ws" && safeEqual(q, getAccessToken())) return "token";
-  if (validSession(getCookie(c, SESSION_COOKIE))) return "session";
+  if (q && new URL(c.req.url).pathname === "/api/ws" && safeEqual(q, getAccessToken())) return { kind: "token" };
+  if (validSession(getCookie(c, SESSION_COOKIE))) return { kind: "session" };
   return null;
+}
+
+export function authenticate(c: Context): AuthKind {
+  return authenticateRequest(c)?.kind ?? null;
+}
+
+/** The request came in on the phones' listener (Tailscale address), see mobile/access.ts. */
+export function isMobileChannel(c: Context): boolean {
+  return (c.env as { channel?: string } | undefined)?.channel === "mobile";
+}
+
+/** The paired phone that made this request (null for the desktop app and the dashboard). */
+export function requestDevice(c: Context): MobileDevice | null {
+  return (c.get("device" as never) as MobileDevice | undefined) ?? null;
 }
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1", "tauri.localhost"]);
@@ -147,6 +178,13 @@ export function isAllowedOrigin(origin: string, host: string | undefined): boole
  * bearer token is involved and the answer reveals nothing.
  */
 export const hostGuard: MiddlewareHandler = async (c, next) => {
+  // The phones' listener checks the Host header against this computer's Tailscale names itself; here the decoded path
+  // is checked too (`/api/%61uth/…` is `/api/auth/…` to the router).
+  if (isMobileChannel(c)) {
+    const path = c.req.path;
+    if (!path.startsWith("/api/") || path.startsWith("/api/auth/")) return c.json({ error: "Not found", code: "not_found" }, 404);
+    return next();
+  }
   const settings = getSettings();
   const cfg = config();
   if (!settings.server.remoteAccess && isLoopbackHost(cfg.host) && !(c.req.method === "POST" && c.req.path.startsWith("/hooks/"))) {
@@ -160,8 +198,13 @@ export const hostGuard: MiddlewareHandler = async (c, next) => {
 
 /** Require auth for /api/* (except public endpoints). Enforce same-origin for cookie auth on unsafe methods. */
 export const requireAuth: MiddlewareHandler = async (c, next) => {
-  const kind = authenticate(c);
-  if (!kind) return c.json({ error: "Unauthorized", code: "unauthorized" }, 401);
+  const auth = authenticateRequest(c);
+  const kind = auth?.kind;
+  if (!kind || (isMobileChannel(c) && kind !== "device")) return c.json({ error: "Unauthorized", code: "unauthorized" }, 401);
+  if (kind === "device") {
+    const refusal = await deviceRefusal(c);
+    if (refusal) return c.json({ error: refusal, code: "device_forbidden" }, 403);
+  }
   if (kind === "session" && !["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
     const origin = c.req.header("origin");
     if (origin) {
@@ -179,8 +222,30 @@ export const requireAuth: MiddlewareHandler = async (c, next) => {
     }
   }
   c.set("authKind" as never, kind as never);
+  if (auth?.device) c.set("device" as never, auth.device as never);
   await next();
 };
+
+/** Why a phone may not make this request (null = it may). */
+async function deviceRefusal(c: Context): Promise<string | null> {
+  const denied = "The phone app can't do this. Use Godmode on your computer.";
+  if (!deviceMayCall(c.req.method, c.req.path)) return denied;
+  const keys = deviceBodyKeys(c.req.method, c.req.path);
+  if (!keys) return null;
+  let payload: unknown;
+  try {
+    payload = await c.req.json();
+  } catch {
+    return null;
+  }
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
+  if (Object.keys(payload).some((k) => !keys.includes(k))) return denied;
+  const view = (payload as { view?: unknown }).view;
+  if (c.req.path === "/api/computer/input" && (typeof view !== "string" || !deviceMayUseView(view))) {
+    return "Only screens shared in a chat can be controlled from the phone.";
+  }
+  return null;
+}
 
 /** Client address from the TCP connection (not spoofable headers). */
 export function clientIp(c: Context): string {

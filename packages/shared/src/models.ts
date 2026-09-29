@@ -880,6 +880,14 @@ export interface VmSettings {
   tartPath: string;
 }
 
+/** The phone app: phones reach Godmode over Tailscale (see mobile.ts). */
+export interface MobileSettings {
+  /** Paired phones may connect. */
+  enabled: boolean;
+  /** Port Godmode listens on for phones, on this computer's Tailscale address only. */
+  port: number;
+}
+
 export interface Settings {
   general: GeneralSettings;
   runner: RunnerSettings;
@@ -891,6 +899,7 @@ export interface Settings {
   server: ServerSettings;
   memory: MemorySettings;
   diagnostics: DiagnosticsSettings;
+  mobile: MobileSettings;
   onboardingComplete: boolean;
 }
 

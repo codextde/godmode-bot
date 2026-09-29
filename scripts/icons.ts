@@ -8,8 +8,12 @@
  *    resvg (WASM), which is fetched into a temporary directory so it never becomes a project dependency.
  * 2. Runs `tauri icon` to produce the full desktop set (icns, ico, PNG sizes) in apps/desktop/src-tauri/icons.
  * 3. Renders the tray icons: a white bolt on transparent (macOS template image; 32px + 64px @2x).
+ * 4. Renders the phone app's icons into apps/mobile/assets: the Liquid Glass icon (godmode.icon) for iOS 26, a
+ *    full-bleed icon, Android's adaptive layers and the splash image.
+ *
+ *   bun scripts/icons.ts --mobile   only step 4
  */
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -17,6 +21,8 @@ const RESVG_VERSION = "2.6.2";
 const root = resolve(import.meta.dir, "..");
 const logoPath = join(root, "docs/assets/logo.svg");
 const iconsDir = join(root, "apps/desktop/src-tauri/icons");
+const mobileDir = join(root, "apps/mobile/assets");
+const mobileOnly = Bun.argv.includes("--mobile");
 
 // The logo's rounded square spans 16..496 of its 512 viewBox. Apple's grid wants it at 824/1024 → widen the viewBox.
 const APP_ICON_VIEWBOX = (() => {
@@ -30,6 +36,37 @@ const APP_ICON_VIEWBOX = (() => {
 const TRAY_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="78 80 356 356">
   <path d="M283 92 158 288h86l-22 132 132-204h-88l17-124Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="14" stroke-linejoin="round"/>
 </svg>`;
+
+const BOLT = `<path d="M283 92 158 288h86l-22 132 132-204h-88l17-124Z" fill="#FAF9F5" stroke="#FAF9F5" stroke-width="10" stroke-linejoin="round"/>`;
+const boltOn = (size: number, scale: number, background = "") =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">${background}<g transform="translate(${size / 2} ${size / 2}) scale(${scale}) translate(-256 -256)">${BOLT}</g></svg>`;
+
+/** Icon Composer document: the bolt as a glass layer on anthracite (iOS 26 Liquid Glass icon). */
+const ICON_COMPOSER = {
+  fill: { "automatic-gradient": "extended-srgb:0.10980,0.10980,0.10980,1.00000" },
+  groups: [
+    {
+      layers: [{ "image-name": "bolt.svg", name: "bolt", position: { scale: 1, "translation-in-points": [0, 0] } }],
+      shadow: { kind: "neutral", opacity: 0.5 },
+      translucency: { enabled: true, value: 0.4 },
+    },
+  ],
+  "supported-platforms": { circles: ["watchOS"], squares: "shared" },
+};
+
+function renderMobile(render: (svg: string, width: number) => Uint8Array) {
+  const composer = join(mobileDir, "godmode.icon");
+  mkdirSync(join(composer, "Assets"), { recursive: true });
+  writeFileSync(join(composer, "icon.json"), JSON.stringify(ICON_COMPOSER, null, 2) + "\n");
+  writeFileSync(
+    join(composer, "Assets/bolt.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" width="350" height="575" viewBox="153 87 206 338">${BOLT}</svg>\n`,
+  );
+  writeFileSync(join(mobileDir, "icon.png"), render(boltOn(1024, 1.9, `<rect width="1024" height="1024" fill="#1C1C1C"/>`), 1024));
+  writeFileSync(join(mobileDir, "adaptive-icon.png"), render(boltOn(1024, 1.25), 1024));
+  writeFileSync(join(mobileDir, "splash-icon.png"), render(readFileSync(logoPath, "utf8"), 512));
+  console.log(`phone app icons written to ${mobileDir}`);
+}
 
 function run(cmd: string[], cwd: string) {
   const proc = Bun.spawnSync(cmd, { cwd, stdout: "inherit", stderr: "inherit" });
@@ -49,6 +86,9 @@ try {
 
   const render = (svg: string, width: number) =>
     new Resvg(svg, { fitTo: { mode: "width", value: width }, background: "rgba(0,0,0,0)" }).render().asPng();
+
+  renderMobile(render);
+  if (mobileOnly) process.exit(0);
 
   const logo = readFileSync(logoPath, "utf8").replace(/viewBox="[^"]*"/, `viewBox="${APP_ICON_VIEWBOX}"`);
   const source = join(work, "icon-1024.png");

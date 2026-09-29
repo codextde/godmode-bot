@@ -54,6 +54,9 @@ import type {
   MessagingVerifyResult,
   MissingLogin,
   MissingLoginPatch,
+  MobileDevice,
+  MobilePairingOffer,
+  MobileStatus,
   ModelCatalog,
   Routine,
   RoutineInput,
@@ -376,6 +379,17 @@ export const api = {
     /** A picture of a running VM's screen (never boots it). */
     screenshot: (id: string, size = 640) => get<{ data: string; mime: string; width: number; height: number }>(`/api/vms/${id}/screenshot`, { size }),
     assign: (id: string, input: VmAssignInput) => post<Vm>(`/api/vms/${id}/assign`, input),
+  },
+
+  mobile: {
+    /** Tailscale, where phones reach Godmode, and the paired phones. `refresh` asks Tailscale again. */
+    status: (refresh = false) => get<MobileStatus>("/api/mobile", { refresh: refresh ? 1 : undefined }),
+    update: (input: { enabled?: boolean; port?: number }) => put<MobileStatus>("/api/mobile", input),
+    /** A one-time QR code (5 minutes); turns phone access on. 409 while Tailscale isn't connected. */
+    pairing: () => post<MobilePairingOffer>("/api/mobile/pairing"),
+    cancelPairing: () => del<{ ok: true }>("/api/mobile/pairing"),
+    renameDevice: (id: string, name: string) => patch<MobileDevice>(`/api/mobile/devices/${id}`, { name }),
+    removeDevice: (id: string) => del<{ ok: true }>(`/api/mobile/devices/${id}`),
   },
 
   chat: {

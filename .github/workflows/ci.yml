@@ -36,6 +36,21 @@ jobs:
         working-directory: packages/core
         run: bun run scripts/build.ts --smoke
 
+  mobile:
+    name: Phone app (typecheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+
   desktop-shell:
     name: Desktop shell (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

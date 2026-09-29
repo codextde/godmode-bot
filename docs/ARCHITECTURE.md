@@ -28,6 +28,7 @@ Godmode Bot is an AI coworker that runs on your machine. It drives **Claude Code
 | `packages/shared` | Types shared by core and UI: models (`models.ts`), API inputs (`api.ts`), WS events (`events.ts`). **The contract.** |
 | `packages/core` | The daemon (Bun + Hono + bun:sqlite). HTTP API under `/api`, WebSocket at `/api/ws`, MCP gateway at `/mcp`. |
 | `apps/desktop` | React UI (also served by the core as the web dashboard) + `src-tauri` desktop shell. |
+| `apps/mobile` | Phone app (Expo, iOS + Android). Own toolchain (bun), outside the pnpm workspace; imports `@godmode/shared` from source. |
 | `docs/` | Docs, logo, screenshots. |
 
 ## Data directory (`~/.godmode`, override with `GODMODE_HOME`)
@@ -426,6 +427,50 @@ an 👀 reaction) and the answer is converted (Telegram HTML, Slack mrkdwn, Team
 `/godmode <command>`. Claude Code's own slash commands are not available from chats. Attachments (≤ 25 MB, Telegram ≤ 20 MB)
 are downloaded into the agent's uploads. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
 connections but restore them turned off, so two machines never answer for one bot.
+
+## Phone app
+
+The phone app (`apps/mobile`) controls one computer's Godmode: chats, runs, agents, automations, VMs and the live
+views. `mobile/` in the core pairs phones and serves them; the desktop's Settings → Phone manages both.
+
+* **Transport: Tailscale.** With phone access on (`settings.mobile`, off until the first QR code), `mobile/access.ts`
+  runs a second `Bun.serve` on this computer's Tailscale IPv4 address only (`settings.mobile.port`, default 7787),
+  never on the LAN. The address comes from `tailscale status --json` (the CLI on PATH or inside Tailscale.app), else
+  from a network interface in 100.64.0.0/10; it is re-checked every 30 s and the listener moves with it. Tailscale
+  encrypts and authenticates the traffic end to end (WireGuard), so the listener speaks plain HTTP. It checks the Host
+  header against the Tailscale address and MagicDNS name, answers only `/api/*` (not `/api/auth/*`, the dashboard,
+  `/mcp` or `/hooks`), accepts only device tokens (`c.env.channel = "mobile"`; the access token and dashboard sessions
+  get 401) and upgrades `/api/ws` with the device token in the `Authorization` header.
+* **Pairing.** `POST /api/mobile/pairing` (desktop) creates a one-time code (32 random bytes, only its SHA-256 kept in
+  memory, 5 minutes, a new one replaces the old) and returns `godmode://pair?d=<base64url JSON>` with the instance id,
+  the computer's name, the URLs (MagicDNS name first, then the IP) and the code (`encodePairingLink` in
+  `@godmode/shared`). The desktop draws it as a QR code. The phone posts the code to `POST /api/mobile/pair` (public,
+  rate limited like sign-in) on the first URL that answers, checks the instance id and gets a device token
+  (`gmd_` + 32 random bytes); the row in `mobile_devices` keeps its SHA-256, name, model, last address and last use.
+  Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
+* **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
+  allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents, conversations and messages, runs (cancel),
+  routines (run, enable), browser profiles (input), computer input, VMs (list, screenshot, start/stop), notifications,
+  missing logins and `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are
+  restricted too: a phone can't set a chat's folder, VM, browser, shared screen or instructions, or change an
+  automation beyond switching it on or off, and it only watches and controls screens that are shared in a chat
+  (`computer.subscribe` and `/api/computer/input`). The listener checks the decoded path, so `/api/%61uth/…` is refused
+  like `/api/auth/…`.
+* **Key hygiene.** The app only sends its key over plain HTTP to a Tailscale address (100.64.0.0/10 or `*.ts.net`;
+  https anywhere, for a future gateway — `isPhoneUrlAllowed`), and first asks the address's `/api/health`, which on
+  the phones' listener returns the instance id; an address that answers as another instance never gets the key.
+  Writes are sent once (no retry on another address), so a slow network never duplicates a message or a run.
+* **Realtime.** Phone sockets get every event except `run.delta`, which only goes to conversations they subscribed to
+  (`conversation.subscribe`) — streaming replies are large. New sockets are sent the current `run.activity` of every
+  run. Browser and computer frames are opt-in as for the desktop; VM screens are polled (`/api/vms/:id/screenshot`).
+* **Removing a phone** (`DELETE /api/mobile/devices/:id`, or the phone itself via `DELETE /api/mobile/me`) deletes the
+  row and closes its sockets with code 4003; the app then forgets its token. Backups carry neither the devices nor the
+  `mobile` settings.
+* **The app** keeps the token and URLs in the Keychain / Keystore (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`), tries the
+  URL that answered last and falls back to the others, and treats 401 as "removed". It opens its WebSocket only in the
+  foreground. An optional Face ID lock covers the app in the app switcher.
+
+A hosted gateway can later be added as another URL in the pairing link.
 
 ## Memory
 
