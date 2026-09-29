@@ -67,7 +67,7 @@ needs to be useful:
 | 📬 **Missing-login inbox** | Agents report missing or broken logins, accounts and 2FA; add them in one click. |
 | 🧩 **Integrations** | Composio toolkits (Gmail, Slack, GitHub, Notion…) and custom MCP servers — globally, per workspace, or per agent. |
 | 💬 **Messaging** | Talk to your agents from **Slack**, **Telegram** and **Microsoft Teams**. Connect a bot, pick which agents it reaches, and approve who may use it; `/agent`, `/new` and `/stop` work right in the chat, and every chat is also a Godmode conversation. |
-| 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA and integrations, plus shared global ones. |
+| 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA, integrations and browser profile, plus shared global ones. Assign any browser profile to a workspace (Browser → profile menu, or in the workspace's settings) and its agents browse with it. |
 | 🧬 **Workspace folders & repos** | Attach project folders and git repositories to a workspace — paste `https://github.com/you/app` and Godmode clones it with your git sign-in, keeps it up to date and hands it to every agent in the workspace. |
 | 🎙️ **Voice mode** | Dictate and hear replies; hands-free conversation loop (Web Speech, OpenAI or ElevenLabs). |
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |

@@ -27,6 +27,8 @@ export interface Workspace {
   instructions: string;
   /** macOS VM the workspace's agents work in (unless their chat or the agent has its own). null = none. */
   vmId: ID | null;
+  /** The workspace's default browser profile (unless an agent pins its own). null = the global default. */
+  browserProfileId: ID | null;
   /** Folders and git repositories every agent in the workspace works with. */
   sources: WorkspaceSource[];
   createdAt: ISODate;

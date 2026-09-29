@@ -131,35 +131,59 @@ export function createProfile(input: { name: string; workspaceId: string | null 
   if (!name) throw badRequest("Profile name is required");
   if (name.length > 80) throw badRequest("Profile name is too long (max 80 characters)");
   const workspaceId = input.workspaceId || null;
-  if (workspaceId && !get<{ id: string }>("SELECT id FROM workspaces WHERE id = ?", workspaceId)) throw notFound("Workspace");
-  const hasDefault = workspaceId
-    ? get<{ id: string }>("SELECT id FROM browser_profiles WHERE workspace_id = ? AND is_default = 1", workspaceId)
-    : get<{ id: string }>("SELECT id FROM browser_profiles WHERE workspace_id IS NULL AND is_default = 1");
+  assertWorkspace(workspaceId);
   // The first profile of a scope becomes its default.
-  return insertProfile(name, workspaceId, !hasDefault);
+  const profile = insertProfile(name, workspaceId, !scopeDefaultId(workspaceId));
+  if (workspaceId && profile.isDefault) bus.changed("workspaces");
+  return profile;
 }
 
-export function updateProfile(id: string, patch: { name?: string; isDefault?: boolean }): BrowserProfile {
+function assertWorkspace(workspaceId: string | null) {
+  if (workspaceId && !get<{ id: string }>("SELECT id FROM workspaces WHERE id = ?", workspaceId)) throw notFound("Workspace");
+}
+
+function scopeDefaultId(workspaceId: string | null): string | null {
+  const r = workspaceId
+    ? get<{ id: string }>("SELECT id FROM browser_profiles WHERE workspace_id = ? AND is_default = 1", workspaceId)
+    : get<{ id: string }>("SELECT id FROM browser_profiles WHERE workspace_id IS NULL AND is_default = 1");
+  return r?.id ?? null;
+}
+
+/**
+ * Rename, make (non-)default, or assign to another scope. A profile assigned to a workspace becomes that workspace's
+ * default when it has none yet (or when `isDefault` asks for it); the workspace it leaves falls back to the global default.
+ */
+export function updateProfile(id: string, patch: { name?: string; isDefault?: boolean; workspaceId?: string | null }): BrowserProfile {
   const r = requireRow(id);
-  const changes: Record<string, string | number> = {};
+  const changes: Record<string, string | number | null> = {};
   if (patch.name !== undefined) {
     const name = patch.name.trim();
     if (!name) throw badRequest("Profile name is required");
     if (name.length > 80) throw badRequest("Profile name is too long (max 80 characters)");
     changes.name = name;
   }
-  tx(() => {
-    if (patch.isDefault === true && !r.is_default) {
-      if (r.workspace_id) run("UPDATE browser_profiles SET is_default = 0 WHERE workspace_id = ?", r.workspace_id);
+  const workspaceId = patch.workspaceId === undefined ? r.workspace_id : patch.workspaceId || null;
+  const moving = workspaceId !== r.workspace_id;
+  if (moving) {
+    if (!r.workspace_id && r.is_default) throw badRequest("The global default profile can't be moved. Make another global profile the default first.");
+    assertWorkspace(workspaceId);
+    changes.workspace_id = workspaceId;
+  }
+  const alreadyDefault = !!r.is_default && !moving;
+  const isDefault = tx(() => {
+    const next = patch.isDefault ?? (moving ? !scopeDefaultId(workspaceId) : alreadyDefault);
+    if (next && !alreadyDefault) {
+      if (workspaceId) run("UPDATE browser_profiles SET is_default = 0 WHERE workspace_id = ?", workspaceId);
       else run("UPDATE browser_profiles SET is_default = 0 WHERE workspace_id IS NULL");
-      changes.is_default = 1;
-    } else if (patch.isDefault === false && r.is_default) {
-      if (!r.workspace_id) throw badRequest("The global default profile can't be unset. Make another global profile the default instead.");
-      changes.is_default = 0;
+    } else if (!next && alreadyDefault && !workspaceId) {
+      throw badRequest("The global default profile can't be unset. Make another global profile the default instead.");
     }
+    if (next !== !!r.is_default) changes.is_default = next ? 1 : 0;
     if (Object.keys(changes).length) update("browser_profiles", id, { ...changes, updated_at: now() });
+    return next;
   });
   bus.changed("browser-profiles");
+  if (moving || (workspaceId && isDefault !== alreadyDefault)) bus.changed("workspaces");
   emitProfile(id);
   return getProfile(id);
 }
@@ -187,6 +211,7 @@ export async function deleteProfile(id: string): Promise<void> {
     }
   }
   bus.changed("browser-profiles");
+  if (r.workspace_id && r.is_default) bus.changed("workspaces");
 }
 
 /** Profile an agent should use: agent.browser.profileId ?? workspace default ?? global default. */

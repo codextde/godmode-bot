@@ -8,7 +8,7 @@ import { all, get, insert, run, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { listAgents, refreshAgentFiles, removeFromDelegateLists, stopAgentRuns, trashAgentRepo } from "../agents/service";
-import { deleteProfile } from "../browser/manager";
+import { deleteProfile, updateProfile } from "../browser/manager";
 import { reloadSchedules } from "../scheduler/scheduler";
 import { HttpError, badRequest, newId, notFound, now, slugify } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
@@ -29,7 +29,10 @@ interface WorkspaceRow {
   updated_at: string;
 }
 
-function toModel(r: WorkspaceRow, sources = listSources(r.id)): Workspace {
+const SELECT = `SELECT w.*, (SELECT b.id FROM browser_profiles b WHERE b.workspace_id = w.id AND b.is_default = 1 ORDER BY b.created_at LIMIT 1) AS browser_profile_id
+  FROM workspaces w`;
+
+function toModel(r: WorkspaceRow & { browser_profile_id?: string | null }, sources = listSources(r.id)): Workspace {
   return {
     id: r.id,
     name: r.name,
@@ -39,6 +42,7 @@ function toModel(r: WorkspaceRow, sources = listSources(r.id)): Workspace {
     icon: r.icon,
     instructions: r.instructions,
     vmId: r.vm_id ?? null,
+    browserProfileId: r.browser_profile_id ?? null,
     sources,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -60,11 +64,11 @@ function cleanName(name: string | undefined): string {
 
 export function listWorkspaces(): Workspace[] {
   const sources = sourcesByWorkspace();
-  return all<WorkspaceRow>("SELECT * FROM workspaces ORDER BY name COLLATE NOCASE ASC").map((r) => toModel(r, sources.get(r.id) ?? []));
+  return all<WorkspaceRow>(`${SELECT} ORDER BY w.name COLLATE NOCASE ASC`).map((r) => toModel(r, sources.get(r.id) ?? []));
 }
 
 export function getWorkspace(id: string): Workspace {
-  const row = get<WorkspaceRow>("SELECT * FROM workspaces WHERE id = ?", id);
+  const row = get<WorkspaceRow>(`${SELECT} WHERE w.id = ?`, id);
   if (!row) throw notFound("Workspace");
   return toModel(row);
 }
@@ -86,12 +90,23 @@ export function createWorkspace(input: WorkspaceInput): Workspace {
   };
   const applySources = tx(() => {
     insert("workspaces", { ...row });
-    return input.sources ? setSources(row.id, input.sources) : undefined;
+    const apply = input.sources ? setSources(row.id, input.sources) : undefined;
+    assignBrowserProfile(row.id, input.browserProfileId);
+    return apply;
   });
   applySources?.();
   bus.changed("workspaces");
   if (row.vm_id) assignmentsChanged();
-  return toModel(row);
+  return getWorkspace(row.id);
+}
+
+/** The workspace's agents browse with this profile unless they pick their own; null = the global default. */
+function assignBrowserProfile(workspaceId: string, profileId: string | null | undefined, current: string | null = null) {
+  if (profileId === undefined) return;
+  const next = profileId?.trim() || null;
+  if (next === current) return;
+  if (next) updateProfile(next, { workspaceId, isDefault: true });
+  else if (current) updateProfile(current, { isDefault: false });
 }
 
 export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Workspace {
@@ -109,7 +124,9 @@ export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Wor
       vm_id: vmId,
       updated_at: now(),
     });
-    return patch.sources ? setSources(id, patch.sources) : undefined;
+    const apply = patch.sources ? setSources(id, patch.sources) : undefined;
+    assignBrowserProfile(id, patch.browserProfileId, current.browserProfileId);
+    return apply;
   });
   applySources?.();
   const next = getWorkspace(id);
