@@ -12,6 +12,7 @@ import {
   updateConversation,
 } from "../../services/conversations";
 import { cancelRun, findRunLog, getRun, listRuns } from "../../runner/runner";
+import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } from "../../services/followups";
 import { notFound } from "../../util";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
@@ -105,6 +106,20 @@ export function registerChatRoutes(app: Hono): void {
     const input = await body(c, sendSchema);
     return c.json(await sendMessage(id, { ...input, trigger: "chat" }), 201);
   });
+
+  app.get("/api/followups", (c) => c.json(listFollowups({ agentId: c.req.query("agentId") || undefined })));
+
+  app.patch("/api/conversations/:id/followup", async (c) => {
+    const { dueAt } = await body(c, z.object({ dueAt: z.string().min(1).max(64) }));
+    return c.json(rescheduleFollowup(c.req.param("id"), new Date(dueAt)));
+  });
+
+  app.delete("/api/conversations/:id/followup", (c) => {
+    if (!cancelFollowup(c.req.param("id"))) throw notFound("Follow-up");
+    return c.json({ ok: true as const });
+  });
+
+  app.post("/api/conversations/:id/followup/run", async (c) => c.json(await runFollowupNow(c.req.param("id")), 201));
 
   app.post("/api/chat", async (c) => {
     const input = await body(

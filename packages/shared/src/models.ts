@@ -306,6 +306,27 @@ export interface Conversation {
   /** Denormalized for lists */
   preview?: string;
   running?: boolean;
+  /** When the agent continues this chat on its own (see Followup). */
+  followup?: ConversationFollowup | null;
+}
+
+export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt">;
+
+/**
+ * A time an agent set to continue a chat on its own — like a coworker who says "I'll check back tomorrow at 10" while
+ * waiting for a reply, a delivery or a build. One per chat; it goes away when it fires or is cancelled.
+ */
+export interface Followup {
+  conversationId: ID;
+  agentId: ID;
+  /** Title of the chat it continues. */
+  title: string;
+  /** What the agent will do then, in its own words. */
+  note: string;
+  dueAt: ISODate;
+  /** When the agent set it. */
+  createdAt: ISODate;
+  updatedAt: ISODate;
 }
 
 export type MessageRole = "user" | "assistant" | "system";
@@ -339,7 +360,12 @@ export type MessageBlock =
   | { type: "error"; text: string }
   | { type: "notice"; level: "info" | "warning" | "success"; text: string }
   /** Output of a Claude Code slash command that ran locally (e.g. /context, /usage, /model). */
-  | { type: "command"; name: string; args: string; output: string };
+  | { type: "command"; name: string; args: string; output: string }
+  /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
+  | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason };
+
+/** Why a follow-up ran: it was due, it was overdue (Godmode was off or asleep), or the human said "continue now". */
+export type FollowupReason = "due" | "late" | "now";
 
 /** A slash command offered by the installed Claude Code CLI for an agent. */
 export interface SlashCommand {
@@ -374,9 +400,9 @@ export interface Message {
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 /**
  * `routine`: an automation ran (schedule, app event, condition met, webhook) · `check`: an automation checked its condition ·
- * `dream`: the agent consolidated its memory in the background.
+ * `dream`: the agent consolidated its memory in the background · `followup`: the agent continued a chat at the time it set.
  */
-export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api";
+export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api" | "followup";
 
 export interface RunUsage {
   inputTokens: number;

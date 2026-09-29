@@ -8,6 +8,7 @@ import type {
   Credential,
   Effort,
   ID,
+  ISODate,
   Message,
   MissingLoginStatus,
   Routine,
@@ -131,6 +132,11 @@ export interface StartChatInput {
   /** Work in this macOS VM instead of the agent's. */
   vmId?: ID | null;
   instructions?: string;
+}
+
+/** Move a chat's follow-up to another time. */
+export interface FollowupPatch {
+  dueAt: ISODate;
 }
 
 export interface ConversationPatch {

@@ -42,6 +42,8 @@ export const qk = {
   archivedConversationLists: ["conversations", "archived"] as unknown[],
   archivedConversations: (agentId: string, search: string) => ["conversations", "archived", agentId, search],
   conversation: (id: string) => ["conversations", "detail", id],
+  /** Times agents set to continue their chats on their own. */
+  followups: ["followups"] as unknown[],
   runs: ["runs"] as unknown[],
   runList: (agentId: string, status: string) => ["runs", "list", agentId, status],
   run: (id: string) => ["runs", "detail", id],

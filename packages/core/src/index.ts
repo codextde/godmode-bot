@@ -22,6 +22,7 @@ import { ensureDefaultAgent } from "./agents/service";
 import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
+import { startFollowups, stopFollowups } from "./services/followups";
 import { startAutomationEvents, stopAutomationEvents } from "./automations/events";
 import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
 import { startMessaging, stopMessaging } from "./messaging/service";
@@ -117,6 +118,7 @@ async function serve(values: Record<string, unknown>) {
   await ensureDefaultAgent();
   recoverInterruptedRuns();
   startScheduler();
+  startFollowups();
   startDreaming();
   startAutomationEvents();
   startAppTriggers();
@@ -191,6 +193,7 @@ async function serve(values: Record<string, unknown>) {
     stopping = true;
     log.info(`received ${signal}, shutting down`);
     stopScheduler();
+    stopFollowups();
     stopDreaming();
     stopAppTriggers();
     stopAutomationEvents();

@@ -1,6 +1,6 @@
 import type { RunStatus, RunTrigger } from "@godmode/shared";
 import { findModel } from "@godmode/shared";
-import { Ban, CheckCircle2, Clock3, Hand, MessageSquare, Moon, Plug, Radar, Share2, Workflow, XCircle } from "lucide-react";
+import { AlarmClock, Ban, CheckCircle2, Clock3, Hand, MessageSquare, Moon, Plug, Radar, Share2, Workflow, XCircle } from "lucide-react";
 import { Orb } from "@/components/aicss/Orb";
 import { useModelCatalog } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -99,6 +99,7 @@ const TRIGGER_META: Record<RunTrigger, { label: string; icon: typeof MessageSqua
   delegation: { label: "Delegation", icon: Share2 },
   manual: { label: "Manual", icon: Hand },
   api: { label: "API", icon: Plug },
+  followup: { label: "Follow-up", icon: AlarmClock },
 };
 
 export function TriggerBadge({ trigger, className }: { trigger: RunTrigger; className?: string }) {

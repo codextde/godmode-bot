@@ -58,6 +58,9 @@ interface ConversationRow {
   created_at: string;
   updated_at: string;
   preview?: string | null;
+  followup_note?: string | null;
+  followup_due_at?: string | null;
+  followup_created_at?: string | null;
 }
 
 interface MessageRow {
@@ -112,6 +115,7 @@ function toConversation(r: ConversationRow): Conversation {
     updatedAt: r.updated_at,
     preview: previewOf(r.preview),
     running: activeRunForConversation(r.id) !== null,
+    followup: r.followup_due_at ? { note: r.followup_note ?? "", dueAt: r.followup_due_at, createdAt: r.followup_created_at ?? r.followup_due_at } : null,
   };
 }
 
@@ -129,9 +133,11 @@ function toMessage(r: MessageRow): Message {
 }
 
 const PREVIEW_SQL = `(SELECT m.content FROM messages m WHERE m.conversation_id = c.id AND m.content != '' ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1) AS preview`;
+const FOLLOWUP_SQL = "f.note AS followup_note, f.due_at AS followup_due_at, f.created_at AS followup_created_at";
+const FROM_SQL = "conversations c LEFT JOIN followups f ON f.conversation_id = c.id";
 
 function conversationRow(id: string): ConversationRow | null {
-  return get<ConversationRow>(`SELECT c.*, ${PREVIEW_SQL} FROM conversations c WHERE c.id = ?`, id);
+  return get<ConversationRow>(`SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL} FROM ${FROM_SQL} WHERE c.id = ?`, id);
 }
 
 function requireConversationRow(id: string): ConversationRow {
@@ -229,7 +235,7 @@ export function listConversations(opts: { agentId?: string; search?: string; lim
   const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? 100)), 500);
   params.push(limit);
   const rows = all<ConversationRow>(
-    `SELECT c.*, ${PREVIEW_SQL} FROM conversations c WHERE ${where.join(" AND ")}
+    `SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL} FROM ${FROM_SQL} WHERE ${where.join(" AND ")}
      ORDER BY ${opts.archived ? "" : "c.pinned DESC, "}COALESCE(c.last_message_at, c.created_at) DESC LIMIT ?`,
     ...params,
   );
@@ -425,7 +431,17 @@ export function saveAttachments(agent: Agent, files: NonNullable<SendMessageInpu
 /** Store the user message (+attachments) and start a run for it. */
 export async function sendMessage(
   conversationId: string,
-  input: SendMessageInput & { trigger?: RunTrigger; routineId?: string | null; parentRunId?: string | null; depth?: number; runId?: string },
+  input: SendMessageInput & {
+    trigger?: RunTrigger;
+    routineId?: string | null;
+    parentRunId?: string | null;
+    depth?: number;
+    runId?: string;
+    /** What Claude gets instead of `content`. */
+    prompt?: string;
+    /** Store a system message with these blocks instead of a message from the human. */
+    marker?: MessageBlock[];
+  },
 ): Promise<SendMessageResult> {
   const conv = requireConversationRow(conversationId);
   const agent = getAgent(conv.agent_id);
@@ -438,9 +454,9 @@ export async function sendMessage(
   if (!content && files.length === 0) throw badRequest("Message is empty");
 
   const attachments = files.length ? saveAttachments(agent, files) : [];
-  const message = addMessage({ conversationId, role: "user", content: redact(content), attachments });
+  const message = addMessage({ conversationId, role: input.marker ? "system" : "user", content: redact(content), blocks: input.marker, attachments });
   // Absolute: the run's cwd is not the agent repo when the chat works in a folder.
-  let prompt = content;
+  let prompt = input.prompt ?? content;
   if (attachments.length) prompt += `${prompt ? "\n\n" : ""}Attached files: ${attachments.map((a) => join(agent.repoPath, a.path)).join(", ")}`;
 
   let started: Run;
@@ -544,6 +560,7 @@ function toolSummary(blocks: MessageBlock[]): string {
 function speaker(runTrigger: RunTrigger): string {
   if (runTrigger === "routine") return "Automation";
   if (runTrigger === "delegation") return "Delegated task";
+  if (runTrigger === "followup") return "Follow-up";
   return getSettings().general.userName.trim() || "User";
 }
 
