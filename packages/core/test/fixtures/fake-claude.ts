@@ -15,6 +15,11 @@
  *              and answer "VM {json}"; "no vm server" when the run has none
  *   CALL_GUEST  start the stdio `browser` and `cua` MCP servers from --mcp-config like Claude Code does, send each an
  *              initialize line and answer "GUEST {json}" with the server names and each server's command and reply
+ *   TASK_EDIT   write TASK_CHANGE.md into the cwd (a coding task's checkout) and answer with a summary
+ *   TASK_COMMIT_ENV  write and commit .env.production in the cwd
+ *   TASK_ENV    write .env and feature.txt into the cwd
+ *   TASK_LEAK:<value>  write config.txt containing <value> into the cwd
+ *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
  *   CRASH       print to stderr and exit 3 without a result
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
@@ -245,6 +250,52 @@ if (slash?.[1] === "clear") {
     hadMemory,
   };
   const text = `DREAM ${JSON.stringify(summary)}`;
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_EDIT")) {
+  out(init);
+  appendFileSync(join(process.cwd(), "TASK_CHANGE.md"), `${prompt.split("\n")[0]}\n`);
+  const text = "Added TASK_CHANGE.md with the requested change.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_COMMIT_ENV")) {
+  out(init);
+  writeFileSync(join(process.cwd(), ".env.production"), "API_TOKEN=abc123\n");
+  const git = (...a: string[]) => Bun.spawnSync(["git", "-c", "user.name=Agent", "-c", "user.email=agent@example.com", ...a], { cwd: process.cwd() });
+  git("add", "-f", ".env.production");
+  git("commit", "-qm", "Add production env");
+  const text = "Committed the env file.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_ENV")) {
+  out(init);
+  writeFileSync(join(process.cwd(), ".env"), "API_TOKEN=abc123\n");
+  writeFileSync(join(process.cwd(), "feature.txt"), "a feature\n");
+  const text = "Added feature.txt.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_LEAK:")) {
+  out(init);
+  writeFileSync(join(process.cwd(), "config.txt"), `token=${/TASK_LEAK:(\S+)/.exec(prompt)![1]}\n`);
+  const text = "Wrote the config.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_BLOCKED")) {
+  out(init);
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  const list = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+  const call = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "task_report_blocked", arguments: { reason: "Need admin access to the billing portal" } } });
+  const tools = (list.result.tools as { name: string }[]).map((t) => t.name);
+  const text = `BLOCKED ${JSON.stringify({ listed: tools.includes("task_report_blocked"), call: call.result.content[0].text })}`;
   textTurn(text);
   result(text);
 } else if (prompt.includes("CRASH")) {

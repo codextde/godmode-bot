@@ -7,7 +7,7 @@ import { Sparkles } from "lucide-react";
 import type { ConversationWithMessages, RoutineTriggerType } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useDraft } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,7 @@ export function OnePromptCard({ compact = false }: { compact?: boolean }) {
   const qc = useQueryClient();
   const { data: boot } = useBootstrap();
   const { data: agents = [] } = useAllAgents();
+  const workspace = useScopeWorkspace();
   const [text, setText, textDraft] = useDraft("automation:describe", "");
   const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -42,7 +43,7 @@ export function OnePromptCard({ compact = false }: { compact?: boolean }) {
   const expanded = !compact || focused || text.trim().length > 0;
 
   const start = useMutation({
-    mutationFn: () => api.chat.start({ agentId: godmodeId, content: `Set up an automation: ${text.trim()}` }),
+    mutationFn: () => api.chat.start({ agentId: godmodeId, content: `Set up an automation: ${text.trim()}`, workspaceId: workspace?.id }),
     onSuccess: (res) => {
       textDraft.discard();
       qc.setQueryData<ConversationWithMessages>(qk.conversation(res.conversation.id), {

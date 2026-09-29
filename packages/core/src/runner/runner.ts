@@ -25,7 +25,7 @@ import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
-import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
+import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, onLaunchProblem, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
 import {
   addMessage,
   appendTranscript,
@@ -649,6 +649,13 @@ function computerHolder(job: Job): Job | null {
   return null;
 }
 
+onLaunchProblem((runId, text) => {
+  const job = jobs.get(runId);
+  if (job?.status !== "running") return;
+  job.acc.addNotice("warning", text);
+  scheduleDelta(job);
+});
+
 /**
  * The running job working in the same VM as `job` (excluding its own ancestors), if any. Runs sharing a browser profile
  * on this computer don't wait for each other: every chat works in its own tabs.
@@ -976,7 +983,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const watch = setInterval(() => job.cancelReason && cancelled.abort(), 250);
     try {
       const prepared = await prepareSources(agent.workspaceId, { onActivity: (label) => emitActivity(job, label), signal: cancelled.signal });
-      sources = prepared.sources.filter((s) => s.path !== cwd && s.path !== agent.repoPath);
+      // A coding task works in its own checkout: the workspace's shared clone of that repository stays out of reach.
+      const taskRepo = get<{ repo_url: string }>("SELECT repo_url FROM tasks WHERE conversation_id = ? AND type = 'coding'", job.conversationId)?.repo_url;
+      sources = prepared.sources.filter((s) => s.path !== cwd && s.path !== agent.repoPath && !(taskRepo && s.url === taskRepo));
       for (const text of prepared.notices) job.acc.addNotice("warning", text);
     } finally {
       clearInterval(watch);
@@ -1028,6 +1037,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         standingInstructions: standing,
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath) : null,
+        followups: job.trigger !== "check" && job.trigger !== "delegation",
       });
   const memoryNow = memoryDigest(agent.repoPath);
 
@@ -1136,9 +1146,11 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     if (restate) job.restatedDigest = digest;
     // Another chat, a dream or the human changed the memory since this session last saw it.
     const memoryChanged = resuming && !dreaming && conv.memory_digest != null && conv.memory_digest !== memoryNow;
+    const followup = get<{ dueAt: string; note: string }>("SELECT due_at AS dueAt, note FROM followups WHERE conversation_id = ?", job.conversationId);
     const prompt =
       resuming && !command
-        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources }) + job.prompt
+        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup }) +
+          job.prompt
         : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 

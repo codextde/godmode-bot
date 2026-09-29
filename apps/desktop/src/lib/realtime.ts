@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { browserView, type AutomationEvent, type BrowserProfile, type ClientEvent, type EntityName, type ServerEvent, type Vm } from "@godmode/shared";
+import { browserView, type AutomationEvent, type BrowserProfile, type ClientEvent, type EntityName, type ServerEvent, type Task, type Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { qk } from "./queryKeys";
@@ -43,8 +43,10 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   vms: [qk.vms],
   // Bot status, access requests and chats (the sidebar badge counts requests).
   messaging: [qk.messaging, qk.bootstrap],
+  tasks: [qk.tasks],
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
+  followups: [qk.followups],
 };
 
 export function startRealtime(queryClient: QueryClient) {
@@ -142,17 +144,27 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "conversation.updated":
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
+      // Follow-ups show the chat's title.
+      qc.invalidateQueries({ queryKey: qk.followups });
       break;
     case "conversation.deleted":
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries({ queryKey: qk.followups });
       break;
     case "agent.updated":
     case "agent.deleted":
       qc.invalidateQueries({ queryKey: qk.agents });
+      if (event.type === "agent.deleted") qc.invalidateQueries({ queryKey: qk.followups });
       break;
     case "routine.updated":
     case "routine.deleted":
       qc.invalidateQueries({ queryKey: qk.routines });
+      break;
+    case "task.updated":
+      upsertTask(qc, event.task);
+      break;
+    case "task.deleted":
+      qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.filter((t) => t.id !== event.id));
       break;
     case "automation.event":
       void upsertAutomationEvent(qc, event.event);
@@ -335,4 +347,19 @@ export function subscribeBrowser(
       sendClientEvent({ type: "browser.unsubscribe", profileId, ...(conversationId ? { conversationId } : {}) });
     } else if (wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(viewers));
   };
+}
+
+/** Patch every cached task list the task belongs to (the key's third segment is the scope: all, global or a workspace id). */
+function upsertTask(qc: QueryClient, task: Task) {
+  for (const [key, list] of qc.getQueriesData<Task[]>({ queryKey: qk.tasks })) {
+    if (!list) continue;
+    const scope = key[2];
+    const belongs = scope === "all" || (scope === "global" ? task.workspaceId === null : task.workspaceId === scope);
+    const idx = list.findIndex((t) => t.id === task.id);
+    if (!belongs) {
+      if (idx >= 0) qc.setQueryData(key, list.filter((t) => t.id !== task.id));
+      continue;
+    }
+    qc.setQueryData(key, idx >= 0 ? list.map((t) => (t.id === task.id ? task : t)) : [...list, task]);
+  }
 }

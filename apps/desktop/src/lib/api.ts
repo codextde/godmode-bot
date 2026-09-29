@@ -37,6 +37,8 @@ import type {
   DreamDetail,
   DreamOverview,
   FolderListing,
+  Followup,
+  FollowupPatch,
   GitCommit,
   LocalChromeProfile,
   LogEntry,
@@ -65,6 +67,9 @@ import type {
   SlashCommand,
   StartChatInput,
   StartChatResult,
+  Task,
+  TaskInput,
+  TaskPatch,
   TotpCode,
   TotpEntry,
   TotpImportInput,
@@ -277,6 +282,18 @@ export const api = {
     syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/workspaces/${id}/sources/${sourceId}/sync`),
   },
 
+  tasks: {
+    list: (q: { workspaceId?: ScopeFilter } = {}) => get<Task[]>("/api/tasks", q),
+    get: (id: string) => get<Task>(`/api/tasks/${id}`),
+    /** With an agent and status todo (the default then), the agent starts right away. */
+    create: (input: TaskInput) => post<Task>("/api/tasks", input),
+    /** Moving to todo starts the agent; moving away from in_progress stops it. */
+    update: (id: string, input: TaskPatch) => patch<Task>(`/api/tasks/${id}`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/tasks/${id}`),
+    /** Follow-up for the agent in the task's conversation (review feedback); the task goes back to work. */
+    message: (id: string, content: string) => post<Task>(`/api/tasks/${id}/messages`, { content }),
+  },
+
   agents: {
     list: (q: { workspaceId?: ScopeFilter } = {}) => get<Agent[]>("/api/agents", q),
     get: (id: string) => get<Agent>(`/api/agents/${id}`),
@@ -285,7 +302,7 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/agents/${id}`),
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
     /** Start a fresh task conversation for the agent */
-    run: (id: string, prompt?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt }),
+    run: (id: string, prompt?: string, workspaceId?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt, workspaceId }),
     files: (id: string, path = "") => get<AgentFileEntry[]>(`/api/agents/${id}/files`, { path }),
     readFile: (id: string, path: string) => get<{ path: string; content: string }>(`/api/agents/${id}/file`, { path }),
     writeFile: (id: string, path: string, content: string) => put<{ ok: true }>(`/api/agents/${id}/file`, { path, content }),
@@ -327,10 +344,18 @@ export const api = {
     list: (q: { agentId?: string; search?: string; limit?: number; archived?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
-    create: (input: { agentId: string; title?: string }) => post<Conversation>("/api/conversations", input),
+    create: (input: { agentId: string; title?: string; workspaceId?: string | null }) => post<Conversation>("/api/conversations", input),
     update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     send: (id: string, input: SendMessageInput) => post<SendMessageResult>(`/api/conversations/${id}/messages`, input),
+  },
+
+  /** Times agents set to continue a chat on their own (one per chat, keyed by the conversation). */
+  followups: {
+    list: (q: { agentId?: string } = {}) => get<Followup[]>("/api/followups", q),
+    move: (conversationId: string, input: FollowupPatch) => patch<Followup>(`/api/conversations/${conversationId}/followup`, input),
+    cancel: (conversationId: string) => del<{ ok: true }>(`/api/conversations/${conversationId}/followup`),
+    runNow: (conversationId: string) => post<Run>(`/api/conversations/${conversationId}/followup/run`),
   },
 
   computer: {

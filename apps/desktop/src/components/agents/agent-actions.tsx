@@ -6,6 +6,7 @@ import { Play } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { clearDraft, useDraft } from "@/lib/drafts";
 import { useLive, type LiveRun } from "@/stores/live";
@@ -44,8 +45,9 @@ export function useAgentLiveRun(agentId: string | undefined): LiveRun | null {
 export function useStartAgentChat() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const workspace = useScopeWorkspace();
   return useMutation({
-    mutationFn: (agentId: string) => api.conversations.create({ agentId }),
+    mutationFn: (agentId: string) => api.conversations.create({ agentId, workspaceId: workspace?.id }),
     onSuccess: (conversation) => {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${conversation.id}`);
@@ -91,9 +93,10 @@ export function RunTaskDialog({
   const agent = useLatest(agentProp);
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const workspace = useScopeWorkspace();
   const [prompt, setPrompt, promptDraft] = useDraft(agent ? `run-task:${agent.id}` : undefined, "");
   const run = useMutation({
-    mutationFn: (input: { agentId: string; prompt: string }) => api.agents.run(input.agentId, input.prompt),
+    mutationFn: (input: { agentId: string; prompt: string }) => api.agents.run(input.agentId, input.prompt, workspace?.id),
     onSuccess: (res, input) => {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.runs });

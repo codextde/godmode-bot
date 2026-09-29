@@ -44,6 +44,7 @@ import { MultiSelect } from "./multi-select";
 import { ModelOptions } from "./model-options";
 import { useVaultGrant } from "@/components/vault/grant";
 import { FolderPickerDialog, folderName, useShortPath } from "@/components/chat/folder-picker";
+import { defaultProfileFor } from "@/components/chat/browser-panel";
 import { InheritedInstructions, useInheritedInstructions } from "@/components/instructions/instructions";
 import { VmSelectField } from "@/components/vms/vm-picker";
 
@@ -516,7 +517,12 @@ export function AgentForm({
                 onChange={(v) => set("browserEnabled", v)}
               />
               <div className={cn("grid grid-cols-1 gap-4 @xl:grid-cols-2", !values.browserEnabled && "pointer-events-none opacity-50")}>
-                <BrowserProfileField value={values.browserProfileId} onChange={(v) => set("browserProfileId", v)} disabled={!values.browserEnabled} />
+                <BrowserProfileField
+                  value={values.browserProfileId}
+                  workspaceId={values.workspaceId}
+                  onChange={(v) => set("browserProfileId", v)}
+                  disabled={!values.browserEnabled}
+                />
                 <div className="space-y-1.5">
                   <span id="agent-headless-label" className="text-sm font-medium">
                     Window
@@ -920,8 +926,19 @@ function ComputerDisplayField({ value, onChange, disabled }: { value: string | n
   );
 }
 
-function BrowserProfileField({ value, onChange, disabled }: { value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
+function BrowserProfileField({
+  value,
+  workspaceId,
+  onChange,
+  disabled,
+}: {
+  value: string | null;
+  workspaceId: string | null;
+  onChange: (v: string | null) => void;
+  disabled?: boolean;
+}) {
   const { data: profiles = [], isLoading } = useQuery({ queryKey: [...qk.browserProfiles, "list"], queryFn: api.browser.profiles });
+  const defaultId = defaultProfileFor(profiles, workspaceId)?.id;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-browser-profile">Profile</Label>
@@ -935,7 +952,7 @@ function BrowserProfileField({ value, onChange, disabled }: { value: string | nu
           {profiles.map((p) => (
             <SelectItem key={p.id} value={p.id}>
               {p.name}
-              {p.isDefault && <span className="text-xs text-muted-foreground">default</span>}
+              {p.id === defaultId && <span className="text-xs text-muted-foreground">default</span>}
               {p.cookieCount > 0 && <span className="text-xs text-muted-foreground">{p.cookieCount} cookies</span>}
             </SelectItem>
           ))}

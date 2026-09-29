@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Godmode Bot — intro film</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #faf9f5; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; background: #faf9f5; }
+      [data-composition-id="main"] > div[data-composition-src] { position: absolute; inset: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="87" data-width="1920" data-height="1080">
+      <div id="el-s1" data-composition-id="s1-open" data-composition-src="compositions/s1-open.html"
+        data-start="0" data-duration="6" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-s2" data-composition-id="s2-team" data-composition-src="compositions/s2-team.html"
+        data-start="6" data-duration="11" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-s3" data-composition-id="s3-reports" data-composition-src="compositions/s3-reports.html"
+        data-start="17" data-duration="15" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-s4" data-composition-id="s4-ask" data-composition-src="compositions/s4-ask.html"
+        data-start="32" data-duration="7.5" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-s5" data-composition-id="s5-works" data-composition-src="compositions/s5-works.html"
+        data-start="39.5" data-duration="16" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-s6" data-composition-id="s6-memory" data-composition-src="compositions/s6-memory.html"
+        data-start="55.5" data-duration="10" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-s7" data-composition-id="s7-anywhere" data-composition-src="compositions/s7-anywhere.html"
+        data-start="65.5" data-duration="11" data-track-index="1" data-width="1920" data-height="1080"></div>
+      <div id="el-s8" data-composition-id="s8-end" data-composition-src="compositions/s8-end.html"
+        data-start="76.5" data-duration="10.5" data-track-index="1" data-width="1920" data-height="1080"></div>
+
+      <!-- Synthesized score + UI sound marks (scripts/make_audio.py), mastered to -16 LUFS. -->
+      <audio id="el-soundtrack" src="assets/audio/soundtrack.m4a" data-start="0" data-duration="87" data-track-index="10" data-volume="1"></audio>
+    </div>
+    <script>
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+    </script>
+  </body>
+</html>

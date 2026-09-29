@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1600, height=1000" />
+    <title>Godmode Bot — Fill, don't reveal</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="assets/brand.css" />
+    <link rel="stylesheet" href="assets/scenes.css" />
+    <style>
+      @font-face { font-family: "Geist"; src: url("assets/fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
+      @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
+      html, body { width: 1600px; height: 1000px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="8" data-width="1600" data-height="1000">
+      <div id="scene" class="clip" data-start="0" data-duration="8" data-track-index="0">
+        <div class="bg-field"></div>
+        <div class="bg-glow" id="glow" style="left: 400px; top: 180px; width: 800px; height: 900px"></div>
+        <div class="guide-v" style="left: 96px"></div>
+        <div class="guide-v" style="left: 1504px"></div>
+        <div class="guide-h" style="top: 960px"></div>
+        <div class="reg" style="left: 87px; top: 951px"></div>
+        <div class="reg" style="left: 1495px; top: 951px"></div>
+        <div id="host"></div>
+        <div class="grain"></div>
+      </div>
+    </div>
+    <script src="assets/lib.js"></script>
+    <script src="assets/scenes/vault.js"></script>
+    <script>
+      const D = 8;
+      const tl = gsap.timeline({ paused: true });
+      const sc = GM.scenes.vault(document.getElementById("host"), tl, 0, { loop: true, len: D });
+      const glow = document.getElementById("glow");
+      GM.driver(tl, D, (t) => {
+        sc.update(t);
+        const b = 0.5 + 0.5 * Math.sin((t / D) * Math.PI * 2);
+        glow.style.opacity = (0.55 + b * 0.35).toFixed(3);
+      });
+      GM.markLayered([".win"], []);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
