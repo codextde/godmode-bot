@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, FolderGit2, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace, type WorkspaceSourceInput } from "@godmode/shared";
-import { colorSwatch } from "@/components/common";
+import { colorSwatch, DraftStatus } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceProfileField } from "@/components/browser/workspace-profile-field";
 import { VmSelectField } from "@/components/vms/vm-picker";
 import { api } from "@/lib/api";
+import { clearDraft, useDraft } from "@/lib/drafts";
 import { useVmChoices } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,35 @@ const EMOJIS = [
 ];
 
 const MAX_NAME = 60;
+const NEW_DRAFT = "workspace:new";
+
+interface WorkspaceForm {
+  name: string;
+  icon: string;
+  color: string;
+  description: string;
+  instructions: string;
+  vmId: string | null;
+  browserProfileId: string | null;
+  sources: WorkspaceSourceInput[];
+}
+
+function randomLook() {
+  return { icon: EMOJIS[Math.floor(Math.random() * 10)], color: AGENT_COLORS[Math.floor(Math.random() * AGENT_COLORS.length)] };
+}
+
+function formFrom(workspace: Workspace | null | undefined, look: { icon: string; color: string }): WorkspaceForm {
+  return {
+    name: workspace?.name ?? "",
+    icon: workspace?.icon || look.icon,
+    color: workspace?.color || look.color,
+    description: workspace?.description ?? "",
+    instructions: workspace?.instructions ?? "",
+    vmId: workspace?.vmId ?? null,
+    browserProfileId: workspace?.browserProfileId ?? null,
+    sources: workspace?.sources.map(toSourceInput) ?? [],
+  };
+}
 const CONTEXT_EXAMPLE = "We are ACME GmbH. Write to clients in German.\nInvoices go to finance@acme.example.\nNever touch the production database.";
 
 export function WorkspaceDialog({
@@ -48,14 +78,22 @@ export function WorkspaceDialog({
   const qc = useQueryClient();
   const setScope = useUi((s) => s.setWorkspace);
   const editing = !!workspace;
-  const [name, setName] = useState("");
-  const [icon, setIcon] = useState("🚀");
-  const [color, setColor] = useState<string>("violet");
-  const [description, setDescription] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [vmId, setVmId] = useState<string | null>(null);
-  const [browserProfileId, setBrowserProfileId] = useState<string | null>(null);
-  const [sources, setSources] = useState<WorkspaceSourceInput[]>([]);
+  const draftKey = workspace ? `workspace:${workspace.id}` : NEW_DRAFT;
+  // A new workspace's look stays put until one is created, so a picked icon or color reads as a change.
+  const [look, setLook] = useState(randomLook);
+  const newLook = useRef(false);
+  // Fresh on every open; live updates (clone progress) must not reset the form.
+  const base = useMemo(() => formFrom(workspace, look), [open, workspace?.id, look]);
+  const [live, setForm, kept] = useDraft(open ? draftKey : undefined, base);
+  const closing = useRef(live);
+  if (open) closing.current = live;
+  const form = open ? live : closing.current;
+  const { name, icon, color, description, instructions, vmId, browserProfileId, sources } = form;
+  const set =
+    <K extends keyof WorkspaceForm>(key: K) =>
+    (value: WorkspaceForm[K]) =>
+      setForm((f) => ({ ...f, [key]: value }));
+  const setIcon = set("icon");
   const sourcesRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const vmChoices = useVmChoices();
@@ -64,17 +102,11 @@ export function WorkspaceDialog({
 
   useEffect(() => {
     if (!open) return;
-    setName(workspace?.name ?? "");
-    setIcon(workspace?.icon || EMOJIS[Math.floor(Math.random() * 10)]);
-    setColor(workspace?.color || AGENT_COLORS[Math.floor(Math.random() * AGENT_COLORS.length)]);
-    setDescription(workspace?.description ?? "");
-    setInstructions(workspace?.instructions ?? "");
-    setVmId(workspace?.vmId ?? null);
-    setBrowserProfileId(workspace?.browserProfileId ?? null);
-    setSources(workspace?.sources.map(toSourceInput) ?? []);
     setCustomEmoji("");
-    // Only when the dialog opens or switches workspace: live updates (clone progress) must not reset the form.
-  }, [open, workspace?.id]);
+    // Only once the dialog is open again: while it closes, a new base would turn the saved form into a draft.
+    if (newLook.current) setLook(randomLook());
+    newLook.current = false;
+  }, [open]);
 
   useEffect(() => {
     if (!open || focus !== "sources") return;
@@ -89,7 +121,8 @@ export function WorkspaceDialog({
   }, [open, focus]);
 
   const save = useMutation({
-    mutationFn: () => {
+    // The key travels with the save: closing the dialog meanwhile switches it to the new-workspace draft.
+    mutationFn: (_key: string) => {
       const input = {
         name: name.trim(),
         icon,
@@ -103,11 +136,14 @@ export function WorkspaceDialog({
       };
       return workspace ? api.workspaces.update(workspace.id, input) : api.workspaces.create(input);
     },
-    onSuccess: (ws) => {
+    onSuccess: (ws, key) => {
+      const edited = key !== NEW_DRAFT;
+      clearDraft(key);
+      if (!edited) newLook.current = true;
       void qc.invalidateQueries({ queryKey: qk.workspaces });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
       void qc.invalidateQueries({ queryKey: qk.browserProfiles });
-      if (editing) toast.success("Workspace updated");
+      if (edited) toast.success("Workspace updated");
       else
         toast.success(`${ws.icon} ${ws.name} created`, {
           description: "Add agents, logins and integrations to it.",
@@ -120,7 +156,7 @@ export function WorkspaceDialog({
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (name.trim() && !save.isPending) save.mutate();
+    if (name.trim() && !save.isPending) save.mutate(draftKey);
   };
 
   return (
@@ -219,7 +255,7 @@ export function WorkspaceDialog({
                 maxLength={MAX_NAME}
                 placeholder="e.g. ACME Corp, Side project, Household"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => set("name")(e.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -232,7 +268,7 @@ export function WorkspaceDialog({
                     role="radio"
                     aria-checked={color === c}
                     aria-label={c}
-                    onClick={() => setColor(c)}
+                    onClick={() => set("color")(c)}
                     className={cn(
                       "grid size-7 place-items-center rounded-md ring-offset-2 ring-offset-background transition hover:opacity-85 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                       colorSwatch(c),
@@ -253,7 +289,7 @@ export function WorkspaceDialog({
                 rows={3}
                 placeholder="What happens in this workspace? Agents see this as context."
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => set("description")(e.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -270,7 +306,7 @@ export function WorkspaceDialog({
                 maxLength={MAX_INSTRUCTIONS_LENGTH}
                 placeholder={CONTEXT_EXAMPLE}
                 value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
+                onChange={(e) => set("instructions")(e.target.value)}
                 className="max-h-72 min-h-28 resize-y leading-relaxed"
               />
             </div>
@@ -283,9 +319,9 @@ export function WorkspaceDialog({
                   Every agent in this workspace can read and edit these and follows their CLAUDE.md. Repositories are cloned for them.
                 </p>
               </div>
-              <WorkspaceSourcesField workspaceId={workspace?.id ?? null} value={sources} onChange={setSources} />
+              <WorkspaceSourcesField workspaceId={workspace?.id ?? null} value={sources} onChange={set("sources")} />
             </div>
-            <WorkspaceProfileField id="ws-browser" workspaceId={workspace?.id ?? null} value={browserProfileId} onChange={setBrowserProfileId} />
+            <WorkspaceProfileField id="ws-browser" workspaceId={workspace?.id ?? null} value={browserProfileId} onChange={set("browserProfileId")} />
             {vmChoices.available && (
               <VmSelectField
                 id="ws-vm"
@@ -295,14 +331,15 @@ export function WorkspaceDialog({
                   </>
                 }
                 value={vmId}
-                onChange={setVmId}
+                onChange={set("vmId")}
                 noneLabel="None — agents work on this Mac"
                 hint="The workspace's agents work in this macOS VM, unless an agent or a chat has its own."
               />
             )}
           </div>
 
-          <DialogFooter className="border-t bg-paper-2 px-6 py-4">
+          <DialogFooter className="items-center border-t bg-paper-2 px-6 py-4">
+            {kept.saved && <DraftStatus onDiscard={kept.discard} className="mr-auto" />}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>

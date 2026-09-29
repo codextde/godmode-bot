@@ -3,11 +3,12 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { toast } from "sonner";
-import { ArrowLeft, Bot, CalendarClock, Plus, Sparkles, Wand2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot, CalendarClock, Plus, Sparkles, Wand2, X } from "lucide-react";
 import type { Agent, AgentInput, AgentTemplate } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { qk } from "@/lib/queryKeys";
+import { clearDraft, draftKeys, loadDraft, useDraft } from "@/lib/drafts";
 import { useAgentTemplates, useBootstrap, useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
@@ -18,7 +19,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { AgentForm } from "@/components/agents/agent-form";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AgentForm, agentToValues, type AgentFormValues } from "@/components/agents/agent-form";
 import { cronToHuman, localTimezone } from "@/components/agents/cron";
 
 const EXAMPLES = [
@@ -27,6 +29,8 @@ const EXAMPLES = [
   "Watch competitor pricing pages weekly and report changes",
   "Triage my inbox twice a day and draft replies for anything urgent",
 ];
+
+const FORM_DRAFTS = "agent-new:template:";
 
 export default function AgentNewPage() {
   const [params, setParams] = useSearchParams();
@@ -48,8 +52,13 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
   const { data: boot } = useBootstrap();
   const workspace = useScopeWorkspace();
   const templates = useAgentTemplates();
-  const [description, setDescription] = useState("");
+  const [description, setDescription, descriptionDraft] = useDraft("agent-new:describe", "");
   const [focused, setFocused] = useState(false);
+  const [draftList, setDraftList] = useState(() => draftKeys(FORM_DRAFTS));
+  const drafts = draftList
+    .map((key) => ({ key, templateId: key.slice(FORM_DRAFTS.length), values: loadDraft<Partial<AgentFormValues> | null>(key, null) }))
+    .filter((d) => d.values !== null)
+    .map((d) => ({ ...d, values: { ...agentToValues(undefined), ...d.values } }));
 
   const describe = useMutation({
     mutationFn: () =>
@@ -59,6 +68,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
         content: `Create a new agent for me: ${description.trim()}. Configure sensible instructions and an automation if it should work on its own (on a schedule or when something happens).`,
       }),
     onSuccess: (res) => {
+      descriptionDraft.discard();
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${res.conversation.id}`);
     },
@@ -81,6 +91,29 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
         }
       />
       <PageBody className="space-y-10">
+        {drafts.length > 0 && (
+          <section aria-labelledby="agent-drafts-title">
+            <h2 id="agent-drafts-title" className="eyebrow mb-3">
+              Pick up where you left off
+            </h2>
+            <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
+              {drafts.map((d, i) => (
+                <DraftCard
+                  key={d.key}
+                  values={d.values}
+                  source={d.templateId === "scratch" ? "From scratch" : `From ${templates.data?.find((t) => t.id === d.templateId)?.name ?? "a template"}`}
+                  index={i}
+                  onOpen={() => onPick(d.templateId)}
+                  onDiscard={() => {
+                    clearDraft(d.key);
+                    setDraftList((keys) => keys.filter((k) => k !== d.key));
+                  }}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="relative overflow-hidden rounded-2xl border bg-paper-2 p-4 @md:p-6 @2xl:p-8">
           <Backdrop className="opacity-60" />
           <div className="relative mx-auto max-w-3xl">
@@ -195,6 +228,56 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
   );
 }
 
+function DraftCard({
+  values,
+  source,
+  index,
+  onOpen,
+  onDiscard,
+}: {
+  values: AgentFormValues;
+  source: string;
+  index: number;
+  onOpen: () => void;
+  onDiscard: () => void;
+}) {
+  const name = values.name.trim() || "Unnamed agent";
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(index, 6) * 0.04 }}
+      className="group relative flex items-center gap-3 rounded-xl border bg-card p-3 pr-2 shadow-card transition hover:border-foreground/15 hover:shadow-float has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-ring/50"
+    >
+      <AgentAvatar agent={{ avatar: values.avatar, color: values.color }} size="md" />
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Continue ${name}`}
+        className="min-w-0 flex-1 text-left outline-none after:absolute after:inset-0 after:rounded-xl"
+      >
+        <span className="block truncate text-sm font-medium tracking-[-0.01em]">{name}</span>
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />
+          <span className="truncate">Draft · {source}</span>
+        </span>
+      </button>
+      <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground transition group-hover:text-foreground">
+        Continue <ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" />
+      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button type="button" variant="ghost" size="icon" onClick={onDiscard} aria-label={`Discard draft ${name}`} className="relative z-10 size-7 text-muted-foreground">
+            <X />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Discard draft</TooltipContent>
+      </Tooltip>
+    </motion.div>
+  );
+}
+
 function TemplateCard({ template, index, onPick }: { template: AgentTemplate; index: number; onPick: () => void }) {
   return (
     <motion.button
@@ -227,6 +310,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
   const qc = useQueryClient();
   const templates = useAgentTemplates();
   const isScratch = templateId === "scratch";
+  const draftKey = FORM_DRAFTS + templateId;
   const template = isScratch ? null : (templates.data?.find((t) => t.id === templateId) ?? null);
   const [withRoutine, setWithRoutine] = useState(true);
 
@@ -265,6 +349,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
       return { agent, routineError };
     },
     onSuccess: ({ agent, routineError }) => {
+      clearDraft(draftKey);
       qc.invalidateQueries({ queryKey: qk.agents });
       qc.invalidateQueries({ queryKey: qk.routines });
       qc.invalidateQueries({ queryKey: qk.bootstrap });
@@ -319,6 +404,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
           key={templateId}
           mode="create"
           initial={initial}
+          draftKey={draftKey}
           submitLabel="Create agent"
           pending={create.isPending}
           onSubmit={(input) => create.mutate(input)}
