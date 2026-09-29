@@ -36,7 +36,11 @@ export interface WorkspaceInput {
   vmId?: ID | null;
   /** Browser profile for the workspace's agents, moved into the workspace if needed; null = the global default. */
   browserProfileId?: ID | null;
+  /** Every attached folder and repository, in order. One naming an existing source keeps it (and its clone). */
+  sources?: WorkspaceSourceInput[];
 }
+
+export type WorkspaceSourceInput = { kind: "folder"; path: string } | { kind: "git"; url: string; branch?: string | null };
 
 export interface AgentInput {
   workspaceId?: ID | null;

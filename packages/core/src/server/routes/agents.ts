@@ -27,6 +27,7 @@ import { requireGrant } from "../grants";
 import { body, computerTargetSchema, z } from "../validate";
 
 const id = z.string().min(1).max(64);
+const DEFAULT_TASK_PROMPT = "Carry out your instructions and report back what you did.";
 const modelId = z
   .string()
   .trim()
@@ -159,9 +160,9 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post("/api/agents/:id/run", async (c) => {
     const agent = getAgent(c.req.param("id"));
-    const { prompt } = await body(c, z.object({ prompt: z.string().trim().min(1, "Prompt is required").max(100_000) }));
+    const { prompt } = await body(c, z.object({ prompt: z.string().trim().max(100_000).optional() }));
     if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
-    return c.json(await startChat({ agentId: agent.id, content: prompt, origin: "api" }));
+    return c.json(await startChat({ agentId: agent.id, content: prompt || DEFAULT_TASK_PROMPT, origin: "api" }));
   });
 
   app.get("/api/agents/:id/commands", async (c) => c.json(await listSlashCommands(getAgent(c.req.param("id")))));
