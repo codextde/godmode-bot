@@ -308,6 +308,14 @@ describe("races and safety", () => {
     expect(files).not.toContain(".env");
   });
 
+  test("a secret-looking file the agent committed itself blocks the push", async () => {
+    const task = createTask({ workspaceId, title: "TASK_COMMIT_ENV configure production", type: "coding", agentId: wsAgent.id });
+    await settled(task.id, ["blocked"]);
+    const t = getTask(task.id);
+    expect(t.blockedReason).toContain(".env.production");
+    expect(await git(["branch", "--list", t.branch!], remote)).toBe("");
+  });
+
   test("changes containing a vault secret are not pushed", async () => {
     const secret = "Zq9-vault-Secret-4242";
     rememberSecret(secret);

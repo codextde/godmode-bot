@@ -363,6 +363,21 @@ function isTaskRun(ctx: RunContext): boolean {
   }
 }
 
+/** The run works on a task, or was delegated (directly or through others) by a run that does. */
+function inTaskChain(ctx: RunContext): boolean {
+  if (isTaskRun(ctx)) return true;
+  try {
+    let run = getRun(ctx.runId);
+    for (let hops = 0; run.parentRunId && hops < 16; hops++) {
+      run = getRun(run.parentRunId);
+      if (run.trigger === "task" || taskForConversation(run.conversationId)) return true;
+    }
+  } catch {
+    /* run gone */
+  }
+  return false;
+}
+
 function taskSummary(t: Task, names: Map<string, string>, agentNames: Map<string, string>) {
   return {
     id: t.id,
@@ -387,7 +402,7 @@ function taskSummary(t: Task, names: Map<string, string>, agentNames: Map<string
 function taskAssignRefusal(caller: Agent, ctx: RunContext, agentId: string | null | undefined): string | null {
   if (!agentId) return null;
   const target = getAgent(agentId);
-  if (isTaskRun(ctx) && target.permissions.canManageAgents) {
+  if (inTaskChain(ctx) && target.permissions.canManageAgents) {
     return `${target.id === caller.id ? "You are" : `${target.name} is`} working on tasks already — only the human can start another manager from here. Assign a specialist agent, or leave it in the backlog.`;
   }
   return offHostRefusal(ctx, target, "give it tasks") ?? revealTargetRefusal(caller, target, "give it tasks");

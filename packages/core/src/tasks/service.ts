@@ -22,7 +22,18 @@ import { getAgent } from "../agents/service";
 import { activeRunForConversation, cancelRun, getRun, waitForRun } from "../runner/runner";
 import { conversationExists, createConversation, sendMessage } from "../services/conversations";
 import { notify } from "../services/notifications";
-import { branchDiff, commitWork, hideCredentials, openPullRequest, prepareCheckout, pullRequestState, pushBranch, validBranchName, validRepoUrl } from "./git";
+import {
+  branchDiff,
+  commitWork,
+  hideCredentials,
+  openPullRequest,
+  prepareCheckout,
+  pullRequestState,
+  pushBranch,
+  secretFilesAdded,
+  validBranchName,
+  validRepoUrl,
+} from "./git";
 
 const log = logger("tasks");
 
@@ -299,7 +310,8 @@ export function updateTask(id: string, patch: TaskPatch): Task {
 
 /** Cancel the run working on a task (the board moved it away from In progress). */
 async function stopWork(task: TaskRow) {
-  activity.delete(task.id);
+  // A restart that already owns the task shows its own progress.
+  if (!busy.has(task.id)) activity.delete(task.id);
   const active = task.conversation_id ? activeRunForConversation(task.conversation_id) : null;
   if (!active) return;
   try {
@@ -339,6 +351,7 @@ export async function sendTaskMessage(id: string, content: string): Promise<Task
   if (!task.conversation_id || !conversationExists(task.conversation_id)) throw conflict("The task hasn't started yet — move it to Todo to start it");
   const owner = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", task.conversation_id)?.agent_id;
   if (!task.agent_id || owner !== task.agent_id) throw conflict("Move the task to Todo to hand it to its agent");
+  if (busy.has(id)) throw conflict(`Godmode is ${activity.get(id)?.replace(/…$/, "").toLowerCase() ?? "preparing the task"} — send it again in a moment`);
   await sendMessage(task.conversation_id, { content, trigger: "task" });
   return getTask(id);
 }
@@ -596,6 +609,10 @@ async function publish(task: TaskRow, summary: string | null, runId: string): Pr
     setActivity(id, "Pushing the branch…");
     const { skipped } = await commitWork({ dir, message: `${title} (#${task.number})` });
     if (skipped.length) notify("warning", `Task #${task.number}: files left out`, `Not committed because they look like secrets: ${skipped.join(", ")}`, link);
+    const secretFiles = await secretFilesAdded(dir, task.base_branch);
+    if (secretFiles.length) {
+      return block(id, `The branch ${task.branch} adds files that look like secrets (${secretFiles.join(", ")}), so Godmode didn't push it. Remove them from the branch (the checkout is in ${dir}), then move the task to Todo.`);
+    }
     if (containsSecret(await branchDiff(dir, task.base_branch))) {
       return block(id, `The changes on ${task.branch} contain a secret saved in the vault, so Godmode didn't push them. Remove it from the branch (the checkout is in ${dir}), then move the task to Todo.`);
     }

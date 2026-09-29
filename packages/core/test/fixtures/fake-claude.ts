@@ -14,6 +14,7 @@
  *   CALL_VM     call the `vm` MCP server from --mcp-config (initialize, tools/list, shell, write_file, edit_file, read_file)
  *              and answer "VM {json}"; "no vm server" when the run has none
  *   TASK_EDIT   write TASK_CHANGE.md into the cwd (a coding task's checkout) and answer with a summary
+ *   TASK_COMMIT_ENV  write and commit .env.production in the cwd
  *   TASK_ENV    write .env and feature.txt into the cwd
  *   TASK_LEAK:<value>  write config.txt containing <value> into the cwd
  *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
@@ -253,6 +254,15 @@ if (slash?.[1] === "clear") {
   out(init);
   appendFileSync(join(process.cwd(), "TASK_CHANGE.md"), `${prompt.split("\n")[0]}\n`);
   const text = "Added TASK_CHANGE.md with the requested change.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_COMMIT_ENV")) {
+  out(init);
+  writeFileSync(join(process.cwd(), ".env.production"), "API_TOKEN=abc123\n");
+  const git = (...a: string[]) => Bun.spawnSync(["git", "-c", "user.name=Agent", "-c", "user.email=agent@example.com", ...a], { cwd: process.cwd() });
+  git("add", "-f", ".env.production");
+  git("commit", "-qm", "Add production env");
+  const text = "Committed the env file.";
   textTurn(text);
   result(text);
 } else if (prompt.includes("TASK_ENV")) {

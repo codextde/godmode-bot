@@ -130,6 +130,12 @@ export async function commitWork(opts: { dir: string; message: string }): Promis
   return { skipped };
 }
 
+/** Files the branch adds on top of its base that look like secrets (env files, keys) — committed by the agent itself. */
+export async function secretFilesAdded(dir: string, base: string): Promise<string[]> {
+  const added = await git(["diff", "--name-only", "--diff-filter=A", "-z", `origin/${base}...HEAD`], dir);
+  return added.split("\0").filter((f) => f && SECRET_FILE.test(f));
+}
+
 /** The branch's changes on top of its base (for checks before pushing), cut at `max` characters. */
 export async function branchDiff(dir: string, base: string, max = 5_000_000): Promise<string> {
   const bin = resolveGit();
