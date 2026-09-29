@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Agent, ApiTool, ApiToolTestResult } from "@godmode/shared";
 import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import * as vault from "../src/vault/vault";
-import { get } from "../src/db";
+import { get, run } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { clearGrants, issueGrant } from "../src/server/grants";
 import { issueRunToken, revokeRunToken } from "../src/mcp/tokens";
@@ -218,6 +218,15 @@ describe("scope", () => {
     expect(buildEnv(agentA, false, false).SHARED_KEY).toBeUndefined();
   });
 
+  test("a stored name that isn't allowed (e.g. from a restored backup) is skipped", () => {
+    run("UPDATE api_tools SET env_var = 'BASH_ENV' WHERE id = ?", workspace.id);
+    try {
+      expect(apiToolEnv(agentA)).toEqual({ SHARED_KEY: "global-key-111111" });
+    } finally {
+      run("UPDATE api_tools SET env_var = 'SHARED_KEY' WHERE id = ?", workspace.id);
+    }
+  });
+
   test("disabled tools and a locked vault leave keys out", async () => {
     updateApiTool(workspace.id, { enabled: false });
     expect(apiToolEnv(agentA)).toEqual({ SHARED_KEY: "global-key-111111" });
@@ -318,10 +327,10 @@ describe("requests", () => {
     writeFileSync(victim, "keep me");
     mkdirSync(join(agentA.repoPath, "workspace", "links"), { recursive: true });
     symlinkSync(victim, join(agentA.repoPath, "workspace", "links", "out.png"));
-    await expect(callApiTool(gemini, KEY, { path: "image.png", saveAs: "workspace/links/out.png" }, places)).rejects.toThrow();
+    const before = seen.length;
+    await expect(callApiTool(gemini, KEY, { path: "image.png", saveAs: "workspace/links/out.png" }, places)).rejects.toThrow("is a link");
     expect(readFileSync(victim, "utf8")).toBe("keep me");
 
-    const before = seen.length;
     await expect(callApiTool(gemini, KEY, { path: "image.png", saveAs: ".git/config" }, places)).rejects.toThrow("hidden");
     await expect(callApiTool(gemini, KEY, { path: "image.png", saveAs: "workspace/.claude/settings.json" }, places)).rejects.toThrow("hidden");
     await expect(callApiTool(gemini, KEY, { path: "image.png", saveAs: join(env.dataDir, "x.png") }, places)).rejects.toThrow("outside the folders");

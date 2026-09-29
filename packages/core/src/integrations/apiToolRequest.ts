@@ -321,6 +321,7 @@ function checkSaveAs(places: CallPlaces, saveAs: string | undefined): void {
   if (!saveAs?.trim()) return;
   const { target, folder } = saveAsTarget(places, saveAs);
   writablePath(folder ? join(target, "file") : target, places);
+  if (!folder && existsSync(target) && lstatSync(target).isSymbolicLink()) throw new HttpError(403, `${target} is a link; pick another path.`, "forbidden");
 }
 
 /* ------------------------------------------------------------------ */
@@ -496,7 +497,7 @@ function suggestedName(res: Response): string | null {
       /* keep it encoded */
     }
   }
-  const name = basename(raw.replace(/\\/g, "/")).replace(/[^\w.\- ]+/g, "_").trim();
+  const name = basename(raw.replace(/\\/g, "/")).replace(/[^\w.\- ]+/g, "_").replace(/^\.+/, "").trim();
   return name && name !== "." && name !== ".." ? name.slice(0, 120) : null;
 }
 
@@ -555,7 +556,12 @@ export async function callApiTool(tool: ApiTool, key: string | null, call: ApiCa
       return "[not saved: it contained the key]";
     }
     const { path, overwrite } = targetPath(places, opts.useSaveAs === false ? undefined : call.saveAs, tool, type, files.length, opts.suggested ?? null);
-    writeOutput(path, data, places, overwrite);
+    try {
+      writeOutput(path, data, places, overwrite);
+    } catch (err) {
+      notes.push(`Couldn't save a ${type} file: ${err instanceof Error ? err.message : String(err)}`);
+      return "[not saved]";
+    }
     files.push({ path, type, bytes: data.byteLength });
     return path;
   };

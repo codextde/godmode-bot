@@ -10,7 +10,7 @@ import { isModelId, MAX_START_WINDOW_MINUTES, TASK_STATUSES, TASK_TYPES } from "
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
 import { logger } from "../log";
-import { hasAppSecret, redact } from "../vault/vault";
+import { hasAppSecret, isUnlocked, redact } from "../vault/vault";
 import { audit } from "../services/audit";
 import { notify } from "../services/notifications";
 import { listMissingLogins, reportMissingLogin } from "../services/missingLogins";
@@ -210,7 +210,9 @@ function apiCallPlaces(agent: Agent, ctx: RunContext): CallPlaces {
   const folder = conv?.working_directory ?? agent.workingDirectory;
   const vmId = vmOfRun(ctx.runId);
   const shared = vmId ? sharedDirOf(vmId) : null;
-  const sources = agent.workspaceId ? listSources(agent.workspaceId).map((s) => s.path) : [];
+  // Like the runner: a coding task works in its own checkout, not in the workspace's shared clone.
+  const taskRepo = get<{ repo_url: string }>("SELECT repo_url FROM tasks WHERE conversation_id = ? AND type = 'coding'", ctx.conversationId)?.repo_url;
+  const sources = agent.workspaceId ? listSources(agent.workspaceId).filter((s) => !(taskRepo && s.url === taskRepo)).map((s) => s.path) : [];
   return {
     roots: [agent.repoPath, ...(folder ? [folder] : []), ...(shared ? [shared] : []), ...sources],
     cwd: folder ?? agent.repoPath,
@@ -220,7 +222,7 @@ function apiCallPlaces(agent: Agent, ctx: RunContext): CallPlaces {
 
 /** Tools whose key this run has in an environment variable (none when the run is kept off this computer). */
 function keysInEnv(tools: ApiTool[], ctx: RunContext): Set<string> {
-  if (lockedVm(ctx)) return new Set();
+  if (lockedVm(ctx) || !isUnlocked()) return new Set();
   return new Set(apiToolEnvOwners(tools).values());
 }
 

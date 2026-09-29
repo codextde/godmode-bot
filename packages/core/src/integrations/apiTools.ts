@@ -23,7 +23,7 @@ const QUERY_NAME_RE = /^[A-Za-z0-9_.~[\]-]+$/;
 const ENV_VAR_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const PRESET_RE = /^[a-z0-9-]{1,40}$/;
 /** Only names of secrets: a variable like HTTPS_PROXY or BASH_ENV would change how programs in a run behave. */
-const SECRET_NAME_RE = /(KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?)$/i;
+const SECRET_NAME_RE = /(KEY|TOKEN|SECRET|PASSWORD)$/i;
 const RESERVED_ENV_PREFIXES = ["ANTHROPIC_", "CLAUDE", "GODMODE_", "DYLD_", "LD_", "GIT_", "MCP_", "AWS_", "NODE_", "NPM_"];
 const MIN_KEY_LENGTH = 8;
 
@@ -398,10 +398,21 @@ export function findApiToolForAgent(agent: Pick<Agent, "id" | "workspaceId" | "i
   throw new HttpError(404, `No API tool "${wanted}" is available to you.${names ? ` Available: ${names}.` : ""}`, "not_found");
 }
 
+/** Stored names are checked again: a restored backup doesn't go through cleanEnvVar. */
+function validEnvVar(name: string): boolean {
+  try {
+    return cleanEnvVar(name) === name;
+  } catch {
+    return false;
+  }
+}
+
 /** Environment variable → the tool whose key it holds (the most specific tool wins a name). */
 export function apiToolEnvOwners(tools: ApiTool[]): Map<string, string> {
   const owners = new Map<string, string>();
-  for (const t of [...tools].sort((a, b) => specificity(a) - specificity(b))) if (t.envVar && t.hasKey) owners.set(t.envVar, t.id);
+  for (const t of [...tools].sort((a, b) => specificity(a) - specificity(b))) {
+    if (t.envVar && t.hasKey && validEnvVar(t.envVar)) owners.set(t.envVar, t.id);
+  }
   return owners;
 }
 

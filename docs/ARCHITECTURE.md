@@ -518,8 +518,8 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
     over an existing file in a folder, or into hidden paths (`.git`, `.claude`…), and `saveAs` is checked before the
     request is sent. Files in a response that contain the key aren't saved; text is masked before it's cut or saved.
   * `env_var` (opt-in) also puts the key into the environment of runs on this computer for scripts and SDKs; the agent
-    can then read it (the most specific tool wins a name). Names must end in `KEY`, `TOKEN`, `SECRET`, `PASSWORD` or
-    `CREDENTIALS` and can't use prefixes of Godmode, Claude and common tools, so a tool can't set `HTTPS_PROXY` or `BASH_ENV`. Turning that on for a saved key, or
+    can then read it (the most specific tool wins a name). Names must end in `KEY`, `TOKEN`, `SECRET` or `PASSWORD`
+    (checked again when a run starts, e.g. after a restore) and can't use prefixes of Godmode, Claude and common tools, so a tool can't set `HTTPS_PROXY` or `BASH_ENV`. Turning that on for a saved key, or
     moving a saved key to an address outside the current one, needs a vault grant unless a new key comes with it.
   * `POST /api/api-tools/:id/test` GETs `test_path` with the key (Test / Save & test in the UI).
 * **Composio** (v3.1 REST, `x-api-key`): browse toolkits, connect accounts via `connected_accounts/link`
