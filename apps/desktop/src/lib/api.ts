@@ -262,7 +262,7 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/agents/${id}`),
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
     /** Start a fresh task conversation for the agent */
-    run: (id: string, prompt: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt }),
+    run: (id: string, prompt?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt }),
     files: (id: string, path = "") => get<AgentFileEntry[]>(`/api/agents/${id}/files`, { path }),
     readFile: (id: string, path: string) => get<{ path: string; content: string }>(`/api/agents/${id}/file`, { path }),
     writeFile: (id: string, path: string, content: string) => put<{ ok: true }>(`/api/agents/${id}/file`, { path, content }),
