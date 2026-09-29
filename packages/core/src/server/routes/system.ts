@@ -85,6 +85,9 @@ export function registerSystemRoutes(app: Hono) {
         throw badRequest("Invalid model id for dreaming");
       }
     }
+    const diagnostics = patch.diagnostics as { verbose?: unknown } | undefined;
+    if (diagnostics !== undefined && (typeof diagnostics !== "object" || diagnostics === null || Array.isArray(diagnostics))) throw badRequest("Invalid log settings");
+    if (diagnostics?.verbose !== undefined && typeof diagnostics.verbose !== "boolean") throw badRequest("diagnostics.verbose must be true or false");
     const vm = patch.vm as Record<string, unknown> | undefined;
     if (vm !== undefined) {
       if (typeof vm !== "object" || vm === null || Array.isArray(vm)) throw badRequest("Invalid virtual machine settings");

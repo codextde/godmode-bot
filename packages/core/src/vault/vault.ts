@@ -5,7 +5,7 @@ import { config } from "../config";
 import { getMeta, setMeta, deleteMeta, get, run, all, tx } from "../db";
 import { bus } from "../events/bus";
 import { getSettings } from "../services/settings";
-import { logger } from "../log";
+import { logger, setSecretMasker } from "../log";
 import { badRequest, locked, now } from "../util";
 import { decrypt, deriveKey, encrypt, newKdfParams, randomKey, sha256, type KdfParams } from "./crypto";
 
@@ -361,9 +361,17 @@ export function containsSecret(text: string): boolean {
 
 export function redact(text: string): string {
   if (!text || knownSecrets.size === 0 || !getSettings().security.redactSecrets) return text;
+  return maskKnownSecrets(text);
+}
+
+/** `redact` regardless of the setting: the diagnostic log is meant to be shared. */
+function maskKnownSecrets(text: string): string {
+  if (!text || knownSecrets.size === 0) return text;
   let out = text;
   for (const secret of knownSecrets) {
     if (out.includes(secret)) out = out.split(secret).join("••••••••");
   }
   return out;
 }
+
+setSecretMasker(maskKnownSecrets);

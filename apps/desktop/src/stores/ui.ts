@@ -11,6 +11,8 @@ interface UiState {
   browserPanel: boolean;
   /** Show the shared window/screen next to chats that share one. */
   computerPanel: boolean;
+  /** Show the VM's screen next to chats that work in a VM. */
+  vmPanel: boolean;
   /** Claude Code version whose update prompt was dismissed; a newer release shows it again. */
   skippedClaudeVersion: string | null;
   /** Task board columns folded to a narrow strip. */
@@ -21,6 +23,7 @@ interface UiState {
   setSidebarCollapsed: (v: boolean) => void;
   setBrowserPanel: (v: boolean) => void;
   setComputerPanel: (v: boolean) => void;
+  setVmPanel: (v: boolean) => void;
   skipClaudeVersion: (version: string | null) => void;
   toggleColumn: (status: string) => void;
 }
@@ -34,6 +37,7 @@ export const useUi = create<UiState>()(
       sidebarCollapsed: false,
       browserPanel: true,
       computerPanel: true,
+      vmPanel: true,
       skippedClaudeVersion: null,
       collapsedColumns: ["cancelled"],
       setWorkspace: (workspace) => set({ workspace }),
@@ -42,6 +46,7 @@ export const useUi = create<UiState>()(
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setBrowserPanel: (browserPanel) => set({ browserPanel }),
       setComputerPanel: (computerPanel) => set({ computerPanel }),
+      setVmPanel: (vmPanel) => set({ vmPanel }),
       skipClaudeVersion: (skippedClaudeVersion) => set({ skippedClaudeVersion }),
       toggleColumn: (status) =>
         set((s) => ({
@@ -56,6 +61,7 @@ export const useUi = create<UiState>()(
         voiceMode: s.voiceMode,
         browserPanel: s.browserPanel,
         computerPanel: s.computerPanel,
+        vmPanel: s.vmPanel,
         skippedClaudeVersion: s.skippedClaudeVersion,
         collapsedColumns: s.collapsedColumns,
       }),

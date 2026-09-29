@@ -12,6 +12,7 @@ import type {
   Bootstrap,
   BrowserProfile,
   ChromeImportInput,
+  ClientLogInput,
   ChromeImportResult,
   ClaudeUpdateResult,
   ClaudeUpdateStatus,
@@ -38,6 +39,9 @@ import type {
   FolderListing,
   GitCommit,
   LocalChromeProfile,
+  LogEntry,
+  LogLevel,
+  LogOverview,
   McpServer,
   McpServerInput,
   MessagingChat,
@@ -203,6 +207,15 @@ export const api = {
 
   audit: {
     list: (q: { limit?: number; action?: string } = {}) => get<AuditEntry[]>("/api/audit", q),
+  },
+
+  logs: {
+    overview: () => get<LogOverview>("/api/logs"),
+    entries: (q: { level?: LogLevel; search?: string; limit?: number } = {}) => get<LogEntry[]>("/api/logs/entries", q),
+    /** Markdown for an AI to analyze; `full` includes every entry instead of the newest that fit in a chat. */
+    report: (full = false) => get<string>("/api/logs/report", { full: full ? 1 : undefined }),
+    clear: () => del<{ ok: true }>("/api/logs"),
+    client: (input: ClientLogInput) => post<{ ok: true }>("/api/logs/client", input),
   },
 
   models: {

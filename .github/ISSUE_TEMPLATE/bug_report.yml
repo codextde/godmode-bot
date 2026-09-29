@@ -66,7 +66,7 @@ body:
     id: logs
     attributes:
       label: Relevant log lines
-      description: From `~/.godmode/logs/core.log` and `~/.godmode/logs/desktop.log`. Remove anything sensitive.
+      description: Settings → Logs → Copy for Claude (secrets are masked), or `~/.godmode/logs/godmode.jsonl` and `~/.godmode/logs/desktop.log`.
       render: shell
   - type: textarea
     id: context
