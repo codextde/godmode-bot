@@ -9,7 +9,8 @@ import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useModelCatalog } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
-import { Kbd } from "@/components/common";
+import { clearDraft, useDraft } from "@/lib/drafts";
+import { DraftStatus, Kbd } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -119,10 +120,13 @@ export function RoutineDialog({
   const { data: agents = [] } = useAllAgents();
   const { catalog } = useModelCatalog();
   const editing = !!routine;
-  const [draft, setDraft] = useState<RoutineDraft>(() => initialDraft(routine, agentId, initial));
+  const [draftKey] = useState(() => (routine ? `routine:${routine.id}` : `routine:new:${agentId ?? "any"}:${JSON.stringify(initial ?? {})}`));
+  const [base] = useState(() => initialDraft(routine, agentId, initial));
+  const [draft, setDraft, kept] = useDraft(draftKey, base);
   const [touched, setTouched] = useState(false);
   /** Until the human sets "Keep one conversation" on a new automation, it follows the trigger type's default. */
-  const [reuseChosen, setReuseChosen] = useState(editing || initial?.reuseConversation !== undefined);
+  const reusePreset = editing || initial?.reuseConversation !== undefined;
+  const [reuseChosen, setReuseChosen] = useState(reusePreset || draft.reuseConversation !== defaultReuse(draft.triggerType));
   /** An automation that just became a webhook: its URL is shown before the dialog closes. */
   const [created, setCreated] = useState<Routine | null>(null);
   const set = <K extends keyof RoutineDraft>(k: K, v: RoutineDraft[K]) => setDraft((d) => ({ ...d, [k]: v }));
@@ -198,6 +202,7 @@ export function RoutineDialog({
       return routine ? api.routines.update(routine.id, input) : api.routines.create(input);
     },
     onSuccess: (r) => {
+      clearDraft(draftKey);
       qc.invalidateQueries({ queryKey: qk.routines });
       if (editing) toast.success("Automation updated", { description: r.name });
       else if (r.trigger.type === "schedule") toast.success("Automation scheduled", { description: r.name });
@@ -469,10 +474,20 @@ export function RoutineDialog({
             </div>
 
             <DialogFooter className="items-center sm:justify-between">
-              <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
-                <Kbd>{modKey}</Kbd>
-                <Kbd>↵</Kbd> to save
-              </span>
+              {kept.saved ? (
+                <DraftStatus
+                  onDiscard={() => {
+                    kept.discard();
+                    setTouched(false);
+                    setReuseChosen(reusePreset);
+                  }}
+                />
+              ) : (
+                <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
+                  <Kbd>{modKey}</Kbd>
+                  <Kbd>↵</Kbd> to save
+                </span>
+              )}
               <div className="flex gap-2">
                 <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                   Cancel
