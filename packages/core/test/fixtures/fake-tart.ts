@@ -77,16 +77,22 @@ async function mutate<T>(fn: (s: State) => T): Promise<T> {
       await Bun.sleep(5);
     }
   }
+  holdingLock = lock;
   try {
     const s = load();
     const out = fn(s);
     save(s);
     return out;
   } finally {
+    holdingLock = null;
     rmSync(lock, { recursive: true, force: true });
   }
 }
+let holdingLock: string | null = null;
+
 function fail(msg: string, code = 1): never {
+  // Failing inside mutate(): release the state lock (process.exit skips finally blocks).
+  if (holdingLock) rmSync(holdingLock, { recursive: true, force: true });
   process.stderr.write(`Error: ${msg}\n`);
   process.exit(code);
 }
@@ -305,6 +311,17 @@ switch (cmd) {
     break;
   }
 
+  case "rename": {
+    const [from, to] = rest;
+    await mutate((s) => {
+      const vm = s.vms[from!] ?? fail(`VM "${from}" does not exist`);
+      if (s.vms[to!]) fail(`VM "${to}" already exists`);
+      delete s.vms[from!];
+      s.vms[to!] = vm;
+    });
+    break;
+  }
+
   case "delete": {
     const name = rest[0]!;
     await mutate((s) => {
@@ -346,7 +363,7 @@ switch (cmd) {
     const shims = join(home, "shims");
     mkdirSync(join(guestHome), { recursive: true });
     mkdirSync(shims, { recursive: true });
-    for (const tool of ["sudo", "defaults", "scutil", "pmset"]) {
+    for (const tool of ["sudo", "defaults", "scutil", "pmset", "launchctl", "shutdown", "route", "pfctl"]) {
       const p = join(shims, tool);
       if (!existsSync(p)) {
         writeFileSync(p, "#!/bin/sh\nexit 0\n");
@@ -358,8 +375,18 @@ switch (cmd) {
       writeFileSync(swVers, "#!/bin/sh\necho 26.0\n");
       chmodSync(swVers, 0o755);
     }
+    // The guest shuts down: its VM stops (like a real `sudo shutdown -h now`).
+    if (command.some((a) => a.includes("shutdown -h now"))) {
+      appendFileSync(join(home, "shutdowns.log"), `${name}\n`);
+      if (vm.pid) process.kill(vm.pid, "SIGINT");
+      process.exit(0);
+    }
     const guestize = (arg: string) => {
       let out = arg.replaceAll("/Volumes/My Shared Files/godmode", vm.shared ?? join(home, "no-share")).replaceAll("/Users/admin", guestHome);
+      // System tools the guest calls by absolute path → the safe shims.
+      for (const tool of ["/usr/sbin/scutil", "/bin/launchctl", "/usr/bin/pmset", "/usr/bin/defaults", "/sbin/shutdown", "/sbin/route", "/sbin/pfctl"]) {
+        out = out.replaceAll(tool, join(shims, tool.split("/").pop()!));
+      }
       return out;
     };
     let argv = command.map(guestize);

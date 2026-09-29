@@ -2,10 +2,11 @@
  * macOS images: downloaded once, kept as local template VMs that new VMs and resets clone (APFS copy-on-write).
  *
  * Tart pulls an image one layer per connection and starts a layer over when the connection drops, which turns a
- * 27 GB image into hours on slower or flaky links. So Godmode downloads the layers itself — many parallel HTTP range
- * requests, resumed across failures and restarts in `<data>/vm/downloads`, each verified against its digest — then
- * lets Tart pull them from a loopback registry (local disk speed) and keeps the result as the template
- * `gm-image-<hash>`. Registries that need credentials fall back to Tart's own pull.
+ * 27 GB image into hours on slower or flaky links. So Godmode downloads the layers itself — many layers in parallel,
+ * each resumed with range requests across failures and restarts in `<data>/vm/downloads` and verified against its
+ * digest — then lets Tart pull them from a loopback registry (local disk speed) and keeps the result as the template
+ * `gm-image-<hash>`. Images share layers (and repeat some), so a layer is downloaded once however many images need it.
+ * Registries that refuse an anonymous pull fall back to Tart's own pull (which knows `tart login` credentials).
  */
 import { createHash } from "node:crypto";
 import { closeSync, createReadStream, existsSync, mkdirSync, openSync, renameSync, rmSync, statSync, statfsSync, writeSync } from "node:fs";
@@ -17,7 +18,10 @@ import * as tart from "./tart";
 const log = logger("vm");
 
 const PARALLEL = 16;
-const ATTEMPTS = 8;
+/** A download that received nothing for this long is restarted (resuming where it stopped). */
+const STALL_MS = 60_000;
+/** Attempts in a row without any progress before a layer (and the image) fails. */
+const MAX_STUCK_ATTEMPTS = 8;
 const MANIFEST_TYPES = [
   "application/vnd.oci.image.manifest.v1+json",
   "application/vnd.docker.distribution.manifest.v2+json",
@@ -62,6 +66,7 @@ export function parseImageRef(image: string): ImageRef {
   return colon >= 0 ? { registry, repository: rest.slice(0, colon), reference: rest.slice(colon + 1) } : { registry, repository: rest, reference: "latest" };
 }
 
+/** The registry refuses an anonymous pull (401/403): only Tart's own pull, with `tart login` credentials, can get it. */
 class AuthRequired extends Error {}
 
 let registryOverride: ((registry: string) => string | null) | null = null;
@@ -77,6 +82,7 @@ export function __setRegistryForTests(fn: ((registry: string) => string | null) 
 
 class RegistryClient {
   private token: string | null = null;
+  private refreshing: Promise<void> | null = null;
 
   constructor(private ref: ImageRef) {}
 
@@ -84,18 +90,26 @@ class RegistryClient {
     return `${registryOverride?.(this.ref.registry) ?? `https://${this.ref.registry}`}/v2/${this.ref.repository}`;
   }
 
-  /** Anonymous bearer token from the registry's auth challenge (ghcr.io, Docker Hub, …). */
-  private async authenticate(challenge: string | null): Promise<void> {
-    const params = Object.fromEntries([...(challenge ?? "").matchAll(/(\w+)="([^"]*)"/g)].map((m) => [m[1]!, m[2]!]));
-    if (!/^Bearer/i.test(challenge ?? "") || !params.realm) throw new AuthRequired(`${this.ref.registry} needs credentials`);
-    const url = new URL(params.realm);
-    if (params.service) url.searchParams.set("service", params.service);
-    url.searchParams.set("scope", params.scope ?? `repository:${this.ref.repository}:pull`);
-    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-    if (!res.ok) throw new AuthRequired(`${this.ref.registry} refused an anonymous pull (HTTP ${res.status})`);
-    const body = (await res.json()) as { token?: string; access_token?: string };
-    this.token = body.token ?? body.access_token ?? null;
-    if (!this.token) throw new AuthRequired(`${this.ref.registry} gave no token`);
+  /** Anonymous bearer token from the registry's auth challenge (ghcr.io, Docker Hub, …); one refresh at a time. */
+  private authenticate(challenge: string | null): Promise<void> {
+    this.refreshing ??= (async () => {
+      const params = Object.fromEntries([...(challenge ?? "").matchAll(/(\w+)="([^"]*)"/g)].map((m) => [m[1]!, m[2]!]));
+      if (!/^Bearer/i.test(challenge ?? "") || !params.realm) throw new AuthRequired(`${this.ref.registry} needs credentials`);
+      const url = new URL(params.realm);
+      if (params.service) url.searchParams.set("service", params.service);
+      url.searchParams.set("scope", params.scope ?? `repository:${this.ref.repository}:pull`);
+      const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      if (res.status === 401 || res.status === 403) throw new AuthRequired(`${this.ref.registry} refused an anonymous pull (HTTP ${res.status})`);
+      // Anything else (429, 5xx) is worth another try.
+      if (!res.ok) throw new Error(`token request failed (HTTP ${res.status})`);
+      const body = (await res.json()) as { token?: string; access_token?: string };
+      const token = body.token ?? body.access_token;
+      if (!token) throw new AuthRequired(`${this.ref.registry} gave no token`);
+      this.token = token;
+    })().finally(() => {
+      this.refreshing = null;
+    });
+    return this.refreshing;
   }
 
   async get(path: string, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<Response> {
@@ -130,6 +144,8 @@ async function fetchManifest(client: RegistryClient, reference: string): Promise
   if (!res.ok) throw new Error(`The image's manifest could not be loaded (HTTP ${res.status})`);
   const raw = await res.arrayBuffer();
   const mediaType = res.headers.get("content-type")?.split(";")[0]?.trim() ?? MANIFEST_TYPES[0]!;
+  const digest = `sha256:${createHash("sha256").update(Buffer.from(raw)).digest("hex")}`;
+  if (reference.startsWith("sha256:") && digest !== reference) throw new Error(`The image's manifest doesn't match its digest ${reference}`);
   const json = JSON.parse(new TextDecoder().decode(raw)) as {
     mediaType?: string;
     manifests?: { digest: string; platform?: { architecture?: string } }[];
@@ -142,12 +158,13 @@ async function fetchManifest(client: RegistryClient, reference: string): Promise
     return fetchManifest(client, pick.digest);
   }
   if (!json.config || !Array.isArray(json.layers)) throw new Error("Unexpected image manifest");
-  const digest = `sha256:${createHash("sha256").update(Buffer.from(raw)).digest("hex")}`;
   return { raw, mediaType: json.mediaType ?? mediaType, digest, blobs: [json.config, ...json.layers].map((b) => ({ digest: b.digest, size: b.size })) };
 }
 
 function blobPath(digest: string): string {
-  return join(downloadsDir(), digest.replace(/^sha256:/, ""));
+  const hex = digest.replace(/^sha256:/, "");
+  if (!/^[a-f0-9]{64}$/.test(hex)) throw new Error(`Unexpected digest ${digest}`);
+  return join(downloadsDir(), hex);
 }
 
 async function sha256File(path: string): Promise<string> {
@@ -161,8 +178,11 @@ async function sha256File(path: string): Promise<string> {
   return `sha256:${hash.digest("hex")}`;
 }
 
-/** Download one blob to `<downloads>/<hex>` (resuming a `.part`), verified against its digest. */
-async function downloadBlob(client: RegistryClient, blob: Blob, onBytes: (n: number) => void, signal: AbortSignal): Promise<void> {
+/**
+ * Download one blob to `<downloads>/<hex>` (resuming its `.part`), verified against its digest. `onBytes` gets the
+ * bytes on disk as they change (negative when a bad partial file is dropped).
+ */
+async function downloadBlob(client: RegistryClient, blob: Blob, onBytes: (n: number) => void): Promise<void> {
   const target = blobPath(blob.digest);
   if (existsSync(target) && statSync(target).size === blob.size) {
     onBytes(blob.size);
@@ -170,55 +190,86 @@ async function downloadBlob(client: RegistryClient, blob: Blob, onBytes: (n: num
   }
   const part = `${target}.part`;
   let reported = 0;
-  for (let attempt = 1; ; attempt++) {
-    if (signal.aborted) throw new Error("cancelled");
+  const sync = (bytes: number) => {
+    onBytes(bytes - reported);
+    reported = bytes;
+  };
+  let stuck = 0;
+  for (;;) {
     let have = existsSync(part) ? statSync(part).size : 0;
     if (have > blob.size) {
       rmSync(part, { force: true });
       have = 0;
     }
-    onBytes(have - reported);
-    reported = have;
+    sync(have);
+    const before = have;
     try {
       if (have < blob.size) {
-        const res = await client.get(`/blobs/${blob.digest}`, have ? { Range: `bytes=${have}-` } : {}, signal);
-        if (res.status !== 200 && res.status !== 206) throw new Error(`HTTP ${res.status}`);
-        // A server that ignores the range starts over.
-        if (res.status === 200 && have) {
-          rmSync(part, { force: true });
-          onBytes(-reported);
-          reported = 0;
-        }
-        const fd = openSync(part, res.status === 200 ? "w" : "a");
+        // A request that stops delivering is dropped (and resumed) instead of hanging.
+        const stall = new AbortController();
+        let timer = setTimeout(() => stall.abort(), STALL_MS);
         try {
-          const reader = res.body!.getReader();
-          for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            writeSync(fd, value);
-            reported += value.length;
-            onBytes(value.length);
+          const res = await client.get(`/blobs/${blob.digest}`, have ? { Range: `bytes=${have}-` } : {}, stall.signal);
+          if (res.status !== 200 && res.status !== 206) throw new Error(`HTTP ${res.status}`);
+          // Resume only where the server really continues; otherwise start over.
+          const resumes = res.status === 206 && Number(/bytes (\d+)-/.exec(res.headers.get("content-range") ?? "")?.[1]) === have;
+          const fd = openSync(part, resumes ? "a" : "w");
+          if (!resumes) sync(0);
+          try {
+            const reader = res.body!.getReader();
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              writeSync(fd, value);
+              sync(reported + value.length);
+              clearTimeout(timer);
+              timer = setTimeout(() => stall.abort(), STALL_MS);
+            }
+          } finally {
+            closeSync(fd);
           }
         } finally {
-          closeSync(fd);
+          clearTimeout(timer);
         }
       }
       if (statSync(part).size !== blob.size) throw new Error("incomplete");
       const digest = await sha256File(part);
       if (digest !== blob.digest) {
         rmSync(part, { force: true });
-        onBytes(-reported);
-        reported = 0;
+        sync(0);
         throw new Error(`digest mismatch (${digest})`);
       }
       renameSync(part, target);
       return;
     } catch (err) {
-      if (err instanceof AuthRequired || signal.aborted || attempt >= ATTEMPTS) throw err;
-      log.debug(`blob ${blob.digest.slice(0, 19)} attempt ${attempt} failed: ${err instanceof Error ? err.message : err}`);
-      await sleep(Math.min(30_000, 1000 * 2 ** attempt));
+      // Only attempts that got nowhere count against the budget.
+      stuck = (existsSync(part) ? statSync(part).size : 0) > before ? 0 : stuck + 1;
+      if (stuck >= MAX_STUCK_ATTEMPTS) throw new Error(`Downloading part ${blob.digest.slice(7, 19)} failed: ${err instanceof Error ? err.message : err}`);
+      log.debug(`blob ${blob.digest.slice(0, 19)}: ${err instanceof Error ? err.message : err}; retrying`);
+      await sleep(Math.min(30_000, 1000 * 2 ** stuck));
     }
   }
+}
+
+/** Blob downloads in flight, shared by every image that needs the blob. */
+const blobJobs = new Map<string, { promise: Promise<void>; listeners: Set<(n: number) => void> }>();
+/** How many in-flight image downloads still need each blob (the others' files can go). */
+const blobHolds = new Map<string, number>();
+
+function fetchBlob(client: RegistryClient, blob: Blob, onBytes: (n: number) => void): Promise<void> {
+  let job = blobJobs.get(blob.digest);
+  if (!job) {
+    const listeners = new Set<(n: number) => void>();
+    const promise = downloadBlob(client, blob, (n) => {
+      for (const l of listeners) l(n);
+    }).finally(() => blobJobs.delete(blob.digest));
+    job = { promise, listeners };
+    blobJobs.set(blob.digest, job);
+    listeners.add(onBytes);
+    return promise;
+  }
+  // Another image is downloading it: count it once it's there.
+  return job.promise.then(() => onBytes(blob.size));
 }
 
 /* ------------------------------------------------------------------ */
@@ -251,6 +302,7 @@ function serveMirror(repository: string, manifest: Manifest): { port: number; st
         const range = /^bytes=(\d+)-$/.exec(req.headers.get("range") ?? "");
         if (range) {
           const start = Number(range[1]);
+          if (start >= blob.size) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${blob.size}` } });
           return new Response(file.slice(start), {
             status: 206,
             headers: { ...headers, "Content-Range": `bytes ${start}-${blob.size - 1}/${blob.size}`, "Content-Length": String(blob.size - start) },
@@ -268,17 +320,17 @@ function serveMirror(repository: string, manifest: Manifest): { port: number; st
 /* Download                                                             */
 /* ------------------------------------------------------------------ */
 
-/** Free space needed to download and unpack an image: its layers plus room for the unpacked disk. */
-export function spaceNeededBytes(downloadBytes: number): number {
-  return downloadBytes * 2 + 5e9;
+/** Free space an image needs: the layers still to download, plus room to unpack all of them. */
+export function spaceNeededBytes(missingBytes: number, totalBytes: number): number {
+  return missingBytes + totalBytes + 5e9;
 }
 
 /**
- * Make `image` available as the template VM `templateName(image)`: download the layers (parallel, resumable), let Tart
- * pull them from a loopback registry, clone the result into the template. Registries that need credentials go through
- * Tart's own pull instead.
+ * Make `image` available as the template VM `templateName(image)`: download the layers (parallel, resumable, shared
+ * with other images), let Tart pull them from a loopback registry, clone the result into the template. Registries
+ * that refuse an anonymous pull go through Tart's own pull instead.
  */
-export async function downloadImage(image: string, onProgress: (p: ImageProgress) => void, signal: AbortSignal = new AbortController().signal): Promise<void> {
+export async function downloadImage(image: string, onProgress: (p: ImageProgress) => void): Promise<void> {
   const template = templateName(image);
   const ref = parseImageRef(image);
   const client = new RegistryClient(ref);
@@ -291,51 +343,64 @@ export async function downloadImage(image: string, onProgress: (p: ImageProgress
     await pullWithTart(image, template, onProgress);
     return;
   }
-  const total = manifest.blobs.reduce((n, b) => n + b.size, 0);
+  // Some layers repeat within an image: each is downloaded (and counted) once.
+  const unique = [...new Map(manifest.blobs.map((b) => [b.digest, b])).values()];
+  const total = unique.reduce((n, b) => n + b.size, 0);
+  const missing = unique.reduce((n, b) => n + (existsSync(blobPath(b.digest)) ? 0 : b.size), 0);
   const free = freeBytes();
-  const alreadyThere = manifest.blobs.reduce((n, b) => n + (existsSync(blobPath(b.digest)) ? b.size : 0), 0);
-  if (free !== null && free < spaceNeededBytes(total - alreadyThere)) {
+  if (free !== null && free < spaceNeededBytes(missing, total)) {
     throw new Error(
-      `Not enough free disk space to download this image: it needs about ${Math.ceil(spaceNeededBytes(total - alreadyThere) / 1e9)} GB, ${Math.floor(free / 1e9)} GB are free.`,
+      `Not enough free disk space to download this image: it needs about ${Math.ceil(spaceNeededBytes(missing, total) / 1e9)} GB, ${Math.floor(free / 1e9)} GB are free.`,
     );
   }
   mkdirSync(downloadsDir(), { recursive: true, mode: 0o700 });
-  let done = 0;
-  let lastReport = 0;
-  const report = (force = false) => {
-    if (!force && Date.now() - lastReport < 500) return;
-    lastReport = Date.now();
-    onProgress({ phase: "download", percent: total ? Math.min(100, (done / total) * 100) : null, bytes: { done, total } });
-  };
-  log.info(`downloading ${image} (${(total / 1e9).toFixed(1)} GB, ${manifest.blobs.length} parts)`);
-  const queue = [...manifest.blobs].sort((a, b) => b.size - a.size);
-  const workers = Array.from({ length: Math.min(PARALLEL, queue.length) }, async () => {
-    for (let blob = queue.shift(); blob; blob = queue.shift()) {
-      await downloadBlob(
-        client,
-        blob,
-        (n) => {
-          done += n;
-          report();
-        },
-        signal,
-      );
-    }
-  });
+  for (const b of unique) blobHolds.set(b.digest, (blobHolds.get(b.digest) ?? 0) + 1);
+  let succeeded = false;
   try {
+    let done = 0;
+    let lastReport = 0;
+    const report = (force = false) => {
+      if (!force && Date.now() - lastReport < 500) return;
+      lastReport = Date.now();
+      onProgress({ phase: "download", percent: total ? Math.min(100, (done / total) * 100) : null, bytes: { done: Math.min(done, total), total } });
+    };
+    log.info(`downloading ${image} (${(total / 1e9).toFixed(1)} GB, ${unique.length} parts)`);
+    const queue = [...unique].sort((a, b) => b.size - a.size);
+    let failure: unknown = null;
+    const workers = Array.from({ length: Math.min(PARALLEL, queue.length) }, async () => {
+      for (let blob = queue.shift(); blob && !failure; blob = queue.shift()) {
+        try {
+          await fetchBlob(client, blob, (n) => {
+            done += n;
+            report();
+          });
+        } catch (err) {
+          failure ??= err;
+        }
+      }
+    });
+    // Every worker ends before this returns: no download keeps writing after a failure (shared ones finish for others).
     await Promise.all(workers);
-  } catch (err) {
-    queue.length = 0;
-    if (err instanceof AuthRequired) {
-      log.info(`${image}: ${err.message}; pulling with tart`);
-      await pullWithTart(image, template, onProgress);
-      return;
+    if (failure) throw failure;
+    report(true);
+    await unpack(ref, manifest, template, onProgress);
+    succeeded = true;
+    log.info(`downloaded ${image} into template ${template}`);
+  } finally {
+    for (const b of unique) {
+      const left = (blobHolds.get(b.digest) ?? 1) - 1;
+      if (left > 0) blobHolds.set(b.digest, left);
+      else {
+        blobHolds.delete(b.digest);
+        // Kept after a failure: the next try resumes from them.
+        if (succeeded) rmSync(blobPath(b.digest), { force: true });
+      }
     }
-    throw err;
   }
-  report(true);
+}
 
-  // Unpack: Tart pulls the verified layers from a loopback registry.
+/** Tart pulls the verified layers from a loopback registry; the result becomes the template. */
+async function unpack(ref: ImageRef, manifest: Manifest, template: string, onProgress: (p: ImageProgress) => void): Promise<void> {
   const mirror = serveMirror(ref.repository, manifest);
   const local = `127.0.0.1:${mirror.port}/${ref.repository}@${manifest.digest}`;
   try {
@@ -343,7 +408,6 @@ export async function downloadImage(image: string, onProgress: (p: ImageProgress
     const res = await tart.tart(["pull", "--insecure", "--concurrency", "4", local], {
       timeoutMs: 0,
       maxOutput: 20_000,
-      signal,
       onOutput: (chunk) => {
         const pct = tart.parseProgress(chunk);
         if (pct !== null) onProgress({ phase: "unpack", percent: pct });
@@ -351,12 +415,11 @@ export async function downloadImage(image: string, onProgress: (p: ImageProgress
     });
     if (res.code !== 0) throw new Error(`Unpacking the image failed: ${tart.tartErrorText(res) || `exit ${res.code}`}`);
     await makeTemplate(local, template);
-    await tart.tart(["delete", local], { timeoutMs: 120_000 }).catch(() => undefined);
   } finally {
     mirror.stop();
+    // The loopback name is never used again (its port changes): drop Tart's cached copy.
+    await tart.tart(["delete", local], { timeoutMs: 120_000 }).catch(() => undefined);
   }
-  for (const b of manifest.blobs) rmSync(blobPath(b.digest), { force: true });
-  log.info(`downloaded ${image} into template ${template}`);
 }
 
 async function pullWithTart(image: string, template: string, onProgress: (p: ImageProgress) => void): Promise<void> {
@@ -370,11 +433,20 @@ async function pullWithTart(image: string, template: string, onProgress: (p: Ima
   });
   if (res.code !== 0) throw new Error(`Downloading ${image} failed: ${tart.tartErrorText(res) || `exit ${res.code}`}`);
   await makeTemplate(image, template);
+  // The template holds the image now (removing it frees the space).
+  await tart.tart(["delete", image], { timeoutMs: 120_000 }).catch(() => undefined);
 }
 
 async function makeTemplate(source: string, template: string): Promise<void> {
   await tart.tart(["delete", template], { timeoutMs: 120_000 }).catch(() => undefined);
   await tart.tartOk(["clone", source, template], { timeoutMs: 30 * 60_000 });
+}
+
+/** Leftovers of downloads Godmode was quit in the middle of: loopback copies in Tart's image cache. */
+export async function pruneImageLeftovers(): Promise<void> {
+  for (const name of await tart.listOciNames().catch(() => [] as string[])) {
+    if (/^127\.0\.0\.1:\d+\//.test(name)) await tart.tart(["delete", name], { timeoutMs: 120_000 }).catch(() => undefined);
+  }
 }
 
 function freeBytes(): number | null {

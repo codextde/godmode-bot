@@ -288,7 +288,8 @@ export class VncClient {
   private async requestFullUpdate(): Promise<void> {
     if (this.closed) throw new VncError("The VM's screen connection is closed");
     const done = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new VncError("The VM's screen did not answer")), UPDATE_TIMEOUT_MS);
+      // No answer: the connection is likely half-open (the VM was powered off) — drop it so the next use reconnects.
+      const timer = setTimeout(() => this.shutdown(new VncError("The VM's screen did not answer")), UPDATE_TIMEOUT_MS);
       this.pendingUpdate.push({
         resolve: () => {
           clearTimeout(timer);

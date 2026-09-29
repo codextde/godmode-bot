@@ -1049,9 +1049,9 @@ const TOOLS: ToolDef[] = [
         return json(vmSummary(await getVm(vmId)));
       }
       if (vmInUse(vmId)) return fail("An agent is working in this VM right now; stop it later or ask the human.");
-      if (action === "stop" && (await getVm(vmId)).state === "suspended") {
-        return fail("The VM is suspended; stopping it would discard its saved session — ask the human.");
-      }
+      const state = (await getVm(vmId)).state;
+      // A suspended (or resuming) VM holds a saved session that stopping would discard.
+      if (action === "stop" && state !== "running") return fail(`The VM is ${state}; only a running VM can be stopped from here — ask the human.`);
       const vm = action === "stop" ? await stopVm(vmId, `agent:${agent.id}`) : await suspendVm(vmId, `agent:${agent.id}`);
       return json(vmSummary(vm));
     },

@@ -1,8 +1,9 @@
 /**
  * Tart (https://tart.run, Fair Source — free on personal machines) runs macOS VMs with Apple's Virtualization.framework.
- * Godmode drives its CLI: `tart clone` pulls an OCI image and makes an APFS copy-on-write VM from it, `tart run` boots
- * it (headless, with Virtualization.framework's VNC server for the screen), `tart exec` runs commands through the Tart
- * guest agent that the Cirrus Labs images ship with, `tart stop` shuts it down gracefully.
+ * Godmode drives its CLI: `tart pull` / `tart clone` turn images into template VMs and APFS copy-on-write VMs (see
+ * ./images.ts), `tart run` boots them headless, `tart exec` runs commands through the Tart guest agent that the Cirrus
+ * Labs images ship with, `tart suspend` saves a VM's memory, and `tart stop` powers a VM off (Godmode asks macOS to
+ * shut down first — see service.ts).
  *
  * Everything lives in Godmode's data directory: TART_HOME is `<data>/vm/tart` (VM disks in `vms/`, the image cache in
  * `cache/`), and Godmode installs its own pinned, checksum-verified copy of Tart into `<data>/vm/bin` on demand — so
@@ -12,7 +13,7 @@ import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { release } from "node:os";
 import { join } from "node:path";
-import { config } from "../config";
+import { config, ensureDir } from "../config";
 import { logger } from "../log";
 import { getSettings } from "../services/settings";
 import { stripAnsi } from "../services/doctor";
@@ -90,7 +91,14 @@ export function resolveTart(): { path: string; managed: boolean } | null {
   return null;
 }
 
+let rootSecured: string | null = null;
+
 export function tartEnv(): Record<string, string | undefined> {
+  // VM disks hold the agents' work: only this user may enter the VM folder (Tart creates its own folders 0755).
+  if (rootSecured !== vmRoot()) {
+    ensureDir(vmRoot(), 0o700);
+    rootSecured = vmRoot();
+  }
   return childEnv({
     TART_HOME: tartHome(),
     // Tart prunes its image cache on its own when the disk runs low; Godmode's images are cached on purpose.
@@ -123,7 +131,10 @@ export interface TartCallOptions {
 export async function tart(args: string[], opts: TartCallOptions = {}): Promise<TartResult> {
   const bin = resolveTart();
   if (!bin) throw new TartError("Tart is not installed. Install it on the Virtual machines page.", "not_installed");
-  return spawnCollect([bin.path, ...args], opts);
+  const started = Date.now();
+  const res = await spawnCollect([bin.path, ...args], opts);
+  log.debug(`tart ${args[0]} ${args[1] ?? ""} → ${res.timedOut ? "timeout" : res.code} (${Date.now() - started} ms)`);
+  return res;
 }
 
 /** Like `tart()`, but throws a TartError with the command's error output when it fails. */
@@ -176,7 +187,8 @@ async function spawnCollect(argv: string[], opts: TartCallOptions): Promise<Tart
   const collected = ["", ""];
   const read = async (stream: ReadableStream<Uint8Array> | number | undefined | null, i: 0 | 1) => {
     if (!stream || typeof stream === "number") return;
-    const decoder = new TextDecoder();
+    // ignoreBOM: file contents read through `cat` keep a byte order mark (edit_file writes them back unchanged).
+    const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
     try {
       const reader = stream.getReader();
       for (;;) {
@@ -348,6 +360,12 @@ export function parseList(stdout: string): TartVmInfo[] {
 export async function listVms(): Promise<TartVmInfo[]> {
   const out = await tartOk(["list", "--source", "local", "--format", "json"], { timeoutMs: 30_000 });
   return parseList(out);
+}
+
+/** Images in Tart's OCI cache, by reference. */
+export async function listOciNames(): Promise<string[]> {
+  const out = await tartOk(["list", "--source", "oci", "--format", "json"], { timeoutMs: 30_000 });
+  return parseList(out).map((v) => v.name);
 }
 
 /** `tart get`: the guest OS ("darwin" / "linux") and the configured resources. */

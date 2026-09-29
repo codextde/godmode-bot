@@ -8,7 +8,7 @@ import { parseKeySequence, type KeyCombo } from "../computer/keys";
 import { logger } from "../log";
 import { sleep } from "../util";
 import { fromBgrx, encodePng, scaleDown } from "./raster";
-import { ensureVmRunning, execInVm, screenEndpoint } from "./service";
+import { ensureVmRunning, execInVm, onVmStopped, screenEndpoint } from "./service";
 import { MODIFIER_KEYSYMS, VncClient, VncError, keysymFor, needsShift } from "./vnc";
 
 const log = logger("vm");
@@ -52,6 +52,9 @@ export function closeScreen(vmId: string): void {
   clients.delete(vmId);
   void p?.then((c) => c.close()).catch(() => undefined);
 }
+
+// A stopped VM's connection is dead: the next use connects afresh.
+onVmStopped(closeScreen);
 
 export interface ScreenShot extends Shot {
   /** base64 PNG */

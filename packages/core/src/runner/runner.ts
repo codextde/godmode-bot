@@ -566,7 +566,10 @@ export function computerTargetOf(job: {
       target = parseComputerTarget(parseJson<unknown>(conv?.computer_target, null));
       if (!target) {
         const agent = getAgent(job.agentId);
-        if (agent.computer.enabled) {
+        // A run kept off this computer (it works in a VM) gets no unattended access to its desktop either.
+        const settings = getSettings();
+        const keptOff = settings.vm.enabled && settings.vm.isolateHostShell && !!resolveVmId(job.conversationId, agent);
+        if (agent.computer.enabled && !keptOff) {
           target = agent.computer.target ?? { kind: "desktop" };
           fromAgent = true;
         }
@@ -957,8 +960,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const disallowed: string[] = [];
   // Hide browser-use tools that need their own LLM key when none is configured (they would only error).
   if (mcp.mcpServers[BROWSER_MCP_NAME] && !browserLlmKey()) disallowed.push(...BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`));
-  // Shell work belongs in the VM: Claude Code's own Bash tool would run on the host.
-  if (vm && settings.vm.isolateHostShell) disallowed.push("Bash");
+  // Shell work belongs in the VM: Claude Code's own Bash tool would run on the host. Settings files (hooks run shell
+  // commands on this computer) can't be planted for later runs in the folders this run may write to.
+  if (hostLocked) disallowed.push("Bash", "Edit(**/.claude/**)"); // Edit rules cover every file-editing tool
   if (disallowed.length) baseArgs.push("--disallowedTools", disallowed.join(","));
   if (viaFiles) baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));
   else baseArgs.push("--append-system-prompt", systemPrompt);

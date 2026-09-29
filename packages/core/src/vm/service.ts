@@ -32,7 +32,7 @@ import { getAgent, updateAgent } from "../agents/service";
 import { emitConversationUpdated, updateConversation } from "../services/conversations";
 import { updateWorkspace } from "../services/workspaces";
 import { ASSIGNMENT_TABLES, vmAssignments } from "./assignments";
-import { downloadImage, templateName } from "./images";
+import { downloadImage, pruneImageLeftovers, templateName } from "./images";
 import * as tart from "./tart";
 
 const log = logger("vm");
@@ -250,6 +250,23 @@ function setProgress(id: string, progress: VmProgress | null, force = false) {
 
 function setError(id: string, error: string | null) {
   update("vms", id, { last_error: error, updated_at: now() });
+}
+
+const stoppedListeners = new Set<(id: string) => void>();
+
+/** Called when a VM stops, suspends or is deleted (e.g. to close its screen connection). */
+export function onVmStopped(fn: (id: string) => void): void {
+  stoppedListeners.add(fn);
+}
+
+function vmStopped(id: string) {
+  for (const fn of stoppedListeners) {
+    try {
+      fn(id);
+    } catch {
+      /* listeners must not break stopping */
+    }
+  }
 }
 
 /** Refresh Tart's list of VMs (throttled; `force` waits for a fresh answer). */
@@ -481,15 +498,31 @@ async function buildDisk(id: string, l: Live): Promise<void> {
   });
   if (l.cancelled) throw new Cancelled();
   setProgress(id, { phase: "clone", label: "Creating the VM's disk", percent: null }, true);
-  await tart.tartOk(["clone", templateName(r.image), id], { timeoutMs: 30 * 60_000 });
-  if (l.cancelled) throw new Cancelled();
-  // A fresh MAC address: two VMs from one image must not get the same IP.
-  await tart.tartOk(["set", id, "--random-mac"], { timeoutMs: 60_000 });
-  await tart.setVm(id, { cpu: r.cpu, memoryMb: r.memory_mb, display: r.display });
+  // Built under a temporary name and renamed when complete: an interrupted build never leaves a half-configured VM
+  // (with the template's MAC address) behind under the VM's name.
+  const building = buildingName(id);
+  await tart.tart(["delete", building], { timeoutMs: 120_000 }).catch(() => undefined);
+  try {
+    await tart.tartOk(["clone", templateName(r.image), building], { timeoutMs: 30 * 60_000 });
+    if (l.cancelled) throw new Cancelled();
+    // A fresh MAC address: two VMs from one image must not get the same IP.
+    await tart.tartOk(["set", building, "--random-mac"], { timeoutMs: 60_000 });
+    await tart.setVm(building, { cpu: r.cpu, memoryMb: r.memory_mb, display: r.display });
+    const diskGb = (await tart.getVmConfig(building)).diskGb;
+    if (diskGb && r.disk_gb > Math.round(diskGb)) await tart.setVm(building, { diskGb: r.disk_gb });
+    else if (diskGb && Math.round(diskGb) !== r.disk_gb) update("vms", id, { disk_gb: Math.round(diskGb) });
+    if (l.cancelled) throw new Cancelled();
+    await tart.tartOk(["rename", building, id], { timeoutMs: 60_000 });
+  } catch (err) {
+    await tart.tart(["delete", building], { timeoutMs: 120_000 }).catch(() => undefined);
+    throw err;
+  }
   await refreshStates(true);
-  const diskGb = states.get(id)?.diskGb;
-  if (diskGb && r.disk_gb > Math.round(diskGb)) await tart.setVm(id, { diskGb: r.disk_gb });
-  else if (diskGb && Math.round(diskGb) !== r.disk_gb) update("vms", id, { disk_gb: Math.round(diskGb) });
+}
+
+/** Tart name of a VM's disk while it is being built. */
+function buildingName(id: string): string {
+  return `${assertId(id)}-building`;
 }
 
 async function deleteDisk(id: string): Promise<void> {
@@ -567,6 +600,7 @@ export async function updateVm(id: string, patch: VmPatch, actor = "user"): Prom
   const l = liveOf(id);
   assertIdle(id, l, "change it");
   await refreshStates(true);
+  assertIdle(id, l, "change it");
   const state = states.get(id)?.state;
   const next: Partial<VmRow> = {};
   if (patch.name !== undefined) {
@@ -601,13 +635,22 @@ export async function updateVm(id: string, patch: VmPatch, actor = "user"): Prom
 export async function deleteVm(id: string, opts: { keepFiles?: boolean } = {}, actor = "user"): Promise<void> {
   const r = requireRow(id);
   const l = liveOf(id);
+  // Everything before the first await: the build (if any) cleans up after itself, runs stop using the VM, and no
+  // start can begin while it's being deleted.
   const creating = l.op === "creating";
   l.cancelled = true;
+  if (creating) l.deleted = true;
+  else claim(l, "stopping", { phase: "boot", label: "Deleting", percent: null });
+  for (const [runId, entry] of runVms) {
+    if (entry.vmId !== id) continue;
+    entry.abort.abort();
+    runVms.delete(runId);
+  }
   if (tart.vmSupport().supported) {
     // Without Tart the disk (and a running VM) would stay behind with no way to manage it.
     await ensureTart();
     await refreshStates(true);
-    if (!creating && (states.get(id)?.state === "running" || l.op === "starting" || l.proc)) await stopProcess(id, l, 5);
+    if (!creating && (states.get(id)?.state === "running" || l.starting || l.proc)) await stopProcess(id, l, 5, { graceful: false });
     if (!creating) await deleteDisk(id);
   }
   const affected = {
@@ -621,16 +664,11 @@ export async function deleteVm(id: string, opts: { keepFiles?: boolean } = {}, a
     run("UPDATE workspaces SET vm_id = NULL WHERE vm_id = ?", id);
     run("DELETE FROM vms WHERE id = ?", id);
   });
-  for (const [runId, entry] of runVms) {
-    if (entry.vmId !== id) continue;
-    entry.abort.abort();
-    runVms.delete(runId);
-  }
   if (!opts.keepFiles) rmSync(sharedDirOf(id), { recursive: true, force: true });
   rmSync(logPathOf(id), { force: true });
-  // A clone that is still running removes its disk when it finishes (buildClaimed).
-  if (creating) l.deleted = true;
-  else live.delete(id);
+  vmStopped(id);
+  // A build that is still running removes its disk when it finishes (buildClaimed).
+  if (!creating) live.delete(id);
   audit(actor, "vm.delete", id, { name: r.name, keptFiles: !!opts.keepFiles });
   log.info(`deleted VM ${id} (${r.name})`);
   states.delete(id);
@@ -661,7 +699,7 @@ export async function resetVm(id: string, opts: { start?: boolean } = {}, actor 
   audit(actor, "vm.reset", id, { name: r.name, image: r.image });
   try {
     await refreshStates(true);
-    if (states.get(id)?.state === "running" || l.proc) await stopProcess(id, l, 10);
+    if (states.get(id)?.state === "running" || l.proc) await stopProcess(id, l, 10, { graceful: false });
     // stopProcess cancels in-flight work; this reset goes on.
     l.cancelled = false;
     await deleteDisk(id);
@@ -686,6 +724,7 @@ export async function duplicateVm(id: string, name?: string, actor = "user"): Pr
   const l = liveOf(id);
   assertIdle(id, l, "duplicate it");
   await refreshStates(true);
+  assertIdle(id, l, "duplicate it");
   const state = stateOf(r, l);
   if (state !== "stopped") throw conflict(state === "suspended" ? "Shut the VM down (Stop) before duplicating it" : "Stop the VM before duplicating it");
   const copy: VmRow = { ...r, id: newId("vm"), name: cleanName(name ?? `${r.name} copy`), provisioned_at: null, last_error: null, last_started_at: null, last_used_at: null, created_at: now(), updated_at: now() };
@@ -818,14 +857,15 @@ async function doStart(id: string, l: Live, token: number): Promise<void> {
     checkCancelled(l);
     l.ip = await tart.ipOf(id, 30).catch(() => null);
     checkCancelled(l);
-    if (!requireRow(id).provisioned_at) {
-      setProgress(id, { phase: "setup", label: "Setting up the VM", percent: null }, true);
-      await provision(id);
-      checkCancelled(l);
-    }
+    // Every boot (idempotent, a second or two): settings made by an older Godmode version get updated too.
+    setProgress(id, { phase: "setup", label: requireRow(id).provisioned_at ? "Getting the VM ready" : "Setting up the VM", percent: null }, true);
+    await provision(id);
+    checkCancelled(l);
     l.ready = true;
     update("vms", id, { last_started_at: now(), last_used_at: now(), updated_at: now() });
     l.lastUsed = Date.now();
+    // Callers use the VM right away (its screen needs Tart's "running" state).
+    await refreshStates(true);
     log.info(`VM ${id} is running${l.ip ? ` at ${l.ip}` : ""}`);
   } catch (err) {
     if (!l.cancelled && l.opToken === token) {
@@ -868,6 +908,7 @@ async function waitForGuest(id: string, l: Live, proc: Subprocess | null, timeou
 }
 
 function onProcessExit(id: string, proc: Subprocess) {
+  vmStopped(id);
   const l = live.get(id);
   if (!l || l.proc !== proc) return;
   l.proc = null;
@@ -877,28 +918,73 @@ function onProcessExit(id: string, proc: Subprocess) {
   void refreshStates(true).then(() => emit(id));
 }
 
-/** Stop the VM: a graceful macOS shutdown, forced after `timeoutS`. Cancels an in-flight start and waits for it. */
-async function stopProcess(id: string, l: Live, timeoutS: number): Promise<void> {
+/**
+ * Stop the VM: macOS shuts down (`tart stop` alone powers the VM off like pulling the plug — writes the guest hadn't
+ * flushed yet would be lost), forced after `timeoutS`. Cancels an in-flight start and waits for it.
+ */
+async function stopProcess(id: string, l: Live, timeoutS: number, opts: { graceful?: boolean } = {}): Promise<void> {
+  // Booted by this Godmode, or adopted running after a restart: shut macOS down instead of cutting the power — unless
+  // the disk is about to be thrown away (delete, reset).
+  const booted = (opts.graceful ?? true) && !l.starting && (l.ready || states.get(id)?.state === "running");
   l.cancelled = true;
-  const stop = async () => {
-    const res = await tart.tart(["stop", id, "--timeout", String(timeoutS)], { timeoutMs: (timeoutS + 30) * 1000 });
+  vmStopped(id);
+  const powerOff = async () => {
+    const res = await tart.tart(["stop", id, "--timeout", "5"], { timeoutMs: 40_000 });
     if (res.code !== 0 && !/not running|is not running|stopped|does not exist/i.test(tart.tartErrorText(res))) {
       log.warn(`tart stop ${id}: ${tart.tartErrorText(res)}`);
     }
   };
-  await stop();
-  // A start in progress gives up at its next step; if it spawned `tart run` after the stop above, stop that too.
+  if (booted && (await shutDownGuest(id, l, timeoutS))) {
+    // Shut down cleanly.
+  } else {
+    if (booted) log.warn(`VM ${id} did not shut down within ${timeoutS} s; powering it off`);
+    await powerOff();
+  }
+  // A start in progress gives up at its next step; if it spawned `tart run` after the power-off above, stop that too.
   if (l.starting) {
     await l.starting.catch(() => undefined);
-    if (l.proc && l.proc.exitCode === null && l.proc.signalCode === null) await stop();
+    if (l.proc && l.proc.exitCode === null && l.proc.signalCode === null) await powerOff();
   }
-  if (l.proc) await Promise.race([l.proc.exited, sleep(10_000)]);
+  if (l.proc) {
+    await Promise.race([l.proc.exited, sleep(10_000)]);
+    // Still up (it was just starting when Tart looked): this Godmode owns the process — stop it directly.
+    if (l.proc.exitCode === null && l.proc.signalCode === null) {
+      l.proc.kill("SIGINT");
+      await Promise.race([l.proc.exited, sleep(10_000)]);
+    }
+  }
   l.proc = null;
   l.ip = null;
   l.ready = false;
 }
 
-export async function stopVm(id: string, actor = "user"): Promise<Vm> {
+/** Ask the guest OS to shut down and wait until the VM is off. Returns whether it went down within `timeoutS`. */
+async function shutDownGuest(id: string, l: Live, timeoutS: number): Promise<boolean> {
+  // The command doesn't return once the system goes down: a short timeout is expected. (Absolute paths: commands run
+  // through the guest agent get a minimal PATH without /sbin.)
+  const res = await tart
+    .tart(["exec", id, "/bin/sh", "-c", "/bin/sync; sudo -n /sbin/shutdown -h now"], { timeoutMs: Math.min(15, timeoutS) * 1000 })
+    .catch(() => null);
+  // Refused right away (no guest agent, sudo failed): no point in waiting.
+  if (res && res.code !== 0 && !res.timedOut && !/transport|unavailable|shut ?down|closed|EOF/i.test(`${res.stderr} ${res.stdout}`)) {
+    await sleep(1000);
+    await refreshStates(true);
+    if (states.get(id)?.state === "running") return false;
+  }
+  const deadline = Date.now() + timeoutS * 1000;
+  while (Date.now() < deadline) {
+    if (l.proc) {
+      if (l.proc.exitCode !== null || l.proc.signalCode !== null) return true;
+    } else {
+      await refreshStates(true);
+      if (states.get(id)?.state !== "running") return true;
+    }
+    await sleep(500);
+  }
+  return false;
+}
+
+export async function stopVm(id: string, actor = "user", stillWanted: () => boolean = () => true): Promise<Vm> {
   requireRow(id);
   const l = liveOf(id);
   if (l.op === "creating") throw conflict("The VM is still being created");
@@ -906,6 +992,10 @@ export async function stopVm(id: string, actor = "user"): Promise<Vm> {
   await ensureTart();
   await refreshStates(true);
   if (states.get(id)?.state === "stopped" && !l.starting && !l.proc) return getVm(id);
+  // Looked again after the awaits above: a creation or reset that started meanwhile isn't interrupted.
+  const opNow = l.op as Op | null; // may have changed during the awaits
+  if (opNow === "creating") throw conflict("The VM is being created");
+  if (opNow === "stopping" || !stillWanted()) return getVm(id);
   // Takes over from a start in progress (which gives up).
   const token = claim(l, "stopping", { phase: "boot", label: "Shutting down", percent: null });
   emit(id);
@@ -929,6 +1019,8 @@ export async function suspendVm(id: string, actor = "user"): Promise<Vm> {
   await refreshStates(true);
   if (states.get(id)?.state !== "running") throw conflict("Only a running VM can be suspended");
   if (!(await isMacGuest(id))) throw conflict("Only macOS VMs can be suspended — stop it instead");
+  assertIdle(id, l, "suspend it");
+  vmStopped(id);
   const token = claim(l, "stopping", { phase: "boot", label: "Suspending", percent: null });
   emit(id);
   try {
@@ -1016,9 +1108,9 @@ function hostnameFor(name: string): string {
 }
 
 /**
- * First boot (and after a rename or reset): link the shared folder into the home folder, name the computer after the
- * VM, authorize Godmode's SSH key (for "Open Terminal"), turn on Screen Sharing (the VM's screen, reachable only from
- * this Mac) and keep the screen from sleeping. Idempotent.
+ * Every boot: link the shared folder into the home folder, name the computer after the VM, authorize Godmode's SSH key
+ * (for "Open Terminal"), turn on Screen Sharing (the VM's screen), let only this Mac reach SSH and Screen Sharing, and
+ * keep the screen from sleeping. Idempotent.
  */
 async function provision(id: string): Promise<void> {
   const r = requireRow(id);
@@ -1026,11 +1118,16 @@ async function provision(id: string): Promise<void> {
   const script = [
     `link=${shq(GUEST_SHARED_DIR)}`,
     `[ -L "$link" ] || [ -e "$link" ] || ln -s ${shq(GUEST_MOUNT)} "$link"`,
-    `sudo -n scutil --set ComputerName ${shq(r.name)} 2>/dev/null || true`,
-    `sudo -n scutil --set LocalHostName ${shq(hostnameFor(r.name))} 2>/dev/null || true`,
-    `sudo -n launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true`,
-    `sudo -n pmset -a displaysleep 0 sleep 0 2>/dev/null || true`,
-    `defaults -currentHost write com.apple.screensaver idleTime -int 0 2>/dev/null || true`,
+    // Absolute paths: commands run through the guest agent get a minimal PATH.
+    `sudo -n /usr/sbin/scutil --set ComputerName ${shq(r.name)} 2>/dev/null || true`,
+    `sudo -n /usr/sbin/scutil --set LocalHostName ${shq(hostnameFor(r.name))} 2>/dev/null || true`,
+    `sudo -n /bin/launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true`,
+    `sudo -n /usr/bin/pmset -a displaysleep 0 sleep 0 2>/dev/null || true`,
+    // Only this Mac (the VM's gateway) may use SSH and Screen Sharing: other VMs on the same network share the images'
+    // well-known login. (Commands from Godmode use the guest agent's virtual socket, not the network.)
+    `gw=$(/sbin/route -n get default 2>/dev/null | /usr/bin/awk '/gateway:/ {print $2}')`,
+    `if [ -n "$gw" ]; then printf 'pass in quick proto tcp from %s to any port { 22, 5900 }\nblock return in quick proto tcp from any to any port { 22, 5900 }\n' "$gw" | sudo -n /sbin/pfctl -q -a com.apple/godmode -f - 2>/dev/null; sudo -n /sbin/pfctl -q -E 2>/dev/null; fi; true`,
+    `/usr/bin/defaults -currentHost write com.apple.screensaver idleTime -int 0 2>/dev/null || true`,
     pub
       ? `mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && (grep -qF ${shq(pub)} ~/.ssh/authorized_keys || echo ${shq(pub)} >> ~/.ssh/authorized_keys) && chmod 600 ~/.ssh/authorized_keys`
       : "true",
@@ -1087,6 +1184,7 @@ export function __setScreenEndpointForTests(fn: ((id: string) => ScreenEndpoint 
 export async function screenEndpoint(id: string): Promise<ScreenEndpoint | null> {
   requireRow(id);
   const l = liveOf(id);
+  if (states.get(id)?.state !== "running") await refreshStates(true);
   if (l.op === "stopping" || states.get(id)?.state !== "running") return null;
   touch(id);
   if (screenEndpointOverride) return screenEndpointOverride(id);
@@ -1182,6 +1280,8 @@ export async function attachVm(runId: string, vmId: string, onActivity?: (label:
   assertUsable();
   const r = requireRow(vmId);
   const l = liveOf(vmId);
+  // In use from now on: the idle sweep leaves it alone.
+  touch(vmId);
   await refreshStates();
   if (states.get(vmId)?.state !== "running" || !l.ready) onActivity?.(`Starting the VM "${r.name}"…`);
   const running = ensureVmRunning(vmId);
@@ -1233,6 +1333,7 @@ export async function startVms(): Promise<void> {
   sweepTimer.unref?.();
   if (!tart.vmSupport().supported || !tart.resolveTart()) return;
   await refreshStates(true);
+  void pruneImageLeftovers();
   for (const r of all<VmRow>("SELECT * FROM vms")) {
     if (!VM_ID.test(r.id) || states.get(r.id)?.state !== "running") continue;
     log.info(`VM ${r.id} (${r.name}) is still running`);
@@ -1259,7 +1360,8 @@ async function sweep(): Promise<void> {
     const l = liveOf(id);
     if (l.op || Date.now() - l.lastUsed < idleMinutes * 60_000) continue;
     log.info(`stopping VM ${id}: idle for ${idleMinutes} minutes`);
-    await stopVm(id, "system").catch((err) => log.warn(`could not stop idle VM ${id}`, err));
+    const idle = () => !vmInUse(id) && Date.now() - l.lastUsed >= idleMinutes * 60_000;
+    await stopVm(id, "system", idle).catch((err) => log.warn(`could not stop idle VM ${id}`, err));
   }
 }
 
@@ -1281,7 +1383,8 @@ export async function shutdownVms(): Promise<void> {
         if (res?.code === 0) return;
         log.warn(`could not suspend VM ${id}; stopping it instead`);
       }
-      await tart.tart(["stop", id, "--timeout", "15"], { timeoutMs: 45_000 }).catch(() => null);
+      // Quick: the desktop app gives Godmode a few seconds to quit before it ends the process.
+      await stopProcess(id, liveOf(id), 3).catch((err) => log.warn(`could not stop VM ${id}`, err));
     }),
   );
 }

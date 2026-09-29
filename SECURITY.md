@@ -52,11 +52,16 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
   read files your user can read or attach to the browser's debugging port). Only give agents tasks and credentials you
   would give a trusted coworker, and run Godmode in a VM or container for sensitive environments.
 - **macOS VMs for agents**: an agent assigned a VM (per agent, chat or workspace) does its shell, file and screen work
-  inside an isolated macOS guest. With *Settings → Virtual machines → Keep agents with a VM off this Mac* (default), its runs turn
-  off Claude Code's Bash tool and don't bypass permissions, so Claude Code's own file tools — which still run on the
-  host — only reach the agent's repository, the chat's folder and the VM's shared folder. The VM shares nothing else with
-  the host (no clipboard; the shared folder is the only mount). Claude Code itself, its MCP servers (browser, vault
-  fills) and your Claude login stay on the host, so a VM is strong containment for the agent's work, not a boundary
-  against a deliberately malicious model that can still use the tools Godmode gives it.
+  inside an isolated macOS guest. With *Settings → Virtual machines → Keep agents with a VM off this Mac* (default), its
+  runs turn off Claude Code's Bash tool, don't bypass permissions (so Claude Code's own file tools — which still run on
+  the host — only reach the agent's repository, the chat's folder and the VM's shared folder), load no Claude Code
+  settings files and can't write any (no hooks), get no unattended access to your desktop (a screen you share in the
+  chat still works), and can't hand work to, change, delete or schedule agents that work on the host (delegated work
+  runs in the same VM). Work meant for a VM never falls back to the host. The VM shares nothing else with the host: no
+  clipboard, the shared folder is the only mount, and a firewall rule inside each guest lets only this Mac reach its
+  SSH and Screen Sharing (the Cirrus Labs images use the well-known login `admin` / `admin`, so other VMs must not).
+  Claude Code itself, its MCP servers (browser, vault fills) and your Claude login stay on the host, so a VM strongly
+  contains the agent's work but is not a boundary against a deliberately malicious model that can still use the tools
+  Godmode gives it — and a VM's `admin` can change its own firewall.
 - Backups (`*.godmode-backup`) are encrypted with the backup passphrase you choose; secrets inside remain encrypted
   with your vault key. Only import backups you created.

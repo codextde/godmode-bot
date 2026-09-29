@@ -75,6 +75,7 @@ async function catchHttp(p: Promise<unknown>): Promise<HttpError> {
 
 beforeAll(async () => {
   env = await setupEnv("godmode-vms-");
+  if (process.env.VM_TEST_DEBUG) (await import("../src/log")).setLogLevel("debug");
   // A wrapper script: settings.vm.tartPath must be one executable file.
   const wrapper = join(env.dataDir, "tart");
   writeFileSync(wrapper, `#!/bin/sh\nexec "${process.execPath}" "${FAKE_TART}" "$@"\n`);
@@ -246,6 +247,8 @@ describe("VM lifecycle", () => {
     expect((await getVm(vmId)).state).toBe("running");
     const stopped = await stopVm(vmId);
     expect(stopped.state).toBe("stopped");
+    // macOS was asked to shut down (a plain `tart stop` powers off and loses unflushed writes).
+    expect(readFileSync(join(tartHome(), "shutdowns.log"), "utf8").split("\n")).toContain(vmId);
   });
 
   test("duplicate copies a stopped VM with a new identity", async () => {
@@ -368,11 +371,49 @@ describe("VM lifecycle", () => {
     }
   });
 
+  test("images that share layers download each layer once, even at the same time", async () => {
+    const before = registry.requests.filter((r) => r.digest === registry.sharedDigest).length;
+    const a = await createVm({ name: "Shares A", image: "ghcr.io/example/shares-a:latest" });
+    const b = await createVm({ name: "Shares B", image: "ghcr.io/example/shares-b:latest" });
+    await waitState(a.id, "stopped");
+    await waitState(b.id, "stopped");
+    expect(fakeState().vms[a.id]!.source).toBe(templateName("ghcr.io/example/shares-a:latest"));
+    expect(fakeState().vms[b.id]!.source).toBe(templateName("ghcr.io/example/shares-b:latest"));
+    // One download of the shared layer for both images (and for its repeats within shares-b).
+    expect(registry.requests.filter((r) => r.digest === registry.sharedDigest).length - before).toBe(1);
+    const { readdirSync } = await import("node:fs");
+    expect(readdirSync(join(env.dataDir, "vm", "downloads"))).toEqual([]);
+    await deleteVm(a.id);
+    await deleteVm(b.id);
+  });
+
+  test("a VM deleted while it's being created leaves no disk behind", async () => {
+    const vm = await createVm({ name: "Gone", image: "ghcr.io/example/deleted-early:latest" });
+    await deleteVm(vm.id);
+    await until(() => !Object.keys(fakeState().vms).some((n) => n.startsWith(vm.id)) && !!fakeState().vms[templateName(vm.image)], 20_000, "cleanup");
+    expect((await catchHttp(getVm(vm.id))).status).toBe(404);
+  });
+
+  test("a VM running without this Godmode (adopted) is shut down cleanly too", async () => {
+    const vm = await createVm({ name: "Adopted" });
+    await waitState(vm.id, "stopped");
+    // Started outside this process — like a VM that kept running while Godmode restarted.
+    const wrapper = join(env.dataDir, "tart");
+    const proc = Bun.spawn([wrapper, "run", vm.id, "--no-graphics"], { env: { ...process.env, TART_HOME: tartHome() }, stdout: "ignore", stderr: "ignore" });
+    await until(() => fakeState().vms[vm.id]?.state === "running", 10_000, "outside start");
+    expect((await waitState(vm.id, "running")).state).toBe("running");
+    await stopVm(vm.id);
+    await proc.exited;
+    expect(readFileSync(join(tartHome(), "shutdowns.log"), "utf8").split("\n")).toContain(vm.id);
+    await deleteVm(vm.id);
+  });
+
   test("images from registries that need a login are pulled by tart itself", async () => {
     const vm = await createVm({ name: "Private", image: "ghcr.io/private/macos:latest" });
     await waitState(vm.id, "stopped");
-    expect(fakeState().images).toContain("ghcr.io/private/macos:latest");
     expect(fakeState().vms[vm.id]!.source).toBe(templateName("ghcr.io/private/macos:latest"));
+    // Tart's pulled copy is dropped once the template holds the image.
+    expect(fakeState().images).not.toContain("ghcr.io/private/macos:latest");
     await deleteVm(vm.id);
   });
 

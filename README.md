@@ -182,16 +182,17 @@ desktop access for routines (agent settings → *Computer*). Setup lives in **Se
 ### Virtual machines — give an agent its own Mac
 
 Open **Virtual machines** in the sidebar and click **New VM** (first time: **Set up** downloads Godmode's own copy of
-[Tart](https://tart.run) — no Homebrew needed). Pick an image — *macOS Tahoe* is a ~27 GB download once; every further
-VM from it is ready in seconds — and assign the VM to an **agent** (agent settings → *Virtual machine*), a **chat**
+[Tart](https://tart.run) — no Homebrew needed). Pick an image — *macOS Tahoe* is a ~27 GB download once (in parallel,
+resumable; Settings → Virtual machines lists downloaded images); every further VM from it is ready in seconds — and
+assign the VM to an **agent** (agent settings → *Virtual machine*), a **chat**
 (the *VM* chip in the message box) or a **workspace**. A run works in its chat's VM, else its agent's, else its
-workspace's, and boots it when needed.
+workspace's, and boots it when needed. You can also just ask Godmode: *"Give the iOS agent its own Mac."*
 
 | | |
 |---|---|
 | **What the agent gets** | A `vm` tool set: `shell` (zsh as `admin`, passwordless sudo, Homebrew), `read_file` / `write_file` / `edit_file`, and `screen` — screenshots, clicks and typing on the VM's display for GUI apps. Claude Code's own Bash tool is turned off for these runs and its file tools only reach the agent's own folders (Settings → Virtual machines → *Keep agents with a VM off this Mac*), so the work stays in the VM. |
 | **Moving files** | Every VM has a shared folder: `~/Godmode` in the VM is `~/.godmode/vm/shared/<vm>` on your Mac (**Shared folder** opens it in Finder). |
-| **Watching & taking over** | The VM card shows a live preview; **Screen** opens it in Screen Sharing, **Terminal** opens an SSH session. |
+| **Watching & taking over** | The VM card shows a live preview; **Screen** opens it in Screen Sharing, **Terminal** opens an SSH session (a firewall in each VM lets only your Mac in). |
 | **Keeping & recreating** | Disks are stored under `~/.godmode/vm` and keep everything (installed tools, repos, logins) between tasks and restarts. When Godmode quits, running VMs are suspended and resume where they left off. **Reset** recreates a clean macOS from the image (shared folder and assignments stay), **Duplicate** copies a VM with its whole disk. |
 
 Needs a Mac with Apple silicon. macOS allows **two** macOS VMs to run at the same time; Godmode tells you which one to
