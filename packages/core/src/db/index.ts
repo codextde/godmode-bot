@@ -62,16 +62,38 @@ function migrate(instance: Database) {
 
 type Param = string | number | bigint | boolean | null | Uint8Array;
 
+const SLOW_QUERY_MS = 100;
+const slowLogged = new Map<string, number>();
+
+/** Slow statements go to the diagnostic log (SQL only — parameters may hold secrets), at most once a minute each. */
+function timed<T>(sql: string, fn: () => T): T {
+  const started = performance.now();
+  try {
+    return fn();
+  } finally {
+    const ms = performance.now() - started;
+    if (ms >= SLOW_QUERY_MS) {
+      const key = sql.replace(/\s+/g, " ").trim().slice(0, 300);
+      const now = Date.now();
+      if (now - (slowLogged.get(key) ?? 0) >= 60_000) {
+        if (slowLogged.size > 500) slowLogged.clear();
+        slowLogged.set(key, now);
+        log.warn("slow database query", { sql: key, ms: Math.round(ms) });
+      }
+    }
+  }
+}
+
 export function all<T>(sql: string, ...params: Param[]): T[] {
-  return getDb().query<T, Param[]>(sql).all(...params);
+  return timed(sql, () => getDb().query<T, Param[]>(sql).all(...params));
 }
 
 export function get<T>(sql: string, ...params: Param[]): T | null {
-  return getDb().query<T, Param[]>(sql).get(...params) ?? null;
+  return timed(sql, () => getDb().query<T, Param[]>(sql).get(...params) ?? null);
 }
 
 export function run(sql: string, ...params: Param[]) {
-  return getDb().query(sql).run(...params);
+  return timed(sql, () => getDb().query(sql).run(...params));
 }
 
 export function tx<T>(fn: () => T): T {
