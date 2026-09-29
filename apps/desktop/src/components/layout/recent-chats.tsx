@@ -1,7 +1,7 @@
-import { Link, useLocation, useParams } from "react-router";
+import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Archive, Pin } from "lucide-react";
+import { Archive, Pin, Trash2 } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -12,11 +12,15 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useArchiveChat } from "@/components/chat/chat-actions";
+import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { api } from "@/lib/api";
 import { useAllAgents, useConversations } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
+import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
+
+const ROW_ACTION =
+  "top-1/2! size-6 -translate-y-1/2 text-muted-foreground after:inset-x-0 hover:bg-background hover:text-foreground hover:shadow-card [&>svg]:size-3.5";
 
 export function RecentChats() {
   const { data: conversations = [] } = useConversations();
@@ -25,18 +29,20 @@ export function RecentChats() {
     queryFn: async () => (await api.conversations.list({ archived: true, limit: 1 })).length > 0,
   });
   const { data: agents = [] } = useAllAgents();
-  const { conversationId } = useParams();
+  const conversationId = useMatch("/chat/:conversationId")?.params.conversationId;
   const { pathname } = useLocation();
   const liveRuns = useLive((s) => s.runs);
   const runningConversations = new Set(Object.values(liveRuns).map((r) => r.conversationId));
   const { setArchived } = useArchiveChat();
+  const navigate = useNavigate();
+  const { askDelete, deleteDialog } = useDeleteChat((id) => id === conversationId && navigate("/", { replace: true }));
 
   const items = [...conversations]
     .filter((c) => !c.archived)
     .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt))
     .slice(0, 30);
 
-  if (items.length === 0 && !hasArchived) return null;
+  if (items.length === 0 && !hasArchived) return deleteDialog;
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -51,7 +57,7 @@ export function RecentChats() {
                 <SidebarMenuButton
                   asChild
                   isActive={conversationId === c.id}
-                  className="h-auto py-1.5 group-focus-within/menu-item:pr-8! group-hover/menu-item:pr-8! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-8! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
+                  className="h-auto py-1.5 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
                 >
                   <Link to={`/chat/${c.id}`} className="flex items-start gap-2">
                     <span className="mt-0.5 text-sm leading-none">{agent?.avatar ?? "💬"}</span>
@@ -78,12 +84,25 @@ export function RecentChats() {
                       showOnHover
                       aria-label={`Archive “${c.title || "New chat"}”`}
                       onClick={() => setArchived(c, true)}
-                      className="top-1/2! size-6 -translate-y-1/2 text-muted-foreground hover:bg-background hover:text-foreground hover:shadow-card [&>svg]:size-3.5"
+                      className={cn(ROW_ACTION, "right-7.5")}
                     >
                       <Archive />
                     </SidebarMenuAction>
                   </TooltipTrigger>
-                  <TooltipContent side="right">Archive</TooltipContent>
+                  <TooltipContent side="top">Archive</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SidebarMenuAction
+                      showOnHover
+                      aria-label={`Delete “${c.title || "New chat"}”`}
+                      onClick={() => askDelete(c)}
+                      className={cn(ROW_ACTION, "hover:text-destructive")}
+                    >
+                      <Trash2 />
+                    </SidebarMenuAction>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Delete</TooltipContent>
                 </Tooltip>
               </SidebarMenuItem>
             );
@@ -105,6 +124,7 @@ export function RecentChats() {
           )}
         </SidebarMenu>
       </SidebarGroupContent>
+      {deleteDialog}
     </SidebarGroup>
   );
 }
