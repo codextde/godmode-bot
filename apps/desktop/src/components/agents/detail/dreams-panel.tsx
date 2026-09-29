@@ -261,7 +261,7 @@ function StatusLines({
             <time dateTime={lastAt.toISOString()} title={format(lastAt, "PPpp")}>
               {formatDistanceToNowStrict(lastAt, { addSuffix: true })}
             </time>
-            {last.status === "paused" && ` because ${agent.name} was needed — it continues when ${agent.name} is idle`}
+            {last.status === "paused" && ` — it continues when ${agent.name} is idle`}
             {last.status === "reverted" && " (undone)"}
           </span>
         ) : (

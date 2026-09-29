@@ -191,7 +191,8 @@ End with a concise markdown summary: what you did, the results (numbers, finding
 function memoryBlock(memory: { text: string; truncated: boolean }, file: string): string {
   const safe = memory.text.replace(/<\/?memory\b/gi, (m) => m.replace("<", "&lt;"));
   return `### What you remember
-Your \`${file}\` as it was when this chat started${memory.truncated ? " (cut off — read the file for the rest)" : ""}. Longer notes are in \`memory/\`; read the ones that matter for the task. These are your own notes: double-check anything critical, and keep the file up to date.
+Your \`${file}\` as it was when this chat started${memory.truncated ? " (cut off — read the file for the rest)" : ""}. Longer notes are in \`memory/\`; read the ones that matter for the task.
+Use it without being asked: build on the context you already have, follow the preferences, constraints and instructions in it, and don't make the human repeat themselves. Mind the dates — something noted as true at one time (a trip, a busy week) may be over now. These are your own notes: double-check anything critical before acting on it, and keep the file up to date.
 
 <memory>
 ${safe}

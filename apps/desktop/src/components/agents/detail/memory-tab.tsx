@@ -19,7 +19,7 @@ import {
   Save,
 } from "lucide-react";
 import type { Agent, AgentFileEntry } from "@godmode/shared";
-import { api, errorMessage } from "@/lib/api";
+import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { isMac, modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
@@ -59,6 +59,9 @@ function readOnlyReason(path: string, size: number): string | null {
 function isMemoryPath(path: string) {
   return path === "MEMORY.md" || path.startsWith("memory/");
 }
+
+/** The file changed on the server since the draft started — saving would overwrite someone else's edit. */
+class StaleDraftError extends Error {}
 
 function parentOf(path: string) {
   const i = path.lastIndexOf("/");
@@ -305,22 +308,41 @@ function FileEditor({
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
 
   const save = useMutation({
-    mutationFn: (content: string) => api.agents.writeFile(agentId, path, content),
-    onSuccess: (_, content) => {
+    mutationFn: async ({ content, base }: { content: string; base: string | null }) => {
+      // Not every writer announces itself (a chat run may rewrite MEMORY.md): check the file is still what the draft started from.
+      if (base !== null) {
+        const fresh = await api.agents.readFile(agentId, path).catch((err) => {
+          if (err instanceof ApiRequestError && err.status === 404) return { path, content: "" };
+          throw err;
+        });
+        if (fresh.content !== base) {
+          qc.setQueryData(qk.agentFile(agentId, path), fresh);
+          throw new StaleDraftError();
+        }
+      }
+      await api.agents.writeFile(agentId, path, content);
+      return content;
+    },
+    onSuccess: (content) => {
       qc.setQueryData(qk.agentFile(agentId, path), { path, content });
       qc.invalidateQueries({ queryKey: qk.agentCommits(agentId) });
       qc.invalidateQueries({ queryKey: qk.agentFiles(agentId, parentOf(path)) });
       setDraft(null);
       toast.success(`Saved ${nameOf(path)}`);
     },
-    onError: (err) => toast.error(`Couldn't save ${nameOf(path)}`, { description: errorMessage(err) }),
+    onError: (err) => {
+      if (err instanceof StaleDraftError) warnConflict();
+      else toast.error(`Couldn't save ${nameOf(path)}`, { description: errorMessage(err) });
+    },
   });
+  const warnConflict = () =>
+    toast.warning(`${nameOf(path)} changed while you were editing`, { description: "Reload it, or overwrite it with your version." });
 
   const saveRef = useRef<() => void>(() => {});
   saveRef.current = () => {
-    if (!dirty || readOnly || save.isPending) return;
-    if (conflict) toast.warning(`${nameOf(path)} changed while you were editing`, { description: "Reload it or overwrite it with your version first." });
-    else save.mutate(value);
+    if (!dirty || readOnly || save.isPending || !draft) return;
+    if (conflict) warnConflict();
+    else save.mutate({ content: value, base: draft.base });
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -390,7 +412,7 @@ function FileEditor({
             <Button variant="outline" size="xs" onClick={() => setDraft(null)}>
               <RotateCcw /> Reload
             </Button>
-            <Button size="xs" disabled={!!readOnly || save.isPending} onClick={() => save.mutate(value)}>
+            <Button size="xs" disabled={!!readOnly || save.isPending} onClick={() => save.mutate({ content: value, base: null })}>
               {save.isPending ? <Spinner /> : <Save />} Overwrite
             </Button>
           </span>

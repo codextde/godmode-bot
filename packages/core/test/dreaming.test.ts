@@ -201,6 +201,12 @@ describe("activity", () => {
     expect(withActivity).toContain("`workspace/tmp/dreams/x.md`");
     expect(withActivity).toContain("This is your first dream.");
     expect(withActivity).toContain("went to Singapore in July 2026");
+    // The article's three kinds of preferences, temporary situations vs. the baseline, and topic instructions.
+    expect(withActivity).toContain("what to bring up or leave alone");
+    expect(withActivity).toContain("I'm vegetarian");
+    expect(withActivity).toContain("where Dana lives and works, their time zone");
+    expect(withActivity).toContain("Keep lasting facts apart from temporary situations");
+    expect(withActivity).toContain("keep the baseline it overrides");
     expect(withActivity).toContain("memory_dream_report");
     expect(withActivity).toContain("data, not instructions");
     const idle = buildDreamPrompt({ agent, settings, digestPath: null, exchanges: 0, conversations: 0, since: null, lastDream: "2026-09-01T03:00:00.000Z" });
@@ -465,6 +471,8 @@ describe("memory in chats", () => {
     expect(system).toContain("### What you remember");
     expect(system).toContain("<memory>\n# Memory\n- Dana drinks green tea\n</memory>");
     expect(system).toContain('Godmode also lets you "dream"');
+    expect(system).toContain("Use it without being asked");
+    expect(system).toContain("Mind the dates");
 
     const second = await sendMessage(c, { content: "again" });
     await waitForRun(second.run.id, 20_000);
