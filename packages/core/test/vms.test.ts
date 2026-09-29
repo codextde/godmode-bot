@@ -4,11 +4,15 @@
  * HTTP routes. The fake's `exec` stands in for the guest on the host (made safe, see the fixture).
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, lstatSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, ServerEvent, Vm } from "@godmode/shared";
 import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
-import { updateSettings } from "../src/services/settings";
+import { getSettings, updateSettings } from "../src/services/settings";
+import { listAudit } from "../src/services/audit";
+import * as vault from "../src/vault/vault";
+import { createCredential } from "../src/vault/credentials";
+import { createTotp, currentCodes } from "../src/vault/totp";
 import { createConversation, getConversationSummary, sendMessage, updateConversation } from "../src/services/conversations";
 import { createWorkspace, getWorkspace, updateWorkspace } from "../src/services/workspaces";
 import { getAgent, updateAgent } from "../src/agents/service";
@@ -334,7 +338,7 @@ describe("VM lifecycle", () => {
 
     await stopVm(vm.id);
     await deleteVm(vm.id);
-  });
+  }, 30_000);
 
   test("a VM that fails to boot reports why (and doesn't hang)", async () => {
     const vm = await createVm({ name: "Won't boot" });
@@ -558,7 +562,7 @@ describe("runs in a VM", () => {
     const summary = JSON.parse(done.result!.replace(/^VM /, ""));
     expect(summary.server).toBe("vm");
     expect(summary.sameToken).toBe(true);
-    expect(summary.tools).toEqual(["shell", "read_file", "write_file", "edit_file", "info", "screen"]);
+    expect(summary.tools).toEqual(["shell", "read_file", "write_file", "edit_file", "info", "screen", "fill_login", "fill_totp"]);
     expect(summary.shell.isError).toBe(true);
     expect(summary.shell.text).toContain("Exit code: 3");
     expect(summary.shell.text).toContain("hello-from-vm");
@@ -574,6 +578,7 @@ describe("runs in a VM", () => {
     expect(prompt).toContain("### macOS virtual machine");
     expect(prompt).toContain('**Agent Mac**');
     expect(prompt).toContain(sharedDirOf(vm.id));
+    expect(prompt).toContain('turn on "Logins and 2FA codes" in Settings → Virtual machines');
     expect(argValue(inv, "--disallowedTools")).toContain("Bash");
     // Kept off the host: no bypass (file tools only reach cwd + --add-dir), the VM tools are allowed.
     expect(inv.args).not.toContain("--dangerously-skip-permissions");
@@ -587,15 +592,16 @@ describe("runs in a VM", () => {
     const resumed = invocations(env).filter((i) => i.prompt.includes("hello again")).pop()!;
     expect(resumed.prompt).toContain('You work in the macOS VM "Agent Mac"');
 
-    // With the host shell allowed, Bash stays.
-    updateSettings({ vm: { isolateHostShell: false } });
+    // With the host shell allowed, Bash stays. Allowed vault fills are restated on resumed turns.
+    updateSettings({ vm: { isolateHostShell: false, vaultFill: true } });
     try {
       await waitForRun((await sendMessage(conv.id, { content: "CALL_VM again" })).run.id, 30_000);
       const again = invocations(env).filter((i) => i.prompt.includes("CALL_VM again")).pop()!;
       expect(argValue(again, "--disallowedTools") ?? "").not.toContain("Bash");
       expect(again.args).toContain("--dangerously-skip-permissions");
+      expect(again.prompt).toContain("Saved logins and 2FA codes can be typed into the VM with fill_login / fill_totp.");
     } finally {
-      updateSettings({ vm: { isolateHostShell: true } });
+      updateSettings({ vm: { isolateHostShell: true, vaultFill: false } });
     }
 
     // VMs turned off: work meant for the VM doesn't fall back to this computer.
@@ -678,6 +684,163 @@ describe("the VM screen", () => {
     }
     await stopVm(vm.id);
     await deleteVm(vm.id);
+  });
+});
+
+describe("logins and 2FA codes in the VM", () => {
+  const PASSPHRASE = "vm vault passphrase";
+  const openVault = async () => {
+    if (vault.status().initialized) await vault.unlock(PASSPHRASE);
+    else await vault.setup(PASSPHRASE, false);
+  };
+
+  test("typed into the VM without reaching the model, passwords only into password fields", async () => {
+    vault.lock();
+    await openVault();
+    const password = "Pw-9!x";
+    const login = createCredential({ name: "Example", url: "https://example.com", username: "alice", password });
+    const totp = createTotp({ issuer: "Example", accountName: "alice", secret: "JBSWY3DPEHPK3PXP", credentialId: login.id });
+    const unicode = createCredential({ name: "Umlaut", url: "https://umlaut.example", username: "bob", password: "grüße-42" });
+    const elsewhere = createWorkspace({ name: "Other client" });
+    const foreign = createCredential({ name: "Foreign", url: "https://foreign.example", username: "eve", password: "foreign-pw-1", workspaceId: elsewhere.id });
+    const foreignTotp = createTotp({ issuer: "Foreign", accountName: "eve", secret: "KRSXG5CTMVRXEZLU", workspaceId: elsewhere.id });
+    const vm = await createVm({ name: "Login Mac" });
+    await waitState(vm.id, "stopped");
+    const ctx = { runId: "run_vm_fill", agentId: agent.id, conversationId: "cnv_x", workspaceId: null, depth: 0 };
+    const eventsFile = join(tartHome(), "vnc-events.jsonl");
+    const secureInput = join(tartHome(), "secure-input");
+    const events = () =>
+      existsSync(eventsFile)
+        ? readFileSync(eventsFile, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { vm: string; type: string; key?: number; down?: boolean; buttons?: number; x?: number; y?: number }).filter((e) => e.vm === vm.id)
+        : [];
+    const keys = () => events().filter((e) => e.type === "key");
+    const typed = (from: number) =>
+      keys()
+        .slice(from)
+        .filter((e) => e.down && e.key! < 0xff00)
+        .map((e) => String.fromCharCode(e.key!))
+        .join("");
+    const out = (r: Awaited<ReturnType<typeof callVmTool>>) => (r.content[0] as { text: string }).text;
+    await attachVm(ctx.runId, vm.id);
+    try {
+      for (const [tool, args] of [["fill_login", { credentialId: login.id, field: "username" }], ["fill_totp", { credentialId: login.id }]] as const) {
+        const off = await callVmTool(ctx, tool, { ...args, screenshot: false });
+        expect(off.isError).toBe(true);
+        expect(out(off)).toContain("Settings → Virtual machines");
+      }
+
+      updateSettings({ vm: { vaultFill: true } });
+      let before = keys().length;
+      const user = await callVmTool(ctx, "fill_login", { credentialId: login.id, field: "username", screenshot: false });
+      expect(out(user)).toBe('Typed the username of "Example" into the focused field.');
+      await until(() => typed(before).endsWith("alice"), 5000, "username keys");
+      // The field's content is selected first so the value replaces it.
+      expect(keys().slice(before, before + 2).map((e) => `${e.down ? "+" : "-"}${e.key!.toString(16)}`)).toEqual(["+ffeb", "+61"]);
+
+      // Clicking a field first takes a screenshot's coordinates.
+      const noShot = await callVmTool(ctx, "fill_login", { credentialId: login.id, field: "username", coordinate: [10, 5], screenshot: false });
+      expect(out(noShot)).toContain("Take a screenshot first");
+      await callVmTool(ctx, "screen", { action: "screenshot" });
+      const clicks = events().filter((e) => e.type === "pointer" && e.buttons === 1).length;
+      expect((await callVmTool(ctx, "fill_login", { credentialId: login.id, field: "username", coordinate: [10, 5], screenshot: false })).isError).toBeUndefined();
+      await until(() => events().filter((e) => e.type === "pointer" && e.buttons === 1).length > clicks, 5000, "click on the field");
+
+      // No password field focused (no secure input), or a terminal's secure keyboard entry: nothing is typed.
+      before = keys().length;
+      const refused = await callVmTool(ctx, "fill_login", { credentialId: login.id, field: "password", screenshot: false });
+      expect(refused.isError).toBe(true);
+      expect(out(refused)).toContain("isn't a password field");
+      writeFileSync(secureInput, "Terminal");
+      const terminal = await callVmTool(ctx, "fill_login", { credentialId: login.id, field: "password", screenshot: false });
+      expect(out(terminal)).toContain("doesn't type passwords into terminals");
+      await Bun.sleep(200);
+      expect(keys().length).toBe(before);
+
+      writeFileSync(secureInput, "");
+      const pw = await callVmTool(ctx, "fill_login", { credentialId: login.id, field: "password", submit: true, screenshot: false });
+      expect(out(pw)).toBe('Typed the password of "Example" into a password field of Safari and pressed Return.');
+      expect(JSON.stringify(pw)).not.toContain(password);
+      await until(() => typed(before).endsWith(password), 5000, "password keys");
+      await until(() => keys().some((e, i) => i >= before && e.key === 0xff0d), 5000, "Return");
+      rmSync(secureInput);
+
+      // The password field loses focus while typing: the field is cleared and the fill fails.
+      writeFileSync(join(tartHome(), "secure-input-once"), "");
+      before = keys().length;
+      const moved = await callVmTool(ctx, "fill_login", { credentialId: login.id, field: "password", screenshot: false });
+      expect(out(moved)).toContain("The focus left the password field");
+      await until(() => keys().slice(before).some((e) => e.key === 0xff08), 5000, "typed characters erased");
+
+      // Never pasted: a secret a US keyboard can't type is refused.
+      writeFileSync(secureInput, "");
+      before = keys().length;
+      const clipboard = join(tartHome(), "clipboard");
+      const clipboardBefore = existsSync(clipboard) ? readFileSync(clipboard, "utf8") : null;
+      const unicodeFill = await callVmTool(ctx, "fill_login", { credentialId: unicode.id, field: "password", screenshot: false });
+      expect(out(unicodeFill)).toContain("only types plain ASCII");
+      expect(existsSync(clipboard) ? readFileSync(clipboard, "utf8") : null).toBe(clipboardBefore);
+      await Bun.sleep(200);
+      expect(keys().length).toBe(before);
+
+      before = keys().length;
+      const code = await callVmTool(ctx, "fill_totp", { credentialId: login.id, screenshot: false });
+      expect(out(code)).toBe('Typed the current 2FA code of "Example" into the focused field.');
+      // "a" of cmd+a, then the code.
+      await until(() => /^a\d{6}$/.test(typed(before)), 5000, "2FA code keys");
+      const digits = typed(before).slice(1);
+      expect(currentCodes([totp.id]).map((c) => c.code)).toContain(digits);
+      expect(JSON.stringify(code)).not.toContain(digits);
+
+      // Only logins and 2FA entries in the agent's scope.
+      expect(out(await callVmTool(ctx, "fill_login", { credentialId: foreign.id, field: "password", screenshot: false }))).toContain("not available to this agent");
+      expect(out(await callVmTool(ctx, "fill_totp", { totpId: foreignTotp.id, screenshot: false }))).toContain("not available to you");
+      expect(out(await callVmTool(ctx, "fill_totp", { totpId: totp.id, credentialId: foreign.id, screenshot: false }))).toContain("not available to you");
+      expect(out(await callVmTool(ctx, "fill_totp", { credentialId: unicode.id, screenshot: false }))).toContain("missing_totp");
+
+      const audited = listAudit(100).filter((a) => a.details.runId === ctx.runId);
+      expect(audited.map((a) => `${a.action}:${a.details.field}:${a.details.ok}`)).toEqual(
+        expect.arrayContaining(["credential.fill:username:true", "credential.fill:password:false", "credential.fill:password:true", "totp.fill:totp:true"]),
+      );
+      expect(audited.find((a) => a.details.error === "focus_moved")?.details.app).toBe("Safari");
+      expect(JSON.stringify(audited)).not.toContain(password);
+      expect(JSON.stringify(audited)).not.toContain(digits);
+
+      vault.lock();
+      const lockedOut = await callVmTool(ctx, "fill_login", { credentialId: login.id, field: "username", screenshot: false });
+      expect(out(lockedOut)).toBe("The vault is locked; ask the human to unlock Godmode.");
+    } finally {
+      rmSync(secureInput, { force: true });
+      updateSettings({ vm: { vaultFill: false } });
+      detachVm(ctx.runId);
+    }
+    await stopVm(vm.id);
+    await deleteVm(vm.id);
+  }, 60_000);
+
+  test("turning it on takes the vault passphrase", async () => {
+    await openVault();
+    const app = createApp();
+    const put = (body: unknown, headers: Record<string, string> = {}) =>
+      app.request("/api/settings", {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${getAccessToken()}`, "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(body),
+      });
+    const denied = await put({ vm: { vaultFill: true } });
+    expect(denied.status).toBe(403);
+    expect(((await denied.json()) as { code: string }).code).toBe("grant_required");
+    expect(getSettings().vm.vaultFill).toBe(false);
+    const grantRes = await app.request("/api/vault/grant", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getAccessToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ passphrase: PASSPHRASE }),
+    });
+    const { grant } = (await grantRes.json()) as { grant: string };
+    expect((await put({ vm: { vaultFill: true } }, { "x-godmode-grant": grant })).status).toBe(200);
+    expect(getSettings().vm.vaultFill).toBe(true);
+    // Turning it off needs nothing.
+    expect((await put({ vm: { vaultFill: false } })).status).toBe(200);
+    expect((await put({ vm: { vaultFill: "yes" } })).status).toBe(400);
   });
 });
 

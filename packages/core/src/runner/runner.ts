@@ -888,7 +888,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
   }
   const promptVm: PromptVm | null = vm
-    ? { name: vm.name, guestUser: vm.guestUser, guestSharedDir: vm.guestSharedDir, hostSharedDir: vm.hostSharedDir, hostShellOff: settings.vm.isolateHostShell }
+    ? { name: vm.name, guestUser: vm.guestUser, guestSharedDir: vm.guestSharedDir, hostSharedDir: vm.hostSharedDir, hostShellOff: settings.vm.isolateHostShell, vaultFill: settings.vm.vaultFill }
     : null;
   // The workspace's folders and repositories; a missing clone is cloned first. A dream only works on its memory.
   let sources: RunSource[] = [];

@@ -161,6 +161,18 @@ describe("HTTP routes", () => {
     expect((await api("GET", `/api/conversations/${conv.id}`)).status).toBe(404);
   });
 
+  test("running an agent without a task falls back to its instructions", async () => {
+    for (const body of [{}, { prompt: "   " }]) {
+      const res = await api("POST", `/api/agents/${agent.id}/run`, body);
+      expect(res.status).toBe(200);
+      const { conversation, run, message } = (await res.json()) as StartChatResult;
+      expect(conversation.origin).toBe("api");
+      expect(message.content).toBe("Carry out your instructions and report back what you did.");
+      expect(conversation.title).toBe(message.content);
+      await waitForRun(run.id, 20_000);
+    }
+  });
+
   test("create conversation + errors", async () => {
     const created = await api("POST", "/api/conversations", { agentId: agent.id, title: "Manual" });
     expect(created.status).toBe(201);

@@ -48,6 +48,8 @@ export interface PromptVm {
   hostSharedDir: string;
   /** Claude Code's Bash tool (which runs on the host) is off for this run. */
   hostShellOff: boolean;
+  /** Saved logins and 2FA codes may be typed into the VM (settings.vm.vaultFill). */
+  vaultFill: boolean;
 }
 
 /** Standing instructions from the human besides the global ones, most general first. The agent's own live in its CLAUDE.md. */
@@ -265,7 +267,12 @@ This task runs in a dedicated macOS virtual machine, **${vm.name}** — not on $
 - The VM keeps its disk between tasks: tools you install, repositories you clone and files you create stay until ${human} resets the VM. Keep your work in the home folder (\`/Users/${vm.guestUser}\`).
 - Shared folder: \`${vm.guestSharedDir}\` in the VM is \`${vm.hostSharedDir}\` on ${human}'s computer. Put results ${human} should get (reports, builds, exports) there; you can also read and write it with your normal file tools.
 - Your own repository (CLAUDE.md, MEMORY.md) stays on ${human}'s computer — keep using your normal file tools for it.
-- Start servers and other long-running processes in the background (\`nohup … > /tmp/x.log 2>&1 &\`); \`shell\` returns when a command's output closes.`;
+- Start servers and other long-running processes in the background (\`nohup … > /tmp/x.log 2>&1 &\`); \`shell\` returns when a command's output closes.
+${
+  vm.vaultFill
+    ? `- Signing in inside the VM (a website in its browser, an app): find the login with \`vault_list_logins\`, click the field on the VM's screen, then call \`fill_login({ credentialId, field })\` or \`fill_totp({ credentialId })\` from the \`vm\` server (both take \`coordinate\` to click first and \`submit: true\`). Godmode types the value — you never see it — and only types passwords into password fields. It can't check which website a field in the VM belongs to, so only fill a login on its own site or app. Never type passwords or 2FA codes with \`screen\`.`
+    : `- Godmode doesn't type saved logins or 2FA codes into this VM: ${human} hasn't allowed it. If a task needs to sign in inside the VM, tell ${human} they can turn on "Logins and 2FA codes" in Settings → Virtual machines.`
+}`;
 }
 
 function computerSection(target: ComputerTarget, human: string, canReveal: boolean): string {
@@ -311,7 +318,7 @@ export function resumeContextPrefix(
     : "";
   // The VM can be assigned or changed between turns: always restate where the work happens.
   const machine = vm
-    ? `\nYou work in the macOS VM "${vm.name}": use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen) for all work in it. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""}`
+    ? `\nYou work in the macOS VM "${vm.name}": use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen) for all work in it. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""} ${vm.vaultFill ? "Saved logins and 2FA codes can be typed into the VM with fill_login / fill_totp." : "Typing saved logins and 2FA codes into the VM is turned off."}`
     : "";
   // Folders and repositories can be attached or removed between turns.
   const attached = sources?.items.length ? `\nWorkspace folders and repositories (added to this session): ${sources.items.map(sourceLine).join(", ")}.` : "";
