@@ -49,7 +49,7 @@ export function AgentPicker({
               <Bot className="size-4 text-muted-foreground" />
             </span>
           )}
-          <span className="truncate font-medium @max-md/composer:sr-only">{current?.name ?? "Choose agent"}</span>
+          <span className="truncate font-medium @max-xs/composer:sr-only">{current?.name ?? "Choose agent"}</span>
           <ChevronDown className="size-3.5 shrink-0 opacity-60" />
         </button>
       </PopoverTrigger>

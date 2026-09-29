@@ -634,6 +634,425 @@ func mouseEvent(_ type: CGEventType, at point: CGPoint, button: CGMouseButton, p
   post(e, pid: pid)
 }
 
+// MARK: - SkyLight (background input Chromium accepts)
+
+/// Private SkyLight entry points — the route Cua Driver takes for background pointer input. Chromium (Chrome, Slack,
+/// VS Code, every Electron app) drops synthetic mouse events that arrive through the public CGEventPostToPid or that
+/// lack the target pid in field 40; SkyLight's pid route reaches the event tap Chromium listens on. Resolved at
+/// runtime: on a macOS without them the public API is the fallback.
+enum SkyLight {
+  private typealias PostToPid = @convention(c) (pid_t, UnsafeMutableRawPointer) -> Void
+  private typealias SetIntField = @convention(c) (UnsafeMutableRawPointer, UInt32, Int64) -> Void
+  private typealias SetWindowLocation = @convention(c) (UnsafeMutableRawPointer, CGPoint) -> Void
+  private typealias GetFrontProcess = @convention(c) (UnsafeMutableRawPointer) -> Int32
+  private typealias PostEventRecordTo = @convention(c) (UnsafeRawPointer, UnsafePointer<UInt8>) -> Int32
+  private typealias MainConnectionID = @convention(c) () -> UInt32
+  private typealias GetWindowOwner = @convention(c) (UInt32, UInt32, UnsafeMutablePointer<UInt32>) -> Int32
+  private typealias GetConnectionPSN = @convention(c) (UInt32, UnsafeMutableRawPointer) -> Int32
+  private typealias GetProcessForPID = @convention(c) (pid_t, UnsafeMutableRawPointer) -> Int32
+
+  private static let loaded = dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY | RTLD_GLOBAL) != nil
+
+  private static func sym<T>(_ name: String, _: T.Type) -> T? {
+    _ = loaded
+    // RTLD_DEFAULT ((void *)-2): every loaded image.
+    guard let p = dlsym(UnsafeMutableRawPointer(bitPattern: -2), name) else { return nil }
+    return unsafeBitCast(p, to: T.self)
+  }
+
+  private static let postToPidFn = sym("SLEventPostToPid", PostToPid.self)
+  private static let setIntFieldFn = sym("SLEventSetIntegerValueField", SetIntField.self) ?? sym("CGEventSetIntegerValueField", SetIntField.self)
+  private static let setWindowLocationFn = sym("CGEventSetWindowLocation", SetWindowLocation.self)
+  private static let getFrontProcessFn = sym("_SLPSGetFrontProcess", GetFrontProcess.self)
+  private static let postEventRecordFn = sym("SLPSPostEventRecordTo", PostEventRecordTo.self)
+  private static let mainConnectionFn = sym("CGSMainConnectionID", MainConnectionID.self)
+  private static let windowOwnerFn = sym("SLSGetWindowOwner", GetWindowOwner.self)
+  private static let connectionPSNFn = sym("SLSGetConnectionPSN", GetConnectionPSN.self)
+  private static let processForPIDFn = sym("GetProcessForPID", GetProcessForPID.self)
+
+  private static func raw(_ e: CGEvent) -> UnsafeMutableRawPointer { Unmanaged.passUnretained(e).toOpaque() }
+
+  /// Raw event field — SkyLight's setter takes the private fields (40, 51, 58, …) the public enum doesn't name.
+  static func set(_ e: CGEvent, _ field: UInt32, _ value: Int64) { setIntFieldFn?(raw(e), field, value) }
+
+  static func setWindowLocation(_ e: CGEvent, _ p: CGPoint) { setWindowLocationFn?(raw(e), p) }
+
+  /// Through SkyLight (the public route when it is missing).
+  static func post(_ e: CGEvent, pid: pid_t) {
+    if let f = postToPidFn { f(pid, raw(e)) } else { e.postToPid(pid) }
+  }
+
+  /// Through both routes, as Cua Driver posts moves, right clicks and drags: AppKit targets drop some SkyLight mouse
+  /// events, Chromium drops public ones.
+  static func postBoth(_ e: CGEvent, pid: pid_t) {
+    postToPidFn?(pid, raw(e))
+    e.postToPid(pid)
+  }
+
+  private static func psn(window: UInt32, pid: pid_t, into out: inout ProcessSerialNumber) -> Bool {
+    if let main = mainConnectionFn, let owner = windowOwnerFn, let connectionPSN = connectionPSNFn {
+      var cid: UInt32 = 0
+      if owner(main(), window, &cid) == 0, cid != 0, connectionPSN(cid, &out) == 0 { return true }
+    }
+    return processForPIDFn.map { $0(pid, &out) == 0 } ?? false
+  }
+
+  /// The 248-byte focus (or defocus) record for `window`.
+  private static func focusRecord(_ window: UInt32, focus: Bool) -> [UInt8] {
+    var buf = [UInt8](repeating: 0, count: 0xF8)
+    buf[0x04] = 0xF8
+    buf[0x08] = 0x0D
+    withUnsafeBytes(of: window.littleEndian) { for (i, b) in $0.enumerated() { buf[0x3C + i] = b } }
+    buf[0x8A] = focus ? 0x01 : 0x02
+    return buf
+  }
+
+  /// Make `window` its app's focused window without raising it or activating the app: Chromium only treats a click
+  /// in a focused window as a user gesture. The front app gets a defocus record — `restoreFocus` hands it back.
+  static func focusWithoutRaise(pid: pid_t, window: UInt32) -> Bool {
+    guard let getFront = getFrontProcessFn, let postRecord = postEventRecordFn else { return false }
+    var front = ProcessSerialNumber()
+    var target = ProcessSerialNumber()
+    guard getFront(&front) == 0, psn(window: window, pid: pid, into: &target) else { return false }
+    let defocused = postRecord(&front, focusRecord(window, focus: false)) == 0
+    let focused = postRecord(&target, focusRecord(window, focus: true)) == 0
+    return defocused && focused
+  }
+
+  /// Undo `focusWithoutRaise`: defocus the shared window and give the front app's key window its focus back, so the
+  /// human's typing keeps landing where it did.
+  static func restoreFocus(previousPid: pid_t, targetPid: pid_t, targetWindow: UInt32) -> Bool {
+    guard let postRecord = postEventRecordFn, let previousWindow = keyWindowNumber(pid: previousPid) else { return false }
+    var previous = ProcessSerialNumber()
+    var target = ProcessSerialNumber()
+    guard psn(window: previousWindow, pid: previousPid, into: &previous), psn(window: targetWindow, pid: targetPid, into: &target) else { return false }
+    let defocused = postRecord(&target, focusRecord(targetWindow, focus: false)) == 0
+    let focused = postRecord(&previous, focusRecord(previousWindow, focus: true)) == 0
+    return defocused && focused
+  }
+
+  /// The app's focused window (accessibility), else its frontmost normal window on screen.
+  private static func keyWindowNumber(pid: pid_t) -> UInt32? {
+    let app = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(app, 0.5)
+    var ref: CFTypeRef?
+    if AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &ref) == .success, let w = asElement(ref) {
+      var id: CGWindowID = 0
+      if _AXUIElementGetWindow(w, &id) == .success, id != 0 { return id }
+    }
+    for w in windowInfoList(all: false) {
+      guard (w[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid, (w[kCGWindowLayer as String] as? NSNumber)?.intValue == 0 else { continue }
+      if let n = w[kCGWindowNumber as String] as? NSNumber { return n.uint32Value }
+    }
+    return nil
+  }
+}
+
+/// The frontmost app (read on the main thread, where AppKit keeps it current).
+func frontmostPid() -> pid_t? {
+  if Thread.isMainThread { return NSWorkspace.shared.frontmostApplication?.processIdentifier }
+  var pid: pid_t?
+  DispatchQueue.main.sync { pid = NSWorkspace.shared.frontmostApplication?.processIdentifier }
+  return pid
+}
+
+/// One id for all events of a gesture (field 58), so WindowServer and Chromium coalesce them.
+func gestureId() -> Int64 { Int64(DispatchTime.now().uptimeNanoseconds % 1_000_000_000) }
+
+/// A mouse event addressed to one window of a background app, stamped the way Cua Driver stamps them: click state
+/// (1), button number (3), subtype (7), the target pid Chromium filters on (40), the window routing fields (51, 91,
+/// 92) and the gesture id (58). `phase` is field 0, which Chromium's gesture recognizer reads.
+func routedEvent(_ type: CGEventType, at point: CGPoint, button: CGMouseButton, pid: pid_t, window: Int, gesture: Int64, clickState: Int64, subtype: Int64, windowLocation: CGPoint, phase: Int64? = nil, flags: CGEventFlags = []) -> CGEvent? {
+  guard let e = CGEvent(mouseEventSource: CGEventSource(stateID: .hidSystemState), mouseType: type, mouseCursorPosition: point, mouseButton: button) else { return nil }
+  if let phase { SkyLight.set(e, 0, phase) }
+  SkyLight.set(e, 1, clickState)
+  SkyLight.set(e, 3, Int64(button.rawValue))
+  SkyLight.set(e, 7, subtype)
+  SkyLight.set(e, 40, Int64(pid))
+  SkyLight.set(e, 51, Int64(window))
+  SkyLight.set(e, 58, gesture)
+  SkyLight.set(e, 91, Int64(window))
+  SkyLight.set(e, 92, Int64(window))
+  SkyLight.setWindowLocation(e, windowLocation)
+  if !flags.isEmpty { e.flags = flags }
+  return e
+}
+
+/// Background left click Chromium accepts (Cua Driver's recipe): focus the window without raising it, then a stamped
+/// move to the target, an off-screen press/release that opens Chromium's user-activation gate without touching the
+/// page, and the real press/release pairs — one gesture, through SkyLight. The front app's focus is handed back after.
+func backgroundLeftClick(pid: pid_t, window: Int, at point: CGPoint, count: Int, flags: CGEventFlags) {
+  let prior = frontmostPid()
+  var focused = false
+  if prior != pid {
+    focused = SkyLight.focusWithoutRaise(pid: pid, window: UInt32(window))
+    usleep(50_000)
+  }
+  let gesture = gestureId()
+  let offScreen = CGPoint(x: -1, y: -1)
+  func send(_ type: CGEventType, _ at: CGPoint, phase: Int64, clickState: Int64) {
+    guard let e = routedEvent(type, at: at, button: .left, pid: pid, window: window, gesture: gesture, clickState: clickState, subtype: 3, windowLocation: at, phase: phase, flags: flags) else { return }
+    SkyLight.post(e, pid: pid)
+  }
+  send(.mouseMoved, point, phase: 2, clickState: 0)
+  usleep(15_000)
+  send(.leftMouseDown, offScreen, phase: 1, clickState: 1)
+  usleep(1_000)
+  send(.leftMouseUp, offScreen, phase: 2, clickState: 1)
+  usleep(100_000)
+  for i in 1...max(1, min(3, count)) {
+    send(.leftMouseDown, point, phase: 3, clickState: Int64(i))
+    usleep(1_000)
+    send(.leftMouseUp, point, phase: 3, clickState: Int64(i))
+    if i < count { usleep(80_000) }
+  }
+  guard let prior, prior != pid else { return }
+  usleep(50_000)
+  let now = frontmostPid()
+  if now == pid {
+    // The click activated the app after all: give the human their app back.
+    DispatchQueue.main.sync { _ = NSRunningApplication(processIdentifier: prior)?.activate(options: []) }
+  } else if focused && now == prior {
+    _ = SkyLight.restoreFocus(previousPid: prior, targetPid: pid, targetWindow: UInt32(window))
+  }
+}
+
+/// Window-scoped right/middle click, hover, drag and wheel: stamped like the left click, window-local location,
+/// through both routes (Cua Driver's recipes for these).
+func routedClick(pid: pid_t, window: Int, at point: CGPoint, local: CGPoint, button: CGMouseButton, downType: CGEventType, upType: CGEventType, count: Int, flags: CGEventFlags) {
+  let gesture = gestureId()
+  if let move = routedEvent(.mouseMoved, at: point, button: .left, pid: pid, window: window, gesture: gesture, clickState: 0, subtype: 3, windowLocation: local) {
+    SkyLight.postBoth(move, pid: pid)
+  }
+  usleep(12_000)
+  for i in 1...max(1, min(3, count)) {
+    if let down = routedEvent(downType, at: point, button: button, pid: pid, window: window, gesture: gesture, clickState: Int64(i), subtype: 3, windowLocation: local, flags: flags) {
+      SkyLight.postBoth(down, pid: pid)
+    }
+    usleep(28_000)
+    if let up = routedEvent(upType, at: point, button: button, pid: pid, window: window, gesture: gesture, clickState: Int64(i), subtype: 3, windowLocation: local, flags: flags) {
+      SkyLight.postBoth(up, pid: pid)
+    }
+    if i < count { usleep(80_000) }
+  }
+}
+
+/// The window's top-left corner (global points), for window-local event locations.
+func windowOrigin(_ window: Int) -> CGPoint? {
+  guard let w = windowById(window), let x = w["x"] as? Double, let y = w["y"] as? Double else { return nil }
+  return CGPoint(x: x, y: y)
+}
+
+// MARK: - Agent cursor
+
+/// The agent's pointer over a shared window, like ChatGPT's agent cursor: background input never moves the human's
+/// pointer, so this shows where the agent points and clicks. A click-through panel ordered directly above the window —
+/// windows the human brings forward cover it as they cover the window — kept out of captures, following the window
+/// and fading out once the agent pauses. Main thread only.
+final class AgentCursor {
+  static let shared = AgentCursor()
+
+  private static let tint = CGColor(srgbRed: 0.15, green: 0.39, blue: 0.92, alpha: 1)
+  private static let idleSeconds: TimeInterval = 20
+
+  private var panel: NSPanel?
+  /// The arrow's tip sits at this layer's origin.
+  private let pointer = CALayer()
+  private var window = 0
+  /// The window's frame (global top-left points) and the pointer in it (window-local points).
+  private var frame = CGRect.zero
+  private var local: CGPoint?
+  private var follow: Timer?
+  private var generation = 0
+
+  private func makePanel() -> NSPanel {
+    let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    p.isOpaque = false
+    p.backgroundColor = .clear
+    p.hasShadow = false
+    p.ignoresMouseEvents = true
+    p.isReleasedWhenClosed = false
+    p.hidesOnDeactivate = false
+    p.animationBehavior = .none
+    p.sharingType = .none
+    p.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
+    let view = NSView()
+    view.wantsLayer = true
+    p.contentView = view
+    view.layer?.addSublayer(pointer)
+
+    let scale = NSScreen.screens.map(\.backingScaleFactor).max() ?? 2
+    // A classic arrow, tip at the origin (layer coordinates grow upward, so the body is below it).
+    let design: [(CGFloat, CGFloat)] = [(0, 0), (0, 18), (4.8, 13.8), (8, 20.6), (11, 19.3), (7.9, 12.6), (13.6, 12.6)]
+    let path = CGMutablePath()
+    path.addLines(between: design.map { CGPoint(x: $0.0, y: -$0.1) })
+    path.closeSubpath()
+    let arrow = CAShapeLayer()
+    arrow.path = path
+    arrow.fillColor = AgentCursor.tint
+    arrow.strokeColor = CGColor.white
+    arrow.lineWidth = 1.6
+    arrow.lineJoin = .round
+    arrow.shadowColor = CGColor.black
+    arrow.shadowOpacity = 0.35
+    arrow.shadowRadius = 2.5
+    arrow.shadowOffset = CGSize(width: 0, height: -1)
+    arrow.contentsScale = scale
+    pointer.addSublayer(arrow)
+
+    let label = CATextLayer()
+    label.string = "Godmode"
+    label.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+    label.fontSize = 11
+    label.foregroundColor = CGColor.white
+    label.alignmentMode = .center
+    label.contentsScale = scale
+    let width = ceil(("Godmode" as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .semibold)]).width) + 14
+    let pill = CALayer()
+    pill.backgroundColor = AgentCursor.tint
+    pill.cornerRadius = 9
+    pill.frame = CGRect(x: 14, y: -38, width: width, height: 18)
+    pill.shadowColor = CGColor.black
+    pill.shadowOpacity = 0.25
+    pill.shadowRadius = 2
+    pill.shadowOffset = CGSize(width: 0, height: -1)
+    label.frame = CGRect(x: 0, y: 1.5, width: width, height: 15)
+    pill.addSublayer(label)
+    pointer.addSublayer(pill)
+    return p
+  }
+
+  /// Global top-left rect → AppKit screen rect (origin at the primary display's bottom-left).
+  private func cocoa(_ r: CGRect) -> NSRect {
+    NSRect(x: r.minX, y: CGDisplayBounds(CGMainDisplayID()).height - r.maxY, width: r.width, height: r.height)
+  }
+
+  private func layerPoint(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x, y: frame.height - p.y) }
+
+  /// Match the window's frame and stacking. False when it is gone or off screen.
+  @discardableResult
+  private func sync() -> Bool {
+    guard let panel, let w = windowById(window), (w["onScreen"] as? Bool) == true,
+          let x = w["x"] as? Double, let y = w["y"] as? Double, let width = w["width"] as? Double, let height = w["height"] as? Double
+    else { return false }
+    let rect = CGRect(x: x, y: y, width: width, height: height)
+    if rect != frame {
+      frame = rect
+      panel.setFrame(cocoa(rect), display: false)
+      if let local {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        pointer.position = layerPoint(local)
+        CATransaction.commit()
+      }
+    }
+    panel.order(.above, relativeTo: window)
+    return true
+  }
+
+  /// Glide to `global` (points) over `window`. Returns how long the glide takes (0 when the cursor just appears).
+  func move(window id: Int, to global: CGPoint) -> TimeInterval {
+    let panel = self.panel ?? makePanel()
+    self.panel = panel
+    if id != window {
+      window = id
+      frame = .zero
+      local = nil
+    }
+    let visible = panel.isVisible && panel.alphaValue > 0.5
+    guard sync() else {
+      hide()
+      return 0
+    }
+    let next = CGPoint(x: global.x - frame.minX, y: global.y - frame.minY)
+    var duration: TimeInterval = 0
+    CATransaction.begin()
+    if visible, let from = local {
+      duration = min(0.45, max(0.12, Double(hypot(next.x - from.x, next.y - from.y)) / 1500))
+      CATransaction.setAnimationDuration(duration)
+      CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeInEaseOut))
+    } else {
+      CATransaction.setDisableActions(true)
+    }
+    pointer.position = layerPoint(next)
+    CATransaction.commit()
+    local = next
+    if !visible {
+      panel.alphaValue = 0
+      NSAnimationContext.runAnimationGroup { ctx in
+        ctx.duration = 0.15
+        panel.animator().alphaValue = 1
+      }
+    }
+    generation += 1
+    let current = generation
+    DispatchQueue.main.asyncAfter(deadline: .now() + AgentCursor.idleSeconds) { [weak self] in
+      if self?.generation == current { self?.hide() }
+    }
+    if follow == nil {
+      follow = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+        guard let self, let panel = self.panel else { return }
+        if !self.sync() { panel.orderOut(nil) }
+      }
+    }
+    return duration
+  }
+
+  /// A ring where the agent clicks.
+  func pulse() {
+    guard let panel, panel.isVisible, let layer = panel.contentView?.layer, let local else { return }
+    let ring = CAShapeLayer()
+    let r: CGFloat = 16
+    ring.path = CGPath(ellipseIn: CGRect(x: -r, y: -r, width: r * 2, height: r * 2), transform: nil)
+    ring.fillColor = AgentCursor.tint.copy(alpha: 0.18)
+    ring.strokeColor = AgentCursor.tint
+    ring.lineWidth = 2.5
+    ring.position = layerPoint(local)
+    ring.contentsScale = pointer.sublayers?.first?.contentsScale ?? 2
+    layer.insertSublayer(ring, below: pointer)
+    let grow = CABasicAnimation(keyPath: "transform.scale")
+    grow.fromValue = 0.3
+    grow.toValue = 1.35
+    let fade = CABasicAnimation(keyPath: "opacity")
+    fade.fromValue = 1
+    fade.toValue = 0
+    let group = CAAnimationGroup()
+    group.animations = [grow, fade]
+    group.duration = 0.5
+    group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+    ring.opacity = 0
+    CATransaction.begin()
+    CATransaction.setCompletionBlock { ring.removeFromSuperlayer() }
+    ring.add(group, forKey: "pulse")
+    CATransaction.commit()
+  }
+
+  func hide() {
+    generation += 1
+    follow?.invalidate()
+    follow = nil
+    guard let panel, panel.isVisible else { return }
+    let current = generation
+    NSAnimationContext.runAnimationGroup({ ctx in
+      ctx.duration = 0.3
+      panel.animator().alphaValue = 0
+    }, completionHandler: { [weak self] in
+      if self?.generation == current { panel.orderOut(nil) }
+    })
+  }
+}
+
+/// Glide the agent cursor to `point` (global) over `window` and wait for it to arrive, so input lands as it does.
+func agentCursor(window: Int, to point: CGPoint) {
+  var duration: TimeInterval = 0
+  DispatchQueue.main.sync { duration = AgentCursor.shared.move(window: window, to: point) }
+  if duration > 0 { usleep(useconds_t(duration * 1_000_000)) }
+}
+
+func agentCursorPulse() {
+  DispatchQueue.main.async { AgentCursor.shared.pulse() }
+}
+
 let pressableRoles: Set<String> = [
   "AXButton", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXMenuButton", "AXMenuItem", "AXMenuBarItem",
   "AXDisclosureTriangle", "AXLink", "AXTab", "AXSwitch", "AXToggle", "AXIncrementor",
@@ -753,16 +1172,45 @@ func pointer(_ p: Params) throws -> [String: Any] {
   let (button, downType, upType, dragType) = mouseButton(p.string("button"))
   let flags = modifierFlags(p.strings("modifiers"))
   var method = "event"
+  // One window of a background app: Cua Driver's routed recipes, window-local locations, the agent cursor.
+  var routed: (pid: pid_t, window: Int, origin: CGPoint)? = nil
+  if let pid, let window {
+    guard let origin = windowOrigin(window) else { throw HelperError("The window is gone (closed or minimized).", code: "window_gone") }
+    routed = (pid, window, origin)
+  }
+  let showCursor = routed != nil && (p.bool("cursor") ?? false)
+  if let r = routed, showCursor { agentCursor(window: r.window, to: point) }
+  func local(_ q: CGPoint) -> CGPoint {
+    guard let r = routed else { return q }
+    return CGPoint(x: q.x - r.origin.x, y: q.y - r.origin.y)
+  }
 
   switch action {
   case "move":
-    mouseEvent(.mouseMoved, at: point, button: .left, pid: pid, window: window, flags: flags)
+    if let r = routed {
+      if let e = routedEvent(.mouseMoved, at: point, button: .left, pid: r.pid, window: r.window, gesture: gestureId(), clickState: 0, subtype: 3, windowLocation: local(point), flags: flags) {
+        SkyLight.postBoth(e, pid: r.pid)
+      }
+    } else {
+      mouseEvent(.mouseMoved, at: point, button: .left, pid: pid, window: window, flags: flags)
+    }
   case "down":
     mouseEvent(downType, at: point, button: button, pid: pid, window: window, flags: flags)
   case "up":
     mouseEvent(upType, at: point, button: button, pid: pid, window: window, flags: flags)
   case "click":
     let count = max(1, min(3, p.int("count") ?? 1))
+    if showCursor { agentCursorPulse() }
+    if let r = routed {
+      if button == .left && count == 1 && flags.isEmpty && axPress(pid: r.pid, at: point) {
+        method = "ax"
+      } else if button == .left {
+        backgroundLeftClick(pid: r.pid, window: r.window, at: point, count: count, flags: flags)
+      } else {
+        routedClick(pid: r.pid, window: r.window, at: point, local: local(point), button: button, downType: downType, upType: upType, count: count, flags: flags)
+      }
+      break
+    }
     if let pid {
       mouseEvent(.mouseMoved, at: point, button: .left, pid: pid, window: window)
       usleep(15_000)
@@ -782,10 +1230,32 @@ func pointer(_ p: Params) throws -> [String: Any] {
     }
   case "drag":
     let to = CGPoint(x: try p.requireDouble("toX"), y: try p.requireDouble("toY"))
+    let steps = 12
+    if let r = routed {
+      let gesture = gestureId()
+      func send(_ type: CGEventType, _ at: CGPoint, clickState: Int64, subtype: Int64, withButton: CGMouseButton) {
+        guard let e = routedEvent(type, at: at, button: withButton, pid: r.pid, window: r.window, gesture: gesture, clickState: clickState, subtype: subtype, windowLocation: local(at), flags: flags) else { return }
+        SkyLight.postBoth(e, pid: r.pid)
+      }
+      send(.mouseMoved, point, clickState: 0, subtype: 3, withButton: .left)
+      usleep(12_000)
+      send(downType, point, clickState: 1, subtype: 0, withButton: button)
+      usleep(16_000)
+      if showCursor { DispatchQueue.main.async { _ = AgentCursor.shared.move(window: r.window, to: to) } }
+      for i in 1...steps {
+        let t = Double(i) / Double(steps)
+        send(dragType, CGPoint(x: point.x + (to.x - point.x) * t, y: point.y + (to.y - point.y) * t), clickState: 1, subtype: 0, withButton: button)
+        usleep(16_000)
+      }
+      // Chromium handles the last move before the release ends its pointer capture.
+      usleep(50_000)
+      send(upType, to, clickState: 1, subtype: 0, withButton: button)
+      usleep(100_000)
+      break
+    }
     mouseEvent(.mouseMoved, at: point, button: .left, pid: pid, window: window)
     usleep(20_000)
     mouseEvent(downType, at: point, button: button, pid: pid, window: window, flags: flags)
-    let steps = 12
     for i in 1...steps {
       let t = Double(i) / Double(steps)
       let q = CGPoint(x: point.x + (to.x - point.x) * t, y: point.y + (to.y - point.y) * t)
@@ -801,16 +1271,32 @@ func pointer(_ p: Params) throws -> [String: Any] {
       method = "ax"
       break
     }
-    if pid == nil {
+    if let r = routed {
+      if let e = routedEvent(.mouseMoved, at: point, button: .left, pid: r.pid, window: r.window, gesture: gestureId(), clickState: 0, subtype: 3, windowLocation: local(point)) {
+        SkyLight.postBoth(e, pid: r.pid)
+      }
+      usleep(12_000)
+    } else if pid == nil {
       mouseEvent(.mouseMoved, at: point, button: .left, pid: nil, window: nil)
       usleep(20_000)
     }
-    let source = CGEventSource(stateID: pid == nil ? .hidSystemState : .privateState)
+    let source = CGEventSource(stateID: pid == nil || routed != nil ? .hidSystemState : .privateState)
     // Positive dy scrolls content down (like the wheel toward the user); CG uses the opposite sign.
     guard let e = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2, wheel1: -dy, wheel2: -dx, wheel3: 0) else {
       throw HelperError("Could not create the scroll event")
     }
     e.location = point
+    if let r = routed {
+      // Chromium hit-tests the wheel at the stamped point: the element under it scrolls, focused or not.
+      SkyLight.setWindowLocation(e, local(point))
+      SkyLight.set(e, 40, Int64(r.pid))
+      SkyLight.set(e, 51, Int64(r.window))
+      SkyLight.set(e, 91, Int64(r.window))
+      SkyLight.set(e, 92, Int64(r.window))
+      SkyLight.postBoth(e, pid: r.pid)
+      usleep(30_000)
+      break
+    }
     if let window {
       e.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: Int64(window))
       e.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent, value: Int64(window))

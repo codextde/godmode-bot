@@ -52,7 +52,7 @@ interface ComposerProps {
   busy?: boolean;
   /** The agent is working — new messages get queued */
   running?: boolean;
-  /** Rendered at the start of the toolbar (e.g. agent picker) */
+  /** Rendered in a context tray below the toolbar (e.g. agent picker, folder) */
   leading?: ReactNode;
   /** Rendered before the voice and send buttons (e.g. model picker) */
   trailing?: ReactNode;
@@ -452,8 +452,6 @@ export function Composer({
       />
 
       <div className="flex items-center gap-0.5 px-2 pb-2">
-        {leading && <div className="mr-1 flex min-w-0 items-center gap-1">{leading}</div>}
-
         <input
           ref={fileInputRef}
           type="file"
@@ -513,7 +511,7 @@ export function Composer({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="hidden items-center gap-1 pr-1 text-[11px] text-muted-foreground @2xl/composer:flex"
+                className="hidden shrink-0 items-center gap-1 pr-1 text-[11px] whitespace-nowrap text-muted-foreground @2xl/composer:flex"
               >
                 <Kbd>⇧</Kbd>
                 <Kbd>↵</Kbd> new line
@@ -546,6 +544,13 @@ export function Composer({
           </Tooltip>
         </div>
       </div>
+
+      {/* Context tray: who works on this and with what, kept apart from the input actions so neither row gets crowded. */}
+      {leading && (
+        <div className="flex min-w-0 items-center gap-1 rounded-b-[calc(var(--radius-2xl)-1px)] border-t border-border/60 bg-muted/40 px-2 py-1.5">
+          {leading}
+        </div>
+      )}
     </div>
   );
 }

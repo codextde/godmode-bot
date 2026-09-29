@@ -446,12 +446,12 @@ export function FolderChip({
               ref={triggerRef}
               type="button"
               variant="ghost"
-              size="icon"
               onClick={() => setPicking(true)}
               aria-label="Work in a folder"
-              className="size-8 rounded-lg text-muted-foreground hover:text-foreground [&_svg:not([class*='size-'])]:size-[17px]"
+              className="h-8 gap-1.5 rounded-lg px-2 text-[13px] font-normal text-muted-foreground hover:text-foreground has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-4"
             >
               {busy ? <Loader2 className="animate-spin" /> : <FolderOpen />}
+              <span className="@max-sm/composer:sr-only">Folder</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent>Work in a folder</TooltipContent>
