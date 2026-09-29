@@ -31,6 +31,7 @@ const EMOJIS = [
 ];
 
 const MAX_NAME = 60;
+const NEW_DRAFT = "workspace:new";
 
 interface WorkspaceForm {
   name: string;
@@ -77,9 +78,10 @@ export function WorkspaceDialog({
   const qc = useQueryClient();
   const setScope = useUi((s) => s.setWorkspace);
   const editing = !!workspace;
-  const draftKey = workspace ? `workspace:${workspace.id}` : "workspace:new";
+  const draftKey = workspace ? `workspace:${workspace.id}` : NEW_DRAFT;
   // A new workspace's look stays put until one is created, so a picked icon or color reads as a change.
   const [look, setLook] = useState(randomLook);
+  const newLook = useRef(false);
   // Fresh on every open; live updates (clone progress) must not reset the form.
   const base = useMemo(() => formFrom(workspace, look), [open, workspace?.id, look]);
   const [live, setForm, kept] = useDraft(open ? draftKey : undefined, base);
@@ -99,7 +101,11 @@ export function WorkspaceDialog({
   const [customEmoji, setCustomEmoji] = useState("");
 
   useEffect(() => {
-    if (open) setCustomEmoji("");
+    if (!open) return;
+    setCustomEmoji("");
+    // Only once the dialog is open again: while it closes, a new base would turn the saved form into a draft.
+    if (newLook.current) setLook(randomLook());
+    newLook.current = false;
   }, [open]);
 
   useEffect(() => {
@@ -115,7 +121,8 @@ export function WorkspaceDialog({
   }, [open, focus]);
 
   const save = useMutation({
-    mutationFn: () => {
+    // The key travels with the save: closing the dialog meanwhile switches it to the new-workspace draft.
+    mutationFn: (_key: string) => {
       const input = {
         name: name.trim(),
         icon,
@@ -129,13 +136,14 @@ export function WorkspaceDialog({
       };
       return workspace ? api.workspaces.update(workspace.id, input) : api.workspaces.create(input);
     },
-    onSuccess: (ws) => {
-      clearDraft(draftKey);
-      if (!editing) setLook(randomLook());
+    onSuccess: (ws, key) => {
+      const edited = key !== NEW_DRAFT;
+      clearDraft(key);
+      if (!edited) newLook.current = true;
       void qc.invalidateQueries({ queryKey: qk.workspaces });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
       void qc.invalidateQueries({ queryKey: qk.browserProfiles });
-      if (editing) toast.success("Workspace updated");
+      if (edited) toast.success("Workspace updated");
       else
         toast.success(`${ws.icon} ${ws.name} created`, {
           description: "Add agents, logins and integrations to it.",
@@ -148,7 +156,7 @@ export function WorkspaceDialog({
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (name.trim() && !save.isPending) save.mutate();
+    if (name.trim() && !save.isPending) save.mutate(draftKey);
   };
 
   return (
