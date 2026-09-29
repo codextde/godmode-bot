@@ -1,4 +1,5 @@
 import type { ComputerView } from "./computer";
+import type { Task } from "./tasks";
 import type { Vm } from "./vm";
 import type {
   Agent,
@@ -87,6 +88,8 @@ export type ServerEvent =
     }
   | { type: "vm.updated"; vm: Vm }
   | { type: "vm.deleted"; id: ID }
+  | { type: "task.updated"; task: Task }
+  | { type: "task.deleted"; id: ID }
   | { type: "entity.changed"; entity: EntityName };
 
 export type EntityName =
@@ -108,6 +111,7 @@ export type EntityName =
   | "vms"
   | "ssh-servers"
   | "messaging"
+  | "tasks"
   | "followups";
 
 /** Messages the UI may send over the WebSocket. */

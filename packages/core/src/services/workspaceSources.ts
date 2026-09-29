@@ -359,6 +359,9 @@ async function git(args: string[], opts: { cwd?: string; timeoutMs: number; sign
   return exec(args, { ...opts, env: await gitEnv() });
 }
 
+/** Godmode's hardened git (no prompts, no clone hooks or fsmonitor, pinned SSH command) for other git work (tasks). */
+export const runGit = git;
+
 /** A git failure in words a human can act on. */
 export function gitFailure(res: Pick<GitResult, "stderr" | "timedOut">, url: string, branch: string | null): string {
   const host = hostnameOf(url.includes("://") ? url : `ssh://${url.replace(":", "/")}`) || "the server";

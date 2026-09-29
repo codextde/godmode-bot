@@ -9,6 +9,7 @@ import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
+import { useDraft } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
 import { Backdrop } from "@/components/brand";
 import { Kbd } from "@/components/common";
@@ -35,7 +36,7 @@ export function OnePromptCard({ compact = false }: { compact?: boolean }) {
   const { data: boot } = useBootstrap();
   const { data: agents = [] } = useAllAgents();
   const workspace = useScopeWorkspace();
-  const [text, setText] = useState("");
+  const [text, setText, textDraft] = useDraft("automation:describe", "");
   const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const godmodeId = boot?.defaultAgentId ?? agents.find((a) => a.isDefault)?.id;
@@ -44,6 +45,7 @@ export function OnePromptCard({ compact = false }: { compact?: boolean }) {
   const start = useMutation({
     mutationFn: () => api.chat.start({ agentId: godmodeId, content: `Set up an automation: ${text.trim()}`, workspaceId: workspace?.id }),
     onSuccess: (res) => {
+      textDraft.discard();
       qc.setQueryData<ConversationWithMessages>(qk.conversation(res.conversation.id), {
         ...res.conversation,
         messages: [res.message],

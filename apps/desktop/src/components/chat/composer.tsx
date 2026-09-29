@@ -25,6 +25,7 @@ import { Kbd } from "@/components/common";
 import { useDictation, useVoiceSettings } from "@/hooks/use-voice";
 import { useVoicePrefs, useVoiceSession, stopSpeaking } from "@/lib/voice";
 import { useUi } from "@/stores/ui";
+import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
 import { AttachmentChip, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, readAttachment, type PendingAttachment } from "./attachments";
 import { LevelBars } from "./voice-visuals";
@@ -57,7 +58,7 @@ interface ComposerProps {
   /** Rendered before the voice and send buttons (e.g. model picker) */
   trailing?: ReactNode;
   size?: "md" | "lg";
-  /** Persist an unsent draft (sessionStorage) under this key */
+  /** Keep the unsent text and files as a draft under this key */
   draftKey?: string;
   /** Agent whose Claude Code slash commands are offered after typing "/" */
   agentId?: string;
@@ -71,24 +72,7 @@ function joinText(base: string, add: string): string {
   return /\s$/.test(base) ? base + add : `${base} ${add}`;
 }
 
-function loadDraft(key?: string): string {
-  if (!key) return "";
-  try {
-    return sessionStorage.getItem(`gm-draft:${key}`) ?? "";
-  } catch {
-    return "";
-  }
-}
-
-function saveDraft(key: string | undefined, text: string) {
-  if (!key) return;
-  try {
-    if (text) sessionStorage.setItem(`gm-draft:${key}`, text);
-    else sessionStorage.removeItem(`gm-draft:${key}`);
-  } catch {
-    /* ignore */
-  }
-}
+const NO_ATTACHMENTS: PendingAttachment[] = [];
 
 export function Composer({
   onSubmit,
@@ -105,8 +89,10 @@ export function Composer({
   ref,
 }: ComposerProps) {
   const navigate = useNavigate();
-  const [text, setText] = useState(() => loadDraft(draftKey));
-  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const textKey = draftKey ? `chat:${draftKey}` : undefined;
+  const filesKey = draftKey ? `chat:${draftKey}:files` : undefined;
+  const [text, setText, textDraft] = useDraft(textKey, "");
+  const [attachments, setAttachments, filesDraft] = useDraft(filesKey, NO_ATTACHMENTS, { persist: false });
   const [focused, setFocused] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -128,19 +114,13 @@ export function Composer({
   const setVoiceMode = useUi((s) => s.setVoiceMode);
   const armVoice = useVoiceSession((s) => s.arm);
 
-  // Draft persistence
-  useEffect(() => {
-    setText(loadDraft(draftKey));
-  }, [draftKey]);
-  useEffect(() => {
-    const t = setTimeout(() => saveDraft(draftKey, text), 250);
-    return () => clearTimeout(t);
-  }, [draftKey, text]);
-
-  // Revoke thumbnails on unmount
+  // Revoke thumbnails on unmount, unless they stay in the draft
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
-  useEffect(() => () => attachmentsRef.current.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl)), []);
+  const keepsFiles = !!filesKey;
+  useEffect(() => () => {
+    if (!keepsFiles) attachmentsRef.current.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+  }, [keepsFiles]);
 
   // Autosize
   useLayoutEffect(() => {
@@ -152,7 +132,10 @@ export function Composer({
 
   useEffect(() => {
     // preventScroll: focusing must never scroll an ancestor (it used to drag the whole page with it).
-    if (autoFocus) textareaRef.current?.focus({ preventScroll: true });
+    const el = textareaRef.current;
+    if (!autoFocus || !el) return;
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(el.value.length, el.value.length);
   }, [autoFocus]);
 
   const dictation = useDictation({
@@ -266,15 +249,16 @@ export function Composer({
     const sent = attachments;
     const voice = voiceRef.current;
     setMenuForced(false);
-    setText("");
-    setAttachments([]);
+    textDraft.discard();
+    filesDraft.discard();
     voiceRef.current = false;
-    saveDraft(draftKey, "");
     try {
       await onSubmit({ content, attachments: sent.map(({ name, mime, data }) => ({ name, mime, data })), voice });
       sent.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
     } catch {
-      // Restore so nothing is lost; the caller shows the error.
+      // Restore so nothing is lost, also when the composer is gone by now; the caller shows the error.
+      if (textKey && content && !loadDraft(textKey, "")) saveDraft(textKey, content, "");
+      if (filesKey && sent.length && !loadDraft(filesKey, NO_ATTACHMENTS).length) saveDraft(filesKey, sent, NO_ATTACHMENTS, false);
       setText((cur) => cur || content);
       setAttachments((cur) => (cur.length ? cur : sent));
       voiceRef.current = voice;

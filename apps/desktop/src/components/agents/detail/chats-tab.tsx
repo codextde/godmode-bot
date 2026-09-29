@@ -2,7 +2,7 @@ import { useEffect, useState, type ComponentType } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Archive, ArchiveRestore, MessageSquare, MessagesSquare, Moon, Pin, Plug, Plus, Search, Share2, Trash2, Workflow } from "lucide-react";
+import { Archive, ArchiveRestore, MessageSquare, MessagesSquare, Moon, Pin, Plug, Plus, Search, Share2, SquareKanban, Trash2, Workflow } from "lucide-react";
 import type { Agent, Conversation, ConversationOrigin } from "@godmode/shared";
 import { errorMessage } from "@/lib/api";
 import { useArchivedConversations, useConversations } from "@/lib/hooks";
@@ -30,6 +30,7 @@ const ORIGIN: Record<ConversationOrigin, { icon: ComponentType<{ className?: str
   slack: { icon: PLATFORMS.slack.glyph, label: "Slack" },
   telegram: { icon: PLATFORMS.telegram.glyph, label: "Telegram" },
   teams: { icon: PLATFORMS.teams.glyph, label: "Microsoft Teams" },
+  task: { icon: SquareKanban, label: "Task" },
 };
 
 function useDebounced<T>(value: T, ms = 250): T {

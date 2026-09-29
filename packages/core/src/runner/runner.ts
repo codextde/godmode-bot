@@ -985,7 +985,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const watch = setInterval(() => job.cancelReason && cancelled.abort(), 250);
     try {
       const prepared = await prepareSources(agent.workspaceId, { onActivity: (label) => emitActivity(job, label), signal: cancelled.signal });
-      sources = prepared.sources.filter((s) => s.path !== cwd && s.path !== agent.repoPath);
+      // A coding task works in its own checkout: the workspace's shared clone of that repository stays out of reach.
+      const taskRepo = get<{ repo_url: string }>("SELECT repo_url FROM tasks WHERE conversation_id = ? AND type = 'coding'", job.conversationId)?.repo_url;
+      sources = prepared.sources.filter((s) => s.path !== cwd && s.path !== agent.repoPath && !(taskRepo && s.url === taskRepo));
       for (const text of prepared.notices) job.acc.addNotice("warning", text);
     } finally {
       clearInterval(watch);

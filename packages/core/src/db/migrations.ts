@@ -495,6 +495,43 @@ CREATE INDEX IF NOT EXISTS idx_followups_due ON followups(due_at);
   },
   {
     id: 14,
+    name: "tasks",
+    sql: /* sql */ `
+-- Kanban tasks agents work on. Coding tasks work in a checkout at <data>/tasks/<id> (derived from the id).
+-- repo_url "" = the workspace's first git repository (workspace_sources).
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  number INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  type TEXT NOT NULL DEFAULT 'general',
+  status TEXT NOT NULL DEFAULT 'backlog',
+  position REAL NOT NULL DEFAULT 0,
+  agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  conversation_id TEXT,
+  repo_url TEXT NOT NULL DEFAULT '',
+  base_branch TEXT NOT NULL DEFAULT '',
+  branch TEXT,
+  pr_url TEXT,
+  pr_number INTEGER,
+  pr_state TEXT,
+  -- Last commit Godmode pushed to the branch (commits pushed by others since are merged in, never overwritten).
+  pushed_sha TEXT,
+  summary TEXT,
+  blocked_reason TEXT,
+  started_at TEXT,
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_workspace ON tasks(workspace_id, status, position);
+CREATE INDEX IF NOT EXISTS idx_tasks_conversation ON tasks(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_runs_conversation ON runs(conversation_id, created_at);
+`,
+  },
+  {
+    id: 15,
     name: "ssh_servers",
     sql: /* sql */ `
 -- Remote machines agents sign in to over SSH. \`*_enc\` are sealed with the vault key; \`key_info\` describes the private

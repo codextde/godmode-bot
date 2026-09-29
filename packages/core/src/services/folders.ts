@@ -48,12 +48,19 @@ function absolute(input: string): string {
 /**
  * Folders overlapping Godmode's data directory are refused: without bypass mode the working directory is where
  * Claude may edit files, and the data directory holds other agents' repositories, the database and the access token.
+ * The one exception is a coding task's own checkout (tasks/<id>).
  */
 function dataDirConflict(path: string, realData = realOrSelf(config().dataDir)): string | null {
   const real = realOrSelf(path);
+  if (isTaskCheckout(real, realData)) return null;
   if (isInside(real, realData)) return "Pick a folder outside Godmode's data directory — agents already have their own repository there.";
   if (isInside(realData, real)) return "Pick a more specific folder — this one contains Godmode's data directory.";
   return null;
+}
+
+function isTaskCheckout(real: string, realData: string): boolean {
+  const rel = relative(join(realData, "tasks"), real);
+  return !!rel && !rel.startsWith("..") && !isAbsolute(rel) && !rel.includes("/") && !rel.includes("\\");
 }
 
 /** Why an absolute `path` can't be a working folder, or null when it can. */
@@ -118,7 +125,7 @@ export function listFolders(input?: string, showHidden = false): FolderListing {
 export function recentFolders(limit = 6): string[] {
   const rows = all<{ path: string }>(
     `SELECT path, MAX(ts) AS ts FROM (
-       SELECT working_directory AS path, COALESCE(last_message_at, updated_at) AS ts FROM conversations WHERE working_directory IS NOT NULL
+       SELECT working_directory AS path, COALESCE(last_message_at, updated_at) AS ts FROM conversations WHERE working_directory IS NOT NULL AND origin != 'task'
        UNION ALL
        SELECT working_directory AS path, updated_at AS ts FROM agents WHERE working_directory IS NOT NULL
      ) GROUP BY path ORDER BY ts DESC LIMIT ?`,

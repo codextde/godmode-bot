@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
@@ -29,6 +29,7 @@ import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useConversations, useScopeWorkspace, useWorkspaces } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
+import { useDraft } from "@/lib/drafts";
 import { useLive, type LiveRun } from "@/stores/live";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,10 @@ function greeting(date: Date): string {
   return "Good night";
 }
 
+const NO_MODEL_CHOICE: ModelChoice = { model: null, effort: null };
+const SETUP_DRAFT = "chat:home-setup:";
+const NO_SSH_SERVERS: string[] = [];
+
 const fade = (delay: number) => ({
   initial: { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0 },
@@ -76,18 +81,20 @@ export default function ChatHome() {
   const { data: agents = [], isLoading: agentsLoading } = useAllAgents();
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
   const composerRef = useRef<ComposerHandle>(null);
-  const [agentId, setAgentId] = useState<string | null>(null);
-  const [choice, setChoice] = useState<ModelChoice>({ model: null, effort: null });
-  const [folder, setFolder] = useState<string | null>(null);
-  /** Shared with the chat this message starts (a window, a screen or a browser tab). */
-  const [shared, setShared] = useState<ComputerTarget | null>(null);
-  const [instructions, setInstructions] = useState("");
+  // The new chat's setup is part of the draft: coming back to it must not send the message to another agent.
+  const [agentId, setAgentId, agentDraft] = useDraft<string | null>(`${SETUP_DRAFT}agent`, null);
+  const [choice, setChoice, choiceDraft] = useDraft(`${SETUP_DRAFT}model`, NO_MODEL_CHOICE);
+  const [folder, setFolder, folderDraft] = useDraft<string | null>(`${SETUP_DRAFT}folder`, null);
+  /** Shared with the chat this message starts (a window, a screen or a browser tab). Never written to storage. */
+  const [shared, setShared, sharedDraft] = useDraft<ComputerTarget | null>(`${SETUP_DRAFT}shared`, null, { persist: false });
+  const [instructions, setInstructions, instructionsDraft] = useDraft(`${SETUP_DRAFT}instructions`, "");
   /** macOS VM for the new chat; null = the agent's (or its workspace's). */
-  const [vmId, setVmId] = useState<string | null>(null);
+  const [vmId, setVmId, vmDraft] = useDraft<string | null>(`${SETUP_DRAFT}vm`, null);
   /** Browser profile for the new chat; null = the agent's. */
-  const [browserProfileId, setBrowserProfileId] = useState<string | null>(null);
+  const [browserProfileId, setBrowserProfileId, browserDraft] = useDraft<string | null>(`${SETUP_DRAFT}browser`, null);
   /** SSH servers for the new chat, on top of the agent's. */
-  const [sshServerIds, setSshServerIds] = useState<string[]>([]);
+  const [sshServerIds, setSshServerIds, sshDraft] = useDraft<string[]>(`${SETUP_DRAFT}ssh`, NO_SSH_SERVERS);
+  const resetSetup = () => [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft].forEach((d) => d.discard());
   const { data: workspaces = [] } = useWorkspaces();
   const scopeWorkspaceId = useScopeWorkspace()?.id ?? null;
 
@@ -104,6 +111,8 @@ export default function ChatHome() {
     const prompt = params.get("prompt");
     const agent = params.get("agent");
     if (!prompt && !agent) return;
+    // A deep link starts a new chat of its own, not on top of the setup left here earlier.
+    resetSetup();
     if (agent) setAgentId(agent);
     if (prompt) requestAnimationFrame(() => composerRef.current?.setText(prompt));
     setParams({}, { replace: true });
@@ -118,8 +127,7 @@ export default function ChatHome() {
         activeRunId: res.run.status === "queued" || res.run.status === "running" ? res.run.id : null,
       });
       if (input.voice) markVoiceRun(res.run.id);
-      setShared(null);
-      setInstructions("");
+      resetSetup();
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${res.conversation.id}`);
     },

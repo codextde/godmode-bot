@@ -8,6 +8,7 @@ import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
+import { clearDraft, useDraft } from "@/lib/drafts";
 import { useLive, type LiveRun } from "@/stores/live";
 import { AgentAvatar, Kbd } from "@/components/common";
 import { LiveDot } from "@/components/aicss/Motion";
@@ -93,14 +94,16 @@ export function RunTaskDialog({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const workspace = useScopeWorkspace();
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt, promptDraft] = useDraft(agent ? `run-task:${agent.id}` : undefined, "");
   const run = useMutation({
-    mutationFn: () => api.agents.run(agent!.id, prompt.trim(), workspace?.id),
-    onSuccess: (res) => {
+    mutationFn: (input: { agentId: string; prompt: string }) => api.agents.run(input.agentId, input.prompt, workspace?.id),
+    onSuccess: (res, input) => {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.runs });
       toast.success(`${agent?.name ?? "Agent"} is on it`);
-      setPrompt("");
+      // Text typed while it was starting stays as the next draft.
+      if (input.agentId !== agent?.id) clearDraft(`run-task:${input.agentId}`);
+      else if (prompt.trim() === input.prompt) promptDraft.discard();
       onOpenChange(false);
       navigate(`/chat/${res.conversation.id}`);
     },
@@ -123,7 +126,7 @@ export function RunTaskDialog({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (canRun) run.mutate();
+            if (canRun) run.mutate({ agentId: agent.id, prompt: prompt.trim() });
           }}
           className="space-y-4"
         >
@@ -139,7 +142,7 @@ export function RunTaskDialog({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
-                  if (canRun) run.mutate();
+                  if (canRun) run.mutate({ agentId: agent.id, prompt: prompt.trim() });
                 }
               }}
               placeholder={agent?.description ? `e.g. ${agent.description}` : "Describe what it should do…"}
