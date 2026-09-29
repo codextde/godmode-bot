@@ -25,7 +25,7 @@ import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
-import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, resolveProfileForAgent } from "../browser/manager";
+import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
 import {
   addMessage,
   appendTranscript,
@@ -225,8 +225,8 @@ interface Job {
   deltaTimer: ReturnType<typeof setTimeout> | null;
   done: Promise<void> | null;
   /**
-   * What this run's browser work locks (undefined = not resolved yet, null = no browser): the browser profile, or
-   * `vm:<id>` for a run in a VM (its browser and screen are the VM's).
+   * The browser this run drives (undefined = not resolved yet, null = no browser): the browser profile, or `vm:<id>`
+   * for a run in a VM (its browser and screen are the VM's — runs in one VM take turns).
    */
   browserLock?: string | null;
   /** The VM the run works in (undefined = not resolved yet, null = none). */
@@ -490,9 +490,7 @@ function pump() {
       blocked.add(job.conversationId);
       continue;
     }
-    // One browser profile = one Chromium: two independent runs driving it at once would fight over tabs and
-    // focus. A run waits while another run holds its profile — unless that run is its own ancestor in the
-    // delegation chain (the parent is idle, waiting for this child).
+    // Runs sharing a browser profile don't wait for each other: every chat works in its own tabs.
     // A dream owns the agent's memory: it waits for the agent's other runs, and they wait while it runs.
     if (memoryHolder(job)) {
       emitActivity(job, job.trigger === "dream" ? "Waiting for other runs to finish before dreaming" : "Waiting — consolidating memory (dreaming)");
@@ -504,7 +502,7 @@ function pump() {
     job.browserLock = undefined;
     const holder = browserHolder(job);
     if (holder) {
-      emitActivity(job, vmOf(job) ? "Waiting for the VM (another run is working in it)" : "Waiting for the browser (in use by another run)");
+      emitActivity(job, "Waiting for the VM (another run is working in it)");
       blocked.add(job.conversationId);
       continue;
     }
@@ -652,10 +650,13 @@ function computerHolder(job: Job): Job | null {
   return null;
 }
 
-/** The running job currently holding `job`'s browser profile or VM (excluding its own ancestors), if any. */
+/**
+ * The running job working in the same VM as `job` (excluding its own ancestors), if any. Runs sharing a browser profile
+ * on this computer don't wait for each other: every chat works in its own tabs.
+ */
 function browserHolder(job: Job): Job | null {
   const lock = browserLockOf(job);
-  if (!lock) return null;
+  if (!lock?.startsWith("vm:")) return null;
   for (const other of jobs.values()) {
     if (other === job || other.status !== "running") continue;
     if (browserLockOf(other) === lock && !isAncestor(other, job)) return other;
@@ -990,6 +991,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     computer: !!computer,
     vm: vm ? { id: vm.id, browser: guest?.browser ?? null, cua: guest?.cua ?? null } : null,
     gatewayOnly: dreaming,
+    run: { runId: job.runId, conversationId: job.conversationId },
     browserProfileId: runProfileOf(job),
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
@@ -1207,6 +1209,7 @@ async function execute(job: Job): Promise<void> {
   } finally {
     if (res.timer) clearTimeout(res.timer);
     if (res.token) revokeRunToken(res.token);
+    releaseChatBrowser(job.runId);
     for (const f of res.files) removeMcpConfigFile(f);
     await detachComputer(job.runId).catch(() => {});
     detachVm(job.runId);
@@ -1413,7 +1416,7 @@ async function detectMissingLogin(job: Job, agent: Agent, text: string) {
   let url = "";
   if (agent.browser.enabled && (!job.vmId || job.vmBrowser)) {
     try {
-      const page = job.vmId ? await currentVmPage(job.vmId) : await currentPage(runProfileOf(job) ?? resolveProfileForAgent(agent, job.conversationId).id);
+      const page = job.vmId ? await currentVmPage(job.vmId) : await currentPage(runProfileOf(job) ?? resolveProfileForAgent(agent, job.conversationId).id, job.conversationId);
       if (page?.url && /^https?:/i.test(page.url)) {
         url = page.url;
         service = hostnameOf(page.url) || service;

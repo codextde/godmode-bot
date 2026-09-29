@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type Keyboard
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Globe, Hand, Lock, Maximize2, Minimize2, MousePointerClick, Play, RotateCw } from "lucide-react";
-import type { BrowserProfile } from "@godmode/shared";
+import { browserView, type BrowserChat, type BrowserProfile } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -44,10 +44,14 @@ interface Ripple {
 /**
  * Live view of a Godmode browser profile (CDP screencast frames over the WebSocket) with optional human takeover:
  * clicks, scrolling and typing on the image are forwarded to the page.
+ * With `conversationId` it shows the tab that chat works in; with `onConversationChange` too, the tab strip lists
+ * the chats browsing in the profile to switch between them.
  * Pass `expanded` + `onExpandedChange` to control the focus view from outside (e.g. the chat's browser panel).
  */
 export function LiveView({
   profile,
+  conversationId = null,
+  onConversationChange,
   onLaunch,
   launching,
   expanded: expandedProp,
@@ -55,6 +59,8 @@ export function LiveView({
   defaultTakeover = false,
 }: {
   profile: BrowserProfile;
+  conversationId?: string | null;
+  onConversationChange?: (conversationId: string) => void;
   onLaunch: () => void;
   launching: boolean;
   expanded?: boolean;
@@ -63,7 +69,10 @@ export function LiveView({
 }) {
   const qc = useQueryClient();
   const running = profile.running;
-  const frame = useLive((s) => (running ? s.frames[profile.id] : undefined));
+  const view = browserView(profile.id, conversationId);
+  const frame = useLive((s) => (running ? s.frames[view] : undefined));
+  const chat = conversationId ? profile.chats.find((c) => c.conversationId === conversationId) : undefined;
+  const noTabYet = !!conversationId && running && !chat && !frame;
   const hasFrame = !!frame;
   const now = useNow(1000);
 
@@ -95,18 +104,18 @@ export function LiveView({
   // Subscribe to frames while the profile is running.
   useEffect(() => {
     if (!running) return;
-    return subscribeBrowser(profile.id);
-  }, [profile.id, running]);
+    return subscribeBrowser(profile.id, { conversationId });
+  }, [profile.id, conversationId, running]);
 
-  // Reset per-profile UI state.
-  const shownProfileId = useRef(profile.id);
+  // Reset per-view UI state.
+  const shownView = useRef(view);
   useEffect(() => {
-    if (shownProfileId.current === profile.id) return;
-    shownProfileId.current = profile.id;
+    if (shownView.current === view) return;
+    shownView.current = view;
     setTakeover(false);
     setEditingUrl(false);
     setRipples([]);
-  }, [profile.id]);
+  }, [view]);
 
   useEffect(() => {
     if (!running) setTakeover(false);
@@ -118,7 +127,7 @@ export function LiveView({
     if (!running || hasFrame) return;
     const t = setTimeout(() => setWaitedLong(true), 5000);
     return () => clearTimeout(t);
-  }, [running, hasFrame, profile.id]);
+  }, [running, hasFrame, view]);
 
   // Esc leaves the expanded view when not taking over (in takeover Esc goes to the page).
   useEffect(() => {
@@ -149,7 +158,7 @@ export function LiveView({
   const send = useCallback(
     (event: InputEvent) => {
       queue.current = queue.current
-        .then(() => api.browser.input(profile.id, event).then(() => undefined))
+        .then(() => api.browser.input(profile.id, event, conversationId).then(() => undefined))
         .catch((e) => {
           if (Date.now() - lastErrorAt.current > 3000) {
             lastErrorAt.current = Date.now();
@@ -157,7 +166,7 @@ export function LiveView({
           }
         });
     },
-    [profile.id, qc],
+    [profile.id, conversationId, qc],
   );
 
   const textBuf = useRef("");
@@ -252,7 +261,7 @@ export function LiveView({
   /* ------------------------------- navigation ------------------------------- */
 
   const navigate = useMutation({
-    mutationFn: (url: string) => api.browser.navigate(profile.id, url),
+    mutationFn: (url: string) => api.browser.navigate(profile.id, url, conversationId),
     onError: (e) => toastApiError(e, "Navigation failed", qc),
   });
 
@@ -314,10 +323,14 @@ export function LiveView({
               <span className="size-2.5 rounded-full bg-foreground/15" />
               <span className="size-2.5 rounded-full bg-foreground/15" />
             </div>
-            <div className="-mb-px flex min-w-0 max-w-72 items-center gap-2 rounded-t-md border border-b-0 bg-card px-3 py-1.5 text-xs">
-              {domain ? <Favicon domain={domain} name={frame?.title || domain} size="sm" className="size-4 rounded-sm" /> : <Globe className="size-3.5 text-muted-foreground" />}
-              <span className="truncate font-medium">{running ? frame?.title || domain || "New tab" : profile.name}</span>
-            </div>
+            {running && onConversationChange && profile.chats.length > 0 ? (
+              <ChatTabs chats={profile.chats} selected={conversationId} onSelect={onConversationChange} />
+            ) : (
+              <div className="-mb-px flex min-w-0 max-w-72 items-center gap-2 rounded-t-md border border-b-0 bg-card px-3 py-1.5 text-xs">
+                {domain ? <Favicon domain={domain} name={frame?.title || domain} size="sm" className="size-4 rounded-sm" /> : <Globe className="size-3.5 text-muted-foreground" />}
+                <span className="truncate font-medium">{running ? frame?.title || chat?.pageTitle || domain || "New tab" : profile.name}</span>
+              </div>
+            )}
             <div className="ml-auto flex items-center gap-2 pb-2">
               {running && (
                 <span
@@ -417,7 +430,9 @@ export function LiveView({
               <span className="min-w-0 flex-1">
                 {takeover
                   ? "You're in control — clicks, scrolling and typing go to the page. Turn off Take over when you're done."
-                  : "Agents keep working in this browser — take over to solve CAPTCHAs or log in manually."}
+                  : conversationId
+                    ? "This chat's own tab — other chats browse in theirs. Take over to solve CAPTCHAs or log in manually."
+                    : "Agents keep working in this browser — take over to solve CAPTCHAs or log in manually."}
               </span>
             </div>
           )}
@@ -453,6 +468,8 @@ export function LiveView({
           >
             {!running ? (
               <NotRunning profileName={profile.name} onLaunch={onLaunch} launching={launching} />
+            ) : noTabYet ? (
+              <NoTabYet />
             ) : frame ? (
               <>
                 <img
@@ -522,6 +539,64 @@ function NotRunning({ profileName, onLaunch, launching }: { profileName: string;
           {launching ? <Spinner /> : <Play />} Launch browser
         </Button>
       </motion.div>
+    </div>
+  );
+}
+
+/** One tab per chat browsing in the profile, a dot while its agent is at work. */
+function ChatTabs({ chats, selected, onSelect }: { chats: BrowserChat[]; selected: string | null; onSelect: (conversationId: string) => void }) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Chats in this browser"
+      className="-mb-px flex min-w-0 flex-1 items-end gap-1 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] pr-8 [scrollbar-width:none]"
+    >
+      {chats.map((chat) => {
+        const active = chat.conversationId === selected;
+        const domain = domainFromUrl(chat.url);
+        const title = chat.title || "Untitled chat";
+        return (
+          <Tooltip key={chat.conversationId}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => onSelect(chat.conversationId)}
+                className={cn(
+                  "flex h-8 max-w-56 min-w-28 shrink-0 items-center gap-2 rounded-t-md border border-b-0 px-3 text-xs transition outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  active ? "bg-card font-medium text-foreground" : "border-transparent text-muted-foreground hover:bg-card/60 hover:text-foreground",
+                )}
+              >
+                {domain ? <Favicon domain={domain} name={chat.pageTitle || domain} size="sm" className="size-4 rounded-sm" /> : <Globe className="size-3.5 shrink-0" />}
+                <span className="truncate">{title}</span>
+                {chat.active && <LiveDot className="ml-auto shrink-0" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-72">
+              <p className="font-medium">{title}</p>
+              <p className="truncate text-muted-foreground">
+                {chat.pageTitle || domain || "New tab"}
+                {chat.tabs > 1 ? ` · ${chat.tabs} tabs` : ""}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+}
+
+function NoTabYet() {
+  return (
+    <div className="absolute inset-0 grid place-items-center bg-paper-2">
+      <div className="flex max-w-xs flex-col items-center gap-3 px-6 text-center">
+        <span className="grid size-10 place-items-center rounded-lg border bg-card text-muted-foreground shadow-card">
+          <Globe className="size-5" />
+        </span>
+        <p className="text-sm font-medium">No page open in this chat</p>
+        <p className="text-xs text-muted-foreground">The agent opens its own tab when it needs the web. Enter an address above to open one yourself.</p>
+      </div>
     </div>
   );
 }

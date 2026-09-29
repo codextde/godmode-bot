@@ -6,7 +6,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { Agent, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Vm } from "@godmode/shared";
-import { isModelId } from "@godmode/shared";
+import { isModelId, MAX_START_WINDOW_MINUTES } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
 import { logger } from "../log";
@@ -14,7 +14,15 @@ import { hasAppSecret, redact } from "../vault/vault";
 import { audit } from "../services/audit";
 import { notify } from "../services/notifications";
 import { listMissingLogins, reportMissingLogin } from "../services/missingLogins";
-import { createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigger, runRoutineNow, updateRoutine } from "../services/routines";
+import {
+  createRoutine,
+  deleteRoutine,
+  getRoutine,
+  listRoutines,
+  resolveAppTrigger,
+  runRoutineNow,
+  updateRoutine,
+} from "../services/routines";
 import { listEvents } from "../automations/events";
 import { reportCheckResult } from "../automations/conditions";
 import { reportDream } from "../memory/dreaming";
@@ -220,13 +228,13 @@ function scrub(detail: string, value: string): string {
   return redact(masked);
 }
 
-/** The browser a fill goes to: Godmode's Chromium for the agent's profile, or the Chrome in the run's VM. */
-type FillTarget = { vmId: string } | { profileId: string };
+/** The browser a fill goes to: the chat's tab in Godmode's Chromium for the run's profile, or the Chrome in the run's VM. */
+type FillTarget = { vmId: string } | { profileId: string; conversationId: string };
 
 function requireBrowser(agent: Agent, ctx: RunContext): FillTarget {
   if (!agent.browser.enabled) throw new HttpError(409, "The browser is disabled for this agent, so nothing can be filled into a page.");
   const vmId = vmOfRun(ctx.runId);
-  if (!vmId) return { profileId: runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id };
+  if (!vmId) return { profileId: runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id, conversationId: ctx.conversationId };
   // A run in a VM browses in the VM, where its shell shares the machine with the browser: secrets only go there when
   // the human allowed logins in VMs — never into a browser on this computer instead.
   if (!getSettings().vm.vaultFill) {
@@ -239,11 +247,11 @@ function requireBrowser(agent: Agent, ctx: RunContext): FillTarget {
 }
 
 function pageOf(target: FillTarget) {
-  return "vmId" in target ? currentVmPage(target.vmId) : currentPage(target.profileId);
+  return "vmId" in target ? currentVmPage(target.vmId) : currentPage(target.profileId, target.conversationId);
 }
 
 function fillInto(target: FillTarget, opts: Parameters<typeof fillIntoPage>[1]) {
-  return "vmId" in target ? fillIntoVm(target.vmId, opts) : fillIntoPage(target.profileId, opts);
+  return "vmId" in target ? fillIntoVm(target.vmId, opts) : fillIntoPage(target.profileId, { ...opts, conversationId: target.conversationId });
 }
 
 /**
@@ -306,7 +314,18 @@ const agentFields = {
 
 const triggerSchema = z
   .discriminatedUnion("type", [
-    z.object({ type: z.literal("schedule") }),
+    z.object({
+      type: z.literal("schedule"),
+      startWindowMinutes: z
+        .number()
+        .int()
+        .min(0)
+        .max(MAX_START_WINDOW_MINUTES)
+        .optional()
+        .describe(
+          'Start at a random moment up to this many minutes after each scheduled time, drawn anew every run — like a coworker who doesn\'t start at the same minute every day. cron "0 8 * * 1-5" + 90 = weekdays somewhere between 08:00 and 09:30. Must not exceed the gap between two runs. Default: on time.',
+        ),
+    }),
     z.object({
       type: z.literal("app"),
       connectionId: z.string().describe("Connected account id (from automation_triggers_list)"),
@@ -352,7 +371,7 @@ function triggerSummary(r: Routine) {
   if (t.type === "condition") return { type: t.type, condition: t.condition, checks: r.cron, checkModel: t.checkModel };
   // The URL is a secret (and masked in transcripts): the human copies it from the app.
   if (t.type === "webhook") return { type: t.type, url: "secret — copy it in the Godmode app: Automations → this automation → Copy webhook URL" };
-  return { type: t.type, cron: r.cron };
+  return { type: t.type, cron: r.cron, ...(t.startWindowMinutes ? { startWindowMinutes: t.startWindowMinutes } : {}) };
 }
 
 /** Event titles, notes and observations quote outside content (emails, web pages, webhook callers). */

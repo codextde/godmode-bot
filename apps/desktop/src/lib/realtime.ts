@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { AutomationEvent, ClientEvent, EntityName, ServerEvent, Vm } from "@godmode/shared";
+import { browserView, type AutomationEvent, type BrowserProfile, type ClientEvent, type EntityName, type ServerEvent, type Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { qk } from "./queryKeys";
@@ -75,7 +75,7 @@ async function connect(queryClient: QueryClient) {
     useLive.getState().setConnected(true);
     while (pendingSends.length) ws.send(JSON.stringify(pendingSends.shift()));
     // Resubscribe live views
-    for (const [profileId, viewers] of browserViewers) ws.send(JSON.stringify(subscribeEvent(profileId, viewers)));
+    for (const viewers of browserViewers.values()) ws.send(JSON.stringify(subscribeEvent(viewers)));
     for (const view of computerViewers.keys()) ws.send(JSON.stringify({ type: "computer.subscribe", view } satisfies ClientEvent));
     if (pingTimer) clearInterval(pingTimer);
     pingTimer = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: "ping" })), 25_000);
@@ -173,12 +173,17 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.setQueryData(qk.vaultStatus, event.status);
       qc.invalidateQueries({ queryKey: qk.bootstrap });
       break;
-    case "browser.updated":
-      qc.invalidateQueries({ queryKey: qk.browserProfiles });
+    case "browser.updated": {
+      // Frequent while chats browse (tabs and titles change): update in place instead of refetching.
+      const known = qc.getQueryData<BrowserProfile[]>(qk.browserProfiles);
+      if (known?.some((p) => p.id === event.profile.id)) {
+        qc.setQueryData(qk.browserProfiles, known.map((p) => (p.id === event.profile.id ? event.profile : p)));
+      } else qc.invalidateQueries({ queryKey: qk.browserProfiles });
       if (!event.profile.running) live.dropBrowserFrame(event.profile.id);
       break;
+    }
     case "browser.frame":
-      live.browserFrame(event.profileId, {
+      live.browserFrame(browserView(event.profileId, event.conversationId), {
         data: event.data,
         url: event.url,
         title: event.title,
@@ -290,29 +295,35 @@ export function subscribeComputer(view: string): () => void {
 }
 
 interface BrowserViewers {
+  profileId: string;
+  conversationId: string | null;
   watching: number;
   passive: number;
 }
 
-/** Live view subscribers per profile in this UI; the core only hears about the first/last and passive changes. */
+/** Live view subscribers per view in this UI; the core only hears about the first/last and passive changes. */
 const browserViewers = new Map<string, BrowserViewers>();
 
-function subscribeEvent(profileId: string, viewers: BrowserViewers): ClientEvent {
-  return { type: "browser.subscribe", profileId, passive: viewers.watching === 0 };
+function subscribeEvent({ profileId, conversationId, watching }: BrowserViewers): ClientEvent {
+  return { type: "browser.subscribe", profileId, ...(conversationId ? { conversationId } : {}), passive: watching === 0 };
 }
 
 /**
- * Subscribe to the live view of a browser profile. Passive viewers (glanceable previews) get frames without
- * keeping an idle browser running.
+ * Subscribe to the live view of a browser profile — with `conversationId`, of the tab that chat works in. Passive
+ * viewers (glanceable previews) get frames without keeping an idle browser running.
  */
-export function subscribeBrowser(profileId: string, { passive = false }: { passive?: boolean } = {}): () => void {
+export function subscribeBrowser(
+  profileId: string,
+  { passive = false, conversationId = null }: { passive?: boolean; conversationId?: string | null } = {},
+): () => void {
   const kind = passive ? "passive" : "watching";
-  const viewers = browserViewers.get(profileId) ?? { watching: 0, passive: 0 };
+  const view = browserView(profileId, conversationId);
+  const viewers = browserViewers.get(view) ?? { profileId, conversationId, watching: 0, passive: 0 };
   const wasPassive = viewers.watching === 0;
   const isFirst = viewers.watching + viewers.passive === 0;
   viewers[kind]++;
-  browserViewers.set(profileId, viewers);
-  if (isFirst || wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(profileId, viewers));
+  browserViewers.set(view, viewers);
+  if (isFirst || wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(viewers));
 
   let active = true;
   return () => {
@@ -321,8 +332,8 @@ export function subscribeBrowser(profileId: string, { passive = false }: { passi
     const wasPassive = viewers.watching === 0;
     viewers[kind]--;
     if (viewers.watching + viewers.passive === 0) {
-      browserViewers.delete(profileId);
-      sendClientEvent({ type: "browser.unsubscribe", profileId });
-    } else if (wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(profileId, viewers));
+      browserViewers.delete(view);
+      sendClientEvent({ type: "browser.unsubscribe", profileId, ...(conversationId ? { conversationId } : {}) });
+    } else if (wasPassive !== (viewers.watching === 0)) sendClientEvent(subscribeEvent(viewers));
   };
 }
