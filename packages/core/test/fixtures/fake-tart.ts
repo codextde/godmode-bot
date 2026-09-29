@@ -139,7 +139,7 @@ switch (cmd) {
     if (rest.includes("--insecure")) {
       // Godmode's loopback registry: fetch the manifest and every blob (one with a range) and check their digests.
       const { createHash } = await import("node:crypto");
-      const [, host, repo, ref] = /^([^/]+)\/(.+)[@:](sha256:[a-f0-9]{64}|[\w.-]+)$/.exec(image) ?? [];
+      const [, host, repo, ref] = /^([^/]+)\/([^@]+?)(?:@|:(?=[\w.-]+$))(sha256:[a-f0-9]{64}|[\w.-]+)$/.exec(image) ?? [];
       if (!host) fail(`bad reference ${image}`);
       if (!(await fetch(`http://${host}/v2/`)).ok) fail("registry ping failed");
       const manifestRes = await fetch(`http://${host}/v2/${repo}/manifests/${ref}`);

@@ -39,6 +39,15 @@ export function VmSection({ settings }: { settings: Settings }) {
     },
     onError: (e) => toastApiError(e, "Tart couldn't be installed", qc),
   });
+  const removeImage = useMutation({
+    mutationFn: (image: string) => api.vms.removeImage(image),
+    onSuccess: () => {
+      toast.success("Image removed");
+      void qc.invalidateQueries({ queryKey: qk.vms });
+    },
+    onError: (e) => toastApiError(e, "The image couldn't be removed", qc),
+  });
+  const downloaded = s?.images.filter((i) => i.downloaded) ?? [];
   const set = (p: Partial<VmSettings>) => patch({ vm: p });
   // Another binary changes what the status reports (installed, version). Failures are toasted by the patch hook.
   const saveTartPath = (tartPath: string) =>
@@ -168,6 +177,22 @@ export function VmSection({ settings }: { settings: Settings }) {
           <span className="break-all">{s ? short(s.storageDir) : "…"}</span>
         </InfoRow>
         {s?.host.freeDiskGb != null && <InfoRow label="Free space">{s.host.freeDiskGb} GB</InfoRow>}
+        {downloaded.map((img) => (
+          <SettingRow
+            key={img.id}
+            label={img.name}
+            description={`Downloaded image${img.sizeBytes ? ` · ${(img.sizeBytes / 1e9).toFixed(1)} GB` : ""} — new VMs from it are ready in seconds. Removing it frees the space; existing VMs keep working.`}
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={removeImage.isPending && removeImage.variables === img.id}
+              onClick={() => removeImage.mutate(img.id)}
+            >
+              {removeImage.isPending && removeImage.variables === img.id && <Spinner />} Remove
+            </Button>
+          </SettingRow>
+        ))}
         <SettingRow
           label="Custom tart binary"
           htmlFor="vm-tart-path"

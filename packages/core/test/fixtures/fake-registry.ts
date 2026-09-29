@@ -61,13 +61,8 @@ export function startFakeRegistry(): FakeRegistry {
       if (!brokeOff && blob === layers[0] && start === 0) {
         brokeOff = true;
         const half = blob.subarray(0, blob.length / 2);
-        const stream = new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(new Uint8Array(half));
-            setTimeout(() => controller.error(new Error("connection lost")), 20);
-          },
-        });
-        return new Response(stream, { headers: { "Content-Length": String(blob.length) } });
+        // Promise half the bytes more than are sent, then end: the client sees a short body.
+        return new Response(new Uint8Array(half), { headers: { "X-Declared-Length": String(blob.length) } });
       }
       const body = blob.subarray(start);
       return new Response(new Uint8Array(body), {

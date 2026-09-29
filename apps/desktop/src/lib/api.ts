@@ -336,6 +336,8 @@ export const api = {
     /** CPU, memory and display apply on the next start; the disk can only grow (while stopped). */
     update: (id: string, input: VmPatch) => patch<Vm>(`/api/vms/${id}`, input),
     delete: (id: string, opts: { keepFiles?: boolean } = {}) => del<{ ok: true }>(`/api/vms/${id}`, { keepFiles: opts.keepFiles ? 1 : undefined }),
+    /** Remove a downloaded image (preset id) to free space; VMs made from it keep working. */
+    removeImage: (image: string) => del<{ ok: true }>(`/api/vms/images/${encodeURIComponent(image)}`),
     /** Boots in the background; fails right away when two VMs already run or the disk is missing. */
     start: (id: string) => post<Vm>(`/api/vms/${id}/start`),
     stop: (id: string) => post<Vm>(`/api/vms/${id}/stop`),

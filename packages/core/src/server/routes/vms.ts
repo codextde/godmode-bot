@@ -8,6 +8,7 @@ import {
   getVm,
   installTart,
   listVms,
+  removeImage,
   openVmScreen,
   openVmTerminal,
   resetVm,
@@ -66,6 +67,12 @@ export function registerVmRoutes(app: Hono): void {
   });
 
   app.get("/api/vms", async (c) => c.json(await listVms()));
+
+  /** Remove a downloaded image (preset id or reference) to free disk space; VMs made from it keep working. */
+  app.delete("/api/vms/images/:image", async (c) => {
+    await removeImage(decodeURIComponent(c.req.param("image")));
+    return c.json({ ok: true as const });
+  });
 
   app.post("/api/vms", async (c) => c.json(await createVm(await body(c, vmSchema)), 201));
 

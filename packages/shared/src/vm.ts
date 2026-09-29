@@ -72,6 +72,8 @@ export interface VmImagePreset {
   recommended: boolean;
   /** Already downloaded: new VMs from it are created in seconds. */
   downloaded: boolean;
+  /** Space the downloaded image takes on this Mac, in bytes (null = not downloaded or unknown). */
+  sizeBytes: number | null;
 }
 
 /** GET /api/vms/status */

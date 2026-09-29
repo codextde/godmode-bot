@@ -47,7 +47,7 @@ let registry: FakeRegistry;
 
 function fakeState(): {
   images: string[];
-  vms: Record<string, { state: string; cpu: number; memory: number; display: string; disk: number; generation: number; macRandomized: number; screenPort?: number }>;
+  vms: Record<string, { state: string; cpu: number; memory: number; display: string; disk: number; generation: number; macRandomized: number; source: string; screenPort?: number }>;
 } {
   return JSON.parse(readFileSync(join(tartHome(), "fake-state.json"), "utf8"));
 }

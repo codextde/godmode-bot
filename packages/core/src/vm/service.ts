@@ -54,7 +54,7 @@ const SWEEP_MS = 30_000;
 /** VM ids become Tart VM names and directory names. */
 const VM_ID = /^vm_[A-Za-z0-9]{8,64}$/;
 
-export const IMAGE_PRESETS: Omit<VmImagePreset, "downloaded">[] = [
+export const IMAGE_PRESETS: Omit<VmImagePreset, "downloaded" | "sizeBytes">[] = [
   {
     id: "tahoe",
     name: "macOS Tahoe",
@@ -333,13 +333,24 @@ export async function vmStatus(): Promise<VmStatus> {
     supported: support.supported,
     reason: support.reason,
     tart: { installed: !!bin && !!version, version, path: bin?.path ?? null, managed: bin?.managed ?? false, bundledVersion: tart.TART_VERSION },
-    images: IMAGE_PRESETS.map((p) => ({ ...p, downloaded: imageDownloaded(p.image) })),
+    images: IMAGE_PRESETS.map((p) => ({ ...p, downloaded: imageDownloaded(p.image), sizeBytes: states.get(templateName(p.image))?.sizeBytes ?? null })),
     maxRunning: MAX_RUNNING,
     running: runningIds().length,
     host: hostInfo(),
     storageDir: tart.vmRoot(),
     downloads: Object.fromEntries([...pulls].map(([image, p]) => [image, p.percent])),
   };
+}
+
+/** Remove a downloaded image (its template) to free space; VMs made from it keep working. */
+export async function removeImage(image: string, actor = "user"): Promise<void> {
+  await ensureTart();
+  const ref = resolveImage(image);
+  if (pulls.has(ref)) throw conflict("The image is still downloading");
+  await tart.tart(["delete", templateName(ref)], { timeoutMs: 5 * 60_000 });
+  audit(actor, "vm.image.remove", ref);
+  await refreshStates(true);
+  bus.changed("vms");
 }
 
 export async function installTart(): Promise<{ ok: boolean; output: string }> {
@@ -435,14 +446,7 @@ async function ensureImage(image: string, onProgress: (p: VmProgress) => void): 
     const label = imageLabel(image);
     entry.promise = downloadImage(image, (p) => {
       entry.percent = p.percent;
-      entry.progress =
-        p.phase === "download"
-          ? {
-              phase: "download",
-              label: p.bytes ? `Downloading ${label} — ${(p.bytes.done / 1e9).toFixed(1)} of ${(p.bytes.total / 1e9).toFixed(1)} GB` : `Downloading ${label}`,
-              percent: p.percent,
-            }
-          : { phase: "clone", label: `Unpacking ${label}`, percent: p.percent };
+      entry.progress = p.phase === "download" ? { phase: "download", label: `Downloading ${label}`, percent: p.percent } : { phase: "clone", label: `Unpacking ${label}`, percent: p.percent };
     }).finally(() => {
       pulls.delete(image);
       statesAt = 0;
