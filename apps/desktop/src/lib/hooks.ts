@@ -148,6 +148,11 @@ export function useVmChoices() {
   return { available, vms: list.data ?? [], isLoading: list.isLoading };
 }
 
+/** SSH servers agents and chats can use (kept current by `entity.changed` "ssh-servers"). */
+export function useSshServers() {
+  return useQuery({ queryKey: qk.sshServers, queryFn: api.ssh.list });
+}
+
 export function useAgentTemplates() {
   return useQuery({ queryKey: qk.agentTemplates, queryFn: api.agents.templates, staleTime: 5 * 60_000 });
 }

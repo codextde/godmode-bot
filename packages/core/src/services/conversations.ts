@@ -24,6 +24,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
+import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
 import { redact } from "../vault/vault";
 import { getAgent, getDefaultAgentId } from "../agents/service";
 import { activeRunForConversation, cancelRun, listActiveRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
@@ -52,6 +53,7 @@ interface ConversationRow {
   computer_target: string | null;
   vm_id: string | null;
   browser_profile_id: string | null;
+  ssh_server_ids: string | null;
   instructions: string;
   pinned: number;
   archived: number;
@@ -106,6 +108,7 @@ function toConversation(r: ConversationRow): Conversation {
     computerTarget: parseComputerTarget(parseJson<unknown>(r.computer_target, null)),
     vmId: r.vm_id ?? null,
     browserProfileId: r.browser_profile_id ?? null,
+    sshServerIds: parseServerIds(r.ssh_server_ids),
     instructions: r.instructions,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
@@ -192,6 +195,7 @@ export function createConversation(
     workingDirectory?: string | null;
     vmId?: string | null;
     browserProfileId?: string | null;
+    sshServerIds?: string[];
     instructions?: string;
   } & ModelChoice,
 ): Conversation {
@@ -199,6 +203,7 @@ export function createConversation(
   const workingDirectory = normalizeWorkingDirectory(input.workingDirectory);
   const vmId = normalizeVmId(input.vmId) ?? null;
   const browserProfileId = normalizeBrowserProfileId(input.browserProfileId) ?? null;
+  const sshServerIds = normalizeSshServerIds(input.sshServerIds) ?? [];
   const ts = now();
   const id = newId("cnv");
   const title = input.title?.trim() ? input.title.trim().slice(0, 200) : DEFAULT_CONVERSATION_TITLE;
@@ -213,6 +218,7 @@ export function createConversation(
     working_directory: workingDirectory,
     vm_id: vmId,
     browser_profile_id: browserProfileId,
+    ssh_server_ids: JSON.stringify(sshServerIds),
     instructions: input.instructions?.trim() ?? "",
     pinned: 0,
     archived: 0,
@@ -270,6 +276,7 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     computer_target: patch.computerTarget === undefined ? undefined : patch.computerTarget ? JSON.stringify(parseComputerTarget(patch.computerTarget)) : null,
     vm_id: normalizeVmId(patch.vmId),
     browser_profile_id: normalizeBrowserProfileId(patch.browserProfileId),
+    ssh_server_ids: patch.sshServerIds === undefined ? undefined : JSON.stringify(normalizeSshServerIds(patch.sshServerIds)),
     instructions: patch.instructions?.trim(),
     updated_at: now(),
   });
@@ -277,6 +284,7 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
   bus.emit({ type: "conversation.updated", conversation });
   if (patch.vmId !== undefined) assignmentsChanged();
   if (patch.browserProfileId !== undefined) retryQueued();
+  if (patch.sshServerIds !== undefined || (patch.archived !== undefined && conversation.sshServerIds.length)) bus.changed("ssh-servers");
   return conversation;
 }
 
@@ -326,6 +334,7 @@ export async function deleteConversation(id: string): Promise<void> {
     log.warn(`could not remove transcript of conversation ${id}`, err);
   }
   bus.emit({ type: "conversation.deleted", id });
+  if (parseServerIds(row.ssh_server_ids).length) bus.changed("ssh-servers");
 }
 
 /* ------------------------------------------------------------------ */
@@ -508,6 +517,8 @@ export async function startChat(
     vmId?: string | null;
     /** Browser profile for this chat (null/omitted = the agent's). */
     browserProfileId?: string | null;
+    /** SSH servers for this chat, in addition to the agent's. */
+    sshServerIds?: string[];
     instructions?: string;
   } & ModelChoice,
 ): Promise<StartChatResult> {
@@ -525,6 +536,7 @@ export async function startChat(
     workingDirectory: input.workingDirectory,
     vmId: input.vmId,
     browserProfileId: input.browserProfileId,
+    sshServerIds: input.sshServerIds,
     instructions: input.instructions,
     model: input.model,
     effort: input.effort,

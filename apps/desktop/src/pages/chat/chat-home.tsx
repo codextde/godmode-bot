@@ -19,6 +19,7 @@ import { ComputerShareChip } from "@/components/computer/computer-panel";
 import { InstructionsChip } from "@/components/instructions/instructions";
 import { VmChip } from "@/components/vms/vm-picker";
 import { BrowserProfileChip } from "@/components/browser/profile-chip";
+import { SshChip } from "@/components/ssh/ssh-chip";
 import { ChatDropZone } from "@/components/chat/thread";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -85,6 +86,8 @@ export default function ChatHome() {
   const [vmId, setVmId] = useState<string | null>(null);
   /** Browser profile for the new chat; null = the agent's. */
   const [browserProfileId, setBrowserProfileId] = useState<string | null>(null);
+  /** SSH servers for the new chat, on top of the agent's. */
+  const [sshServerIds, setSshServerIds] = useState<string[]>([]);
   const { data: workspaces = [] } = useWorkspaces();
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
@@ -173,6 +176,7 @@ export default function ChatHome() {
                   />
                   <BrowserProfileChip agent={selected} value={browserProfileId} onChange={setBrowserProfileId} />
                   <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />
+                  <SshChip agent={selected} value={sshServerIds} onChange={setSshServerIds} />
                   <VmChip
                     value={vmId}
                     inherited={[
@@ -197,6 +201,7 @@ export default function ChatHome() {
                 computerTarget: shared ?? undefined,
                 vmId: vmId ?? undefined,
                 browserProfileId: browserProfileId ?? undefined,
+                sshServerIds: sshServerIds.length ? sshServerIds : undefined,
                 instructions: instructions || undefined,
               })
             }
@@ -240,6 +245,7 @@ export default function ChatHome() {
             computerTarget: shared ?? undefined,
             vmId: vmId ?? undefined,
             browserProfileId: browserProfileId ?? undefined,
+            sshServerIds: sshServerIds.length ? sshServerIds : undefined,
             instructions: instructions || undefined,
             ...choice,
           });

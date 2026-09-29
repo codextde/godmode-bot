@@ -202,6 +202,8 @@ async function compile(opts: {
         ...(windows ? { windows } : {}),
       },
       format: "esm",
+      // ssh2's optional native helper (never built): ssh2 loads it in a try/catch and uses pure JavaScript without it.
+      external: ["cpu-features"],
       minify: true,
       sourcemap: "linked",
       bytecode: opts.bytecode,

@@ -40,6 +40,8 @@ const instructions = z.string().max(MAX_INSTRUCTIONS_LENGTH).optional();
 const vmId = z.string().trim().max(100).nullable().optional();
 /** Browser profile of the chat; null = the agent's (or the default). */
 const browserProfileId = z.string().trim().max(100).nullable().optional();
+/** SSH servers of the chat (the whole list); the agent's apply anyway. */
+const sshServerIds = z.array(z.string().trim().min(1).max(100)).max(50).optional();
 
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
@@ -71,7 +73,7 @@ export function registerChatRoutes(app: Hono): void {
   );
 
   app.post("/api/conversations", async (c) => {
-    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, instructions, ...modelChoice }));
+    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, sshServerIds, instructions, ...modelChoice }));
     return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
@@ -89,6 +91,7 @@ export function registerChatRoutes(app: Hono): void {
         computerTarget: computerTargetSchema.nullable().optional(),
         vmId,
         browserProfileId,
+        sshServerIds,
         instructions,
       }),
     );
@@ -118,6 +121,7 @@ export function registerChatRoutes(app: Hono): void {
         computerTarget: computerTargetSchema.nullable().optional(),
         vmId,
         browserProfileId,
+        sshServerIds,
         instructions,
         ...modelChoice,
       }),

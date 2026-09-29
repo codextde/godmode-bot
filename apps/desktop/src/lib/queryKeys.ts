@@ -70,6 +70,8 @@ export const qk = {
   vmList: ["vms", "list"] as unknown[],
   vmStatus: ["vms", "status"] as unknown[],
   vmScreen: (id: string, size: number) => ["vm-screen", id, size],
+  sshServers: ["ssh-servers"] as unknown[],
+  sshLocalKeys: ["ssh-local-keys"] as unknown[],
   chromeProfiles: ["chrome-profiles"] as unknown[],
   folders: ["folders"] as unknown[],
   folderList: (path: string, hidden: boolean) => ["folders", "list", path, hidden],

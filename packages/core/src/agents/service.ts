@@ -32,6 +32,7 @@ import { reloadSchedules } from "../scheduler/scheduler";
 import { requestAppTriggerSync } from "../integrations/composioTriggers";
 import { badRequest, newId, notFound, now, parseJson, slugify } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
+import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
 import {
   AGENT_GITIGNORE,
   AGENT_REPO_DIRS,
@@ -66,6 +67,7 @@ interface AgentRow {
   subagents: string;
   working_directory: string | null;
   vm_id: string | null;
+  ssh_server_ids: string;
   repo_path: string;
   last_run_at: string | null;
   created_at: string;
@@ -138,6 +140,7 @@ function toModel(r: AgentRow): Agent {
     subagents: normalizeSubagents(parseJson<unknown>(r.subagents, [])),
     workingDirectory: r.working_directory,
     vmId: r.vm_id ?? null,
+    sshServerIds: parseServerIds(r.ssh_server_ids),
     // Derived from the slug so the data dir can move (backup restore, GODMODE_HOME change).
     repoPath: repoPathFor(r.slug),
     lastRunAt: r.last_run_at,
@@ -169,6 +172,7 @@ function toRow(a: Agent): Record<string, string | number | null> {
     subagents: json(a.subagents)!,
     working_directory: a.workingDirectory,
     vm_id: a.vmId,
+    ssh_server_ids: json(a.sshServerIds)!,
     repo_path: a.repoPath,
     last_run_at: a.lastRunAt,
     created_at: a.createdAt,
@@ -482,6 +486,8 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     workingDirectory: isAgentActor(actor) ? null : normalizeWorkingDirectory(input.workingDirectory),
     // A VM only takes host access away, so managers may give one; removing it stays with the human (updateAgent).
     vmId: normalizeVmId(input.vmId) ?? null,
+    // Human-only: signing in to remote machines.
+    sshServerIds: isAgentActor(actor) ? [] : (normalizeSshServerIds(input.sshServerIds) ?? []),
     repoPath: repoPathFor(slug),
     lastRunAt: null,
     createdAt: ts,
@@ -502,6 +508,7 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
   log.info(`created agent ${agent.slug}${agent.isDefault ? " (default)" : ""}`);
   bus.emit({ type: "agent.updated", agent });
   if (agent.vmId) assignmentsChanged();
+  if (agent.sshServerIds.length) bus.changed("ssh-servers");
   return agent;
 }
 
@@ -555,6 +562,7 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   }
   // Moving an agent into a VM only narrows what it reaches on this computer; taking it out is human-only.
   if (patch.vmId !== undefined && (patch.vmId || !isAgentActor(actor))) next.vmId = normalizeVmId(patch.vmId) ?? null;
+  if (patch.sshServerIds !== undefined && !isAgentActor(actor)) next.sshServerIds = normalizeSshServerIds(patch.sshServerIds) ?? [];
 
   next.status = !next.enabled ? "disabled" : current.status === "disabled" ? "idle" : current.status;
   next.updatedAt = now();
@@ -573,6 +581,7 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   const agent = getAgent(current.id);
   bus.emit({ type: "agent.updated", agent });
   if (current.vmId !== agent.vmId) assignmentsChanged();
+  if (JSON.stringify(current.sshServerIds) !== JSON.stringify(agent.sshServerIds)) bus.changed("ssh-servers");
   if (current.enabled !== agent.enabled || current.workspaceId !== agent.workspaceId) {
     reloadSchedules();
     requestAppTriggerSync();

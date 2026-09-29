@@ -90,6 +90,7 @@ const ALL_ENTITIES: EntityName[] = [
   "settings",
   "runs",
   "vms",
+  "ssh-servers",
   "messaging",
 ];
 

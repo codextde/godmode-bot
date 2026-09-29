@@ -338,6 +338,22 @@ function loadKnownSecrets() {
         }
       }
     }
+    for (const row of all<{ id: string; password_enc: string | null; private_key_enc: string | null; passphrase_enc: string | null }>(
+      "SELECT id, password_enc, private_key_enc, passphrase_enc FROM ssh_servers",
+    )) {
+      for (const [enc, field] of [
+        [row.password_enc, "password"],
+        [row.private_key_enc, "private_key"],
+        [row.passphrase_enc, "passphrase"],
+      ] as const) {
+        if (!enc) continue;
+        try {
+          rememberSecret(decrypt(dek, enc, `ssh_servers.${field}:${row.id}`));
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     for (const row of all<{ id: string; secrets_enc: string | null }>("SELECT id, secrets_enc FROM messaging_connections")) {
       if (!row.secrets_enc) continue;
       try {

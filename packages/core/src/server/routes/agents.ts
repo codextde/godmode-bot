@@ -91,6 +91,7 @@ export const agentSchema = z.object({
   subagents: z.array(subagentSchema).max(20).optional(),
   workingDirectory: z.string().trim().max(4096).nullable().optional(),
   vmId: id.nullable().optional(),
+  sshServerIds: z.array(id).max(50).optional(),
 });
 
 const triggerSchema = z.discriminatedUnion("type", [

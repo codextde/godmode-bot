@@ -61,6 +61,8 @@ export interface AgentInput {
   workingDirectory?: string | null;
   /** macOS VM the agent works in; null = the workspace's. */
   vmId?: ID | null;
+  /** SSH servers the agent may use in every run. */
+  sshServerIds?: ID[];
 }
 
 export interface AgentTemplate {
@@ -132,6 +134,8 @@ export interface StartChatInput {
   vmId?: ID | null;
   /** Browse in this profile instead of the agent's. */
   browserProfileId?: ID | null;
+  /** SSH servers the chat may use, in addition to the agent's. */
+  sshServerIds?: ID[];
   instructions?: string;
 }
 
@@ -150,6 +154,8 @@ export interface ConversationPatch {
   vmId?: ID | null;
   /** Browser profile for this chat; null = back to the agent's (or the default). */
   browserProfileId?: ID | null;
+  /** SSH servers of this chat (the whole list); the agent's servers apply anyway. */
+  sshServerIds?: ID[];
   /** "" = none. */
   instructions?: string;
 }

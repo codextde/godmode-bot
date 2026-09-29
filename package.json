@@ -25,5 +25,11 @@
     "start": "pnpm --filter @godmode/core start",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"
+  },
+  "pnpm": {
+    "neverBuiltDependencies": [
+      "ssh2",
+      "cpu-features"
+    ]
   }
 }

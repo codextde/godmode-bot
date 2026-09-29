@@ -13,6 +13,8 @@
  *              with a JSON summary; "no computer server" when the run has none
  *   CALL_VM     call the `vm` MCP server from --mcp-config (initialize, tools/list, shell, write_file, edit_file, read_file)
  *              and answer "VM {json}"; "no vm server" when the run has none
+ *   CALL_SSH    call the `ssh` MCP server from --mcp-config (initialize, tools/list, list_servers, shell, write_file,
+ *              edit_file, read_file, shell with sudo) and answer "SSH {json}"; "no ssh server" when the run has none
  *   CALL_GUEST  start the stdio `browser` and `cua` MCP servers from --mcp-config like Claude Code does, send each an
  *              initialize line and answer "GUEST {json}" with the server names and each server's command and reply
  *   CRASH       print to stderr and exit 3 without a result
@@ -366,6 +368,53 @@ if (slash?.[1] === "clear") {
       cwd,
     };
     const text = `VM ${JSON.stringify(summary)}`;
+    textTurn(text);
+    result(text);
+  }
+} else if (prompt.includes("CALL_SSH")) {
+  out(init);
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const server = cfg.mcpServers.ssh;
+  if (!server) {
+    textTurn("no ssh server");
+    result("no ssh server");
+  } else {
+    let id = 0;
+    const rpc = async (method: string, params?: unknown) => {
+      const res = await fetch(server.url, {
+        method: "POST",
+        headers: { ...server.headers, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, ...(params ? { params } : {}) }),
+      });
+      const raw = await res.text();
+      return raw ? JSON.parse(raw) : null;
+    };
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const r = await rpc("tools/call", { name, arguments: args });
+      return { text: r.result.content[0].text as string, isError: !!r.result.isError };
+    };
+    const initRes = await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } });
+    const list = await rpc("tools/list");
+    const servers = await call("list_servers", {});
+    const shell = await call("shell", { command: "echo hello-from-ssh; echo oops >&2; exit 3" });
+    const write = await call("write_file", { path: "project/notes.txt", content: "alpha\nbeta\n" });
+    const edit = await call("edit_file", { path: "project/notes.txt", old_string: "beta", new_string: "gamma" });
+    const read = await call("read_file", { path: "~/project/notes.txt" });
+    const sudo = await call("shell", { command: "echo root=$FAKE_ROOT", sudo: true });
+    const summary = {
+      server: initRes.result.serverInfo.name,
+      sameToken: server.headers.Authorization === cfg.mcpServers.godmode!.headers.Authorization,
+      tools: (list.result.tools as { name: string }[]).map((t) => t.name),
+      servers,
+      shell,
+      write,
+      edit,
+      read,
+      sudo,
+    };
+    const text = `SSH ${JSON.stringify(summary)}`;
     textTurn(text);
     result(text);
   }

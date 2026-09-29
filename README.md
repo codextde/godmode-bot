@@ -60,6 +60,7 @@ needs to be useful:
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
 | 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent works *entirely inside the VM* — commands, files, apps (computer use with Cua Driver) and the web (Google Chrome with browser-use) — and no browser opens on your Mac. Watch the VM's screen next to the chat and take control anytime. Allow it once and agents sign in inside the VM too: Godmode fills your saved logins and 2FA codes for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
+| 🔌 **SSH servers** | Let agents work on your servers: save a server with a password or an SSH key (paste it, pick one from `~/.ssh` or generate a new one) and give it to a chat or an agent. Godmode signs in and answers `sudo` — the AI never sees the password or the key. Agents run commands, edit config files and copy files back and forth; the host key is pinned on the first connection. |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
 | 🔐 **Vault** | Logins with password generator, per-workspace or global, AES-256-GCM encrypted, fully audited. |
 | 📥 **Password import** | Bring logins over from Chrome (and Edge, Brave, Arc), 1Password (.1pux or CSV), Bitwarden, Apple Passwords, Firefox and more — with a preview that updates saved logins instead of duplicating them. |
@@ -209,6 +210,20 @@ workspace's, and boots it when needed. You can also just ask Godmode: *"Give the
 Needs a Mac with Apple silicon. macOS allows **two** macOS VMs to run at the same time; Godmode tells you which one to
 stop when a third is needed.
 
+### SSH servers — let agents work on your servers
+
+Open **SSH servers** in the sidebar and click **Add server**: host, port, user and either a **password** or an **SSH
+key** — paste it, load a file, pick one from `~/.ssh` on this computer, or **generate** a new one and add its public key
+to the server's `~/.ssh/authorized_keys`. **Test connection** signs in once and shows the server's host key; Godmode
+trusts only that key from then on. Then pick the server for a **chat** (the *SSH* chip in the message box) or an
+**agent** (agent settings → *SSH servers*, used in every run). A run gets its chat's servers and its agent's.
+
+| | |
+|---|---|
+| **What the agent gets** | An `ssh` tool set: `shell` (a command in the user's shell; `sudo: true` runs it as root and Godmode types the saved password into sudo's prompt), `read_file` / `write_file` / `edit_file` (SFTP, or the shell when a server has none), and `upload` / `download` between the chat's folders on your computer and the server. |
+| **Secrets** | The password, key and passphrase are sealed in the vault, masked in transcripts and never part of a tool result — also when a command prints them. |
+| **Checking in** | Each server card shows whether it was reachable, its OS and pinned host key, which agents and chats use it, and a **Run command** box for a quick look yourself. |
+
 ### Good to know
 
 - **macOS — Chrome session import** reads your Chrome profile, which macOS protects: grant Godmode
@@ -304,6 +319,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Computer use: share a window (background control via Cua Driver), a display, every monitor or a browser tab
 - [x] Automations: schedules, app events (Composio triggers), plain-language conditions and webhooks
 - [x] Agents working in a dedicated macOS VM (Tart / Virtualization.framework): shell, files and screen, assigned per agent, chat or workspace
+- [x] SSH servers: agents run commands, edit files and copy files on remote machines — password or key, sudo, pinned host keys
 - [ ] Windows / Linux VMs
 - [ ] Mobile companion app & push notifications
 - [ ] Team mode: shared workspaces and approvals

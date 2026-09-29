@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, Vm } from "@godmode/shared";
+import type { Agent, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, SshServer, Vm } from "@godmode/shared";
 import { computerTargetLabel } from "@godmode/shared";
 import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import { ConversationHeader } from "@/components/chat/conversation-header";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { InstructionsChip } from "@/components/instructions/instructions";
+import { SshChip } from "@/components/ssh/ssh-chip";
 import { VmChip } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { ChatDropZone, Thread } from "@/components/chat/thread";
@@ -240,6 +241,33 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     onError: (err) => toast.error("Couldn't change the browser profile", { description: errorMessage(err) }),
   });
 
+  const setSshServers = useMutation({
+    mutationFn: (sshServerIds: string[]) => api.conversations.update(conversationId, { sshServerIds }),
+    onMutate: (next) => {
+      const prev = qc.getQueryData<ConversationWithMessages>(key)?.sshServerIds ?? [];
+      qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, sshServerIds: next } : c));
+      return { prev };
+    },
+    onSuccess: (updated, next, ctx) => {
+      // The cache already holds the latest pick (toggles can overlap); take everything else from the answer.
+      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated, sshServerIds: old.sshServerIds } : old));
+      qc.invalidateQueries({ queryKey: qk.sshServers });
+      const servers = qc.getQueryData<SshServer[]>(qk.sshServers) ?? [];
+      const nameOf = (id: string) => servers.find((s) => s.id === id)?.name ?? "the server";
+      const added = next.find((id) => !ctx.prev.includes(id));
+      const removed = ctx.prev.find((id) => !next.includes(id));
+      if (added)
+        toast.success(`Next message can use ${nameOf(added)}`, {
+          description: "Godmode signs in for the agent — the password or key stays in the vault.",
+        });
+      else if (removed) toast.success(`Removed ${nameOf(removed)}`, { description: "Runs in this chat can't sign in to it anymore." });
+    },
+    onError: (err, _next, ctx) => {
+      if (ctx) qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, sshServerIds: ctx.prev } : c));
+      toast.error("Couldn't change the SSH servers", { description: errorMessage(err) });
+    },
+  });
+
   const share = useMutation({
     mutationFn: (computerTarget: ComputerTarget | null) => api.conversations.update(conversationId, { computerTarget }),
     onSuccess: (updated, target) => {
@@ -411,6 +439,12 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                         />
                       </>
                     )}
+                    <SshChip
+                      agent={agent}
+                      value={conv.sshServerIds ?? []}
+                      onChange={(ids) => setSshServers.mutateAsync(ids).catch(() => undefined)}
+                      busy={setSshServers.isPending}
+                    />
                     <VmChip
                       value={conv.vmId ?? null}
                       inherited={vmInherited}

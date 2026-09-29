@@ -43,6 +43,13 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
   Godmode's own windows and dashboard tabs can't be shared. Unattended desktop access for routines is a human-only
   agent setting; agents without it can't hand work to agents that have it, and backups never restore it. Shares and
   their first use per run are audited (`computer.share`, `computer.unshare`, `computer.control`).
+- **SSH servers are assigned by you**: an agent only reaches the servers you give its chat or the agent itself — agents
+  can't assign servers to themselves or others, and delegated work doesn't inherit a chat's servers. Godmode signs in
+  and answers `sudo` with the password sealed in the vault; the password, private key and passphrase never appear in a
+  tool result (masked even when a command prints them). The server's host key is pinned on the first connection and a
+  different key is refused. Uploads and downloads only use the folders of the run on your computer. First use per run
+  and every sudo password entry are audited (`ssh.use`, `ssh.sudo`). An agent with a server can do whatever that user
+  may do there — give it an account with only the rights the work needs.
 
 ## Important caveats
 

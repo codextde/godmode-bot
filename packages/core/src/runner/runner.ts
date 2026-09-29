@@ -49,6 +49,8 @@ import { attachComputer, computerLockKey, detachComputer } from "../computer/ser
 import { attachVm, detachVm, type RunVm } from "../vm/service";
 import { CUA_HIDDEN_TOOLS, currentVmPage, prepareGuest, type GuestTools } from "../vm/guest";
 import { resolveVmId } from "../vm/assignments";
+import { runSshServerIds } from "../ssh/assignments";
+import { attachSsh, detachSsh, promptServers } from "../ssh/service";
 import { parseComputerTarget } from "../computer/targets";
 import { StreamAccumulator, detectLoginFailure, redactBlocks } from "./stream";
 
@@ -982,12 +984,19 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     }
     if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
   }
+  // SSH servers of the chat and the agent. Uploads and downloads stay within the folders this run works with.
+  const ssh = dreaming ? [] : promptServers(runSshServerIds(job.conversationId, agent.id));
+  if (ssh.length) {
+    const folders = [cwd, agent.repoPath, vm?.hostSharedDir, ...sources.map((s) => s.path)].filter((f): f is string => !!f);
+    attachSsh(job.runId, [...new Set(folders)]);
+  }
   const mcp = await buildMcpConfig(agent, res.token, {
     onNotice: (text) => job.acc.addNotice("warning", text),
     computer: !!computer,
     vm: vm ? { id: vm.id, browser: guest?.browser ?? null, cua: guest?.cua ?? null } : null,
     gatewayOnly: dreaming,
     browserProfileId: runProfileOf(job),
+    ssh: ssh.length > 0,
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
@@ -1020,6 +1029,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         browserAvailable: "browser" in mcp.mcpServers,
         computer,
         vm: promptVm,
+        ssh,
         voice: job.voice,
         workingDirectory: folder,
         sources: promptSources,
@@ -1136,7 +1146,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const memoryChanged = resuming && !dreaming && conv.memory_digest != null && conv.memory_digest !== memoryNow;
     const prompt =
       resuming && !command
-        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources }) + job.prompt
+        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, ssh }) + job.prompt
         : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 
@@ -1203,6 +1213,7 @@ async function execute(job: Job): Promise<void> {
     for (const f of res.files) removeMcpConfigFile(f);
     await detachComputer(job.runId).catch(() => {});
     detachVm(job.runId);
+    detachSsh(job.runId);
   }
   // Always push the final streamed state (a throttled delta may still be pending).
   if (job.status === "running") safely("emit final delta", () => emitDelta(job));

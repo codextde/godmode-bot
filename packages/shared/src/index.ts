@@ -4,5 +4,6 @@ export * from "./api";
 export * from "./constants";
 export * from "./computer";
 export * from "./vm";
+export * from "./ssh";
 export * from "./git";
 export * from "./messaging";
