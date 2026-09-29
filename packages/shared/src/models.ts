@@ -305,6 +305,8 @@ export interface Conversation {
   vmId: ID | null;
   /** Browser profile this chat works in, overriding the agent's and the workspace / global default. null = theirs. */
   browserProfileId: ID | null;
+  /** Workspace a global agent's chat was started in; it browses with that workspace's default profile. */
+  workspaceId: ID | null;
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
   instructions: string;
   pinned: boolean;

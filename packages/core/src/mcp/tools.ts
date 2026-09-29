@@ -32,7 +32,7 @@ import { createAgent, deleteAgent, getAgent, listAgents, peersFor, updateAgent }
 import { addCredentialDomain, credentialsForAgent, findCredentialsForAgent, getCredential, listCredentials, markCredentialUsed, revealForAgent } from "../vault/credentials";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
 import { nameGuessMatchesHost } from "../vault/match";
-import { currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
+import { chatWorkspaceId, currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
 import { currentVmPage, fillIntoVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { loginFillScope } from "../browser/fill";
@@ -655,11 +655,13 @@ const TOOLS: ToolDef[] = [
       if (refusal) return fail(refusal);
       // From a VM, work for an agent without its own VM stays in the caller's VM.
       const vmId = lockedVm(ctx) && !resolveVmId(null, target) ? lockedVm(ctx) : null;
-      // Work for an agent without its own profile stays in the browser profile picked for the caller's chat, within the
-      // target's reach (global or its workspace's).
+      // Work stays in the caller's workspace, and for an agent without its own profile in the browser profile picked for
+      // the caller's chat, within the target's reach (global or its workspace's).
+      const workspaceId = agent.workspaceId ?? chatWorkspaceId(ctx.conversationId);
       const inherited = target.browser.profileId ? null : runChatBrowserProfile(ctx.runId);
-      const browserProfileId = inherited && (!inherited.workspaceId || inherited.workspaceId === target.workspaceId) ? inherited.id : null;
-      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId });
+      const reach = target.workspaceId ?? workspaceId;
+      const browserProfileId = inherited && (!inherited.workspaceId || inherited.workspaceId === reach) ? inherited.id : null;
+      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId, workspaceId });
       const { run } = await sendMessage(conversation.id, {
         content: `[Delegated by ${agent.name}]\n\n${task}`,
         trigger: "delegation",

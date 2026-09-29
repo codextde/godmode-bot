@@ -285,7 +285,7 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/agents/${id}`),
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
     /** Start a fresh task conversation for the agent */
-    run: (id: string, prompt?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt }),
+    run: (id: string, prompt?: string, workspaceId?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt, workspaceId }),
     files: (id: string, path = "") => get<AgentFileEntry[]>(`/api/agents/${id}/files`, { path }),
     readFile: (id: string, path: string) => get<{ path: string; content: string }>(`/api/agents/${id}/file`, { path }),
     writeFile: (id: string, path: string, content: string) => put<{ ok: true }>(`/api/agents/${id}/file`, { path, content }),
@@ -327,7 +327,7 @@ export const api = {
     list: (q: { agentId?: string; search?: string; limit?: number; archived?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
-    create: (input: { agentId: string; title?: string }) => post<Conversation>("/api/conversations", input),
+    create: (input: { agentId: string; title?: string; workspaceId?: string | null }) => post<Conversation>("/api/conversations", input),
     update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     send: (id: string, input: SendMessageInput) => post<SendMessageResult>(`/api/conversations/${id}/messages`, input),

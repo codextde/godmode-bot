@@ -218,9 +218,10 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
   `--remote-debugging-port=<free port> --user-data-dir=~/.godmode/browser/<id>` on 127.0.0.1.
 * A run on this computer uses its chat's profile (`conversations.browser_profile_id`, picked in the composer), else its
   agent's pinned profile, else its workspace's default profile (`Workspace.browserProfileId`), else the global default
-  (a run in a VM browses in the VM instead). Delegated work
-  for an agent without a pinned profile keeps the profile picked for the caller's chat when it's global or in the target's
-  workspace; deleting a profile sends its chats back to their default. Profiles can be reassigned to another workspace
+  (a run in a VM browses in the VM instead). A global agent's chat remembers the workspace selected in the sidebar when
+  it started (`conversations.workspace_id`) and uses that workspace's default. Delegated work stays in the caller's
+  workspace, and for an agent without a pinned profile keeps the profile picked for the caller's chat when it's global or
+  in the target's workspace; deleting a profile sends its chats back to their default. Profiles can be reassigned to another workspace
   (`PATCH /api/browser/profiles/:id { workspaceId }`) or picked in the workspace's settings (`browserProfileId`, which
   moves a global profile into the workspace); cookies and sessions travel with the profile. The global default always
   stays global.
