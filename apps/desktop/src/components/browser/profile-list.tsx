@@ -202,7 +202,7 @@ function ProfileCard({
             <Cookie className="size-3" /> {p.cookieCount.toLocaleString()}
           </span>
           <span className={cn("inline-flex items-center gap-1", p.running && "text-brand-strong")}>
-            {p.running ? "Running" : "Stopped"}
+            {p.running ? (p.chats.length ? `${p.chats.length} ${p.chats.length === 1 ? "chat" : "chats"}` : "Running") : "Stopped"}
           </span>
         </div>
         {p.importedFrom && (

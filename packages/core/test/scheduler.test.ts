@@ -11,6 +11,7 @@ import { resetSettingsCache } from "../src/services/settings";
 import * as conversations from "../src/services/conversations";
 import { createAgent, updateAgent } from "../src/agents/service";
 import * as repo from "../src/agents/repo";
+import * as routines from "../src/services/routines";
 import { createRoutine, getRoutine, runRoutineNow, updateRoutine } from "../src/services/routines";
 import { reloadSchedules, scheduledRoutines, startScheduler, stopScheduler, triggerRoutine } from "../src/scheduler/scheduler";
 import { HttpError, newId, now } from "../src/util";
@@ -288,6 +289,40 @@ describe("triggering", () => {
     expect(err.message).toContain("disabled");
     expect(sent).toHaveLength(0);
     await repo.repoIdle(other.repoPath);
+  });
+
+  test("a random start fires at its drawn time and plans the next slot", async () => {
+    const routine = createRoutine({
+      agentId: agent.id,
+      name: "Coworker",
+      trigger: { type: "schedule", startWindowMinutes: 60 },
+      cron: "0 8 * * *",
+      timezone: "UTC",
+      prompt: "Good morning",
+    });
+    const soon = { slot: new Date(Date.now() - 60_000), at: new Date(Date.now() + 100) };
+    const draw = spyOn(routines, "nextRandomStart").mockImplementationOnce(() => soon);
+    try {
+      startScheduler();
+      expect(scheduledRoutines().find((s) => s.routineId === routine.id)!.nextRunAt).toBe(soon.at.toISOString());
+      for (let i = 0; i < 50 && !sent.some((m) => m.routineId === routine.id); i++) await Bun.sleep(50);
+      expect(sent.find((m) => m.routineId === routine.id)).toMatchObject({ content: "Good morning", trigger: "routine" });
+
+      const next = scheduledRoutines().find((s) => s.routineId === routine.id)!.nextRunAt!;
+      expect(draw).toHaveBeenLastCalledWith(routine.id, "0 8 * * *", "UTC", 60, expect.any(Date), soon.slot.getTime());
+      expect(Date.parse(next)).toBeGreaterThan(Date.now());
+      expect(new Date(next).getUTCHours()).toBe(8);
+      expect(getRoutine(routine.id).nextRunAt).toBe(next);
+      expect(get<{ source: string }>("SELECT source FROM automation_events WHERE routine_id = ?", routine.id)?.source).toBe("schedule");
+
+      updateRoutine(routine.id, { trigger: { type: "schedule", startWindowMinutes: 45 } });
+      const [, , , minutes, , handled] = draw.mock.calls.at(-1)!;
+      expect(minutes).toBe(45);
+      expect(handled).toBeGreaterThanOrEqual(soon.slot.getTime());
+    } finally {
+      draw.mockRestore();
+      stopScheduler();
+    }
   });
 
   test("scheduled ticks skip disabled routines", async () => {

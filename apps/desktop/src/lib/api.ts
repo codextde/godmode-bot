@@ -465,8 +465,10 @@ export const api = {
     stop: (id: string) => post<{ ok: true }>(`/api/browser/profiles/${id}/stop`),
     chromeProfiles: () => get<LocalChromeProfile[]>("/api/browser/chrome-profiles"),
     import: (id: string, input: ChromeImportInput) => post<ChromeImportResult>(`/api/browser/profiles/${id}/import`, input),
-    navigate: (id: string, url: string) => post<{ ok: true }>(`/api/browser/profiles/${id}/navigate`, { url }),
-    /** Human takeover in live view: forward a click / key / text to the page */
+    /** With `conversationId`: that chat's tab (opened if it has none) instead of the active one. */
+    navigate: (id: string, url: string, conversationId?: string | null) =>
+      post<{ ok: true }>(`/api/browser/profiles/${id}/navigate`, { url, conversationId: conversationId ?? null }),
+    /** Human takeover in live view: forward a click / key / text to the page (the chat's tab, with `conversationId`) */
     input: (
       id: string,
       event:
@@ -474,7 +476,8 @@ export const api = {
         | { type: "scroll"; x: number; y: number; deltaY: number }
         | { type: "key"; key: string }
         | { type: "text"; text: string },
-    ) => post<{ ok: true }>(`/api/browser/profiles/${id}/input`, event),
+      conversationId?: string | null,
+    ) => post<{ ok: true }>(`/api/browser/profiles/${id}/input`, { ...event, conversationId: conversationId ?? null }),
     /** browser-use `profile-use` (sync local Chrome cookies to a browser-use Cloud profile) */
     profileUse: () => get<import("@godmode/shared").ProfileUseStatus>("/api/browser/profile-use"),
     /** Downloads the profile-use binary into <dataDir>/bin */

@@ -33,9 +33,12 @@ export const fills: {
   kind?: string;
   selector?: string;
   submit?: boolean;
+  conversationId?: string;
   allowedHosts: string[];
   httpHosts?: string[];
 }[] = [];
+/** Runs that asked for browser tools, with the chat they are bound to. */
+export const browserRuns: { agentId: string; runId: string; conversationId: string; profileId: string | null }[] = [];
 /** When set, the fake fill fails with an error message that echoes the typed text (leak test). */
 export const fillFailure = { echoText: false };
 
@@ -50,6 +53,7 @@ const fakeProfile: BrowserProfile = {
   cookieCount: 0,
   running: false,
   cdpUrl: null,
+  chats: [],
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
 };
@@ -60,7 +64,11 @@ mock.module("../../src/browser/manager", () => ({
     testAgentIds.has(agent.id) && !(conversationId && realBrowser.chatProfileId(conversationId))
       ? fakeProfile
       : realBrowser.resolveProfileForAgent(agent, conversationId),
-  browserMcpServer: async (agent: Agent, profileId?: string | null) => (testAgentIds.has(agent.id) ? null : realBrowser.browserMcpServer(agent, profileId)),
+  browserMcpServer: async (agent: Agent, run: Parameters<BrowserModule["browserMcpServer"]>[1], profileId?: string | null) => {
+    if (!testAgentIds.has(agent.id)) return realBrowser.browserMcpServer(agent, run, profileId);
+    browserRuns.push({ agentId: agent.id, ...run, profileId: profileId ?? null });
+    return null;
+  },
   fillIntoPage: async (profileId: string, opts: Parameters<BrowserModule["fillIntoPage"]>[1]) => {
     if (profileId !== FAKE_PROFILE_ID) return realBrowser.fillIntoPage(profileId, opts);
     fills.push({
@@ -69,14 +77,15 @@ mock.module("../../src/browser/manager", () => ({
       kind: opts.kind,
       selector: opts.selector,
       submit: opts.submit,
+      conversationId: opts.conversationId,
       allowedHosts: opts.allowedHosts,
       httpHosts: opts.httpHosts,
     });
     if (fillFailure.echoText) return { ok: false, url: "https://example.com/login", detail: `Typing failed near "${opts.text}"` };
     return { ok: true, url: "https://example.com/login", detail: "filled" };
   },
-  currentPage: async (profileId: string) =>
-    profileId === FAKE_PROFILE_ID ? { url: "https://app.example.com/login", title: "Login" } : realBrowser.currentPage(profileId),
+  currentPage: async (profileId: string, conversationId?: string) =>
+    profileId === FAKE_PROFILE_ID ? { url: "https://app.example.com/login", title: "Login" } : realBrowser.currentPage(profileId, conversationId),
 }));
 
 export const FAKE_CLAUDE = join(import.meta.dir, "fake-claude.ts");
