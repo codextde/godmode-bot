@@ -18,7 +18,7 @@ import { resolveUvx, toolPath } from "../services/doctor";
 import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
 import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type PageSession } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
-import { fillOnPage, type FillKind } from "./fill";
+import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
 import { initLiveView, startLiveView, stopLiveView } from "./screencast";
@@ -515,36 +515,13 @@ export async function fillIntoPage(
   },
 ): Promise<{ ok: boolean; url: string; detail: string }> {
   requireRow(profileId);
-  if (typeof opts.text !== "string" || opts.text.length === 0) return { ok: false, url: "", detail: "Nothing to type." };
-  if (!Array.isArray(opts.allowedHosts) || opts.allowedHosts.length === 0) {
-    return { ok: false, url: "", detail: "Refusing to fill: this login has no site (URL or domain) it belongs to. Ask the human to add one in the vault." };
-  }
+  const refused = fillPrecheck(opts);
+  if (refused) return refused;
   const rb = getRunning(profileId);
   if (!rb) return { ok: false, url: "", detail: "The browser is not running. Open the login page with the browser tools first." };
   rb.lastUsedAt = Date.now();
-  // Belt and braces: error texts come from CDP/our scripts, but never let the typed value through.
-  const scrub = (detail: string) => detail.split(opts.text).join("••••••••");
   try {
-    const result = await withActivePage(rb, opts.urlContains, (page) =>
-      fillOnPage(page, {
-        text: opts.text,
-        kind: opts.kind,
-        selector: opts.selector,
-        submit: opts.submit,
-        allowedHosts: opts.allowedHosts,
-        httpHosts: opts.httpHosts,
-      }),
-    );
-    if (!result) {
-      return {
-        ok: false,
-        url: "",
-        detail: opts.urlContains ? `No open tab has a URL containing "${opts.urlContains}".` : "The browser has no open tab.",
-      };
-    }
-    return { ...result, detail: scrub(result.detail) };
-  } catch (err) {
-    return { ok: false, url: "", detail: scrub(`Could not fill the field: ${err instanceof Error ? err.message : String(err)}`) };
+    return await fillIntoActivePage({ client: rb.client, port: rb.port }, opts);
   } finally {
     rb.lastUsedAt = Date.now();
   }

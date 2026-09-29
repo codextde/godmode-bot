@@ -82,6 +82,8 @@ export const BROWSER_MCP_NAME = "browser";
 export const COMPUTER_MCP_NAME = "computer";
 /** MCP server with the tools of a run that works in a macOS VM (shell and files inside the VM). */
 export const VM_MCP_NAME = "vm";
+/** Cua Driver running inside the VM a run works in: computer use of the VM's apps and windows. */
+export const CUA_MCP_NAME = "cua";
 
 /** Longest global, workspace or chat instructions the API accepts. */
 export const MAX_INSTRUCTIONS_LENGTH = 20_000;

@@ -40,6 +40,10 @@ export interface PromptVm {
   hostSharedDir: string;
   /** Claude Code's Bash tool (which runs on the host) is off for this run. */
   hostShellOff: boolean;
+  /** The `browser` tools drive Google Chrome inside the VM. */
+  browser: boolean;
+  /** The `cua` tools (Cua Driver in the VM) control the VM's apps and windows. */
+  cua: boolean;
 }
 
 /** Standing instructions from the human besides the global ones, most general first. The agent's own live in its CLAUDE.md. */
@@ -128,8 +132,13 @@ ${workplace}`);
 Godmode tools come from the \`godmode\` MCP server (vault logins and 2FA, missing-login reports, notifications${perms.allowDelegation || perms.canManageAgents ? ", other agents" : ""}).`);
 
   if (ctx.browserAvailable) {
+    const where = ctx.vm ? ` It is Google Chrome inside the VM "${ctx.vm.name}", not a browser on ${human}'s computer.` : "";
+    const takeover = ctx.vm ? "on the VM's screen" : "in Godmode's live browser view";
     out.push(`### Browser
-Use the \`browser\` MCP tools for anything on the web (navigate, click, type, read pages, take screenshots). The browser keeps its cookies between runs, so you are often already logged in — check before logging in again. If a CAPTCHA or an unexpected human check blocks you, tell ${human} in your final summary (they can take over in Godmode's live browser view).`);
+Use the \`browser\` MCP tools for anything on the web (navigate, click, type, read pages, take screenshots).${where} The browser keeps its cookies between runs, so you are often already logged in — check before logging in again. If a CAPTCHA or an unexpected human check blocks you, tell ${human} in your final summary (they can take over ${takeover}).`);
+  } else if (ctx.vm) {
+    out.push(`### Browser
+No browser could be set up in the VM for this run. If a task needs a website, say so in your final summary — never open a browser on ${human}'s computer instead.`);
   } else {
     out.push(`### Browser
 No browser tools are attached to this run. If a task needs a website, say so in your final summary instead of guessing.`);
@@ -235,9 +244,15 @@ You are "${agent.name}", an AI coworker running inside Godmode Bot for ${human}.
 }
 
 function vmSection(vm: PromptVm, human: string): string {
+  const home = `/Users/${vm.guestUser}`;
+  const apps = vm.cua
+    ? `- Apps: the \`cua\` tools (Cua Driver) control the VM's apps and windows — list windows, read a window's controls (accessibility elements), click, type, press keys, launch apps. Prefer them for apps; use \`screen\` for a picture of the whole display or when an element can't be reached.`
+    : "- Apps: use `screen` (mouse and keyboard) for apps.";
   return `### macOS virtual machine
-This task runs in a dedicated macOS virtual machine, **${vm.name}** — not on ${human}'s own computer. Do the work (commands, code, installs, builds, apps) inside the VM.
-- Use the \`vm\` MCP tools: \`shell\` runs a command (a fresh zsh login shell as user \`${vm.guestUser}\` with passwordless sudo and Homebrew; pass \`cwd\`), \`read_file\` / \`write_file\` / \`edit_file\` work on files in the VM, \`screen\` sees and controls its display (mouse and keyboard, like computer use) for GUI apps, \`info\` describes the VM.${vm.hostShellOff ? ` Claude Code's own Bash tool is turned off in this run because it would run on ${human}'s computer, and your other file tools only reach your repository, the chat's folder and the shared folder.` : ` Claude Code's own Bash tool still runs on ${human}'s computer — only use it for your own repository.`}
+This task runs in a dedicated macOS virtual machine, **${vm.name}** — not on ${human}'s own computer. Do all of the work inside the VM: commands, code, installs, builds, apps and websites. Nothing of it runs on ${human}'s computer.
+- Use the \`vm\` MCP tools: \`shell\` runs a command (a fresh zsh login shell as user \`${vm.guestUser}\` with passwordless sudo and Homebrew; pass \`cwd\`), \`read_file\` / \`write_file\` / \`edit_file\` work on files in the VM, \`screen\` sees and controls its whole display (mouse and keyboard, like computer use), \`info\` describes the VM.${vm.hostShellOff ? ` Claude Code's own Bash tool is turned off in this run because it would run on ${human}'s computer, and your other file tools only reach your repository, the chat's folder and the shared folder.` : ` Claude Code's own Bash tool still runs on ${human}'s computer — only use it for your own repository.`}
+- Websites: ${vm.browser ? `the \`browser\` tools drive Google Chrome inside the VM (it is on the VM's screen too). Downloads land in \`${home}/Downloads\` in the VM.` : `no browser could be set up in the VM for this run.`}
+${apps}
 - The VM keeps its disk between tasks: tools you install, repositories you clone and files you create stay until ${human} resets the VM. Keep your work in the home folder (\`/Users/${vm.guestUser}\`).
 - Shared folder: \`${vm.guestSharedDir}\` in the VM is \`${vm.hostSharedDir}\` on ${human}'s computer. Put results ${human} should get (reports, builds, exports) there; you can also read and write it with your normal file tools.
 - Your own repository (CLAUDE.md, MEMORY.md) stays on ${human}'s computer — keep using your normal file tools for it.
@@ -287,7 +302,7 @@ export function resumeContextPrefix(
     : "";
   // The VM can be assigned or changed between turns: always restate where the work happens.
   const machine = vm
-    ? `\nYou work in the macOS VM "${vm.name}": use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen) for all work in it. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""}`
+    ? `\nYou work in the macOS VM "${vm.name}" — everything happens inside it: use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen)${vm.browser ? ", the `browser` tools (Chrome in the VM)" : ""}${vm.cua ? " and the `cua` tools (the VM's apps)" : ""}. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""}`
     : "";
   return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${machine}${update}${memory}</godmode-context>\n\n`;
 }

@@ -1,15 +1,16 @@
 /**
  * macOS VMs against a fake `tart` (fixtures/fake-tart.ts): lifecycle (create → start → stop, suspend, reset,
- * duplicate, delete), the two-VM limit, assignments (chat → agent → workspace), the runner's `vm` MCP server and the
- * HTTP routes. The fake's `exec` stands in for the guest on the host (made safe, see the fixture).
+ * duplicate, delete), the two-VM limit, assignments (chat → agent → workspace), the runner's `vm` MCP server,
+ * Godmode's agent in the VM (browser and computer use inside the guest) and the HTTP routes. The fake's `exec` stands
+ * in for the guest on the host (made safe, see the fixture).
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, lstatSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, ServerEvent, Vm } from "@godmode/shared";
-import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, captureEvents, fills, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { updateSettings } from "../src/services/settings";
-import { createConversation, getConversationSummary, sendMessage, updateConversation } from "../src/services/conversations";
+import { createConversation, getConversationSummary, listMessages, sendMessage, updateConversation } from "../src/services/conversations";
 import { createWorkspace, getWorkspace, updateWorkspace } from "../src/services/workspaces";
 import { getAgent, updateAgent } from "../src/agents/service";
 import { waitForRun } from "../src/runner/runner";
@@ -38,8 +39,17 @@ import { callVmTool, guestPathWord } from "../src/vm/tools";
 import { __setRegistryForTests, templateName } from "../src/vm/images";
 import { startFakeRegistry, type FakeRegistry } from "./fixtures/fake-registry";
 import { __setScreenEndpointForTests, attachVm, detachVm } from "../src/vm/service";
+import { __setGuestCdpForTests, __setHostUvForTests } from "../src/vm/guest";
+import { BROWSER_USE_SPEC } from "../src/browser/browserUse";
+import { CUA_DRIVER_SPEC } from "../src/computer/cua";
+import { run as sql } from "../src/db";
+import { issueRunToken, revokeRunToken } from "../src/mcp/tokens";
+import * as vault from "../src/vault/vault";
+import { createCredential } from "../src/vault/credentials";
 
 const FAKE_TART = join(import.meta.dir, "fixtures", "fake-tart.ts");
+/** Stands in for this Mac's uv, which Godmode copies into a VM. */
+const FAKE_UV = join(import.meta.dir, "fixtures", "fake-uv.sh");
 
 let env: TestEnv;
 let agent: Agent;
@@ -92,6 +102,8 @@ beforeAll(async () => {
     const port = fakeState().vms[id]?.screenPort;
     return port ? { host: "127.0.0.1", port, username: "admin", password: "admin" } : null;
   });
+  // Godmode's agent in the VM installs its tools through the (fake) uv — never the real one, which would download.
+  __setHostUvForTests(FAKE_UV);
   agent = await makeAgent({ name: "VM Worker" });
 });
 
@@ -99,6 +111,8 @@ afterAll(async () => {
   for (const vm of await listVms()) await deleteVm(vm.id).catch(() => undefined);
   setVmSupportForTests(null);
   __setScreenEndpointForTests(null);
+  __setHostUvForTests(undefined);
+  __setGuestCdpForTests(null);
   __setRegistryForTests(null);
   registry.stop();
   await env.close();
@@ -333,7 +347,7 @@ describe("VM lifecycle", () => {
 
     await stopVm(vm.id);
     await deleteVm(vm.id);
-  });
+  }, 60_000);
 
   test("a VM that fails to boot reports why (and doesn't hang)", async () => {
     const vm = await createVm({ name: "Won't boot" });
@@ -627,6 +641,168 @@ describe("runs in a VM", () => {
     const done = await waitForRun((await sendMessage(conv.id, { content: "CALL_VM" })).run.id, 30_000);
     expect(done.result).toBe("no vm server");
   });
+});
+
+describe("Godmode's agent in the VM", () => {
+  const guestHome = () => join(tartHome(), "guest-home");
+  const lines = (path: string) => (existsSync(path) ? readFileSync(path, "utf8").trim().split("\n").filter(Boolean) : []);
+  const logOf = (name: string) => lines(join(tartHome(), name));
+  const uvFetches = () => lines(join(guestHome(), ".godmode", "fake-uv.log")).sort();
+  /** A fresh guest: the fake's VMs share one guest home. */
+  const freshGuest = () => {
+    for (const dir of [".godmode", "Applications"]) rmSync(join(guestHome(), dir), { recursive: true, force: true });
+    for (const file of ["open.log", "downloads.log", "chrome-running", "no-network"]) rmSync(join(tartHome(), file), { force: true });
+  };
+  const guestSummary = (result: string | null) =>
+    JSON.parse(result!.replace(/^GUEST /, "")) as {
+      servers: string[];
+      browser: { command: string; args: string[]; reply: { result: Record<string, unknown> & { serverInfo: { name: string } } } } | null;
+      cua: { command: string; args: string[]; reply: { result: Record<string, unknown> & { serverInfo: { name: string } } } } | null;
+    };
+  const notices = (conversationId: string) =>
+    listMessages(conversationId)
+      .flatMap((m) => m.blocks)
+      .filter((b) => b.type === "notice")
+      .map((b) => (b as { text: string }).text);
+
+  test("browser and computer use run inside the VM, set up on first use — no browser starts on this computer", async () => {
+    freshGuest();
+    updateSettings({ computer: { enabled: true } });
+    const vm = await createVm({ name: "Browser Mac" });
+    await waitState(vm.id, "stopped");
+    const worker = await makeAgent({ name: "Guest Runner", browser: { enabled: true } });
+    // Neither unattended access nor a screen shared in the chat reaches a run that works in a VM.
+    await updateAgent(worker.id, { vmId: vm.id, computer: { enabled: true, target: null } });
+    const conv = createConversation({ agentId: worker.id });
+    sql("UPDATE conversations SET computer_target = ? WHERE id = ?", JSON.stringify({ kind: "desktop" }), conv.id);
+
+    const { events, stop } = captureEvents();
+    const done = await waitForRun((await sendMessage(conv.id, { content: "CALL_GUEST" })).run.id, 90_000);
+    stop();
+    expect(done.error).toBeNull();
+    const summary = guestSummary(done.result);
+    expect(summary.servers.sort()).toEqual(["browser", "cua", "godmode", "vm"]);
+
+    // Both servers are started by Claude Code through the Tart guest agent and answer from inside the guest.
+    const tartBin = join(env.dataDir, "tart");
+    for (const server of [summary.browser!, summary.cua!]) {
+      expect(server.command).toBe(tartBin);
+      expect(server.args.slice(0, 3)).toEqual(["exec", "-i", vm.id]);
+    }
+    expect(summary.browser!.reply.result).toMatchObject({ serverInfo: { name: "browser-use" }, args: "--mcp", configDir: join(guestHome(), ".godmode", "browser-use") });
+    expect(summary.cua!.reply.result).toMatchObject({ serverInfo: { name: "cua-driver" }, args: "mcp --direct", telemetry: "false" });
+
+    // Installed in the guest: uv copied from this Mac, Chrome from Google's disk image, browser-use and Cua Driver via uv.
+    expect(readFileSync(join(guestHome(), ".godmode", "bin", "uv"), "utf8")).toBe(readFileSync(FAKE_UV, "utf8"));
+    expect(existsSync(join(guestHome(), "Applications", "Google Chrome.app"))).toBe(true);
+    expect(logOf("downloads.log")).toEqual(["https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg"]);
+    expect(uvFetches()).toEqual([BROWSER_USE_SPEC, CUA_DRIVER_SPEC].sort());
+    const activity = events.flatMap((e) => (e.type === "run.activity" ? [e.label] : []));
+    expect(activity).toContain('Setting up Google Chrome, browser-use and Cua Driver in "Browser Mac" (first time only)…');
+
+    // Chrome runs in the VM with DevTools on the guest's loopback, and browser-use connects to it there.
+    const opened = logOf("open.log");
+    expect(opened.length).toBe(1);
+    expect(opened[0]).toContain("Google Chrome.app --args --remote-debugging-port=9322 --remote-debugging-address=127.0.0.1");
+    const config = JSON.parse(readFileSync(join(guestHome(), ".godmode", "browser-use", "config.json"), "utf8")) as { browser_profile: Record<string, { cdp_url: string; downloads_path: string }> };
+    expect(Object.values(config.browser_profile)[0]).toMatchObject({ cdp_url: "http://127.0.0.1:9322", downloads_path: "/Users/admin/Downloads" });
+
+    const inv = invocations(env).filter((i) => i.prompt.includes("CALL_GUEST")).pop()!;
+    const prompt = argValue(inv, "--append-system-prompt")!;
+    expect(prompt).toContain('It is Google Chrome inside the VM "Browser Mac"');
+    expect(prompt).toContain("the `cua` tools (Cua Driver) control the VM's apps and windows");
+    expect(prompt).not.toContain("### Computer");
+    expect(argValue(inv, "--allowedTools")).toContain("mcp__cua");
+    // No LLM key goes into the VM, so browser-use's LLM tools are hidden.
+    expect(argValue(inv, "--disallowedTools")).toContain("mcp__browser__browser_extract_content");
+    // One browser (browser-use's Chrome, where vault fills land); Cua Driver's own browser and upkeep tools are hidden.
+    expect(argValue(inv, "--disallowedTools")).toContain("mcp__cua__browser_navigate");
+    expect(argValue(inv, "--disallowedTools")).toContain("mcp__cua__check_for_update");
+
+    // The next run finds everything in place, Chrome still running.
+    const again = await waitForRun((await sendMessage(conv.id, { content: "CALL_GUEST again" })).run.id, 60_000);
+    expect(again.status).toBe("succeeded");
+    expect(guestSummary(again.result).servers).toContain("browser");
+    expect(invocations(env).filter((i) => i.prompt.includes("CALL_GUEST again")).pop()!.prompt).toContain("the `browser` tools (Chrome in the VM)");
+    expect(logOf("downloads.log").length).toBe(1);
+    expect(uvFetches().length).toBe(2);
+    expect(logOf("open.log").length).toBe(1);
+
+    // Without a VM, the same agent may use the screen shared in the chat again.
+    await updateAgent(worker.id, { vmId: null, computer: { enabled: false, target: null } });
+    const host = await waitForRun((await sendMessage(conv.id, { content: "CALL_GUEST on the host" })).run.id, 60_000);
+    expect(guestSummary(host.result).servers).toContain("computer");
+    expect(guestSummary(host.result).servers).not.toContain("cua");
+    sql("UPDATE conversations SET computer_target = NULL WHERE id = ?", conv.id);
+    await stopVm(vm.id);
+    await deleteVm(vm.id);
+  }, 180_000);
+
+  test("a tool that can't be set up in the VM is left out, never replaced by this computer's", async () => {
+    freshGuest();
+    writeFileSync(join(tartHome(), "no-network"), "");
+    const vm = await createVm({ name: "Offline Mac" });
+    await waitState(vm.id, "stopped");
+    const worker = await makeAgent({ name: "Offline Runner", browser: { enabled: true } });
+    await updateAgent(worker.id, { vmId: vm.id });
+    const conv = createConversation({ agentId: worker.id });
+    try {
+      const done = await waitForRun((await sendMessage(conv.id, { content: "CALL_GUEST" })).run.id, 90_000);
+      expect(done.status).toBe("succeeded");
+      expect(guestSummary(done.result).servers.sort()).toEqual(["cua", "godmode", "vm"]);
+      expect(notices(conv.id).join("\n")).toContain("Google Chrome couldn't be installed in the VM: curl: (6) Could not resolve host");
+      const prompt = argValue(invocations(env).filter((i) => i.prompt.includes("CALL_GUEST")).pop()!, "--append-system-prompt")!;
+      expect(prompt).toContain("No browser could be set up in the VM for this run");
+
+      // Not tried again right away: every run would wait for the same failure.
+      await waitForRun((await sendMessage(conv.id, { content: "CALL_GUEST again" })).run.id, 60_000);
+      expect(logOf("downloads.log").length).toBe(1);
+    } finally {
+      rmSync(join(tartHome(), "no-network"), { force: true });
+      await stopVm(vm.id);
+      await deleteVm(vm.id);
+    }
+  }, 180_000);
+
+  test("logins are filled into the VM's browser, never into one on this computer", async () => {
+    await vault.setup("correct horse battery staple", false);
+    const cred = createCredential({ name: "Example", url: "https://example.com/login", username: "alice", password: "vm-secret-4711" });
+    const vm = await createVm({ name: "Login Mac" });
+    await waitState(vm.id, "stopped");
+    const worker = await makeAgent({ name: "Login Runner", browser: { enabled: true } });
+    const runId = "run_vm_fill_test";
+    await attachVm(runId, vm.id);
+    const token = issueRunToken({ runId, agentId: worker.id, conversationId: "cnv_vm_fill", workspaceId: null, depth: 0 });
+    // Nothing answers on the forwarded DevTools port: Chrome isn't running in the VM.
+    __setGuestCdpForTests(() => 9);
+    fills.length = 0;
+    const fill = async () => {
+      const res = await fetch(`${env.baseUrl}/mcp`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "vault_fill_login", arguments: { credentialId: cred.id, field: "password" } } }),
+      });
+      const text = await res.text();
+      const body = JSON.parse(text.startsWith("{") ? text : text.split("\n").find((l) => l.startsWith("data: "))!.slice(6)) as { result: { content: { text: string }[]; isError?: boolean } };
+      expect(body.result.isError).toBe(true);
+      expect(body.result.content[0]!.text).not.toContain("vm-secret-4711");
+      return body.result.content[0]!.text;
+    };
+    try {
+      // The agent's shell shares the VM with its browser: logins only go in when the human allowed it.
+      expect(await fill()).toContain('turn on "Logins and 2FA codes" in Settings → Virtual machines');
+      updateSettings({ vm: { vaultFill: true } });
+      expect(await fill()).toContain("The browser in the VM is not running");
+      expect(fills).toEqual([]);
+    } finally {
+      updateSettings({ vm: { vaultFill: false } });
+      __setGuestCdpForTests(null);
+      revokeRunToken(token);
+      detachVm(runId);
+      await stopVm(vm.id);
+      await deleteVm(vm.id);
+    }
+  }, 60_000);
 });
 
 describe("the VM screen", () => {

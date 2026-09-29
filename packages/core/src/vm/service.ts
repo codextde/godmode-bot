@@ -1079,9 +1079,14 @@ export function guestPathWord(path: string): string {
   return `"$HOME"/${shq(p)}`;
 }
 
+/** Godmode's SSH key for its VMs (authorized in every guest when it boots, see `provision`). */
+export function sshKeyPath(): string {
+  return join(tart.vmRoot(), "ssh", "id_ed25519");
+}
+
 async function ensureSshKey(): Promise<string | null> {
   const dir = join(tart.vmRoot(), "ssh");
-  const key = join(dir, "id_ed25519");
+  const key = sshKeyPath();
   if (!existsSync(`${key}.pub`)) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const res = Bun.spawnSync(["/usr/bin/ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "godmode-vm", "-f", key], { stdout: "pipe", stderr: "pipe" });
@@ -1182,14 +1187,26 @@ export function __setScreenEndpointForTests(fn: ((id: string) => ScreenEndpoint 
  * logged in as the guest user. null when the VM isn't running.
  */
 export async function screenEndpoint(id: string): Promise<ScreenEndpoint | null> {
+  if (screenEndpointOverride) return (await vmRunning(id)) ? screenEndpointOverride(id) : null;
+  const ip = await vmAddress(id);
+  return ip ? { host: ip, port: SCREEN_PORT, username: GUEST_USER, password: GUEST_PASSWORD } : null;
+}
+
+async function vmRunning(id: string): Promise<boolean> {
   requireRow(id);
   const l = liveOf(id);
   if (states.get(id)?.state !== "running") await refreshStates(true);
-  if (l.op === "stopping" || states.get(id)?.state !== "running") return null;
+  if (l.op === "stopping" || states.get(id)?.state !== "running") return false;
   touch(id);
-  if (screenEndpointOverride) return screenEndpointOverride(id);
+  return true;
+}
+
+/** The running VM's address on the private network only this Mac reaches, or null. */
+export async function vmAddress(id: string): Promise<string | null> {
+  if (!(await vmRunning(id))) return null;
+  const l = liveOf(id);
   l.ip ??= await tart.ipOf(id, 10).catch(() => null);
-  return l.ip ? { host: l.ip, port: SCREEN_PORT, username: GUEST_USER, password: GUEST_PASSWORD } : null;
+  return l.ip;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1217,7 +1234,7 @@ export async function openVmTerminal(id: string): Promise<void> {
   if (!l.ip) throw conflict("The VM has no IP address yet — try again in a moment");
   if (!requireRow(id).provisioned_at) await provision(id);
   touch(id);
-  const key = join(tart.vmRoot(), "ssh", "id_ed25519");
+  const key = sshKeyPath();
   const script = join(tart.vmRoot(), "ssh", `${id}.command`);
   writeFileSync(
     script,

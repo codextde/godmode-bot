@@ -13,6 +13,8 @@
  *              with a JSON summary; "no computer server" when the run has none
  *   CALL_VM     call the `vm` MCP server from --mcp-config (initialize, tools/list, shell, write_file, edit_file, read_file)
  *              and answer "VM {json}"; "no vm server" when the run has none
+ *   CALL_GUEST  start the stdio `browser` and `cua` MCP servers from --mcp-config like Claude Code does, send each an
+ *              initialize line and answer "GUEST {json}" with the server names and each server's command and reply
  *   CRASH       print to stderr and exit 3 without a result
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
@@ -367,6 +369,46 @@ if (slash?.[1] === "clear") {
     textTurn(text);
     result(text);
   }
+} else if (prompt.includes("CALL_GUEST")) {
+  out(init);
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
+  };
+  const talk = async (name: string) => {
+    const server = cfg.mcpServers[name];
+    if (!server?.command) return null;
+    const proc = Bun.spawn([server.command, ...(server.args ?? [])], {
+      env: { ...process.env, ...server.env },
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    proc.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })}\n`);
+    await proc.stdin.flush();
+    const reader = proc.stdout.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    const deadline = Date.now() + 30_000;
+    while (!buf.includes("\n") && Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+    }
+    await proc.stdin.end();
+    const exitCode = await Promise.race([proc.exited, pause(10_000).then(() => null)]);
+    const stderr = await new Response(proc.stderr).text();
+    let reply: unknown = null;
+    try {
+      reply = JSON.parse(buf.split("\n")[0]!);
+    } catch {
+      reply = { raw: buf, stderr };
+    }
+    return { command: server.command, args: server.args ?? [], reply, exitCode };
+  };
+  const summary = { servers: Object.keys(cfg.mcpServers), browser: await talk("browser"), cua: await talk("cua") };
+  const text = `GUEST ${JSON.stringify(summary)}`;
+  textTurn(text);
+  result(text);
 } else if (prompt.includes("USE_TOOL")) {
   await replay("stream-tooluse.jsonl");
 } else {
