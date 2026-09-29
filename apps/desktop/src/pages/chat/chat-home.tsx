@@ -25,7 +25,7 @@ import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useConversations, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useConversations, useScopeWorkspace, useWorkspaces } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useLive, type LiveRun } from "@/stores/live";
@@ -86,6 +86,7 @@ export default function ChatHome() {
   /** Browser profile for the new chat; null = the agent's. */
   const [browserProfileId, setBrowserProfileId] = useState<string | null>(null);
   const { data: workspaces = [] } = useWorkspaces();
+  const scopeWorkspaceId = useScopeWorkspace()?.id ?? null;
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
   const selected =
@@ -171,7 +172,7 @@ export default function ChatHome() {
                     agentName={selected?.name}
                     onChange={setFolder}
                   />
-                  <BrowserProfileChip agent={selected} value={browserProfileId} onChange={setBrowserProfileId} />
+                  <BrowserProfileChip agent={selected} value={browserProfileId} workspaceId={scopeWorkspaceId} onChange={setBrowserProfileId} />
                   <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />
                   <VmChip
                     value={vmId}
@@ -197,6 +198,7 @@ export default function ChatHome() {
                 computerTarget: shared ?? undefined,
                 vmId: vmId ?? undefined,
                 browserProfileId: browserProfileId ?? undefined,
+                workspaceId: scopeWorkspaceId ?? undefined,
                 instructions: instructions || undefined,
               })
             }
@@ -240,6 +242,7 @@ export default function ChatHome() {
             computerTarget: shared ?? undefined,
             vmId: vmId ?? undefined,
             browserProfileId: browserProfileId ?? undefined,
+            workspaceId: scopeWorkspaceId ?? undefined,
             instructions: instructions || undefined,
             ...choice,
           });

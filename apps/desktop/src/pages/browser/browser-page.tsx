@@ -9,8 +9,10 @@ import { LiveView } from "@/components/browser/live-view";
 import { ImportSessionsCard } from "@/components/browser/import-sessions";
 import { ProfileUseCard } from "@/components/browser/profile-use-card";
 import { useProfileActions } from "@/components/browser/use-profile-actions";
+import { defaultProfileFor } from "@/components/chat/browser-panel";
 import { isVaultLocked } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
+import { useScopeWorkspace } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -21,19 +23,53 @@ export default function BrowserPage() {
 
   const profilesQuery = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
   const profiles = profilesQuery.data ?? [];
+  const workspace = useScopeWorkspace();
+  const defaultProfile = defaultProfileFor(profiles, workspace?.id);
+  const ordered = defaultProfile ? [defaultProfile, ...profiles.filter((p) => p.id !== defaultProfile.id)] : profiles;
 
   const requested = params.get("profile");
-  const selected = profiles.find((p) => p.id === requested) ?? profiles.find((p) => p.isDefault) ?? profiles[0] ?? null;
+  const selected = profiles.find((p) => p.id === requested) ?? defaultProfile ?? profiles[0] ?? null;
+  // Chats browse in parallel, each in its own tab: show the one picked (or the one used last).
+  const requestedChat = params.get("chat");
+  const chats = selected?.running ? selected.chats : [];
+  const chat =
+    chats.find((c) => c.conversationId === requestedChat) ??
+    chats.reduce<(typeof chats)[number] | null>((latest, c) => (!latest || c.lastUsedAt > latest.lastUsedAt ? c : latest), null);
 
   const select = (id: string) =>
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.set("profile", id);
+        next.delete("chat");
         return next;
       },
       { replace: true },
     );
+
+  const selectChat = (conversationId: string) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("chat", conversationId);
+        return next;
+      },
+      { replace: true },
+    );
+
+  // Pin the chat shown, so the view doesn't hop to whichever chat was just busy.
+  const shownChat = chat?.conversationId ?? null;
+  useEffect(() => {
+    if (!shownChat || requestedChat === shownChat) return;
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("chat", shownChat);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [shownChat, requestedChat, setParams]);
 
   // Drop a stale ?profile= (e.g. after deletion).
   useEffect(() => {
@@ -90,16 +126,30 @@ export default function BrowserPage() {
           <div className="grid grid-cols-1 gap-6 @5xl:grid-cols-[300px_minmax(0,1fr)]">
             <aside className="space-y-3">
               <h2 className="eyebrow px-1">Profiles</h2>
-              <ProfileList profiles={profiles} isLoading={profilesQuery.isLoading} selectedId={selected?.id ?? null} onSelect={select} actions={actions} />
+              <ProfileList
+                profiles={ordered}
+                defaultId={defaultProfile?.id ?? null}
+                workspace={workspace}
+                isLoading={profilesQuery.isLoading}
+                selectedId={selected?.id ?? null}
+                onSelect={select}
+                actions={actions}
+              />
             </aside>
             <div className="min-w-0 space-y-6">
               {selected ? (
-                <LiveView profile={selected} onLaunch={() => actions.launch.mutate(selected)} launching={launching} />
+                <LiveView
+                  profile={selected}
+                  conversationId={chat?.conversationId ?? null}
+                  onConversationChange={selectChat}
+                  onLaunch={() => actions.launch.mutate(selected)}
+                  launching={launching}
+                />
               ) : (
                 <Skeleton className="aspect-[16/10] w-full rounded-xl" />
               )}
               <div className="grid grid-cols-1 gap-6 @7xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-                <ImportSessionsCard profiles={profiles} targetId={selected?.id ?? null} onTargetChange={select} />
+                <ImportSessionsCard profiles={ordered} defaultId={defaultProfile?.id ?? null} targetId={selected?.id ?? null} onTargetChange={select} />
                 <ProfileUseCard />
               </div>
             </div>

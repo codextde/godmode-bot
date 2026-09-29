@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { BrowserProfile } from "@godmode/shared";
+import type { BrowserProfile, Workspace } from "@godmode/shared";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { toastApiError } from "@/components/vault/vault-utils";
@@ -29,10 +29,18 @@ export function useProfileActions() {
   });
 
   const setDefault = useMutation({
-    mutationFn: (p: BrowserProfile) => api.browser.updateProfile(p.id, { isDefault: true }),
-    onSuccess: (_res, p) => {
-      toast.success(`${p.name} is now the default profile`);
+    mutationFn: async ({ profile, workspace }: { profile: BrowserProfile; workspace: Workspace | null }) => {
+      if (workspace) await api.workspaces.update(workspace.id, { browserProfileId: !profile.workspaceId && profile.isDefault ? null : profile.id });
+      else await api.browser.updateProfile(profile.id, { isDefault: true });
+    },
+    onSuccess: (_res, { profile, workspace }) => {
+      if (workspace)
+        toast.success(`${profile.name} is now the default in ${workspace.name}`, {
+          description: profile.workspaceId ? undefined : profile.isDefault ? `${workspace.name} follows the global default again.` : `Moved from Global into ${workspace.name}.`,
+        });
+      else toast.success(`${profile.name} is now the default profile`);
       void invalidate();
+      void qc.invalidateQueries({ queryKey: qk.workspaces });
     },
     onError: (e) => toastApiError(e, "Could not change the default profile", qc),
   });

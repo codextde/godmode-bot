@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
 import { BROWSER_MCP_NAME, COMPUTER_MCP_NAME, CUA_MCP_NAME, GODMODE_MCP_NAME, VM_MCP_NAME } from "@godmode/shared";
-import { localCoreUrl } from "../config";
+import { config, isLoopbackHost } from "../config";
 import { browserMcpServer } from "../browser/manager";
 import { mcpServersForAgent } from "../integrations/mcpServers";
 import { guestBrowserServer, guestCuaServer } from "../vm/guest";
@@ -20,9 +20,13 @@ import type { McpConfigFile, McpServerJson } from "../types";
 
 const log = logger("runner");
 
-/** URL Claude uses to reach the gateway. */
+/** URL Claude uses to reach the gateway. Wildcard/loopback binds are reached over 127.0.0.1. */
 export function gatewayUrl(): string {
-  return `${localCoreUrl()}/mcp`;
+  const cfg = config();
+  const host = cfg.host;
+  const wildcard = host === "0.0.0.0" || host === "::" || host === "[::]" || host === "";
+  const reachable = wildcard || isLoopbackHost(host) ? "127.0.0.1" : host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+  return `http://${reachable}:${cfg.port}/mcp`;
 }
 
 function errorText(err: unknown): string {
@@ -39,7 +43,15 @@ export interface McpVm {
 export async function buildMcpConfig(
   agent: Agent,
   runToken: string,
-  opts: { onNotice?: (text: string) => void; computer?: boolean; vm?: McpVm | null; gatewayOnly?: boolean; browserProfileId?: string | null } = {},
+  opts: {
+    onNotice?: (text: string) => void;
+    computer?: boolean;
+    vm?: McpVm | null;
+    gatewayOnly?: boolean;
+    browserProfileId?: string | null;
+    /** The run and its chat: browser tools only reach that chat's tabs. */
+    run?: { runId: string; conversationId: string };
+  } = {},
 ): Promise<McpConfigFile> {
   const servers: Record<string, McpServerJson> = {};
   // Dreams get the Godmode gateway only: no integrations, browser or computer.
@@ -67,9 +79,9 @@ export async function buildMcpConfig(
   if (opts.vm) {
     // Work in a VM stays in the VM: its browser runs there, and no browser starts on this computer.
     if (opts.vm.browser) servers[BROWSER_MCP_NAME] = guestBrowserServer(opts.vm.id, opts.vm.browser);
-  } else if (agent.browser.enabled && getSettings().browser.enabled) {
+  } else if (agent.browser.enabled && getSettings().browser.enabled && opts.run) {
     try {
-      const browser = await browserMcpServer(agent, opts.browserProfileId);
+      const browser = await browserMcpServer(agent, opts.run, opts.browserProfileId);
       if (browser) servers[BROWSER_MCP_NAME] = browser;
     } catch (err) {
       log.warn(`browser tools unavailable for agent ${agent.id}`, err);

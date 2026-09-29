@@ -20,7 +20,6 @@ import { websocketHandler, type WsData } from "../src/server/ws";
 import { startLiveView, stopLiveView, dispatchInput } from "../src/browser/screencast";
 import * as manager from "../src/browser/manager";
 import { loginFillScope, originRefusal } from "../src/browser/fill";
-import { createApp } from "../src/server/app";
 import type { McpServerJson } from "../src/types";
 
 const chrome = findChrome();
@@ -73,7 +72,7 @@ function onDemandAgent(profileId: string): Agent {
 
 function browserUseCdpUrl(entry: McpServerJson | null): string {
   if (!entry || !("env" in entry)) throw new Error("expected a stdio server");
-  const config = JSON.parse(readFileSync(join(entry.env!.BROWSER_USE_CONFIG_DIR!, "config.json"), "utf8"));
+  const config = JSON.parse(readFileSync(entry.env!.BROWSER_USE_CONFIG_PATH!, "utf8"));
   return (Object.values(config.browser_profile)[0] as { cdp_url: string }).cdp_url;
 }
 
@@ -511,44 +510,39 @@ suite("managed Chromium (CDP integration)", () => {
   test("agent browser tools start the browser only when browser-use first connects", async () => {
     await manager.stopBrowser(profileId);
     updateSettings({ browser: { browserUseCommand: "browser-use --mcp" } });
+    const run = { runId: "run_on_demand", conversationId: "cnv_on_demand" };
     try {
-      const cdpUrl = browserUseCdpUrl(await manager.browserMcpServer(onDemandAgent(profileId)));
+      const cdpUrl = browserUseCdpUrl(await manager.browserMcpServer(onDemandAgent(profileId), run, profileId));
       expect(manager.getProfile(profileId).running).toBe(false);
-      expect(cdpUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/cdp\/[\w-]{20,}$/);
-      expect(browserUseCdpUrl(await manager.browserMcpServer(onDemandAgent(profileId)))).toBe(cdpUrl);
 
-      const app = createApp();
-      const discover = async () => {
-        const res = await app.request(`${new URL(cdpUrl).pathname}/json/version`);
-        expect(res.status).toBe(200);
-        return ((await res.json()) as { webSocketDebuggerUrl: string }).webSocketDebuggerUrl;
-      };
-      const wsUrl = await discover();
+      const res = await fetch(`${cdpUrl}/json/version`);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { webSocketDebuggerUrl: string }).webSocketDebuggerUrl).toStartWith(cdpUrl.replace("http:", "ws:"));
       const rb = getRunning(profileId)!;
       expect(rb.headless).toBe(true);
-      expect(wsUrl).toBe(rb.wsUrl);
-      expect(await discover()).toBe(rb.wsUrl);
-      expect((await app.request("/cdp/not-a-ticket/json/version")).status).toBe(404);
+      expect(rb.tabs.currentPage(run.conversationId)).toBeTruthy();
     } finally {
+      manager.releaseChatBrowser(run.runId);
       updateSettings({ browser: { browserUseCommand: "" } });
     }
   }, 60_000);
 
-  test("an on-demand launch that fails is reported to the runs driving the profile", async () => {
+  test("a browser that can't start on demand is reported to the run", async () => {
     await manager.stopBrowser(profileId);
     updateSettings({ browser: { browserUseCommand: "browser-use --mcp" } });
     const squatter = await launchChrome({ executable: chrome!.path, userDataDir: manager.getProfile(profileId).userDataDir, headless: true });
+    const run = { runId: "run_blocked", conversationId: "cnv_blocked" };
     const problems: string[] = [];
-    const off = manager.onLaunchProblem((id, text) => void (id === profileId && problems.push(text)));
+    const off = manager.onLaunchProblem((runId, text) => void (runId === run.runId && problems.push(text)));
     try {
-      const cdpUrl = browserUseCdpUrl(await manager.browserMcpServer(onDemandAgent(profileId)));
-      const res = await createApp().request(`${new URL(cdpUrl).pathname}/json/version`);
-      expect(res.status).toBe(500);
+      const cdpUrl = browserUseCdpUrl(await manager.browserMcpServer(onDemandAgent(profileId), run, profileId));
+      expect((await fetch(`${cdpUrl}/json/version`)).status).toBe(503);
       expect(problems).toHaveLength(1);
       expect(problems[0]).toContain("won't work in this run");
       expect(problems[0]).toContain("already in use");
     } finally {
       off();
+      manager.releaseChatBrowser(run.runId);
       squatter.kill("SIGKILL");
       await Promise.race([squatter.exited, Bun.sleep(5000)]);
       updateSettings({ browser: { browserUseCommand: "" } });
