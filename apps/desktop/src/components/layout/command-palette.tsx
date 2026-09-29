@@ -11,6 +11,7 @@ import {
   Layers,
   Lock,
   MessageSquarePlus,
+  MonitorUp,
   Moon,
   Plug,
   Plus,
@@ -115,6 +116,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => go("/browser")}>
             <Globe /> Browser
+          </CommandItem>
+          <CommandItem onSelect={() => go("/computer")}>
+            <MonitorUp /> Computer
           </CommandItem>
           <CommandItem onSelect={() => go("/workspaces")}>
             <Layers /> Workspaces

@@ -9,6 +9,8 @@
  *   SLEEP       emit init, then hang (cancel / timeout tests)
  *   LOGIN_FAIL  answer with a login-failure sentence
  *   CALL_MCP    call the Godmode MCP gateway from --mcp-config (initialize, tools/list, report_missing_login)
+ *   CALL_COMPUTER  call the `computer` MCP server from --mcp-config (initialize, tools/list, computer_info) and answer
+ *              with a JSON summary; "no computer server" when the run has none
  *   CRASH       print to stderr and exit 3 without a result
  *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected)
  *
@@ -232,6 +234,35 @@ if (slash?.[1] === "clear") {
   const text = `MCP ${JSON.stringify(summary)}. I couldn't log in to example.com.`;
   textTurn(text);
   result(text);
+} else if (prompt.includes("CALL_COMPUTER")) {
+  out(init);
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const server = cfg.mcpServers.computer;
+  if (!server) {
+    textTurn("no computer server");
+    result("no computer server");
+  } else {
+    const rpc = async (body: unknown) => {
+      const res = await fetch(server.url, { method: "POST", headers: { ...server.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+      const raw = await res.text();
+      return raw ? JSON.parse(raw) : null;
+    };
+    const initRes = await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+    const list = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+    const call = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "computer_info", arguments: {} } });
+    const summary = {
+      server: initRes.result.serverInfo.name,
+      url: server.url,
+      sameToken: server.headers.Authorization === cfg.mcpServers.godmode!.headers.Authorization,
+      tools: (list.result.tools as { name: string }[]).map((t) => t.name),
+      info: call.result.content[0].text as string,
+    };
+    const text = `COMPUTER ${JSON.stringify(summary)}`;
+    textTurn(text);
+    result(text);
+  }
 } else if (prompt.includes("USE_TOOL")) {
   await replay("stream-tooluse.jsonl");
 } else {

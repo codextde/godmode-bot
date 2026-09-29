@@ -15,6 +15,7 @@ import { logger } from "../log";
 import { childEnv, which } from "../util";
 import { findChrome } from "../browser/chrome";
 import { BROWSER_USE_SPEC, BROWSER_USE_VERSION } from "../browser/browserUse";
+import { CUA_DRIVER_SPEC, CUA_DRIVER_VERSION, cuaDriverInstalled, installCuaDriver } from "../computer/cua";
 
 const log = logger("doctor");
 
@@ -350,6 +351,17 @@ function checkClaudeMem(): Check {
   };
 }
 
+async function checkCuaDriver(): Promise<Check> {
+  const base = { id: "cua-driver" as const, name: "Cua Driver (computer use)" };
+  const s = settingsOrNull()?.computer;
+  if (s && !s.useCuaDriver) return { ...base, ok: false, version: null, path: null, detail: "Turned off — optional, controls single app windows in the background" };
+  const found = await cuaDriverInstalled();
+  if (found.installed) {
+    return { ...base, ok: true, version: found.source === "uv" ? CUA_DRIVER_VERSION : null, path: found.path, detail: found.source === "uv" ? `${CUA_DRIVER_SPEC} (via uv)` : `Using ${found.source} cua-driver` };
+  }
+  return { ...base, ok: false, version: null, path: null, detail: "Not installed — optional, lets agents control a single app window in the background" };
+}
+
 function installHint(id: DependencyId): string {
   const win = isWin();
   switch (id) {
@@ -369,6 +381,8 @@ function installHint(id: DependencyId): string {
       return process.platform === "darwin" ? "Run: xcode-select --install" : win ? "Install Git for Windows from https://git-scm.com" : "Install git with your package manager";
     case "claude-mem":
       return `Optional. Godmode downloads claude-mem ${CLAUDE_MEM_VERSION} from npm (needs Node.js 20+); then pick it in Settings → Memory.`;
+    case "cua-driver":
+      return `Optional. Install uv first, then: uvx --from ${CUA_DRIVER_SPEC} cua-driver --version (or the official installer from cua.ai/driver).`;
   }
 }
 
@@ -396,7 +410,16 @@ async function buildReport(refresh: boolean): Promise<DoctorReport> {
   const browserEnabled = settingsOrNull()?.browser.enabled ?? true;
   const claudePath = resolveClaudeBinary();
   const uvx = resolveUvx();
-  const checks = await Promise.all([checkClaude(), checkClaudeAuth(claudePath), checkUv(), checkBrowserUse(uvx, refresh), checkChrome(), checkGit(), checkClaudeMem()]);
+  const checks = await Promise.all([
+    checkClaude(),
+    checkClaudeAuth(claudePath),
+    checkUv(),
+    checkBrowserUse(uvx, refresh),
+    checkChrome(),
+    checkGit(),
+    checkClaudeMem(),
+    checkCuaDriver(),
+  ]);
   const required: Record<DependencyId, boolean> = {
     claude: true,
     "claude-auth": true,
@@ -405,6 +428,7 @@ async function buildReport(refresh: boolean): Promise<DoctorReport> {
     chrome: browserEnabled,
     git: false,
     "claude-mem": settingsOrNull()?.memory.backend === "claude-mem",
+    "cua-driver": false,
   };
   const installable: Record<DependencyId, boolean> = {
     claude: true,
@@ -414,6 +438,7 @@ async function buildReport(refresh: boolean): Promise<DoctorReport> {
     chrome: !!uvx,
     git: false,
     "claude-mem": claudeMemStatus().nodeAvailable,
+    "cua-driver": !!uvx,
   };
   const dependencies: DependencyStatus[] = checks.map((c) => ({ ...c, required: required[c.id], installable: installable[c.id], installHint: installHint(c.id) }));
   const report: DoctorReport = {
@@ -455,15 +480,21 @@ function installCommand(id: DependencyId): string[] | { error: string } {
     case "git":
       return { error: installHint("git") };
     case "claude-mem":
+    case "cua-driver":
       return { error: "handled separately" };
   }
 }
 
 export async function installDependency(id: DependencyId): Promise<{ ok: boolean; output: string }> {
-  const valid: DependencyId[] = ["claude", "claude-auth", "uv", "browser-use", "chrome", "git", "claude-mem"];
+  const valid: DependencyId[] = ["claude", "claude-auth", "uv", "browser-use", "chrome", "git", "claude-mem", "cua-driver"];
   if (!valid.includes(id)) return { ok: false, output: `Unknown dependency: ${String(id)}` };
   if (id === "claude-mem") {
     const result = await installClaudeMem();
+    cachedReport = null;
+    return result;
+  }
+  if (id === "cua-driver") {
+    const result = await installCuaDriver();
     cachedReport = null;
     return result;
   }

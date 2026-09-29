@@ -38,6 +38,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   settings: [qk.settings, qk.bootstrap],
   runs: [qk.runs],
   models: [qk.models],
+  computer: [qk.computer],
 };
 
 export function startRealtime(queryClient: QueryClient) {
@@ -68,6 +69,7 @@ async function connect(queryClient: QueryClient) {
     while (pendingSends.length) ws.send(JSON.stringify(pendingSends.shift()));
     // Resubscribe live views
     for (const [profileId, viewers] of browserViewers) ws.send(JSON.stringify(subscribeEvent(profileId, viewers)));
+    for (const view of computerViewers.keys()) ws.send(JSON.stringify({ type: "computer.subscribe", view } satisfies ClientEvent));
     if (pingTimer) clearInterval(pingTimer);
     pingTimer = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: "ping" })), 25_000);
     // Refresh everything after a reconnect — we may have missed events.
@@ -173,10 +175,46 @@ function handle(qc: QueryClient, event: ServerEvent) {
         at: Date.now(),
       });
       break;
+    case "computer.frame":
+      live.computerFrame(event.view, {
+        data: event.data,
+        mime: event.mime,
+        width: event.width,
+        height: event.height,
+        label: event.label,
+        ...(event.error ? { error: event.error } : {}),
+        at: Date.now(),
+      });
+      break;
+    case "computer.action":
+      live.computerAction(event.view, { runId: event.runId, action: event.action, x: event.x, y: event.y, at: Date.now() });
+      break;
     case "entity.changed":
       for (const key of ENTITY_KEYS[event.entity] ?? []) qc.invalidateQueries({ queryKey: key });
       break;
   }
+}
+
+/** Computer live view subscribers per view in this UI; the core only hears about the first and the last. */
+const computerViewers = new Map<string, number>();
+
+/** Subscribe to a computer live view ("display:1", "window:<pid>:<id>", "tab:<profile>:<target>"). */
+export function subscribeComputer(view: string): () => void {
+  const count = computerViewers.get(view) ?? 0;
+  computerViewers.set(view, count + 1);
+  if (count === 0) sendClientEvent({ type: "computer.subscribe", view });
+  let active = true;
+  return () => {
+    if (!active) return;
+    active = false;
+    const left = (computerViewers.get(view) ?? 1) - 1;
+    if (left > 0) computerViewers.set(view, left);
+    else {
+      computerViewers.delete(view);
+      sendClientEvent({ type: "computer.unsubscribe", view });
+      useLive.getState().dropComputerView(view);
+    }
+  };
 }
 
 interface BrowserViewers {

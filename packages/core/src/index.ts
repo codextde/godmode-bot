@@ -22,6 +22,7 @@ import { ensureDefaultAgent } from "./agents/service";
 import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
+import { shutdownComputer } from "./computer/service";
 import { runDoctor } from "./services/doctor";
 import { getModelCatalog } from "./runner/models";
 import { newId } from "./util";
@@ -181,6 +182,7 @@ async function serve(values: Record<string, unknown>) {
     stopScheduler();
     await shutdownRunner();
     await shutdownBrowsers();
+    await shutdownComputer();
     server.stop(true);
     closeDb();
     process.exit(0);

@@ -93,6 +93,7 @@ const SAFE_ID = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
 const EXECUTABLE_SETTINGS: Record<string, string[]> = {
   runner: ["extraArgs", "claudePath"],
   browser: ["chromePath", "browserUseCommand"],
+  computer: ["cuaDriverCommand"],
   voice: ["openaiBaseUrl"],
 };
 
@@ -387,6 +388,23 @@ function sanitizeDump(dump: DbDump): string[] {
     clearedFolders++;
   }
   if (clearedFolders) warnings.push(`Cleared ${clearedFolders} working folder(s) that don't exist on this machine or aren't allowed.`);
+
+  // Computer use: shared windows/screens belong to the machine they were shared on, and unattended control of this
+  // computer is something the human turns on here, not something a backup grants.
+  for (const row of rowsOf("conversations")) if (row.computer_target != null) row.computer_target = null;
+  let computerAgents = 0;
+  for (const row of rowsOf("agents")) {
+    let enabled = false;
+    try {
+      enabled = typeof row.computer === "string" && (JSON.parse(row.computer) as { enabled?: unknown })?.enabled === true;
+    } catch {
+      /* malformed → reset below */
+    }
+    if (typeof row.computer === "string" && !enabled) continue;
+    if (enabled) computerAgents++;
+    row.computer = "{}";
+  }
+  if (computerAgents) warnings.push(`Turned off computer use for ${computerAgents} agent(s) — turn it back on in their settings if you trust them with this computer.`);
 
   const profiles = rowsOf("browser_profiles");
   const safeProfiles = profiles.filter((row) => typeof row.id === "string" && SAFE_ID.test(row.id));

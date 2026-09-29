@@ -5,7 +5,8 @@
  */
 import { arch, platform } from "node:os";
 import { join } from "node:path";
-import type { Agent, Settings } from "@godmode/shared";
+import type { Agent, ComputerTarget, Settings } from "@godmode/shared";
+import { computerTargetLabel } from "@godmode/shared";
 
 export interface PromptContext {
   agent: Agent;
@@ -14,6 +15,8 @@ export interface PromptContext {
   peers: Agent[];
   /** Browser MCP tools are attached to this run. */
   browserAvailable: boolean;
+  /** Screen, window or browser tab this run may see and control (computer MCP tools). */
+  computer?: ComputerTarget | null;
   /** The message was dictated — answer in speakable prose. */
   voice?: boolean;
   /** Folder attached to the chat (Claude's cwd). null = the agent's own repository. */
@@ -89,6 +92,8 @@ Use the \`browser\` MCP tools for anything on the web (navigate, click, type, re
 No browser tools are attached to this run. If a task needs a website, say so in your final summary instead of guessing.`);
   }
 
+  if (ctx.computer) out.push(computerSection(ctx.computer, human, perms.secretAccess === "reveal"));
+
   out.push(`### Logging in to websites
 Never ask ${human} for a password and never type a password or 2FA code yourself — Godmode fills secrets directly into the page so you never see them.
 1. Open the site's login page with the browser tools.
@@ -142,6 +147,24 @@ End with a concise markdown summary: what you did, the results (numbers, finding
   if (extra) out.push(`## Additional instructions\n${extra}`);
 
   return out.join("\n\n");
+}
+
+function computerSection(target: ComputerTarget, human: string, canReveal: boolean): string {
+  const what = computerTargetLabel(target);
+  const scope =
+    target.kind === "window"
+      ? `${human} shared one app window with you: **${what}**. You control it in the background — your clicks and keystrokes go only to this window, ${human} keeps using their mouse and keyboard, and every other app is off limits. Prefer \`computer_ui\` elements (accessibility) for buttons, menus and fields: they work even when the window is covered. Keyboard shortcuts with cmd/ctrl may not reach a background window; use menus or elements instead.`
+      : target.kind === "tab"
+        ? `${human} shared one browser tab with you: **${what}**. Control it with the \`computer\` tools (screenshot, click, type) in the background; the \`browser\` tools may still be used for other pages.`
+        : target.kind === "display"
+          ? `${human} shared one display with you: **${what}**. You use the real mouse and keyboard — ${human} sees everything you do. Stay on this display.`
+          : `${human} shared their entire desktop with you (every display). You use the real mouse and keyboard — ${human} sees everything you do. Check \`computer_info\` for the displays and pick one with \`display\`.`;
+  return `### Computer
+${scope}
+- Use the \`computer\` MCP tools: start with \`{action: "screenshot"}\`; coordinates are pixels of your latest screenshot and every action returns a fresh screenshot. Zoom in on small text instead of guessing.
+- Work step by step and verify each step on the screenshot. If something unexpected appears (a dialog, a permission prompt, a payment or delete confirmation), stop and ask ${human}.
+- Never type passwords or 2FA codes into the computer${canReveal ? " unless the task requires it and you got them from the vault" : ""} — for websites use the vault tools in the browser; for apps, ask ${human} to log in.
+- If the shared window was closed or you can't reach what you need, say so in your final answer instead of working around it.`;
 }
 
 /**

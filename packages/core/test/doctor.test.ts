@@ -31,7 +31,7 @@ describe("doctor", () => {
     expect(report.platform).toBe(process.platform);
     expect(report.arch).toBe(process.arch);
     const ids = report.dependencies.map((d) => d.id).sort();
-    expect(ids).toEqual(["browser-use", "chrome", "claude", "claude-auth", "claude-mem", "git", "uv"]);
+    expect(ids).toEqual(["browser-use", "chrome", "claude", "claude-auth", "claude-mem", "cua-driver", "git", "uv"]);
     for (const d of report.dependencies) {
       expect(typeof d.name).toBe("string");
       expect(typeof d.detail).toBe("string");

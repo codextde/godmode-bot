@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Globe,
   KeyRound,
+  MonitorUp,
   Plug,
   Plus,
   ShieldCheck,
@@ -57,6 +58,10 @@ export interface AgentFormValues {
   browserEnabled: boolean;
   browserProfileId: string | null;
   headless: boolean | null;
+  /** Unattended computer use (no share in the chat needed). */
+  computerEnabled: boolean;
+  /** null = the entire desktop, else a display id. */
+  computerDisplayId: string | null;
   inheritMcp: boolean;
   mcpServerIds: string[];
   subagents: SubagentDefinition[];
@@ -85,6 +90,8 @@ export function agentToValues(
     browserEnabled: source?.browser?.enabled ?? true,
     browserProfileId: source?.browser?.profileId ?? null,
     headless: source?.browser?.headless ?? null,
+    computerEnabled: source?.computer?.enabled ?? false,
+    computerDisplayId: source?.computer?.target?.kind === "display" ? source.computer.target.displayId : null,
     inheritMcp: source?.inheritMcp ?? true,
     mcpServerIds: source?.mcpServerIds ?? [],
     subagents: source?.subagents ?? [],
@@ -111,6 +118,7 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
       maxBudgetUsd: budget != null && Number.isFinite(budget) && budget > 0 ? budget : null,
     },
     browser: { enabled: v.browserEnabled, profileId: v.browserProfileId, headless: v.headless },
+    computer: { enabled: v.computerEnabled, target: v.computerDisplayId ? { kind: "display", displayId: v.computerDisplayId } : null },
     inheritMcp: v.inheritMcp,
     mcpServerIds: v.mcpServerIds,
     subagents: v.subagents
@@ -180,6 +188,7 @@ const SECTIONS = [
   { id: "folder", label: "Folder" },
   { id: "permissions", label: "Permissions" },
   { id: "browser", label: "Browser" },
+  { id: "computer", label: "Computer" },
   { id: "tools", label: "Tools" },
   { id: "subagents", label: "Subagents" },
 ];
@@ -544,6 +553,24 @@ export function AgentForm({
             </div>
           </FormSection>
 
+          <FormSection
+            id="computer"
+            title="Computer"
+            description="In chats you share a window or screen yourself. Here you can let this agent use the computer on its own — for routines and delegated tasks."
+          >
+            <div className="space-y-5">
+              <ToggleRow
+                id="agent-computer"
+                icon={<MonitorUp className="size-4" />}
+                title="Use the computer without a share"
+                description="Controls the real mouse and keyboard when it runs on its own. Only turn this on for agents you trust with your desktop."
+                checked={values.computerEnabled}
+                onChange={(v) => set("computerEnabled", v)}
+              />
+              <ComputerDisplayField value={values.computerDisplayId} onChange={(v) => set("computerDisplayId", v)} disabled={!values.computerEnabled} />
+            </div>
+          </FormSection>
+
           <FormSection id="tools" title="Tools & integrations" description="MCP servers and connected apps this agent can use.">
             <div className="space-y-5">
               <ToggleRow
@@ -596,6 +623,7 @@ export function AgentForm({
               <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
                 <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{findModel(catalog.models, values.model)?.label ?? (values.model || "Default model")}</span>
                 {values.browserEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">Browser</span>}
+                {values.computerEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">Computer</span>}
                 {values.workingDirectory && (
                   <span className="flex max-w-full items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
                     <FolderOpen className="size-3 shrink-0" />
@@ -828,6 +856,32 @@ function DelegateField({ agentId, value, onChange }: { agentId?: string; value: 
         placeholder="Any agent"
         emptyText="No other agents yet."
       />
+    </div>
+  );
+}
+
+function ComputerDisplayField({ value, onChange, disabled }: { value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
+  const { data } = useQuery({ queryKey: qk.computerSources, queryFn: api.computer.sources, enabled: !disabled, staleTime: 30_000, retry: false });
+  const displays = data?.displays ?? [];
+  const known = value === null || displays.some((d) => d.id === value);
+  return (
+    <div className={cn("space-y-1.5 sm:max-w-sm", disabled && "pointer-events-none opacity-50")}>
+      <Label htmlFor="agent-computer-display">Screen</Label>
+      <Select value={value ?? "desktop"} onValueChange={(v) => onChange(v === "desktop" ? null : v)} disabled={disabled}>
+        <SelectTrigger id="agent-computer-display" className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="desktop">Entire desktop{displays.length > 1 ? ` (${displays.length} displays)` : ""}</SelectItem>
+          {displays.map((d) => (
+            <SelectItem key={d.id} value={d.id}>
+              {d.name}
+              {d.primary ? " (primary)" : ""}
+            </SelectItem>
+          ))}
+          {!known && value && <SelectItem value={value}>Display {value} (not connected)</SelectItem>}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

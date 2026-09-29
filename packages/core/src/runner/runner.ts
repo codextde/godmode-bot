@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { FileSink, Subprocess } from "bun";
-import type { Agent, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
+import type { Agent, ComputerTarget, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
 import { BROWSER_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
@@ -43,6 +43,8 @@ import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor } from "./models";
 import { buildSystemPrompt, resumeContextPrefix } from "./prompt";
+import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
+import { parseComputerTarget } from "../computer/targets";
 import { StreamAccumulator, detectLoginFailure, redactBlocks } from "./stream";
 
 const log = logger("runner");
@@ -207,6 +209,10 @@ interface Job {
   done: Promise<void> | null;
   /** Browser profile this run drives (undefined = not resolved yet, null = no browser). */
   browserProfileId?: string | null;
+  /** Screen, window or tab this run may control (undefined = not resolved yet, null = none). */
+  computerTarget?: ComputerTarget | null;
+  /** The target is the agent's own unattended access, not something shared in the chat. */
+  computerFromAgent?: boolean;
   /** `--model` value the run was started with. */
   model?: string;
   /** A slash command ran in a replacement session: keep the lost one so the next message still gets the recap. */
@@ -459,6 +465,14 @@ function pump() {
       blocked.add(job.conversationId);
       continue;
     }
+    // The desktop has one mouse and keyboard: runs controlling it take turns (a shared window or tab only locks itself).
+    // Re-read what is shared right before deciding, so the lock and the run use the same target.
+    job.computerTarget = undefined;
+    if (computerHolder(job)) {
+      emitActivity(job, `Waiting for the computer (in use by another run)`);
+      blocked.add(job.conversationId);
+      continue;
+    }
     queue.splice(queue.indexOf(runId), 1);
     job.status = "running";
     running++;
@@ -491,6 +505,47 @@ function isAncestor(candidate: Job, job: Job): boolean {
     parentId = jobs.get(parentId)?.parentRunId ?? null;
   }
   return false;
+}
+
+/**
+ * What the run may control: the screen, window or tab shared in its conversation, else — for agents allowed to use
+ * the computer on their own (routines, delegated work) — their configured target (default: the whole desktop).
+ */
+export function computerTargetOf(job: { agentId: string; conversationId: string; computerTarget?: ComputerTarget | null; computerFromAgent?: boolean }): ComputerTarget | null {
+  if (job.computerTarget !== undefined) return job.computerTarget;
+  let target: ComputerTarget | null = null;
+  let fromAgent = false;
+  try {
+    if (getSettings().computer.enabled) {
+      const conv = get<{ computer_target: string | null }>("SELECT computer_target FROM conversations WHERE id = ?", job.conversationId);
+      target = parseComputerTarget(parseJson<unknown>(conv?.computer_target, null));
+      if (!target) {
+        const agent = getAgent(job.agentId);
+        if (agent.computer.enabled) {
+          target = agent.computer.target ?? { kind: "desktop" };
+          fromAgent = true;
+        }
+      }
+    }
+  } catch {
+    target = null;
+  }
+  job.computerTarget = target;
+  job.computerFromAgent = fromAgent;
+  return target;
+}
+
+/** The running job controlling the same screen/window/tab as `job` (excluding its own ancestors), if any. */
+function computerHolder(job: Job): Job | null {
+  const target = computerTargetOf(job);
+  if (!target) return null;
+  const key = computerLockKey(target);
+  for (const other of jobs.values()) {
+    if (other === job || other.status !== "running") continue;
+    const t = computerTargetOf(other);
+    if (t && computerLockKey(t) === key && !isAncestor(other, job)) return other;
+  }
+  return null;
 }
 
 /** The running job currently holding `job`'s browser profile (excluding its own ancestors), if any. */
@@ -746,7 +801,14 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     workspaceId: agent.workspaceId,
     depth: job.depth,
   });
-  const mcp = await buildMcpConfig(agent, res.token, { onNotice: (text) => job.acc.addNotice("warning", text) });
+  // What the lock was decided on — unless the human stopped (or changed) sharing while the run was starting.
+  const decided = computerTargetOf(job);
+  job.computerTarget = undefined;
+  const fresh = computerTargetOf(job);
+  const computer = fresh && decided && computerLockKey(fresh) === computerLockKey(decided) ? fresh : null;
+  if (decided && !computer && fresh) job.acc.addNotice("info", "What you share changed while this message started — it applies from your next message.");
+  if (computer) attachComputer(job.runId, agent.id, job.conversationId, computer, job.computerFromAgent ? "agent" : "share");
+  const mcp = await buildMcpConfig(agent, res.token, { onNotice: (text) => job.acc.addNotice("warning", text), computer: !!computer });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
   if (job.acc.blocks.length) scheduleDelta(job);
@@ -765,6 +827,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     settings,
     peers,
     browserAvailable: "browser" in mcp.mcpServers,
+    computer,
     voice: job.voice,
     workingDirectory: folder,
   });
@@ -908,6 +971,7 @@ async function execute(job: Job): Promise<void> {
     if (res.timer) clearTimeout(res.timer);
     if (res.token) revokeRunToken(res.token);
     for (const f of res.files) removeMcpConfigFile(f);
+    await detachComputer(job.runId).catch(() => {});
   }
   // Always push the final streamed state (a throttled delta may still be pending).
   if (job.status === "running") safely("emit final delta", () => emitDelta(job));

@@ -25,6 +25,8 @@ import { audit } from "../services/audit";
 import { normalizeWorkingDirectory } from "../services/folders";
 import { onSettingsApplied } from "../services/runtime";
 import { getSettings } from "../services/settings";
+import { DEFAULT_AGENT_COMPUTER, normalizeAgentComputer } from "../computer/targets";
+import { detachAgentComputer } from "../computer/service";
 import { cancelRun, waitForRun } from "../runner/runner";
 import { reloadSchedules } from "../scheduler/scheduler";
 import { badRequest, newId, notFound, now, parseJson, slugify } from "../util";
@@ -56,6 +58,7 @@ interface AgentRow {
   status: string;
   permissions: string;
   browser: string;
+  computer: string;
   mcp_server_ids: string;
   inherit_mcp: number;
   subagents: string;
@@ -126,6 +129,7 @@ function toModel(r: AgentRow): Agent {
     status: enabled ? (r.status as AgentStatus) : "disabled",
     permissions: normalizePermissions({ ...BASE_PERMISSIONS, ...parseJson<Partial<AgentPermissions>>(r.permissions, {}) }),
     browser: normalizeBrowser({ ...DEFAULT_BROWSER, ...parseJson<Partial<AgentBrowserConfig>>(r.browser, {}) }),
+    computer: normalizeAgentComputer(parseJson<unknown>(r.computer, {})),
     mcpServerIds: existingMcpServerIds(stringList(parseJson<unknown>(r.mcp_server_ids, []))),
     inheritMcp: bool(r.inherit_mcp),
     subagents: normalizeSubagents(parseJson<unknown>(r.subagents, [])),
@@ -155,6 +159,7 @@ function toRow(a: Agent): Record<string, string | number | null> {
     status: a.status,
     permissions: json(a.permissions)!,
     browser: json(a.browser)!,
+    computer: json(a.computer)!,
     mcp_server_ids: json(a.mcpServerIds)!,
     inherit_mcp: int(a.inheritMcp)!,
     subagents: json(a.subagents)!,
@@ -463,6 +468,8 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     status: enabled ? "idle" : "disabled",
     permissions,
     browser,
+    // Human-only: unattended control of the human's computer.
+    computer: isAgentActor(actor) ? { ...DEFAULT_AGENT_COMPUTER } : normalizeAgentComputer({ ...DEFAULT_AGENT_COMPUTER, ...input.computer }),
     mcpServerIds: existingMcpServerIds(stringList(input.mcpServerIds ?? [])),
     inheritMcp: input.inheritMcp !== false,
     subagents: normalizeSubagents(input.subagents ?? []),
@@ -526,6 +533,11 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   if (patch.browser !== undefined) {
     next.browser = normalizeBrowser({ ...current.browser, ...patch.browser });
     if (next.browser.profileId !== current.browser.profileId) assertBrowserProfile(next.browser.profileId);
+  }
+  if (patch.computer !== undefined && !isAgentActor(actor)) {
+    next.computer = normalizeAgentComputer({ ...current.computer, ...patch.computer });
+    // Turning unattended access off (or pointing it elsewhere) applies to running runs too.
+    if (JSON.stringify(next.computer) !== JSON.stringify(current.computer)) void detachAgentComputer(current.id);
   }
   if (patch.mcpServerIds !== undefined) next.mcpServerIds = existingMcpServerIds(stringList(patch.mcpServerIds));
   if (patch.inheritMcp !== undefined) next.inheritMcp = patch.inheritMcp;

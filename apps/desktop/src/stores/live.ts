@@ -21,10 +21,34 @@ export interface BrowserFrame {
   at: number;
 }
 
+export interface ComputerFrame {
+  /** base64 ("" when `error` is set) */
+  data: string;
+  mime: string;
+  width: number;
+  height: number;
+  label: string;
+  error?: string;
+  at: number;
+}
+
+export interface ComputerAction {
+  runId: string;
+  action: string;
+  /** 0–1 within the frame */
+  x?: number;
+  y?: number;
+  at: number;
+}
+
 interface LiveState {
   connected: boolean;
   runs: Record<string, LiveRun>;
   frames: Record<string, BrowserFrame>;
+  /** Computer live view frames per view ("display:1", "window:812:4711", …). */
+  computerFrames: Record<string, ComputerFrame>;
+  /** Latest agent action per view (drawn as a ripple). */
+  computerActions: Record<string, ComputerAction>;
   setConnected: (v: boolean) => void;
   runStarted: (run: Run) => void;
   runDelta: (runId: string, conversationId: string, messageId: string, blocks: MessageBlock[]) => void;
@@ -32,6 +56,9 @@ interface LiveState {
   runFinished: (run: Run) => void;
   browserFrame: (profileId: string, frame: BrowserFrame) => void;
   dropBrowserFrame: (profileId: string) => void;
+  computerFrame: (view: string, frame: ComputerFrame) => void;
+  computerAction: (view: string, action: ComputerAction) => void;
+  dropComputerView: (view: string) => void;
 }
 
 /** Realtime state fed by the WebSocket (in-flight runs, streaming blocks, browser frames). */
@@ -39,6 +66,8 @@ export const useLive = create<LiveState>((set) => ({
   connected: false,
   runs: {},
   frames: {},
+  computerFrames: {},
+  computerActions: {},
   setConnected: (connected) => set({ connected }),
   runStarted: (run) =>
     set((s) => ({
@@ -90,6 +119,23 @@ export const useLive = create<LiveState>((set) => ({
       const frames = { ...s.frames };
       delete frames[profileId];
       return { frames };
+    }),
+  computerFrame: (view, frame) =>
+    set((s) => {
+      // Keep the last picture (and when it was live) when an error arrives, so the view doesn't flash empty.
+      const prev = s.computerFrames[view];
+      const next = frame.error && prev?.data ? { ...prev, error: frame.error } : frame;
+      return { computerFrames: { ...s.computerFrames, [view]: next } };
+    }),
+  computerAction: (view, action) => set((s) => ({ computerActions: { ...s.computerActions, [view]: action } })),
+  dropComputerView: (view) =>
+    set((s) => {
+      if (!s.computerFrames[view] && !s.computerActions[view]) return s;
+      const computerFrames = { ...s.computerFrames };
+      const computerActions = { ...s.computerActions };
+      delete computerFrames[view];
+      delete computerActions[view];
+      return { computerFrames, computerActions };
     }),
 }));
 

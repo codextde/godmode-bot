@@ -270,4 +270,12 @@ ALTER TABLE agents ADD COLUMN working_directory TEXT;
 ALTER TABLE conversations ADD COLUMN working_directory TEXT;
 `,
   },
+  {
+    id: 4,
+    name: "computer_use",
+    sql: /* sql */ `
+ALTER TABLE agents ADD COLUMN computer TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE conversations ADD COLUMN computer_target TEXT;
+`,
+  },
 ];

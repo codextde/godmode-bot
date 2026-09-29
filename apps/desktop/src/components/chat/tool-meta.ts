@@ -16,8 +16,15 @@ import {
   Globe,
   History,
   KeyRound,
+  Keyboard,
   Layers,
   Link2,
+  Monitor,
+  MonitorUp,
+  Move,
+  ZoomIn,
+  Hourglass,
+  AppWindow,
   ListChecks,
   ListTree,
   MousePointerClick,
@@ -39,6 +46,7 @@ import {
 
 export type ToolKind =
   | "browser"
+  | "computer"
   | "vault"
   | "missing-login"
   | "delegate"
@@ -152,6 +160,48 @@ function browserMeta(tool: string, input: Input): Omit<ToolMeta, "kind" | "serve
       return { icon: Wand2, title: "Ran the browser agent", detail: truncate(str(input.task), 80) || undefined };
     default:
       return { icon: Globe, title: humanize(tool) };
+  }
+}
+
+function computerMeta(tool: string, input: Input): Omit<ToolMeta, "kind" | "server" | "tool"> {
+  if (tool === "computer_ui") return { icon: ListTree, title: input.query ? `Looked for “${truncate(str(input.query), 40)}” in the window` : "Read the window's controls" };
+  if (tool === "computer_info") return { icon: Monitor, title: "Checked the shared screen" };
+  if (tool === "computer_windows") return { icon: AppWindow, title: input.focus != null ? "Switched window" : "Listed windows" };
+  if (tool === "computer_open_app") return { icon: AppWindow, title: `Opened ${str(input.name) || "an app"}` };
+  const at = Array.isArray(input.coordinate) ? ` at ${input.coordinate.map((n) => Math.round(Number(n))).join(", ")}` : "";
+  const element = input.element ? " a control" : "";
+  switch (str(input.action)) {
+    case "screenshot":
+      return { icon: Camera, title: "Looked at the screen", detail: input.display ? `display ${str(input.display)}` : undefined };
+    case "left_click":
+      return { icon: MousePointerClick, title: element ? "Clicked a control" : `Clicked${at}` };
+    case "double_click":
+      return { icon: MousePointerClick, title: `Double-clicked${element || at}` };
+    case "triple_click":
+      return { icon: MousePointerClick, title: `Triple-clicked${element || at}` };
+    case "right_click":
+      return { icon: MousePointerClick, title: `Right-clicked${element || at}` };
+    case "middle_click":
+      return { icon: MousePointerClick, title: `Middle-clicked${at}` };
+    case "mouse_move":
+      return { icon: Move, title: `Moved the pointer${at}` };
+    case "left_click_drag":
+      return { icon: Move, title: "Dragged" };
+    case "scroll":
+      return { icon: ScrollText, title: `Scrolled ${str(input.scroll_direction) || "down"}` };
+    case "type":
+      return { icon: Type, title: element ? "Typed into a field" : "Typed text", detail: truncate(str(input.text), 80) || undefined };
+    case "key":
+    case "hold_key":
+      return { icon: Keyboard, title: `Pressed ${truncate(str(input.text), 40) || "keys"}` };
+    case "wait":
+      return { icon: Hourglass, title: `Waited ${str(input.duration) || "1"}s` };
+    case "zoom":
+      return { icon: ZoomIn, title: "Zoomed in" };
+    case "cursor_position":
+      return { icon: MousePointerClick, title: "Checked the pointer position" };
+    default:
+      return { icon: MonitorUp, title: humanize(tool) };
   }
 }
 
@@ -292,6 +342,9 @@ export function describeTool(name: string, rawInput: unknown, ctx: ToolContext =
 
   if (server === "browser" || tool.startsWith("browser_")) {
     return { ...browserMeta(tool, input), kind: "browser", server, tool };
+  }
+  if (server === "computer") {
+    return { ...computerMeta(tool, input), kind: "computer", server, tool };
   }
   if (server === "godmode" || (server === null && GODMODE_TOOLS.has(tool)) || GODMODE_TOOLS.has(tool)) {
     const m = godmodeMeta(tool, input, ctx);

@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, ConversationWithMessages, Message, SendMessageInput } from "@godmode/shared";
+import type { Agent, ComputerTarget, ConversationWithMessages, Message, SendMessageInput } from "@godmode/shared";
+import { computerTargetLabel } from "@godmode/shared";
 import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AgentAvatar, EmptyState } from "@/components/common";
 import { BrowserFocus, BrowserPanel, BrowserToggle, useChatBrowser, type BrowserFocusMode } from "@/components/chat/browser-panel";
+import { ComputerFocus, ComputerPanel, ComputerShareChip, ComputerToggle, type ComputerFocusMode } from "@/components/computer/computer-panel";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { useArchiveChat } from "@/components/chat/chat-actions";
 import { ConversationHeader } from "@/components/chat/conversation-header";
@@ -53,8 +55,17 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const wide = useMediaQuery("(min-width: 1024px)");
   const [browserFocus, setBrowserFocus] = useState<BrowserFocusMode | null>(null);
   const { setArchived } = useArchiveChat();
-  const showBrowserPanel = !!browser?.running && !!agent && wide && browserPanel;
+  const computerTarget = conv?.computerTarget ?? null;
+  const computerPanel = useUi((s) => s.computerPanel);
+  const setComputerPanel = useUi((s) => s.setComputerPanel);
+  const [computerFocus, setComputerFocus] = useState<ComputerFocusMode | null>(null);
+  // Something shared takes the side panel; the browser stays one click away in the header.
+  const showComputerPanel = !!computerTarget && !!agent && wide && computerPanel;
+  const showBrowserPanel = !!browser?.running && !!agent && wide && browserPanel && !showComputerPanel;
   useEffect(() => setBrowserFocus(null), [browser?.id]);
+  useEffect(() => {
+    if (!computerTarget) setComputerFocus(null);
+  }, [computerTarget]);
 
   const messages = useMemo(() => conv?.messages ?? [], [conv?.messages]);
   const activeRunId = live?.runId ?? conv?.activeRunId ?? null;
@@ -165,6 +176,20 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     onError: (err) => toast.error("Couldn't change the folder", { description: errorMessage(err) }),
   });
 
+  const share = useMutation({
+    mutationFn: (computerTarget: ComputerTarget | null) => api.conversations.update(conversationId, { computerTarget }),
+    onSuccess: (updated, target) => {
+      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
+      if (target) {
+        setComputerPanel(true);
+        toast.success(`Sharing ${computerTargetLabel(target)}`, {
+          description: busyRef.current ? "The agent can use it from your next message." : `${agent?.name ?? "The agent"} can see and control it in this chat.`,
+        });
+      } else toast("Stopped sharing");
+    },
+    onError: (err) => toast.error("Couldn't change what's shared", { description: errorMessage(err) }),
+  });
+
   const cancel = useMutation({
     mutationFn: (runId: string) => api.runs.cancel(runId),
     onSuccess: () => toast("Stopping the agent…"),
@@ -230,9 +255,17 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           agent={agent}
           onVoiceMode={onVoiceMode}
           browserToggle={
-            browser?.running && !showBrowserPanel ? (
-              <BrowserToggle working={!!activeRunId} onClick={() => (wide ? setBrowserPanel(true) : setBrowserFocus("watch"))} />
-            ) : undefined
+            <>
+              {computerTarget && !showComputerPanel && (
+                <ComputerToggle working={!!activeRunId} onClick={() => (wide ? setComputerPanel(true) : setComputerFocus("watch"))} />
+              )}
+              {browser?.running && !showBrowserPanel && (
+                <BrowserToggle
+                  working={!!activeRunId}
+                  onClick={() => (wide && !showComputerPanel ? setBrowserPanel(true) : setBrowserFocus("watch"))}
+                />
+              )}
+            </>
           }
         />
 
@@ -278,13 +311,22 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               autoFocus
               running={!!activeRunId}
               leading={
-                <FolderChip
-                  chatFolder={conv.workingDirectory}
-                  agentFolder={agent?.workingDirectory ?? null}
-                  agentName={agent?.name}
-                  onChange={(path) => setFolder.mutate(path)}
-                  busy={setFolder.isPending}
-                />
+                <>
+                  <FolderChip
+                    chatFolder={conv.workingDirectory}
+                    agentFolder={agent?.workingDirectory ?? null}
+                    agentName={agent?.name}
+                    onChange={(path) => setFolder.mutate(path)}
+                    busy={setFolder.isPending}
+                  />
+                  <ComputerShareChip
+                    target={computerTarget}
+                    agentName={agent?.name}
+                    onShare={(t) => share.mutateAsync(t)}
+                    onWatch={() => setComputerFocus("watch")}
+                    busy={share.isPending}
+                  />
+                </>
               }
               placeholder={agent ? `Message ${agent.name} — or type / for commands` : "Message…"}
               trailing={
@@ -310,6 +352,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         />
       </ChatDropZone>
       <AnimatePresence initial={false}>
+        {showComputerPanel && (
+          <ComputerPanel
+            key="computer"
+            target={computerTarget!}
+            agent={agent!}
+            activity={activeRunId ? liveActivityLabel(live) : null}
+            onHide={() => setComputerPanel(false)}
+            onFocus={setComputerFocus}
+            onStop={() => share.mutate(null)}
+            stopping={share.isPending && share.variables === null}
+          />
+        )}
         {showBrowserPanel && (
           <BrowserPanel
             key={browser.id}
@@ -322,6 +376,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         )}
       </AnimatePresence>
       <BrowserFocus profile={browser} mode={browserFocus} onClose={() => setBrowserFocus(null)} />
+      <ComputerFocus target={computerTarget} mode={computerFocus} onClose={() => setComputerFocus(null)} />
     </div>
   );
 }

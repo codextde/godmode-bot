@@ -31,3 +31,6 @@ Thumbs.db
 # tooling
 .omc/
 coverage/
+
+# native helper dev builds
+packages/core/native/macos/build/

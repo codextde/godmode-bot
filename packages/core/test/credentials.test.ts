@@ -79,6 +79,7 @@ function makeAgent(workspaceId: string | null, permissions: Partial<AgentPermiss
       ...permissions,
     },
     browser: { profileId: null, enabled: true, headless: null },
+    computer: { enabled: false, target: null },
     mcpServerIds: [],
     inheritMcp: true,
     subagents: [],

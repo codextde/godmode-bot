@@ -166,6 +166,46 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
   (click/type) e.g. to solve a CAPTCHA. Chats show a *passive* preview of their agent's browser next to the thread:
   passive subscribers get frames but don't keep an idle browser running.
 
+## Computer use
+
+A chat can **share** something with its agent — `conversations.computer_target` (`ComputerTarget` in
+`packages/shared/src/computer.ts`): one app window, one display, the whole desktop or a tab of a Godmode browser.
+Agents allowed to use the computer unattended (`agents.computer`, human-only) get the desktop (or one display) for runs
+without a share. A run with a target gets a fourth MCP server, `computer` → `POST /mcp/computer` on the gateway with
+the run's token; its tools only ever reach that target:
+
+| Tool | |
+|---|---|
+| `computer({ action, … })` | Claude's computer-use vocabulary: `screenshot`, `left_click` / `right_click` / `double_click` / `triple_click` / `middle_click`, `mouse_move`, `left_click_drag`, `scroll`, `type`, `key` (xdotool-style keys), `hold_key`, `wait`, `cursor_position`, `zoom`. Coordinates are pixels of the latest screenshot; every action returns a fresh one. Desktop shares take `display`; window shares take `element` (from `computer_ui`) and, if allowed in settings, `foreground`. |
+| `computer_info` | What is shared (displays with their arrangement, window, tab). |
+| `computer_ui` | Window shares: the window's accessibility elements with tokens (click/type by element — works while the window is covered). |
+| `computer_windows`, `computer_open_app` | Desktop shares: list / focus windows, open apps. |
+
+Each model screenshot remembers the screen area it shows (`Shot`), so image pixels map back exactly
+(`src/computer/geometry.ts`). Engines (`src/computer/engines/`) behind one interface:
+
+* **Window** — [Cua Driver](https://github.com/trycua/cua) (`libs/cua-driver`, MIT), run as `cua-driver mcp --direct`
+  (Godmode is its MCP client; `--direct` keeps the TCC grants of the app running Godmode). The pinned build comes from
+  PyPI (`cua-driver`, bundles the native binary) via `uvx`, with telemetry and update checks off and its state under
+  `<data>/cua-driver`. Its pixel coordinates refer to its last screenshot of the window, so all calls go through one
+  queue and that size is tracked. Element tokens that a newer driver snapshot made stale are re-resolved by
+  role/label/position. On macOS the native helper backs it up: window capture for the live view, scrolling (through the
+  scroll area's accessibility scroll bars — posted wheel events don't reach background windows), and pointer/keyboard
+  delivery with `CGEventPostToPid` + `AXPress` when the driver refuses a window it can't match in the accessibility tree.
+* **Desktop / display** — the native helper, every monitor: macOS `native/macos/GodmodeComputer.swift` (ScreenCaptureKit,
+  global CGEvents; embedded into the compiled core by `scripts/build.ts`, extracted to `<data>/bin`, compiled with
+  `swiftc` when running from source), Windows a PowerShell-hosted C# class (`helpers/windowsHelper.ts`: `Screen.AllScreens`,
+  `CopyFromScreen`, `SendInput`), Linux/X11 `xrandr` + ImageMagick `import` + `xdotool`. Without one, Cua Driver's
+  desktop target covers the primary display. Desktop runs take turns (one mouse); window/tab shares only lock themselves.
+* **Tab** — CDP on Godmode's Chromium (`Page.captureScreenshot`, `Input.dispatch*`), background tabs included.
+
+Live view: `computer.subscribe { view }` over the WebSocket (`display:<id>`, `window:<pid>:<windowId>`,
+`tab:<profile>:<target>`) streams `computer.frame` events (≈4 fps) while someone watches; agent actions arrive as
+`computer.action` (drawn as ripples). Takeover: `POST /api/computer/input` (coordinates of the last frame). Sharing
+(`PATCH /api/conversations/:id { computerTarget }`, or `computerTarget` on `POST /api/chat`) validates the target; stopping
+revokes a running run's access immediately. Shares and first use per run are audited (`computer.share`,
+`computer.unshare`, `computer.control`). Backups never restore shares, unattended access or the Cua Driver command.
+
 ## Integrations
 
 * **Custom MCP servers** (stdio/http/sse), scoped global / workspace / agent; env + headers encrypted.

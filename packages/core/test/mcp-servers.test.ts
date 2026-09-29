@@ -51,6 +51,7 @@ function agentModel(p: Partial<Agent> & { id: string }): Agent {
       maxBudgetUsd: null,
     },
     browser: { profileId: null, enabled: false, headless: null },
+    computer: { enabled: false, target: null },
     mcpServerIds: p.mcpServerIds ?? [],
     inheritMcp: p.inheritMcp ?? true,
     subagents: [],

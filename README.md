@@ -57,6 +57,7 @@ needs to be useful:
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
+| 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
 | 🔐 **Vault** | Logins with password generator, per-workspace or global, AES-256-GCM encrypted, fully audited. |
 | 📥 **Password import** | Bring logins over from Chrome (and Edge, Brave, Arc), 1Password (.1pux or CSV), Bitwarden, Apple Passwords, Firefox and more — with a preview that updates saved logins instead of duplicating them. |
@@ -154,6 +155,26 @@ docker compose up -d   # dashboard on http://localhost:7777
    Godmode creates the agent, its instructions and its routine.
 5. **Check the inbox** — if an agent couldn't log in, it tells you what's missing.
 
+### Computer use — share a window or your screen
+
+Click **Share** (the screen icon) in the message box and pick what the agent may see and control in this chat:
+
+| Share | How the agent works |
+|---|---|
+| **A window** | Only that app window, **in the background**: clicks, typing and scrolling go straight to the window's process (accessibility-first via [Cua Driver](https://github.com/trycua/cua)), so your cursor and focus stay where they are — even when the window is covered. |
+| **A display / the entire desktop** | The real mouse and keyboard, across every monitor (the agent picks a display per screenshot). |
+| **A browser tab** | One tab of Godmode's browser, over CDP, in the background. |
+
+The chat shows a live view of what's shared; **Take control** lets you click and type into it yourself (a window keeps
+running in the background). **Stop sharing** takes effect immediately, even mid-run. Agents can also get unattended
+desktop access for routines (agent settings → *Computer*). Setup lives in **Settings → Computer**:
+
+- **macOS** asks once for *Accessibility* and *Screen Recording* for Godmode (restart Godmode after granting).
+- **Cua Driver** (`cua-driver` from PyPI, MIT) is downloaded with one click via uv. Without it, Godmode's built-in
+  macOS helper controls windows on its own.
+- **Windows / Linux**: single windows need Cua Driver; the whole desktop uses a built-in PowerShell helper (Windows) or
+  `xrandr` + ImageMagick + `xdotool` (Linux/X11), and falls back to Cua Driver's primary display.
+
 ### Good to know
 
 - **macOS — Chrome session import** reads your Chrome profile, which macOS protects: grant Godmode
@@ -175,13 +196,14 @@ docker compose up -d   # dashboard on http://localhost:7777
                 │ HTTP + WebSocket (token / session)
 ┌───────────────▼────────────────────────────────────────────────────────┐
 │  godmode core (Bun)                                                    │
-│  runner · vault · scheduler · agents (git) · MCP gateway · browser    │
+│  runner · vault · scheduler · agents (git) · MCP gateway · browser ·  │
+│  computer use (Cua Driver · native helper)                             │
 └───────┬──────────────────────────────┬─────────────────────────────────┘
         │ spawns per turn               │ launches + CDP
 ┌───────▼──────────────────────┐   ┌────▼─────────────┐
 │ claude -p (Opus 5.5, bypass) │   │ managed Chromium │◄── browser-use MCP
 │  MCP: godmode · browser ·    │   └──────────────────┘
-│       composio · your MCPs   │
+│   computer · composio · …    │
 └──────────────────────────────┘
 ```
 
@@ -244,13 +266,14 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Composio + custom MCP servers, workspaces, voice mode, backup/restore
 - [x] Desktop app (macOS/Windows/Linux) + headless web dashboard
 - [x] Working folders, Claude Code slash commands, live browser preview in chat, desktop auto-update
-- [ ] Full computer use: agents working in a dedicated macOS / Windows / Linux VM
+- [x] Computer use: share a window (background control via Cua Driver), a display, every monitor or a browser tab
+- [ ] Agents working in a dedicated macOS / Windows / Linux VM (Cua sandboxes / lume)
 - [ ] Mobile companion app & push notifications
 - [ ] Team mode: shared workspaces and approvals
 
 ## 🙏 Credits
 
-[Claude Code](https://code.claude.com) · [browser-use](https://github.com/browser-use/browser-use) ·
+[Claude Code](https://code.claude.com) · [browser-use](https://github.com/browser-use/browser-use) · [Cua](https://github.com/trycua/cua) ·
 [Composio](https://composio.dev) · [Model Context Protocol](https://modelcontextprotocol.io) ·
 [Tauri](https://tauri.app) · [shadcn/ui](https://ui.shadcn.com) · [aicss](https://www.aicss.dev) ·
 [claude-mem](https://github.com/thedotmack/claude-mem) · [Bun](https://bun.sh)

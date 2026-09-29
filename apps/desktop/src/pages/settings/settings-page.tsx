@@ -8,6 +8,7 @@ import {
   Globe,
   HeartPulse,
   Info,
+  MonitorUp,
   RefreshCw,
   Settings2,
   ShieldCheck,
@@ -19,6 +20,7 @@ import { AboutSection } from "@/components/settings/about-section";
 import { AiSection } from "@/components/settings/ai-section";
 import { BackupSection } from "@/components/settings/backup-section";
 import { BrowserSection } from "@/components/settings/browser-section";
+import { ComputerSection } from "@/components/settings/computer-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { MemorySection } from "@/components/settings/memory-section";
 import { SecuritySection } from "@/components/settings/security-section";
@@ -34,6 +36,7 @@ const SECTIONS = [
   { id: "general", label: "General", icon: <SlidersHorizontal />, group: "Preferences" },
   { id: "ai", label: "AI & Claude", icon: <Sparkles />, group: "Preferences" },
   { id: "browser", label: "Browser", icon: <Globe />, group: "Preferences" },
+  { id: "computer", label: "Computer", icon: <MonitorUp />, group: "Preferences" },
   { id: "voice", label: "Voice", icon: <AudioLines />, group: "Preferences" },
   { id: "memory", label: "Memory", icon: <BrainCircuit />, group: "Preferences" },
   { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
@@ -77,6 +80,7 @@ export default function SettingsPage() {
       general: () => <GeneralSection settings={s} />,
       ai: () => <AiSection settings={s} />,
       browser: () => <BrowserSection settings={s} />,
+      computer: () => <ComputerSection settings={s} />,
       voice: () => <VoiceSection settings={s} />,
       memory: () => <MemorySection settings={s} />,
       security: () => <SecuritySection settings={s} />,

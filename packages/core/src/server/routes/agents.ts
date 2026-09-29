@@ -18,7 +18,7 @@ import { startChat } from "../../services/conversations";
 import { getSettings } from "../../services/settings";
 import { conflict } from "../../util";
 import { requireGrant } from "../grants";
-import { body, z } from "../validate";
+import { body, computerTargetSchema, z } from "../validate";
 
 const id = z.string().min(1).max(64);
 const modelId = z
@@ -47,6 +47,13 @@ const browserSchema = z
   })
   .partial();
 
+const computerSchema = z
+  .object({
+    enabled: z.boolean(),
+    target: computerTargetSchema.nullable(),
+  })
+  .partial();
+
 const subagentSchema = z.object({
   name: z
     .string()
@@ -71,6 +78,7 @@ export const agentSchema = z.object({
   enabled: z.boolean().optional(),
   permissions: permissionsSchema.optional(),
   browser: browserSchema.optional(),
+  computer: computerSchema.optional(),
   mcpServerIds: z.array(id).max(200).optional(),
   inheritMcp: z.boolean().optional(),
   subagents: z.array(subagentSchema).max(20).optional(),

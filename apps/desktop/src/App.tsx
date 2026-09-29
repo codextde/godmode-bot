@@ -27,6 +27,7 @@ const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
 const TotpPage = lazy(() => import("@/pages/vault/totp-page"));
 const IntegrationsPage = lazy(() => import("@/pages/integrations/integrations-page"));
 const BrowserPage = lazy(() => import("@/pages/browser/browser-page"));
+const ComputerPage = lazy(() => import("@/pages/computer/computer-page"));
 const InboxPage = lazy(() => import("@/pages/inbox/inbox-page"));
 const SettingsPage = lazy(() => import("@/pages/settings/settings-page"));
 
@@ -107,6 +108,7 @@ export function App() {
           <Route path="/vault/2fa" element={<TotpPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/browser" element={<BrowserPage />} />
+          <Route path="/computer" element={<ComputerPage />} />
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
           <Route path="/settings/:section" element={<SettingsPage />} />

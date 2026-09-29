@@ -34,6 +34,16 @@ export const DEFAULT_SETTINGS: Settings = {
     keepAliveMinutes: 15,
     liveView: true,
   },
+  computer: {
+    enabled: true,
+    useCuaDriver: true,
+    cuaDriverCommand: "",
+    allowForeground: false,
+    agentCursor: true,
+    liveView: true,
+    liveViewFps: 4,
+    screenshotMaxSize: 1280,
+  },
   voice: {
     enabled: true,
     sttProvider: "browser",

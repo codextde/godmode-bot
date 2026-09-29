@@ -347,6 +347,27 @@ describe("untrusted backup contents", () => {
     expect(warnings.some((w) => w.includes("evil-stdio"))).toBe(true);
   });
 
+  test("turns off unattended computer use, clears shared screens and the Cua Driver command", async () => {
+    const evil = tamper((dump) => {
+      const base = dump.tables.agents![0]!;
+      dump.tables.agents!.push({ ...base, id: "agt_desktop", name: "Desktop", slug: "desktop", computer: JSON.stringify({ enabled: true, target: null }) });
+      dump.tables.agents!.push({ ...base, id: "agt_quiet", name: "Quiet", slug: "quiet", computer: JSON.stringify({ enabled: false, target: null }) });
+      for (const c of dump.tables.conversations ?? []) c.computer_target = JSON.stringify({ kind: "desktop" });
+      const settings = (dump.tables.settings ??= []);
+      settings.push({ key: "computer", value: JSON.stringify({ enabled: true, cuaDriverCommand: "sh -c evil", liveViewFps: 7 }) });
+    });
+    const result = await importBackup(evil, BACKUP_PASSPHRASE);
+    const computerOf = (id: string) => get<{ computer: string }>("SELECT computer FROM agents WHERE id = ?", id)!.computer;
+    expect(JSON.parse(computerOf("agt_desktop"))).toEqual({});
+    expect(JSON.parse(computerOf("agt_quiet"))).toEqual({ enabled: false, target: null });
+    expect(get<{ n: number }>("SELECT COUNT(*) AS n FROM conversations WHERE computer_target IS NOT NULL")!.n).toBe(0);
+    expect(getSettings().computer.cuaDriverCommand).toBe("");
+    expect(getSettings().computer.liveViewFps).toBe(7);
+    const warnings = result.warnings ?? [];
+    expect(warnings.some((w) => w.includes("computer use for 1 agent"))).toBe(true);
+    expect(warnings.some((w) => w.includes("computer.cuaDriverCommand"))).toBe(true);
+  });
+
   test("keeps usable working folders and clears missing or data-dir-overlapping ones", async () => {
     const folder = mkdtempSync(join(tmpdir(), "godmode-backup-folder-"));
     const evil = tamper((dump) => {

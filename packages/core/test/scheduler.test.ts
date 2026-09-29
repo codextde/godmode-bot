@@ -142,6 +142,7 @@ describe("triggering", () => {
         model: null,
         effort: null,
         workingDirectory: null,
+        computerTarget: null,
         pinned: false,
         archived: false,
         lastMessageAt: null,

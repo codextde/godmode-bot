@@ -7,6 +7,7 @@
  *  - Some items (MCP servers, Composio connections, credentials) can additionally be
  *    pinned to a single agent via `agentId`.
  */
+import type { AgentComputerConfig, ComputerTarget } from "./computer";
 
 export type ID = string;
 export type ISODate = string;
@@ -90,6 +91,8 @@ export interface Agent {
   status: AgentStatus;
   permissions: AgentPermissions;
   browser: AgentBrowserConfig;
+  /** Computer use without a screen shared in the chat (routines, delegated tasks). */
+  computer: AgentComputerConfig;
   /** MCP server ids (custom + composio) explicitly attached to this agent (in addition to scope-inherited ones). */
   mcpServerIds: ID[];
   /** Whether to inherit global/workspace MCP servers. */
@@ -146,6 +149,8 @@ export interface Conversation {
   effort: Effort | null;
   /** Folder this conversation works in, overriding the agent's. null = the agent's default. */
   workingDirectory: string | null;
+  /** What the human shared with the agent in this chat (screen, window or browser tab). null = nothing. */
+  computerTarget: ComputerTarget | null;
   pinned: boolean;
   archived: boolean;
   lastMessageAt: ISODate | null;
@@ -497,6 +502,25 @@ export interface BrowserSettings {
   liveView: boolean;
 }
 
+export interface ComputerSettings {
+  /** Agents may see and control the computer when a screen, window or tab is shared with them. */
+  enabled: boolean;
+  /** Use Cua Driver (trycua/cua) for background control of single windows. Off = Godmode's built-in helper (macOS). */
+  useCuaDriver: boolean;
+  /** Custom cua-driver command; empty = the pinned version via uvx. */
+  cuaDriverCommand: string;
+  /** A shared window may be brought to the front briefly when a background action doesn't land. */
+  allowForeground: boolean;
+  /** Show Cua Driver's agent cursor on the window an agent controls. */
+  agentCursor: boolean;
+  /** Stream what agents see while you watch. */
+  liveView: boolean;
+  /** Live view frames per second (1–10). */
+  liveViewFps: number;
+  /** Long edge of screenshots sent to the model, in pixels (the model sees at most ~1.15 megapixels). */
+  screenshotMaxSize: number;
+}
+
 export type SttProvider = "browser" | "openai";
 export type TtsProvider = "browser" | "openai" | "elevenlabs";
 
@@ -551,6 +575,7 @@ export interface Settings {
   general: GeneralSettings;
   runner: RunnerSettings;
   browser: BrowserSettings;
+  computer: ComputerSettings;
   voice: VoiceSettings;
   security: SecuritySettings;
   server: ServerSettings;
@@ -588,7 +613,7 @@ export interface ModelCatalog {
 /* Doctor (dependency checks)                                           */
 /* ------------------------------------------------------------------ */
 
-export type DependencyId = "claude" | "claude-auth" | "uv" | "browser-use" | "chrome" | "git" | "claude-mem";
+export type DependencyId = "claude" | "claude-auth" | "uv" | "browser-use" | "chrome" | "git" | "claude-mem" | "cua-driver";
 
 export interface DependencyStatus {
   id: DependencyId;

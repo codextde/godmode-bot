@@ -19,8 +19,25 @@ const clients = new Set<ServerWebSocket<WsData>>();
 const browserSubscribers = new Map<string, number>();
 const browserWatchers = new Map<string, number>();
 
+const computerSubscribers = new Map<string, number>();
+
 /** Hooks invoked when the first/last UI subscribes to a browser live view. */
 let onBrowserSubscribe: ((profileId: string, subscribed: boolean) => void) | null = null;
+/** Hooks invoked when the first/last UI subscribes to a computer live view. */
+let onComputerSubscribe: ((view: string, subscribed: boolean) => void) | null = null;
+
+export function setComputerSubscriptionHandler(fn: (view: string, subscribed: boolean) => void) {
+  onComputerSubscribe = fn;
+}
+
+export function hasComputerSubscribers(view: string): boolean {
+  return (computerSubscribers.get(view) ?? 0) > 0;
+}
+
+/** Views someone is watching right now. */
+export function subscribedComputerViews(): string[] {
+  return [...computerSubscribers.keys()];
+}
 
 export function setBrowserSubscriptionHandler(fn: (profileId: string, subscribed: boolean) => void) {
   onBrowserSubscribe = fn;
@@ -55,6 +72,18 @@ bus.on((event) => {
     for (const ws of clients) if (ws.data.subscriptions.has(`browser:${event.profileId}`)) send(ws, event);
     return;
   }
+  if (event.type === "computer.frame" || event.type === "computer.action") {
+    const payload = JSON.stringify(event);
+    for (const ws of clients) {
+      if (!ws.data.subscriptions.has(`computer:${event.view}`)) continue;
+      try {
+        ws.send(payload);
+      } catch {
+        /* ignore */
+      }
+    }
+    return;
+  }
   const payload = JSON.stringify(event);
   for (const ws of clients) {
     try {
@@ -81,6 +110,21 @@ function changeSubscription(ws: ServerWebSocket<WsData>, profileId: string, subs
   if ((subscribe && count === 1) || (!subscribe && count === 0)) onBrowserSubscribe?.(profileId, subscribe);
 }
 
+/** Views are "display:<id>", "window:<pid>:<id>" or "tab:<profile>:<target>" — keep keys bounded. */
+function validView(view: unknown): view is string {
+  return typeof view === "string" && view.length > 0 && view.length <= 300 && /^(display|window|tab):/.test(view);
+}
+
+function changeComputerSubscription(ws: ServerWebSocket<WsData>, view: string, subscribe: boolean) {
+  const key = `computer:${view}`;
+  const has = ws.data.subscriptions.has(key);
+  if (subscribe === has) return;
+  if (subscribe) ws.data.subscriptions.add(key);
+  else ws.data.subscriptions.delete(key);
+  const count = bump(computerSubscribers, view, subscribe ? 1 : -1);
+  if ((subscribe && count === 1) || (!subscribe && count === 0)) onComputerSubscribe?.(view, subscribe);
+}
+
 export const websocketHandler = {
   open(ws: ServerWebSocket<WsData>) {
     clients.add(ws);
@@ -103,11 +147,18 @@ export const websocketHandler = {
       case "browser.unsubscribe":
         changeSubscription(ws, msg.profileId, false);
         break;
+      case "computer.subscribe":
+        if (validView(msg.view)) changeComputerSubscription(ws, msg.view, true);
+        break;
+      case "computer.unsubscribe":
+        if (validView(msg.view)) changeComputerSubscription(ws, msg.view, false);
+        break;
     }
   },
   close(ws: ServerWebSocket<WsData>) {
-    for (const key of ws.data.subscriptions) {
+    for (const key of [...ws.data.subscriptions]) {
       if (key.startsWith("browser:")) changeSubscription(ws, key.slice(8), false);
+      else if (key.startsWith("computer:")) changeComputerSubscription(ws, key.slice(9), false);
     }
     clients.delete(ws);
   },

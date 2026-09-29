@@ -1,3 +1,4 @@
+import type { AgentComputerConfig, ComputerTarget } from "./computer";
 import type {
   Agent,
   AgentBrowserConfig,
@@ -43,6 +44,7 @@ export interface AgentInput {
   enabled?: boolean;
   permissions?: Partial<AgentPermissions>;
   browser?: Partial<AgentBrowserConfig>;
+  computer?: Partial<AgentComputerConfig>;
   mcpServerIds?: ID[];
   inheritMcp?: boolean;
   subagents?: SubagentDefinition[];
@@ -97,6 +99,8 @@ export interface StartChatInput {
   effort?: Effort | null;
   /** Work in this folder instead of the agent's default. */
   workingDirectory?: string | null;
+  /** Share a screen, window or browser tab with the new chat. */
+  computerTarget?: ComputerTarget | null;
 }
 
 export interface ConversationPatch {
@@ -108,6 +112,8 @@ export interface ConversationPatch {
   effort?: Effort | null;
   /** null = back to the agent's default folder. */
   workingDirectory?: string | null;
+  /** Share a screen, window or browser tab with the agent; null = stop sharing. */
+  computerTarget?: ComputerTarget | null;
 }
 
 export interface StartChatResult extends SendMessageResult {

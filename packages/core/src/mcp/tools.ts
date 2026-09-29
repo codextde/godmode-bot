@@ -122,6 +122,10 @@ const ASK_HUMAN = "ask the human to change this in Settings";
  * caller that could reveal them itself — and never from another workspace. Returns the refusal, or null.
  */
 function revealTargetRefusal(caller: Agent, target: Agent, what: string): string | null {
+  // An agent that may control this computer on its own only takes work from callers that may too.
+  if (target.computer.enabled && !caller.computer.enabled && target.id !== caller.id) {
+    return `${target.name} can control this computer on its own; only the human can ${what}.`;
+  }
   if (target.permissions.secretAccess !== "reveal") return null;
   if (caller.permissions.secretAccess !== "reveal") return `Target agent can reveal secrets; only the human can ${what} from here.`;
   if (target.workspaceId !== null && target.workspaceId !== caller.workspaceId) {

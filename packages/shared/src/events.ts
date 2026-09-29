@@ -1,3 +1,4 @@
+import type { ComputerView } from "./computer";
 import type {
   Agent,
   AppNotification,
@@ -54,6 +55,30 @@ export type ServerEvent =
       width: number;
       height: number;
     }
+  | {
+      type: "computer.frame";
+      /** Live view stream, e.g. "display:1" or "window:812:4711" (see computerView). */
+      view: ComputerView;
+      /** base64 image ("" when `error` is set) */
+      data: string;
+      mime: "image/jpeg" | "image/png";
+      /** Frame size; takeover input uses this coordinate space. */
+      width: number;
+      height: number;
+      /** e.g. "Safari — Apple" */
+      label: string;
+      /** Why no picture could be taken (missing permission, window closed, …). */
+      error?: string;
+    }
+  | {
+      /** An agent acted on a shared view (drawn as a ripple in the live view). x/y in frame coordinates, 0–1. */
+      type: "computer.action";
+      view: ComputerView;
+      runId: ID;
+      action: string;
+      x?: number;
+      y?: number;
+    }
   | { type: "entity.changed"; entity: EntityName };
 
 export type EntityName =
@@ -69,11 +94,15 @@ export type EntityName =
   | "notifications"
   | "settings"
   | "runs"
-  | "models";
+  | "models"
+  | "computer";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =
   | { type: "ping" }
   /** `passive` viewers (e.g. the chat preview) get frames without keeping an idle browser running. */
   | { type: "browser.subscribe"; profileId: ID; passive?: boolean }
-  | { type: "browser.unsubscribe"; profileId: ID };
+  | { type: "browser.unsubscribe"; profileId: ID }
+  /** Computer live view frames (see computerView). */
+  | { type: "computer.subscribe"; view: ComputerView }
+  | { type: "computer.unsubscribe"; view: ComputerView };

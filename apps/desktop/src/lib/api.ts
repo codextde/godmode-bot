@@ -19,6 +19,10 @@ import type {
   ComposioConnection,
   ComposioStatus,
   ComposioToolkit,
+  ComputerImage,
+  ComputerInputEvent,
+  ComputerSources,
+  ComputerStatus,
   Conversation,
   ConversationPatch,
   ConversationWithMessages,
@@ -267,6 +271,20 @@ export const api = {
     update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     send: (id: string, input: SendMessageInput) => post<SendMessageResult>(`/api/conversations/${id}/messages`, input),
+  },
+
+  computer: {
+    status: () => get<ComputerStatus>("/api/computer/status"),
+    /** Displays, windows and Godmode browser tabs that can be shared. */
+    sources: () => get<ComputerSources>("/api/computer/sources"),
+    thumbnail: (view: string, size = 480) => get<ComputerImage>("/api/computer/thumbnail", { view, size }),
+    /** macOS: ask for Accessibility + Screen Recording. */
+    requestPermissions: () => post<ComputerStatus>("/api/computer/permissions"),
+    installCua: () => post<{ ok: boolean; output: string }>("/api/computer/cua/install"),
+    stopCua: () => post<{ ok: true }>("/api/computer/cua/stop"),
+    /** Human takeover in a computer live view; coordinates are in the frame the human saw (`frame`). */
+    input: (view: string, event: ComputerInputEvent, frame?: { width: number; height: number }) =>
+      post<{ ok: true }>("/api/computer/input", { view, event, frame }),
   },
 
   chat: {

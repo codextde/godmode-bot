@@ -36,6 +36,14 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
 - **Backups** are encrypted with a passphrase (scrypt + AES-256-GCM, authenticated header); imports validate paths and
   reset settings that point at programs or endpoints, and disable stdio MCP servers, so a foreign backup can't run code.
 
+- **Computer use is opt-in per chat**: an agent only sees and controls what you share in that chat (one window, one
+  display, the whole desktop or one Godmode browser tab), through a per-run MCP server scoped to exactly that target.
+  Stopping the share revokes access immediately — also for queued or long-running actions (typing, waits, held keys).
+  A shared window is driven in the background and keyboard input only goes to it when it is its app's key window.
+  Godmode's own windows and dashboard tabs can't be shared. Unattended desktop access for routines is a human-only
+  agent setting; agents without it can't hand work to agents that have it, and backups never restore it. Shares and
+  their first use per run are audited (`computer.share`, `computer.unshare`, `computer.control`).
+
 ## Important caveats
 
 - Agents run Claude Code in **bypass-permissions mode** by default so they can work without interruption. They can run

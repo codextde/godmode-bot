@@ -11,6 +11,7 @@ import { getAgent } from "../agents/service";
 import type { RunContext } from "../types";
 import { resolveRunToken } from "./tokens";
 import { UnknownToolError, callTool, listToolsFor, toolErrorMessage } from "./tools";
+import { COMPUTER_INSTRUCTIONS, UnknownComputerToolError, callComputerTool, listComputerTools } from "../computer/tools";
 
 const log = logger("mcp");
 
@@ -43,8 +44,33 @@ function idOf(msg: unknown): JsonRpcId {
 const ok = (id: JsonRpcId, result: unknown): JsonRpcResponse => ({ jsonrpc: "2.0", id, result });
 const rpcError = (id: JsonRpcId, code: number, message: string): JsonRpcResponse => ({ jsonrpc: "2.0", id, error: { code, message } });
 
+/** One MCP server behind the gateway: `/mcp` (Godmode tools) or `/mcp/computer` (computer use). */
+export interface McpServerDef {
+  name: string;
+  instructions: string;
+  list: (ctx: RunContext) => { name: string; description: string; inputSchema: Record<string, unknown> }[];
+  call: (ctx: RunContext, name: string, args: unknown) => Promise<unknown>;
+  isUnknownTool: (err: unknown) => boolean;
+}
+
+export const GODMODE_SERVER: McpServerDef = {
+  name: "godmode",
+  instructions: INSTRUCTIONS,
+  list: (ctx) => listToolsFor(getAgent(ctx.agentId)),
+  call: callTool,
+  isUnknownTool: (err) => err instanceof UnknownToolError,
+};
+
+export const COMPUTER_SERVER: McpServerDef = {
+  name: "computer",
+  instructions: COMPUTER_INSTRUCTIONS,
+  list: listComputerTools,
+  call: callComputerTool,
+  isUnknownTool: (err) => err instanceof UnknownComputerToolError,
+};
+
 /** Handle one JSON-RPC message. Returns null for notifications and client responses (nothing to send). */
-export async function handleRpc(ctx: RunContext, msg: unknown): Promise<JsonRpcResponse | null> {
+export async function handleRpc(ctx: RunContext, msg: unknown, server: McpServerDef = GODMODE_SERVER): Promise<JsonRpcResponse | null> {
   if (!isObj(msg)) return rpcError(null, -32600, "Invalid Request");
   if (typeof msg.method !== "string") {
     // A response to a server→client request (we never send any) — ignore.
@@ -62,14 +88,14 @@ export async function handleRpc(ctx: RunContext, msg: unknown): Promise<JsonRpcR
       return ok(id, {
         protocolVersion: typeof params.protocolVersion === "string" ? params.protocolVersion : DEFAULT_PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "godmode", version: VERSION },
-        instructions: INSTRUCTIONS,
+        serverInfo: { name: server.name, version: VERSION },
+        instructions: server.instructions,
       });
     case "ping":
       return ok(id, {});
     case "tools/list": {
       try {
-        return ok(id, { tools: listToolsFor(getAgent(ctx.agentId)) });
+        return ok(id, { tools: server.list(ctx) });
       } catch (err) {
         return rpcError(id, -32603, toolErrorMessage(err));
       }
@@ -78,9 +104,9 @@ export async function handleRpc(ctx: RunContext, msg: unknown): Promise<JsonRpcR
       const name = typeof params.name === "string" ? params.name : "";
       if (!name) return rpcError(id, -32602, "Invalid params: missing tool name");
       try {
-        return ok(id, await callTool(ctx, name, params.arguments ?? {}));
+        return ok(id, await server.call(ctx, name, params.arguments ?? {}));
       } catch (err) {
-        if (err instanceof UnknownToolError) return rpcError(id, -32602, err.message);
+        if (server.isUnknownTool(err)) return rpcError(id, -32602, err instanceof Error ? err.message : String(err));
         log.error(`tools/call ${name} crashed`, err);
         return rpcError(id, -32603, toolErrorMessage(err));
       }
@@ -105,7 +131,7 @@ function disableIdleTimeout(c: Context) {
 }
 
 /** Answer one tools/call over SSE: headers go out immediately, keepalive comments until the result is ready. */
-function sseCall(ctx: RunContext, msg: unknown): Response {
+function sseCall(ctx: RunContext, msg: unknown, server: McpServerDef): Response {
   const encoder = new TextEncoder();
   let keepalive: ReturnType<typeof setInterval> | null = null;
   let closed = false;
@@ -122,7 +148,7 @@ function sseCall(ctx: RunContext, msg: unknown): Response {
       send(": godmode\n\n");
       keepalive = setInterval(() => send(": keepalive\n\n"), KEEPALIVE_MS);
       try {
-        const response = await handleRpc(ctx, msg);
+        const response = await handleRpc(ctx, msg, server);
         if (response) send(`event: message\ndata: ${JSON.stringify(response)}\n\n`);
       } finally {
         if (keepalive) clearInterval(keepalive);
@@ -147,35 +173,40 @@ function sseCall(ctx: RunContext, msg: unknown): Response {
   });
 }
 
+async function serve(c: Context, server: McpServerDef): Promise<Response> {
+  const ctx = resolveRunToken(bearer(c));
+  if (!ctx) return c.json(rpcError(null, -32001, "Unauthorized: invalid or expired run token"), 401);
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json(rpcError(null, -32700, "Parse error"), 400);
+  }
+
+  if (Array.isArray(body)) {
+    if (!body.length) return c.json(rpcError(null, -32600, "Invalid Request: empty batch"), 400);
+    disableIdleTimeout(c);
+    const responses = (await Promise.all(body.map((m) => handleRpc(ctx, m, server)))).filter((r): r is JsonRpcResponse => r !== null);
+    return responses.length ? c.json(responses) : c.body(null, 202);
+  }
+
+  const accept = c.req.header("accept") ?? "";
+  if (isObj(body) && body.method === "tools/call" && body.id !== undefined && body.id !== null && accept.includes("text/event-stream")) {
+    disableIdleTimeout(c);
+    return sseCall(ctx, body, server);
+  }
+  const response = await handleRpc(ctx, body, server);
+  return response ? c.json(response) : c.body(null, 202);
+}
+
 export function registerMcpRoutes(app: Hono): void {
-  app.post("/mcp", async (c) => {
-    const ctx = resolveRunToken(bearer(c));
-    if (!ctx) return c.json(rpcError(null, -32001, "Unauthorized: invalid or expired run token"), 401);
+  app.post("/mcp", (c) => serve(c, GODMODE_SERVER));
+  app.post("/mcp/computer", (c) => serve(c, COMPUTER_SERVER));
 
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json(rpcError(null, -32700, "Parse error"), 400);
-    }
-
-    if (Array.isArray(body)) {
-      if (!body.length) return c.json(rpcError(null, -32600, "Invalid Request: empty batch"), 400);
-      disableIdleTimeout(c);
-      const responses = (await Promise.all(body.map((m) => handleRpc(ctx, m)))).filter((r): r is JsonRpcResponse => r !== null);
-      return responses.length ? c.json(responses) : c.body(null, 202);
-    }
-
-    const accept = c.req.header("accept") ?? "";
-    if (isObj(body) && body.method === "tools/call" && body.id !== undefined && body.id !== null && accept.includes("text/event-stream")) {
-      disableIdleTimeout(c);
-      return sseCall(ctx, body);
-    }
-    const response = await handleRpc(ctx, body);
-    return response ? c.json(response) : c.body(null, 202);
-  });
-
-  // Stateless server: no server-initiated SSE stream and no sessions to terminate.
-  app.get("/mcp", (c) => c.body(null, 405, { Allow: "POST, DELETE" }));
-  app.delete("/mcp", (c) => c.body(null, 200));
+  // Stateless servers: no server-initiated SSE stream and no sessions to terminate.
+  for (const path of ["/mcp", "/mcp/computer"]) {
+    app.get(path, (c) => c.body(null, 405, { Allow: "POST, DELETE" }));
+    app.delete(path, (c) => c.body(null, 200));
+  }
 }

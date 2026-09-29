@@ -7,6 +7,7 @@ import {
   Bot,
   CalendarClock,
   Globe,
+  MonitorUp,
   Inbox,
   KeyRound,
   Lock,
@@ -108,6 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/vault/2fa", label: "2FA Codes", icon: <ShieldCheck /> },
     { to: "/integrations", label: "Integrations", icon: <Plug /> },
     { to: "/browser", label: "Browser", icon: <Globe /> },
+    { to: "/computer", label: "Computer", icon: <MonitorUp /> },
   ];
 
   return (

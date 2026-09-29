@@ -17,7 +17,8 @@ import type {
   Run,
   RunTrigger,
 } from "@godmode/shared";
-import type { ConversationPatch, ConversationWithMessages, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
+import type { ComputerTarget, ConversationPatch, ConversationWithMessages, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
+import { computerTargetLabel } from "@godmode/shared";
 import { all, bool, get, insert, int, run as sql, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -27,6 +28,8 @@ import { getAgent, getDefaultAgentId } from "../agents/service";
 import { activeRunForConversation, cancelRun, listActiveRuns, startRun, waitForRun } from "../runner/runner";
 import { displayToolName } from "../runner/stream";
 import { normalizeWorkingDirectory } from "./folders";
+import { parseComputerTarget } from "../computer/targets";
+import { audit } from "./audit";
 import { getSettings } from "./settings";
 
 const log = logger("chat");
@@ -45,6 +48,7 @@ interface ConversationRow {
   model: string | null;
   effort: Effort | null;
   working_directory: string | null;
+  computer_target: string | null;
   pinned: number;
   archived: number;
   last_message_at: string | null;
@@ -95,6 +99,7 @@ function toConversation(r: ConversationRow): Conversation {
     model: r.model || null,
     effort: r.effort || null,
     workingDirectory: r.working_directory,
+    computerTarget: parseComputerTarget(parseJson<unknown>(r.computer_target, null)),
     pinned: bool(r.pinned),
     archived: bool(r.archived),
     lastMessageAt: r.last_message_at,
@@ -233,6 +238,7 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     model: patch.model === undefined ? undefined : patch.model?.trim() || null,
     effort: patch.effort,
     working_directory: patch.workingDirectory === undefined ? undefined : normalizeWorkingDirectory(patch.workingDirectory),
+    computer_target: patch.computerTarget === undefined ? undefined : patch.computerTarget ? JSON.stringify(parseComputerTarget(patch.computerTarget)) : null,
     updated_at: now(),
   });
   const conversation = getConversationSummary(id);
@@ -452,6 +458,8 @@ export async function startChat(
     attachments?: SendMessageInput["attachments"];
     voice?: boolean;
     workingDirectory?: string | null;
+    /** Screen, window or tab the human shares with this chat (already validated). */
+    computerTarget?: ComputerTarget | null;
   } & ModelChoice,
 ): Promise<StartChatResult> {
   const agentId = input.agentId || getDefaultAgentId();
@@ -469,6 +477,10 @@ export async function startChat(
     model: input.model,
     effort: input.effort,
   });
+  if (input.computerTarget) {
+    update("conversations", conversation.id, { computer_target: JSON.stringify(parseComputerTarget(input.computerTarget)) });
+    audit("user", "computer.share", computerTargetLabel(input.computerTarget), { conversationId: conversation.id, kind: input.computerTarget.kind });
+  }
   try {
     const result = await sendMessage(conversation.id, { content: input.content, attachments: input.attachments, voice: input.voice });
     return { ...result, conversation: getConversationSummary(conversation.id) };

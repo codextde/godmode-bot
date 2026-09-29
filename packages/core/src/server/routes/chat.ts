@@ -13,7 +13,9 @@ import {
 } from "../../services/conversations";
 import { cancelRun, findRunLog, getRun, listRuns } from "../../runner/runner";
 import { notFound } from "../../util";
-import { body, z } from "../validate";
+import { body, computerTargetSchema, z } from "../validate";
+import { shareComputer } from "../../computer/share";
+import { validateTarget } from "../../computer/service";
 
 const attachmentSchema = z.object({
   name: z.string().min(1).max(255),
@@ -79,9 +81,12 @@ export function registerChatRoutes(app: Hono): void {
         archived: z.boolean().optional(),
         ...modelChoice,
         workingDirectory: folder,
+        computerTarget: computerTargetSchema.nullable().optional(),
       }),
     );
-    return c.json(updateConversation(c.req.param("id"), patch));
+    const { computerTarget, ...rest } = patch;
+    if (computerTarget !== undefined) await shareComputer(c.req.param("id"), computerTarget);
+    return c.json(updateConversation(c.req.param("id"), rest));
   });
 
   app.delete("/api/conversations/:id", async (c) => {
@@ -97,8 +102,13 @@ export function registerChatRoutes(app: Hono): void {
   });
 
   app.post("/api/chat", async (c) => {
-    const input = await body(c, sendSchema.extend({ agentId: z.string().min(1).optional(), workingDirectory: folder, ...modelChoice }));
-    return c.json(await startChat({ ...input, origin: "chat" }), 201);
+    const input = await body(
+      c,
+      sendSchema.extend({ agentId: z.string().min(1).optional(), workingDirectory: folder, computerTarget: computerTargetSchema.nullable().optional(), ...modelChoice }),
+    );
+    // Check the shared window/screen/tab before the chat exists, so a stale pick doesn't leave an empty chat.
+    const computerTarget = input.computerTarget ? await validateTarget(input.computerTarget) : null;
+    return c.json(await startChat({ ...input, computerTarget, origin: "chat" }), 201);
   });
 
   app.get("/api/runs", (c) =>

@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { motion } from "motion/react";
-import type { Agent, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
+import type { Agent, ComputerTarget, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
 import { ArrowRight, Bell, Pin, Receipt, Telescope, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,6 +15,7 @@ import { AgentPicker } from "@/components/chat/agent-picker";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { FolderChip } from "@/components/chat/folder-picker";
+import { ComputerShareChip } from "@/components/computer/computer-panel";
 import { ChatDropZone } from "@/components/chat/thread";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -74,6 +75,8 @@ export default function ChatHome() {
   const [agentId, setAgentId] = useState<string | null>(null);
   const [choice, setChoice] = useState<ModelChoice>({ model: null, effort: null });
   const [folder, setFolder] = useState<string | null>(null);
+  /** Shared with the chat this message starts (a window, a screen or a browser tab). */
+  const [shared, setShared] = useState<ComputerTarget | null>(null);
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
   const selected =
@@ -101,6 +104,7 @@ export default function ChatHome() {
         activeRunId: res.run.status === "queued" || res.run.status === "running" ? res.run.id : null,
       });
       if (input.voice) markVoiceRun(res.run.id);
+      setShared(null);
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${res.conversation.id}`);
     },
@@ -156,6 +160,7 @@ export default function ChatHome() {
                     agentName={selected?.name}
                     onChange={setFolder}
                   />
+                  <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />
                 </>
               )
             }
@@ -168,6 +173,7 @@ export default function ChatHome() {
                 voice: input.voice || undefined,
                 ...choice,
                 workingDirectory: folder ?? undefined,
+                computerTarget: shared ?? undefined,
               })
             }
           />
@@ -202,7 +208,7 @@ export default function ChatHome() {
         agent={selected}
         busy={start.isPending}
         onSend={async (text) => {
-          await start.mutateAsync({ agentId: selected?.id, content: text, voice: true, workingDirectory: folder ?? undefined, ...choice });
+          await start.mutateAsync({ agentId: selected?.id, content: text, voice: true, workingDirectory: folder ?? undefined, computerTarget: shared ?? undefined, ...choice });
         }}
       />
     </ChatDropZone>

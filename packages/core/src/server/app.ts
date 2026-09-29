@@ -17,6 +17,7 @@ import { registerBackupRoutes } from "./routes/backup";
 import { registerVoiceRoutes } from "./routes/voice";
 import { registerFolderRoutes } from "./routes/folders";
 import { registerMcpRoutes } from "../mcp/http";
+import { registerComputerRoutes } from "./routes/computer";
 import { serveStatic } from "./static";
 
 const log = logger("http");
@@ -77,6 +78,7 @@ export function createApp() {
   registerMissingLoginRoutes(app);
   registerIntegrationRoutes(app);
   registerBrowserRoutes(app);
+  registerComputerRoutes(app);
   registerBackupRoutes(app);
   registerVoiceRoutes(app);
   registerFolderRoutes(app);
