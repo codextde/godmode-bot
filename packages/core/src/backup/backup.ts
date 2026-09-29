@@ -20,6 +20,7 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync,
 import { dirname, join, resolve, sep } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import type { BackupExportInput, BackupImportResult, BackupManifest, EntityName } from "@godmode/shared";
+import { isValidBranch, parseGitUrl } from "@godmode/shared";
 import { config, VERSION } from "../config";
 import { all, get, getDb, run as exec } from "../db";
 import { recoverInterruptedRuns } from "../runner/runner";
@@ -34,6 +35,7 @@ import { startAppTriggers, stopAppTriggers } from "../integrations/composioTrigg
 import { shutdownBrowsers } from "../browser/manager";
 import { resetComposioState } from "../integrations/composio";
 import { workingDirectoryProblem } from "../services/folders";
+import { isSafeCloneDir } from "../services/workspaceSources";
 import * as vault from "../vault/vault";
 import { assertSafeKdf, openWithPassphrase, sealWithPassphrase } from "../vault/crypto";
 import { badRequest, conflict, HttpError, slugify } from "../util";
@@ -393,6 +395,25 @@ function sanitizeDump(dump: DbDump): string[] {
     clearedFolders++;
   }
   if (clearedFolders) warnings.push(`Cleared ${clearedFolders} working folder(s) that don't exist on this machine or aren't allowed.`);
+
+  // Workspace folders must exist here; repositories are cloned again (clones aren't in backups) from URLs that must
+  // still pass the checks new ones do.
+  let droppedSources = 0;
+  tables.workspace_sources = rowsOf("workspace_sources").filter((row) => {
+    const ok =
+      row.kind === "folder"
+        ? typeof row.path === "string" && !workingDirectoryProblem(row.path)
+        : row.kind === "git" &&
+          typeof row.url === "string" &&
+          !("error" in parseGitUrl(row.url)) &&
+          (row.branch == null || (typeof row.branch === "string" && isValidBranch(row.branch))) &&
+          typeof row.path === "string" &&
+          isSafeCloneDir(row.path);
+    if (!ok) droppedSources++;
+    else if (row.kind === "git") Object.assign(row, { error: null, commit_sha: null, head_branch: null, synced_at: null });
+    return ok;
+  });
+  if (droppedSources) warnings.push(`Removed ${droppedSources} workspace folder(s) or repositories that don't exist on this machine or aren't allowed.`);
 
   // Computer use: shared windows/screens belong to the machine they were shared on, and unattended control of this
   // computer is something the human turns on here, not something a backup grants.

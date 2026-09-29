@@ -27,8 +27,42 @@ export interface Workspace {
   instructions: string;
   /** macOS VM the workspace's agents work in (unless their chat or the agent has its own). null = none. */
   vmId: ID | null;
+  /** Folders and git repositories every agent in the workspace works with. */
+  sources: WorkspaceSource[];
   createdAt: ISODate;
   updatedAt: ISODate;
+}
+
+/**
+ * A folder on this computer or a git repository attached to a workspace. Godmode clones repositories into its data
+ * directory; every run of an agent in the workspace gets them (`--add-dir`).
+ *  - `ready`: usable (a repository is cloned)
+ *  - `cloning` / `syncing`: a clone or an update is in progress
+ *  - `missing`: the folder is gone, or the repository isn't cloned yet (the next run or a sync clones it)
+ *  - `error`: cloning failed (`error`)
+ */
+export type WorkspaceSourceStatus = "ready" | "cloning" | "syncing" | "missing" | "error";
+
+export interface WorkspaceSource {
+  id: ID;
+  kind: "folder" | "git";
+  name: string;
+  /** The folder, or where the repository is cloned. */
+  path: string;
+  /** Clone URL (git only). */
+  url: string | null;
+  /** Branch to check out (git only); null = the repository's default branch. */
+  branch: string | null;
+  status: WorkspaceSourceStatus;
+  /** Why the folder can't be used, or why the last clone or update failed (a clone stays usable). */
+  error: string | null;
+  /** Why the last update left the clone as it was (local changes, no tracking branch). */
+  note: string | null;
+  /** Checked out commit and branch (git only). */
+  commit: string | null;
+  headBranch: string | null;
+  /** Last successful clone or update (git only). */
+  syncedAt: ISODate | null;
 }
 
 /* ------------------------------------------------------------------ */
