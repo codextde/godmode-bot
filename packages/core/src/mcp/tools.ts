@@ -5,7 +5,7 @@
  */
 import { join } from "node:path";
 import { z } from "zod";
-import type { Agent, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Vm } from "@godmode/shared";
+import type { Agent, ApiTool, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Vm } from "@godmode/shared";
 import { isModelId, MAX_START_WINDOW_MINUTES } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
@@ -36,8 +36,8 @@ import { nameGuessMatchesHost } from "../vault/match";
 import { chatWorkspaceId, currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
 import { currentVmPage, fillIntoVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
-import { apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
-import { callApiTool, METHODS, type CallPlaces } from "../integrations/apiToolRequest";
+import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
+import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
 import { listSources } from "../services/workspaceSources";
 import { get } from "../db";
 import { loginFillScope } from "../browser/fill";
@@ -215,6 +215,12 @@ function apiCallPlaces(agent: Agent, ctx: RunContext): CallPlaces {
     cwd: folder ?? agent.repoPath,
     outputDir: shared ? join(shared, "api-tools") : join(agent.repoPath, "workspace", "api-tools"),
   };
+}
+
+/** Tools whose key this run has in an environment variable (none when the run is kept off this computer). */
+function keysInEnv(tools: ApiTool[], ctx: RunContext): Set<string> {
+  if (lockedVm(ctx)) return new Set();
+  return new Set(apiToolEnvOwners(tools).values());
 }
 
 const fileRef = z.object({
@@ -651,18 +657,21 @@ const TOOLS: ToolDef[] = [
       "List the API tools the human set up for you: what each API is for, its address and whether its key is also in an environment variable. Read a tool's documentation with api_tool_docs, then call it with api_tool_request.",
     schema: z.object({}),
     when: (agent) => hasApiTools(agent),
-    run: (_args, { agent }) =>
-      json(
-        apiToolsForAgent(agent).map((t) => ({
+    run: (_args, { agent, ctx }) => {
+      const tools = apiToolsForAgent(agent);
+      const inEnv = keysInEnv(tools, ctx);
+      return json(
+        tools.map((t) => ({
           id: t.id,
           name: t.name,
           usedFor: t.description,
           address: t.baseUrl || null,
           hasKey: t.hasKey,
-          ...(t.envVar && t.hasKey ? { envVar: t.envVar } : {}),
+          ...(inEnv.has(t.id) ? { envVar: t.envVar } : {}),
           hasDocs: !!t.docs || !!t.docsUrl,
         })),
-      ),
+      );
+    },
   }),
 
   defineTool({
@@ -670,8 +679,9 @@ const TOOLS: ToolDef[] = [
     description: "Read how to use an API tool — its documentation, address and how the key is sent. Read it before your first request to a tool.",
     schema: z.object({ tool: z.string().min(1).describe("Tool id or name (api_tools_list)") }),
     when: (agent) => hasApiTools(agent),
-    run: ({ tool: ref }, { agent }) => {
+    run: ({ tool: ref }, { agent, ctx }) => {
       const t = findApiToolForAgent(agent, ref);
+      const inEnv = keysInEnv(apiToolsForAgent(agent), ctx).has(t.id);
       const key = !t.hasKey
         ? "No key is saved — the API is called without one."
         : `Godmode sends the key ${t.auth.in === "query" ? `as the query parameter "${t.auth.name}"` : `in the header "${t.auth.name}"`} on every api_tool_request; don't add it yourself.`;
@@ -680,7 +690,7 @@ const TOOLS: ToolDef[] = [
         t.description && `Used for: ${t.description}`,
         t.baseUrl ? `API address: ${t.baseUrl} — api_tool_request paths are relative to it.` : "No API address: requests through Godmode aren't possible.",
         key,
-        t.envVar && t.hasKey && `The key is also in $${t.envVar} for scripts and SDKs (never print it).`,
+        inEnv && `The key is also in $${t.envVar} for scripts and SDKs (never print it).`,
         t.docsUrl && `Official documentation: ${t.docsUrl}`,
       ].filter(Boolean);
       const docs = t.docs ? `## Documentation\n${t.docs}` : "The human didn't add documentation. Look up the API's official documentation on the web before calling it.";
@@ -708,16 +718,21 @@ const TOOLS: ToolDef[] = [
     run: async ({ tool: ref, ...call }, { agent, ctx }) => {
       const tool = findApiToolForAgent(agent, ref);
       const key = tool.hasKey ? apiToolKey(tool.id) : null;
-      const result = await callApiTool(tool, key, call, apiCallPlaces(agent, ctx));
-      audit(`agent:${agent.id}`, "api_tool.request", tool.id, {
-        method: call.method ?? "GET",
-        path: call.path ?? "",
-        status: result.status,
-        files: result.files.length,
-        runId: ctx.runId,
-      });
-      markApiToolUsed(tool.id);
-      return result.ok ? result.text : fail(result.text);
+      let result: ApiCallResult | null = null;
+      try {
+        result = await callApiTool(tool, key, call, apiCallPlaces(agent, ctx));
+        return result.ok ? result.text : fail(result.text);
+      } finally {
+        audit(`agent:${agent.id}`, "api_tool.request", tool.id, {
+          method: call.method ?? "GET",
+          path: call.path ?? "",
+          status: result?.status ?? null,
+          files: result?.files.length ?? 0,
+          ...(result ? {} : { refused: true }),
+          runId: ctx.runId,
+        });
+        if (result) markApiToolUsed(tool.id);
+      }
     },
   }),
 

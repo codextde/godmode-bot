@@ -268,6 +268,7 @@ export function AgentForm({
       const mod = isMac ? e.metaKey : e.ctrlKey;
       if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
+        if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
         submitRef.current();
       }
     };
@@ -601,7 +602,7 @@ export function AgentForm({
                 checked={values.inheritMcp}
                 onChange={(v) => set("inheritMcp", v)}
               />
-              <ApiToolsField agentId={agentId} workspaceId={values.workspaceId} inherit={values.inheritMcp} />
+              <ApiToolsField agentId={agentId} workspaceId={values.workspaceId} savedWorkspaceId={initial?.workspaceId ?? null} inherit={values.inheritMcp} />
               <McpField agentId={agentId} value={values.mcpServerIds} onChange={(v) => set("mcpServerIds", v)} />
             </div>
           </FormSection>
@@ -975,7 +976,17 @@ function BrowserProfileField({
 }
 
 /** The API tools this agent gets (from its scope), with a shortcut to add one only for it. */
-function ApiToolsField({ agentId, workspaceId, inherit }: { agentId?: string; workspaceId: string | null; inherit: boolean }) {
+function ApiToolsField({
+  agentId,
+  workspaceId,
+  savedWorkspaceId,
+  inherit,
+}: {
+  agentId?: string;
+  workspaceId: string | null;
+  savedWorkspaceId: string | null;
+  inherit: boolean;
+}) {
   const { data: tools = [], isLoading } = useApiTools();
   const [dialog, setDialog] = useState<ApiToolDialogState>(null);
   const available = tools.filter(
@@ -1013,7 +1024,7 @@ function ApiToolsField({ agentId, workspaceId, inherit }: { agentId?: string; wo
         </p>
       )}
       {agentId && (
-        <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ mode: "create", preset: null, scope: { workspaceId, agentId } })}>
+        <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ mode: "create", preset: null, scope: { workspaceId: savedWorkspaceId, agentId } })}>
           <Wrench /> Add a tool only for this agent
         </Button>
       )}

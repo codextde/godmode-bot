@@ -22,12 +22,10 @@ const HEADER_NAME_RE = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const QUERY_NAME_RE = /^[A-Za-z0-9_.~[\]-]+$/;
 const ENV_VAR_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const PRESET_RE = /^[a-z0-9-]{1,40}$/;
-/** Variables runs depend on; a tool can't replace them. */
-const RESERVED_ENV = new Set([
-  "PATH", "HOME", "USER", "LOGNAME", "SHELL", "PWD", "TMPDIR", "TMP", "TEMP", "LANG", "TERM",
-  "NODE_OPTIONS", "NODE_PATH", "BUN_OPTIONS", "PYTHONPATH", "PYTHONHOME", "SSH_AUTH_SOCK", "DISABLE_AUTOUPDATER",
-]);
-const RESERVED_ENV_PREFIXES = ["ANTHROPIC_", "CLAUDE", "GODMODE_", "DYLD_", "LD_", "LC_", "GIT_", "MCP_"];
+/** Only names of secrets: a variable like HTTPS_PROXY or BASH_ENV would change how programs in a run behave. */
+const SECRET_NAME_RE = /(KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?)$/i;
+const RESERVED_ENV_PREFIXES = ["ANTHROPIC_", "CLAUDE", "GODMODE_", "DYLD_", "LD_", "GIT_", "MCP_", "AWS_", "NODE_", "NPM_"];
+const MIN_KEY_LENGTH = 8;
 
 interface ApiToolRow {
   id: string;
@@ -172,10 +170,9 @@ export function cleanEnvVar(value: unknown): string | null {
   const name = value.trim();
   if (!name) return null;
   if (name.length > 100 || !ENV_VAR_RE.test(name)) throw badRequest(`Invalid environment variable name: ${name}. Use letters, digits and _ (e.g. GEMINI_API_KEY).`);
+  if (!SECRET_NAME_RE.test(name)) throw badRequest(`${name} must end in _KEY, _TOKEN or _SECRET (e.g. GEMINI_API_KEY).`);
   const upper = name.toUpperCase();
-  if (RESERVED_ENV.has(upper) || RESERVED_ENV_PREFIXES.some((p) => upper.startsWith(p))) {
-    throw badRequest(`${name} is used by Godmode or the system; pick another name.`);
-  }
+  if (RESERVED_ENV_PREFIXES.some((p) => upper.startsWith(p))) throw badRequest(`${name} is used by Godmode or other programs; pick another name.`);
   return name;
 }
 
@@ -188,6 +185,7 @@ function cleanPreset(value: unknown): string | null {
 function cleanKey(value: string): string {
   const key = value.trim();
   if (key.length > 16_384) throw badRequest("The API key is too long");
+  if (key.length < MIN_KEY_LENGTH) throw badRequest(`The API key must be at least ${MIN_KEY_LENGTH} characters`);
   if (/[\s\0]/.test(key)) throw badRequest("The API key must not contain spaces or line breaks");
   return key;
 }
@@ -400,14 +398,20 @@ export function findApiToolForAgent(agent: Pick<Agent, "id" | "workspaceId" | "i
   throw new HttpError(404, `No API tool "${wanted}" is available to you.${names ? ` Available: ${names}.` : ""}`, "not_found");
 }
 
-/**
- * Environment variables with the keys of the agent's tools that hand them to runs (the most specific tool wins a
- * name). Tools whose key can't be opened (vault locked) are left out.
- */
+/** Environment variable → the tool whose key it holds (the most specific tool wins a name). */
+export function apiToolEnvOwners(tools: ApiTool[]): Map<string, string> {
+  const owners = new Map<string, string>();
+  for (const t of [...tools].sort((a, b) => specificity(a) - specificity(b))) if (t.envVar && t.hasKey) owners.set(t.envVar, t.id);
+  return owners;
+}
+
+/** Environment variables with the keys of the agent's tools that hand them to runs. Keys that can't be opened (vault locked) are left out. */
 export function apiToolEnv(agent: Pick<Agent, "id" | "workspaceId" | "inheritMcp">): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const tool of apiToolsForAgent(agent)) {
-    if (!tool.envVar || !tool.hasKey) continue;
+  const tools = apiToolsForAgent(agent);
+  const owners = apiToolEnvOwners(tools);
+  for (const tool of tools) {
+    if (!tool.envVar || owners.get(tool.envVar) !== tool.id) continue;
     try {
       const key = apiToolKey(tool.id);
       if (key) env[tool.envVar] = key;

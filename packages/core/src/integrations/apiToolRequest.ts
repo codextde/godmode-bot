@@ -6,8 +6,8 @@
  * or the raw body), and files in the response (binary bodies, base64 or data URLs in JSON) are saved to disk so the
  * agent gets paths instead of megabytes of base64. Both only reach the folders the run itself may use.
  */
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, resolve, sep } from "node:path";
+import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, statSync, writeSync } from "node:fs";
+import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import type { ApiTool, ApiToolTestResult } from "@godmode/shared";
 import { badRequest, HttpError, slugify } from "../util";
 import { redact } from "../vault/vault";
@@ -59,6 +59,7 @@ export interface ApiCallResult {
 }
 
 const MAX_INPUT_FILE = 50 * 1024 * 1024;
+const MAX_INPUT_TOTAL = 100 * 1024 * 1024;
 const MAX_RESPONSE = 200 * 1024 * 1024;
 const MAX_INLINE = 60_000;
 const MAX_ERROR_INLINE = 8_000;
@@ -209,7 +210,14 @@ function outsideMessage(path: string): string {
   return `${path} is outside the folders you can use in this run (your repository, the chat's folder, the workspace's folders and the VM's shared folder).`;
 }
 
-function readInputFile(ref: string, places: CallPlaces): { bytes: Uint8Array<ArrayBuffer>; name: string; type: string } {
+/** The most specific root `real` lies in, or null. */
+function rootOf(real: string, roots: string[]): string | null {
+  return roots.filter((root) => within(real, [root])).sort((a, b) => b.length - a.length)[0] ?? null;
+}
+
+const NOFOLLOW = constants.O_NOFOLLOW ?? 0;
+
+function readInputFile(ref: string, places: CallPlaces, budget: { left: number }): { bytes: Uint8Array<ArrayBuffer>; name: string; type: string } {
   if (typeof ref !== "string" || !ref.trim()) throw badRequest("$file needs a path");
   const path = resolve(places.cwd, ref.trim());
   let real: string;
@@ -219,52 +227,58 @@ function readInputFile(ref: string, places: CallPlaces): { bytes: Uint8Array<Arr
     throw badRequest(`File not found: ${path}`);
   }
   if (!within(real, realRoots(places.roots))) throw new HttpError(403, outsideMessage(path), "forbidden");
-  const stat = statSync(real);
-  if (!stat.isFile()) throw badRequest(`${path} is not a file`);
-  if (stat.size > MAX_INPUT_FILE) throw badRequest(`${path} is larger than ${formatBytes(MAX_INPUT_FILE)}`);
-  const bytes = new Uint8Array(readFileSync(real));
-  const ext = extname(real).slice(1).toLowerCase();
-  return { bytes, name: basename(real), type: TYPE_BY_EXT[ext] ?? sniffType(bytes) ?? "application/octet-stream" };
+  const fd = openSync(real, constants.O_RDONLY | NOFOLLOW);
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) throw badRequest(`${path} is not a file`);
+    if (stat.size > MAX_INPUT_FILE) throw badRequest(`${path} is larger than ${formatBytes(MAX_INPUT_FILE)}`);
+    if (stat.size > budget.left) throw badRequest(`The files of one request may add up to ${formatBytes(MAX_INPUT_TOTAL)}`);
+    budget.left -= stat.size;
+    const bytes = new Uint8Array(readFileSync(fd));
+    const ext = extname(real).slice(1).toLowerCase();
+    return { bytes, name: basename(real), type: TYPE_BY_EXT[ext] ?? sniffType(bytes) ?? "application/octet-stream" };
+  } finally {
+    closeSync(fd);
+  }
 }
 
 function isFileRef(v: unknown): v is FileRef {
   return typeof v === "object" && v !== null && !Array.isArray(v) && typeof (v as FileRef).$file === "string";
 }
 
-function substituteFiles(value: unknown, places: CallPlaces, depth = 0): unknown {
+function substituteFiles(value: unknown, places: CallPlaces, budget: { left: number }, depth = 0): unknown {
   if (depth > 64) throw badRequest("json is nested too deeply");
   if (isFileRef(value)) {
-    const file = readInputFile(value.$file, places);
+    const file = readInputFile(value.$file, places, budget);
     const b64 = Buffer.from(file.bytes).toString("base64");
     return value.as === "dataUrl" ? `data:${value.type ?? file.type};base64,${b64}` : b64;
   }
-  if (Array.isArray(value)) return value.map((v) => substituteFiles(v, places, depth + 1));
+  if (Array.isArray(value)) return value.map((v) => substituteFiles(v, places, budget, depth + 1));
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, substituteFiles(v, places, depth + 1)]));
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, substituteFiles(v, places, budget, depth + 1)]));
   }
   return value;
 }
 
+function saveAsTarget(places: CallPlaces, saveAs: string): { target: string; folder: boolean } {
+  const target = resolve(places.cwd, saveAs.trim());
+  return { target, folder: /[\\/]$/.test(saveAs) || (existsSync(target) && statSync(target).isDirectory()) };
+}
+
 /** Where a response file is written: `saveAs` (a file, or a folder ending in / or existing), else the output folder. */
-function targetPath(places: CallPlaces, saveAs: string | undefined, tool: ApiTool, type: string, index: number, suggested: string | null): string {
+function targetPath(places: CallPlaces, saveAs: string | undefined, tool: ApiTool, type: string, index: number, suggested: string | null): { path: string; overwrite: boolean } {
   const ext = EXT_BY_TYPE[type] ?? (suggested ? extname(suggested).slice(1) : "");
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
   const generated = suggested ? suggested : `${slugify(tool.name) || "api"}-${stamp}${index > 0 ? `-${index + 1}` : ""}.${ext || "bin"}`;
-  let path: string;
-  if (saveAs?.trim()) {
-    const target = resolve(places.cwd, saveAs.trim());
-    const folder = /[\\/]$/.test(saveAs) || (existsSync(target) && statSync(target).isDirectory());
-    if (folder) path = join(target, generated);
-    else {
-      const own = extname(target) ? target : `${target}.${ext || "bin"}`;
-      path = index === 0 ? own : own.replace(/(\.[^./\\]+)?$/, (m) => `-${index + 1}${m}`);
-    }
-  } else path = join(places.outputDir, generated);
-  return uniquePath(path, !!saveAs?.trim() && index === 0 && !/[\\/]$/.test(saveAs));
+  if (!saveAs?.trim()) return { path: uniquePath(join(places.outputDir, generated)), overwrite: false };
+  const { target, folder } = saveAsTarget(places, saveAs);
+  if (folder) return { path: uniquePath(join(target, generated)), overwrite: false };
+  const own = extname(target) ? target : `${target}.${ext || "bin"}`;
+  return index === 0 ? { path: own, overwrite: true } : { path: uniquePath(own.replace(/(\.[^./\\]+)?$/, (m) => `-${index + 1}${m}`)), overwrite: false };
 }
 
-function uniquePath(path: string, overwrite: boolean): string {
-  if (overwrite || !existsSync(path)) return path;
+function uniquePath(path: string): string {
+  if (!existsSync(path)) return path;
   const ext = extname(path);
   const stem = path.slice(0, path.length - ext.length);
   for (let n = 2; ; n++) {
@@ -273,17 +287,40 @@ function uniquePath(path: string, overwrite: boolean): string {
   }
 }
 
-function writeOutput(path: string, bytes: Uint8Array, places: CallPlaces): void {
-  const roots = realRoots(places.roots);
-  let dir = dirname(path);
-  // The deepest existing ancestor must be inside a root (symlinks resolved) before anything is created.
-  let probe = dir;
+/**
+ * The real path a response file may be written to: inside one of the run's folders (symlinks resolved) and not in a
+ * hidden file or folder — .git, .claude and the like hold settings and hooks that run programs on this computer.
+ */
+function writablePath(path: string, places: CallPlaces): string {
+  let probe = dirname(path);
   while (!existsSync(probe) && dirname(probe) !== probe) probe = dirname(probe);
-  if (!within(realpathSync(probe), roots)) throw new HttpError(403, outsideMessage(path), "forbidden");
-  mkdirSync(dir, { recursive: true });
-  dir = realpathSync(dir);
-  if (!within(dir, roots)) throw new HttpError(403, outsideMessage(path), "forbidden");
-  writeFileSync(join(dir, basename(path)), bytes);
+  const real = join(realpathSync(probe), relative(probe, path));
+  const root = rootOf(real, realRoots(places.roots));
+  if (!root || real === root) throw new HttpError(403, outsideMessage(path), "forbidden");
+  const hidden = relative(root, real).split(sep).find((part) => part.startsWith("."));
+  if (hidden) throw new HttpError(403, `Files from responses can't go into hidden files or folders (${hidden}); pick another path.`, "forbidden");
+  return real;
+}
+
+function writeOutput(path: string, bytes: Uint8Array, places: CallPlaces, overwrite: boolean): void {
+  const target = writablePath(path, places);
+  mkdirSync(dirname(target), { recursive: true });
+  if (realpathSync(dirname(target)) !== dirname(target)) throw new HttpError(403, outsideMessage(path), "forbidden");
+  if (existsSync(target) && lstatSync(target).isSymbolicLink()) throw new HttpError(403, `${path} is a link; pick another path.`, "forbidden");
+  const flags = constants.O_WRONLY | constants.O_CREAT | (overwrite ? constants.O_TRUNC : constants.O_EXCL) | NOFOLLOW;
+  const fd = openSync(target, flags, 0o644);
+  try {
+    writeSync(fd, bytes);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Refuse a `saveAs` that can't be used before anything is sent (and paid for). */
+function checkSaveAs(places: CallPlaces, saveAs: string | undefined): void {
+  if (!saveAs?.trim()) return;
+  const { target, folder } = saveAsTarget(places, saveAs);
+  writablePath(folder ? join(target, "file") : target, places);
 }
 
 /* ------------------------------------------------------------------ */
@@ -291,6 +328,7 @@ function writeOutput(path: string, bytes: Uint8Array, places: CallPlaces): void 
 /* ------------------------------------------------------------------ */
 
 function buildBody(call: ApiCall, places: CallPlaces, headers: Headers): BodyInit | undefined {
+  const budget = { left: MAX_INPUT_TOTAL };
   const given = [call.json !== undefined, call.body !== undefined, call.form !== undefined].filter(Boolean).length;
   if (given > 1) throw badRequest("Send only one of json, body or form");
   if (!given) return undefined;
@@ -298,21 +336,21 @@ function buildBody(call: ApiCall, places: CallPlaces, headers: Headers): BodyIni
   if (method === "GET" || method === "HEAD") throw badRequest(`A ${method} request has no body; use query for parameters`);
   if (call.json !== undefined) {
     if (!headers.has("content-type")) headers.set("content-type", "application/json");
-    return JSON.stringify(substituteFiles(call.json, places));
+    return JSON.stringify(substituteFiles(call.json, places, budget));
   }
   if (call.form !== undefined) {
     headers.delete("content-type");
     const form = new FormData();
     for (const [name, value] of Object.entries(call.form)) {
       if (isFileRef(value)) {
-        const file = readInputFile(value.$file, places);
+        const file = readInputFile(value.$file, places, budget);
         form.append(name, new Blob([file.bytes], { type: value.type ?? file.type }), value.filename ?? file.name);
       } else form.append(name, String(value));
     }
     return form;
   }
   if (isFileRef(call.body)) {
-    const file = readInputFile(call.body.$file, places);
+    const file = readInputFile(call.body.$file, places, budget);
     if (!headers.has("content-type")) headers.set("content-type", call.body.type ?? file.type);
     return file.bytes;
   }
@@ -369,6 +407,7 @@ interface Fetched {
   url: URL;
   /** A redirect that wasn't followed because it leaves the tool's address. */
   leftAt: string | null;
+  tooMany?: boolean;
 }
 
 /** fetch() that follows redirects only while they stay under the tool's address (the key never leaves it). */
@@ -389,7 +428,7 @@ async function fetchInside(tool: ApiTool, key: string | null, url: URL, init: { 
     } catch {
       return { res, url: current, leftAt: new URL(location, current).toString() };
     }
-    if (hop >= MAX_REDIRECTS) return { res, url: current, leftAt: next.toString() };
+    if (hop >= MAX_REDIRECTS) return { res, url: current, leftAt: null, tooMany: true };
     await res.body?.cancel().catch(() => undefined);
     if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === "POST")) {
       method = "GET";
@@ -431,12 +470,13 @@ function extractBlobs(value: unknown, save: (bytes: Uint8Array, type: string) =>
     if (!type && b64.length < OPAQUE_BLOB_CHARS) return value;
     return save(bytes, type ?? "application/octet-stream");
   }
-  if (Array.isArray(value)) return value.map((v) => extractBlobs(v, save, hint, depth + 1));
+  if (Array.isArray(value)) return value.map((v) => extractBlobs(v, save, null, depth + 1));
   if (value && typeof value === "object") {
     const obj = value as Record<string, unknown>;
     const sibling = [obj.mimeType, obj.mime_type, obj.contentType, obj.content_type, obj.media_type, obj.mediaType].find((v) => typeof v === "string") as string | undefined;
-    const own = sibling ? mimeOf(sibling) : hint;
-    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, extractBlobs(v, save, own, depth + 1)]));
+    // A type field only describes the strings right next to it (e.g. inlineData.data), not nested ids or cursors.
+    const own = sibling ? mimeOf(sibling) : null;
+    return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, extractBlobs(v, save, typeof v === "string" ? own : null, depth + 1)]));
   }
   return value;
 }
@@ -448,7 +488,14 @@ function statusLine(res: Response): string {
 function suggestedName(res: Response): string | null {
   const cd = res.headers.get("content-disposition") ?? "";
   const m = /filename\*=(?:UTF-8'')?([^;]+)|filename="?([^";]+)"?/i.exec(cd);
-  const raw = m ? decodeURIComponent((m[1] ?? m[2] ?? "").trim()) : "";
+  let raw = (m?.[1] ?? m?.[2] ?? "").trim();
+  if (m?.[1]) {
+    try {
+      raw = decodeURIComponent(raw);
+    } catch {
+      /* keep it encoded */
+    }
+  }
   const name = basename(raw.replace(/\\/g, "/")).replace(/[^\w.\- ]+/g, "_").trim();
   return name && name !== "." && name !== ".." ? name.slice(0, 120) : null;
 }
@@ -474,40 +521,50 @@ export async function callApiTool(tool: ApiTool, key: string | null, call: ApiCa
   }
   const headers = requestHeaders(tool, call.headers);
   const body = buildBody(call, places, headers);
+  checkSaveAs(places, call.saveAs);
   const timeout = Math.min(Math.max(call.timeoutSeconds ?? 180, 5), 600);
-  const mask = (s: string) => redact(key ? s.split(key).join(MASK) : s);
+  const mask = masker(key);
   const shown = displayUrl(tool, url);
   const started = Date.now();
 
   let fetched: Fetched;
+  let bytes: Uint8Array;
   try {
     fetched = await fetchInside(tool, key, url, { method, headers, body }, AbortSignal.timeout(timeout * 1000));
+    bytes = await readCapped(fetched.res);
   } catch (err) {
-    const reason = err instanceof Error && err.name === "TimeoutError" ? `no answer within ${timeout} s (pass timeoutSeconds for slow APIs)` : err instanceof Error ? err.message : String(err);
+    const reason =
+      err instanceof Error && err.name === "TimeoutError" ? `no answer within ${timeout} s (pass timeoutSeconds for slow APIs)` : err instanceof Error ? err.message : String(err);
     return { ok: false, status: null, files: [], text: mask(`${method} ${shown}\n→ failed: ${reason}`) };
   }
   const { res } = fetched;
-  const bytes = await readCapped(res);
   const mime = mimeOf(res.headers.get("content-type"));
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
   const head = [`${method} ${displayUrl(tool, fetched.url)}`, `→ ${statusLine(res)} · ${seconds} s${mime ? ` · ${mime}` : ""} · ${formatBytes(bytes.byteLength)}`];
   if (fetched.leftAt) {
     head.push(`Redirected to ${mask(fetched.leftAt)} — not followed: it's outside this tool's API address and would get the key. If it's a download link, fetch it without the key (e.g. curl -L).`);
   }
+  if (fetched.tooMany) head.push(`Stopped after ${MAX_REDIRECTS} redirects.`);
 
   const files: SavedFile[] = [];
-  const save = (data: Uint8Array, type: string, suggested: string | null = null): string => {
-    const path = targetPath(places, call.saveAs, tool, type, files.length, suggested);
-    writeOutput(path, data, places);
+  const notes: string[] = [];
+  const keyBytes = key ? Buffer.from(key) : null;
+  const save = (data: Uint8Array, type: string, opts: { suggested?: string | null; useSaveAs?: boolean } = {}): string => {
+    if (keyBytes && Buffer.from(data.buffer, data.byteOffset, data.byteLength).includes(keyBytes)) {
+      notes.push(`A ${type} file in the response contained the key, so it wasn't saved.`);
+      return "[not saved: it contained the key]";
+    }
+    const { path, overwrite } = targetPath(places, opts.useSaveAs === false ? undefined : call.saveAs, tool, type, files.length, opts.suggested ?? null);
+    writeOutput(path, data, places, overwrite);
     files.push({ path, type, bytes: data.byteLength });
     return path;
   };
 
-  const ok = res.ok && !fetched.leftAt;
+  const ok = res.ok && !fetched.leftAt && !fetched.tooMany;
   let payload = "";
   if (!ok) {
-    const detail = bytes.byteLength ? new TextDecoder().decode(bytes.subarray(0, MAX_ERROR_INLINE)) : "";
-    payload = detail ? `${detail}${bytes.byteLength > MAX_ERROR_INLINE ? "\n… (cut off)" : ""}` : "";
+    const detail = bytes.byteLength ? mask(new TextDecoder().decode(bytes.subarray(0, MAX_ERROR_INLINE + 2048))) : "";
+    payload = detail.length > MAX_ERROR_INLINE ? `${detail.slice(0, MAX_ERROR_INLINE)}\n… (cut off)` : detail;
   } else if (method === "HEAD" || !bytes.byteLength) {
     payload = "";
   } else if (isJsonType(mime) || (isTextual(mime) && /^\s*[[{]/.test(new TextDecoder().decode(bytes.subarray(0, 64))))) {
@@ -516,30 +573,39 @@ export async function callApiTool(tool: ApiTool, key: string | null, call: ApiCa
     try {
       const replaced = extractBlobs(JSON.parse(text), (data, type) => {
         const path = save(data, type);
-        return `[saved to ${path} — ${type}, ${formatBytes(data.byteLength)}]`;
+        return path.startsWith("[") ? path : `[saved to ${path} — ${type}, ${formatBytes(data.byteLength)}]`;
       });
       pretty = JSON.stringify(replaced, null, 2);
-    } catch {
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
       pretty = text;
     }
-    payload = inline(pretty, "application/json", save);
+    payload = inline(mask(pretty), "application/json", save);
   } else if (isTextual(mime) || (!mime && looksLikeText(bytes))) {
-    payload = inline(new TextDecoder().decode(bytes), mime || "text/plain", save);
+    payload = inline(mask(new TextDecoder().decode(bytes)), mime || "text/plain", save);
   } else {
     const type = mime && mime !== "application/octet-stream" && mime !== "binary/octet-stream" ? mime : (sniffType(bytes) ?? "application/octet-stream");
-    save(bytes, type, suggestedName(res));
+    save(bytes, type, { suggested: suggestedName(res) });
   }
 
   const out = [...head];
   if (files.length) out.push("", `Saved ${files.length === 1 ? "1 file" : `${files.length} files`}:`, ...files.map((f) => `- ${f.path} (${f.type}, ${formatBytes(f.bytes)})`));
+  if (notes.length) out.push("", ...notes);
   if (payload) out.push("", payload);
-  if (!ok && !fetched.leftAt) out.push("", hintFor(res.status, tool));
+  if (!ok && !fetched.leftAt && !fetched.tooMany) out.push("", hintFor(res.status, tool));
   return { ok, status: res.status, files, text: mask(out.join("\n").trimEnd()) };
 }
 
-function inline(text: string, type: string, save: (data: Uint8Array, type: string) => string): string {
+/** Masks the key (also URL-encoded, as it appears in query strings) and every other known secret. */
+function masker(key: string | null): (s: string) => string {
+  const forms = key ? [...new Set([key, encodeURIComponent(key), new URLSearchParams({ k: key }).toString().slice(2)])] : [];
+  return (s: string) => redact(forms.reduce((text, form) => text.split(form).join(MASK), s));
+}
+
+/** Long text is cut for the agent; the whole (masked) text goes to a file in the output folder. */
+function inline(text: string, type: string, save: (data: Uint8Array, type: string, opts?: { useSaveAs?: boolean }) => string): string {
   if (text.length <= MAX_INLINE) return text;
-  const path = save(new TextEncoder().encode(text), type);
+  const path = save(new TextEncoder().encode(text), type, { useSaveAs: false });
   return `${text.slice(0, MAX_INLINE)}\n… (cut off after ${MAX_INLINE.toLocaleString("en-US")} characters — the full response is in ${path})`;
 }
 
@@ -559,7 +625,7 @@ function hintFor(status: number, tool: ApiTool): string {
 export async function testApiToolKey(tool: ApiTool, key: string | null): Promise<ApiToolTestResult> {
   if (!tool.baseUrl || !tool.testPath) return { ok: false, status: null, ms: 0, message: "This tool has no test path." };
   const started = Date.now();
-  const mask = (s: string) => redact(key ? s.split(key).join(MASK) : s);
+  const mask = masker(key);
   try {
     const url = resolveApiUrl(tool.baseUrl, tool.testPath);
     const { res, leftAt } = await fetchInside(tool, key, url, { method: "GET", headers: new Headers({ accept: "application/json" }) }, AbortSignal.timeout(15_000));

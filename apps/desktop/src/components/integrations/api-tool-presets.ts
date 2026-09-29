@@ -207,4 +207,5 @@ export function suggestEnvVar(name: string): string {
 }
 
 export const ENV_VAR_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+export const SECRET_NAME_PATTERN = /(KEY|TOKEN|SECRET|PASSWORD|CREDENTIALS?)$/i;
 export const HEADER_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;

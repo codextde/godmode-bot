@@ -100,6 +100,14 @@ beforeAll(async () => {
           return new Response(null, { status: 302, headers: { location: "https://evil.example/steal" } });
         case "/v1/bounce-in":
           return new Response(null, { status: 302, headers: { location: "/v1/models" } });
+        case "/v1/report":
+          return new Response(new TextEncoder().encode("%PDF-1.7 report"), { headers: { "content-type": "application/pdf", "content-disposition": 'attachment; filename="report 100%.pdf"' } });
+        case "/v1/nested":
+          return Response.json({ mimeType: "application/pdf", body: { attachmentId: "A".repeat(800) } });
+        case "/v1/loop":
+          return new Response(null, { status: 302, headers: { location: "/v1/loop" } });
+        case "/v1/echo-url":
+          return new Response(req.url, { headers: { "content-type": "text/plain" } });
         case "/admin":
           return Response.json({ secret: "admin" });
         default:
@@ -133,6 +141,10 @@ describe("CRUD + validation", () => {
     expectHttpError(() => createApiTool({ name: "x", baseUrl: "https://example.com", envVar: "ANTHROPIC_API_KEY" }), 400);
     expectHttpError(() => createApiTool({ name: "x", baseUrl: "https://example.com", envVar: "1BAD" }), 400);
     expectHttpError(() => createApiTool({ name: "x", baseUrl: "https://example.com", apiKey: "has space" }), 400);
+    expectHttpError(() => createApiTool({ name: "x", baseUrl: "https://example.com", apiKey: "short" }), 400);
+    expectHttpError(() => createApiTool({ name: "x", baseUrl: "https://example.com", envVar: "HTTPS_PROXY" }), 400);
+    expectHttpError(() => createApiTool({ name: "x", baseUrl: "https://example.com", envVar: "BASH_ENV" }), 400);
+    expectHttpError(() => createApiTool({ name: "x", baseUrl: "https://example.com", envVar: "NODE_AUTH_TOKEN" }), 400);
     expectHttpError(() => createApiTool({ name: "x", baseUrl: "https://example.com", testPath: "https://other.example/models" }), 403);
     expectHttpError(() => createApiTool({ name: "x", workspaceId: "ws_missing", baseUrl: "https://example.com" }), 400);
   });
@@ -301,6 +313,46 @@ describe("requests", () => {
     await expect(callApiTool(gemini, KEY, { method: "POST", path: "echo", body: { $file: "workspace/sneaky/outside.txt" } }, places)).rejects.toThrow("outside the folders");
   });
 
+  test("responses never go through a link, into hidden folders or over a file in a folder", async () => {
+    const victim = join(env.dataDir, "victim.txt");
+    writeFileSync(victim, "keep me");
+    mkdirSync(join(agentA.repoPath, "workspace", "links"), { recursive: true });
+    symlinkSync(victim, join(agentA.repoPath, "workspace", "links", "out.png"));
+    await expect(callApiTool(gemini, KEY, { path: "image.png", saveAs: "workspace/links/out.png" }, places)).rejects.toThrow();
+    expect(readFileSync(victim, "utf8")).toBe("keep me");
+
+    const before = seen.length;
+    await expect(callApiTool(gemini, KEY, { path: "image.png", saveAs: ".git/config" }, places)).rejects.toThrow("hidden");
+    await expect(callApiTool(gemini, KEY, { path: "image.png", saveAs: "workspace/.claude/settings.json" }, places)).rejects.toThrow("hidden");
+    await expect(callApiTool(gemini, KEY, { path: "image.png", saveAs: join(env.dataDir, "x.png") }, places)).rejects.toThrow("outside the folders");
+    expect(seen.length).toBe(before);
+
+    const first = await callApiTool(gemini, KEY, { path: "report", saveAs: "workspace/reports/" }, places);
+    const second = await callApiTool(gemini, KEY, { path: "report", saveAs: "workspace/reports" }, places);
+    expect(first.files[0]!.path.endsWith("report 100_.pdf")).toBe(true);
+    expect(second.files[0]!.path.endsWith("report 100_-2.pdf")).toBe(true);
+  });
+
+  test("a type field only describes the strings next to it", async () => {
+    const res = await callApiTool(gemini, KEY, { path: "nested" }, places);
+    expect(res.files).toHaveLength(0);
+    expect(res.text).toContain("A".repeat(800));
+  });
+
+  test("redirect loops stop", async () => {
+    const res = await callApiTool(gemini, KEY, { path: "loop" }, places);
+    expect(res.ok).toBe(false);
+    expect(res.text).toContain("Stopped after 5 redirects");
+  });
+
+  test("a key that is URL-encoded in the query is masked too", async () => {
+    const odd = "abc+def/ghi=jkl";
+    const tool = { ...gemini, auth: { in: "query" as const, name: "key", prefix: "" } };
+    const res = await callApiTool(tool, odd, { path: "echo-url" }, places);
+    expect(res.text).not.toContain(encodeURIComponent(odd));
+    expect(res.text).not.toContain("abc%2Bdef");
+  });
+
   test("$file sends files as base64, form uploads and raw bodies", async () => {
     const dir = join(agentA.repoPath, "workspace", "in");
     mkdirSync(dir, { recursive: true });
@@ -439,6 +491,10 @@ describe("agents", () => {
 
     const denied = await gateway(agentB, "api_tool_request", { tool: tool.id, path: "models" });
     expect(denied.result.isError).toBe(true);
+
+    const refused = await gateway(agentA, "api_tool_request", { tool: tool.id, path: "image.png", saveAs: ".git/hooks/pre-commit" });
+    expect(refused.result.isError).toBe(true);
+    expect(listAudit(10, "api_tool.request")[0]!.details).toMatchObject({ refused: true });
   });
 
   test("the system prompt introduces the tools", async () => {

@@ -19,7 +19,7 @@ import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { BEARER, ENV_VAR_PATTERN, HEADER_PATTERN, suggestEnvVar, toolIcon, type ApiToolPreset } from "./api-tool-presets";
+import { BEARER, ENV_VAR_PATTERN, HEADER_PATTERN, SECRET_NAME_PATTERN, suggestEnvVar, toolIcon, type ApiToolPreset } from "./api-tool-presets";
 import { ScopePicker, useDefaultScope, type IntegrationScope } from "./scope-picker";
 
 type KeyMode = "bearer" | "header" | "query";
@@ -95,11 +95,12 @@ function authOf(f: FormState): ApiToolAuth {
   return { in: "header", name: f.headerName.trim(), prefix: f.prefix };
 }
 
-type Field = "name" | "baseUrl" | "headerName" | "queryName" | "envVar" | "docsUrl" | "testPath";
+type Field = "name" | "apiKey" | "baseUrl" | "headerName" | "queryName" | "envVar" | "docsUrl" | "testPath";
 
 function validate(f: FormState): Partial<Record<Field, string>> {
   const errors: Partial<Record<Field, string>> = {};
   if (!f.name.trim()) errors.name = "Give the tool a name.";
+  if (f.apiKey.trim() && (f.apiKey.trim().length < 8 || /\s/.test(f.apiKey.trim()))) errors.apiKey = "That doesn't look like a whole key — check what you pasted.";
   if (f.baseUrl.trim()) {
     try {
       const u = new URL(f.baseUrl.trim());
@@ -111,7 +112,9 @@ function validate(f: FormState): Partial<Record<Field, string>> {
   } else if (!f.envOn) errors.baseUrl = "Where do requests go? e.g. https://api.example.com";
   if (f.keyMode === "header" && !HEADER_PATTERN.test(f.headerName.trim())) errors.headerName = "Header names have no spaces, e.g. x-api-key.";
   if (f.keyMode === "query" && !/^[A-Za-z0-9_.~[\]-]+$/.test(f.queryName.trim())) errors.queryName = "e.g. key or api_key";
-  if (f.envOn && !ENV_VAR_PATTERN.test(f.envVar.trim())) errors.envVar = "Letters, digits and _ only, e.g. GEMINI_API_KEY.";
+  if (f.envOn && (!ENV_VAR_PATTERN.test(f.envVar.trim()) || !SECRET_NAME_PATTERN.test(f.envVar.trim()))) {
+    errors.envVar = "Letters, digits and _, ending in _KEY, _TOKEN or _SECRET — e.g. GEMINI_API_KEY.";
+  }
   if (f.docsUrl.trim()) {
     try {
       new URL(f.docsUrl.trim());
@@ -268,7 +271,9 @@ export function ApiToolDialog({
                 value={form.apiKey}
                 onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value, removeKey: false }))}
                 placeholder={keySaved ? "Saved — paste a new key to replace it" : (preset?.keyPlaceholder ?? "Paste the API key")}
+                aria-invalid={!!err("apiKey")}
               />
+              {err("apiKey") && <p className="text-xs text-destructive">{err("apiKey")}</p>}
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                 <ShieldCheck className="size-3.5 text-brand-strong" /> Encrypted in your vault and never shown again.
                 {keySaved && !form.apiKey && (
