@@ -33,6 +33,7 @@ import {
   waitForRun,
 } from "../src/runner/runner";
 import { FAKE_CLAUDE } from "./fixtures/runner-harness";
+import { createProfile, deleteProfile, resolveProfileForAgent } from "../src/browser/manager";
 import { now } from "../src/util";
 
 let env: TestEnv;
@@ -229,6 +230,43 @@ describe("runner end-to-end with fake claude", () => {
 
     await cancelRun(a.run.id);
     expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
+  });
+
+  test("a chat can work in its own browser profile", async () => {
+    const browserA = await makeAgent({ name: "Browser C", browser: { enabled: true } });
+    const browserB = await makeAgent({ name: "Browser D", browser: { enabled: true } });
+    const own = createProfile({ name: "Chat profile", workspaceId: createWorkspace({ name: "Profiles" }).id });
+    const a = await startChat({ agentId: browserA.id, content: "SLEEP a" });
+    await until(() => getRun(a.run.id).status === "running", 10_000, "run a");
+
+    // A different profile doesn't wait for the run holding the agents' default one.
+    const b = await startChat({ agentId: browserB.id, content: "hello b", browserProfileId: own.id });
+    expect(b.conversation.browserProfileId).toBe(own.id);
+    expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
+    expect(resolveProfileForAgent(browserB, b.conversation.id).id).toBe(own.id);
+    await cancelRun(a.run.id);
+
+    expect(() => updateConversation(b.conversation.id, { browserProfileId: "bpr_missing" })).toThrow(/doesn't exist/);
+    expect(updateConversation(b.conversation.id, { browserProfileId: null }).browserProfileId).toBeNull();
+    updateConversation(b.conversation.id, { browserProfileId: own.id });
+    await deleteProfile(own.id);
+    expect(getConversation(b.conversation.id).browserProfileId).toBeNull();
+  });
+
+  test("switching a chat that waits for the browser to another profile starts it", async () => {
+    const holder = await makeAgent({ name: "Browser E", browser: { enabled: true } });
+    const waiter = await makeAgent({ name: "Browser F", browser: { enabled: true } });
+    const other = createProfile({ name: "Free profile", workspaceId: createWorkspace({ name: "Free" }).id });
+    const a = await startChat({ agentId: holder.id, content: "SLEEP a" });
+    await until(() => getRun(a.run.id).status === "running", 10_000, "run a");
+    const b = await startChat({ agentId: waiter.id, content: "hello b" });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(getRun(b.run.id).status).toBe("queued");
+
+    updateConversation(b.conversation.id, { browserProfileId: other.id });
+    expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
+    expect(getRun(a.run.id).status).toBe("running");
+    await cancelRun(a.run.id);
   });
 
   test("cancelling a queued run never starts it", async () => {

@@ -462,6 +462,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_messaging_chats_external ON messaging_chat
   },
   {
     id: 11,
+    name: "chat_browser_profile",
+    sql: /* sql */ `
+-- Browser profile a chat works in, overriding its agent's (and the workspace / global default).
+ALTER TABLE conversations ADD COLUMN browser_profile_id TEXT;
+`,
+  },
+  {
+    id: 12,
     name: "followups",
     sql: /* sql */ `
 -- A time an agent set to continue a chat on its own (one per chat). Removed when it runs or is cancelled.

@@ -3,7 +3,7 @@ import { toast } from "sonner";
 const CLEAR_AFTER_SECONDS = 30;
 let clearTimer: ReturnType<typeof setTimeout> | null = null;
 
-async function writeClipboard(text: string) {
+export async function writeClipboard(text: string) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
     return;

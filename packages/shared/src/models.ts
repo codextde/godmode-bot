@@ -296,6 +296,8 @@ export interface Conversation {
   computerTarget: ComputerTarget | null;
   /** macOS VM this chat works in, overriding the agent's and the workspace's. null = theirs. */
   vmId: ID | null;
+  /** Browser profile this chat works in, overriding the agent's and the workspace / global default. null = theirs. */
+  browserProfileId: ID | null;
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
   instructions: string;
   pinned: boolean;
@@ -710,6 +712,44 @@ export interface AuditEntry {
   details: Record<string, unknown>;
 }
 
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+/** One line of the diagnostic log (`<data>/logs/godmode.jsonl`). Secrets are masked before it is written. */
+export interface LogEntry {
+  ts: ISODate;
+  level: LogLevel;
+  /** Subsystem that wrote it: "runner", "http", "vault", "ui", … */
+  scope: string;
+  msg: string;
+  data?: Record<string, unknown>;
+  err?: { name?: string; message: string; stack?: string };
+}
+
+/** Recurring warnings and errors, grouped by what they say (ids and numbers ignored). */
+export interface LogIssue {
+  level: "warn" | "error";
+  scope: string;
+  msg: string;
+  count: number;
+  firstTs: ISODate;
+  lastTs: ISODate;
+}
+
+export interface LogOverview {
+  path: string;
+  sizeBytes: number;
+  entries: number;
+  counts: Record<LogLevel, number>;
+  firstTs: ISODate | null;
+  lastTs: ISODate | null;
+  issues: LogIssue[];
+}
+
+export interface DiagnosticsSettings {
+  /** Also record every request and debug details (the log fills faster). */
+  verbose: boolean;
+}
+
 export interface GeneralSettings {
   theme: "dark" | "light" | "system";
   accent: string;
@@ -876,6 +916,7 @@ export interface Settings {
   security: SecuritySettings;
   server: ServerSettings;
   memory: MemorySettings;
+  diagnostics: DiagnosticsSettings;
   onboardingComplete: boolean;
 }
 
