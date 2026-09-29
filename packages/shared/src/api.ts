@@ -34,7 +34,11 @@ export interface WorkspaceInput {
   instructions?: string;
   /** macOS VM for the workspace's agents; null = none. */
   vmId?: ID | null;
+  /** Every attached folder and repository, in order. One naming an existing source keeps it (and its clone). */
+  sources?: WorkspaceSourceInput[];
 }
+
+export type WorkspaceSourceInput = { kind: "folder"; path: string } | { kind: "git"; url: string; branch?: string | null };
 
 export interface AgentInput {
   workspaceId?: ID | null;

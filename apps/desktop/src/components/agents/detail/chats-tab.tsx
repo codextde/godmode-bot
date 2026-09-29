@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -19,13 +19,17 @@ import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { useStartAgentChat } from "../agent-actions";
+import { PLATFORMS } from "@/components/messaging/platform";
 
-const ORIGIN: Record<ConversationOrigin, { icon: typeof MessageSquare; label: string }> = {
+const ORIGIN: Record<ConversationOrigin, { icon: ComponentType<{ className?: string }>; label: string }> = {
   chat: { icon: MessageSquare, label: "Chat" },
   routine: { icon: Workflow, label: "Automation" },
   delegation: { icon: Share2, label: "Delegation" },
   api: { icon: Plug, label: "API" },
   dream: { icon: Moon, label: "Dreams" },
+  slack: { icon: PLATFORMS.slack.glyph, label: "Slack" },
+  telegram: { icon: PLATFORMS.telegram.glyph, label: "Telegram" },
+  teams: { icon: PLATFORMS.teams.glyph, label: "Microsoft Teams" },
 };
 
 function useDebounced<T>(value: T, ms = 250): T {

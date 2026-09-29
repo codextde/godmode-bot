@@ -338,6 +338,15 @@ function loadKnownSecrets() {
         }
       }
     }
+    for (const row of all<{ id: string; secrets_enc: string | null }>("SELECT id, secrets_enc FROM messaging_connections")) {
+      if (!row.secrets_enc) continue;
+      try {
+        const parsed: unknown = JSON.parse(decrypt(dek, row.secrets_enc, `messaging_connections.secrets:${row.id}`));
+        if (parsed && typeof parsed === "object") rememberSecretValues(parsed as Record<string, unknown>);
+      } catch {
+        /* ignore */
+      }
+    }
   } catch (err) {
     log.warn("could not load secrets for redaction", err);
   }

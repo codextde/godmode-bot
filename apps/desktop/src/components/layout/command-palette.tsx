@@ -10,6 +10,7 @@ import {
   KeyRound,
   Layers,
   Lock,
+  MessageCircle,
   MessageSquarePlus,
   MonitorUp,
   Moon,
@@ -115,6 +116,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => go("/integrations")}>
             <Plug /> Integrations
+          </CommandItem>
+          <CommandItem value="messaging slack telegram microsoft teams bots" onSelect={() => go("/messaging")}>
+            <MessageCircle /> Messaging
           </CommandItem>
           <CommandItem onSelect={() => go("/browser")}>
             <Globe /> Browser
