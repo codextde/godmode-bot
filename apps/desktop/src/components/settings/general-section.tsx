@@ -88,7 +88,7 @@ export function GeneralSection({ settings }: { settings: Settings }) {
           label="Launch at login"
           htmlFor="launch-at-login"
           disabled={!isTauri}
-          description={isTauri ? "Start Godmode in the background when you sign in, so routines keep running." : "Desktop app only."}
+          description={isTauri ? "Start Godmode in the background when you sign in, so automations keep running." : "Desktop app only."}
         >
           <Switch
             id="launch-at-login"
@@ -101,7 +101,7 @@ export function GeneralSection({ settings }: { settings: Settings }) {
           label="Keep running in the menu bar"
           htmlFor="minimize-to-tray"
           disabled={!isTauri}
-          description="Closing the window hides Godmode to the tray instead of quitting — agents and routines keep working."
+          description="Closing the window hides Godmode to the tray instead of quitting — agents and automations keep working."
         >
           <Switch
             id="minimize-to-tray"
@@ -116,7 +116,7 @@ export function GeneralSection({ settings }: { settings: Settings }) {
         <SettingRow
           label="Desktop notifications"
           htmlFor="desktop-notifications"
-          description="Get notified when a task finishes, a routine fails, or an agent needs a login from you."
+          description="Get notified when a task finishes, an automation fails, or an agent needs a login from you."
         >
           <Button
             variant="ghost"

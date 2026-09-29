@@ -120,7 +120,7 @@ export function SecuritySection({ settings }: { settings: Settings }) {
         <SettingRow
           label="Remember on this device"
           htmlFor="remember-device"
-          description="Stores the vault key in the macOS Keychain / Windows Credential Manager so routines can run unattended after a restart. Turn off for maximum security on shared machines."
+          description="Stores the vault key in the macOS Keychain / Windows Credential Manager so automations can run unattended after a restart. Turn off for maximum security on shared machines."
         >
           <Switch id="remember-device" checked={rememberOn} disabled={remember.isPending} onCheckedChange={(on) => remember.mutate(on)} />
         </SettingRow>

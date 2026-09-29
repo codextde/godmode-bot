@@ -26,6 +26,9 @@ export const qk = {
   agentTemplates: ["agent-templates"] as unknown[],
   routines: ["routines"] as unknown[],
   routineList: (agentId: string) => ["routines", "list", agentId],
+  /** Automation events; the third segment is the routine id or "all" (see realtime.ts). */
+  automationEvents: ["automation-events"] as unknown[],
+  automationEventList: (routineId: string, limit: number) => ["automation-events", "list", routineId, limit],
   conversationsAll: ["conversations"] as unknown[],
   conversationLists: ["conversations", "list"] as unknown[],
   conversations: (agentId: string, search: string) => ["conversations", "list", agentId, search],
@@ -41,6 +44,8 @@ export const qk = {
   composioStatus: ["composio", "status"] as unknown[],
   composioToolkits: (search: string, category: string) => ["composio", "toolkits", search, category],
   composioConnections: ["composio", "connections"] as unknown[],
+  composioTriggerTypes: (toolkit: string) => ["composio", "trigger-types", toolkit],
+  composioTriggerType: (slug: string) => ["composio", "trigger-type", slug],
   browserProfiles: ["browser-profiles"] as unknown[],
   computer: ["computer"] as unknown[],
   computerStatus: ["computer", "status"] as unknown[],

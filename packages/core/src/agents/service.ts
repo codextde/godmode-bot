@@ -29,6 +29,7 @@ import { DEFAULT_AGENT_COMPUTER, normalizeAgentComputer } from "../computer/targ
 import { detachAgentComputer } from "../computer/service";
 import { cancelRun, waitForRun } from "../runner/runner";
 import { reloadSchedules } from "../scheduler/scheduler";
+import { requestAppTriggerSync } from "../integrations/composioTriggers";
 import { badRequest, newId, notFound, now, parseJson, slugify } from "../util";
 import {
   AGENT_GITIGNORE,
@@ -562,7 +563,10 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
 
   const agent = getAgent(current.id);
   bus.emit({ type: "agent.updated", agent });
-  if (current.enabled !== agent.enabled || current.workspaceId !== agent.workspaceId) reloadSchedules();
+  if (current.enabled !== agent.enabled || current.workspaceId !== agent.workspaceId) {
+    reloadSchedules();
+    requestAppTriggerSync();
+  }
   return agent;
 }
 
@@ -585,6 +589,7 @@ export async function deleteAgent(id: string): Promise<void> {
   if (routines) bus.changed("routines");
   bus.changed("runs");
   reloadSchedules();
+  requestAppTriggerSync();
 }
 
 /** Remove deleted agent ids from every other agent's permissions.delegateTo (call inside a transaction). */

@@ -132,7 +132,7 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium">Remember on this device</span>
             <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-              Recommended so routines run unattended. The vault key is kept in your operating system's keychain and the vault unlocks
+              Recommended so automations run unattended. The vault key is kept in your operating system's keychain and the vault unlocks
               automatically on this machine. Turn off to type the passphrase after every restart.
             </span>
           </span>

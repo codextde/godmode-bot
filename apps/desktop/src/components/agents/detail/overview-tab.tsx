@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Activity, ArrowRight, CalendarClock, CircleStop, Coins, Gauge, Pencil, Timer } from "lucide-react";
+import { Activity, ArrowRight, CircleStop, Coins, Gauge, Pencil, Timer } from "lucide-react";
 import type { Agent, Run } from "@godmode/shared";
 import { useRoutines, useRuns } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
@@ -18,6 +18,7 @@ import { RunDetailSheet, useCancelRun } from "@/components/runs/run-detail-sheet
 import { formatCost, formatDuration, formatElapsed } from "@/components/runs/run-status";
 import { useAgentLiveRun } from "../agent-actions";
 import { cronToHuman } from "../cron";
+import { lowerFirst, TRIGGER_TYPES } from "@/components/automations/trigger-meta";
 
 export function OverviewTab({ agent }: { agent: Agent }) {
   const runsQ = useRuns(agent.id);
@@ -115,30 +116,34 @@ export function OverviewTab({ agent }: { agent: Agent }) {
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-medium tracking-[-0.01em]">Up next</h2>
               <Button variant="ghost" size="xs" asChild className="text-muted-foreground">
-                <Link to={`/agents/${agent.id}/routines`}>Routines</Link>
+                <Link to={`/agents/${agent.id}/routines`}>Automations</Link>
               </Button>
             </div>
             {upcoming.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Nothing scheduled.{" "}
+                Nothing coming up.{" "}
                 <Link to={`/agents/${agent.id}/routines`} className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
-                  Add a routine
+                  Add an automation
                 </Link>{" "}
-                to run it automatically.
+                to put it to work on its own.
               </p>
             ) : (
               <ul className="space-y-3">
-                {upcoming.map((r) => (
-                  <li key={r.id} className="flex items-start gap-2.5">
-                    <CalendarClock className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{r.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {cronToHuman(r.cron)} · {formatDistanceToNowStrict(new Date(r.nextRunAt!), { addSuffix: true })}
+                {upcoming.map((r) => {
+                  const Icon = TRIGGER_TYPES[r.trigger.type].icon;
+                  return (
+                    <li key={r.id} className="flex items-start gap-2.5">
+                      <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{r.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {r.trigger.type === "condition" ? `Checks ${lowerFirst(cronToHuman(r.cron))}` : cronToHuman(r.cron)} ·{" "}
+                          {formatDistanceToNowStrict(new Date(r.nextRunAt!), { addSuffix: true })}
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>

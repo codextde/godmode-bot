@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   Bot,
   Brain,
-  CalendarClock,
   Cpu,
   Ellipsis,
   FolderOpen,
@@ -18,6 +17,7 @@ import {
   Play,
   Settings2,
   Trash2,
+  Workflow,
 } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
@@ -53,7 +53,7 @@ import { SettingsTab } from "@/components/agents/detail/settings-tab";
 const TABS = [
   { id: "", label: "Overview", icon: LayoutGrid },
   { id: "chats", label: "Chats", icon: MessagesSquare },
-  { id: "routines", label: "Routines", icon: CalendarClock },
+  { id: "routines", label: "Automations", icon: Workflow },
   { id: "memory", label: "Memory", icon: Brain },
   { id: "history", label: "History", icon: GitCommitHorizontal },
   { id: "settings", label: "Settings", icon: Settings2 },
@@ -181,7 +181,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
                   <span className="@max-md:sr-only">{agent.enabled ? "Enabled" : "Disabled"}</span>
                 </label>
               </TooltipTrigger>
-              <TooltipContent>{agent.enabled ? "Disable: routines and delegations stop" : "Enable this agent"}</TooltipContent>
+              <TooltipContent>{agent.enabled ? "Disable: automations and delegations stop" : "Enable this agent"}</TooltipContent>
             </Tooltip>
             <Button variant="outline" onClick={() => setRunTask(true)} disabled={!agent.enabled}>
               <Play /> Run task

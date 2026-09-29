@@ -1,9 +1,11 @@
 import type { Hono } from "hono";
 import type { McpServerInput } from "@godmode/shared";
 import { body, z } from "../validate";
+import { badRequest } from "../../util";
 import { createMcpServer, deleteMcpServer, listMcpServers, updateMcpServer, TRANSPORTS } from "../../integrations/mcpServers";
 import { probeMcpServer } from "../../integrations/mcpProbe";
 import * as composio from "../../integrations/composio";
+import { getTriggerType, listTriggerTypes } from "../../integrations/composioTriggers";
 
 const transport = z.enum(TRANSPORTS as [McpServerInput["transport"], ...McpServerInput["transport"][]]);
 const secretMap = z.record(z.string().max(256), z.string().max(16_384));
@@ -89,6 +91,14 @@ export function registerIntegrationRoutes(app: Hono): void {
   );
 
   app.get("/api/composio/connections", (c) => c.json(composio.listConnections()));
+
+  app.get("/api/composio/trigger-types", async (c) => {
+    const toolkit = c.req.query("toolkit")?.trim();
+    if (!toolkit) throw badRequest("Pass the app (toolkit) whose events you want");
+    return c.json(await listTriggerTypes(toolkit));
+  });
+
+  app.get("/api/composio/trigger-types/:slug", async (c) => c.json(await getTriggerType(c.req.param("slug"))));
 
   app.post("/api/composio/connect", async (c) => {
     const input = await body(c, connectSchema);

@@ -1085,7 +1085,8 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   bus.changed("runs");
   if (convAlive) emitConversationUpdated(job.conversationId);
 
-  if (wasRunning && finished && convAlive) {
+  // Condition checks keep no transcript: they run every few minutes and only report a result.
+  if (wasRunning && finished && convAlive && job.trigger !== "check") {
     const done = finished;
     safely("append transcript", () => {
       const user = job.userMessageId ? getMessage(job.userMessageId) : null;
@@ -1098,7 +1099,8 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   if (!wasRunning || !finished || !agent) return;
   if (outcome.status !== "cancelled") await detectMissingLogin(job, agent, text);
 
-  if (getSettings().memory.autoCommit) {
+  // Condition checks change nothing worth a commit; the task run that follows commits as usual.
+  if (getSettings().memory.autoCommit && job.trigger !== "check") {
     const title = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", job.conversationId)?.title ?? job.trigger;
     const message = `Run ${job.runId.slice(-6)}: ${title}`;
     commitAgentRepo(job.agentId, message).catch((err) => log.warn(`auto-commit for agent ${job.agentId} failed`, err));

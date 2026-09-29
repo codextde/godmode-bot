@@ -21,6 +21,8 @@ import * as vault from "./vault/vault";
 import { ensureDefaultAgent } from "./agents/service";
 import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler";
+import { startAutomationEvents, stopAutomationEvents } from "./automations/events";
+import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
 import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
 import { shutdownComputer } from "./computer/service";
 import { runDoctor } from "./services/doctor";
@@ -112,6 +114,8 @@ async function serve(values: Record<string, unknown>) {
   await ensureDefaultAgent();
   recoverInterruptedRuns();
   startScheduler();
+  startAutomationEvents();
+  startAppTriggers();
 
   const app = createApp();
   const token = getAccessToken();
@@ -180,6 +184,8 @@ async function serve(values: Record<string, unknown>) {
     stopping = true;
     log.info(`received ${signal}, shutting down`);
     stopScheduler();
+    stopAppTriggers();
+    stopAutomationEvents();
     await shutdownRunner();
     await shutdownBrowsers();
     await shutdownComputer();

@@ -31,7 +31,8 @@ const STATUSES: { id: "all" | RunStatus; label: string }[] = [
 const TRIGGERS: { id: "all" | RunTrigger; label: string }[] = [
   { id: "all", label: "Any trigger" },
   { id: "chat", label: "Chat" },
-  { id: "routine", label: "Routine" },
+  { id: "routine", label: "Automation" },
+  { id: "check", label: "Condition check" },
   { id: "delegation", label: "Delegation" },
   { id: "manual", label: "Manual" },
   { id: "api", label: "API" },
@@ -108,7 +109,7 @@ export default function ActivityPage() {
       <PageHeader
         icon={<Activity />}
         title="Activity"
-        description="Every run across your agents — live, scheduled and delegated."
+        description="Every run across your agents — live, automated and delegated."
         actions={
           <Button variant="outline" size="icon" onClick={() => runsQ.refetch()} aria-label="Refresh" disabled={runsQ.isFetching}>
             <RefreshCw className={cn(runsQ.isFetching && "animate-spin")} />
@@ -225,7 +226,7 @@ export default function ActivityPage() {
           <EmptyState
             icon={<Activity />}
             title={filtered ? "No runs match these filters" : "No activity yet"}
-            description={filtered ? undefined : "When your agents chat, run routines or delegate work, every run shows up here — live."}
+            description={filtered ? undefined : "When your agents chat, run automations or delegate work, every run shows up here — live."}
             action={
               filtered ? (
                 <Button

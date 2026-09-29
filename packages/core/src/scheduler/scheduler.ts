@@ -1,18 +1,20 @@
 /**
- * Cron routines scheduler: one croner job per enabled routine of an enabled agent (timezone aware).
- * A tick sends the routine prompt into a conversation of the agent, exactly like a user message.
+ * Cron scheduler for automations: one croner job per enabled schedule or condition automation of an enabled agent
+ * (timezone aware). A schedule tick sends the automation's prompt into its conversation, exactly like a user message;
+ * a condition tick starts a condition check (automations/conditions.ts).
  */
 import { Cron } from "croner";
-import type { Routine, Run, ServerEvent } from "@godmode/shared";
-import { all, get, run as exec } from "../db";
-import { bus } from "../events/bus";
+import type { Routine, Run } from "@godmode/shared";
+import { all, run as exec } from "../db";
 import { logger } from "../log";
 import { getAgent } from "../agents/service";
-import { computeNextRunAt, getRoutine } from "../services/routines";
-import { createConversation, sendMessage } from "../services/conversations";
+import { computeNextRunAt, emitRoutine, getRoutine } from "../services/routines";
+import { sendMessage } from "../services/conversations";
 import { notify } from "../services/notifications";
-import { getSettings } from "../services/settings";
-import { HttpError, conflict, now } from "../util";
+import { automationConversation } from "../automations/conversation";
+import { runConditionCheck } from "../automations/conditions";
+import { activeMainRun, ensureRunListener, recordEvent, settleIfFinished } from "../automations/events";
+import { HttpError, badRequest, conflict, now } from "../util";
 
 const log = logger("scheduler");
 
@@ -25,48 +27,9 @@ const jobs = new Map<string, ScheduledJob>();
 /** Routines between "tick accepted" and "run created" — guards against double triggers. */
 const triggering = new Set<string>();
 let started = false;
-let unsubscribe: (() => void) | null = null;
 
-function emitRoutine(id: string) {
-  try {
-    bus.emit({ type: "routine.updated", routine: getRoutine(id) });
-  } catch {
-    /* routine deleted meanwhile */
-  }
-}
-
-function onBusEvent(event: ServerEvent) {
-  if (event.type !== "run.finished" || !event.run.routineId) return;
-  const result = exec("UPDATE routines SET last_status = ? WHERE id = ?", event.run.status, event.run.routineId);
-  if (result.changes > 0) emitRoutine(event.run.routineId);
-}
-
-function ensureListener() {
-  if (!unsubscribe) unsubscribe = bus.on(onBusEvent);
-}
-
-function signature(r: { cron: string; timezone: string }): string {
-  return `${r.cron}\u0000${r.timezone}`;
-}
-
-function formatDate(date: Date, timezone: string): string {
-  try {
-    return new Intl.DateTimeFormat(getSettings().general.language || "en", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(date);
-  } catch {
-    return date.toISOString().slice(0, 10);
-  }
-}
-
-function activeRunId(routineId: string): string | null {
-  return (
-    get<{ id: string }>("SELECT id FROM runs WHERE routine_id = ? AND status IN ('queued', 'running') LIMIT 1", routineId)?.id ??
-    null
-  );
+function signature(r: { cron: string; timezone: string; type: string }): string {
+  return `${r.type}\u0000${r.cron}\u0000${r.timezone}`;
 }
 
 function nextRunAt(routine: Routine): string | null {
@@ -75,38 +38,27 @@ function nextRunAt(routine: Routine): string | null {
   return routine.enabled ? computeNextRunAt(routine.cron, routine.timezone) : null;
 }
 
-/** Reuse the routine's conversation when configured (and still present), otherwise start a new one. */
-function resolveConversation(routine: Routine): string {
-  if (routine.reuseConversation && routine.conversationId) {
-    const existing = get<{ id: string }>(
-      "SELECT id FROM conversations WHERE id = ? AND agent_id = ?",
-      routine.conversationId,
-      routine.agentId,
-    );
-    if (existing) return existing.id;
-  }
-  // A reused conversation spans many runs, so only per-run conversations carry the date.
-  const title = routine.reuseConversation ? routine.name : `${routine.name} · ${formatDate(new Date(), routine.timezone)}`;
-  const conversation = createConversation({ agentId: routine.agentId, title, origin: "routine" });
-  if (routine.reuseConversation) exec("UPDATE routines SET conversation_id = ? WHERE id = ?", conversation.id, routine.id);
-  return conversation.id;
-}
-
 /**
- * Run a routine now: same path as a cron tick. Throws 409 when the agent is disabled or the routine is
+ * Run a schedule automation now: same path as a cron tick. Throws 409 when the agent is disabled or the routine is
  * already running. `scheduled` ticks additionally skip routines that were disabled meanwhile.
  */
 export async function triggerRoutine(id: string, opts: { scheduled?: boolean } = {}): Promise<Run> {
-  ensureListener();
+  ensureRunListener();
   const routine = getRoutine(id);
+  if (routine.trigger.type !== "schedule") throw badRequest(`“${routine.name}” is not a scheduled automation`);
   const agent = getAgent(routine.agentId);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   if (opts.scheduled && !routine.enabled) throw conflict(`Routine "${routine.name}" is disabled`);
-  if (triggering.has(id) || activeRunId(id)) throw conflict(`Routine "${routine.name}" is already running`);
+  if (triggering.has(id) || activeMainRun(id)) {
+    if (opts.scheduled) {
+      recordEvent(id, { source: "schedule", title: "Scheduled time reached", status: "skipped", note: "The previous run was still in progress" });
+    }
+    throw conflict(`Routine "${routine.name}" is already running`);
+  }
 
   triggering.add(id);
   try {
-    const conversationId = resolveConversation(routine);
+    const conversationId = automationConversation(routine);
     exec(
       "UPDATE routines SET last_run_at = ?, next_run_at = ?, last_status = 'queued' WHERE id = ?",
       now(),
@@ -114,6 +66,13 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean } =
       id,
     );
     const { run } = await sendMessage(conversationId, { content: routine.prompt, trigger: "routine", routineId: routine.id });
+    recordEvent(id, {
+      source: opts.scheduled ? "schedule" : "manual",
+      title: opts.scheduled ? "Scheduled time reached" : "Started manually",
+      status: "running",
+      runId: run.id,
+    });
+    settleIfFinished(run.id);
     // Don't clobber a final status if the run already finished (run.finished handler wrote it).
     exec("UPDATE routines SET last_status = ? WHERE id = ? AND last_status = 'queued'", run.status, id);
     emitRoutine(id);
@@ -128,9 +87,19 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean } =
 }
 
 async function onTick(routineId: string) {
+  let routine: Routine;
   try {
-    const run = await triggerRoutine(routineId, { scheduled: true });
-    log.info(`routine ${routineId} started run ${run.id}`);
+    routine = getRoutine(routineId);
+  } catch {
+    reloadSchedules();
+    return;
+  }
+  try {
+    const run =
+      routine.trigger.type === "condition"
+        ? await runConditionCheck(routineId, { scheduled: true })
+        : await triggerRoutine(routineId, { scheduled: true });
+    log.info(`routine ${routineId} started ${run.trigger === "check" ? "a check" : "run"} ${run.id}`);
   } catch (err) {
     if (err instanceof HttpError && err.status === 409) {
       log.info(`routine ${routineId} skipped: ${err.message}`);
@@ -141,16 +110,16 @@ async function onTick(routineId: string) {
       return;
     }
     log.error(`routine ${routineId} failed to start`, err);
-    try {
-      const routine = getRoutine(routineId);
-      notify(
-        "error",
-        `Routine "${routine.name}" could not start`,
-        err instanceof Error ? err.message : String(err),
-        `/agents/${routine.agentId}`,
-      );
-    } catch {
-      /* routine deleted meanwhile */
+    notify(
+      "error",
+      `Automation “${routine.name}” could not start`,
+      err instanceof Error ? err.message : String(err),
+      `/agents/${routine.agentId}`,
+    );
+  } finally {
+    if (routine.trigger.type === "condition") {
+      const next = jobs.get(routineId)?.job.nextRun()?.toISOString() ?? null;
+      if (exec("UPDATE routines SET next_run_at = ? WHERE id = ?", next, routineId).changes > 0) emitRoutine(routineId);
     }
   }
 }
@@ -158,9 +127,11 @@ async function onTick(routineId: string) {
 /** Re-read routines from DB and reschedule (after CRUD). Unchanged jobs keep running. */
 export function reloadSchedules(): void {
   if (!started) return;
-  const wanted = all<{ id: string; cron: string; timezone: string }>(
-    `SELECT r.id, r.cron, r.timezone FROM routines r JOIN agents a ON a.id = r.agent_id
-     WHERE r.enabled = 1 AND a.enabled = 1`,
+  const wanted = all<{ id: string; cron: string; timezone: string; type: string }>(
+    `SELECT id, cron, timezone, type FROM (
+       SELECT r.id, r.cron, r.timezone, CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END AS type
+       FROM routines r JOIN agents a ON a.id = r.agent_id WHERE r.enabled = 1 AND a.enabled = 1)
+     WHERE type IN ('schedule', 'condition')`,
   );
   const byId = new Map(wanted.map((r) => [r.id, r]));
 
@@ -203,16 +174,16 @@ export function reloadSchedules(): void {
 function repairStaleStatuses() {
   exec(
     `UPDATE routines SET last_status = COALESCE(
-       (SELECT status FROM runs WHERE runs.routine_id = routines.id ORDER BY created_at DESC LIMIT 1), 'failed')
+       (SELECT status FROM runs WHERE runs.routine_id = routines.id AND runs.trigger = 'routine' ORDER BY created_at DESC LIMIT 1), 'failed')
      WHERE last_status IN ('queued', 'running')
-       AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.routine_id = routines.id AND runs.status IN ('queued', 'running'))`,
+       AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.routine_id = routines.id AND runs.trigger = 'routine' AND runs.status IN ('queued', 'running'))`,
   );
 }
 
 export function startScheduler(): void {
   if (started) return;
   started = true;
-  ensureListener();
+  ensureRunListener();
   repairStaleStatuses();
   reloadSchedules();
   log.info(`scheduler started with ${jobs.size} routine(s)`);
@@ -222,8 +193,6 @@ export function stopScheduler(): void {
   started = false;
   for (const { job } of jobs.values()) job.stop();
   jobs.clear();
-  unsubscribe?.();
-  unsubscribe = null;
 }
 
 /** Currently scheduled routines (for diagnostics and tests). */

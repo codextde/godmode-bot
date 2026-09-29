@@ -56,7 +56,7 @@ export interface McpServerDef {
 export const GODMODE_SERVER: McpServerDef = {
   name: "godmode",
   instructions: INSTRUCTIONS,
-  list: (ctx) => listToolsFor(getAgent(ctx.agentId)),
+  list: (ctx) => listToolsFor(getAgent(ctx.agentId), ctx),
   call: callTool,
   isUnknownTool: (err) => err instanceof UnknownToolError,
 };

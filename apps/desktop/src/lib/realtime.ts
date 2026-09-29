@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { ClientEvent, EntityName, ServerEvent } from "@godmode/shared";
+import type { AutomationEvent, ClientEvent, EntityName, ServerEvent } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { qk } from "./queryKeys";
@@ -148,6 +148,11 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "routine.deleted":
       qc.invalidateQueries({ queryKey: qk.routines });
       break;
+    case "automation.event":
+      void upsertAutomationEvent(qc, event.event);
+      // Pending counts and the trigger's last event live on the routine.
+      qc.invalidateQueries({ queryKey: qk.routines });
+      break;
     case "missing-login.created":
     case "missing-login.updated":
       qc.invalidateQueries({ queryKey: qk.missingLogins });
@@ -193,6 +198,36 @@ function handle(qc: QueryClient, event: ServerEvent) {
       for (const key of ENTITY_KEYS[event.entity] ?? []) qc.invalidateQueries({ queryKey: key });
       break;
   }
+}
+
+/** Newest first; the id breaks ties so the order is stable. */
+function newestFirst(a: AutomationEvent, b: AutomationEvent): number {
+  return b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id);
+}
+
+/** Merge an event into a cached page of `limit` events (see qk.automationEventList). */
+function mergeEvent(old: AutomationEvent[] | undefined, event: AutomationEvent, limit: number): AutomationEvent[] | undefined {
+  if (!Array.isArray(old)) return old;
+  if (old.some((e) => e.id === event.id)) return old.map((e) => (e.id === event.id ? event : e));
+  // A full page ends where the server cut it: an older event (e.g. a status update of one) isn't on it.
+  const last = old[old.length - 1];
+  if (old.length >= limit && last && newestFirst(event, last) > 0) return old;
+  return [event, ...old].sort(newestFirst).slice(0, limit);
+}
+
+/** Patch the event into every cached list that shows it (per automation, or "all"). */
+async function upsertAutomationEvent(qc: QueryClient, event: AutomationEvent) {
+  const filters = {
+    queryKey: qk.automationEvents,
+    predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[1] === "list" && (q.queryKey[2] === "all" || q.queryKey[2] === event.routineId),
+  };
+  // A refetch that started before the event would land without it; cancel it, patch, and refetch when next needed.
+  await qc.cancelQueries(filters);
+  for (const query of qc.getQueryCache().findAll(filters)) {
+    const limit = typeof query.queryKey[3] === "number" ? query.queryKey[3] : Infinity;
+    qc.setQueryData<AutomationEvent[]>(query.queryKey, (old) => mergeEvent(old, event, limit));
+  }
+  void qc.invalidateQueries({ ...filters, refetchType: "none" });
 }
 
 /** Computer live view subscribers per view in this UI; the core only hears about the first and the last. */

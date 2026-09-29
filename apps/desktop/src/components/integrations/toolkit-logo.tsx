@@ -25,6 +25,11 @@ export function ToolkitLogo({ src, name, size = "md", className }: { src?: strin
   );
 }
 
+/** Composio's logo for a toolkit slug, when no toolkit (or trigger type) with its own `logo` is at hand. */
+export function toolkitLogoUrl(slug: string): string {
+  return `https://logos.composio.dev/api/${slug}`;
+}
+
 /** "googlecalendar" → "Googlecalendar"; used when the toolkit isn't in the loaded gallery. */
 export function prettySlug(slug: string): string {
   return slug.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());

@@ -128,7 +128,8 @@ two concurrent turns in the same conversation.
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |
 | `agents_list()`, `agent_get({id})` | Discover peer agents |
 | `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result) |
-| `agent_create`, `agent_update`, `agent_delete`, `routine_create`, `routine_update`, `routine_delete`, `runs_list`, `workspaces_list` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent) |
+| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent) |
+| `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
 | `notify_user({ title, body })` | Push a notification to the human |
 
 ## HTTP API
@@ -206,12 +207,48 @@ Live view: `computer.subscribe { view }` over the WebSocket (`display:<id>`, `wi
 revokes a running run's access immediately. Shares and first use per run are audited (`computer.share`,
 `computer.unshare`, `computer.control`). Backups never restore shares, unattended access or the Cua Driver command.
 
+## Automations
+
+An automation (internally a *routine*: table `routines`, `/api/routines`, `routine_*` tools, `state/routines.json`)
+runs an agent's prompt when its trigger fires (`Routine.trigger`):
+
+| Trigger | Fires when | How |
+|---|---|---|
+| `schedule` | the cron expression matches | croner job (`scheduler/scheduler.ts`), timezone aware |
+| `app` | a connected app emits an event (new email, Slack message, calendar event, Notion update…) | Composio trigger instance per watched account + settings (`POST /api/v3.1/trigger_instances/{slug}/upsert`), delivered over Composio's realtime channel (Pusher, `private-<project>_triggers`, the feed behind the SDK's `triggers.subscribe`) — no public URL needed (`integrations/composioTriggers.ts`, `integrations/pusher.ts`) |
+| `condition` | a plain-language condition becomes true ("a competitor changes their pricing") | on the cron schedule (≥ 5 min apart) the agent runs a **check** (`Run.trigger = "check"`, archived per-automation conversation, fresh Claude session, optional cheaper `checkModel`) and reports via `automation_check_result`; the reported observation is fed into the next check to detect changes (`automations/conditions.ts`) |
+| `webhook` | something POSTs to `/hooks/<token>` | public route outside `/api` (exempt from the loopback Host check so a tunnel can forward it); the token is stored as a SHA-256 hash (lookup) and sealed with the vault key (shown again in the UI); ≤ 256 KB, 60 calls/min, `Idempotency-Key`/`X-Request-Id` dedupe (`automations/webhooks.ts`) |
+
+Everything that happens is an **event** (`automation_events`, `AutomationEvent`, WS `automation.event`): schedule ticks,
+app events, webhook calls, conditions met and manual tests. Events are stored first, deduplicated (Composio message id,
+delivery headers) and dispatched (`automations/events.ts`): an idle automation starts one run with every waiting event
+(≤ 10); a busy one keeps them pending until its run finishes; at most 50 wait and 20 runs start per automation per
+hour (then events wait and the human is notified). The run prompt is the automation's prompt followed by the events
+as delimited, **untrusted** data (known secrets masked, size-bounded) with an explicit instruction not to follow
+instructions inside them; an optional plain-language `filter` lets the agent skip non-matching events (it answers
+`Skipped: …`, and the events are marked skipped). Event statuses follow their run (`pending → running → done | failed
+| skipped`); finished events are pruned (newest 200 per automation, at most 30 days). "Run now" runs a schedule, checks a
+condition, or sends app/webhook automations a test event (a dry run that never shares a run with real events).
+App and webhook automations start a conversation per event by default (named after the event), so untrusted data
+doesn't accumulate in one long session. A condition's reported observation becomes the next check's baseline only
+once the task handled it — after a failed or skipped task the next check still sees the change.
+
+App trigger instances are kept in sync every 5 minutes and on changes (`syncAppTriggers`): upserted per automation
+(re-upserted hourly, and when the API key — possibly another Composio project — changes), disabled when the
+automation, its agent or its account goes away or out of the agent's scope, and deleted once nothing references them.
+Events are only routed to automations whose trigger instance matches, whose setup is healthy and whose agent may still
+use the watched account.
+
+The Godmode agent sets automations up from one sentence ("when X happens, do Y"): `automation_triggers_list` shows the
+connected Composio accounts and each app's events with their settings schema; `routine_create` takes the trigger.
+
 ## Integrations
 
 * **Custom MCP servers** (stdio/http/sse), scoped global / workspace / agent; env + headers encrypted.
 * **Composio** (v3.1 REST, `x-api-key`): browse toolkits, connect accounts via `connected_accounts/link`
   (`user_id` = `global` | `ws_<workspaceId>` | `agent_<agentId>`), and expose them to agents through a Tool Router
-  session MCP URL (`POST /api/v3.1/tool_router/session`).
+  session MCP URL (`POST /api/v3.1/tool_router/session`). Connected accounts can also start automations (app
+  triggers, see Automations); an automation may only watch accounts its agent could use.
 
 ## Memory
 

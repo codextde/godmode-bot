@@ -133,7 +133,7 @@ export function AiSection({ settings }: { settings: Settings }) {
       return;
     }
     patch({ runner: { bypassPermissions: false } });
-    toast.warning("Full bypass mode is off", { description: "Agents will pause at permission prompts — unattended routines may stall." });
+    toast.warning("Full bypass mode is off", { description: "Agents will pause at permission prompts — unattended automations may stall." });
   };
 
   return (
@@ -196,12 +196,12 @@ export function AiSection({ settings }: { settings: Settings }) {
           {r.bypassPermissions ? (
             <Callout tone="warning" title="Agents act without asking">
               They can run any shell command, install software, and create, edit or delete files on this machine — exactly like a coworker with
-              full access. This is what lets routines finish unattended. Vault secrets stay protected: in fill mode the AI never sees your
+              full access. This is what lets automations finish unattended. Vault secrets stay protected: in fill mode the AI never sees your
               passwords, and every secret use is audited.
             </Callout>
           ) : (
             <Callout tone="muted" title="Agents stop at permission prompts">
-              Every command or file edit needs approval. Nobody is watching a scheduled routine, so unattended work will stall until you turn
+              Every command or file edit needs approval. Nobody is watching an automation, so unattended work will stall until you turn
               full bypass back on.
             </Callout>
           )}

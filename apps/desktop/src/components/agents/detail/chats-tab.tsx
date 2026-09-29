@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Archive, ArchiveRestore, CalendarClock, MessageSquare, MessagesSquare, Pin, Plug, Plus, Search, Share2 } from "lucide-react";
+import { Archive, ArchiveRestore, MessageSquare, MessagesSquare, Pin, Plug, Plus, Search, Share2, Workflow } from "lucide-react";
 import type { Agent, Conversation, ConversationOrigin } from "@godmode/shared";
 import { errorMessage } from "@/lib/api";
 import { useArchivedConversations, useConversations } from "@/lib/hooks";
@@ -22,7 +22,7 @@ import { useStartAgentChat } from "../agent-actions";
 
 const ORIGIN: Record<ConversationOrigin, { icon: typeof MessageSquare; label: string }> = {
   chat: { icon: MessageSquare, label: "Chat" },
-  routine: { icon: CalendarClock, label: "Routine" },
+  routine: { icon: Workflow, label: "Automation" },
   delegation: { icon: Share2, label: "Delegation" },
   api: { icon: Plug, label: "API" },
 };

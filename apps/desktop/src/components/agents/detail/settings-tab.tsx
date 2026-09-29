@@ -46,7 +46,7 @@ export function SettingsTab({ agent }: { agent: Agent }) {
       {!agent.isDefault && (
         <Section
           title="Danger zone"
-          description="Deleting removes the agent, its routines, conversations and memory repository."
+          description="Deleting removes the agent, its automations, conversations and memory repository."
           className="border-destructive/30"
         >
           <Button variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setConfirmDelete(true)}>

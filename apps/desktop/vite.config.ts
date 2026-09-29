@@ -30,6 +30,8 @@ export default defineConfig(({ command }) => ({
     host: "127.0.0.1",
     proxy: {
       "/api": { target: CORE_URL, changeOrigin: false, ws: true },
+      // Automation webhooks, so URLs copied from the dev UI reach the core.
+      "/hooks": { target: CORE_URL, changeOrigin: false },
     },
     watch: { ignored: ["**/src-tauri/**"] },
   },

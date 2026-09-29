@@ -60,7 +60,7 @@ export function useToggleAgent() {
       qc.setQueryData(qk.agent(agent.id), agent);
       qc.invalidateQueries({ queryKey: qk.agents });
       toast.success(agent.enabled ? `${agent.name} enabled` : `${agent.name} disabled`, {
-        description: agent.enabled ? undefined : "Its routines won't run until you enable it again.",
+        description: agent.enabled ? undefined : "Its automations won't run until you enable it again.",
       });
     },
     onError: (err) => toast.error("Couldn't update agent", { description: errorMessage(err) }),
@@ -189,7 +189,7 @@ export function DeleteAgentDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete {agent?.name}?</AlertDialogTitle>
           <AlertDialogDescription>
-            This removes the agent, its routines and conversations. Its memory repository is deleted as well. This can't be undone.
+            This removes the agent, its automations and conversations. Its memory repository is deleted as well. This can't be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

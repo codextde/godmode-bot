@@ -2,6 +2,7 @@ import type { ComputerView } from "./computer";
 import type {
   Agent,
   AppNotification,
+  AutomationEvent,
   BrowserProfile,
   Conversation,
   ID,
@@ -40,6 +41,8 @@ export type ServerEvent =
   | { type: "agent.deleted"; id: ID }
   | { type: "routine.updated"; routine: Routine }
   | { type: "routine.deleted"; id: ID }
+  /** An automation event was received or changed status. */
+  | { type: "automation.event"; event: AutomationEvent }
   | { type: "missing-login.created"; item: MissingLogin }
   | { type: "missing-login.updated"; item: MissingLogin }
   | { type: "notification"; notification: AppNotification }

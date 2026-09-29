@@ -524,7 +524,7 @@ function toolSummary(blocks: MessageBlock[]): string {
 }
 
 function speaker(runTrigger: RunTrigger): string {
-  if (runTrigger === "routine") return "Routine";
+  if (runTrigger === "routine") return "Automation";
   if (runTrigger === "delegation") return "Delegated task";
   return getSettings().general.userName.trim() || "User";
 }

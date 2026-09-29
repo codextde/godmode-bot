@@ -1,6 +1,6 @@
 import type { RunStatus, RunTrigger } from "@godmode/shared";
 import { findModel } from "@godmode/shared";
-import { Ban, CalendarClock, CheckCircle2, Clock3, Hand, MessageSquare, Plug, Share2, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, Clock3, Hand, MessageSquare, Plug, Radar, Share2, Workflow, XCircle } from "lucide-react";
 import { Orb } from "@/components/aicss/Orb";
 import { useModelCatalog } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -93,7 +93,8 @@ export function RunStatusIcon({ status, className }: { status: RunStatus; classN
 
 const TRIGGER_META: Record<RunTrigger, { label: string; icon: typeof MessageSquare }> = {
   chat: { label: "Chat", icon: MessageSquare },
-  routine: { label: "Routine", icon: CalendarClock },
+  routine: { label: "Automation", icon: Workflow },
+  check: { label: "Condition check", icon: Radar },
   delegation: { label: "Delegation", icon: Share2 },
   manual: { label: "Manual", icon: Hand },
   api: { label: "API", icon: Plug },

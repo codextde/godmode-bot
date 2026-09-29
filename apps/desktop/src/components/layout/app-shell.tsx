@@ -5,7 +5,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Bot,
-  CalendarClock,
   Globe,
   MonitorUp,
   Inbox,
@@ -18,6 +17,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Workflow,
 } from "lucide-react";
 import {
   Sidebar,
@@ -100,7 +100,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const workNav: NavItem[] = [
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
-    { to: "/routines", label: "Routines", icon: <CalendarClock /> },
+    { to: "/automations", label: "Automations", icon: <Workflow /> },
     { to: "/activity", label: "Activity", icon: <Activity /> },
     { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
   ];

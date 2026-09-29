@@ -20,7 +20,7 @@ const ArchivedPage = lazy(() => import("@/pages/chat/archived-page"));
 const AgentsPage = lazy(() => import("@/pages/agents/agents-page"));
 const AgentNewPage = lazy(() => import("@/pages/agents/agent-new"));
 const AgentDetailPage = lazy(() => import("@/pages/agents/agent-detail"));
-const RoutinesPage = lazy(() => import("@/pages/routines/routines-page"));
+const AutomationsPage = lazy(() => import("@/pages/automations/automations-page"));
 const ActivityPage = lazy(() => import("@/pages/activity/activity-page"));
 const WorkspacesPage = lazy(() => import("@/pages/workspaces/workspaces-page"));
 const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
@@ -100,7 +100,8 @@ export function App() {
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/agents/new" element={<AgentNewPage />} />
           <Route path="/agents/:agentId/*" element={<AgentDetailPage />} />
-          <Route path="/routines" element={<RoutinesPage />} />
+          <Route path="/automations" element={<AutomationsPage />} />
+          <Route path="/routines" element={<Navigate to="/automations" replace />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/workspaces" element={<WorkspacesPage />} />
           <Route path="/vault" element={<Navigate to="/vault/logins" replace />} />

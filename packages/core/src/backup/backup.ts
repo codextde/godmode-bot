@@ -21,13 +21,16 @@ import { dirname, join, resolve, sep } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import type { BackupExportInput, BackupImportResult, BackupManifest, EntityName } from "@godmode/shared";
 import { config, VERSION } from "../config";
-import { all, get, getDb } from "../db";
+import { all, get, getDb, run as exec } from "../db";
+import { recoverInterruptedRuns } from "../runner/runner";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
 import { applyRuntimeSettings } from "../services/runtime";
 import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/settings";
 import { startScheduler, stopScheduler } from "../scheduler/scheduler";
+import { startAutomationEvents, stopAutomationEvents } from "../automations/events";
+import { startAppTriggers, stopAppTriggers } from "../integrations/composioTriggers";
 import { shutdownBrowsers } from "../browser/manager";
 import { resetComposioState } from "../integrations/composio";
 import { workingDirectoryProblem } from "../services/folders";
@@ -406,6 +409,26 @@ function sanitizeDump(dump: DbDump): string[] {
   }
   if (computerAgents) warnings.push(`Turned off computer use for ${computerAgents} agent(s) — turn it back on in their settings if you trust them with this computer.`);
 
+  // Automations: trigger JSON the database can't parse would break the scheduler's queries.
+  const isJson = (v: unknown) => {
+    if (typeof v !== "string") return false;
+    try {
+      return typeof JSON.parse(v) === "object";
+    } catch {
+      return false;
+    }
+  };
+  let brokenTriggers = 0;
+  for (const row of rowsOf("routines")) {
+    if (row.trigger !== undefined && !isJson(row.trigger)) {
+      row.trigger = '{"type":"schedule"}';
+      row.enabled = 0;
+      brokenTriggers++;
+    }
+    if (row.trigger_state !== undefined && !isJson(row.trigger_state)) row.trigger_state = "{}";
+  }
+  if (brokenTriggers) warnings.push(`Paused ${brokenTriggers} automation(s) whose trigger couldn't be read — set their trigger again.`);
+
   const profiles = rowsOf("browser_profiles");
   const safeProfiles = profiles.filter((row) => typeof row.id === "string" && SAFE_ID.test(row.id));
   if (safeProfiles.length !== profiles.length) {
@@ -618,6 +641,8 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     stopScheduler();
+    stopAppTriggers();
+    stopAutomationEvents();
     try {
       try {
         await shutdownBrowsers();
@@ -625,6 +650,10 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
         log.warn("could not stop browsers before restore", err instanceof Error ? err.message : err);
       }
       const counts = restoreDatabase(dump, vaultMeta);
+      // Runs that were in progress when the backup was made will never finish, and events that were waiting then
+      // are stale now: don't replay them.
+      recoverInterruptedRuns();
+      exec("UPDATE automation_events SET status = 'skipped', note = 'Restored from a backup' WHERE status = 'pending'");
       // The restored vault has a different key: a key remembered on this device is obsolete.
       try {
         await vault.setRememberDevice(false);
@@ -652,6 +681,8 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       return { ok: true as const, counts: result, warnings };
     } finally {
       startScheduler();
+      startAutomationEvents();
+      startAppTriggers();
     }
   });
 }

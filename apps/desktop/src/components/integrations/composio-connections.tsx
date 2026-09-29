@@ -15,7 +15,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmDialog } from "./confirm-dialog";
-import { prettySlug, ToolkitLogo } from "./toolkit-logo";
+import { prettySlug, ToolkitLogo, toolkitLogoUrl } from "./toolkit-logo";
 
 export function connectionTone(status: string): "ok" | "pending" | "error" | "neutral" {
   const s = status.toUpperCase();
@@ -150,7 +150,7 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
                       exit={{ opacity: 0, height: 0 }}
                       className="group flex items-center gap-3 rounded-lg px-2.5 py-2 transition hover:bg-accent"
                     >
-                      <ToolkitLogo src={tk?.logo ?? `https://logos.composio.dev/api/${c.toolkit}`} name={name} size="sm" />
+                      <ToolkitLogo src={tk?.logo ?? toolkitLogoUrl(c.toolkit)} name={name} size="sm" />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="truncate text-sm font-medium">{name}</span>

@@ -11,6 +11,7 @@ import type {
   Message,
   MissingLoginStatus,
   Routine,
+  RoutineTrigger,
   Run,
   SubagentDefinition,
   TotpAlgorithm,
@@ -65,11 +66,26 @@ export interface AgentTemplate {
 export interface RoutineInput {
   agentId: ID;
   name: string;
-  cron: string;
+  /** Default: `{ type: "schedule" }`. */
+  trigger?: RoutineTrigger;
+  /** Required for schedule and condition triggers (for conditions: how often to check); ignored otherwise. */
+  cron?: string;
   timezone?: string;
   prompt: string;
+  /** App/webhook triggers: only act on matching events (plain language). */
+  filter?: string;
   enabled?: boolean;
   reuseConversation?: boolean;
+}
+
+export interface WebhookRotateResult {
+  /** The new secret path; the old one stops working. */
+  webhookPath: string;
+}
+
+export interface TestEventInput {
+  /** Sample event data; default: a small example. */
+  payload?: unknown;
 }
 
 export interface ConversationWithMessages extends Conversation {

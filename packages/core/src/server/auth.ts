@@ -141,11 +141,15 @@ export function isAllowedOrigin(origin: string, host: string | undefined): boole
   return getSettings().server.allowedOrigins.includes(origin);
 }
 
-/** Protect against DNS rebinding: when not in remote mode, only accept loopback Host headers. */
+/**
+ * Protect against DNS rebinding: when not in remote mode, only accept loopback Host headers. Automation webhooks
+ * (`/hooks/<token>`) are exempt so a tunnel can forward them: the secret token authenticates the call, no cookie or
+ * bearer token is involved and the answer reveals nothing.
+ */
 export const hostGuard: MiddlewareHandler = async (c, next) => {
   const settings = getSettings();
   const cfg = config();
-  if (!settings.server.remoteAccess && isLoopbackHost(cfg.host)) {
+  if (!settings.server.remoteAccess && isLoopbackHost(cfg.host) && !(c.req.method === "POST" && c.req.path.startsWith("/hooks/"))) {
     const host = (c.req.header("host") ?? "").replace(/:\d+$/, "").toLowerCase();
     if (host && !LOCAL_HOSTS.has(host)) {
       return c.json({ error: "Host not allowed", code: "host_forbidden" }, 403);

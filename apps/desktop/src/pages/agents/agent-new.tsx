@@ -54,7 +54,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
     mutationFn: () =>
       api.chat.start({
         agentId: boot?.defaultAgentId ?? undefined,
-        content: `Create a new agent for me: ${description.trim()}. Configure sensible instructions and a routine if it should run on a schedule.`,
+        content: `Create a new agent for me: ${description.trim()}. Configure sensible instructions and an automation if it should work on its own (on a schedule or when something happens).`,
       }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
@@ -267,7 +267,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
       qc.invalidateQueries({ queryKey: qk.routines });
       qc.invalidateQueries({ queryKey: qk.bootstrap });
       toast.success(`${agent.avatar} ${agent.name} is ready`, { description: "Say hi or give it a first task." });
-      if (routineError) toast.error("The routine couldn't be created", { description: errorMessage(routineError) });
+      if (routineError) toast.error("The automation couldn't be created", { description: errorMessage(routineError) });
       navigate(`/agents/${agent.id}`);
     },
     onError: (err) => !isGrantCancelled(err) && toast.error("Couldn't create agent", { description: errorMessage(err) }),
@@ -326,7 +326,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
               <div className="flex items-start gap-2.5">
                 <Checkbox id="template-routine" checked={withRoutine} onCheckedChange={(v) => setWithRoutine(v === true)} className="mt-0.5" />
                 <Label htmlFor="template-routine" className="block cursor-pointer text-sm leading-snug font-normal">
-                  Also create routine <span className="font-medium">{template.routine.name}</span>{" "}
+                  Also create automation <span className="font-medium">{template.routine.name}</span>{" "}
                   <span className="text-muted-foreground">({cronToHuman(template.routine.cron)})</span>
                 </Label>
               </div>

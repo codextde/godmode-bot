@@ -291,4 +291,32 @@ WHERE claude_session_id IS NOT NULL
   AND EXISTS (SELECT 1 FROM settings WHERE key = 'runner' AND trim(coalesce(json_extract(value, '$.appendSystemPrompt'), '')) != '');
 `,
   },
+  {
+    id: 6,
+    name: "automation_triggers",
+    sql: /* sql */ `
+ALTER TABLE routines ADD COLUMN trigger TEXT NOT NULL DEFAULT '{"type":"schedule"}';
+ALTER TABLE routines ADD COLUMN filter TEXT NOT NULL DEFAULT '';
+ALTER TABLE routines ADD COLUMN trigger_state TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE routines ADD COLUMN webhook_token_hash TEXT;
+ALTER TABLE routines ADD COLUMN webhook_token_enc TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_routines_webhook ON routines(webhook_token_hash) WHERE webhook_token_hash IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS automation_events (
+  id TEXT PRIMARY KEY,
+  routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+  source TEXT NOT NULL,
+  dedupe_key TEXT,
+  title TEXT NOT NULL,
+  payload TEXT NOT NULL DEFAULT 'null',
+  status TEXT NOT NULL,
+  run_id TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_automation_events_routine ON automation_events(routine_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_automation_events_status ON automation_events(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_automation_events_dedupe ON automation_events(routine_id, dedupe_key) WHERE dedupe_key IS NOT NULL;
+`,
+  },
 ];

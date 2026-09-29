@@ -19,6 +19,7 @@ import { registerFolderRoutes } from "./routes/folders";
 import { registerMcpRoutes } from "../mcp/http";
 import { registerComputerRoutes } from "./routes/computer";
 import { serveStatic } from "./static";
+import { handleWebhook } from "../automations/webhooks";
 
 const log = logger("http");
 
@@ -62,6 +63,9 @@ export function createApp() {
 
   // MCP gateway for agent runs (authenticated by per-run tokens, not user auth)
   registerMcpRoutes(app);
+
+  // Automation webhooks (the secret token in the path is the credential)
+  app.post("/hooks/:token", handleWebhook);
 
   // Protected API
   app.use("/api/*", async (c, next) => {

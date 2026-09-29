@@ -64,7 +64,7 @@ function ExportCard() {
     <SettingsGroup
       title="Export backup"
       icon={<HardDriveDownload />}
-      description="A single encrypted file with your settings, agents, routines, vault (logins + 2FA) and integrations."
+      description="A single encrypted file with your settings, agents, automations, vault (logins + 2FA) and integrations."
     >
       <form
         className="space-y-4 py-4"
@@ -281,7 +281,7 @@ function ImportCard() {
           <AlertDialogHeader>
             <AlertDialogTitle>Replace your current data?</AlertDialogTitle>
             <AlertDialogDescription>
-              This replaces your current data — agents, routines, logins, 2FA codes, integrations and settings — with the contents of{" "}
+              This replaces your current data — agents, automations, logins, 2FA codes, integrations and settings — with the contents of{" "}
               <span className="font-medium text-foreground">{file?.name}</span>. Running tasks are stopped. Consider exporting a backup first.
             </AlertDialogDescription>
           </AlertDialogHeader>

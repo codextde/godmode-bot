@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { motion } from "motion/react";
-import { Bot, CalendarClock, KeyRound } from "lucide-react";
+import { Bot, KeyRound, Workflow } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,9 +19,9 @@ const FEATURES = [
     body: "Passwords and 2FA codes live in an encrypted vault. Agents use them without ever seeing them.",
   },
   {
-    icon: <CalendarClock />,
+    icon: <Workflow />,
     title: "Keeps going",
-    body: "Routines run on a schedule, agents delegate to each other and only ping you when they need you.",
+    body: "Automations start work on a schedule or when something happens, agents delegate to each other and only ping you when they need you.",
   },
 ];
 

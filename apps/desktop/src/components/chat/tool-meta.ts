@@ -4,7 +4,6 @@ import {
   Bell,
   Bot,
   BotMessageSquare,
-  CalendarClock,
   Camera,
   Code2,
   Eye,
@@ -40,6 +39,7 @@ import {
   Type,
   UserCog,
   Wand2,
+  Workflow,
   Wrench,
   X,
 } from "lucide-react";
@@ -221,10 +221,25 @@ const GODMODE_TOOLS = new Set([
   "routine_create",
   "routine_update",
   "routine_delete",
+  "automation_triggers_list",
+  "automation_events_list",
+  "automation_check_result",
   "runs_list",
   "workspaces_list",
   "notify_user",
 ]);
+
+/** What starts an automation, for routine_create / routine_update: the app event, the condition or the cron. */
+function automationDetail(input: Input): string | undefined {
+  const trigger = input.trigger;
+  if (trigger && typeof trigger === "object" && !Array.isArray(trigger)) {
+    const t = trigger as Input;
+    if (t.type === "app") return str(t.triggerName) || "On an app event";
+    if (t.type === "condition") return truncate(`When ${str(t.condition)}`, 120);
+    if (t.type === "webhook") return "When its webhook is called";
+  }
+  return str(input.cron) || undefined;
+}
 
 function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMeta, "server" | "tool"> | null {
   const credId = str(input.credentialId);
@@ -267,11 +282,22 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
     case "agent_delete":
       return { kind: "agents", icon: Trash2, title: agentName ? `Deleted ${agentName}` : "Deleted an agent" };
     case "routine_create":
-      return { kind: "agents", icon: CalendarClock, title: `Created routine ${str(input.name)}`.trim(), detail: str(input.cron) || undefined };
+      return { kind: "agents", icon: Workflow, title: `Created automation ${str(input.name)}`.trim(), detail: automationDetail(input) };
     case "routine_update":
-      return { kind: "agents", icon: CalendarClock, title: "Updated a routine" };
+      return { kind: "agents", icon: Workflow, title: "Updated an automation", detail: automationDetail(input) };
     case "routine_delete":
-      return { kind: "agents", icon: Trash2, title: "Deleted a routine" };
+      return { kind: "agents", icon: Trash2, title: "Deleted an automation" };
+    case "automation_triggers_list":
+      return { kind: "agents", icon: Workflow, title: "Looked up app events it can react to" };
+    case "automation_events_list":
+      return { kind: "agents", icon: History, title: "Checked recent automation events" };
+    case "automation_check_result":
+      return {
+        kind: "agents",
+        icon: ScanText,
+        title: input.met === true ? "Condition met" : "Condition not met yet",
+        detail: truncate(str(input.summary ?? input.observation), 120) || undefined,
+      };
     case "runs_list":
       return { kind: "agents", icon: History, title: "Checked recent runs" };
     case "workspaces_list":

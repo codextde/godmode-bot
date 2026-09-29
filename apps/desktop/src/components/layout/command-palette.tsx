@@ -4,7 +4,6 @@ import {
   Activity,
   Archive,
   Bot,
-  CalendarClock,
   Globe,
   Inbox,
   KeyRound,
@@ -19,6 +18,7 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  Workflow,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -94,8 +94,8 @@ export function CommandPalette() {
           <CommandItem onSelect={() => go("/agents")}>
             <Bot /> Agents
           </CommandItem>
-          <CommandItem onSelect={() => go("/routines")}>
-            <CalendarClock /> Routines
+          <CommandItem value="automations routines schedules triggers webhooks" onSelect={() => go("/automations")}>
+            <Workflow /> Automations
           </CommandItem>
           <CommandItem onSelect={() => go("/activity")}>
             <Activity /> Activity

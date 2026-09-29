@@ -110,26 +110,123 @@ export interface Agent {
 }
 
 /* ------------------------------------------------------------------ */
-/* Routines (scheduled / cron tasks)                                    */
+/* Routines = automations: a prompt an agent runs when its trigger fires */
 /* ------------------------------------------------------------------ */
+
+/**
+ * What starts an automation:
+ *  - `schedule`: the cron expression fires.
+ *  - `app`: an event in a connected app (Composio trigger: new email, Slack message, Notion update…).
+ *  - `condition`: the agent checks a condition in plain language on the cron schedule and acts once it holds.
+ *  - `webhook`: an HTTP POST to the automation's secret URL.
+ */
+export type RoutineTriggerType = "schedule" | "app" | "condition" | "webhook";
+
+export type RoutineTrigger =
+  | { type: "schedule" }
+  | {
+      type: "app";
+      /** Godmode Composio connection (`ComposioConnection.id`) whose account is watched. */
+      connectionId: ID;
+      /** Composio toolkit slug, e.g. "gmail". */
+      toolkit: string;
+      /** Composio trigger type slug, e.g. "GMAIL_NEW_GMAIL_MESSAGE". */
+      triggerSlug: string;
+      /** Display name of the trigger type, e.g. "New Gmail message". */
+      triggerName: string;
+      /** Trigger configuration (fields of the trigger type's config schema). */
+      config: Record<string, unknown>;
+    }
+  | {
+      type: "condition";
+      /** Plain-language condition, e.g. "a competitor changes their pricing page". */
+      condition: string;
+      /** Model for the periodic checks; null = the agent's model. */
+      checkModel: string | null;
+    }
+  | { type: "webhook" };
+
+/** Health of the trigger (listening for app events, last check, webhook calls…). */
+export interface RoutineTriggerStatus {
+  state: "ok" | "pending" | "error" | "off";
+  /** Why it is pending / failing, human readable. */
+  message: string | null;
+  /** Last time the trigger fired (event received, condition met). */
+  lastEventAt: ISODate | null;
+  /** Condition triggers: last check and what the agent observed then. */
+  lastCheckAt: ISODate | null;
+  observation: string | null;
+}
 
 export interface Routine {
   id: ID;
   agentId: ID;
   name: string;
-  /** Cron expression (5 or 6 fields). */
+  trigger: RoutineTrigger;
+  /** Cron expression (5 or 6 fields): the schedule, or how often a condition is checked. "" for app/webhook triggers. */
   cron: string;
   timezone: string;
   prompt: string;
+  /** Event triggers (app, webhook): only act on events that match this, in plain language. "" = every event. */
+  filter: string;
   enabled: boolean;
   /** Keep a single conversation for every run of this routine (continuity) vs. new conversation per run. */
   reuseConversation: boolean;
   conversationId: ID | null;
   lastRunAt: ISODate | null;
+  /** Next scheduled run (schedule) or check (condition). */
   nextRunAt: ISODate | null;
   lastStatus: RunStatus | null;
+  triggerStatus: RoutineTriggerStatus;
+  /**
+   * Webhook triggers: the secret path to POST to, e.g. "/hooks/whk_…" (relative to the core's address).
+   * null for other triggers, and while the vault is locked (the token is stored encrypted).
+   */
+  webhookPath: string | null;
+  /** Events waiting for the automation to finish its current run. */
+  pendingEvents: number;
   createdAt: ISODate;
   updatedAt: ISODate;
+}
+
+/** schedule: the cron fired · app / webhook: an event arrived · condition: a check found the condition met · manual: Run now / test event. */
+export type AutomationEventSource = "schedule" | "app" | "webhook" | "condition" | "manual";
+/**
+ * pending: waiting for the automation's current run · running: handed to a run · done / failed: that run's outcome ·
+ * skipped: not run (automation paused, duplicate, dropped from a full queue).
+ */
+export type AutomationEventStatus = "pending" | "running" | "done" | "failed" | "skipped";
+
+/** Something that happened and started (or will start) an automation. */
+export interface AutomationEvent {
+  id: ID;
+  routineId: ID;
+  source: AutomationEventSource;
+  /** One line, e.g. "New Gmail message · Invoice #1042 from ACME". */
+  title: string;
+  /** Event data as received (JSON, truncated). Untrusted. */
+  payload: unknown;
+  status: AutomationEventStatus;
+  runId: ID | null;
+  /** Why it was skipped or failed. */
+  note: string | null;
+  createdAt: ISODate;
+}
+
+/** A Composio trigger type (event a connected app can emit). */
+export interface ComposioTriggerType {
+  slug: string;
+  name: string;
+  description: string;
+  instructions: string;
+  toolkit: string;
+  toolkitLogo: string | null;
+  /** "poll" triggers are checked by Composio every few minutes; "webhook" ones arrive instantly. */
+  kind: "poll" | "webhook" | null;
+  /** JSON schema of the trigger configuration. */
+  config: Record<string, unknown>;
+  /** Setup in the upstream app is needed before events arrive (e.g. a Slack/Notion webhook subscription). */
+  requiresWebhookSetup: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -229,7 +326,8 @@ export interface Message {
 }
 
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-export type RunTrigger = "chat" | "routine" | "delegation" | "manual" | "api";
+/** `routine`: an automation ran (schedule, app event, condition met, webhook) · `check`: an automation checked its condition. */
+export type RunTrigger = "chat" | "routine" | "check" | "delegation" | "manual" | "api";
 
 export interface RunUsage {
   inputTokens: number;

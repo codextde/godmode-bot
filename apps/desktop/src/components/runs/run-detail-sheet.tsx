@@ -18,6 +18,7 @@ import {
   Share2,
   Timer,
   TriangleAlert,
+  Workflow,
 } from "lucide-react";
 import type { Run } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
@@ -219,7 +220,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
                 to={`/agents/${run.agentId}/routines`}
                 className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-muted-foreground shadow-card transition hover:border-foreground/15 hover:text-foreground"
               >
-                <CalendarClock className="size-3" /> Started by a routine <ChevronRight className="size-3" />
+                <Workflow className="size-3" /> Started by an automation <ChevronRight className="size-3" />
               </Link>
             )}
           </div>

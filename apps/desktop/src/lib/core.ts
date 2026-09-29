@@ -54,6 +54,11 @@ export async function getCoreInfo(): Promise<CoreInfo> {
   }
 }
 
+/** Absolute URL of a core path, e.g. an automation's webhook. The app renders only after `getCoreInfo` resolved. */
+export function coreUrl(path: string): string {
+  return `${info?.baseUrl || window.location.origin}${path}`;
+}
+
 /** Web dashboard: remember an access token for this browser tab session only. */
 export function setSessionToken(token: string | null) {
   try {

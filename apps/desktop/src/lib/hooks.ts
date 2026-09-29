@@ -82,6 +82,40 @@ export function useRoutines(agentId: string = "all") {
   });
 }
 
+/** Recent events of one automation (what started it), newest first. Kept live by realtime.ts. */
+export function useRoutineEvents(routineId: string, { limit = 50, enabled = true } = {}) {
+  return useQuery({
+    queryKey: qk.automationEventList(routineId, limit),
+    queryFn: () => api.routines.events(routineId, { limit }),
+    enabled,
+  });
+}
+
+/** Recent events across every automation, newest first. */
+export function useAutomationEvents(limit = 20) {
+  return useQuery({ queryKey: qk.automationEventList("all", limit), queryFn: () => api.automationEvents.list({ limit }) });
+}
+
+/** Composio trigger types (events) a toolkit offers; `null` toolkit = disabled. */
+export function useComposioTriggerTypes(toolkit: string | null) {
+  return useQuery({
+    queryKey: qk.composioTriggerTypes(toolkit ?? ""),
+    queryFn: () => api.composio.triggerTypes(toolkit!),
+    enabled: !!toolkit,
+    staleTime: 10 * 60_000,
+  });
+}
+
+/** A single Composio trigger type by slug (for automations whose type isn't in the toolkit list anymore). */
+export function useComposioTriggerType(slug: string | null, enabled = true) {
+  return useQuery({
+    queryKey: qk.composioTriggerType(slug ?? ""),
+    queryFn: () => api.composio.triggerType(slug!),
+    enabled: enabled && !!slug,
+    staleTime: 10 * 60_000,
+  });
+}
+
 /** Recent runs filtered by agent / status ("all" = no filter). */
 export function useRuns(agentId: string = "all", status: string = "all", limit = 200) {
   return useQuery({

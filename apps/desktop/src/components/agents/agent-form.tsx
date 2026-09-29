@@ -19,7 +19,7 @@ import {
   UserRound,
   Users,
 } from "lucide-react";
-import type { Agent, AgentInput, ClaudeModel, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
+import type { Agent, AgentInput, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
 import { DEFAULT_MODEL, EFFORT_LABELS, EFFORT_OPTIONS, effortForModel, findModel } from "@godmode/shared";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -34,11 +34,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Spinner } from "@/components/ui/spinner";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AvatarPicker, ColorSwatches } from "./avatar-picker";
 import { MultiSelect } from "./multi-select";
+import { ModelOptions } from "./model-options";
 import { useVaultGrant } from "@/components/vault/grant";
 import { FolderPickerDialog, folderName, useShortPath } from "@/components/chat/folder-picker";
 import { InheritedInstructions, useInheritedInstructions } from "@/components/instructions/instructions";
@@ -156,33 +157,6 @@ function validate(v: AgentFormValues): Record<string, string> {
   return errors;
 }
 
-function ModelOptions({ models, current }: { models: ClaudeModel[]; current?: string }) {
-  const older = models.filter((m) => !m.latest);
-  return (
-    <>
-      {models
-        .filter((m) => m.latest)
-        .map((m) => (
-          <SelectItem key={m.id} value={m.id}>
-            <span>{m.label}</span>
-            {m.description && <span className="text-xs text-muted-foreground">{m.description}</span>}
-          </SelectItem>
-        ))}
-      {older.length > 0 && (
-        <SelectGroup>
-          <SelectLabel>Older models</SelectLabel>
-          {older.map((m) => (
-            <SelectItem key={m.id} value={m.id}>
-              {m.label}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      )}
-      {current && !findModel(models, current) && <SelectItem value={current}>{current}</SelectItem>}
-    </>
-  );
-}
-
 const SECTIONS = [
   { id: "identity", label: "Identity" },
   { id: "instructions", label: "Instructions" },
@@ -214,7 +188,7 @@ export function AgentForm({
   pending?: boolean;
   onSubmit: (input: AgentInput) => void;
   onCancel?: () => void;
-  /** Rendered above the submit bar (e.g. template routine opt-in). */
+  /** Rendered above the submit bar (e.g. template automation opt-in). */
   footerExtra?: ReactNode;
 }) {
   const { data: boot } = useBootstrap();
@@ -428,7 +402,7 @@ export function AgentForm({
           <FormSection
             id="folder"
             title="Working folder"
-            description="Optional. Its chats and routines run inside this folder and can read and edit the files there. Memory stays in the agent's own repository."
+            description="Optional. Its chats and automations run inside this folder and can read and edit the files there. Memory stays in the agent's own repository."
           >
             <FolderField value={values.workingDirectory} onChange={(v) => set("workingDirectory", v)} />
           </FormSection>
@@ -499,7 +473,7 @@ export function AgentForm({
               <ToggleRow
                 id="agent-manage"
                 icon={<Bot className="size-4" />}
-                title="Can manage agents & routines"
+                title="Can manage agents & automations"
                 description="Create, change and delete agents and schedules — like the built-in Godmode orchestrator."
                 checked={values.canManageAgents}
                 onChange={(v) => set("canManageAgents", v)}
@@ -571,7 +545,7 @@ export function AgentForm({
           <FormSection
             id="computer"
             title="Computer"
-            description="In chats you share a window or screen yourself. Here you can let this agent use the computer on its own — for routines and delegated tasks."
+            description="In chats you share a window or screen yourself. Here you can let this agent use the computer on its own — for automations and delegated tasks."
           >
             <div className="space-y-5">
               <ToggleRow
@@ -824,7 +798,7 @@ function FolderField({ value, onChange }: { value: string | null; onChange: (v: 
         value={value}
         onPick={onChange}
         title="Default folder"
-        description="New chats and routines of this agent run inside this folder. Each chat can still switch to another one."
+        description="New chats and automations of this agent run inside this folder. Each chat can still switch to another one."
       />
     </>
   );

@@ -20,6 +20,7 @@ import { logger } from "../log";
 import { audit } from "../services/audit";
 import * as vault from "../vault/vault";
 import { sha256 } from "../vault/crypto";
+import { releaseTriggerInstances } from "./composioTriggers";
 import { badRequest, HttpError, newId, notFound, now, parseJson, sleep } from "../util";
 
 const log = logger("composio");
@@ -135,20 +136,27 @@ function upstreamMessage(data: unknown, fallback: string): string {
 
 function upstreamError(status: number, data: unknown, text: string): HttpError {
   const message = upstreamMessage(data, text.slice(0, 300) || `HTTP ${status}`);
+  const details = { upstreamStatus: status };
   // Never surface 401 to the UI: it would be mistaken for an expired Godmode session.
-  if (status === 401) return new HttpError(400, "Invalid Composio API key", "composio_invalid_key");
-  if (status === 403) return new HttpError(403, `Composio denied the request: ${message}`, "composio_forbidden");
-  if (status === 404) return new HttpError(404, message, "composio_not_found");
-  if (status === 400 || status === 409 || status === 422) return new HttpError(400, `Composio: ${message}`, "composio_bad_request");
-  return new HttpError(502, `Composio API error (HTTP ${status}): ${message}`, "composio_upstream");
+  if (status === 401) return new HttpError(400, "Invalid Composio API key", "composio_invalid_key", details);
+  if (status === 403) return new HttpError(403, `Composio denied the request: ${message}`, "composio_forbidden", details);
+  if (status === 404) return new HttpError(404, message, "composio_not_found", details);
+  if (status === 400 || status === 409 || status === 422) return new HttpError(400, `Composio: ${message}`, "composio_bad_request", details);
+  return new HttpError(502, `Composio API error (HTTP ${status}): ${message}`, "composio_upstream", details);
+}
+
+/** HTTP status Composio answered with, for errors from `composioRequest` (null for network errors). */
+export function upstreamStatus(err: unknown): number | null {
+  const details = err instanceof HttpError ? (err.details as { upstreamStatus?: unknown } | undefined) : undefined;
+  return typeof details?.upstreamStatus === "number" ? details.upstreamStatus : null;
 }
 
 type Query = Record<string, string | number | boolean | null | undefined>;
 
-async function composioRequest<T>(
-  method: "GET" | "POST" | "DELETE",
+export async function composioRequest<T>(
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
-  opts: { query?: Query; body?: unknown; apiKey?: string } = {},
+  opts: { query?: Query; body?: unknown; apiKey?: string; timeoutMs?: number } = {},
 ): Promise<T> {
   const key = opts.apiKey ?? requireApiKey();
   const url = new URL(path, COMPOSIO_BASE_URL);
@@ -165,13 +173,13 @@ async function composioRequest<T>(
         method,
         headers,
         body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? REQUEST_TIMEOUT_MS),
       });
     } catch (err) {
       const timedOut = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
       throw new HttpError(
         502,
-        timedOut ? `Composio did not respond within ${REQUEST_TIMEOUT_MS / 1000} seconds` : `Could not reach Composio: ${err instanceof Error ? err.message : String(err)}`,
+        timedOut ? `Composio did not respond within ${(opts.timeoutMs ?? REQUEST_TIMEOUT_MS) / 1000} seconds` : `Could not reach Composio: ${err instanceof Error ? err.message : String(err)}`,
         "composio_unreachable",
       );
     }
@@ -252,6 +260,8 @@ export async function setApiKey(apiKey: string | null, actor = "user"): Promise<
   if (value !== null && value !== "" && (value.length < 8 || value.length > 512 || /\s/.test(value))) {
     throw badRequest("That does not look like a Composio API key");
   }
+  const previous = vault.hasAppSecret(COMPOSIO_API_KEY_SECRET) ? vault.getAppSecret(COMPOSIO_API_KEY_SECRET) : null;
+  if (previous && previous !== (value || null)) await releaseTriggerInstances(previous, value || null);
   vault.setAppSecret(COMPOSIO_API_KEY_SECRET, value || null);
   resetComposioState();
   forgetSessions();

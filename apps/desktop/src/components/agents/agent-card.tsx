@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router";
 import { formatDistanceToNowStrict } from "date-fns";
-import { CalendarClock, Cpu, Ellipsis, History, MessageSquare, Pencil, Play, Power, PowerOff, Trash2 } from "lucide-react";
+import { Cpu, Ellipsis, History, MessageSquare, Pencil, Play, Power, PowerOff, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { AgentAvatar, ScopeBadge } from "@/components/common";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -76,7 +76,7 @@ export function AgentCard({
               <Play /> Run task…
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/routines`)}>
-              <CalendarClock /> Routines
+              <Workflow /> Automations
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/settings`)}>
               <Pencil /> Edit
@@ -103,8 +103,8 @@ export function AgentCard({
         <span className="flex items-center gap-1" title="Model">
           <Cpu className="size-3.5" /> {agent.model ? modelLabel(agent.model) : "Default model"}
         </span>
-        <span className="flex items-center gap-1" title="Routines">
-          <CalendarClock className="size-3.5" /> {routineCount}
+        <span className="flex items-center gap-1" title="Automations">
+          <Workflow className="size-3.5" /> {routineCount}
         </span>
         <span className="flex items-center gap-1" title={agent.lastRunAt ? new Date(agent.lastRunAt).toLocaleString() : "Never ran"}>
           <History className="size-3.5" />

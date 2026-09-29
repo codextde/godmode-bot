@@ -13,7 +13,10 @@ import {
 } from "../../agents/service";
 import { AGENT_TEMPLATES } from "../../agents/templates";
 import { listSlashCommands } from "../../runner/commands";
-import { createRoutine, deleteRoutine, listRoutines, runRoutineNow, updateRoutine } from "../../services/routines";
+import type { RoutineTrigger } from "@godmode/shared";
+import { createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigger, runRoutineNow, updateRoutine } from "../../services/routines";
+import { listEvents, sendTestEvent } from "../../automations/events";
+import { rotateWebhookToken } from "../../automations/webhooks";
 import { startChat } from "../../services/conversations";
 import { getSettings } from "../../services/settings";
 import { conflict } from "../../util";
@@ -85,12 +88,33 @@ export const agentSchema = z.object({
   workingDirectory: z.string().trim().max(4096).nullable().optional(),
 });
 
+const triggerSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("schedule") }),
+  z.object({
+    type: z.literal("app"),
+    connectionId: id,
+    toolkit: z.string().trim().max(100).optional(),
+    triggerSlug: z.string().trim().min(1, "Choose an app event").max(200),
+    triggerName: z.string().trim().max(200).optional(),
+    config: z.record(z.string(), z.unknown()).optional(),
+  }),
+  z.object({
+    type: z.literal("condition"),
+    condition: z.string().trim().min(1, "Describe the condition").max(2000),
+    checkModel: z.string().trim().max(200).nullable().optional(),
+  }),
+  z.object({ type: z.literal("webhook") }),
+]);
+
 export const routineSchema = z.object({
   agentId: id,
   name: z.string().trim().min(1, "Name is required").max(120),
-  cron: z.string().trim().min(1, "Cron expression is required").max(120),
+  trigger: triggerSchema.optional(),
+  /** Required for schedule and condition triggers (checked by the service). */
+  cron: z.string().trim().max(120).optional(),
   timezone: z.string().trim().max(64).optional(),
   prompt: z.string().trim().min(1, "Prompt is required").max(20_000),
+  filter: z.string().trim().max(2000).optional(),
   enabled: z.boolean().optional(),
   reuseConversation: z.boolean().optional(),
 });
@@ -159,9 +183,20 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.get("/api/routines", (c) => c.json(listRoutines({ agentId: c.req.query("agentId") || undefined })));
 
-  app.post("/api/routines", async (c) => c.json(createRoutine(await body(c, routineSchema))));
+  app.post("/api/routines", async (c) => {
+    const input = await body(c, routineSchema);
+    const trigger = await resolveAppTrigger(input.trigger as RoutineTrigger | undefined, input.agentId);
+    return c.json(createRoutine({ ...input, trigger }));
+  });
 
-  app.patch("/api/routines/:id", async (c) => c.json(updateRoutine(c.req.param("id"), await body(c, routineSchema.partial()))));
+  app.patch("/api/routines/:id", async (c) => {
+    const routineId = c.req.param("id");
+    const patch = await body(c, routineSchema.partial());
+    const trigger = patch.trigger
+      ? await resolveAppTrigger(patch.trigger as RoutineTrigger, patch.agentId ?? getRoutine(routineId).agentId)
+      : undefined;
+    return c.json(updateRoutine(routineId, { ...patch, trigger }));
+  });
 
   app.delete("/api/routines/:id", (c) => {
     deleteRoutine(c.req.param("id"));
@@ -169,4 +204,25 @@ export function registerAgentRoutes(app: Hono): void {
   });
 
   app.post("/api/routines/:id/run", async (c) => c.json(await runRoutineNow(c.req.param("id"))));
+
+  /* Automation events -------------------------------------------------- */
+
+  const limitParam = (value: string | undefined) => (value ? Number(value) || undefined : undefined);
+
+  app.get("/api/routines/:id/events", (c) => {
+    const routine = getRoutine(c.req.param("id"));
+    return c.json(listEvents({ routineId: routine.id, limit: limitParam(c.req.query("limit")) }));
+  });
+
+  app.get("/api/automation-events", (c) =>
+    c.json(listEvents({ routineId: c.req.query("routineId") || undefined, limit: limitParam(c.req.query("limit")) })),
+  );
+
+  app.post("/api/routines/:id/test-event", async (c) => {
+    const { payload } = await body(c, z.object({ payload: z.unknown().optional() }));
+    const { event } = await sendTestEvent(c.req.param("id"), payload);
+    return c.json(event);
+  });
+
+  app.post("/api/routines/:id/webhook/rotate", (c) => c.json(rotateWebhookToken(c.req.param("id"))));
 }

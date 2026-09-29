@@ -18,7 +18,7 @@ import { DeleteAgentDialog, RunTaskDialog } from "@/components/agents/agent-acti
 type Filter = "all" | "running" | "scheduled" | "disabled";
 
 const CREATE_PROMPT =
-  "Create a new agent for me. Ask me what it should do, then configure sensible instructions and a routine if it should run on a schedule.";
+  "Create a new agent for me. Ask me what it should do, then configure sensible instructions and an automation if it should work on its own (on a schedule or when something happens).";
 
 export default function AgentsPage() {
   const navigate = useNavigate();
@@ -89,7 +89,7 @@ export default function AgentsPage() {
   const FILTERS: { id: Filter; label: string }[] = [
     { id: "all", label: "All" },
     { id: "running", label: "Working" },
-    { id: "scheduled", label: "Scheduled" },
+    { id: "scheduled", label: "Automated" },
     { id: "disabled", label: "Disabled" },
   ];
 
@@ -98,7 +98,7 @@ export default function AgentsPage() {
       <PageHeader
         icon={<Bot />}
         title="Agents"
-        description={`Your AI coworkers in ${scopeName}. Each has its own memory, schedule and tools.`}
+        description={`Your AI coworkers in ${scopeName}. Each has its own memory, automations and tools.`}
         actions={
           <>
             <Button variant="outline" onClick={() => navigate(`/?prompt=${encodeURIComponent(CREATE_PROMPT)}`)} className="hidden @md:inline-flex">

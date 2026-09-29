@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, Conversation, ConversationWithMessages } from "@godmode/shared";
 import { EFFORT_LABELS } from "@godmode/shared";
-import { Archive, ArchiveRestore, AudioLines, CalendarClock, ChevronRight, Cpu, Ellipsis, Pencil, Pin, PinOff, Share2, Trash2, Plug } from "lucide-react";
+import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, Pencil, Pin, PinOff, Share2, Trash2, Plug, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +25,7 @@ import { isMac } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 
 const ORIGIN_META = {
-  routine: { label: "Routine", icon: CalendarClock },
+  routine: { label: "Automation", icon: Workflow },
   delegation: { label: "Delegated", icon: Share2 },
   api: { label: "API", icon: Plug },
 } as const;

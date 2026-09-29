@@ -6,6 +6,7 @@ import type {
   ApiError,
   AppNotification,
   AuditEntry,
+  AutomationEvent,
   BackupExportInput,
   BackupImportResult,
   Bootstrap,
@@ -19,6 +20,7 @@ import type {
   ComposioConnection,
   ComposioStatus,
   ComposioToolkit,
+  ComposioTriggerType,
   ComputerImage,
   ComputerInputEvent,
   ComputerSources,
@@ -54,8 +56,10 @@ import type {
   TotpImportResult,
   PasswordImportPreview,
   PasswordImportResult,
+  TestEventInput,
   TotpInput,
   VaultStatus,
+  WebhookRotateResult,
   Workspace,
   WorkspaceInput,
 } from "@godmode/shared";
@@ -260,7 +264,18 @@ export const api = {
     create: (input: RoutineInput) => post<Routine>("/api/routines", input),
     update: (id: string, input: Partial<RoutineInput>) => patch<Routine>(`/api/routines/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/routines/${id}`),
+    /** Schedule: run now · condition: check now (trigger "check") · app/webhook: run with a test event. */
     run: (id: string) => post<Run>(`/api/routines/${id}/run`),
+    /** What started this automation, newest first. */
+    events: (id: string, q: { limit?: number } = {}) => get<AutomationEvent[]>(`/api/routines/${id}/events`, q),
+    /** App/webhook automations only: queue a sample event (goes through the filter like a real one). */
+    testEvent: (id: string, input: TestEventInput = {}) => post<AutomationEvent>(`/api/routines/${id}/test-event`, input),
+    /** Webhook automations: issue a new secret URL; the old one stops working. */
+    rotateWebhook: (id: string) => post<WebhookRotateResult>(`/api/routines/${id}/webhook/rotate`),
+  },
+
+  automationEvents: {
+    list: (q: { limit?: number; routineId?: string } = {}) => get<AutomationEvent[]>("/api/automation-events", q),
   },
 
   conversations: {
@@ -329,6 +344,9 @@ export const api = {
     connect: (input: ComposioConnectInput) => post<ComposioConnectResult>("/api/composio/connect", input),
     refresh: (id: string) => post<ComposioConnection>(`/api/composio/connections/${id}/refresh`),
     disconnect: (id: string) => del<{ ok: true }>(`/api/composio/connections/${id}`),
+    /** Events a toolkit can emit (new email, new Slack message…), with their config schema. */
+    triggerTypes: (toolkit: string) => get<ComposioTriggerType[]>("/api/composio/trigger-types", { toolkit }),
+    triggerType: (slug: string) => get<ComposioTriggerType>(`/api/composio/trigger-types/${encodeURIComponent(slug)}`),
   },
 
   browser: {

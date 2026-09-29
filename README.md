@@ -53,7 +53,7 @@ needs to be useful:
 | 💬 **Chat first** | Start with one conversation with *Godmode*, your main AI coworker. It can answer, act, and create other agents for you. |
 | 🤖 **Persistent agents** | Bots with their own instructions, conversations, memory (`MEMORY.md`), routines and history — each in its own git repo. |
 | 📁 **Working folders** | Optionally point a chat or an agent at any folder on your machine — it works on the files there and keeps its memory in its own repo. |
-| ⏰ **Routines** | Cron schedules with a friendly builder: “weekdays at 08:00”, “1st of every month”… |
+| ⚡ **Automations** | Work starts when it happens: on a schedule (“weekdays at 08:00”), when something happens in a connected app (a new email, a Slack message, a calendar event, a Notion update), when a condition you describe comes true (“competitor pricing changes”), or when a webhook is called. Describe it in one sentence and Godmode sets it up. |
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
@@ -152,8 +152,10 @@ docker compose up -d   # dashboard on http://localhost:7777
    **Vault → 2FA Codes** (Google Authenticator → *Transfer accounts* → *Export* → screenshot).
 3. **Chat** — ask Godmode anything: *“Log into our billing portal and download September's invoice.”*
 4. **Create agents** — *“Create an agent that checks our competitors' pricing every Monday and sends me a summary.”*
-   Godmode creates the agent, its instructions and its routine.
-5. **Check the inbox** — if an agent couldn't log in, it tells you what's missing.
+   Godmode creates the agent, its instructions and its automation.
+5. **Automate** — *“When I get an email with an invoice, save the PDF to Drive and log it in my sheet.”* Godmode picks the
+   trigger (here: a new Gmail message via Composio), the agent and the steps, and it runs whenever it happens.
+6. **Check the inbox** — if an agent couldn't log in, it tells you what's missing.
 
 ### Computer use — share a window or your screen
 
@@ -267,6 +269,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Desktop app (macOS/Windows/Linux) + headless web dashboard
 - [x] Working folders, Claude Code slash commands, live browser preview in chat, desktop auto-update
 - [x] Computer use: share a window (background control via Cua Driver), a display, every monitor or a browser tab
+- [x] Automations: schedules, app events (Composio triggers), plain-language conditions and webhooks
 - [ ] Agents working in a dedicated macOS / Windows / Linux VM (Cua sandboxes / lume)
 - [ ] Mobile companion app & push notifications
 - [ ] Team mode: shared workspaces and approvals

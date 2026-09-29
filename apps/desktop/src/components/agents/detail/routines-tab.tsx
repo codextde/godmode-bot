@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { CalendarClock, Plus, Sun, CalendarDays, CalendarRange } from "lucide-react";
+import { Blocks, CalendarDays, Plus, Radar, Sun, Workflow } from "lucide-react";
 import type { Agent, Routine } from "@godmode/shared";
 import { useRoutines } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
@@ -11,9 +11,10 @@ import { RoutineDialog, type RoutineDraft } from "../routine-dialog";
 import { RoutineItem } from "../routine-item";
 
 const QUICK_STARTS: { icon: typeof Sun; label: string; draft: Partial<RoutineDraft> }[] = [
-  { icon: Sun, label: "Every morning", draft: { name: "Morning check-in", cron: "0 8 * * *" } },
-  { icon: CalendarDays, label: "Every Monday", draft: { name: "Weekly review", cron: "0 9 * * 1" } },
-  { icon: CalendarRange, label: "1st of the month", draft: { name: "Monthly run", cron: "0 9 1 * *" } },
+  { icon: Sun, label: "Every morning", draft: { name: "Morning check-in", triggerType: "schedule", cron: "0 8 * * *" } },
+  { icon: CalendarDays, label: "Every Monday", draft: { name: "Weekly review", triggerType: "schedule", cron: "0 9 * * 1" } },
+  { icon: Blocks, label: "On an app event", draft: { triggerType: "app" } },
+  { icon: Radar, label: "When something changes", draft: { triggerType: "condition" } },
 ];
 
 export function RoutinesTab({ agent }: { agent: Agent }) {
@@ -27,10 +28,11 @@ export function RoutinesTab({ agent }: { agent: Agent }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Routines run {agent.name} on a schedule with a fixed prompt — perfect for recurring chores.
+          Automations put {agent.name} to work on a schedule, when something happens in your apps, when a condition is met or when a webhook is
+          called.
         </p>
         <Button onClick={() => openNew()} disabled={!agent.enabled}>
-          <Plus /> New routine
+          <Plus /> New automation
         </Button>
       </div>
 
@@ -41,12 +43,12 @@ export function RoutinesTab({ agent }: { agent: Agent }) {
           ))}
         </div>
       ) : q.isError ? (
-        <EmptyState icon={<CalendarClock />} title="Couldn't load routines" description={errorMessage(q.error)} />
+        <EmptyState icon={<Workflow />} title="Couldn't load automations" description={errorMessage(q.error)} />
       ) : routines.length === 0 ? (
         <EmptyState
-          icon={<CalendarClock />}
-          title="No routines yet"
-          description={`Schedule ${agent.name} to work automatically — even while you're away.`}
+          icon={<Workflow />}
+          title="No automations yet"
+          description={`Let ${agent.name} get to work on its own — even while you're away.`}
           action={
             <div className="flex flex-wrap justify-center gap-2">
               {QUICK_STARTS.map((s) => (
