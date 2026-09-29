@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Navigate, NavLink, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  Activity,
   AudioLines,
   BrainCircuit,
   Box,
@@ -25,6 +26,7 @@ import { BrowserSection } from "@/components/settings/browser-section";
 import { ComputerSection } from "@/components/settings/computer-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { InstructionsSection } from "@/components/settings/instructions-section";
+import { LogsSection } from "@/components/settings/logs-section";
 import { MemorySection } from "@/components/settings/memory-section";
 import { SecuritySection } from "@/components/settings/security-section";
 import { SystemSection } from "@/components/settings/system-section";
@@ -48,6 +50,7 @@ const SECTIONS = [
   { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
   { id: "backup", label: "Backup", icon: <DatabaseBackup />, group: "Data & privacy" },
   { id: "system", label: "System", icon: <HeartPulse />, group: "App" },
+  { id: "logs", label: "Logs", icon: <Activity />, group: "App" },
   { id: "about", label: "About", icon: <Info />, group: "App" },
 ] as const satisfies readonly { id: string; label: string; icon: ReactNode; group: string }[];
 
@@ -94,6 +97,7 @@ export default function SettingsPage() {
       security: () => <SecuritySection settings={s} />,
       backup: () => <BackupSection />,
       system: () => <SystemSection bootstrap={boot} />,
+      logs: () => <LogsSection settings={s} />,
       about: () => <AboutSection version={boot?.version} />,
     }[active]();
   }

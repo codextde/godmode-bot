@@ -10,7 +10,7 @@ pub fn data_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     app.path().home_dir().ok().map(|home| home.join(".godmode"))
 }
 
-/// Where the core writes `core.log` and the shell writes `desktop.log`.
+/// Where the core writes `godmode.jsonl` and the shell writes `desktop.log`.
 pub fn logs_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     data_dir(app).map(|dir| dir.join("logs"))
 }
