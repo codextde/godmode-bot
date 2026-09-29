@@ -71,6 +71,7 @@ needs to be useful:
 | 🧬 **Workspace folders & repos** | Attach project folders and git repositories to a workspace — paste `https://github.com/you/app` and Godmode clones it with your git sign-in, keeps it up to date and hands it to every agent in the workspace. |
 | 🎙️ **Voice mode** | Dictate and hear replies; hands-free conversation loop (Web Speech, OpenAI or ElevenLabs). |
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
+| 🩺 **Diagnostic log** | Errors, slow spots and how every run went, with secrets masked. Settings → Logs groups recurring problems and copies an AI-ready report — paste it into Claude to find bugs and speed things up. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
 
 <table>
