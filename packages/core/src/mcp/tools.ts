@@ -961,10 +961,18 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "workspaces_list",
-    description: "List workspaces (groups of agents, logins and integrations).",
+    description: "List workspaces (groups of agents, logins and integrations) with the folders and git repositories their agents work with.",
     schema: z.object({}),
     when: isManager,
-    run: () => json(listWorkspaces().map((w) => ({ id: w.id, name: w.name, description: w.description }))),
+    run: () =>
+      json(
+        listWorkspaces().map((w) => ({
+          id: w.id,
+          name: w.name,
+          description: w.description,
+          sources: w.sources.map((s) => ({ kind: s.kind, name: s.name, path: s.path, url: s.url, branch: s.branch, status: s.status })),
+        })),
+      ),
   }),
 
   defineTool({

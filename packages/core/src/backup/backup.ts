@@ -20,6 +20,7 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync,
 import { dirname, join, resolve, sep } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import type { BackupExportInput, BackupImportResult, BackupManifest, EntityName } from "@godmode/shared";
+import { isValidBranch, parseGitUrl } from "@godmode/shared";
 import { config, VERSION } from "../config";
 import { all, get, getDb, run as exec } from "../db";
 import { recoverInterruptedRuns } from "../runner/runner";
@@ -31,9 +32,11 @@ import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/s
 import { startScheduler, stopScheduler } from "../scheduler/scheduler";
 import { startAutomationEvents, stopAutomationEvents } from "../automations/events";
 import { startAppTriggers, stopAppTriggers } from "../integrations/composioTriggers";
+import { startMessaging, stopMessaging } from "../messaging/service";
 import { shutdownBrowsers } from "../browser/manager";
 import { resetComposioState } from "../integrations/composio";
 import { workingDirectoryProblem } from "../services/folders";
+import { isSafeCloneDir } from "../services/workspaceSources";
 import * as vault from "../vault/vault";
 import { assertSafeKdf, openWithPassphrase, sealWithPassphrase } from "../vault/crypto";
 import { badRequest, conflict, HttpError, slugify } from "../util";
@@ -87,6 +90,7 @@ const ALL_ENTITIES: EntityName[] = [
   "settings",
   "runs",
   "vms",
+  "messaging",
 ];
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
@@ -394,6 +398,25 @@ function sanitizeDump(dump: DbDump): string[] {
   }
   if (clearedFolders) warnings.push(`Cleared ${clearedFolders} working folder(s) that don't exist on this machine or aren't allowed.`);
 
+  // Workspace folders must exist here; repositories are cloned again (clones aren't in backups) from URLs that must
+  // still pass the checks new ones do.
+  let droppedSources = 0;
+  tables.workspace_sources = rowsOf("workspace_sources").filter((row) => {
+    const ok =
+      row.kind === "folder"
+        ? typeof row.path === "string" && !workingDirectoryProblem(row.path)
+        : row.kind === "git" &&
+          typeof row.url === "string" &&
+          !("error" in parseGitUrl(row.url)) &&
+          (row.branch == null || (typeof row.branch === "string" && isValidBranch(row.branch))) &&
+          typeof row.path === "string" &&
+          isSafeCloneDir(row.path);
+    if (!ok) droppedSources++;
+    else if (row.kind === "git") Object.assign(row, { error: null, commit_sha: null, head_branch: null, synced_at: null });
+    return ok;
+  });
+  if (droppedSources) warnings.push(`Removed ${droppedSources} workspace folder(s) or repositories that don't exist on this machine or aren't allowed.`);
+
   // Computer use: shared windows/screens belong to the machine they were shared on, and unattended control of this
   // computer is something the human turns on here, not something a backup grants.
   for (const row of rowsOf("conversations")) if (row.computer_target != null) row.computer_target = null;
@@ -484,6 +507,16 @@ function sanitizeDump(dump: DbDump): string[] {
     warnings.push(
       `Disabled ${disabled.length} command-line MCP server(s) from the backup (${disabled.join(", ")}). Check their commands under Integrations before turning them back on.`,
     );
+  }
+
+  // A bot answers from one place: the machine the backup came from may still be running it.
+  const bots: string[] = [];
+  for (const row of rowsOf("messaging_connections")) {
+    if (row.enabled !== 0) bots.push(String(row.name ?? row.id ?? "unnamed"));
+    row.enabled = 0;
+  }
+  if (bots.length) {
+    warnings.push(`Turned off ${bots.length} messaging bot(s) from the backup (${bots.join(", ")}). Turn them on under Messaging once no other Godmode runs them.`);
   }
   return warnings;
 }
@@ -658,6 +691,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
     stopScheduler();
     stopAppTriggers();
     stopAutomationEvents();
+    await stopMessaging();
     try {
       try {
         await shutdownBrowsers();
@@ -698,6 +732,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       startScheduler();
       startAutomationEvents();
       startAppTriggers();
+      startMessaging();
     }
   });
 }
