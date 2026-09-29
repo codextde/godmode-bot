@@ -54,7 +54,7 @@ async function flush() {
 
 export function reportClientError(level: Entry["level"], err: unknown, data?: Record<string, unknown>) {
   const { msg, stack } = describe(err);
-  const text = (msg || "Unknown error").trim().slice(0, 2000);
+  const text = (msg ?? "").trim().slice(0, 2000) || "Unknown error";
   if (IGNORED.some((re) => re.test(text))) return;
   const key = `${level}|${text}`;
   const now = Date.now();

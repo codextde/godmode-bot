@@ -6,7 +6,7 @@
  */
 import type { Context, Hono } from "hono";
 import { VERSION } from "../config";
-import { logger } from "../log";
+import { excerpt, logger } from "../log";
 import { getAgent } from "../agents/service";
 import type { RunContext } from "../types";
 import { resolveRunToken } from "./tokens";
@@ -23,7 +23,7 @@ const SLOW_TOOL_MS = 10_000;
 function toolResultText(result: Record<string, unknown>): string {
   const content = Array.isArray(result.content) ? result.content : [];
   const text = content.map((c) => (isObj(c) && typeof c.text === "string" ? c.text : "")).join(" ").trim();
-  return text.slice(0, 500);
+  return excerpt(text, 500);
 }
 
 const INSTRUCTIONS =

@@ -127,7 +127,7 @@ async function serve(values: Record<string, unknown>) {
   startVms().catch((err) => log.warn("could not check VMs", err));
 
   const app = createApp();
-  const token = getAccessToken();
+  getAccessToken(); // creates the access token on first start
 
   const serveOpts = {
     hostname: cfg.host,
@@ -184,7 +184,7 @@ async function serve(values: Record<string, unknown>) {
     startupMs: Math.round(performance.now()),
   });
   if (cfg.mode === "server") {
-    log.info(`Dashboard: ${url}  — access token: ${token.slice(0, 6)}… (run \`godmode token\` to print it)`);
+    log.info(`Dashboard: ${url}  — run \`godmode token\` to print the access token`);
   }
 
   // Background doctor check so the UI has fresh dependency info.

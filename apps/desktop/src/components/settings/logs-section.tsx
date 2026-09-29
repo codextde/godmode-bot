@@ -1,4 +1,4 @@
-import { useDeferredValue, useRef, useState, type ReactNode } from "react";
+import { useDeferredValue, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow, isToday } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
@@ -63,6 +63,13 @@ function formatMs(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)} ms`;
   if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`;
   return `${Math.round(ms / 60_000)} min`;
+}
+
+/** Issues group messages that differ only in ids and numbers: search for the longest part they share. */
+function issueSearch(msg: string): string {
+  const parts = msg.split(/\b[a-z]+_[A-Za-z0-9]{8,}\b|\b[0-9a-f]{8}-[0-9a-f-]{27}\b|\b[0-9a-f]{12,}\b|\d+(?:\.\d+)?/i).map((p) => p.trim());
+  const longest = parts.reduce((a, b) => (b.length > a.length ? b : a), "");
+  return (longest.length >= 4 ? longest : msg).slice(0, 80);
 }
 
 /** The detail that tells entries with the same message apart ("slow request" → which route, how slow). */
@@ -133,7 +140,7 @@ export function LogsSection({ settings }: { settings: Settings }) {
 
   const showIssue = (issue: LogIssue) => {
     setFilter(issue.level);
-    setSearch(issue.msg.slice(0, 80));
+    setSearch(issueSearch(issue.msg));
     entriesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -349,7 +356,7 @@ function EntriesCard({
     refetchOnWindowFocus: true,
     placeholderData: (prev) => prev,
   });
-  const entries = query.data ?? [];
+  const entries = useMemo(() => withIds(query.data ?? []), [query.data]);
 
   return (
     <SettingsGroup
@@ -399,10 +406,9 @@ function EntriesCard({
       ) : (
         <div className={cn("max-h-[560px] overflow-auto transition-opacity", query.isPlaceholderData && "opacity-60")}>
           <ul className="divide-y">
-            {entries.map((e, i) => {
-              const id = `${e.ts}|${i}|${e.msg}`;
-              return <EntryRow key={id} entry={e} open={open === id} onToggle={() => setOpen((o) => (o === id ? null : id))} />;
-            })}
+            {entries.map(({ id, entry }) => (
+              <EntryRow key={id} entry={entry} open={open === id} onToggle={() => setOpen((o) => (o === id ? null : id))} />
+            ))}
           </ul>
           {entries.length >= ENTRY_LIMIT && (
             <p className="border-t px-5 py-3 text-center text-xs text-muted-foreground">
@@ -413,6 +419,20 @@ function EntriesCard({
       )}
     </SettingsGroup>
   );
+}
+
+/** Stable keys across refreshes (new entries arrive on top), so an open entry stays open. */
+function withIds(entries: LogEntry[]): { id: string; entry: LogEntry }[] {
+  const seen = new Map<string, number>();
+  const out = new Array<{ id: string; entry: LogEntry }>(entries.length);
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    const base = `${e.ts}|${e.scope}|${e.msg}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    out[i] = { id: `${base}|${n}`, entry: e };
+  }
+  return out;
 }
 
 function EntryRow({ entry, open, onToggle }: { entry: LogEntry; open: boolean; onToggle: () => void }) {

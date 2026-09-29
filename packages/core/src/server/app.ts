@@ -37,8 +37,33 @@ function isApiPath(path: string) {
   return path.startsWith("/api/") || path.startsWith("/mcp") || path.startsWith("/hooks/");
 }
 
+/** Sign-in and webhook endpoints answer anyone: their refusals must not let strangers fill (or write into) the log. */
+function isPublicPath(path: string) {
+  return path.startsWith("/api/auth/") || path.startsWith("/hooks/");
+}
+
+const REJECTIONS_PER_MINUTE = 30;
+
+function rejectionLogger() {
+  let windowStart = 0;
+  let count = 0;
+  let suppressed = 0;
+  return (level: "info" | "warn", msg: string, details: Record<string, unknown>) => {
+    const now = Date.now();
+    if (now - windowStart >= 60_000) {
+      if (suppressed) log.info("more rejected requests not logged", { count: suppressed });
+      windowStart = now;
+      count = 0;
+      suppressed = 0;
+    }
+    if (++count > REJECTIONS_PER_MINUTE) suppressed++;
+    else log[level](msg, details);
+  };
+}
+
 export function createApp() {
   const app = new Hono();
+  const logRejection = rejectionLogger();
 
   // Route patterns (never raw paths): ids stay groupable and the webhook token in /hooks/:token stays out of the log.
   app.use("*", async (c, next) => {
@@ -48,7 +73,7 @@ export function createApp() {
     const ms = Math.round(performance.now() - started);
     const details = { method: c.req.method, route: c.req.routePath, status: c.res.status, ms };
     if (ms >= SLOW_REQUEST_MS) log.info("slow request", details);
-    else log.debug("request", details);
+    else if (!c.req.path.startsWith("/api/logs")) log.debug("request", details);
   });
 
   app.use(
@@ -78,7 +103,9 @@ export function createApp() {
     const route = c.req.routePath;
     if (err instanceof HttpError) {
       if (err.status >= 500) log.error(`${c.req.method} ${route} failed`, { err, status: err.status, code: err.code });
-      else if (!isRoutineRefusal(err)) log.info("request rejected", { method: c.req.method, route, status: err.status, code: err.code, error: err.message });
+      else if (!isRoutineRefusal(err) && !isPublicPath(c.req.path)) {
+        logRejection("info", "request rejected", { method: c.req.method, route, status: err.status, code: err.code, error: err.message });
+      }
       return c.json({ error: err.message, code: err.code, details: err.details }, err.status as 400);
     }
     log.error(`${c.req.method} ${route} failed`, err);
@@ -121,7 +148,7 @@ export function createApp() {
   registerLogRoutes(app);
 
   app.all("/api/*", (c) => {
-    log.warn("unknown API route", { method: c.req.method, path: c.req.path });
+    if (!isPublicPath(c.req.path)) logRejection("warn", "unknown API route", { method: c.req.method, path: c.req.path.slice(0, 200) });
     return c.json({ error: "Not found", code: "not_found" }, 404);
   });
 

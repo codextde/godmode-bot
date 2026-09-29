@@ -17,7 +17,7 @@ import type { Agent, ComputerTarget, Effort, Message, Run, RunStatus, RunTrigger
 import { BROWSER_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
-import { logger } from "../log";
+import { excerpt, logger } from "../log";
 import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson } from "../util";
 import { redact } from "../vault/vault";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentStatus, touchAgentRun } from "../agents/service";
@@ -1263,12 +1263,12 @@ function logRunFinished(job: Job, run: Run, agent: Agent | null, status: Outcome
     tokens: run.usage,
     toolCalls: tools.length,
     topTools: [...byName.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, n]) => `${name}×${n}`),
-    failedTools: tools.filter((t) => t.isError).slice(0, 8).map((t) => ({ name: t.name, error: (t.result ?? "").slice(0, 300) })),
+    failedTools: tools.filter((t) => t.isError).slice(0, 8).map((t) => ({ name: t.name, error: excerpt(t.result ?? "", 300) })),
     ...(job.depth ? { depth: job.depth } : {}),
     ...(job.timedOut ? { timedOut: true } : {}),
-    ...(error ? { error: error.slice(0, 1000) } : {}),
+    ...(error ? { error: excerpt(error, 1000) } : {}),
   };
-  if (status === "failed") log.warn(`run failed: ${(error ?? "unknown error").split("\n")[0].slice(0, 160)}`, details);
+  if (status === "failed") log.warn(`run failed: ${excerpt((error ?? "unknown error").split("\n")[0], 160)}`, details);
   else log.info("run finished", details);
 }
 

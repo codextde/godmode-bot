@@ -10,7 +10,6 @@ const crash = logger("crash");
 
 const TICK_MS = 500;
 const STALL_MS = 300;
-/** A gap this long is the computer sleeping, not the core being busy. */
 const SLEEP_MS = 30_000;
 const STALL_REPORT_EVERY_MS = 60_000;
 const SNAPSHOT_EVERY_MS = 30 * 60_000;
@@ -61,20 +60,24 @@ function reportStalls() {
   worstStall = 0;
 }
 
+/** The monotonic clock stops while the computer sleeps, the wall clock doesn't: that tells a stall from sleep. */
 function watchEventLoop() {
-  let expected = Date.now() + TICK_MS;
+  let expectedWall = Date.now() + TICK_MS;
+  let lastMono = performance.now();
   tick = setInterval(() => {
     const now = Date.now();
-    const lag = now - expected;
-    expected = now + TICK_MS;
-    if (lag >= SLEEP_MS) {
-      log.info("resumed after the computer slept (or the core was paused)", { pausedMs: Math.round(lag) });
-      return;
+    const mono = performance.now();
+    const busy = mono - lastMono - TICK_MS;
+    const gap = now - expectedWall;
+    expectedWall = now + TICK_MS;
+    lastMono = mono;
+    if (busy >= STALL_MS) {
+      stalls++;
+      worstStall = Math.max(worstStall, busy);
+      if (now - lastStallReport >= STALL_REPORT_EVERY_MS) reportStalls();
+    } else if (gap >= SLEEP_MS) {
+      log.info("resumed after the computer slept", { pausedMs: Math.round(gap) });
     }
-    if (lag < STALL_MS) return;
-    stalls++;
-    worstStall = Math.max(worstStall, lag);
-    if (now - lastStallReport >= STALL_REPORT_EVERY_MS) reportStalls();
   }, TICK_MS);
   tick.unref?.();
 }
