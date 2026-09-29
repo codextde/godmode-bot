@@ -257,6 +257,11 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
     is going or someone watches its live view; the browser's last page is kept, blank, for the next chat (closing the
     last window would quit Chromium on Windows and Linux). Chromium has one download folder per profile, so two agents
     downloading through one profile at the same moment may find the file in the folder of the one that set it last.
+* **On demand**: a run's endpoint only starts Chromium when browser-use first asks for `/json/version`, on its first
+  browser tool call, so a run that never browses never opens a browser. A start that fails or outlasts browser-use's
+  15 s connect timeout becomes a warning in that run. Idle browsers (no CDP client attached, no watcher, window not
+  focused) stop after `browser.keepAliveMinutes` (default 5); browsers an earlier core left running are adopted at
+  startup and closed unless something still uses them.
 * **Session import** (“continue where Chrome left off”): the importer uses the same technique as browser-use’s
   `profile-use` — copy the Chrome profile’s cookie store to a temp dir, start the real Chrome binary headless on it
   with CDP, read decrypted cookies via `Storage.getCookies`, inject them into the Godmode profile with

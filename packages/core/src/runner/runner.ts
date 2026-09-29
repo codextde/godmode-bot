@@ -25,7 +25,7 @@ import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
-import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
+import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, onLaunchProblem, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
 import {
   addMessage,
   appendTranscript,
@@ -648,6 +648,13 @@ function computerHolder(job: Job): Job | null {
   }
   return null;
 }
+
+onLaunchProblem((runId, text) => {
+  const job = jobs.get(runId);
+  if (job?.status !== "running") return;
+  job.acc.addNotice("warning", text);
+  scheduleDelta(job);
+});
 
 /**
  * The running job working in the same VM as `job` (excluding its own ancestors), if any. Runs sharing a browser profile
