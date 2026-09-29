@@ -643,8 +643,7 @@ export async function browserMcpServer(agent: Agent, profileId?: string | null):
     throw new HttpError(424, "uv (uvx) is not installed, so browser-use can't start. Install it in Settings → Dependencies.", "uv_missing");
   }
 
-  const chosen = profileId ? row(profileId) : null;
-  const profile = chosen ? toProfile(chosen) : resolveProfileForAgent(agent);
+  const profile = profileId ? getProfile(profileId) : resolveProfileForAgent(agent);
   const headless = agent.browser.headless ?? settings.browser.headless;
   const { cdpUrl } = await launchBrowser(profile.id, { headless });
 

@@ -56,7 +56,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const composerRef = useRef<ComposerHandle>(null);
   const [queued, setQueued] = useState<Record<string, string>>({});
   const mountedAt = useRef(Date.now());
-  const browser = useChatBrowser(agent, conv?.browserProfileId ?? null);
+  // A profile picked mid-run applies from the next message: keep showing the browser the running agent drives.
+  const [runProfile, setRunProfile] = useState<{ runId: string; profileId: string | null } | null>(null);
+  if ((live?.runId ?? null) !== (runProfile?.runId ?? null)) setRunProfile(live ? { runId: live.runId, profileId: conv?.browserProfileId ?? null } : null);
+  const chatProfileId = runProfile ? runProfile.profileId : (conv?.browserProfileId ?? null);
+  const browser = useChatBrowser(agent, chatProfileId);
   const browserPanel = useUi((s) => s.browserPanel);
   const setBrowserPanel = useUi((s) => s.setBrowserPanel);
   const wide = useMediaQuery("(min-width: 1024px)");
@@ -218,8 +222,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       const profile = updated.browserProfileId
         ? profiles.find((p) => p.id === updated.browserProfileId)
         : agent && agentBrowserProfile(agent, profiles);
-      const when = busyRef.current ? "From your next message" : "The next messages";
-      if (updated.browserProfileId) toast.success(`Browsing in ${profile?.name ?? "the new profile"}`, { description: `${when} use its cookies and logins.` });
+      const when = busyRef.current ? "Your next message uses" : "The next messages use";
+      if (updated.browserProfileId) toast.success(`Browsing in ${profile?.name ?? "the new profile"}`, { description: `${when} its cookies and logins.` });
       else toast.success("Back to the default profile", { description: `${agent?.name ?? "The agent"} browses in ${profile?.name ?? "its own profile"} again.` });
     },
     onError: (err) => toast.error("Couldn't change the browser profile", { description: errorMessage(err) }),
@@ -449,7 +453,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             key={browser.id}
             profile={browser}
             agent={agent}
-            forChat={browser.id === conv.browserProfileId}
+            forChat={browser.id === chatProfileId}
             activity={activeRunId ? liveActivityLabel(live) : null}
             onHide={() => setBrowserPanel(false)}
             onFocus={setBrowserFocus}

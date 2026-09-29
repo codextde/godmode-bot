@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { FileSink, Subprocess } from "bun";
-import type { Agent, ComputerTarget, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
+import type { Agent, BrowserProfile, ComputerTarget, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
 import { BROWSER_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
@@ -25,7 +25,7 @@ import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
-import { BROWSER_LLM_TOOLS, browserLlmKey, currentPage, resolveProfileForAgent } from "../browser/manager";
+import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, resolveProfileForAgent } from "../browser/manager";
 import {
   addMessage,
   appendTranscript,
@@ -224,6 +224,8 @@ interface Job {
   done: Promise<void> | null;
   /** Browser profile this run drives (undefined = not resolved yet, null = no browser). */
   browserProfileId?: string | null;
+  /** The profile was picked for the run's chat rather than inherited from its agent. */
+  browserFromChat?: boolean;
   /** Screen, window or tab this run may control (undefined = not resolved yet, null = none). */
   computerTarget?: ComputerTarget | null;
   /** The target is the agent's own unattended access, not something shared in the chat. */
@@ -488,6 +490,8 @@ function pump() {
       blocked.add(job.conversationId);
       continue;
     }
+    // Resolve the profile right before deciding, so a chat switched to another profile stops waiting for the old one.
+    job.browserProfileId = undefined;
     const holder = browserHolder(job);
     if (holder) {
       emitActivity(job, `Waiting for the browser (in use by another run)`);
@@ -526,11 +530,15 @@ function memoryHolder(job: Job): Job | null {
 
 function browserProfileOf(job: Job): string | null {
   if (job.browserProfileId !== undefined) return job.browserProfileId;
-  if (job.trigger === "dream") return (job.browserProfileId = null);
+  job.browserProfileId = null;
+  job.browserFromChat = false;
+  if (job.trigger === "dream") return null;
   try {
     const agent = getAgent(job.agentId);
-    job.browserProfileId =
-      getSettings().browser.enabled && agent.browser.enabled ? resolveProfileForAgent(agent, job.conversationId).id : null;
+    if (getSettings().browser.enabled && agent.browser.enabled) {
+      job.browserProfileId = resolveProfileForAgent(agent, job.conversationId).id;
+      job.browserFromChat = job.browserProfileId === chatProfileId(job.conversationId);
+    }
   } catch {
     job.browserProfileId = null;
   }
@@ -541,6 +549,23 @@ function browserProfileOf(job: Job): string | null {
 export function runBrowserProfile(runId: string): string | null {
   const job = jobs.get(runId);
   return job ? browserProfileOf(job) : null;
+}
+
+/** The profile a live run drives when it was picked for its chat (null when inherited, gone or the run is over). */
+export function runChatBrowserProfile(runId: string): BrowserProfile | null {
+  const job = jobs.get(runId);
+  const id = job ? browserProfileOf(job) : null;
+  if (!id || !job?.browserFromChat) return null;
+  try {
+    return getProfile(id);
+  } catch {
+    return null;
+  }
+}
+
+/** Something a waiting run depends on changed (e.g. its chat's browser profile): try to start queued runs again. */
+export function retryQueued(): void {
+  pump();
 }
 
 function isAncestor(candidate: Job, job: Job): boolean {

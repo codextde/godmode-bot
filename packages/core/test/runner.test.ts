@@ -253,6 +253,22 @@ describe("runner end-to-end with fake claude", () => {
     expect(getConversation(b.conversation.id).browserProfileId).toBeNull();
   });
 
+  test("switching a chat that waits for the browser to another profile starts it", async () => {
+    const holder = await makeAgent({ name: "Browser E", browser: { enabled: true } });
+    const waiter = await makeAgent({ name: "Browser F", browser: { enabled: true } });
+    const other = createProfile({ name: "Free profile", workspaceId: createWorkspace({ name: "Free" }).id });
+    const a = await startChat({ agentId: holder.id, content: "SLEEP a" });
+    await until(() => getRun(a.run.id).status === "running", 10_000, "run a");
+    const b = await startChat({ agentId: waiter.id, content: "hello b" });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(getRun(b.run.id).status).toBe("queued");
+
+    updateConversation(b.conversation.id, { browserProfileId: other.id });
+    expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
+    expect(getRun(a.run.id).status).toBe("running");
+    await cancelRun(a.run.id);
+  });
+
   test("cancelling a queued run never starts it", async () => {
     const conv = createConversation({ agentId: agent.id });
     const first = await sendMessage(conv.id, { content: "SLEEP" });

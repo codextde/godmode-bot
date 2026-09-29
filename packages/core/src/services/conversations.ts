@@ -26,7 +26,7 @@ import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { redact } from "../vault/vault";
 import { getAgent, getDefaultAgentId } from "../agents/service";
-import { activeRunForConversation, cancelRun, listActiveRuns, startRun, waitForRun } from "../runner/runner";
+import { activeRunForConversation, cancelRun, listActiveRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
 import { displayToolName } from "../runner/stream";
 import { normalizeWorkingDirectory } from "./folders";
 import { parseComputerTarget } from "../computer/targets";
@@ -276,6 +276,7 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
   const conversation = getConversationSummary(id);
   bus.emit({ type: "conversation.updated", conversation });
   if (patch.vmId !== undefined) assignmentsChanged();
+  if (patch.browserProfileId !== undefined) retryQueued();
   return conversation;
 }
 

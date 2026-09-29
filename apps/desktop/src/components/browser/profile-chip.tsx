@@ -65,7 +65,7 @@ export function BrowserProfileChip({
 
   const pick = (profileId: string | null) => {
     setOpen(false);
-    if (profileId !== (own?.id ?? null)) void onChange(profileId);
+    if (profileId !== value) void onChange(profileId);
   };
   const tooltip = own ? `This chat browses in ${own.name}` : fallback ? `Browses in ${fallback.name} — ${fallbackFrom.toLowerCase()}` : "Browser profile";
   const icon = busy ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : <Globe className="size-3.5 shrink-0 text-muted-foreground" />;
@@ -124,7 +124,7 @@ export function BrowserProfileChip({
                     <span className="block truncate">{fallback && fallback.name.toLowerCase() !== "default" ? `Default — ${fallback.name}` : "Default"}</span>
                     <span className="block truncate text-[11px] text-muted-foreground">{fallbackFrom}</span>
                   </span>
-                  {!own && <Check className="size-4" aria-label="Selected" />}
+                  {!value && <Check className="size-4" aria-label="Selected" />}
                 </CommandItem>
               </CommandGroup>
               <CommandSeparator />
