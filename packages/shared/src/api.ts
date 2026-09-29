@@ -386,4 +386,14 @@ export interface SetupInput {
   dashboardPassword?: string;
 }
 
+/** Errors the app UI ran into, recorded in the diagnostic log (`POST /api/logs/client`). */
+export interface ClientLogInput {
+  entries: {
+    level: "info" | "warn" | "error";
+    msg: string;
+    stack?: string;
+    data?: Record<string, unknown>;
+  }[];
+}
+
 export type { Agent, Attachment, Conversation, Credential, Message, Routine, Run, TotpEntry, Workspace };

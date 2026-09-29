@@ -1188,6 +1188,10 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   } catch (err) {
     log.error(`run ${job.runId} vanished`, err);
   }
+  if (finished) {
+    const run = finished;
+    safely("log run", () => logRunFinished(job, run, agent, outcome.status, error));
+  }
   emitActivity(job, outcome.status === "succeeded" ? "Done" : outcome.status === "cancelled" ? "Cancelled" : "Failed");
   if (finished) bus.emit({ type: "run.finished", run: finished });
   bus.changed("runs");
@@ -1215,6 +1219,33 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
     const message = `Run ${job.runId.slice(-6)}: ${title}`;
     commitAgentRepo(job.agentId, message).catch((err) => log.warn(`auto-commit for agent ${job.agentId} failed`, err));
   }
+}
+
+/** One line per run in the diagnostic log: what it cost, how long it took and waited, which tools failed. */
+function logRunFinished(job: Job, run: Run, agent: Agent | null, status: Outcome["status"], error: string | null) {
+  const tools = job.acc.blocks.flatMap((b) => (b.type === "tool_use" ? [b] : []));
+  const byName = new Map<string, number>();
+  for (const t of tools) byName.set(t.name, (byName.get(t.name) ?? 0) + 1);
+  const details = {
+    runId: run.id,
+    agent: agent?.name ?? job.agentId,
+    trigger: job.trigger,
+    status,
+    model: run.model,
+    ms: run.durationMs,
+    queuedMs: run.startedAt ? Date.parse(run.startedAt) - Date.parse(run.createdAt) : null,
+    costUsd: run.costUsd,
+    turns: run.numTurns,
+    tokens: run.usage,
+    toolCalls: tools.length,
+    topTools: [...byName.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, n]) => `${name}×${n}`),
+    failedTools: tools.filter((t) => t.isError).slice(0, 8).map((t) => ({ name: t.name, error: (t.result ?? "").slice(0, 300) })),
+    ...(job.depth ? { depth: job.depth } : {}),
+    ...(job.timedOut ? { timedOut: true } : {}),
+    ...(error ? { error: error.slice(0, 1000) } : {}),
+  };
+  if (status === "failed") log.warn(`run failed: ${(error ?? "unknown error").split("\n")[0].slice(0, 160)}`, details);
+  else log.info("run finished", details);
 }
 
 /** The run wrote MEMORY.md itself (Edit/Write/MultiEdit on a path ending in MEMORY.md). */

@@ -18,6 +18,13 @@ const log = logger("mcp");
 
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 const KEEPALIVE_MS = 15_000;
+const SLOW_TOOL_MS = 10_000;
+
+function toolResultText(result: Record<string, unknown>): string {
+  const content = Array.isArray(result.content) ? result.content : [];
+  const text = content.map((c) => (isObj(c) && typeof c.text === "string" ? c.text : "")).join(" ").trim();
+  return text.slice(0, 500);
+}
 
 const INSTRUCTIONS =
   "Godmode tools for this agent: log in to websites with vault_list_logins → vault_fill_login → vault_fill_totp " +
@@ -112,11 +119,21 @@ export async function handleRpc(ctx: RunContext, msg: unknown, server: McpServer
     case "tools/call": {
       const name = typeof params.name === "string" ? params.name : "";
       if (!name) return rpcError(id, -32602, "Invalid params: missing tool name");
+      const started = performance.now();
+      const tool = `${server.name}.${name}`;
       try {
-        return ok(id, await server.call(ctx, name, params.arguments ?? {}));
+        const result = await server.call(ctx, name, params.arguments ?? {});
+        const ms = Math.round(performance.now() - started);
+        if (isObj(result) && result.isError === true) log.info("tool call returned an error", { tool, ms, runId: ctx.runId, error: toolResultText(result) });
+        else if (ms >= SLOW_TOOL_MS) log.info("slow tool call", { tool, ms, runId: ctx.runId });
+        else log.debug("tool call", { tool, ms, runId: ctx.runId });
+        return ok(id, result);
       } catch (err) {
-        if (server.isUnknownTool(err)) return rpcError(id, -32602, err instanceof Error ? err.message : String(err));
-        log.error(`tools/call ${name} crashed`, err);
+        if (server.isUnknownTool(err)) {
+          log.warn("unknown tool called", { tool, runId: ctx.runId });
+          return rpcError(id, -32602, err instanceof Error ? err.message : String(err));
+        }
+        log.error(`tools/call ${name} crashed`, { err, tool, ms: Math.round(performance.now() - started), runId: ctx.runId });
         return rpcError(id, -32603, toolErrorMessage(err));
       }
     }

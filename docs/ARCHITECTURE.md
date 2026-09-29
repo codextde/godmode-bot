@@ -42,7 +42,7 @@ backups/              automatic + manual backups (*.godmode-backup)
 vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, tart/ (TART_HOME: vms/<vm-id>
                       disks and gm-image-* templates), downloads/ (image layers while downloading),
                       shared/<vm-id>/ shared folders, logs/<vm-id>.log, ssh/ key
-logs/core.log
+logs/godmode.jsonl    diagnostic log (see "Diagnostic log"); godmode.1.jsonl is the previous 2 MB, desktop.log the shell's
 ```
 
 ### Agent repositories
@@ -151,6 +151,29 @@ core routes must match it exactly. Errors are `{ error, code?, details? }` with 
 (400 validation, 401 auth, 403 forbidden, 404 missing, 409 conflict, 423 vault locked).
 
 Scope query param `workspaceId`: `all` (default) | `global` | `<workspace id>`.
+
+## Diagnostic log
+
+`log.ts` writes every entry as one JSON line (`LogEntry` in `packages/shared/src/models.ts`) to `logs/godmode.jsonl`
+(moved to `godmode.1.jsonl` at 2 MB, so at most two files). Before anything is written, known vault secrets (regardless of
+`security.redactSecrets`), bearer tokens, API keys, `key=value` secrets, URL credentials, webhook tokens and the home
+directory are masked; request paths are logged as route patterns. `info` and up by default, `debug` too with
+`settings.diagnostics.verbose`. What gets recorded besides the existing log calls:
+
+| Scope | Entries |
+|---|---|
+| `runner` | One per run: status, duration, queue wait, cost, tokens, tool calls, failed tools with their error |
+| `http` | Requests slower than 1 s, rejected requests (4xx except sign-in, vault-locked and grant prompts), unknown API routes, 5xx with stack; every request with `verbose` |
+| `mcp` | Agent tool calls slower than 10 s or returning an error, crashes, unknown tools |
+| `db` | Statements slower than 100 ms (SQL only, once a minute each) |
+| `perf` | Event-loop stalls over 300 ms, sleep/wake gaps, memory every 30 min |
+| `crash` | Uncaught exceptions and unhandled rejections (the core still exits with 1) |
+| `ui` | Render crashes, uncaught errors and failed requests that never reached the core (`POST /api/logs/client`, 60 a minute) |
+
+Settings → Logs reads it through `GET /api/logs` (counts, recurring warnings/errors grouped by message without ids and
+numbers), `GET /api/logs/entries?level=&search=&limit=` and `GET /api/logs/report[?full=1]`: Markdown for an AI with
+the environment, recurring problems, a run summary, slow spots, the tail of `desktop.log` and the newest entries that fit
+in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
 
 ## WebSocket (`/api/ws`)
 

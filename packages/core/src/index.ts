@@ -28,6 +28,7 @@ import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
 import { shutdownComputer } from "./computer/service";
 import { shutdownVms, startVms } from "./vm/service";
 import { runDoctor } from "./services/doctor";
+import { resourceSnapshot, startDiagnostics, stopDiagnostics } from "./diagnostics/monitor";
 import { getModelCatalog } from "./runner/models";
 import { newId } from "./util";
 
@@ -99,6 +100,7 @@ async function serve(values: Record<string, unknown>) {
   // The token now lives in the config; don't let any child process (agents, MCP servers, installers) inherit it.
   delete process.env.GODMODE_TOKEN;
   setLogDir(cfg.logsDir);
+  startDiagnostics();
   openDb(cfg.dbPath);
 
   const settings = getSettings();
@@ -174,7 +176,11 @@ async function serve(values: Record<string, unknown>) {
   const url = `http://${displayHost}:${cfg.port}`;
   // Machine-readable ready line for the desktop shell.
   console.log(`GODMODE_READY ${JSON.stringify({ url, port: cfg.port, version: VERSION })}`);
-  log.info(`Godmode core ${VERSION} listening on ${url} (mode=${cfg.mode}, data=${cfg.dataDir})`);
+  log.info(`Godmode core ${VERSION} listening on ${url} (mode=${cfg.mode}, data=${cfg.dataDir})`, {
+    platform: `${cfg.platform} ${cfg.arch}`,
+    bun: Bun.version,
+    startupMs: Math.round(performance.now()),
+  });
   if (cfg.mode === "server") {
     log.info(`Dashboard: ${url}  — access token: ${token.slice(0, 6)}… (run \`godmode token\` to print it)`);
   }
@@ -187,7 +193,8 @@ async function serve(values: Record<string, unknown>) {
   const shutdown = async (signal: string) => {
     if (stopping) return;
     stopping = true;
-    log.info(`received ${signal}, shutting down`);
+    log.info(`received ${signal}, shutting down`, resourceSnapshot());
+    stopDiagnostics();
     stopScheduler();
     stopDreaming();
     stopAppTriggers();
