@@ -887,7 +887,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
   }
   const promptVm: PromptVm | null = vm
-    ? { name: vm.name, guestUser: vm.guestUser, guestSharedDir: vm.guestSharedDir, hostSharedDir: vm.hostSharedDir, hostShellOff: settings.vm.isolateHostShell }
+    ? { name: vm.name, guestUser: vm.guestUser, guestSharedDir: vm.guestSharedDir, hostSharedDir: vm.hostSharedDir, hostShellOff: settings.vm.isolateHostShell, vaultFill: settings.vm.vaultFill }
     : null;
   const mcp = await buildMcpConfig(agent, res.token, {
     onNotice: (text) => job.acc.addNotice("warning", text),

@@ -11,6 +11,9 @@
  * `exec` runs the command on the host as a stand-in for the guest, made safe: `/bin/zsh -l -c` becomes `/bin/sh -c`
  * (no login shell resetting PATH), `sudo`, `defaults`, `scutil`, `pmset` and `sw_vers` are no-op shims, the guest home
  * `/Users/admin` is `$TART_HOME/guest-home` and the shared folder mount is the host folder given to `run --dir`.
+ * `pbcopy` writes the "guest clipboard" to `$TART_HOME/clipboard`. Run directly (without a shell), `/usr/sbin/ioreg`
+ * reports secure keyboard input while `$TART_HOME/secure-input` exists (or once for `secure-input-once`), and `/bin/ps`
+ * names its owner: the app in that file (default Safari).
  *
  * Env: FAKE_TART_PULL_MS — how long a pull takes (default 300); FAKE_TART_BOOT_FAILS — number of `exec` readiness
  * probes that fail before the guest agent "answers" (default 1); FAKE_TART_OS — guest OS of every VM ("darwin"; with
@@ -370,10 +373,19 @@ switch (cmd) {
         chmodSync(p, 0o755);
       }
     }
-    const swVers = join(shims, "sw_vers");
-    if (!existsSync(swVers)) {
-      writeFileSync(swVers, "#!/bin/sh\necho 26.0\n");
-      chmodSync(swVers, 0o755);
+    const scripted: Record<string, string> = {
+      sw_vers: "echo 26.0",
+      pbcopy: `cat > "${join(home, "clipboard")}"`,
+      // secure-input-once: the password field loses focus right after the first look.
+      ioreg: `on=; [ -f "${join(home, "secure-input")}" ] && on=1; [ -f "${join(home, "secure-input-once")}" ] && rm "${join(home, "secure-input-once")}" && on=1; [ -n "$on" ] && echo '  "IOConsoleUsers" = ({"kCGSSessionOnConsoleKey"=Yes,"kCGSSessionSecureInputPID"=4242,"kCGSSessionUserNameKey"="admin"})'; exit 0`,
+      ps: `app=$(cat "${join(home, "secure-input")}" 2>/dev/null); echo "/Applications/\${app:-Safari}.app/Contents/MacOS/\${app:-Safari}"`,
+    };
+    for (const [tool, body] of Object.entries(scripted)) {
+      const p = join(shims, tool);
+      if (!existsSync(p)) {
+        writeFileSync(p, `#!/bin/sh\n${body}\n`);
+        chmodSync(p, 0o755);
+      }
     }
     // The guest shuts down: its VM stops (like a real `sudo shutdown -h now`).
     if (command.some((a) => a.includes("shutdown -h now"))) {
@@ -390,6 +402,8 @@ switch (cmd) {
       return out;
     };
     let argv = command.map(guestize);
+    // Programs run directly (no shell) → their shims.
+    if (argv[0] === "/usr/sbin/ioreg" || argv[0] === "/bin/ps") argv = [join(shims, argv[0].split("/").pop()!), ...argv.slice(1)];
     if (argv[0] === "/bin/zsh") argv = ["/bin/sh", "-c", argv[argv.length - 1]!];
     const proc = Bun.spawn(argv, {
       cwd: guestHome,
