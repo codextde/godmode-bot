@@ -18,6 +18,7 @@ import { requireGrant } from "../grants";
 import { body, z } from "../validate";
 import { badRequest } from "../../util";
 import { isValidDreamSchedule } from "../../memory/dreaming";
+import { pendingRequestCount } from "../../messaging/service";
 
 function count(sql: string): number {
   return get<{ c: number }>(sql)?.c ?? 0;
@@ -44,6 +45,7 @@ export function registerSystemRoutes(app: Hono) {
         openMissingLogins: count("SELECT COUNT(*) AS c FROM missing_logins WHERE status = 'open'"),
         runningRuns: count("SELECT COUNT(*) AS c FROM runs WHERE status IN ('queued','running')"),
         unreadNotifications: unreadCount(),
+        messagingRequests: pendingRequestCount(),
       },
     };
     return c.json(data);

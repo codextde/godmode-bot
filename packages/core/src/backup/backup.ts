@@ -31,6 +31,7 @@ import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/s
 import { startScheduler, stopScheduler } from "../scheduler/scheduler";
 import { startAutomationEvents, stopAutomationEvents } from "../automations/events";
 import { startAppTriggers, stopAppTriggers } from "../integrations/composioTriggers";
+import { startMessaging, stopMessaging } from "../messaging/service";
 import { shutdownBrowsers } from "../browser/manager";
 import { resetComposioState } from "../integrations/composio";
 import { workingDirectoryProblem } from "../services/folders";
@@ -87,6 +88,7 @@ const ALL_ENTITIES: EntityName[] = [
   "settings",
   "runs",
   "vms",
+  "messaging",
 ];
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
@@ -485,6 +487,16 @@ function sanitizeDump(dump: DbDump): string[] {
       `Disabled ${disabled.length} command-line MCP server(s) from the backup (${disabled.join(", ")}). Check their commands under Integrations before turning them back on.`,
     );
   }
+
+  // A bot answers from one place: the machine the backup came from may still be running it.
+  const bots: string[] = [];
+  for (const row of rowsOf("messaging_connections")) {
+    if (row.enabled !== 0) bots.push(String(row.name ?? row.id ?? "unnamed"));
+    row.enabled = 0;
+  }
+  if (bots.length) {
+    warnings.push(`Turned off ${bots.length} messaging bot(s) from the backup (${bots.join(", ")}). Turn them on under Messaging once no other Godmode runs them.`);
+  }
   return warnings;
 }
 
@@ -658,6 +670,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
     stopScheduler();
     stopAppTriggers();
     stopAutomationEvents();
+    await stopMessaging();
     try {
       try {
         await shutdownBrowsers();
@@ -698,6 +711,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       startScheduler();
       startAutomationEvents();
       startAppTriggers();
+      startMessaging();
     }
   });
 }

@@ -237,8 +237,11 @@ export interface ComposioTriggerType {
 /* Conversations, messages, runs                                        */
 /* ------------------------------------------------------------------ */
 
-/** `dream`: the archived conversation an agent's dreams (memory consolidation) run in. */
-export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream";
+/**
+ * `dream`: the archived conversation an agent's dreams (memory consolidation) run in ·
+ * `slack` / `telegram` / `teams`: a chat on that platform (see Messaging).
+ */
+export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream" | "slack" | "telegram" | "teams";
 
 export interface Conversation {
   id: ID;
@@ -900,5 +903,7 @@ export interface Bootstrap {
     openMissingLogins: number;
     runningRuns: number;
     unreadNotifications: number;
+    /** People waiting for approval to talk to a messaging bot. */
+    messagingRequests: number;
   };
 }

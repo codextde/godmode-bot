@@ -16,6 +16,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSidebar } from "@/components/ui/sidebar";
 import { AgentAvatar } from "@/components/common";
+import { PLATFORMS } from "@/components/messaging/platform";
 import { DeleteChatDialog, useArchiveChat } from "@/components/chat/chat-actions";
 import { useModelLabel } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
@@ -29,6 +30,9 @@ const ORIGIN_META = {
   delegation: { label: "Delegated", icon: Share2 },
   api: { label: "API", icon: Plug },
   dream: { label: "Dreams", icon: Moon },
+  slack: { label: "Slack", icon: PLATFORMS.slack.glyph },
+  telegram: { label: "Telegram", icon: PLATFORMS.telegram.glyph },
+  teams: { label: "Teams", icon: PLATFORMS.teams.glyph },
 } as const;
 
 export function ConversationHeader({
