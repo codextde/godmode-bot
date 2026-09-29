@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
     browserUseCommand: "",
     keepAliveMinutes: 15,
     liveView: true,
+    stealth: true,
   },
   computer: {
     enabled: true,

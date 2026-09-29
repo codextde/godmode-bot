@@ -204,6 +204,7 @@ export interface LaunchMarker {
   pid: number;
   port: number;
   headless: boolean;
+  stealth?: boolean;
 }
 
 export function writeLaunchMarker(userDataDir: string, marker: LaunchMarker) {
@@ -218,7 +219,7 @@ export function readLaunchMarker(userDataDir: string): LaunchMarker | null {
   try {
     const m = JSON.parse(readFileSync(join(userDataDir, LAUNCH_MARKER), "utf8")) as Partial<LaunchMarker>;
     const valid = Number.isInteger(m.pid) && m.pid! > 0 && Number.isInteger(m.port) && m.port! > 0 && m.port! <= 65535;
-    return valid ? { pid: m.pid!, port: m.port!, headless: !!m.headless } : null;
+    return valid ? { pid: m.pid!, port: m.port!, headless: !!m.headless, stealth: !!m.stealth } : null;
   } catch {
     return null;
   }
@@ -257,6 +258,7 @@ export interface ChromeProcess {
   port: number;
   wsUrl: string;
   browserVersion: string;
+  userAgent: string;
   /** The browser, or `open` when LaunchServices started it (macOS, visible). */
   proc: Subprocess;
   /** Resolves with the exit code once the process is gone. */
@@ -352,6 +354,7 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
             port,
             wsUrl: version.webSocketDebuggerUrl,
             browserVersion: version.Browser,
+            userAgent: version["User-Agent"],
             proc,
             exited,
             isAlive: () => alive,
@@ -385,6 +388,7 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
           port,
           wsUrl: version.webSocketDebuggerUrl,
           browserVersion: version.Browser,
+          userAgent: version["User-Agent"],
           proc,
           exited: exited.then(async () => {
             while (isAlive()) await sleep(250);

@@ -58,6 +58,7 @@ needs to be useful:
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
+| 🥷 **Bot-detection hardening** | Sites that block automated browsers see a normal Chrome: no `navigator.webdriver`, and even a headless browser has the user agent and screen of a regular Chrome window. *Run check* (Settings → Browser) shows what bot detection sees, signal by signal. |
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
 | 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent works *entirely inside the VM* — commands, files, apps (computer use with Cua Driver) and the web (Google Chrome with browser-use) — and no browser opens on your Mac. Watch the VM's screen next to the chat and take control anytime. Allow it once and agents sign in inside the VM too: Godmode fills your saved logins and 2FA codes for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
@@ -114,6 +115,10 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/messaging.png" alt="Slack, Telegram and Teams bots connected to agents" /><br /><sub><b>Messaging</b> — talk to agents from Slack, Telegram and Microsoft Teams</sub></td>
     <td><img src="docs/screenshots/messaging-bot.png" alt="A bot's access requests, agents and who may use it" /><br /><sub><b>Bot settings</b> — approve people, pick agents, see every chat</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/bot-check.png" alt="Bot check of a hardened headless browser: 9 of 10 checks pass" /><br /><sub><b>Bot check</b> — what bot detection sees in the agents' browser</sub></td>
+    <td><img src="docs/screenshots/bot-check-off.png" alt="Bot check without hardening: the headless user agent and screen give the browser away" /><br /><sub><b>Without hardening</b> — headless Chrome gives itself away</sub></td>
   </tr>
 </table>
 

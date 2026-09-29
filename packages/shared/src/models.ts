@@ -761,6 +761,8 @@ export interface BrowserSettings {
   browserUseCommand: string;
   keepAliveMinutes: number;
   liveView: boolean;
+  /** Hide automation signals so sites don't treat agents as bots (applies when a browser launches). */
+  stealth: boolean;
 }
 
 export interface ComputerSettings {

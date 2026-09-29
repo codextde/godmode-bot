@@ -11,6 +11,8 @@ export interface RunningBrowser {
   httpUrl: string;
   wsUrl: string;
   headless: boolean;
+  /** Launched with bot-detection hardening (see stealth.ts). */
+  stealth: boolean;
   /** Persistent browser-level CDP connection owned by Godmode. */
   client: CdpClient;
   /** null when we adopted a browser left running by a previous core process. */

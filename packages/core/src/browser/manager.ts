@@ -4,7 +4,7 @@
  */
 import { existsSync, rmSync } from "node:fs";
 import { join, relative, resolve, isAbsolute } from "node:path";
-import type { Agent, BrowserProfile, ChromeImportInput, ChromeImportResult, LocalChromeProfile } from "@godmode/shared";
+import type { Agent, BotCheckReport, BrowserProfile, ChromeImportInput, ChromeImportResult, LocalChromeProfile } from "@godmode/shared";
 import type { McpServerJson } from "../types";
 import { config, ensureDir } from "../config";
 import { bool, get, all, insert, run, update, tx } from "../db";
@@ -20,6 +20,8 @@ import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type Pag
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
+import { stealthArgs, windowedUserAgent } from "./stealth";
+import { botCheckReport } from "./botCheck";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
 import { initLiveView, startLiveView, stopLiveView } from "./screencast";
 import * as importer from "./importer";
@@ -275,6 +277,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
   let port: number;
   let wsUrl: string;
   let headless: boolean;
+  let stealth: boolean;
   // A Chromium left running by a previous core process still owns this profile dir — adopt it.
   const marker = readLaunchMarker(profile.user_data_dir);
   const orphan = marker && isProcessAlive(marker.pid) ? await probeCdp(marker.port) : null;
@@ -283,6 +286,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
     port = marker.port;
     wsUrl = orphan.webSocketDebuggerUrl;
     headless = marker.headless;
+    stealth = !!marker.stealth;
     log.info(`adopting running browser for profile ${profileId} (pid ${pid}, port ${port})`);
   } else {
     if (marker) clearLaunchMarker(profile.user_data_dir);
@@ -295,15 +299,17 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
       );
     }
     headless = opts.headless ?? settings.browser.headless;
+    stealth = settings.browser.stealth;
+    const extraArgs = stealth ? stealthArgs({ headless, userAgent: headless ? await windowedUserAgent(chrome.path) : null }) : [];
     try {
-      proc = await launchChrome({ executable: chrome.path, userDataDir: profile.user_data_dir, headless });
+      proc = await launchChrome({ executable: chrome.path, userDataDir: profile.user_data_dir, headless, extraArgs });
     } catch (err) {
       throw new HttpError(500, `Could not start ${chrome.browser}: ${err instanceof Error ? err.message : String(err)}`, "browser_launch_failed");
     }
     pid = proc.pid;
     port = proc.port;
     wsUrl = proc.wsUrl;
-    writeLaunchMarker(profile.user_data_dir, { pid, port, headless });
+    writeLaunchMarker(profile.user_data_dir, { pid, port, headless, stealth });
     log.info(`started ${chrome.browser} for profile ${profileId} (pid ${pid}, port ${port}, ${headless ? "headless" : "headed"})`);
   }
 
@@ -322,6 +328,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
     httpUrl: `http://127.0.0.1:${port}`,
     wsUrl,
     headless,
+    stealth,
     client,
     process: proc,
     pid,
@@ -593,6 +600,20 @@ export async function navigate(profileId: string, url: string): Promise<void> {
   if (!done) await rb.client.send("Target.createTarget", { url: parsed.href });
 }
 
+/** What bot detection sees in the profile's browser; a browser started just for the check is stopped again. */
+export async function botCheck(profileId: string): Promise<BotCheckReport> {
+  requireRow(profileId);
+  const wasRunning = !!getRunning(profileId);
+  const rb = await ensureBrowser(profileId);
+  rb.lastUsedAt = Date.now();
+  try {
+    const { product } = await rb.client.send<{ product: string }>("Browser.getVersion");
+    return await botCheckReport(rb.client, { profileId, browser: product.replace(/^HeadlessChrome/, "Chrome"), headless: rb.headless, stealth: rb.stealth });
+  } finally {
+    if (!wasRunning) await stopBrowser(profileId);
+  }
+}
+
 /** Running browser for the profile or a 409. */
 export function requireRunning(profileId: string): RunningBrowser {
   requireRow(profileId);
@@ -631,6 +652,7 @@ export async function browserMcpServer(agent: Agent, profileId?: string | null):
     configDir,
     cdpUrl,
     headless,
+    stealth: settings.browser.stealth,
     userDataDir: profile.userDataDir,
     downloadsPath: join(workspace, "downloads"),
     fileSystemPath: join(cfg.dataDir, "browser-use", profile.id, agent.id, "files"),

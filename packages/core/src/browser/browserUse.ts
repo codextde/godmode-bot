@@ -69,6 +69,8 @@ export interface BrowserUseConfigInput {
   configDir: string;
   cdpUrl: string;
   headless: boolean;
+  /** In headless mode browser-use emulates the screen size as viewport, making the page larger than its window — a bot signal. */
+  stealth?: boolean;
   /** Only used if browser-use ever has to launch a browser itself (e.g. after a crash). */
   userDataDir: string;
   downloadsPath: string;
@@ -91,7 +93,7 @@ export function browserUseConfig(input: BrowserUseConfigInput, profileId: string
         default: true,
         created_at: createdAt,
         cdp_url: input.cdpUrl,
-        headless: input.headless,
+        headless: input.headless && !input.stealth,
         // browser-use copies any user_data_dir whose path contains "chrome" into a temp dir on every start;
         // never hand it such a path.
         user_data_dir: /chrome/i.test(input.userDataDir) ? join(input.configDir, "user-data") : input.userDataDir,

@@ -10,6 +10,7 @@ import type {
   BackupExportInput,
   BackupImportResult,
   Bootstrap,
+  BotCheckReport,
   BrowserProfile,
   ChromeImportInput,
   ClientLogInput,
@@ -451,6 +452,7 @@ export const api = {
     chromeProfiles: () => get<LocalChromeProfile[]>("/api/browser/chrome-profiles"),
     import: (id: string, input: ChromeImportInput) => post<ChromeImportResult>(`/api/browser/profiles/${id}/import`, input),
     navigate: (id: string, url: string) => post<{ ok: true }>(`/api/browser/profiles/${id}/navigate`, { url }),
+    botCheck: (id: string) => post<BotCheckReport>(`/api/browser/profiles/${id}/bot-check`),
     /** Human takeover in live view: forward a click / key / text to the page */
     input: (
       id: string,

@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
 import {
+  botCheck,
   createProfile,
   deleteProfile,
   getProfile,
@@ -79,6 +80,8 @@ export function registerBrowserRoutes(app: Hono): void {
     await navigate(c.req.param("id"), url);
     return c.json({ ok: true });
   });
+
+  app.post("/api/browser/profiles/:id/bot-check", async (c) => c.json(await botCheck(c.req.param("id"))));
 
   app.post("/api/browser/profiles/:id/input", async (c) => {
     const event = await body(c, inputEvent);
