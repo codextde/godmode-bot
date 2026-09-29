@@ -131,15 +131,16 @@ function useCommitDraft<T>(value: T, onCommit: (v: T) => void, delay: number | n
 
 type InputProps = Omit<ComponentProps<typeof Input>, "value" | "onChange" | "defaultValue">;
 
-/** Text input bound to a settings value; saves when the user pauses, leaves the field or presses Enter. */
+/** Text input bound to a settings value; saves when the user pauses (`delay` ms, null = never), leaves the field or presses Enter. */
 export function CommitInput({
   value,
   onCommit,
   transform,
+  delay = 600,
   className,
   ...props
-}: InputProps & { value: string; onCommit: (v: string) => void; transform?: (v: string) => string }) {
-  const d = useCommitDraft(value, (v) => onCommit(transform ? transform(v) : v));
+}: InputProps & { value: string; onCommit: (v: string) => void; transform?: (v: string) => string; delay?: number | null }) {
+  const d = useCommitDraft(value, (v) => onCommit(transform ? transform(v) : v), delay);
   return (
     <Input
       {...props}

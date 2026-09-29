@@ -33,6 +33,7 @@ const TRIGGERS: { id: "all" | RunTrigger; label: string }[] = [
   { id: "chat", label: "Chat" },
   { id: "routine", label: "Automation" },
   { id: "check", label: "Condition check" },
+  { id: "dream", label: "Dream" },
   { id: "delegation", label: "Delegation" },
   { id: "manual", label: "Manual" },
   { id: "api", label: "API" },

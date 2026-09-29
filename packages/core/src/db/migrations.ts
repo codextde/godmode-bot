@@ -319,4 +319,35 @@ CREATE INDEX IF NOT EXISTS idx_automation_events_status ON automation_events(sta
 CREATE UNIQUE INDEX IF NOT EXISTS idx_automation_events_dedupe ON automation_events(routine_id, dedupe_key) WHERE dedupe_key IS NOT NULL;
 `,
   },
+  {
+    id: 7,
+    name: "dreaming",
+    sql: /* sql */ `
+-- Dreams: background memory consolidation runs. \`snapshot\` holds the memory files as they were when the dream
+-- started (JSON, cleared when it ends); \`files\` the files it changed, before and after (JSON), for review and undo.
+CREATE TABLE IF NOT EXISTS dreams (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  run_id TEXT,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL,
+  source_from TEXT,
+  source_to TEXT,
+  exchanges INTEGER NOT NULL DEFAULT 0,
+  conversations INTEGER NOT NULL DEFAULT 0,
+  summary TEXT NOT NULL DEFAULT '',
+  changes TEXT NOT NULL DEFAULT '[]',
+  files TEXT NOT NULL DEFAULT '[]',
+  snapshot TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_dreams_agent ON dreams(agent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_dreams_run ON dreams(run_id);
+-- Digest of MEMORY.md as the conversation's Claude session last saw it (changes are pointed out on resume).
+ALTER TABLE conversations ADD COLUMN memory_digest TEXT;
+`,
+  },
 ];

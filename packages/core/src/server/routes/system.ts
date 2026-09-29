@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import { homedir } from "node:os";
 import type { Bootstrap } from "@godmode/shared";
-import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
+import { MAX_INSTRUCTIONS_LENGTH, isModelId } from "@godmode/shared";
 import { config } from "../../config";
 import { get } from "../../db";
 import * as vault from "../../vault/vault";
@@ -17,6 +17,7 @@ import { hasDashboardPassword } from "../auth";
 import { requireGrant } from "../grants";
 import { body, z } from "../validate";
 import { badRequest } from "../../util";
+import { isValidDreamSchedule } from "../../memory/dreaming";
 
 function count(sql: string): number {
   return get<{ c: number }>(sql)?.c ?? 0;
@@ -63,6 +64,24 @@ export function registerSystemRoutes(app: Hono) {
     const instructions = (patch.runner as { appendSystemPrompt?: unknown } | undefined)?.appendSystemPrompt;
     if (typeof instructions === "string" && instructions.length > MAX_INSTRUCTIONS_LENGTH) {
       throw badRequest(`Instructions for every agent can be at most ${MAX_INSTRUCTIONS_LENGTH.toLocaleString("en-US")} characters`);
+    }
+    const memory = patch.memory as { dreaming?: unknown } | undefined;
+    if (memory !== undefined && (typeof memory !== "object" || memory === null || Array.isArray(memory))) throw badRequest("Invalid memory settings");
+    if (memory?.dreaming !== undefined && (typeof memory.dreaming !== "object" || memory.dreaming === null || Array.isArray(memory.dreaming))) {
+      throw badRequest("Invalid dreaming settings");
+    }
+    const dreaming = memory?.dreaming as { cron?: unknown; minNewExchanges?: unknown; refreshDays?: unknown; model?: unknown; enabled?: unknown } | undefined;
+    if (dreaming) {
+      if (dreaming.enabled !== undefined && typeof dreaming.enabled !== "boolean") throw badRequest("dreaming.enabled must be true or false");
+      if (dreaming.cron !== undefined && (typeof dreaming.cron !== "string" || !isValidDreamSchedule(dreaming.cron))) {
+        throw badRequest("The dreaming schedule must be a cron expression with 5 fields (minute hour day month weekday)");
+      }
+      const count = (v: unknown, max: number) => v === undefined || (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= max);
+      if (!count(dreaming.minNewExchanges, 1000)) throw badRequest("Minimum new exchanges must be a whole number between 0 and 1000");
+      if (!count(dreaming.refreshDays, 365)) throw badRequest("Refresh days must be a whole number between 0 and 365");
+      if (dreaming.model !== undefined && (typeof dreaming.model !== "string" || (dreaming.model.trim() !== "" && !isModelId(dreaming.model.trim())))) {
+        throw badRequest("Invalid model id for dreaming");
+      }
     }
     const next = updateSettings(patch as never);
     applyRuntimeSettings(next);

@@ -16,6 +16,7 @@ import { listMissingLogins, reportMissingLogin } from "../services/missingLogins
 import { createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigger, runRoutineNow, updateRoutine } from "../services/routines";
 import { listEvents } from "../automations/events";
 import { reportCheckResult } from "../automations/conditions";
+import { reportDream } from "../memory/dreaming";
 import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/composio";
 import { listTriggerTypes } from "../integrations/composioTriggers";
 import { listWorkspaces } from "../services/workspaces";
@@ -321,6 +322,17 @@ function isCheckRun(ctx: RunContext): boolean {
     return false;
   }
 }
+
+/** The run is a dream (background memory consolidation): it gets `memory_dream_report` and nothing else. */
+function isDreamRun(ctx: RunContext): boolean {
+  try {
+    return getRun(ctx.runId).trigger === "dream";
+  } catch {
+    return false;
+  }
+}
+
+const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report"]);
 
 function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -847,6 +859,25 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
+    name: "memory_dream_report",
+    description:
+      "Report the result of this dream (call exactly once, at the end). summary: one or two sentences for the human on what you consolidated. changes: what you did to your memory, one line per entry (kind: added, updated, merged, removed, corrected or dated) — empty when nothing needed to change.",
+    schema: z.object({
+      summary: z.string().max(2000),
+      changes: z
+        .array(
+          z.object({
+            kind: z.enum(["added", "updated", "merged", "removed", "corrected", "dated"]),
+            text: z.string().max(1000),
+          }),
+        )
+        .max(100),
+    }),
+    when: (_agent, ctx) => isDreamRun(ctx),
+    run: (report, { ctx }) => reportDream(ctx.runId, report),
+  }),
+
+  defineTool({
     name: "runs_list",
     description:
       "Recent runs of all agents (or one agent) with status, result snippet and error — use it to check what every agent did and what failed.",
@@ -967,7 +998,8 @@ export function allToolNames(): string[] {
 
 /** Tools listed for this agent in this run (permission-filtered). */
 export function listToolsFor(agent: Agent, ctx: RunContext): { name: string; description: string; inputSchema: Record<string, unknown> }[] {
-  return TOOLS.filter((t) => !t.when || t.when(agent, ctx)).map((t) => {
+  const dream = isDreamRun(ctx);
+  return TOOLS.filter((t) => (dream ? DREAM_TOOLS.has(t.name) : !t.when || t.when(agent, ctx))).map((t) => {
     let schema = schemaCache.get(t.name);
     if (!schema) {
       schema = inputSchema(t.schema);
@@ -999,6 +1031,7 @@ export async function callTool(ctx: RunContext, name: string, args: unknown): Pr
   try {
     const agent = getAgent(ctx.agentId);
     if (tool.when && !tool.when(agent, ctx)) return result(`The tool ${name} is not available to ${agent.name}.`, true);
+    if (!DREAM_TOOLS.has(name) && isDreamRun(ctx)) return result(`The tool ${name} is not available while dreaming.`, true);
     const parsed = tool.schema.parse(args ?? {});
     const out = await tool.run(parsed as never, { ctx, agent });
     return typeof out === "string" ? result(out) : result(out.text, out.isError === true);

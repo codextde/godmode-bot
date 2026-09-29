@@ -130,6 +130,7 @@ two concurrent turns in the same conversation.
 | `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result) |
 | `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent) |
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
+| `memory_dream_report({ summary, changes })` | Only in dream runs — and the only tool they get: report what a memory consolidation changed (see Dreaming) |
 | `notify_user({ title, body })` | Push a notification to the human |
 
 ## HTTP API
@@ -254,3 +255,39 @@ connected Composio accounts and each app's events with their settings schema; `r
 
 Default: file-based (`MEMORY.md` + `memory/` in the agent repo, committed to git). Optional:
 [claude-mem](https://github.com/thedotmack/claude-mem) with `CLAUDE_MEM_DATA_DIR` pointing into the agent repo.
+
+* **Loaded into every chat** (`settings.memory.injectMemory`, default on): a new Claude session gets `MEMORY.md`
+  (up to 12,000 characters) in its system prompt, so the agent starts every task already knowing it. Each
+  conversation stores a digest of the `MEMORY.md` its session saw (`conversations.memory_digest`, refreshed after each
+  of its runs); when another chat, a dream or the human changed it since, the next resumed turn says so.
+* **Reflection**: the runtime prompt asks the agent to update `MEMORY.md` at the end of every task
+  (`settings.memory.reflectAfterRun`).
+
+### Dreaming (background memory consolidation)
+
+After ChatGPT's "dreaming": on a schedule (`settings.memory.dreaming.cron`, local time, default nightly at 03:00) every
+agent reviews what happened since its last dream and rewrites its memory — capturing what nobody explicitly asked it to
+remember, merging duplicates, resolving contradictions (newer wins), making dates absolute and rewriting plans that
+have passed ("is going to Singapore in July" → "went to Singapore in July 2026"), and pruning what is stale, keeping
+`MEMORY.md` compact enough to load into every run. `memory/dreaming.ts` owns it:
+
+* **When**: a 5-minute tick sweeps once per scheduled time; a schedule missed while the computer was off or asleep is
+  caught up on the next tick. An agent is due with at least `minNewExchanges` (default 3) new exchanges — finished
+  chat, automation, delegated and API runs; checks and dreams don't count — or, without them, when its last dream is
+  `refreshDays` (default 7) old and `MEMORY.md` mentions dates. Scheduled dreams only start on idle agents (no run in
+  the last 10 minutes; retried on later ticks). "Dream now" (`POST /api/agents/:id/dreams`) starts one right away.
+* **How**: a dream is a run with trigger `dream` in the agent's archived `origin = 'dream'` conversation (nobody else
+  can post there), with a fresh session, cwd = the agent repo, the dreaming model (`dreaming.model`, default
+  `sonnet`), `--tools Read,Write,Edit,Glob,Grep`, and an MCP config with only the Godmode gateway, which lists just
+  `memory_dream_report` (other tools are refused). The exchanges since the cursor (`MAX(dreams.source_to)` of
+  successful or undone dreams) are handed over as a digest of the already redacted run prompts and answers, grouped by
+  conversation, in `workspace/tmp/dreams/<id>.md` (git-ignored, removed afterwards; 120k characters per dream — older
+  activity first, the rest waits for the next dream). No transcript, no missing-login detection, no "last active".
+* **Exclusive**: a dream owns the agent's memory — the runner starts no other run of the agent while it runs, and it
+  waits for the agent's running runs (capped at 20 minutes). A run someone waits for (chat, delegation, API) pauses a
+  *scheduled* dream: it is cancelled, rolled back and retried once the agent is idle again.
+* **All or nothing, reviewable**: `MEMORY.md` and `memory/**` are snapshotted when the dream starts (`dreams.snapshot`).
+  A successful dream stores the changed files before/after (`dreams.files`) with the agent's report (summary and one
+  line per change: added, updated, merged, removed, corrected, dated) and commits `Dream: <summary>`; a failed or
+  cancelled one is rolled back. `POST /api/dreams/:id/revert` undoes a dream while its files are unchanged since.
+  The agent's Memory tab shows the journal with a diff of every dream.

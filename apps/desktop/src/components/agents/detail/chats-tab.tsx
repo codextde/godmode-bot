@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Archive, ArchiveRestore, MessageSquare, MessagesSquare, Pin, Plug, Plus, Search, Share2, Workflow } from "lucide-react";
+import { Archive, ArchiveRestore, MessageSquare, MessagesSquare, Moon, Pin, Plug, Plus, Search, Share2, Workflow } from "lucide-react";
 import type { Agent, Conversation, ConversationOrigin } from "@godmode/shared";
 import { errorMessage } from "@/lib/api";
 import { useArchivedConversations, useConversations } from "@/lib/hooks";
@@ -25,6 +25,7 @@ const ORIGIN: Record<ConversationOrigin, { icon: typeof MessageSquare; label: st
   routine: { icon: Workflow, label: "Automation" },
   delegation: { icon: Share2, label: "Delegation" },
   api: { icon: Plug, label: "API" },
+  dream: { icon: Moon, label: "Dreams" },
 };
 
 function useDebounced<T>(value: T, ms = 250): T {

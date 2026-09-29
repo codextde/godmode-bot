@@ -76,6 +76,14 @@ export const DEFAULT_SETTINGS: Settings = {
     backend: "files",
     autoCommit: true,
     reflectAfterRun: true,
+    injectMemory: true,
+    dreaming: {
+      enabled: true,
+      cron: "0 3 * * *",
+      model: "sonnet",
+      minNewExchanges: 3,
+      refreshDays: 7,
+    },
   },
   onboardingComplete: false,
 };

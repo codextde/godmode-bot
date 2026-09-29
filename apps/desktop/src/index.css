@@ -41,6 +41,10 @@
   --anthracite: #1c1c1c;
   --paper-2: #f4f2ed;
 
+  /* Dreaming — moonlit indigo, only for background memory consolidation */
+  --dream: #5552c9;
+  --dream-soft: rgb(85 82 201 / 0.09);
+
   --glow-a: var(--brand);
   --glow-b: var(--brand);
   --glow-c: var(--brand);
@@ -92,6 +96,9 @@
   --brand-soft: rgb(47 214 144 / 0.14);
   --paper-2: #211f1d;
 
+  --dream: #a9a6ff;
+  --dream-soft: rgb(169 166 255 / 0.11);
+
   --chart-1: #2fd690;
   --chart-2: #1fb5a6;
   --chart-3: #e8a53a;
@@ -139,6 +146,8 @@
   --color-brand-strong: var(--brand-strong);
   --color-brand-soft: var(--brand-soft);
   --color-paper-2: var(--paper-2);
+  --color-dream: var(--dream);
+  --color-dream-soft: var(--dream-soft);
   --color-glow-a: var(--glow-a);
   --color-glow-b: var(--glow-b);
   --color-glow-c: var(--glow-c);
@@ -172,6 +181,9 @@
   --animate-float: float 6s ease-in-out infinite;
   --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-live-dot: live-dot 2s ease-out infinite;
+  --animate-twinkle: twinkle 3.6s ease-in-out infinite;
+  --animate-dream-halo: dream-halo 3.2s ease-in-out infinite;
+  --animate-dream-dot: dream-dot 2s ease-out infinite;
 
   @keyframes shimmer {
     0% { background-position: 200% 0; }
@@ -188,6 +200,18 @@
   }
   @keyframes live-dot {
     0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 55%, transparent); }
+    80%, 100% { box-shadow: 0 0 0 6px transparent; }
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.2; transform: scale(0.7); }
+    50% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes dream-halo {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--dream) 0%, transparent), 0 0 12px -4px color-mix(in oklab, var(--dream) 30%, transparent); }
+    50% { box-shadow: 0 0 0 5px color-mix(in oklab, var(--dream) 10%, transparent), 0 0 22px -2px color-mix(in oklab, var(--dream) 45%, transparent); }
+  }
+  @keyframes dream-dot {
+    0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--dream) 55%, transparent); }
     80%, 100% { box-shadow: 0 0 0 6px transparent; }
   }
 }

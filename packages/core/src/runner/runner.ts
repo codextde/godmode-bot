@@ -39,10 +39,11 @@ import {
 } from "../services/conversations";
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
+import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor } from "./models";
-import { buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix } from "./prompt";
+import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix } from "./prompt";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
 import { parseComputerTarget } from "../computer/targets";
 import { StreamAccumulator, detectLoginFailure, redactBlocks } from "./stream";
@@ -60,6 +61,8 @@ export interface StartRunInput {
   voice?: boolean;
   /** The stored user message this run answers. When omitted the runner stores one from `prompt`. */
   userMessageId?: string | null;
+  /** Id for the run (callers that must know it before the run can start or finish). Default: a new one. */
+  runId?: string;
 }
 
 export const CLAUDE_NOT_FOUND = "Claude Code CLI not found. Install it from Settings → System.";
@@ -72,6 +75,15 @@ const PERSIST_INTERVAL_MS = 2000;
 const KILL_GRACE_MS = 5000;
 const SESSION_MISSING = /no conversation found|session(?: id)? [^\n]{0,80}not found|could not find session|no such session/i;
 const AUTH_PROBLEM = /not logged in|please run \/login|invalid api key|authentication_error|oauth token (?:has )?expired|credit balance is too low/i;
+/** Built-in Claude Code tools of a dream run: reading and editing the memory files, nothing else. */
+const DREAM_TOOLS = "Read,Write,Edit,Glob,Grep";
+/**
+ * What a dream may change without asking (print mode denies everything else): its memory files and the report tool.
+ * Edit rules cover every built-in tool that writes files.
+ */
+const DREAM_ALLOWED = ["Edit(./MEMORY.md)", "Edit(./memory/**)", "mcp__godmode"];
+/** A dream holds the agent's memory while it runs: never for longer than this. */
+const DREAM_TIMEOUT_MINUTES = 20;
 
 export { __setClaudeBinaryForTests } from "./claude";
 
@@ -219,6 +231,8 @@ interface Job {
   keepSessionId?: string;
   /** Digest of the standing instructions restated in this run's prompt; recorded once the run succeeds. */
   restatedDigest?: string;
+  /** Digest of the MEMORY.md this run's Claude session was shown (or told about) when it started. */
+  memorySeen?: string;
 }
 
 /** The session may no longer hold the instructions it was given: restate them on the next turn. */
@@ -281,7 +295,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
   if (conv.agent_id !== agent.id) throw badRequest("The conversation belongs to another agent");
   if (!input.prompt.trim()) throw badRequest("Prompt is empty");
 
-  const runId = newId("run");
+  const runId = input.runId ?? newId("run");
   let userMessageId = input.userMessageId ?? null;
   if (userMessageId) sql("UPDATE messages SET run_id = ? WHERE id = ?", runId, userMessageId);
   else userMessageId = addMessage({ conversationId: input.conversationId, role: "user", content: redact(input.prompt), runId }).id;
@@ -441,7 +455,8 @@ export async function shutdownRunner(): Promise<void> {
 function pump() {
   if (shuttingDown) return;
   const max = Math.max(1, Math.floor(getSettings().runner.maxConcurrentRuns || 1));
-  let running = [...jobs.values()].filter((j) => j.status === "running").length;
+  // Dreams don't take run slots (there is at most one at a time), so they never hold up anyone's work.
+  let running = [...jobs.values()].filter((j) => j.status === "running" && j.trigger !== "dream").length;
   const blocked = new Set<string>();
   for (const runId of [...queue]) {
     const job = jobs.get(runId);
@@ -457,13 +472,19 @@ function pump() {
     // A delegated run whose parent is running (and typically waiting for it) may exceed the limit — otherwise
     // a parent holding the last slot would deadlock on its own child.
     const parentRunning = !!job.parentRunId && jobs.get(job.parentRunId)?.status === "running";
-    if (running >= max && !parentRunning) {
+    if (job.trigger === "dream" ? [...jobs.values()].some((j) => j.trigger === "dream" && j.status === "running") : running >= max && !parentRunning) {
       blocked.add(job.conversationId);
       continue;
     }
     // One browser profile = one Chromium: two independent runs driving it at once would fight over tabs and
     // focus. A run waits while another run holds its profile — unless that run is its own ancestor in the
     // delegation chain (the parent is idle, waiting for this child).
+    // A dream owns the agent's memory: it waits for the agent's other runs, and they wait while it runs.
+    if (memoryHolder(job)) {
+      emitActivity(job, job.trigger === "dream" ? "Waiting for other runs to finish before dreaming" : "Waiting — consolidating memory (dreaming)");
+      blocked.add(job.conversationId);
+      continue;
+    }
     const holder = browserHolder(job);
     if (holder) {
       emitActivity(job, `Waiting for the browser (in use by another run)`);
@@ -480,7 +501,7 @@ function pump() {
     }
     queue.splice(queue.indexOf(runId), 1);
     job.status = "running";
-    running++;
+    if (job.trigger !== "dream") running++;
     job.done = execute(job)
       .catch((err) => log.error(`run ${runId} crashed`, err))
       .finally(() => {
@@ -491,8 +512,18 @@ function pump() {
   }
 }
 
+/** A running job of the same agent that conflicts with `job` over the agent's memory (one of them is a dream). */
+function memoryHolder(job: Job): Job | null {
+  for (const other of jobs.values()) {
+    if (other === job || other.status !== "running" || other.agentId !== job.agentId) continue;
+    if (job.trigger === "dream" || other.trigger === "dream") return other;
+  }
+  return null;
+}
+
 function browserProfileOf(job: Job): string | null {
   if (job.browserProfileId !== undefined) return job.browserProfileId;
+  if (job.trigger === "dream") return (job.browserProfileId = null);
   try {
     const agent = getAgent(job.agentId);
     job.browserProfileId =
@@ -516,12 +547,19 @@ function isAncestor(candidate: Job, job: Job): boolean {
  * What the run may control: the screen, window or tab shared in its conversation, else — for agents allowed to use
  * the computer on their own (routines, delegated work) — their configured target (default: the whole desktop).
  */
-export function computerTargetOf(job: { agentId: string; conversationId: string; computerTarget?: ComputerTarget | null; computerFromAgent?: boolean }): ComputerTarget | null {
+export function computerTargetOf(job: {
+  agentId: string;
+  conversationId: string;
+  trigger?: RunTrigger;
+  computerTarget?: ComputerTarget | null;
+  computerFromAgent?: boolean;
+}): ComputerTarget | null {
   if (job.computerTarget !== undefined) return job.computerTarget;
   let target: ComputerTarget | null = null;
   let fromAgent = false;
   try {
-    if (getSettings().computer.enabled) {
+    // Dreams only read and edit memory files.
+    if (getSettings().computer.enabled && job.trigger !== "dream") {
       const conv = get<{ computer_target: string | null }>("SELECT computer_target FROM conversations WHERE id = ?", job.conversationId);
       target = parseComputerTarget(parseJson<unknown>(conv?.computer_target, null));
       if (!target) {
@@ -793,12 +831,15 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     effort: Effort | null;
     instructions: string | null;
     instructions_digest: string | null;
+    memory_digest: string | null;
   }>(
-    "SELECT claude_session_id, working_directory, model, effort, instructions, instructions_digest FROM conversations WHERE id = ?",
+    "SELECT claude_session_id, working_directory, model, effort, instructions, instructions_digest, memory_digest FROM conversations WHERE id = ?",
     job.conversationId,
   );
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
-  const folder = conv.working_directory ?? agent.workingDirectory;
+  const dreaming = job.trigger === "dream";
+  // A dream always works in the agent's repository, on its memory files.
+  const folder = dreaming ? null : (conv.working_directory ?? agent.workingDirectory);
   const problem = folder && (isDirectory(folder) ? workingDirectoryProblem(folder) : `The folder ${folder} doesn't exist anymore.`);
   if (problem) {
     const fix = conv.working_directory ? "Pick another folder for this chat." : `Change the default folder in ${agent.name}'s settings.`;
@@ -820,12 +861,16 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const computer = fresh && decided && computerLockKey(fresh) === computerLockKey(decided) ? fresh : null;
   if (decided && !computer && fresh) job.acc.addNotice("info", "What you share changed while this message started — it applies from your next message.");
   if (computer) attachComputer(job.runId, agent.id, job.conversationId, computer, job.computerFromAgent ? "agent" : "share");
-  const mcp = await buildMcpConfig(agent, res.token, { onNotice: (text) => job.acc.addNotice("warning", text), computer: !!computer });
+  const mcp = await buildMcpConfig(agent, res.token, {
+    onNotice: (text) => job.acc.addNotice("warning", text),
+    computer: !!computer,
+    gatewayOnly: dreaming,
+  });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
   if (job.acc.blocks.length) scheduleDelta(job);
 
-  const canDelegate = agent.permissions.allowDelegation || agent.permissions.canManageAgents;
+  const canDelegate = !dreaming && (agent.permissions.allowDelegation || agent.permissions.canManageAgents);
   let peers: Agent[] = [];
   if (canDelegate) {
     try {
@@ -842,16 +887,21 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     chat: conv.instructions ?? "",
   });
   const digest = instructionsDigest(standing);
-  const systemPrompt = buildSystemPrompt({
-    agent,
-    settings,
-    peers,
-    browserAvailable: "browser" in mcp.mcpServers,
-    computer,
-    voice: job.voice,
-    workingDirectory: folder,
-    standingInstructions: standing,
-  });
+  const systemPrompt = dreaming
+    ? buildDreamSystemPrompt(agent, settings)
+    : buildSystemPrompt({
+        agent,
+        settings,
+        peers,
+        browserAvailable: "browser" in mcp.mcpServers,
+        computer,
+        voice: job.voice,
+        workingDirectory: folder,
+        standingInstructions: standing,
+        // Condition checks run every few minutes and only look at the world: no memory needed.
+        memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath) : null,
+      });
+  const memoryNow = memoryDigest(agent.repoPath);
 
   const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
   const effort = effortFor(model, conv.effort || agent.effort || settings.runner.effort || null);
@@ -865,22 +915,27 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const baseArgs = ["-p", "--input-format", "text", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", model];
   if (effort) baseArgs.push("--effort", effort);
   if (fallback && fallback !== model && isModelId(fallback)) baseArgs.push("--fallback-model", fallback);
-  if (settings.runner.bypassPermissions) baseArgs.push("--dangerously-skip-permissions");
+  if (dreaming) {
+    // Never bypass permissions for a dream: it may only write its memory files (print mode denies the rest).
+    baseArgs.push("--permission-mode", "default", "--allowedTools", ...DREAM_ALLOWED);
+  } else if (settings.runner.bypassPermissions) baseArgs.push("--dangerously-skip-permissions");
   else {
     // Non-bypass mode: allow Godmode-provided MCP tools without prompts (print mode cannot ask).
     baseArgs.push("--permission-mode", "acceptEdits", "--allowedTools", Object.keys(mcp.mcpServers).map((n) => `mcp__${n}`).join(","));
   }
   baseArgs.push("--mcp-config", mcpPath, "--strict-mcp-config");
+  if (dreaming) baseArgs.push("--tools", DREAM_TOOLS);
   // Hide browser-use tools that need their own LLM key when none is configured (they would only error).
   if (mcp.mcpServers[BROWSER_MCP_NAME] && !browserLlmKey()) {
     baseArgs.push("--disallowedTools", BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`).join(","));
   }
   if (viaFiles) baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));
   else baseArgs.push("--append-system-prompt", systemPrompt);
-  baseArgs.push("--setting-sources", "project,local");
+  // Dreams load no settings files: the repository's own .claude/settings*.json could widen their permissions.
+  baseArgs.push("--setting-sources", dreaming ? "" : "project,local");
   if (folder) baseArgs.push("--add-dir", agent.repoPath);
   if (budget != null && budget > 0) baseArgs.push("--max-budget-usd", String(budget));
-  if (agent.subagents.length) {
+  if (agent.subagents.length && !dreaming) {
     const defs: Record<string, { description: string; prompt: string; model?: string }> = {};
     for (const s of agent.subagents) {
       if (!s.name?.trim()) continue;
@@ -891,7 +946,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       baseArgs.push("--agents", viaFiles ? writeTempFile(res, `godmode-agents-${job.runId}.json`, json) : json);
     }
   }
-  if (settings.memory.backend === "claude-mem") {
+  if (settings.memory.backend === "claude-mem" && !dreaming) {
     const pluginDir = claudeMemPluginDir();
     if (pluginDir) baseArgs.push("--plugin-dir", pluginDir);
     else {
@@ -908,7 +963,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   mkdirSync(join(logPath, ".."), { recursive: true });
   const logSink = Bun.file(logPath).writer();
 
-  const timeoutMinutes = settings.runner.runTimeoutMinutes;
+  const timeoutMinutes = dreaming
+    ? Math.min(settings.runner.runTimeoutMinutes || DREAM_TIMEOUT_MINUTES, DREAM_TIMEOUT_MINUTES)
+    : settings.runner.runTimeoutMinutes;
   if (timeoutMinutes > 0) {
     res.timer = setTimeout(() => {
       job.timedOut = true;
@@ -922,8 +979,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const resuming = !!sessionId;
     if (!sessionId) {
       sessionId = randomUUID();
-      setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest });
+      setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest, memoryDigest: memoryNow });
     }
+    job.memorySeen = memoryNow;
     if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
     const sessionArgs = resuming ? ["--resume", sessionId] : ["--session-id", sessionId];
     // Claude Code only recognizes a slash command at the very start of the prompt.
@@ -931,7 +989,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     // A resumed session keeps the system prompt of its first turn: restate standing instructions that changed since.
     const restate = resuming && !command && (conv.instructions_digest ?? "") !== digest;
     if (restate) job.restatedDigest = digest;
-    const prompt = resuming && !command ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined }) + job.prompt : job.prompt;
+    // Another chat, a dream or the human changed the memory since this session last saw it.
+    const memoryChanged = resuming && !dreaming && conv.memory_digest != null && conv.memory_digest !== memoryNow;
+    const prompt =
+      resuming && !command
+        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged }) + job.prompt
+        : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 
     const lostSession =
@@ -947,7 +1010,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       for (const n of notices) if (n.type === "notice") job.acc.addNotice(n.level, n.text);
       if (command) job.keepSessionId = sessionId;
       sessionId = randomUUID();
-      setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest });
+      setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest, memoryDigest: memoryNow });
       attempt = await spawnClaude(
         job,
         cmd,
@@ -1062,6 +1125,11 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
               : {}),
         lastMessageAt: ts,
         ...(digest !== null && digest !== row?.instructions_digest ? { instructionsDigest: digest } : {}),
+        // The session knows the memory as of its start plus its own edits; changes from elsewhere during the run are
+        // pointed out on the next turn (when unsure, a harmless extra hint beats a missed one).
+        ...(agent && job.memorySeen !== undefined && job.trigger !== "dream"
+          ? { memoryDigest: editedMemory(acc.blocks) ? memoryDigest(agent.repoPath) : job.memorySeen }
+          : {}),
         ...(title && title !== DEFAULT_CONVERSATION_TITLE ? { title } : {}),
         ...(outcome.status === "succeeded" ? commandOverrides(acc.localCommand) : {}),
       });
@@ -1071,7 +1139,8 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   if (wasRunning) {
     const others = [...jobs.values()].some((j) => j !== job && j.agentId === job.agentId && j.status === "running");
     if (!others) safely("set agent status", () => setAgentStatus(job.agentId, "idle"));
-    safely("touch agent", () => touchAgentRun(job.agentId));
+    // A dream is not activity of the agent ("last active" stays the last real run).
+    if (job.trigger !== "dream") safely("touch agent", () => touchAgentRun(job.agentId));
   }
 
   let finished: Run | null = null;
@@ -1085,8 +1154,8 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   bus.changed("runs");
   if (convAlive) emitConversationUpdated(job.conversationId);
 
-  // Condition checks keep no transcript: they run every few minutes and only report a result.
-  if (wasRunning && finished && convAlive && job.trigger !== "check") {
+  // Condition checks and dreams keep no transcript: checks only report a result, a dream's record is the dream itself.
+  if (wasRunning && finished && convAlive && job.trigger !== "check" && job.trigger !== "dream") {
     const done = finished;
     safely("append transcript", () => {
       const user = job.userMessageId ? getMessage(job.userMessageId) : null;
@@ -1097,14 +1166,25 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   pump();
 
   if (!wasRunning || !finished || !agent) return;
-  if (outcome.status !== "cancelled") await detectMissingLogin(job, agent, text);
+  // A dream's summary may talk about past login trouble — that is no new missing login.
+  if (outcome.status !== "cancelled" && job.trigger !== "dream") await detectMissingLogin(job, agent, text);
 
-  // Condition checks change nothing worth a commit; the task run that follows commits as usual.
-  if (getSettings().memory.autoCommit && job.trigger !== "check") {
+  // Condition checks change nothing worth a commit; the task run that follows commits as usual. Dreams commit their
+  // memory changes themselves (memory/dreaming.ts).
+  if (getSettings().memory.autoCommit && job.trigger !== "check" && job.trigger !== "dream") {
     const title = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", job.conversationId)?.title ?? job.trigger;
     const message = `Run ${job.runId.slice(-6)}: ${title}`;
     commitAgentRepo(job.agentId, message).catch((err) => log.warn(`auto-commit for agent ${job.agentId} failed`, err));
   }
+}
+
+/** The run wrote MEMORY.md itself (Edit/Write/MultiEdit on a path ending in MEMORY.md). */
+function editedMemory(blocks: StreamAccumulator["blocks"]): boolean {
+  return blocks.some((b) => {
+    if (b.type !== "tool_use" || !["Edit", "Write", "MultiEdit"].includes(b.name) || b.isError) return false;
+    const path = (b.input as { file_path?: unknown } | null)?.file_path;
+    return typeof path === "string" && /(^|[\\/])MEMORY\.md$/.test(path);
+  });
 }
 
 /**

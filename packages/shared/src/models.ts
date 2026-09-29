@@ -233,7 +233,8 @@ export interface ComposioTriggerType {
 /* Conversations, messages, runs                                        */
 /* ------------------------------------------------------------------ */
 
-export type ConversationOrigin = "chat" | "routine" | "delegation" | "api";
+/** `dream`: the archived conversation an agent's dreams (memory consolidation) run in. */
+export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream";
 
 export interface Conversation {
   id: ID;
@@ -326,8 +327,11 @@ export interface Message {
 }
 
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
-/** `routine`: an automation ran (schedule, app event, condition met, webhook) · `check`: an automation checked its condition. */
-export type RunTrigger = "chat" | "routine" | "check" | "delegation" | "manual" | "api";
+/**
+ * `routine`: an automation ran (schedule, app event, condition met, webhook) · `check`: an automation checked its condition ·
+ * `dream`: the agent consolidated its memory in the background.
+ */
+export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api";
 
 export interface RunUsage {
   inputTokens: number;
@@ -355,6 +359,76 @@ export interface Run {
   startedAt: ISODate | null;
   finishedAt: ISODate | null;
   createdAt: ISODate;
+}
+
+/* ------------------------------------------------------------------ */
+/* Dreams: background memory consolidation                              */
+/* ------------------------------------------------------------------ */
+
+export type DreamReason = "schedule" | "manual";
+/**
+ * `paused`: a scheduled dream gave way to a run someone waits for (rolled back, retried when the agent is idle) ·
+ * `reverted`: the human undid the dream's changes. Failed, cancelled and paused dreams changed nothing (rolled back).
+ */
+export type DreamStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "paused" | "reverted";
+/** What a dream did to one memory entry (reported by the agent). */
+export type DreamChangeKind = "added" | "updated" | "merged" | "removed" | "corrected" | "dated";
+
+export interface DreamChange {
+  kind: DreamChangeKind;
+  /** One line: the entry and why it changed. */
+  text: string;
+}
+
+/** A memory file a dream changed. before/after = null: the file didn't exist before / was deleted. */
+export interface DreamFileChange {
+  path: string;
+  before: string | null;
+  after: string | null;
+}
+
+export interface Dream {
+  id: ID;
+  agentId: ID;
+  runId: ID | null;
+  reason: DreamReason;
+  status: DreamStatus;
+  /** Activity the dream reviewed: runs that finished after `sourceFrom` (null = from the start) up to `sourceTo`. */
+  sourceFrom: ISODate | null;
+  sourceTo: ISODate | null;
+  /** Exchanges (finished runs) and conversations the dream reviewed. */
+  exchanges: number;
+  conversations: number;
+  /** One or two sentences from the agent: what it consolidated. */
+  summary: string;
+  changes: DreamChange[];
+  /** Paths of the memory files the dream changed (contents via the dream's detail). */
+  files: string[];
+  /** The changes can still be undone (no later edit touched the same files). */
+  canRevert: boolean;
+  error: string | null;
+  createdAt: ISODate;
+  /** When the dream's run started (null while queued). */
+  startedAt: ISODate | null;
+  finishedAt: ISODate | null;
+}
+
+export interface DreamDetail extends Dream {
+  fileChanges: DreamFileChange[];
+}
+
+/** Dreaming status of one agent. */
+export interface DreamOverview {
+  /** Dreaming is switched on in Settings → Memory. */
+  enabled: boolean;
+  /** Next scheduled dream time (null when dreaming is off or the schedule is invalid). */
+  nextDreamAt: ISODate | null;
+  /** Activity since the last successful dream, waiting to be consolidated. */
+  pending: { exchanges: number; conversations: number; since: ISODate | null };
+  /** The dream currently queued or running, if any. */
+  active: Dream | null;
+  /** Latest dreams, newest first. */
+  dreams: Dream[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -671,6 +745,28 @@ export interface MemorySettings {
   autoCommit: boolean;
   /** Summarize and store learnings after each run */
   reflectAfterRun: boolean;
+  /** Load MEMORY.md into every new session's system prompt (the agent starts each chat already knowing it). */
+  injectMemory: boolean;
+  dreaming: DreamingSettings;
+}
+
+/**
+ * Dreaming: agents periodically review their recent conversations in the background and rewrite their memory —
+ * capturing what was never explicitly saved, merging duplicates, fixing contradictions and dating time-bound facts.
+ */
+export interface DreamingSettings {
+  enabled: boolean;
+  /** When agents dream: cron expression (5 fields) in local time, e.g. "0 3 * * *" = every night at 03:00. */
+  cron: string;
+  /** Model for dreams (alias or id). "" = the agent's own model. */
+  model: string;
+  /** A scheduled dream needs at least this many new exchanges (finished runs) since the agent's last dream. */
+  minNewExchanges: number;
+  /**
+   * Without enough new activity, still dream when the last dream is this many days old and the memory mentions
+   * dates — so plans that have passed are rewritten as past events. 0 = never.
+   */
+  refreshDays: number;
 }
 
 export interface Settings {

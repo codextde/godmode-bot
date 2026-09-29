@@ -18,6 +18,9 @@ import { createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigg
 import { listEvents, sendTestEvent } from "../../automations/events";
 import { rotateWebhookToken } from "../../automations/webhooks";
 import { startChat } from "../../services/conversations";
+import { dreamOverview, getDream, isDreaming, revertDream, startDream } from "../../memory/dreaming";
+import { isMemoryPath } from "../../memory/files";
+import { resolveRepoPath } from "../../agents/repo";
 import { getSettings } from "../../services/settings";
 import { conflict } from "../../util";
 import { requireGrant } from "../grants";
@@ -170,7 +173,12 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.put("/api/agents/:id/file", async (c) => {
     const { path, content } = await body(c, z.object({ path: z.string().trim().min(1).max(1024), content: z.string() }));
-    await writeAgentFile(c.req.param("id"), path, content);
+    const agent = getAgent(c.req.param("id"));
+    // A dream owns the memory files while it runs (its rollback or undo would take the edit with it).
+    if (isMemoryPath(resolveRepoPath(agent.repoPath, path).rel) && isDreaming(agent.id)) {
+      throw conflict(`${agent.name} is dreaming (consolidating its memory) — edit it when the dream has ended, or cancel the dream.`);
+    }
+    await writeAgentFile(agent.id, path, content);
     return c.json({ ok: true });
   });
 
@@ -178,6 +186,16 @@ export function registerAgentRoutes(app: Hono): void {
     const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 50) || 50, 1), 500);
     return c.json(await listAgentCommits(c.req.param("id"), limit));
   });
+
+  /* Dreams (background memory consolidation) ------------------------- */
+
+  app.get("/api/agents/:id/dreams", (c) => c.json(dreamOverview(c.req.param("id"))));
+
+  app.post("/api/agents/:id/dreams", async (c) => c.json(await startDream(c.req.param("id"), "manual")));
+
+  app.get("/api/dreams/:id", (c) => c.json(getDream(c.req.param("id"))));
+
+  app.post("/api/dreams/:id/revert", async (c) => c.json(await revertDream(c.req.param("id"))));
 
   /* Routines ---------------------------------------------------------- */
 

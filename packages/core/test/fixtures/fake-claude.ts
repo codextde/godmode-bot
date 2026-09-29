@@ -12,6 +12,10 @@
  *   CALL_COMPUTER  call the `computer` MCP server from --mcp-config (initialize, tools/list, computer_info) and answer
  *              with a JSON summary; "no computer server" when the run has none
  *   CRASH       print to stderr and exit 3 without a result
+ *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
+ *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
+ *               and answers "DREAM {json}". Digest keywords: DREAM_SLEEP hangs and DREAM_CRASH exits 3 (both after
+ *               writing the memory), DREAM_NO_REPORT skips the report.
  *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected)
  *
  * With `--input-format stream-json` it answers the `initialize` control request with a command and model catalog.
@@ -187,6 +191,58 @@ if (slash?.[1] === "clear") {
     local_command_run: { command: name, args },
   });
   result(text, { num_turns: 0, local_command: name });
+} else if (prompt.startsWith("Dream: consolidate")) {
+  out(init);
+  const cwd = process.cwd();
+  const digestRel = /`(workspace\/tmp\/dreams\/[^`]+\.md)`/.exec(prompt)?.[1] ?? null;
+  const digest = digestRel && existsSync(join(cwd, digestRel)) ? readFileSync(join(cwd, digestRel), "utf8") : "";
+  const memoryPath = join(cwd, "MEMORY.md");
+  const hadMemory = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8").length : 0;
+  const facts = [...new Set([...digest.matchAll(/REMEMBER: ([^\n]+)/g)].map((m) => m[1]!.trim()))];
+  writeFileSync(memoryPath, `# Memory\n\n## Consolidated\n${facts.map((f) => `- ${f}`).join("\n")}\n`);
+  if (facts.length) {
+    mkdirSync(join(cwd, "memory"), { recursive: true });
+    writeFileSync(join(cwd, "memory", "dream-notes.md"), `# Notes\n\n${facts.length} fact(s)\n`);
+  }
+  if (digest.includes("DREAM_SLEEP")) {
+    textTurn("Dreaming");
+    await pause(60_000);
+  }
+  if (digest.includes("DREAM_CRASH")) {
+    process.stderr.write("fatal: the dream exploded\n");
+    process.exit(3);
+  }
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  const list = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+  const forbidden = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "notify_user", arguments: { title: "hi", body: "x" } } });
+  const report = digest.includes("DREAM_NO_REPORT")
+    ? null
+    : await rpc({
+        jsonrpc: "2.0",
+        id: 4,
+        method: "tools/call",
+        params: { name: "memory_dream_report", arguments: { summary: `Consolidated ${facts.length} fact(s).`, changes: facts.map((f) => ({ kind: "added", text: f })) } },
+      });
+  const summary = {
+    servers: Object.keys(cfg.mcpServers),
+    tools: (list.result.tools as { name: string }[]).map((t) => t.name),
+    forbidden: { text: forbidden.result.content[0].text as string, isError: forbidden.result.isError === true },
+    report: report ? (report.result.content[0].text as string) : null,
+    digest: digest.length > 0,
+    hadMemory,
+  };
+  const text = `DREAM ${JSON.stringify(summary)}`;
+  textTurn(text);
+  result(text);
 } else if (prompt.includes("CRASH")) {
   process.stderr.write("fatal: something exploded\n");
   process.exit(3);

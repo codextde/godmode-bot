@@ -19,11 +19,18 @@ export const qk = {
   agents: ["agents"] as unknown[],
   agentList: (workspaceId: string) => ["agents", "list", workspaceId],
   agent: (id: string) => ["agents", "detail", id],
+  agentFilesAll: ["agents", "files"] as unknown[],
   agentFiles: (id: string, path: string) => ["agents", "files", id, path],
+  agentFileAll: ["agents", "file"] as unknown[],
   agentFile: (id: string, path: string) => ["agents", "file", id, path],
+  agentCommitsAll: ["agents", "commits"] as unknown[],
   agentCommits: (id: string) => ["agents", "commits", id],
   agentCommands: (id: string) => ["agents", "commands", id],
   agentTemplates: ["agent-templates"] as unknown[],
+  /** Dreams (memory consolidation); invalidating the root refreshes every overview and detail. */
+  dreams: ["dreams"] as unknown[],
+  agentDreams: (agentId: string) => ["dreams", "agent", agentId],
+  dream: (id: string) => ["dreams", "detail", id],
   routines: ["routines"] as unknown[],
   routineList: (agentId: string) => ["routines", "list", agentId],
   /** Automation events; the third segment is the routine id or "all" (see realtime.ts). */

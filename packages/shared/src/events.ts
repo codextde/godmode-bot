@@ -97,6 +97,7 @@ export type EntityName =
   | "notifications"
   | "settings"
   | "runs"
+  | "dreams"
   | "models"
   | "computer";
 

@@ -34,9 +34,14 @@ function errorText(err: unknown): string {
 export async function buildMcpConfig(
   agent: Agent,
   runToken: string,
-  opts: { onNotice?: (text: string) => void; computer?: boolean } = {},
+  opts: { onNotice?: (text: string) => void; computer?: boolean; gatewayOnly?: boolean } = {},
 ): Promise<McpConfigFile> {
   const servers: Record<string, McpServerJson> = {};
+  // Dreams get the Godmode gateway only: no integrations, browser or computer.
+  if (opts.gatewayOnly) {
+    servers[GODMODE_MCP_NAME] = { type: "http", url: gatewayUrl(), headers: { Authorization: `Bearer ${runToken}` } };
+    return { mcpServers: servers };
+  }
 
   try {
     const external = await mcpServersForAgent(agent);

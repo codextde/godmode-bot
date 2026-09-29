@@ -45,29 +45,35 @@ function ModelItem({ model }: { model: ClaudeModel }) {
 }
 
 /** Model picker: the models Claude Code offers + "Custom…" for any Claude CLI model id/alias. */
-function ModelSelect({
+export function ModelSelect({
   id,
   value,
   onChange,
   allowNone = false,
+  noneLabel = "None",
+  disabled,
 }: {
   id: string;
   value: string;
   onChange: (v: string) => void;
+  /** Offer an empty value, shown as `noneLabel`. */
   allowNone?: boolean;
+  noneLabel?: string;
+  disabled?: boolean;
 }) {
   const { catalog, isPending } = useModelCatalog();
   const known = findModel(catalog.models, value);
   const [customMode, setCustom] = useState(false);
   const custom = customMode || (!isPending && !known && !(allowNone && !value));
   const selectValue = custom ? CUSTOM : allowNone && !value ? NONE : (known?.id ?? value);
-  const display = custom ? "Custom model id" : selectValue === NONE ? "None" : (known?.label ?? value);
+  const display = custom ? "Custom model id" : selectValue === NONE ? noneLabel : (known?.label ?? value);
   const older = catalog.models.filter((m) => !m.latest);
 
   return (
     <div className="flex w-full flex-col items-stretch gap-2 @xl:w-72">
       <Select
         value={selectValue}
+        disabled={disabled}
         onValueChange={(v) => {
           if (v === CUSTOM) {
             setCustom(true);
@@ -83,7 +89,7 @@ function ModelSelect({
         <SelectContent>
           {allowNone && (
             <>
-              <SelectItem value={NONE}>None</SelectItem>
+              <SelectItem value={NONE}>{noneLabel}</SelectItem>
               <SelectSeparator />
             </>
           )}
@@ -110,6 +116,7 @@ function ModelSelect({
       {custom && (
         <CommitInput
           aria-label="Custom model id"
+          disabled={disabled}
           autoFocus={!value || !!known}
           className="font-mono text-[13px]"
           placeholder="e.g. claude-opus-5-5 or opus"

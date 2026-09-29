@@ -4,13 +4,15 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ComputerTarget, ConversationWithMessages, Message, SendMessageInput } from "@godmode/shared";
 import { computerTargetLabel } from "@godmode/shared";
-import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, Sparkles, Wand2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { AgentAvatar, EmptyState } from "@/components/common";
 import { BrowserFocus, BrowserPanel, BrowserToggle, useChatBrowser, type BrowserFocusMode } from "@/components/chat/browser-panel";
 import { ComputerFocus, ComputerPanel, ComputerShareChip, ComputerToggle, type ComputerFocusMode } from "@/components/computer/computer-panel";
+import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { useArchiveChat } from "@/components/chat/chat-actions";
 import { ConversationHeader } from "@/components/chat/conversation-header";
@@ -258,6 +260,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   if (isLoading || !conv) return <ConversationSkeleton />;
 
   const lastMessage = messages[messages.length - 1] ?? null;
+  // The agent's dream log: the core refuses messages here, so it reads like a transcript.
+  const dreamLog = conv.origin === "dream";
 
   return (
     <div className="flex h-full min-h-0">
@@ -265,7 +269,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         <ConversationHeader
           conversation={conv}
           agent={agent}
-          onVoiceMode={onVoiceMode}
+          onVoiceMode={dreamLog ? undefined : onVoiceMode}
           browserToggle={
             <>
               {computerTarget && !showComputerPanel && (
@@ -293,81 +297,89 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           }
         />
 
-        <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
-          <div className="mx-auto w-full max-w-3xl">
-            <AnimatePresence initial={false}>
-              {conv.archived && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-                  className="overflow-hidden"
-                >
-                  <div className="mb-2 flex items-center gap-2.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-3 text-[13px] text-muted-foreground shadow-card">
-                    <Archive className="size-3.5 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">
-                      <span className="font-medium text-foreground">Archived.</span> Send a message to move it back to Recent.
-                    </span>
-                    <Button size="xs" variant="ghost" onClick={() => setArchived(conv, false)}>
-                      <ArchiveRestore /> Unarchive
-                    </Button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <Composer
-              ref={composerRef}
-              draftKey={conversationId}
-              agentId={conv.agentId}
-              autoFocus
-              running={!!activeRunId}
-              leading={
-                <>
-                  <FolderChip
-                    chatFolder={conv.workingDirectory}
-                    agentFolder={agent?.workingDirectory ?? null}
-                    agentName={agent?.name}
-                    onChange={(path) => setFolder.mutate(path)}
-                    busy={setFolder.isPending}
-                  />
-                  <ComputerShareChip
-                    target={computerTarget}
-                    agentName={agent?.name}
-                    onShare={(t) => share.mutateAsync(t)}
-                    onWatch={() => setComputerFocus("watch")}
-                    busy={share.isPending}
-                  />
-                  <InstructionsChip
-                    value={conv.instructions ?? ""}
-                    agent={agent}
-                    onChange={(text) => setInstructions.mutateAsync(text)}
-                    busy={setInstructions.isPending}
-                  />
-                </>
-              }
-              placeholder={agent ? `Message ${agent.name} — or type / for commands` : "Message…"}
-              trailing={
-                <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(patch) => choose.mutate(patch)} />
-              }
-              onSubmit={(input) => send.mutateAsync(input)}
-            />
-            <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 @2xl:block">
-              Agents act for you with your saved logins — secrets are filled into the browser, never shown to the AI.
-            </p>
+        {dreamLog ? (
+          <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
+            <DreamLogNote agentId={conv.agentId} agentName={agent?.name ?? "The agent"} />
           </div>
-        </div>
+        ) : (
+          <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
+            <div className="mx-auto w-full max-w-3xl">
+              <AnimatePresence initial={false}>
+                {conv.archived && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mb-2 flex items-center gap-2.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-3 text-[13px] text-muted-foreground shadow-card">
+                      <Archive className="size-3.5 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className="font-medium text-foreground">Archived.</span> Send a message to move it back to Recent.
+                      </span>
+                      <Button size="xs" variant="ghost" onClick={() => setArchived(conv, false)}>
+                        <ArchiveRestore /> Unarchive
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <Composer
+                ref={composerRef}
+                draftKey={conversationId}
+                agentId={conv.agentId}
+                autoFocus
+                running={!!activeRunId}
+                leading={
+                  <>
+                    <FolderChip
+                      chatFolder={conv.workingDirectory}
+                      agentFolder={agent?.workingDirectory ?? null}
+                      agentName={agent?.name}
+                      onChange={(path) => setFolder.mutate(path)}
+                      busy={setFolder.isPending}
+                    />
+                    <ComputerShareChip
+                      target={computerTarget}
+                      agentName={agent?.name}
+                      onShare={(t) => share.mutateAsync(t)}
+                      onWatch={() => setComputerFocus("watch")}
+                      busy={share.isPending}
+                    />
+                    <InstructionsChip
+                      value={conv.instructions ?? ""}
+                      agent={agent}
+                      onChange={(text) => setInstructions.mutateAsync(text)}
+                      busy={setInstructions.isPending}
+                    />
+                  </>
+                }
+                placeholder={agent ? `Message ${agent.name} — or type / for commands` : "Message…"}
+                trailing={
+                  <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(patch) => choose.mutate(patch)} />
+                }
+                onSubmit={(input) => send.mutateAsync(input)}
+              />
+              <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 @2xl:block">
+                Agents act for you with your saved logins — secrets are filled into the browser, never shown to the AI.
+              </p>
+            </div>
+          </div>
+        )}
 
-        <VoiceMode
-          agent={agent}
-          busy={!!activeRunId || send.isPending}
-          activity={live ? liveActivityLabel(live) : null}
-          lastMessage={lastMessage}
-          onSend={async (text) => {
-            await send.mutateAsync({ content: text, voice: true });
-          }}
-          onStop={activeRunId ? () => cancel.mutate(activeRunId) : undefined}
-        />
+        {!dreamLog && (
+          <VoiceMode
+            agent={agent}
+            busy={!!activeRunId || send.isPending}
+            activity={live ? liveActivityLabel(live) : null}
+            lastMessage={lastMessage}
+            onSend={async (text) => {
+              await send.mutateAsync({ content: text, voice: true });
+            }}
+            onStop={activeRunId ? () => cancel.mutate(activeRunId) : undefined}
+          />
+        )}
       </ChatDropZone>
       <AnimatePresence initial={false}>
         {showComputerPanel && (
@@ -395,6 +407,24 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       </AnimatePresence>
       <BrowserFocus profile={browser} mode={browserFocus} onClose={() => setBrowserFocus(null)} />
       <ComputerFocus target={computerTarget} mode={computerFocus} onClose={() => setComputerFocus(null)} />
+    </div>
+  );
+}
+
+/** Footer of an agent's dream log: nothing to send here — point to a fresh chat instead. */
+function DreamLogNote({ agentId, agentName }: { agentId: string; agentName: string }) {
+  const chat = useStartAgentChat();
+  return (
+    <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card px-4 py-3 text-[13px] text-muted-foreground shadow-card">
+      <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-dream-soft text-dream">
+        <Moon className="size-3.5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1 basis-56">
+        This is where <span className="font-medium text-foreground">{agentName}</span> dreams — start a new chat to talk to it.
+      </span>
+      <Button size="sm" variant="outline" disabled={chat.isPending} onClick={() => chat.mutate(agentId)}>
+        {chat.isPending ? <Spinner /> : <MessageSquarePlus />} New chat
+      </Button>
     </div>
   );
 }

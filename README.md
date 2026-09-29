@@ -52,6 +52,7 @@ needs to be useful:
 |---|---|
 | 💬 **Chat first** | Start with one conversation with *Godmode*, your main AI coworker. It can answer, act, and create other agents for you. |
 | 🤖 **Persistent agents** | Bots with their own instructions, conversations, memory (`MEMORY.md`), routines and history — each in its own git repo. |
+| 🌙 **Dreaming** | While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned (even if nobody said "remember this"), merge duplicates, fix contradictions and update dates ("is going to Singapore in July" → "went to Singapore in July"). Memory loads into every new chat; every dream can be reviewed as a diff and undone. |
 | 📁 **Working folders** | Optionally point a chat or an agent at any folder on your machine — it works on the files there and keeps its memory in its own repo. |
 | ⚡ **Automations** | Work starts when it happens: on a schedule (“weekdays at 08:00”), when something happens in a connected app (a new email, a Slack message, a calendar event, a Notion update), when a condition you describe comes true (“competitor pricing changes”), or when a webhook is called. Describe it in one sentence and Godmode sets it up. |
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |

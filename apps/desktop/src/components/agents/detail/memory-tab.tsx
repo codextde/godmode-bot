@@ -13,6 +13,7 @@ import {
   Folder,
   FolderOpen,
   Lock,
+  Moon,
   PencilLine,
   RotateCcw,
   Save,
@@ -38,6 +39,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { DreamsPanel, useDreamingNow } from "./dreams-panel";
 
 const PINNED = ["MEMORY.md", "CLAUDE.md"];
 const HIDDEN = new Set([".git"]);
@@ -51,6 +53,11 @@ function readOnlyReason(path: string, size: number): string | null {
   if (path.startsWith("conversations/")) return "Conversation transcript — read-only.";
   if (size > MAX_EDITABLE) return "This file is too large to edit here.";
   return null;
+}
+
+/** MEMORY.md and memory/** — a running dream owns these (the core refuses edits meanwhile). */
+function isMemoryPath(path: string) {
+  return path === "MEMORY.md" || path.startsWith("memory/");
 }
 
 function parentOf(path: string) {
@@ -104,6 +111,7 @@ export function MemoryTab({ agent }: { agent: Agent }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["memory"]));
   const [dirty, setDirty] = useState(false);
   const [pending, setPending] = useState<{ path: string; size: number } | null>(null);
+  const dreaming = useDreamingNow(agent.id);
 
   const select = (entry: { path: string; size: number }) => {
     if (entry.path === selected?.path) return;
@@ -119,48 +127,59 @@ export function MemoryTab({ agent }: { agent: Agent }) {
     });
 
   return (
-    <div className="grid min-h-[32rem] grid-cols-1 gap-4 @3xl:grid-cols-[260px_minmax(0,1fr)]">
-      <aside className="flex max-h-[70vh] min-h-0 flex-col rounded-xl border bg-card shadow-card">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <div>
-            <h2 className="text-sm font-medium tracking-[-0.01em]">Files</h2>
-            <p className="text-xs text-muted-foreground">Agent repository</p>
+    <div className="space-y-4">
+      <DreamsPanel agent={agent} />
+      <div className="grid min-h-[32rem] grid-cols-1 gap-4 @3xl:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="flex max-h-[70vh] min-h-0 flex-col rounded-xl border bg-card shadow-card">
+          <div className="flex items-center justify-between border-b px-4 py-3">
+            <div>
+              <h2 className="text-sm font-medium tracking-[-0.01em]">Files</h2>
+              <p className="text-xs text-muted-foreground">Agent repository</p>
+            </div>
           </div>
-        </div>
-        <nav aria-label="Agent files" className="min-h-0 flex-1 overflow-y-auto p-2">
-          <Tree agentId={agent.id} dir="" depth={0} expanded={expanded} onToggle={toggleDir} selected={selected?.path ?? null} onSelect={select} />
-        </nav>
-      </aside>
+          <nav aria-label="Agent files" className="min-h-0 flex-1 overflow-y-auto p-2">
+            <Tree agentId={agent.id} dir="" depth={0} expanded={expanded} onToggle={toggleDir} selected={selected?.path ?? null} onSelect={select} />
+          </nav>
+        </aside>
 
-      <section className="flex min-h-0 min-w-0 flex-col rounded-xl border bg-card shadow-card">
-        {selected ? (
-          <FileEditor key={selected.path} agentId={agent.id} path={selected.path} size={selected.size} onDirtyChange={setDirty} />
-        ) : (
-          <div className="grid flex-1 place-items-center p-10 text-sm text-muted-foreground">Select a file to view it.</div>
-        )}
-      </section>
+        <section className="flex min-h-0 min-w-0 flex-col rounded-xl border bg-card shadow-card">
+          {selected ? (
+            <FileEditor
+              key={selected.path}
+              agentId={agent.id}
+              agentName={agent.name}
+              path={selected.path}
+              size={selected.size}
+              dreaming={dreaming}
+              onDirtyChange={setDirty}
+            />
+          ) : (
+            <div className="grid flex-1 place-items-center p-10 text-sm text-muted-foreground">Select a file to view it.</div>
+          )}
+        </section>
 
-      <AlertDialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
-            <AlertDialogDescription>Your edits to {selected?.path} haven't been saved.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                setDirty(false);
-                setSelected(pending);
-                setPending(null);
-              }}
-            >
-              Discard
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <AlertDialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+              <AlertDialogDescription>Your edits to {selected?.path} haven't been saved.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep editing</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => {
+                  setDirty(false);
+                  setSelected(pending);
+                  setPending(null);
+                }}
+              >
+                Discard
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </div>
   );
 }
@@ -252,24 +271,34 @@ function Tree({
 
 function FileEditor({
   agentId,
+  agentName,
   path,
   size,
+  dreaming,
   onDirtyChange,
 }: {
   agentId: string;
+  agentName: string;
   path: string;
   size: number;
+  /** A dream of the agent is running: memory files are locked until it ends. */
+  dreaming: boolean;
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const qc = useQueryClient();
   const file = useQuery({ queryKey: qk.agentFile(agentId, path), queryFn: () => api.agents.readFile(agentId, path) });
   const original = file.data?.content ?? "";
-  const [draft, setDraft] = useState<string | null>(null);
-  const value = draft ?? original;
-  const dirty = draft !== null && draft !== original;
+  /** The edit and the file content it started from, so a rewrite underneath (e.g. by a dream) isn't silently overwritten. */
+  const [draft, setDraft] = useState<{ text: string; base: string } | null>(null);
+  const value = draft?.text ?? original;
+  const dirty = draft !== null && draft.text !== original;
+  const conflict = dirty && draft.base !== original;
   const isMarkdown = /\.(md|markdown)$/i.test(path);
-  const readOnly = readOnlyReason(path, Math.max(size, original.length));
-  const [view, setView] = useState<"edit" | "preview">(isMarkdown && readOnly ? "preview" : "edit");
+  const fixedReason = readOnlyReason(path, Math.max(size, original.length));
+  const dreamLock = dreaming && isMemoryPath(path);
+  const readOnly = fixedReason ?? (dreamLock ? `${agentName} is dreaming — editing is paused until the dream ends.` : null);
+  const [view, setView] = useState<"edit" | "preview">(isMarkdown && fixedReason ? "preview" : "edit");
+  const edit = (text: string) => setDraft((d) => ({ text, base: d && d.text !== original ? d.base : original }));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
@@ -289,7 +318,9 @@ function FileEditor({
 
   const saveRef = useRef<() => void>(() => {});
   saveRef.current = () => {
-    if (dirty && !readOnly && !save.isPending) save.mutate(value);
+    if (!dirty || readOnly || save.isPending) return;
+    if (conflict) toast.warning(`${nameOf(path)} changed while you were editing`, { description: "Reload it or overwrite it with your version first." });
+    else save.mutate(value);
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -323,12 +354,12 @@ function FileEditor({
               </ToggleGroupItem>
             </ToggleGroup>
           )}
-          {!readOnly && (
+          {!fixedReason && (
             <>
               <Button variant="ghost" size="sm" disabled={!dirty} onClick={() => setDraft(null)}>
                 <RotateCcw /> Revert
               </Button>
-              <Button size="sm" disabled={!dirty || save.isPending} onClick={() => saveRef.current()}>
+              <Button size="sm" disabled={!dirty || !!readOnly || conflict || save.isPending} onClick={() => saveRef.current()}>
                 {save.isPending ? <Spinner /> : <Save />} Save
                 <Kbd>{modKey}S</Kbd>
               </Button>
@@ -338,14 +369,31 @@ function FileEditor({
       </div>
 
       {readOnly && (
-        <div className="flex items-center gap-2 border-b bg-paper-2 px-4 py-2 text-xs text-muted-foreground">
-          <Lock className="size-3.5 shrink-0" />
+        <div className={cn("flex items-center gap-2 border-b px-4 py-2 text-xs text-muted-foreground", fixedReason ? "bg-paper-2" : "bg-dream-soft")} role={fixedReason ? undefined : "status"}>
+          {fixedReason ? <Lock className="size-3.5 shrink-0" /> : <Moon className="size-3.5 shrink-0 text-dream" aria-hidden />}
           <span>{readOnly}</span>
           {path === "CLAUDE.md" && (
             <Link to={`/agents/${agentId}/settings`} className="ml-auto shrink-0 font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
               Open settings
             </Link>
           )}
+        </div>
+      )}
+
+      {conflict && (
+        <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-warning/25 bg-warning/[0.07] px-4 py-2 text-xs">
+          <span className="min-w-0 flex-1 basis-64 text-muted-foreground">
+            <span className="font-medium text-foreground">{nameOf(path)} changed while you were editing</span> — {agentName} may have rewritten it. Reload to
+            see the new version (your edits are discarded), or overwrite it with yours.
+          </span>
+          <span className="flex shrink-0 gap-1.5">
+            <Button variant="outline" size="xs" onClick={() => setDraft(null)}>
+              <RotateCcw /> Reload
+            </Button>
+            <Button size="xs" disabled={!!readOnly || save.isPending} onClick={() => save.mutate(value)}>
+              {save.isPending ? <Spinner /> : <Save />} Overwrite
+            </Button>
+          </span>
         </div>
       )}
 
@@ -366,15 +414,14 @@ function FileEditor({
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => edit(e.target.value)}
             onKeyDown={(e) => {
               // Tab inserts two spaces instead of leaving the editor
               if (e.key === "Tab" && !e.shiftKey && !readOnly) {
                 e.preventDefault();
                 const el = e.currentTarget;
                 const { selectionStart: s, selectionEnd: end } = el;
-                const next = `${value.slice(0, s)}  ${value.slice(end)}`;
-                setDraft(next);
+                edit(`${value.slice(0, s)}  ${value.slice(end)}`);
                 requestAnimationFrame(() => el.setSelectionRange(s + 2, s + 2));
               }
             }}
@@ -390,7 +437,7 @@ function FileEditor({
       <div className="flex items-center gap-3 border-t px-4 py-2 text-[11px] text-muted-foreground">
         <span className="tabular-nums">{lines.toLocaleString()} lines</span>
         <span className="tabular-nums">{formatSize(new Blob([value]).size)}</span>
-        {path === "MEMORY.md" && <span>The agent maintains this file itself — edits guide what it remembers.</span>}
+        {path === "MEMORY.md" && <span>The agent maintains this file itself and consolidates it while dreaming — edits guide what it remembers.</span>}
         {file.dataUpdatedAt > 0 && !dirty && (
           <span className="ml-auto">loaded {formatDistanceToNowStrict(file.dataUpdatedAt, { addSuffix: true })}</span>
         )}

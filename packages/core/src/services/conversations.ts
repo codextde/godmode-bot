@@ -257,6 +257,8 @@ export function setConversationState(
     claudeSessionId?: string | null;
     /** `instructionsDigest` of the standing instructions the Claude session has seen. */
     instructionsDigest?: string;
+    /** `memoryDigest` of the MEMORY.md the Claude session has seen. */
+    memoryDigest?: string | null;
     lastMessageAt?: string;
     title?: string;
     model?: string | null;
@@ -267,6 +269,7 @@ export function setConversationState(
   update("conversations", id, {
     claude_session_id: patch.claudeSessionId,
     instructions_digest: patch.instructionsDigest,
+    memory_digest: patch.memoryDigest,
     archived: int(patch.archived),
     model: patch.model,
     effort: patch.effort,
@@ -414,11 +417,14 @@ export function saveAttachments(agent: Agent, files: NonNullable<SendMessageInpu
 /** Store the user message (+attachments) and start a run for it. */
 export async function sendMessage(
   conversationId: string,
-  input: SendMessageInput & { trigger?: RunTrigger; routineId?: string | null; parentRunId?: string | null; depth?: number },
+  input: SendMessageInput & { trigger?: RunTrigger; routineId?: string | null; parentRunId?: string | null; depth?: number; runId?: string },
 ): Promise<SendMessageResult> {
   const conv = requireConversationRow(conversationId);
   const agent = getAgent(conv.agent_id);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
+  if (conv.origin === "dream" && input.trigger !== "dream") {
+    throw badRequest(`This is where ${agent.name} dreams (consolidates its memory). Start a new chat to talk to it.`);
+  }
   const content = (input.content ?? "").trim();
   const files = input.attachments ?? [];
   if (!content && files.length === 0) throw badRequest("Message is empty");
@@ -441,6 +447,7 @@ export async function sendMessage(
       depth: input.depth ?? 0,
       voice: input.voice ?? false,
       userMessageId: message.id,
+      runId: input.runId,
     });
   } catch (err) {
     sql("DELETE FROM messages WHERE id = ?", message.id);

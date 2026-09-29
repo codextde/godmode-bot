@@ -32,6 +32,9 @@ import type {
   CredentialInput,
   DependencyId,
   DoctorReport,
+  Dream,
+  DreamDetail,
+  DreamOverview,
   FolderListing,
   GitCommit,
   LocalChromeProfile,
@@ -257,6 +260,16 @@ export const api = {
     commits: (id: string) => get<GitCommit[]>(`/api/agents/${id}/commits`),
     /** Slash commands of the installed Claude Code CLI, as this agent's runs see them */
     commands: (id: string) => get<SlashCommand[]>(`/api/agents/${id}/commands`),
+  },
+
+  dreams: {
+    /** Dreaming status of an agent: schedule, waiting activity, the active dream and the journal. */
+    overview: (agentId: string) => get<DreamOverview>(`/api/agents/${agentId}/dreams`),
+    /** Dream now (409 when the agent is disabled or already dreaming). Cancel via `runs.cancel(dream.runId)`. */
+    start: (agentId: string) => post<Dream>(`/api/agents/${agentId}/dreams`),
+    get: (id: string) => get<DreamDetail>(`/api/dreams/${id}`),
+    /** Put the memory files back the way they were before the dream (409 when they were edited since). */
+    revert: (id: string) => post<Dream>(`/api/dreams/${id}/revert`),
   },
 
   routines: {
