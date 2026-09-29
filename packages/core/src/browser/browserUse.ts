@@ -10,7 +10,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { which } from "../util";
 
 export const BROWSER_USE_VERSION = "0.13.10";
@@ -67,6 +67,8 @@ export function browserUseCommand(custom: string, uvx: string | null): { command
 
 export interface BrowserUseConfigInput {
   configDir: string;
+  /** Write here instead of `<configDir>/config.json` (a run's own file, passed as BROWSER_USE_CONFIG_PATH). */
+  configPath?: string;
   cdpUrl: string;
   headless: boolean;
   /** Only used if browser-use ever has to launch a browser itself (e.g. after a crash). */
@@ -87,7 +89,8 @@ export function writeBrowserUseConfig(input: BrowserUseConfigInput): string {
   mkdirSync(input.configDir, { recursive: true, mode: 0o700 });
   mkdirSync(input.downloadsPath, { recursive: true });
   mkdirSync(input.fileSystemPath, { recursive: true });
-  const path = join(input.configDir, "config.json");
+  const path = input.configPath ?? join(input.configDir, "config.json");
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
 
   let profileId: string = randomUUID();
   let createdAt = new Date().toISOString();
@@ -155,7 +158,7 @@ const PASSTHROUGH_ENV = [
   "NO_PROXY",
 ];
 
-export function browserUseEnv(configDir: string, path: string): Record<string, string> {
+export function browserUseEnv(configDir: string, path: string, configPath?: string): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of PASSTHROUGH_ENV) {
     const v = process.env[key];
@@ -165,6 +168,7 @@ export function browserUseEnv(configDir: string, path: string): Record<string, s
     ...env,
     PATH: path,
     BROWSER_USE_CONFIG_DIR: configDir,
+    ...(configPath ? { BROWSER_USE_CONFIG_PATH: configPath } : {}),
     ANONYMIZED_TELEMETRY: "false",
     BROWSER_USE_CLOUD_SYNC: "false",
     BROWSER_USE_VERSION_CHECK: "false",

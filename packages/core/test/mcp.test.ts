@@ -219,8 +219,9 @@ describe("vault tools", () => {
       ["alice", "username", undefined],
       [PASSWORD, "password", true],
     ]);
-    // Bound to the login's own site, https only.
+    // Bound to the login's own site, https only — typed into the calling chat's own tab.
     for (const f of fills) expect([f.allowedHosts, f.httpHosts]).toEqual([["example.com"], []]);
+    for (const f of fills) expect(f.conversationId).toBe("cnv_mcp_test");
     const audits = listAudit(50, "credential.fill").filter((a) => a.target === cred.id);
     expect(audits.length).toBe(2);
     expect(audits[0]!.actor).toBe(`agent:${worker.id}`);

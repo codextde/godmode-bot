@@ -25,7 +25,7 @@ import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
-import { BROWSER_LLM_TOOLS, browserLlmKey, currentPage, resolveProfileForAgent } from "../browser/manager";
+import { BROWSER_LLM_TOOLS, browserLlmKey, currentPage, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
 import {
   addMessage,
   appendTranscript,
@@ -222,8 +222,6 @@ interface Job {
   lastPersistAt: number;
   deltaTimer: ReturnType<typeof setTimeout> | null;
   done: Promise<void> | null;
-  /** Browser profile this run drives (undefined = not resolved yet, null = no browser). */
-  browserProfileId?: string | null;
   /** Screen, window or tab this run may control (undefined = not resolved yet, null = none). */
   computerTarget?: ComputerTarget | null;
   /** The target is the agent's own unattended access, not something shared in the chat. */
@@ -479,18 +477,10 @@ function pump() {
       blocked.add(job.conversationId);
       continue;
     }
-    // One browser profile = one Chromium: two independent runs driving it at once would fight over tabs and
-    // focus. A run waits while another run holds its profile — unless that run is its own ancestor in the
-    // delegation chain (the parent is idle, waiting for this child).
+    // Runs sharing a browser profile don't wait for each other: every chat works in its own tabs.
     // A dream owns the agent's memory: it waits for the agent's other runs, and they wait while it runs.
     if (memoryHolder(job)) {
       emitActivity(job, job.trigger === "dream" ? "Waiting for other runs to finish before dreaming" : "Waiting — consolidating memory (dreaming)");
-      blocked.add(job.conversationId);
-      continue;
-    }
-    const holder = browserHolder(job);
-    if (holder) {
-      emitActivity(job, `Waiting for the browser (in use by another run)`);
       blocked.add(job.conversationId);
       continue;
     }
@@ -522,19 +512,6 @@ function memoryHolder(job: Job): Job | null {
     if (job.trigger === "dream" || other.trigger === "dream") return other;
   }
   return null;
-}
-
-function browserProfileOf(job: Job): string | null {
-  if (job.browserProfileId !== undefined) return job.browserProfileId;
-  if (job.trigger === "dream") return (job.browserProfileId = null);
-  try {
-    const agent = getAgent(job.agentId);
-    job.browserProfileId =
-      getSettings().browser.enabled && agent.browser.enabled ? resolveProfileForAgent(agent).id : null;
-  } catch {
-    job.browserProfileId = null;
-  }
-  return job.browserProfileId;
 }
 
 function isAncestor(candidate: Job, job: Job): boolean {
@@ -593,17 +570,6 @@ function computerHolder(job: Job): Job | null {
     if (other === job || other.status !== "running") continue;
     const t = computerTargetOf(other);
     if (t && computerLockKey(t) === key && !isAncestor(other, job)) return other;
-  }
-  return null;
-}
-
-/** The running job currently holding `job`'s browser profile (excluding its own ancestors), if any. */
-function browserHolder(job: Job): Job | null {
-  const profileId = browserProfileOf(job);
-  if (!profileId) return null;
-  for (const other of jobs.values()) {
-    if (other === job || other.status !== "running") continue;
-    if (browserProfileOf(other) === profileId && !isAncestor(other, job)) return other;
   }
   return null;
 }
@@ -909,6 +875,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     computer: !!computer,
     vm: !!vm,
     gatewayOnly: dreaming,
+    run: { runId: job.runId, conversationId: job.conversationId },
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
@@ -1119,6 +1086,7 @@ async function execute(job: Job): Promise<void> {
   } finally {
     if (res.timer) clearTimeout(res.timer);
     if (res.token) revokeRunToken(res.token);
+    releaseChatBrowser(job.runId);
     for (const f of res.files) removeMcpConfigFile(f);
     await detachComputer(job.runId).catch(() => {});
     detachVm(job.runId);
@@ -1294,7 +1262,7 @@ async function detectMissingLogin(job: Job, agent: Agent, text: string) {
   let url = "";
   if (agent.browser.enabled) {
     try {
-      const page = await currentPage(resolveProfileForAgent(agent).id);
+      const page = await currentPage(resolveProfileForAgent(agent).id, job.conversationId);
       if (page?.url && /^https?:/i.test(page.url)) {
         url = page.url;
         service = hostnameOf(page.url) || service;

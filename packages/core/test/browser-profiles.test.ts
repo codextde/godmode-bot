@@ -115,9 +115,10 @@ describe("browser profiles", () => {
   });
 
   test("browserMcpServer returns null when browser tools are disabled", async () => {
-    expect(await manager.browserMcpServer(agent({ browser: { enabled: false } }))).toBeNull();
+    const run = { runId: "run_disabled", conversationId: "cnv_disabled" };
+    expect(await manager.browserMcpServer(agent({ browser: { enabled: false } }), run)).toBeNull();
     updateSettings({ browser: { enabled: false } });
-    expect(await manager.browserMcpServer(agent({}))).toBeNull();
+    expect(await manager.browserMcpServer(agent({}), run)).toBeNull();
     updateSettings({ browser: { enabled: true } });
   });
 

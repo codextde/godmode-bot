@@ -44,6 +44,7 @@ export interface ComputerAction {
 interface LiveState {
   connected: boolean;
   runs: Record<string, LiveRun>;
+  /** Browser live view frames per view (`browserView`: a profile's active tab, or one chat's tab). */
   frames: Record<string, BrowserFrame>;
   /** Computer live view frames per view ("display:1", "window:812:4711", …). */
   computerFrames: Record<string, ComputerFrame>;
@@ -54,7 +55,7 @@ interface LiveState {
   runDelta: (runId: string, conversationId: string, messageId: string, blocks: MessageBlock[]) => void;
   runActivity: (runId: string, label: string) => void;
   runFinished: (run: Run) => void;
-  browserFrame: (profileId: string, frame: BrowserFrame) => void;
+  browserFrame: (view: string, frame: BrowserFrame) => void;
   dropBrowserFrame: (profileId: string) => void;
   computerFrame: (view: string, frame: ComputerFrame) => void;
   computerAction: (view: string, action: ComputerAction) => void;
@@ -112,12 +113,14 @@ export const useLive = create<LiveState>((set) => ({
       delete next[run.id];
       return { runs: next };
     }),
-  browserFrame: (profileId, frame) => set((s) => ({ frames: { ...s.frames, [profileId]: frame } })),
+  browserFrame: (view, frame) => set((s) => ({ frames: { ...s.frames, [view]: frame } })),
+  /** Forget every frame of the profile (its browser stopped). */
   dropBrowserFrame: (profileId) =>
     set((s) => {
-      if (!s.frames[profileId]) return s;
+      const stale = Object.keys(s.frames).filter((view) => view === profileId || view.startsWith(`${profileId}:`));
+      if (!stale.length) return s;
       const frames = { ...s.frames };
-      delete frames[profileId];
+      for (const view of stale) delete frames[view];
       return { frames };
     }),
   computerFrame: (view, frame) =>

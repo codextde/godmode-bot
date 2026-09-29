@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { AgentAvatar, EmptyState } from "@/components/common";
-import { BrowserFocus, BrowserPanel, BrowserToggle, useChatBrowser, type BrowserFocusMode } from "@/components/chat/browser-panel";
+import { BrowserFocus, BrowserPanel, BrowserToggle, useChatBrowser, useChatTab, type BrowserFocusMode } from "@/components/chat/browser-panel";
 import { ComputerFocus, ComputerPanel, ComputerShareChip, ComputerToggle, type ComputerFocusMode } from "@/components/computer/computer-panel";
 import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
@@ -56,6 +56,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const [queued, setQueued] = useState<Record<string, string>>({});
   const mountedAt = useRef(Date.now());
   const browser = useChatBrowser(agent);
+  // The panel appears once the agent opens this chat's own tab (other chats browse in theirs).
+  const chatTab = useChatTab(browser, conversationId);
   const browserPanel = useUi((s) => s.browserPanel);
   const setBrowserPanel = useUi((s) => s.setBrowserPanel);
   const wide = useMediaQuery("(min-width: 1024px)");
@@ -67,7 +69,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const [computerFocus, setComputerFocus] = useState<ComputerFocusMode | null>(null);
   // Something shared takes the side panel; the browser stays one click away in the header.
   const showComputerPanel = !!computerTarget && !!agent && wide && computerPanel;
-  const showBrowserPanel = !!browser?.running && !!agent && wide && browserPanel && !showComputerPanel;
+  const showBrowserPanel = !!browser && !!chatTab && !!agent && wide && browserPanel && !showComputerPanel;
   useEffect(() => setBrowserFocus(null), [browser?.id]);
   useEffect(() => {
     if (!computerTarget) setComputerFocus(null);
@@ -294,7 +296,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               {computerTarget && !showComputerPanel && (
                 <ComputerToggle working={!!activeRunId} onClick={() => (wide ? setComputerPanel(true) : setComputerFocus("watch"))} />
               )}
-              {browser?.running && !showBrowserPanel && (
+              {!!chatTab && !showBrowserPanel && (
                 <BrowserToggle
                   working={!!activeRunId}
                   onClick={() => (wide && !showComputerPanel ? setBrowserPanel(true) : setBrowserFocus("watch"))}
@@ -426,6 +428,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           <BrowserPanel
             key={browser.id}
             profile={browser}
+            conversationId={conversationId}
             agent={agent}
             activity={activeRunId ? liveActivityLabel(live) : null}
             onHide={() => setBrowserPanel(false)}
@@ -433,7 +436,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           />
         )}
       </AnimatePresence>
-      <BrowserFocus profile={browser} mode={browserFocus} onClose={() => setBrowserFocus(null)} />
+      <BrowserFocus profile={browser} conversationId={conversationId} mode={browserFocus} onClose={() => setBrowserFocus(null)} />
       <ComputerFocus target={computerTarget} mode={computerFocus} onClose={() => setComputerFocus(null)} />
     </div>
   );

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
-import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, browserRuns, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { insert, run as sql } from "../src/db";
 import { getSettings, updateSettings } from "../src/services/settings";
 import { config } from "../src/config";
@@ -213,22 +213,24 @@ describe("runner end-to-end with fake claude", () => {
     }
   });
 
-  test("runs sharing a browser profile take turns; delegated children may use the parent's browser", async () => {
+  test("runs sharing a browser profile run at the same time — every chat works in its own tabs", async () => {
     const browserA = await makeAgent({ name: "Browser A", browser: { enabled: true } });
     const browserB = await makeAgent({ name: "Browser B", browser: { enabled: true } });
     const a = await startChat({ agentId: browserA.id, content: "SLEEP a" });
     await until(() => getRun(a.run.id).status === "running", 10_000, "run a");
 
-    // Independent run on the same profile waits…
     const b = await startChat({ agentId: browserB.id, content: "hello b" });
-    // …but a run delegated by the holder may use the browser while the parent waits for it.
     const childConv = createConversation({ agentId: browserB.id, origin: "delegation" });
     const child = await sendMessage(childConv.id, { content: "hello child", trigger: "delegation", parentRunId: a.run.id, depth: 1 });
+    expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
     expect((await waitForRun(child.run.id, 20_000)).status).toBe("succeeded");
-    expect(getRun(b.run.id).status).toBe("queued");
+    expect(getRun(a.run.id).status).toBe("running");
+    // Each run's browser tools are bound to its own chat.
+    expect(browserRuns).toContainEqual({ agentId: browserA.id, runId: a.run.id, conversationId: a.conversation.id });
+    expect(browserRuns).toContainEqual({ agentId: browserB.id, runId: b.run.id, conversationId: b.conversation.id });
 
     await cancelRun(a.run.id);
-    expect((await waitForRun(b.run.id, 20_000)).status).toBe("succeeded");
+    await waitForRun(a.run.id, 10_000);
   });
 
   test("cancelling a queued run never starts it", async () => {

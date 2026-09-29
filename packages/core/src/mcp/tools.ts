@@ -204,9 +204,13 @@ function requireBrowser(agent: Agent) {
  * the only way a name guess widens where a secret may be typed; `guessHost` (the host that was added) is returned
  * so the caller can remember it on the login after a successful fill. The scope stays https-only.
  */
-async function fillScopeFor(profileId: string, login: Credential): Promise<{ scope: { allowedHosts: string[]; httpHosts: string[] }; guessHost: string | null }> {
+async function fillScopeFor(
+  profileId: string,
+  conversationId: string,
+  login: Credential,
+): Promise<{ scope: { allowedHosts: string[]; httpHosts: string[] }; guessHost: string | null }> {
   const scope = loginFillScope(login);
-  const host = hostnameOf((await currentPage(profileId))?.url ?? "");
+  const host = hostnameOf((await currentPage(profileId, conversationId))?.url ?? "");
   if (!host || scope.allowedHosts.some((d) => domainMatches(host, d)) || !nameGuessMatchesHost(login, host, { strict: true })) {
     return { scope, guessHost: null };
   }
@@ -411,8 +415,8 @@ const TOOLS: ToolDef[] = [
         );
       }
       const login = getCredential(credentialId);
-      const { scope, guessHost } = await fillScopeFor(profile.id, login);
-      const result = await fillIntoPage(profile.id, { text: value, kind: field, selector, submit, ...scope });
+      const { scope, guessHost } = await fillScopeFor(profile.id, ctx.conversationId, login);
+      const result = await fillIntoPage(profile.id, { text: value, kind: field, selector, submit, conversationId: ctx.conversationId, ...scope });
       audit(`agent:${agent.id}`, "credential.fill", credentialId, { field, runId: ctx.runId, ok: result.ok, ...(guessHost ? { guessedSite: guessHost } : {}) });
       if (!result.ok) return fail(`Could not fill the ${field}: ${scrub(result.detail, value)}`);
       markCredentialUsed(credentialId);
@@ -463,8 +467,8 @@ const TOOLS: ToolDef[] = [
         await sleep(code.remaining * 1000 + 300);
         code = codeForAgent(agent, id);
       }
-      const { scope, guessHost } = await fillScopeFor(profile.id, site);
-      const result = await fillIntoPage(profile.id, { text: code.code, kind: "totp", selector, submit, ...scope });
+      const { scope, guessHost } = await fillScopeFor(profile.id, ctx.conversationId, site);
+      const result = await fillIntoPage(profile.id, { text: code.code, kind: "totp", selector, submit, conversationId: ctx.conversationId, ...scope });
       audit(`agent:${agent.id}`, "totp.fill", id, { field: "totp", runId: ctx.runId, credentialId: credentialId ?? null, ok: result.ok, ...(guessHost ? { guessedSite: guessHost } : {}) });
       if (!result.ok) return fail(`Could not fill the 2FA code: ${scrub(result.detail, code.code)}`);
       const remembered = guessHost && addCredentialDomain(site.id, guessHost);
