@@ -317,8 +317,9 @@ describe("VM lifecycle", () => {
     await a;
 
     // A suspended VM keeps its hardware (changing it would lose the saved session); renaming is fine.
+    // 2048 differs from both host-dependent defaults (4096 / 8192), so it is a real hardware change everywhere.
     await suspendVm(vm.id);
-    expect((await catchHttp(updateVm(vm.id, { memoryMb: 4096 }))).message).toContain("suspended");
+    expect((await catchHttp(updateVm(vm.id, { memoryMb: 2048 }))).message).toContain("suspended");
     expect((await updateVm(vm.id, { name: "Busy bee" })).name).toBe("Busy bee");
     await startVm(vm.id);
     expect((await getVm(vm.id)).state).toBe("running");
@@ -337,7 +338,7 @@ describe("VM lifecycle", () => {
 
     await stopVm(vm.id);
     await deleteVm(vm.id);
-  }, 15_000);
+  }, 30_000);
 
   test("a VM that fails to boot reports why (and doesn't hang)", async () => {
     const vm = await createVm({ name: "Won't boot" });

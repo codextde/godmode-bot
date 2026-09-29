@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Conversation, ConversationWithMessages } from "@godmode/shared";
 import { toast } from "sonner";
@@ -53,6 +54,19 @@ export function useArchiveChat() {
   return { setArchived: (chat: ChatRef, archived: boolean) => mutation.mutate({ chat, archived }) };
 }
 
+/** Ask before deleting a chat for good; render `deleteDialog` once and call `askDelete` from any row. */
+export function useDeleteChat(onDeleted?: (id: string) => void) {
+  const [chat, setChat] = useState<ChatRef | null>(null);
+  const [open, setOpen] = useState(false);
+  return {
+    askDelete: (c: ChatRef) => {
+      setChat(c);
+      setOpen(true);
+    },
+    deleteDialog: <DeleteChatDialog chat={chat} open={open} onOpenChange={setOpen} onDeleted={onDeleted} />,
+  };
+}
+
 export function DeleteChatDialog({
   chat,
   open,
@@ -62,18 +76,28 @@ export function DeleteChatDialog({
   chat: ChatRef | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onDeleted?: () => void;
+  onDeleted?: (id: string) => void;
 }) {
   const qc = useQueryClient();
   const remove = useMutation({
-    mutationFn: (id: string) => api.conversations.delete(id),
-    onSuccess: (_res, id) => {
-      toast.success("Chat deleted");
-      qc.removeQueries({ queryKey: qk.conversation(id) });
-      qc.invalidateQueries({ queryKey: qk.conversationsAll });
-      onDeleted?.();
+    mutationFn: (chat: ChatRef) => api.conversations.delete(chat.id),
+    onMutate: async (chat) => {
+      const lists = [qk.conversationLists, qk.archivedConversationLists];
+      await Promise.all(lists.map((queryKey) => qc.cancelQueries({ queryKey })));
+      const snapshot = lists.flatMap((queryKey) => qc.getQueriesData<Conversation[]>({ queryKey }));
+      for (const queryKey of lists) qc.setQueriesData<Conversation[]>({ queryKey }, (list) => list?.filter((c) => c.id !== chat.id));
+      return { snapshot };
     },
-    onError: (err) => toast.error("Couldn't delete the chat", { description: errorMessage(err) }),
+    onSuccess: (_res, chat) => {
+      toast.success("Chat deleted", { description: chat.title || "New chat" });
+      onDeleted?.(chat.id);
+      qc.removeQueries({ queryKey: qk.conversation(chat.id) });
+    },
+    onError: (err, _chat, ctx) => {
+      for (const [key, data] of ctx?.snapshot ?? []) qc.setQueryData(key, data);
+      toast.error("Couldn't delete the chat", { description: errorMessage(err) });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: qk.conversationsAll }),
   });
 
   return (
@@ -87,11 +111,7 @@ export function DeleteChatDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => chat && remove.mutate(chat.id)}
-            className="bg-destructive text-white hover:bg-destructive/90"
-            disabled={remove.isPending}
-          >
+          <AlertDialogAction variant="destructive" onClick={() => chat && remove.mutate(chat)} disabled={remove.isPending && remove.variables?.id === chat?.id}>
             Delete
           </AlertDialogAction>
         </AlertDialogFooter>
