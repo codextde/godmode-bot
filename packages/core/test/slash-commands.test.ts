@@ -66,7 +66,9 @@ describe("StreamAccumulator — local slash commands", () => {
     acc.push({ type: "system", subtype: "status", status: "compacting" });
     expect(acc.activityLabel()).toBe("Compacting conversation…");
     acc.push({ type: "system", subtype: "status", status: null, compact_result: "success" });
+    expect(acc.compacted).toBe(false);
     acc.push({ type: "system", subtype: "compact_boundary", compact_metadata: { trigger: "manual", pre_tokens: 58279, post_tokens: 2556 } });
+    expect(acc.compacted).toBe(true);
     expect(acc.blocks).toEqual([
       { type: "notice", level: "info", text: "Context cleared — your next message starts a fresh session." },
       { type: "notice", level: "success", text: "Conversation compacted · 58.3k → 2.6k tokens" },

@@ -33,7 +33,7 @@ function toModel(r: WorkspaceRow): Workspace {
     description: r.description,
     color: r.color,
     icon: r.icon,
-    instructions: r.instructions ?? "",
+    instructions: r.instructions,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

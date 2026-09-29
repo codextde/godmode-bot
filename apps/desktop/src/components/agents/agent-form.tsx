@@ -290,10 +290,7 @@ export function AgentForm({
 
   const err = (k: string) => (showErrors ? errors[k] : undefined);
   const preview = { id: agentId, avatar: values.avatar, color: values.color };
-  const inherited = useInheritedInstructions(
-    { id: agentId ?? "", name: values.name, avatar: values.avatar, color: values.color, instructions: "", workspaceId: values.workspaceId },
-    { includeAgent: false },
-  );
+  const inherited = useInheritedInstructions(values.workspaceId);
 
   const { hash } = useLocation();
   useEffect(() => {

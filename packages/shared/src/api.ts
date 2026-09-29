@@ -102,7 +102,6 @@ export interface StartChatInput {
   workingDirectory?: string | null;
   /** Share a screen, window or browser tab with the new chat. */
   computerTarget?: ComputerTarget | null;
-  /** Standing instructions for the new chat. */
   instructions?: string;
 }
 
@@ -117,7 +116,7 @@ export interface ConversationPatch {
   workingDirectory?: string | null;
   /** Share a screen, window or browser tab with the agent; null = stop sharing. */
   computerTarget?: ComputerTarget | null;
-  /** Standing instructions for this chat; "" = none. */
+  /** "" = none. */
   instructions?: string;
 }
 

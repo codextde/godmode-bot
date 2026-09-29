@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
-import { AGENT_COLORS, type Workspace } from "@godmode/shared";
+import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace } from "@godmode/shared";
 import { colorSwatch } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,7 +26,7 @@ const EMOJIS = [
 ];
 
 const MAX_NAME = 60;
-const CONTEXT_EXAMPLE = "We are ACME GmbH. Write to clients in German.\nInvoices go to finance@acme.de.\nNever touch the production database.";
+const CONTEXT_EXAMPLE = "We are ACME GmbH. Write to clients in German.\nInvoices go to finance@acme.example.\nNever touch the production database.";
 
 export function WorkspaceDialog({
   open,
@@ -224,7 +224,7 @@ export function WorkspaceDialog({
                 id="ws-instructions"
                 autoFocus={focus === "instructions"}
                 rows={5}
-                maxLength={20_000}
+                maxLength={MAX_INSTRUCTIONS_LENGTH}
                 placeholder={CONTEXT_EXAMPLE}
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}

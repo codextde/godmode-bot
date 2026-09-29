@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { existsSync, readFileSync } from "node:fs";
-import { EFFORT_OPTIONS, isModelId } from "@godmode/shared";
+import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, isModelId } from "@godmode/shared";
 import {
   createConversation,
   deleteConversation,
@@ -35,7 +35,7 @@ const modelChoice = {
 };
 
 const folder = z.string().trim().max(4096).nullable().optional();
-const instructions = z.string().max(20_000).optional();
+const instructions = z.string().max(MAX_INSTRUCTIONS_LENGTH).optional();
 
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),

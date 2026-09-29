@@ -165,6 +165,7 @@ if (slash?.[1] === "clear") {
 } else if (slash) {
   const [, name, args] = slash;
   out(init);
+  if (name === "compact") out({ type: "system", subtype: "compact_boundary", compact_metadata: { trigger: "manual", pre_tokens: 900, post_tokens: 100 } });
   const effort = args.toLowerCase();
   const text =
     name === "model"

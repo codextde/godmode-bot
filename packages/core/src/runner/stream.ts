@@ -127,6 +127,8 @@ export class StreamAccumulator {
   localCommand: { name: string; args: string; output: string } | null = null;
   /** `/clear` replaced the Claude session with an empty one. */
   contextCleared = false;
+  /** The session was compacted: earlier turns are only a summary now. */
+  compacted = false;
   private compacting = false;
 
   private streams = new Map<string, StreamState>();
@@ -214,6 +216,7 @@ export class StreamAccumulator {
     } else if (e.subtype === "status") {
       this.compacting = e.status === "compacting";
     } else if (e.subtype === "compact_boundary") {
+      this.compacted = true;
       const meta = isObj(e.compact_metadata) ? e.compact_metadata : {};
       const pre = num(meta.pre_tokens);
       const post = num(meta.post_tokens);

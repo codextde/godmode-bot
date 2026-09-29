@@ -81,5 +81,8 @@ export const BROWSER_MCP_NAME = "browser";
 /** MCP server with the computer-use tools of a run that has a screen, window or tab shared. */
 export const COMPUTER_MCP_NAME = "computer";
 
+/** Longest global, workspace or chat instructions the API accepts. */
+export const MAX_INSTRUCTIONS_LENGTH = 20_000;
+
 /** Placeholder the API returns/accepts for stored secret values (MCP env/headers): sending it back keeps the stored value. */
 export const SECRET_MASK = "********";

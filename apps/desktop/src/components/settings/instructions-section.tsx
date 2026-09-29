@@ -1,15 +1,15 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Bot, ChevronRight, Globe2, Layers, MessageSquare, Plus } from "lucide-react";
-import type { Settings, Workspace } from "@godmode/shared";
+import { MAX_INSTRUCTIONS_LENGTH, type Settings, type Workspace } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { firstLine } from "@/components/instructions/instructions";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAllAgents, useWorkspaces } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import { WorkspaceDialog } from "@/pages/workspaces/workspace-dialog";
-import { WorkspaceTile } from "@/pages/workspaces/workspace-tile";
+import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
+import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 import { CommitTextarea, SectionHeading, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 const LAYERS = [
@@ -65,6 +65,7 @@ export function InstructionsSection({ settings }: { settings: Settings }) {
           <CommitTextarea
             id="global-instructions"
             aria-label="Instructions for every agent"
+            maxLength={MAX_INSTRUCTIONS_LENGTH}
             className="min-h-48 resize-y font-sans text-sm leading-relaxed"
             placeholder={EXAMPLE}
             value={settings.runner.appendSystemPrompt}

@@ -1,4 +1,5 @@
 import type { Hono } from "hono";
+import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { createWorkspace, deleteWorkspace, listWorkspaces, updateWorkspace } from "../../services/workspaces";
 import { body, z } from "../validate";
 
@@ -7,7 +8,7 @@ const workspaceSchema = z.object({
   description: z.string().max(2000).optional(),
   color: z.string().trim().max(32).optional(),
   icon: z.string().trim().max(64).optional(),
-  instructions: z.string().max(20_000).optional(),
+  instructions: z.string().max(MAX_INSTRUCTIONS_LENGTH).optional(),
 });
 
 export function registerWorkspaceRoutes(app: Hono): void {

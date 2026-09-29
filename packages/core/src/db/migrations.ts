@@ -285,6 +285,10 @@ ALTER TABLE conversations ADD COLUMN computer_target TEXT;
 ALTER TABLE workspaces ADD COLUMN instructions TEXT NOT NULL DEFAULT '';
 ALTER TABLE conversations ADD COLUMN instructions TEXT NOT NULL DEFAULT '';
 ALTER TABLE conversations ADD COLUMN instructions_digest TEXT;
+-- Sessions started with global instructions under the old heading must be told about changes.
+UPDATE conversations SET instructions_digest = 'legacy'
+WHERE claude_session_id IS NOT NULL
+  AND EXISTS (SELECT 1 FROM settings WHERE key = 'runner' AND trim(coalesce(json_extract(value, '$.appendSystemPrompt'), '')) != '');
 `,
   },
 ];

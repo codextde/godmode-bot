@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { homedir } from "node:os";
 import type { Bootstrap } from "@godmode/shared";
+import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { config } from "../../config";
 import { get } from "../../db";
 import * as vault from "../../vault/vault";
@@ -15,6 +16,7 @@ import { applyRuntimeSettings } from "../../services/runtime";
 import { hasDashboardPassword } from "../auth";
 import { requireGrant } from "../grants";
 import { body, z } from "../validate";
+import { badRequest } from "../../util";
 
 function count(sql: string): number {
   return get<{ c: number }>(sql)?.c ?? 0;
@@ -58,6 +60,10 @@ export function registerSystemRoutes(app: Hono) {
     // Making "reveal" the default secret access for new agents needs a fresh passphrase confirmation.
     const security = patch.security as { defaultSecretAccess?: unknown } | undefined;
     if (security?.defaultSecretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
+    const instructions = (patch.runner as { appendSystemPrompt?: unknown } | undefined)?.appendSystemPrompt;
+    if (typeof instructions === "string" && instructions.length > MAX_INSTRUCTIONS_LENGTH) {
+      throw badRequest(`Instructions for every agent can be at most ${MAX_INSTRUCTIONS_LENGTH.toLocaleString("en-US")} characters`);
+    }
     const next = updateSettings(patch as never);
     applyRuntimeSettings(next);
     return c.json(next);

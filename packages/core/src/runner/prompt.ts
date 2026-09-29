@@ -34,18 +34,15 @@ export interface InstructionLayers {
 }
 
 /** The "Standing instructions" section, or "" when no layer has any. */
-export function instructionsSection(settings: Settings, layers: InstructionLayers): string {
-  const human = settings.general.userName.trim() || "the user";
+export function instructionsSection(settings: Settings, { workspace, chat }: InstructionLayers): string {
   const parts: string[] = [];
   const global = settings.runner.appendSystemPrompt?.trim();
-  const workspace = layers.workspace?.text.trim();
-  const chat = layers.chat.trim();
   if (global) parts.push(`### For every agent\n${global}`);
-  if (workspace) parts.push(`### For the "${layers.workspace!.name}" workspace\n${workspace}`);
-  if (chat) parts.push(`### For this chat\n${chat}`);
+  if (workspace?.text.trim()) parts.push(`### For the "${workspace.name}" workspace\n${workspace.text.trim()}`);
+  if (chat.trim()) parts.push(`### For this chat\n${chat.trim()}`);
   if (!parts.length) return "";
   return `## Standing instructions
-${human} set these rules. Follow them in every task. When two conflict, the more specific one wins: this chat, then your own instructions in CLAUDE.md, then the workspace, then the ones for every agent.
+${settings.general.userName.trim() || "The user"} set these rules. Follow them in every task. When two conflict, the more specific one wins: this chat, then your own instructions in CLAUDE.md, then the workspace, then the ones for every agent.
 
 ${parts.join("\n\n")}`;
 }
@@ -200,9 +197,10 @@ ${scope}
 /**
  * Prefix for resumed sessions: the session's system prompt is a snapshot of its first turn, so the date and a
  * working directory that changed since then are restated on every turn. `instructions` is the current
- * "Standing instructions" section when it changed since the session saw it ("" = all removed).
+ * "Standing instructions" section when it changed since the session saw it ("" = none left).
  */
-export function resumeContextPrefix(folder: string | null, repoPath: string, now = new Date(), instructions?: string): string {
+export function resumeContextPrefix(folder: string | null, repoPath: string, opts: { now?: Date; instructions?: string } = {}): string {
+  const { now = new Date(), instructions } = opts;
   const where = folder
     ? `Working directory: \`${folder}\` (the folder attached to this chat). Your own repository with CLAUDE.md and MEMORY.md: \`${repoPath}\`.`
     : `Working directory: your own repository \`${repoPath}\`.`;
@@ -210,7 +208,7 @@ export function resumeContextPrefix(folder: string | null, repoPath: string, now
     instructions === undefined
       ? ""
       : instructions
-        ? `\n\nYour standing instructions changed. These replace the "Standing instructions" in your system prompt:\n\n${instructions}`
-        : `\n\nYour standing instructions were removed. Ignore the "Standing instructions" in your system prompt.`;
+        ? `\n\nYour standing instructions changed. They replace any "Standing instructions" or "Additional instructions" in your system prompt:\n\n${instructions}`
+        : `\n\nYou have no standing instructions anymore. Ignore any "Standing instructions" or "Additional instructions" in your system prompt.`;
   return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${update}</godmode-context>\n\n`;
 }

@@ -217,7 +217,12 @@ interface Job {
   model?: string;
   /** A slash command ran in a replacement session: keep the lost one so the next message still gets the recap. */
   keepSessionId?: string;
+  /** Digest of the standing instructions restated in this run's prompt; recorded once the run succeeds. */
+  restatedDigest?: string;
 }
+
+/** The session may no longer hold the instructions it was given: restate them on the next turn. */
+const STALE_DIGEST = "stale";
 
 const jobs = new Map<string, Job>();
 const queue: string[] = [];
@@ -925,8 +930,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const command = parseSlashCommand(job.prompt) !== null;
     // A resumed session keeps the system prompt of its first turn: restate standing instructions that changed since.
     const restate = resuming && !command && (conv.instructions_digest ?? "") !== digest;
-    if (restate) setConversationState(job.conversationId, { instructionsDigest: digest });
-    const prompt = resuming && !command ? resumeContextPrefix(folder, agent.repoPath, undefined, restate ? standing : undefined) + job.prompt : job.prompt;
+    if (restate) job.restatedDigest = digest;
+    const prompt = resuming && !command ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined }) + job.prompt : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 
     const lostSession =
@@ -1037,9 +1042,15 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
       assistant = updateMessage(job.messageId, { content: text, blocks });
     });
     safely("update conversation", () => {
-      const row = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", job.conversationId);
+      const row = get<{ title: string; instructions_digest: string | null }>(
+        "SELECT title, instructions_digest FROM conversations WHERE id = ?",
+        job.conversationId,
+      );
       const title =
         row?.title === DEFAULT_CONVERSATION_TITLE && job.userMessageId ? autoTitle(job.userMessageId) : undefined;
+      let digest = outcome.status === "succeeded" && job.restatedDigest !== undefined ? job.restatedDigest : (row?.instructions_digest ?? null);
+      // A restatement lives in the transcript, which compaction summarizes.
+      if (acc.compacted && digest) digest = STALE_DIGEST;
       setConversationState(job.conversationId, {
         // After /clear the next turn starts a brand-new session instead of resuming the old one.
         ...(acc.contextCleared
@@ -1050,6 +1061,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
               ? { claudeSessionId: acc.sessionId }
               : {}),
         lastMessageAt: ts,
+        ...(digest !== null && digest !== row?.instructions_digest ? { instructionsDigest: digest } : {}),
         ...(title && title !== DEFAULT_CONVERSATION_TITLE ? { title } : {}),
         ...(outcome.status === "succeeded" ? commandOverrides(acc.localCommand) : {}),
       });

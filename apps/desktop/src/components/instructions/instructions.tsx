@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ArrowUpRight, Globe2, ScrollText } from "lucide-react";
-import type { Agent } from "@godmode/shared";
+import { MAX_INSTRUCTIONS_LENGTH, type Agent } from "@godmode/shared";
 import { AgentAvatar, Kbd } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { WorkspaceTile } from "@/pages/workspaces/workspace-tile";
+import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 import { modKey } from "@/lib/desktop";
 import { useBootstrap, useWorkspaces } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -30,13 +30,12 @@ export function firstLine(text: string): string {
   );
 }
 
-/** Instructions an agent receives besides a chat's own, most general first. Only layers with text. */
-export function useInheritedInstructions(agent: Pick<Agent, "id" | "name" | "avatar" | "color" | "instructions" | "workspaceId"> | undefined, opts?: { includeAgent?: boolean }): InstructionLayer[] {
+/** Instructions an agent in this workspace receives besides a chat's own, most general first. Only layers with text. */
+export function useInheritedInstructions(workspaceId: string | null | undefined, agent?: Agent): InstructionLayer[] {
   const { data: boot } = useBootstrap();
   const { data: workspaces } = useWorkspaces();
   const global = boot?.settings.runner.appendSystemPrompt?.trim() ?? "";
-  const workspace = agent?.workspaceId ? workspaces?.find((w) => w.id === agent.workspaceId) : undefined;
-  const includeAgent = opts?.includeAgent ?? true;
+  const workspace = workspaceId ? workspaces?.find((w) => w.id === workspaceId) : undefined;
   return useMemo(() => {
     const layers: InstructionLayer[] = [];
     if (global)
@@ -59,10 +58,10 @@ export function useInheritedInstructions(agent: Pick<Agent, "id" | "name" | "ava
         icon: <WorkspaceTile icon={workspace.icon} color={workspace.color} size="sm" />,
         href: `/workspaces?edit=${workspace.id}`,
       });
-    if (includeAgent && agent?.instructions.trim())
+    if (agent?.instructions.trim())
       layers.push({ key: "agent", label: agent.name, text: agent.instructions, icon: <AgentAvatar agent={agent} size="sm" />, href: `/agents/${agent.id}/settings#instructions` });
     return layers;
-  }, [global, workspace, agent, includeAgent]);
+  }, [global, workspace, agent]);
 }
 
 const LAYER_HINT: Record<InstructionLayer["key"], string> = {
@@ -97,7 +96,10 @@ export function InheritedInstructions({ layers, onNavigate, className }: { layer
   );
 }
 
-/** Composer tray button: this chat's own instructions, plus what it inherits from the agent, workspace and globally. */
+/**
+ * Composer tray button: this chat's own instructions, plus what it inherits from the agent, workspace and globally.
+ * Closing the popover keeps the edit; Escape throws it away.
+ */
 export function InstructionsChip({
   value,
   agent,
@@ -111,27 +113,38 @@ export function InstructionsChip({
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
-  const inherited = useInheritedInstructions(agent);
+  const discard = useRef(false);
+  const inherited = useInheritedInstructions(agent?.workspaceId, agent);
   const own = value.trim().length > 0;
   const dirty = draft.trim() !== value.trim();
 
-  useEffect(() => {
-    if (open) setDraft(value);
-  }, [open, value]);
-
-  const save = async (text: string) => {
+  /** false when saving failed (the caller shows why). */
+  const commit = async (text: string) => {
+    if (text.trim() === value.trim()) return true;
     try {
       await onChange(text.trim());
-      setOpen(false);
+      return true;
     } catch {
-      /* the caller reports the error; keep the draft */
+      return false;
     }
+  };
+
+  const save = async (text: string) => {
+    if (await commit(text)) setOpen(false);
+  };
+
+  const onOpenChange = async (next: boolean) => {
+    setOpen(next);
+    if (next) {
+      discard.current = false;
+      setDraft(value);
+    } else if (!discard.current && !(await commit(draft))) setOpen(true);
   };
 
   const summary = [own && "this chat", ...inherited.map((l) => (l.key === "global" ? "every agent" : l.label))].filter(Boolean).join(" · ");
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(next) => void onOpenChange(next)}>
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
@@ -160,7 +173,15 @@ export function InstructionsChip({
         </TooltipTrigger>
         <TooltipContent>{summary ? `Instructions: ${summary}` : "Add instructions for this chat"}</TooltipContent>
       </Tooltip>
-      <PopoverContent align="start" side="top" sideOffset={8} className="w-[min(28rem,calc(100vw-2rem))] overflow-hidden rounded-xl p-0">
+      <PopoverContent
+        align="start"
+        side="top"
+        sideOffset={8}
+        className="w-[min(28rem,calc(100vw-2rem))] overflow-hidden rounded-xl p-0"
+        onEscapeKeyDown={() => {
+          discard.current = true;
+        }}
+      >
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -178,7 +199,7 @@ export function InstructionsChip({
               autoFocus
               aria-label="Instructions for this chat"
               value={draft}
-              maxLength={20_000}
+              maxLength={MAX_INSTRUCTIONS_LENGTH}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -194,12 +215,12 @@ export function InstructionsChip({
             {inherited.length > 0 ? (
               <>
                 <p className="px-2 pt-0.5 pb-1 text-[11px] font-medium text-muted-foreground">Also applies</p>
-                <InheritedInstructions layers={inherited} onNavigate={() => setOpen(false)} />
+                <InheritedInstructions layers={inherited} onNavigate={() => void onOpenChange(false)} />
               </>
             ) : (
               <p className="px-2 py-1 text-xs text-muted-foreground">
                 Rules for every agent or a whole workspace live in{" "}
-                <Link to="/settings/instructions" onClick={() => setOpen(false)} className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
+                <Link to="/settings/instructions" onClick={() => void onOpenChange(false)} className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
                   Settings → Instructions
                 </Link>
                 .
@@ -212,6 +233,7 @@ export function InstructionsChip({
                 Clear
               </Button>
             )}
+            {dirty && <span className="truncate text-[11px] text-muted-foreground">Esc discards changes</span>}
             <span className="ml-auto hidden items-center gap-1 text-[11px] text-muted-foreground sm:flex">
               <Kbd>{modKey}</Kbd>
               <Kbd>↵</Kbd>

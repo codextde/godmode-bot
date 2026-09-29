@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -27,8 +27,8 @@ import { useBootstrap, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
-import { WorkspaceDialog } from "./workspace-dialog";
-import { WorkspaceTile } from "./workspace-tile";
+import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
+import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 
 interface Counts {
   agents: number | null;
@@ -83,9 +83,9 @@ export default function WorkspacesPage() {
   const [forceDelete, setForceDelete] = useState<{ workspace: Workspace; counts: [string, number][] } | null>(null);
 
   const creating = params.get("new") === "1";
-  const editId = params.get("edit");
+  const editId = creating ? null : params.get("edit");
   const linked = editId ? (workspaces?.find((w) => w.id === editId) ?? null) : null;
-  const target = editing ?? linked;
+  const target = creating ? null : (editing ?? linked);
   const dialogOpen = creating || !!target;
   const closeDialog = () => {
     setEditing(null);
@@ -97,6 +97,13 @@ export default function WorkspacesPage() {
       setParams(next, { replace: true });
     }
   };
+  useEffect(() => {
+    if (!editId || !workspaces || linked) return;
+    const next = new URLSearchParams(params);
+    next.delete("edit");
+    setParams(next, { replace: true });
+    toast.error("That workspace doesn't exist anymore");
+  }, [editId, workspaces, linked, params, setParams]);
   const editContext = (ws: Workspace) => {
     setFocusContext(true);
     setEditing(ws);
@@ -245,7 +252,7 @@ export default function WorkspacesPage() {
       <WorkspaceDialog
         open={dialogOpen}
         workspace={target}
-        focus={focusContext || (!!linked && !editing) ? "instructions" : undefined}
+        focus={focusContext || (linked && !editing) ? "instructions" : undefined}
         onOpenChange={(o) => {
           if (!o) closeDialog();
         }}

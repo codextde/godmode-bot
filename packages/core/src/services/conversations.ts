@@ -49,7 +49,7 @@ interface ConversationRow {
   effort: Effort | null;
   working_directory: string | null;
   computer_target: string | null;
-  instructions: string | null;
+  instructions: string;
   pinned: number;
   archived: number;
   last_message_at: string | null;
@@ -101,7 +101,7 @@ function toConversation(r: ConversationRow): Conversation {
     effort: r.effort || null,
     workingDirectory: r.working_directory,
     computerTarget: parseComputerTarget(parseJson<unknown>(r.computer_target, null)),
-    instructions: r.instructions ?? "",
+    instructions: r.instructions,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
     lastMessageAt: r.last_message_at,

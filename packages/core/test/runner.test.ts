@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
+import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { insert, run as sql } from "../src/db";
 import { updateSettings } from "../src/services/settings";
@@ -15,7 +16,8 @@ import {
   transcriptPath,
   updateConversation,
 } from "../src/services/conversations";
-import { createWorkspace } from "../src/services/workspaces";
+import { createWorkspace, updateWorkspace } from "../src/services/workspaces";
+import { getAccessToken } from "../src/server/auth";
 import {
   CLAUDE_NOT_FOUND,
   INTERRUPTED,
@@ -347,14 +349,20 @@ describe("standing instructions", () => {
     updateSettings({ runner: { appendSystemPrompt: "" } });
   });
 
+  const lastPrompt = async (conversationId: string, content: string) => {
+    const sent = await sendMessage(conversationId, { content });
+    await waitForRun(sent.run.id, 20_000);
+    return invocations(env).at(-1)!.prompt;
+  };
+
   test("global, workspace and chat layers reach the system prompt, most specific last", async () => {
-    updateSettings({ runner: { appendSystemPrompt: "Use less comments." } });
+    updateSettings({ runner: { appendSystemPrompt: "Use fewer comments." } });
     const ws = createWorkspace({ name: "Acme", instructions: "Invoices go to finance@acme.test." });
     const bot = await makeAgent({ name: "Layered Bot", workspaceId: ws.id });
     const { run } = await startChat({ agentId: bot.id, content: "Hi", instructions: "Answer in German." });
     expect((await waitForRun(run.id, 20_000)).status).toBe("succeeded");
     const system = argValue(invocations(env).at(-1)!, "--append-system-prompt")!;
-    const every = system.indexOf("### For every agent\nUse less comments.");
+    const every = system.indexOf("### For every agent\nUse fewer comments.");
     const workspace = system.indexOf('### For the "Acme" workspace\nInvoices go to finance@acme.test.');
     const chat = system.indexOf("### For this chat\nAnswer in German.");
     expect(system).toContain("## Standing instructions");
@@ -364,28 +372,60 @@ describe("standing instructions", () => {
   });
 
   test("a resumed chat is told when its instructions change, once", async () => {
+    updateSettings({ runner: { appendSystemPrompt: "Use fewer comments." } });
     const { conversation, run } = await startChat({ agentId: agent.id, content: "Hi" });
     await waitForRun(run.id, 20_000);
-    const lastPrompt = async (content: string) => {
-      const sent = await sendMessage(conversation.id, { content });
-      await waitForRun(sent.run.id, 20_000);
-      return invocations(env).at(-1)!.prompt;
-    };
 
-    expect(await lastPrompt("unchanged")).not.toContain("standing instructions");
+    expect(await lastPrompt(conversation.id, "unchanged")).not.toContain("standing instructions");
 
     updateConversation(conversation.id, { instructions: "Always sign with Dan." });
-    const changed = await lastPrompt("after edit");
+    const changed = await lastPrompt(conversation.id, "after edit");
     expect(changed).toContain("Your standing instructions changed");
     expect(changed).toContain("### For this chat\nAlways sign with Dan.");
-    expect(changed).toContain("### For every agent\nUse less comments.");
+    expect(changed).toContain("### For every agent\nUse fewer comments.");
     expect(changed.endsWith("after edit")).toBe(true);
 
-    expect(await lastPrompt("again")).not.toContain("standing instructions");
+    expect(await lastPrompt(conversation.id, "again")).not.toContain("standing instructions");
 
     updateSettings({ runner: { appendSystemPrompt: "" } });
     updateConversation(conversation.id, { instructions: "" });
-    expect(await lastPrompt("cleared")).toContain("Your standing instructions were removed");
+    expect(await lastPrompt(conversation.id, "cleared")).toContain("You have no standing instructions anymore");
+  });
+
+  test("workspace changes are restated to its agents' chats", async () => {
+    const ws = createWorkspace({ name: "Globex", instructions: "Bill in EUR." });
+    const bot = await makeAgent({ name: "Globex Bot", workspaceId: ws.id });
+    const { conversation, run } = await startChat({ agentId: bot.id, content: "Hi" });
+    await waitForRun(run.id, 20_000);
+    updateWorkspace(ws.id, { instructions: "Bill in USD." });
+    expect(await lastPrompt(conversation.id, "next")).toContain('### For the "Globex" workspace\nBill in USD.');
+  });
+
+  test("a restatement counts only once a run succeeds, and again after compaction", async () => {
+    const { conversation, run } = await startChat({ agentId: agent.id, content: "Hi" });
+    await waitForRun(run.id, 20_000);
+    updateConversation(conversation.id, { instructions: "Be brief." });
+
+    const { run: slow } = await sendMessage(conversation.id, { content: "SLEEP please" });
+    await until(() => getRun(slow.id).status === "running" && invocations(env).at(-1)!.prompt.includes("SLEEP please"), 10_000, "run to start");
+    expect(invocations(env).at(-1)!.prompt).toContain("Be brief.");
+    await cancelRun(slow.id, "Cancelled by user");
+    await waitForRun(slow.id, 15_000);
+    expect(await lastPrompt(conversation.id, "retry")).toContain("Be brief.");
+    expect(await lastPrompt(conversation.id, "steady")).not.toContain("standing instructions");
+
+    expect(await lastPrompt(conversation.id, "/compact")).toBe("/compact");
+    expect(await lastPrompt(conversation.id, "after compact")).toContain("### For this chat\nBe brief.");
+  });
+
+  test("instructions are capped", async () => {
+    const tooLong = "x".repeat(MAX_INSTRUCTIONS_LENGTH + 1);
+    const res = await fetch(`${env.baseUrl}/api/settings`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${getAccessToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ runner: { appendSystemPrompt: tooLong } }),
+    });
+    expect(res.status).toBe(400);
   });
 });
 
