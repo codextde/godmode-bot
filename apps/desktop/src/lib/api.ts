@@ -40,6 +40,14 @@ import type {
   LocalChromeProfile,
   McpServer,
   McpServerInput,
+  MessagingChat,
+  MessagingConnection,
+  MessagingConnectionInput,
+  MessagingConnectionPatch,
+  MessagingCredentials,
+  MessagingUser,
+  MessagingUserStatus,
+  MessagingVerifyResult,
   MissingLogin,
   MissingLoginPatch,
   ModelCatalog,
@@ -71,6 +79,7 @@ import type {
   WebhookRotateResult,
   Workspace,
   WorkspaceInput,
+  WorkspaceSource,
 } from "@godmode/shared";
 import { getCoreInfo } from "./core";
 
@@ -252,6 +261,7 @@ export const api = {
     create: (input: WorkspaceInput) => post<Workspace>("/api/workspaces", input),
     update: (id: string, input: Partial<WorkspaceInput>) => patch<Workspace>(`/api/workspaces/${id}`, input),
     delete: (id: string, force = false) => del<{ ok: true }>(`/api/workspaces/${id}`, { force: force ? 1 : undefined }),
+    syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/workspaces/${id}/sources/${sourceId}/sync`),
   },
 
   agents: {
@@ -386,6 +396,22 @@ export const api = {
     test: (id: string) => post<{ ok: boolean; tools?: string[]; error?: string }>(`/api/mcp-servers/${id}/test`),
   },
 
+  messaging: {
+    list: () => get<MessagingConnection[]>("/api/messaging"),
+    /** Check tokens without saving them: who the bot is, and anything to know before connecting. */
+    verify: (credentials: MessagingCredentials) => post<MessagingVerifyResult>("/api/messaging/verify", { credentials }),
+    /** Open access ("anyone") needs a vault grant. */
+    create: (input: MessagingConnectionInput, grant?: string) => request<MessagingConnection>("POST", "/api/messaging", input, withGrant(grant)),
+    update: (id: string, input: MessagingConnectionPatch, grant?: string) => request<MessagingConnection>("PATCH", `/api/messaging/${id}`, input, withGrant(grant)),
+    delete: (id: string) => del<{ ok: true }>(`/api/messaging/${id}`),
+    users: (id: string) => get<MessagingUser[]>(`/api/messaging/${id}/users`),
+    setUser: (id: string, userId: string, status: MessagingUserStatus) => patch<MessagingUser>(`/api/messaging/${id}/users/${userId}`, { status }),
+    removeUser: (id: string, userId: string) => del<{ ok: true }>(`/api/messaging/${id}/users/${userId}`),
+    chats: (id: string) => get<MessagingChat[]>(`/api/messaging/${id}/chats`),
+    /** Teams app package (zip) to upload in Teams. */
+    teamsApp: (id: string) => request<Blob>("GET", `/api/messaging/${id}/teams-app`),
+  },
+
   composio: {
     status: () => get<ComposioStatus>("/api/composio/status"),
     /** Force the core to re-validate the stored key */
@@ -405,7 +431,7 @@ export const api = {
   browser: {
     profiles: () => get<BrowserProfile[]>("/api/browser/profiles"),
     createProfile: (input: { name: string; workspaceId: string | null }) => post<BrowserProfile>("/api/browser/profiles", input),
-    updateProfile: (id: string, input: { name?: string; isDefault?: boolean }) => patch<BrowserProfile>(`/api/browser/profiles/${id}`, input),
+    updateProfile: (id: string, input: { name?: string; isDefault?: boolean; workspaceId?: string | null }) => patch<BrowserProfile>(`/api/browser/profiles/${id}`, input),
     deleteProfile: (id: string) => del<{ ok: true }>(`/api/browser/profiles/${id}`),
     launch: (id: string, headless?: boolean) => post<{ cdpUrl: string; port: number }>(`/api/browser/profiles/${id}/launch`, { headless }),
     stop: (id: string) => post<{ ok: true }>(`/api/browser/profiles/${id}/stop`),

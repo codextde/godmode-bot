@@ -1,5 +1,6 @@
 /**
- * Workspaces: groups of agents, logins, 2FA entries, MCP servers and browser profiles.
+ * Workspaces: groups of agents, logins, 2FA entries, MCP servers and browser profiles, plus the folders and
+ * repositories their agents work with.
  */
 import type { Workspace } from "@godmode/shared";
 import type { WorkspaceInput } from "@godmode/shared";
@@ -7,10 +8,11 @@ import { all, get, insert, run, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { listAgents, refreshAgentFiles, removeFromDelegateLists, stopAgentRuns, trashAgentRepo } from "../agents/service";
-import { deleteProfile } from "../browser/manager";
+import { deleteProfile, updateProfile } from "../browser/manager";
 import { reloadSchedules } from "../scheduler/scheduler";
 import { HttpError, badRequest, newId, notFound, now, slugify } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
+import { gitSourceRows, listSources, setSources, sourcesByWorkspace, trashClones } from "./workspaceSources";
 
 const log = logger("workspaces");
 
@@ -27,7 +29,10 @@ interface WorkspaceRow {
   updated_at: string;
 }
 
-function toModel(r: WorkspaceRow): Workspace {
+const SELECT = `SELECT w.*, (SELECT b.id FROM browser_profiles b WHERE b.workspace_id = w.id AND b.is_default = 1 ORDER BY b.created_at LIMIT 1) AS browser_profile_id
+  FROM workspaces w`;
+
+function toModel(r: WorkspaceRow & { browser_profile_id?: string | null }, sources = listSources(r.id)): Workspace {
   return {
     id: r.id,
     name: r.name,
@@ -37,6 +42,8 @@ function toModel(r: WorkspaceRow): Workspace {
     icon: r.icon,
     instructions: r.instructions,
     vmId: r.vm_id ?? null,
+    browserProfileId: r.browser_profile_id ?? null,
+    sources,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -56,11 +63,12 @@ function cleanName(name: string | undefined): string {
 }
 
 export function listWorkspaces(): Workspace[] {
-  return all<WorkspaceRow>("SELECT * FROM workspaces ORDER BY name COLLATE NOCASE ASC").map(toModel);
+  const sources = sourcesByWorkspace();
+  return all<WorkspaceRow>(`${SELECT} ORDER BY w.name COLLATE NOCASE ASC`).map((r) => toModel(r, sources.get(r.id) ?? []));
 }
 
 export function getWorkspace(id: string): Workspace {
-  const row = get<WorkspaceRow>("SELECT * FROM workspaces WHERE id = ?", id);
+  const row = get<WorkspaceRow>(`${SELECT} WHERE w.id = ?`, id);
   if (!row) throw notFound("Workspace");
   return toModel(row);
 }
@@ -80,25 +88,47 @@ export function createWorkspace(input: WorkspaceInput): Workspace {
     created_at: ts,
     updated_at: ts,
   };
-  insert("workspaces", { ...row });
+  const applySources = tx(() => {
+    insert("workspaces", { ...row });
+    const apply = input.sources ? setSources(row.id, input.sources) : undefined;
+    assignBrowserProfile(row.id, input.browserProfileId);
+    return apply;
+  });
+  applySources?.();
   bus.changed("workspaces");
   if (row.vm_id) assignmentsChanged();
-  return toModel(row);
+  return getWorkspace(row.id);
+}
+
+/** The workspace's agents browse with this profile unless they pick their own; null = the global default. */
+function assignBrowserProfile(workspaceId: string, profileId: string | null | undefined, current: string | null = null) {
+  if (profileId === undefined) return;
+  const next = profileId?.trim() || null;
+  if (next === current) return;
+  if (next) updateProfile(next, { workspaceId, isDefault: true });
+  else if (current) updateProfile(current, { isDefault: false });
 }
 
 export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Workspace {
   const current = getWorkspace(id);
   const name = patch.name !== undefined ? cleanName(patch.name) : undefined;
   const description = patch.description !== undefined ? patch.description.trim() : undefined;
-  update("workspaces", id, {
-    name,
-    description,
-    color: patch.color !== undefined ? patch.color.trim() || "violet" : undefined,
-    icon: patch.icon !== undefined ? patch.icon.trim() || "🗂️" : undefined,
-    instructions: patch.instructions?.trim(),
-    vm_id: normalizeVmId(patch.vmId),
-    updated_at: now(),
+  const vmId = normalizeVmId(patch.vmId);
+  const applySources = tx(() => {
+    update("workspaces", id, {
+      name,
+      description,
+      color: patch.color !== undefined ? patch.color.trim() || "violet" : undefined,
+      icon: patch.icon !== undefined ? patch.icon.trim() || "🗂️" : undefined,
+      instructions: patch.instructions?.trim(),
+      vm_id: vmId,
+      updated_at: now(),
+    });
+    const apply = patch.sources ? setSources(id, patch.sources) : undefined;
+    assignBrowserProfile(id, patch.browserProfileId, current.browserProfileId);
+    return apply;
   });
+  applySources?.();
   const next = getWorkspace(id);
   bus.changed("workspaces");
   if (next.vmId !== current.vmId) assignmentsChanged();
@@ -171,6 +201,7 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
 
   const agents = listAgents({ workspaceId: id }).filter((a) => a.workspaceId === id && !a.isDefault);
   for (const agent of agents) await stopAgentRuns(agent.id);
+  const clones = gitSourceRows(id);
 
   // Let the browser manager stop Chromium and clean up each profile; the cascade below removes leftovers.
   const profiles = all<{ id: string }>("SELECT id FROM browser_profiles WHERE workspace_id = ?", id);
@@ -192,6 +223,7 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
     removeFromDelegateLists(agents.map((a) => a.id));
   });
 
+  await trashClones(clones);
   for (const agent of agents) {
     try {
       const moved = await trashAgentRepo(agent);
