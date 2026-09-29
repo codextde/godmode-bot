@@ -648,6 +648,9 @@ export interface BrowserProfile {
   cookieCount: number;
   running: boolean;
   cdpUrl: string | null;
+  /** How the running browser was started; null while it isn't running. */
+  headless: boolean | null;
+  stealth: boolean | null;
   createdAt: ISODate;
   updatedAt: ISODate;
 }

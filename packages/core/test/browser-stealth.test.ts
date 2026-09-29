@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { browserUseConfig } from "../src/browser/browserUse";
 import { judgeBotSignals, type BotHeaders, type BotSignals } from "../src/browser/botCheck";
-import { headlessScreen, stealthArgs, withoutHeadless } from "../src/browser/stealth";
+import { headlessScreen, stealthArgs, windowedUserAgent, withoutHeadless } from "../src/browser/stealth";
 import { DEFAULT_SETTINGS } from "../src/services/settings";
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36";
@@ -58,6 +58,26 @@ describe("stealth launch", () => {
     expect(withoutHeadless(UA.replace("Chrome/", "HeadlessChrome/"))).toBe(UA);
     const edge = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0";
     expect(withoutHeadless(edge)).toBe(edge.replace("HeadlessChrome/", "Chrome/"));
+  });
+
+  test("learns the windowed user agent once per executable; failures aren't cached and never throw", async () => {
+    let launches = 0;
+    const ok = async () => {
+      launches++;
+      return { userAgent: UA.replace("Chrome/", "HeadlessChrome/"), kill: () => {}, exited: Promise.resolve(0) };
+    };
+    expect(await windowedUserAgent("/nonexistent/ok-chrome", ok)).toBe(UA);
+    expect(await windowedUserAgent("/nonexistent/ok-chrome", ok)).toBe(UA);
+    expect(launches).toBe(1);
+
+    let failures = 0;
+    const broken = async (): Promise<never> => {
+      failures++;
+      throw new Error("Chromium exited during startup");
+    };
+    expect(await windowedUserAgent("/nonexistent/broken-chrome", broken)).toBeNull();
+    expect(await windowedUserAgent("/nonexistent/broken-chrome", broken)).toBeNull();
+    expect(failures).toBe(2);
   });
 
   test("is on by default", () => {

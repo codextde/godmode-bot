@@ -50,6 +50,8 @@ const fakeProfile: BrowserProfile = {
   cookieCount: 0,
   running: false,
   cdpUrl: null,
+  headless: null,
+  stealth: null,
   createdAt: new Date(0).toISOString(),
   updatedAt: new Date(0).toISOString(),
 };

@@ -23,6 +23,8 @@ export interface RunningBrowser {
   startedAt: number;
   lastUsedAt: number;
   stopping: boolean;
+  /** Started just for a bot check or an import, which stop it again — unless someone else got it meanwhile. */
+  transient: boolean;
 }
 
 const running = new Map<string, RunningBrowser>();
@@ -59,7 +61,10 @@ export function unregisterBrowser(rb: RunningBrowser): boolean {
 /** Mark the profile browser as in use (defers idle shutdown). */
 export function touchBrowser(profileId: string) {
   const rb = running.get(profileId);
-  if (rb) rb.lastUsedAt = Date.now();
+  if (rb) {
+    rb.lastUsedAt = Date.now();
+    rb.transient = false;
+  }
 }
 
 /** Called with the browser when one starts and with null when it stops. */

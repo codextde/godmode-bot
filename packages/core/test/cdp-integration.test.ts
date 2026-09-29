@@ -210,6 +210,23 @@ suite("managed Chromium (CDP integration)", () => {
     }
   }, 60_000);
 
+  test("a browser started for the bot check is stopped again, unless someone else got it meanwhile", async () => {
+    updateSettings({ browser: { headless: true } });
+    const borrowed = manager.createProfile({ name: "Borrowed", workspaceId: null });
+    try {
+      await manager.botCheck(borrowed.id);
+      expect(manager.getProfile(borrowed.id).running).toBe(false);
+
+      const check = manager.botCheck(borrowed.id);
+      const joined = await manager.launchBrowser(borrowed.id);
+      await check;
+      expect(manager.getProfile(borrowed.id)).toMatchObject({ running: true, cdpUrl: joined.cdpUrl, headless: true, stealth: true });
+    } finally {
+      updateSettings({ browser: { headless: false } });
+      await manager.stopBrowser(borrowed.id);
+    }
+  }, 60_000);
+
   test("fills username and password by kind without a selector (and never into the focused wrong field)", async () => {
     await openPage(profileId, "/login");
     const user = await manager.fillIntoPage(profileId, { text: "alice@example.com", kind: "username", ...LOCAL });

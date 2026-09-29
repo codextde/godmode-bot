@@ -20,7 +20,7 @@ import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type Pag
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
-import { stealthArgs, windowedUserAgent } from "./stealth";
+import { stealthArgs, stopProbes, windowedUserAgent } from "./stealth";
 import { botCheckReport } from "./botCheck";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
 import { initLiveView, startLiveView, stopLiveView } from "./screencast";
@@ -60,6 +60,8 @@ function toProfile(r: ProfileRow): BrowserProfile {
     cookieCount: r.cookie_count,
     running: !!rb,
     cdpUrl: rb ? rb.httpUrl : null,
+    headless: rb ? rb.headless : null,
+    stealth: rb ? rb.stealth : null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -252,22 +254,29 @@ export async function launchBrowser(profileId: string, opts: { headless?: boolea
   return { cdpUrl: rb.httpUrl, port: rb.port };
 }
 
-async function ensureBrowser(profileId: string, opts: { headless?: boolean } = {}): Promise<RunningBrowser> {
+/** Anyone else getting the browser keeps it running after a transient user (bot check, import) is done. */
+function claim(rb: RunningBrowser): RunningBrowser {
+  rb.transient = false;
+  return rb;
+}
+
+/** `transient`: a browser this call starts is only borrowed — see `RunningBrowser.transient`. */
+async function ensureBrowser(profileId: string, opts: { headless?: boolean; transient?: boolean } = {}): Promise<RunningBrowser> {
   const pendingStop = stopping.get(profileId);
   if (pendingStop) await pendingStop;
   const current = getRunning(profileId);
   if (current) {
     current.lastUsedAt = Date.now();
-    return current;
+    return claim(current);
   }
   const inflight = launching.get(profileId);
-  if (inflight) return inflight;
+  if (inflight) return inflight.then(claim);
   const p = startBrowser(profileId, opts).finally(() => launching.delete(profileId));
   launching.set(profileId, p);
-  return p;
+  return opts.transient ? p : p.then(claim);
 }
 
-async function startBrowser(profileId: string, opts: { headless?: boolean }): Promise<RunningBrowser> {
+async function startBrowser(profileId: string, opts: { headless?: boolean; transient?: boolean }): Promise<RunningBrowser> {
   const profile = requireRow(profileId);
   ensureDir(profile.user_data_dir);
   const settings = getSettings();
@@ -336,6 +345,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
     startedAt: Date.now(),
     lastUsedAt: Date.now(),
     stopping: false,
+    transient: !!opts.transient && !!proc,
   };
 
   // Navigation / new tabs count as activity (this is how browser-use usage keeps the browser alive).
@@ -445,6 +455,7 @@ async function shutdownOne(rb: RunningBrowser) {
 
 export async function shutdownBrowsers(): Promise<void> {
   stopIdleWatcher();
+  stopProbes();
   await Promise.all(allRunning().map((rb) => stopBrowser(rb.profileId).catch((err) => log.warn("stop failed", err))));
 }
 
@@ -603,14 +614,13 @@ export async function navigate(profileId: string, url: string): Promise<void> {
 /** What bot detection sees in the profile's browser; a browser started just for the check is stopped again. */
 export async function botCheck(profileId: string): Promise<BotCheckReport> {
   requireRow(profileId);
-  const wasRunning = !!getRunning(profileId);
-  const rb = await ensureBrowser(profileId);
+  const rb = await ensureBrowser(profileId, { transient: true });
   rb.lastUsedAt = Date.now();
   try {
     const { product } = await rb.client.send<{ product: string }>("Browser.getVersion");
     return await botCheckReport(rb.client, { profileId, browser: product.replace(/^HeadlessChrome/, "Chrome"), headless: rb.headless, stealth: rb.stealth });
   } finally {
-    if (!wasRunning) await stopBrowser(profileId);
+    if (rb.transient) await stopBrowser(profileId);
   }
 }
 
@@ -642,17 +652,16 @@ export async function browserMcpServer(agent: Agent, profileId?: string | null):
   }
 
   const profile = profileId ? getProfile(profileId) : resolveProfileForAgent(agent);
-  const headless = agent.browser.headless ?? settings.browser.headless;
-  const { cdpUrl } = await launchBrowser(profile.id, { headless });
+  const rb = await ensureBrowser(profile.id, { headless: agent.browser.headless ?? settings.browser.headless });
 
   const cfg = config();
   const configDir = join(cfg.dataDir, "browser-use", profile.id, agent.id);
   const workspace = agent.repoPath ? join(agent.repoPath, "workspace") : join(cfg.dataDir, "browser-use", profile.id, agent.id, "files");
   writeBrowserUseConfig({
     configDir,
-    cdpUrl,
-    headless,
-    stealth: settings.browser.stealth,
+    cdpUrl: rb.httpUrl,
+    headless: rb.headless,
+    stealth: rb.stealth,
     userDataDir: profile.userDataDir,
     downloadsPath: join(workspace, "downloads"),
     fileSystemPath: join(cfg.dataDir, "browser-use", profile.id, agent.id, "files"),
@@ -703,13 +712,12 @@ export async function importChromeSession(profileId: string, input: ChromeImport
 
   // Import into the running browser, or start it headless just for the import and stop it afterwards
   // (Browser.close flushes the cookie store to disk).
-  const wasRunning = !!getRunning(profileId);
-  const rb = await ensureBrowser(profileId, wasRunning ? {} : { headless: true });
+  const rb = await ensureBrowser(profileId, { headless: true, transient: true });
   let result: { set: number; failed: number; total: number };
   try {
     result = await importer.injectCookies(rb.client, cookies);
   } finally {
-    if (!wasRunning) await stopBrowser(profileId);
+    if (rb.transient) await stopBrowser(profileId);
   }
 
   update("browser_profiles", profileId, {

@@ -1,6 +1,6 @@
 /**
  * Bot-detection hardening for the Chromium Godmode launches, so sites see a regular Chrome:
- * - `navigator.webdriver` stays false (`--disable-blink-features=AutomationControlled`).
+ * - `--disable-blink-features=AutomationControlled` keeps `navigator.webdriver` false on every Chromium build.
  * - Headless: every request, frame and worker carries the user agent the same Chrome sends with a window (learned once
  *   per executable from a throwaway headless launch), and the screen is a desktop display larger than the window.
  * browser-use doesn't emulate a viewport over it either (see browserUse.ts), so a page never outgrows its window.
@@ -8,8 +8,11 @@
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { logger } from "../log";
 import { sleep } from "../util";
-import { launchChrome, type ChromeProcess } from "./chrome";
+import { launchChrome, type ChromeProcess, type LaunchOptions } from "./chrome";
+
+const log = logger("browser");
 
 /** A common desktop display minus the menu bar (macOS) or the taskbar (Windows), in `--screen-info` syntax. */
 export function headlessScreen(platform: NodeJS.Platform = process.platform): string {
@@ -32,10 +35,13 @@ export function withoutHeadless(userAgent: string): string {
   return userAgent.replace(/HeadlessChrome\//g, "Chrome/");
 }
 
+type Launch = (opts: LaunchOptions) => Promise<Pick<ChromeProcess, "userAgent" | "kill" | "exited">>;
+
 const userAgents = new Map<string, Promise<string | null>>();
+const probes = new Set<Pick<ChromeProcess, "kill">>();
 
 /** The user agent `executable` sends with a window; null when it can't be learned (the next launch tries again). */
-export function windowedUserAgent(executable: string): Promise<string | null> {
+export function windowedUserAgent(executable: string, launch: Launch = launchChrome): Promise<string | null> {
   let key = executable;
   try {
     key += `@${statSync(executable).mtimeMs}`;
@@ -44,7 +50,7 @@ export function windowedUserAgent(executable: string): Promise<string | null> {
   }
   let ua = userAgents.get(key);
   if (!ua) {
-    ua = probeUserAgent(executable);
+    ua = probeUserAgent(executable, launch);
     userAgents.set(key, ua);
     void ua.then((v) => {
       if (!v) userAgents.delete(key);
@@ -53,19 +59,35 @@ export function windowedUserAgent(executable: string): Promise<string | null> {
   return ua;
 }
 
-async function probeUserAgent(executable: string): Promise<string | null> {
-  const dir = mkdtempSync(join(tmpdir(), "godmode-ua-"));
-  let proc: ChromeProcess | null = null;
+async function probeUserAgent(executable: string, launch: Launch): Promise<string | null> {
+  let dir: string | null = null;
+  let proc: Awaited<ReturnType<Launch>> | null = null;
   try {
-    proc = await launchChrome({ executable, userDataDir: dir, headless: true, timeoutMs: 15_000 });
+    dir = mkdtempSync(join(tmpdir(), "godmode-ua-"));
+    proc = await launch({ executable, userDataDir: dir, headless: true, timeoutMs: 15_000 });
+    probes.add(proc);
     return proc.userAgent ? withoutHeadless(proc.userAgent) : null;
-  } catch {
+  } catch (err) {
+    log.warn("could not learn the browser's user agent; headless keeps its own", err);
     return null;
   } finally {
     if (proc) {
       proc.kill("SIGKILL");
       await Promise.race([proc.exited, sleep(3000)]);
+      probes.delete(proc);
     }
-    rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    if (dir) {
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      } catch {
+        /* a leftover temp profile is harmless */
+      }
+    }
   }
+}
+
+/** Kill user-agent probes still running (core shutdown). */
+export function stopProbes() {
+  for (const proc of probes) proc.kill("SIGKILL");
+  probes.clear();
 }

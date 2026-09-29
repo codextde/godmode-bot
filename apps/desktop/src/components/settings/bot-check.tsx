@@ -33,26 +33,28 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
   const qc = useQueryClient();
   const { data: profiles } = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
   const profile = profiles?.find((p) => p.isDefault && !p.workspaceId) ?? null;
-  const report = useQuery<BotCheckReport | null>({ queryKey: qk.botCheck, queryFn: () => null, enabled: false, initialData: null, staleTime: Infinity });
+  const key = [...qk.botCheck, profile?.id ?? ""];
+  const report = useQuery<BotCheckReport | null>({ queryKey: key, queryFn: () => null, enabled: false, initialData: null, staleTime: Infinity });
 
   const run = useMutation({
     mutationFn: async (restart: boolean) => {
       if (!profile) throw new Error("The default browser profile isn't ready yet.");
       if (restart) {
         await api.browser.stop(profile.id);
-        await api.browser.launch(profile.id);
+        await api.browser.launch(profile.id, profile.headless ?? undefined);
       }
       return api.browser.botCheck(profile.id);
     },
-    onSuccess: (r, restart) => {
-      qc.setQueryData(qk.botCheck, r);
-      if (restart) void qc.invalidateQueries({ queryKey: qk.browserProfiles });
+    onSuccess: (r) => {
+      qc.setQueryData([...qk.botCheck, r.profileId], r);
+      void qc.invalidateQueries({ queryKey: qk.browserProfiles });
     },
     onError: (e) => toastApiError(e, "Bot check failed", qc),
   });
 
   const r = report.data;
-  const outdated = !!r && r.stealth !== browser.stealth;
+  const restartNeeded = !!profile?.running && profile.stealth !== null && profile.stealth !== browser.stealth;
+  const stale = !!r && !restartNeeded && r.stealth !== browser.stealth;
   const disabled = !browser.enabled || !profile;
 
   if (!r && !run.isPending) {
@@ -108,20 +110,30 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
       </div>
 
       <AnimatePresence initial={false}>
-        {outdated && !run.isPending && (
+        {(restartNeeded || stale) && !run.isPending && (
           <motion.div
+            key={restartNeeded ? "restart" : "stale"}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-warning/25 bg-warning/[0.06] px-3.5 py-2.5 text-xs">
+            <div
+              className={cn(
+                "mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3.5 py-2.5 text-xs",
+                restartNeeded ? "border-warning/25 bg-warning/[0.06]" : "bg-paper-2/60 py-3",
+              )}
+            >
               <span className="min-w-0 flex-1 text-foreground/85">
-                The browser is still running with stealth {r.stealth ? "on" : "off"}. Restart it to check the new setting — agents using it lose their open tabs.
+                {restartNeeded
+                  ? `The browser is still running with stealth ${profile?.stealth ? "on" : "off"}. Restart it to apply the new setting — agents using it lose their open tabs.`
+                  : `Stealth is ${browser.stealth ? "on" : "off"} now — check again to see what changes.`}
               </span>
-              <Button size="xs" variant="outline" onClick={() => run.mutate(true)}>
-                <RotateCw /> Restart & check
-              </Button>
+              {restartNeeded && (
+                <Button size="xs" variant="outline" onClick={() => run.mutate(true)} disabled={disabled}>
+                  <RotateCw /> Restart & check
+                </Button>
+              )}
             </div>
           </motion.div>
         )}
@@ -139,7 +151,7 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
                   transition={{ delay: i * 0.025 }}
                   className="grid grid-cols-[auto_1fr] items-start gap-x-3 border-b px-3.5 py-2.5 last:border-b-0 @lg:grid-cols-[auto_9rem_1fr]"
                 >
-                  <s.icon className={cn("mt-px size-4", s.text)} aria-label={s.label} />
+                  <s.icon role="img" className={cn("mt-px size-4", s.text)} aria-label={s.label} />
                   <span className="text-[13px] font-medium">{c.label}</span>
                   <span className="col-start-2 text-xs leading-relaxed break-words text-muted-foreground @lg:col-start-3 @lg:pt-px">{c.detail}</span>
                 </motion.li>
@@ -162,7 +174,12 @@ function Meter({ report }: { report: BotCheckReport }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="flex items-center gap-2" aria-label={`${v.passed} of ${report.checks.length} checks passed`}>
+        <div
+          tabIndex={0}
+          role="img"
+          className="flex items-center gap-2 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          aria-label={`${v.passed} of ${report.checks.length} checks passed`}
+        >
           <div className="flex gap-[3px]">
             {report.checks.map((c) => (
               <span key={c.id} className={cn("h-3.5 w-1.5 rounded-full", STATUS[c.status].bar, c.status === "pass" && "opacity-80")} />
