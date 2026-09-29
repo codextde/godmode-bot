@@ -129,7 +129,7 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
         <Link2 className="size-3.5" /> Connected accounts
         <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{connections.length}</span>
       </h2>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 @3xl:grid-cols-2">
         {groups.map((g) => (
           <div key={g.key} className="rounded-xl border bg-card p-2 shadow-card">
             <div className="flex items-center gap-2 px-2.5 pt-1.5 pb-2 text-xs font-medium text-muted-foreground">

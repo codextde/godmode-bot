@@ -38,7 +38,7 @@ export function AgentPicker({
           type="button"
           aria-label={`Agent: ${current?.name ?? "choose"}`}
           className={cn(
-            "flex h-8 max-w-[13rem] items-center gap-2 rounded-lg border bg-card pr-2 pl-1 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+            "flex h-8 max-w-[13rem] min-w-0 items-center gap-2 rounded-lg border bg-card pr-2 pl-1 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
             className,
           )}
         >
@@ -49,7 +49,7 @@ export function AgentPicker({
               <Bot className="size-4 text-muted-foreground" />
             </span>
           )}
-          <span className="truncate font-medium">{current?.name ?? "Choose agent"}</span>
+          <span className="truncate font-medium @max-md/composer:sr-only">{current?.name ?? "Choose agent"}</span>
           <ChevronDown className="size-3.5 shrink-0 opacity-60" />
         </button>
       </PopoverTrigger>

@@ -31,6 +31,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useSidebar } from "@/components/ui/sidebar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useModelLabel } from "@/components/runs/run-status";
 import { folderName, useShortPath } from "@/components/chat/folder-picker";
@@ -132,17 +133,17 @@ function AgentHeader({ agent }: { agent: Agent }) {
 
   return (
     <div className="relative border-b">
-      <div className="relative px-8 pt-6 pb-6">
+      <div className="relative px-5 pt-5 pb-5 @2xl:px-8 @2xl:pt-6 @2xl:pb-6">
         <Link to="/agents" className="mb-4 inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
           <ArrowLeft className="size-3.5" /> Agents
         </Link>
-        <div className="flex flex-wrap items-start gap-5">
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-4 @2xl:gap-x-5">
           <div className={cn("rounded-2xl", live && "glow-border")}>
-            <AgentAvatar agent={agent} size="xl" />
+            <AgentAvatar agent={agent} size="xl" className="@max-xl:size-12 @max-xl:rounded-xl @max-xl:text-2xl" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-[26px] leading-tight font-medium tracking-[-0.03em]">{agent.name}</h1>
+              <h1 className="truncate text-[23px] leading-tight font-medium tracking-[-0.03em] @2xl:text-[26px]">{agent.name}</h1>
               {agent.isDefault && (
                 <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Built-in</span>
               )}
@@ -167,7 +168,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
               )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 @4xl:w-auto">
             <Tooltip>
               <TooltipTrigger asChild>
                 <label className="mr-1 flex cursor-pointer items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-xs text-muted-foreground shadow-card">
@@ -177,7 +178,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
                     disabled={toggle.isPending}
                     aria-label={agent.enabled ? "Disable agent" : "Enable agent"}
                   />
-                  {agent.enabled ? "Enabled" : "Disabled"}
+                  <span className="@max-md:sr-only">{agent.enabled ? "Enabled" : "Disabled"}</span>
                 </label>
               </TooltipTrigger>
               <TooltipContent>{agent.enabled ? "Disable: routines and delegations stop" : "Enable this agent"}</TooltipContent>
@@ -215,13 +216,14 @@ function AgentHeader({ agent }: { agent: Agent }) {
 }
 
 function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
+  const { isMobile } = useSidebar();
   return (
     <nav
       aria-label="Agent sections"
       // Clear the macOS title-bar drag region in the desktop shell
-      className={cn("sticky z-20 border-b bg-background px-6", isTauri && isMac ? "top-7" : "top-0")}
+      className={cn("sticky z-20 border-b bg-background px-3 @2xl:px-6", isTauri && isMac && !isMobile ? "top-7" : "top-0")}
     >
-      <div className="flex gap-1 overflow-x-auto py-2 [scrollbar-width:none]">
+      <div className="scroll-fade-x flex gap-1 overflow-x-auto py-2 [scrollbar-width:none]">
         {TABS.map((t) => {
           const isActive = t.id === active;
           const Icon = t.icon;
@@ -256,7 +258,7 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
 function HeaderSkeleton() {
   return (
     <div>
-      <div className="border-b px-8 pt-12 pb-6">
+      <div className="border-b px-5 pt-12 pb-6 @2xl:px-8">
         <div className="flex items-start gap-5">
           <Skeleton className="size-16 rounded-xl" />
           <div className="flex-1 space-y-2.5">
@@ -272,7 +274,7 @@ function HeaderSkeleton() {
         ))}
       </div>
       <PageBody className="pt-6">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
           {Array.from({ length: 4 }, (_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl" />
           ))}

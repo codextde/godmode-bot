@@ -87,7 +87,7 @@ export default function BrowserPage() {
             }
           />
         ) : (
-          <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-6 @5xl:grid-cols-[300px_minmax(0,1fr)]">
             <aside className="space-y-3">
               <h2 className="eyebrow px-1">Profiles</h2>
               <ProfileList profiles={profiles} isLoading={profilesQuery.isLoading} selectedId={selected?.id ?? null} onSelect={select} actions={actions} />
@@ -98,7 +98,7 @@ export default function BrowserPage() {
               ) : (
                 <Skeleton className="aspect-[16/10] w-full rounded-xl" />
               )}
-              <div className="grid gap-6 2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+              <div className="grid grid-cols-1 gap-6 @7xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                 <ImportSessionsCard profiles={profiles} targetId={selected?.id ?? null} onTargetChange={select} />
                 <ProfileUseCard />
               </div>

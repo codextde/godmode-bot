@@ -289,10 +289,10 @@ export function AgentForm({
       className="relative"
       noValidate
     >
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_240px]">
+      <div className="grid grid-cols-1 gap-6 @5xl:grid-cols-[minmax(0,1fr)_240px]">
         <div className="min-w-0 space-y-5">
           <FormSection id="identity" title="Identity" description="How this agent shows up across Godmode.">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+            <div className="flex flex-col gap-5 @lg:flex-row @lg:items-start">
               <div className="flex flex-col items-center gap-3">
                 <AvatarPicker id="agent-avatar" avatar={values.avatar} color={values.color} onChange={(v) => set("avatar", v)} />
               </div>
@@ -353,7 +353,7 @@ export function AgentForm({
           </FormSection>
 
           <FormSection id="brain" title="Model & workspace" description="Which Claude model powers it, how hard it thinks, and where it lives.">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="agent-model">Model</Label>
                 <Select
@@ -382,7 +382,7 @@ export function AgentForm({
                 value={(values.effort && effortForModel(efforts, values.effort)) || "default"}
                 onValueChange={(v) => v && set("effort", v === "default" ? null : (v as Effort))}
                 aria-labelledby="agent-effort-label"
-                className="w-full flex-wrap sm:flex-nowrap"
+                className="w-full flex-wrap @xl:flex-nowrap"
               >
                 <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
                   Default
@@ -419,7 +419,7 @@ export function AgentForm({
                   value={values.secretAccess}
                   onValueChange={(v) => void chooseSecretAccess(v as SecretAccessMode)}
                   aria-labelledby="secret-access-label"
-                  className="grid gap-3 sm:grid-cols-2"
+                  className="grid grid-cols-1 gap-3 @xl:grid-cols-2"
                 >
                   <RadioCard
                     value="fill"
@@ -481,7 +481,7 @@ export function AgentForm({
                 onChange={(v) => set("canManageAgents", v)}
               />
 
-              <div className="grid gap-1.5 sm:max-w-xs">
+              <div className="grid gap-1.5 @md:max-w-xs">
                 <Label htmlFor="agent-budget">Max budget per run</Label>
                 <div className="relative">
                   <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
@@ -514,7 +514,7 @@ export function AgentForm({
                 checked={values.browserEnabled}
                 onChange={(v) => set("browserEnabled", v)}
               />
-              <div className={cn("grid gap-4 sm:grid-cols-2", !values.browserEnabled && "pointer-events-none opacity-50")}>
+              <div className={cn("grid grid-cols-1 gap-4 @xl:grid-cols-2", !values.browserEnabled && "pointer-events-none opacity-50")}>
                 <BrowserProfileField value={values.browserProfileId} onChange={(v) => set("browserProfileId", v)} disabled={!values.browserEnabled} />
                 <div className="space-y-1.5">
                   <span id="agent-headless-label" className="text-sm font-medium">
@@ -582,7 +582,7 @@ export function AgentForm({
         </div>
 
         {/* Sticky preview + section nav on wide screens */}
-        <aside className="hidden xl:block">
+        <aside className="hidden @5xl:block">
           <div className="sticky top-6 space-y-4">
             <div className="rounded-xl border bg-card p-4 shadow-card">
               <div className="eyebrow mb-3">Preview</div>
@@ -634,7 +634,7 @@ export function AgentForm({
               </span>
             )}
           </div>
-          <span className="hidden items-center gap-1 text-xs text-muted-foreground md:flex">
+          <span className="hidden items-center gap-1 text-xs text-muted-foreground @2xl:flex">
             <Kbd>{modKey}S</Kbd>
           </span>
           {onCancel && (
@@ -917,7 +917,7 @@ function SubagentsEditor({
             className="space-y-3 rounded-lg border bg-paper-2 p-3.5"
           >
             <div className="flex items-start gap-3">
-              <div className="grid flex-1 gap-3 sm:grid-cols-2">
+              <div className="grid flex-1 grid-cols-1 gap-3 @xl:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor={`sub-name-${i}`} className="text-xs">
                     Name
@@ -948,7 +948,7 @@ function SubagentsEditor({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="space-y-1.5 @xl:col-span-2">
                   <Label htmlFor={`sub-desc-${i}`} className="text-xs">
                     When to use it
                   </Label>
@@ -960,7 +960,7 @@ function SubagentsEditor({
                     className="h-8 text-sm"
                   />
                 </div>
-                <div className="space-y-1.5 sm:col-span-2">
+                <div className="space-y-1.5 @xl:col-span-2">
                   <Label htmlFor={`sub-prompt-${i}`} className="text-xs">
                     Prompt
                   </Label>

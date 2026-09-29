@@ -62,7 +62,7 @@ export function AboutSection({ version }: { version: string | undefined }) {
         <h3 className="eyebrow flex items-center gap-2">
           <Heart className="size-3.5" /> Built on the shoulders of
         </h3>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-3 @xl:grid-cols-2">
           {CREDITS.map((c, i) => (
             <motion.button
               key={c.name}

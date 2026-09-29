@@ -101,7 +101,7 @@ export default function AgentsPage() {
         description={`Your AI coworkers in ${scopeName}. Each has its own memory, schedule and tools.`}
         actions={
           <>
-            <Button variant="outline" onClick={() => navigate(`/?prompt=${encodeURIComponent(CREATE_PROMPT)}`)} className="hidden sm:inline-flex">
+            <Button variant="outline" onClick={() => navigate(`/?prompt=${encodeURIComponent(CREATE_PROMPT)}`)} className="hidden @md:inline-flex">
               <Sparkles /> Ask Godmode
             </Button>
             <Button asChild>
@@ -154,7 +154,7 @@ export default function AgentsPage() {
         </div>
 
         {agentsQ.isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
             {Array.from({ length: 6 }, (_, i) => (
               <div key={i} className="rounded-xl border bg-card p-4 shadow-card">
                 <div className="flex items-center gap-3">
@@ -216,7 +216,7 @@ export default function AgentsPage() {
             }
           />
         ) : (
-          <motion.div layout className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <motion.div layout className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
             {visible.map((agent, i) => (
               <motion.div
                 key={agent.id}

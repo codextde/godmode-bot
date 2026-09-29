@@ -226,7 +226,7 @@ function KeyRow({ meta, state, onOpenComposio }: { meta: KeyMeta; state: SecretR
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="flex flex-col gap-2 pt-3 sm:flex-row sm:pl-[3.375rem]">
+            <div className="flex flex-col gap-2 pt-3 @xl:flex-row @xl:pl-[3.375rem]">
               <PasswordInput
                 aria-label={meta.label}
                 placeholder={meta.placeholder ?? "Paste the key"}

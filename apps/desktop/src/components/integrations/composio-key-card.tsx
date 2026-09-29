@@ -124,7 +124,7 @@ export function ComposioKeyCard({ status, loading }: { status: ComposioStatus | 
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="flex flex-col gap-2 pt-4 sm:flex-row">
+            <div className="flex flex-col gap-2 pt-4 @md:flex-row">
               <PasswordInput
                 aria-label="Composio API key"
                 placeholder="ak_…"

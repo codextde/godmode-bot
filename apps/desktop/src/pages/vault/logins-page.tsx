@@ -334,7 +334,7 @@ function TrustStrip() {
     { icon: <ScrollText />, title: "Every use is audited", text: "See who used what in Settings → Security." },
   ];
   return (
-    <div className="grid gap-px overflow-hidden rounded-xl border bg-border shadow-card sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border bg-border shadow-card @3xl:grid-cols-3">
       {items.map((it) => (
         <div key={it.title} className="flex items-start gap-3 bg-card px-4 py-3">
           <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md bg-brand-soft text-brand-strong [&_svg]:size-4">{it.icon}</div>
@@ -358,8 +358,8 @@ function ListSkeleton() {
             <Skeleton className="h-3.5 w-40" />
             <Skeleton className="h-3 w-24" />
           </div>
-          <Skeleton className="hidden h-3.5 w-32 md:block" />
-          <Skeleton className="hidden h-3.5 w-24 md:block" />
+          <Skeleton className="hidden h-3.5 w-32 @3xl:block" />
+          <Skeleton className="hidden h-3.5 w-24 @3xl:block" />
           <Skeleton className="size-8 rounded-md" />
         </div>
       ))}

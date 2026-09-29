@@ -90,9 +90,10 @@ export default function RoutinesPage() {
       />
       <PageBody className="space-y-6">
         {scoped.length > 0 && (
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 @xl:grid-cols-3">
             <SummaryTile icon={<Zap />} label="Active routines" value={`${counts.active}`} hint={counts.paused ? `${counts.paused} paused` : "All running on schedule"} />
             <SummaryTile
+              className="order-last col-span-2 @xl:order-none @xl:col-span-1"
               icon={<Clock />}
               label="Next up"
               value={next?.nextRunAt ? formatDistanceToNowStrict(new Date(next.nextRunAt), { addSuffix: true }) : "—"}
@@ -242,6 +243,7 @@ function SummaryTile({
   hint,
   tone,
   onClick,
+  className,
 }: {
   icon: ReactNode;
   label: string;
@@ -249,6 +251,7 @@ function SummaryTile({
   hint?: ReactNode;
   tone?: "error";
   onClick?: () => void;
+  className?: string;
 }) {
   const Comp = onClick ? "button" : "div";
   return (
@@ -258,6 +261,7 @@ function SummaryTile({
       className={cn(
         "min-w-0 rounded-xl border bg-card p-4 text-left shadow-card",
         onClick && "transition hover:border-foreground/15 hover:shadow-float focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+        className,
       )}
     >
       <div className={cn("eyebrow flex items-center gap-2 [&_svg]:size-3.5", tone === "error" && "text-destructive!")}>

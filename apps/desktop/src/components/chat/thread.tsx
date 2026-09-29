@@ -40,7 +40,7 @@ export function Thread({ messages, agent, inflight, queuedMessageIds, onStop, st
   return (
     <div className="relative min-h-0 flex-1">
       <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain" tabIndex={-1} aria-label="Messages">
-        <div ref={contentRef} className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 pt-6 pb-10 sm:px-6">
+        <div ref={contentRef} className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 pt-6 pb-10 @xl:px-6">
           {isEmpty && empty}
           {messages.map((m) => {
             const day = dayLabel(m.createdAt);

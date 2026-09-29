@@ -73,7 +73,7 @@ function ExportCard() {
           if (valid) exportMut.mutate();
         }}
       >
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="bk-pass">Backup passphrase</Label>
             <PasswordInput id="bk-pass" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="At least 8 characters" />

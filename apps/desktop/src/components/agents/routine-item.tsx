@@ -104,7 +104,7 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
   return (
     <div
       className={cn(
-        "group flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-card transition hover:border-foreground/15 hover:shadow-float md:flex-row md:items-center",
+        "group flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-card transition hover:border-foreground/15 hover:shadow-float @2xl:flex-row @2xl:items-center",
         !routine.enabled && "opacity-70",
       )}
     >
@@ -139,7 +139,7 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pl-12 md:pl-0">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 @md:pl-11 @2xl:pl-0">
         <div className="min-w-24 text-xs">
           <div className="eyebrow">Next run</div>
           {routine.enabled && next ? (

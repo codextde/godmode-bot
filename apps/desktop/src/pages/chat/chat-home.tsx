@@ -116,7 +116,7 @@ export default function ChatHome() {
     <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="relative min-h-full">
       <Backdrop />
 
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-5 pt-[12vh] pb-10 text-center sm:px-8">
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[8vh] pb-10 text-center @md:px-5 @xl:px-8 @2xl:pt-[12vh]">
         <motion.div {...fade(0)}>
           <span className="inline-flex items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-2.5 text-xs text-muted-foreground shadow-card">
             <LiveDot />
@@ -129,7 +129,7 @@ export default function ChatHome() {
             )}
           </span>
         </motion.div>
-        <motion.h1 {...fade(0.05)} className="heading-display mt-6 text-[40px] sm:text-[52px]">
+        <motion.h1 {...fade(0.05)} className="heading-display mt-6 text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]">
           {greeting(now)}
           {userName ? `, ${userName}` : ""}.
           <span className="block text-foreground/35">What should we get done?</span>
@@ -187,13 +187,13 @@ export default function ChatHome() {
           ))}
         </motion.div>
 
-        <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
+        <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
           <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
           <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>/</Kbd> commands <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere
         </motion.p>
       </div>
 
-      <div className="relative mx-auto w-full max-w-5xl space-y-10 px-5 pb-16 sm:px-8">
+      <div className="relative mx-auto w-full max-w-5xl space-y-10 px-4 pb-16 @md:px-5 @xl:px-8">
         <RunningNow agents={agents} />
         <RecentChats agents={agents} />
       </div>
@@ -271,7 +271,7 @@ function RecentChats({ agents }: { agents: Agent[] }) {
     return (
       <section>
         <Skeleton className="mb-3 h-4 w-32" />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
             <Skeleton key={i} className="h-28 rounded-xl" />
           ))}
@@ -289,7 +289,7 @@ function RecentChats({ agents }: { agents: Agent[] }) {
           Your agents <ArrowRight className="size-3" />
         </Link>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
         {recent.map((c, i) => (
           <RecentCard key={c.id} conversation={c} agent={agents.find((a) => a.id === c.agentId)} running={running.has(c.id) || !!c.running} index={i} />
         ))}

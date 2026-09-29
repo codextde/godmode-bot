@@ -51,7 +51,7 @@ export function RecentChats() {
                 <SidebarMenuButton
                   asChild
                   isActive={conversationId === c.id}
-                  className="h-auto py-1.5 group-focus-within/menu-item:pr-8! group-hover/menu-item:pr-8! group-has-data-[sidebar=menu-action]/menu-item:pr-2 data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
+                  className="h-auto py-1.5 group-focus-within/menu-item:pr-8! group-hover/menu-item:pr-8! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-8! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
                 >
                   <Link to={`/chat/${c.id}`} className="flex items-start gap-2">
                     <span className="mt-0.5 text-sm leading-none">{agent?.avatar ?? "💬"}</span>

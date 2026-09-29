@@ -129,7 +129,7 @@ export default function ActivityPage() {
                 <LiveDot /> Live now
                 <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{liveList.length}</span>
               </h2>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
                 {liveList.map((r) => (
                   <LiveCard key={r.runId} live={r} agent={agentById.get(r.agentId)} onOpen={() => setParam("run", r.runId)} />
                 ))}
