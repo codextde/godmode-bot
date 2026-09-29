@@ -13,22 +13,26 @@ import { join } from "node:path";
 import type { Agent, PullRequestState, Run, RunStatus, ServerEvent, Task, TaskInput, TaskPatch, TaskStatus, TaskType } from "@godmode/shared";
 import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES } from "@godmode/shared";
 import { config } from "../config";
-import { all, get, insert, run as sql, update } from "../db";
+import { all, get, getMeta, insert, run as sql, setMeta, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, conflict, newId, notFound, now, slugify } from "../util";
-import { redact } from "../vault/vault";
+import { containsSecret, redact } from "../vault/vault";
 import { getAgent } from "../agents/service";
-import { activeRunForConversation, cancelRun, waitForRun } from "../runner/runner";
+import { activeRunForConversation, cancelRun, getRun, waitForRun } from "../runner/runner";
 import { conversationExists, createConversation, sendMessage } from "../services/conversations";
 import { notify } from "../services/notifications";
-import { GitError, openPullRequest, prepareCheckout, pullRequestState, pushBranch, validBranchName, validRepoUrl } from "./git";
+import { branchDiff, commitWork, hideCredentials, openPullRequest, prepareCheckout, pullRequestState, pushBranch, validBranchName, validRepoUrl } from "./git";
 
 const log = logger("tasks");
 
 const PR_WATCH_INTERVAL_MS = 5 * 60_000;
 const POSITION_STEP = 1024;
 const SUMMARY_MAX = 20_000;
+const TERMINAL: ReadonlySet<RunStatus> = new Set(["succeeded", "failed", "cancelled"]);
+/** Statuses an agent's work (not the human) may move a task out of. */
+const WORKING: readonly TaskStatus[] = ["in_progress"];
+const STARTABLE: readonly TaskStatus[] = ["todo", "in_progress"];
 
 interface TaskRow {
   id: string;
@@ -47,6 +51,7 @@ interface TaskRow {
   pr_url: string | null;
   pr_number: number | null;
   pr_state: PullRequestState | null;
+  pushed_sha: string | null;
   summary: string | null;
   blocked_reason: string | null;
   started_at: string | null;
@@ -61,6 +66,8 @@ interface TaskRow {
 const activity = new Map<string, string>();
 /** Tasks being started or published (one at a time per task). */
 const busy = new Set<string>();
+/** Tasks the board asked to (re)start while they were busy: started once they are free. */
+const again = new Set<string>();
 let unsubscribe: (() => void) | null = null;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -214,6 +221,7 @@ function positionIn(workspaceId: string | null, status: TaskStatus, beforeId: st
   if (next - prev > 1e-6) return (prev + next) / 2;
   // Ran out of room between two neighbours: space the column out again.
   siblings.forEach((s, i) => sql("UPDATE tasks SET position = ? WHERE id = ?", (i + 1) * POSITION_STEP, s.id));
+  bus.changed("tasks");
   return idx * POSITION_STEP + POSITION_STEP / 2;
 }
 
@@ -227,10 +235,16 @@ export function createTask(input: TaskInput): Task {
   const status = input.status ? cleanStatus(input.status) : agentId ? "todo" : "backlog";
   const ts = now();
   const id = newId("tsk");
+  // Never reused (a branch or pull request of a deleted task may still carry its number).
+  const number = tx(() => {
+    const n = Math.max(Number(getMeta("task_number")) || 0, get<{ n: number | null }>("SELECT MAX(number) AS n FROM tasks")?.n ?? 0) + 1;
+    setMeta("task_number", String(n));
+    return n;
+  });
   insert("tasks", {
     id,
     workspace_id: workspaceId,
-    number: (get<{ n: number | null }>("SELECT MAX(number) AS n FROM tasks")?.n ?? 0) + 1,
+    number,
     title: cleanTitle(input.title),
     description: cleanDescription(input.description),
     type: cleanType(input.type),
@@ -276,8 +290,9 @@ export function updateTask(id: string, patch: TaskPatch): Task {
     !!agentId &&
     ((status !== current.status && (status === "todo" || (status === "in_progress" && !wasWorking))) ||
       ((status === "todo" || status === "in_progress") && reassigned));
-  if (wasWorking && (status !== "in_progress" || reassigned)) void stopWork(current);
+  // Start first: the restart owns the task before the old run's end is reported.
   if (starts) void dispatch(id);
+  if (wasWorking && (status !== "in_progress" || reassigned)) void stopWork(current);
   emit(id);
   return getTask(id);
 }
@@ -310,7 +325,9 @@ export async function deleteTask(id: string): Promise<void> {
 /** Stop and clean up every task of a workspace that is being deleted (its rows go with the workspace). */
 export async function removeWorkspaceTasks(workspaceId: string): Promise<void> {
   for (const t of all<TaskRow>("SELECT * FROM tasks WHERE workspace_id = ?", workspaceId)) {
+    const active = t.conversation_id ? activeRunForConversation(t.conversation_id) : null;
     await stopWork(t);
+    if (active) await waitForRun(active, 15_000).catch(() => {});
     rmSync(checkoutDir(t.id), { recursive: true, force: true });
   }
 }
@@ -339,9 +356,22 @@ export function reportBlocked(conversationId: string, reason: string): Task {
 /* Starting work                                                       */
 /* ------------------------------------------------------------------ */
 
-function block(id: string, reason: string) {
+/**
+ * Move a task because of its work (not the human): only from `from` — a move the human made meanwhile wins. A task
+ * that changes columns goes to the top, where the latest activity is. Returns whether it moved.
+ */
+function transition(id: string, status: TaskStatus, from: readonly TaskStatus[], blockedReason: string | null = null): boolean {
+  const t = get<{ workspace_id: string | null; status: TaskStatus; position: number }>("SELECT workspace_id, status, position FROM tasks WHERE id = ?", id);
+  if (!t || !from.includes(t.status)) return false;
+  const top = get<{ p: number | null }>("SELECT MIN(position) AS p FROM tasks WHERE workspace_id IS ? AND status = ? AND id != ?", t.workspace_id, status, id)?.p;
+  const position = t.status === status ? t.position : top == null ? POSITION_STEP : top - POSITION_STEP;
+  sql("UPDATE tasks SET status = ?, position = ?, blocked_reason = ?, updated_at = ? WHERE id = ?", status, position, blockedReason, now(), id);
+  return true;
+}
+
+function block(id: string, reason: string, from: readonly TaskStatus[] = WORKING) {
   activity.delete(id);
-  sql("UPDATE tasks SET status = 'blocked', blocked_reason = ?, updated_at = ? WHERE id = ?", redact(reason).slice(0, 2000), now(), id);
+  transition(id, "blocked", from, hideCredentials(redact(reason)).slice(0, 2000));
   emit(id);
 }
 
@@ -361,7 +391,7 @@ const TYPE_BRIEF: Record<TaskType, (t: { repo: string; base: string; branch: str
     "Research this thoroughly and answer with a well-structured report in Markdown: the key findings first, then details, sources (with links) and a recommendation where it helps.",
   coding: ({ repo, base, branch }) =>
     [
-      `You work in a fresh checkout of ${repo} (your current directory), on the branch \`${branch}\` created from \`${base}\`.`,
+      `You work in a fresh checkout of ${hideCredentials(repo)} (your current directory), on the branch \`${branch}\` created from \`${base}\`.`,
       "Implement the change, keep to the project's conventions, run its tests and linters when it has them, and commit your work with clear commit messages.",
       "Don't push and don't open a pull request: Godmode pushes the branch and opens the pull request when you finish.",
       "End with a summary of the changes — it becomes the pull request description.",
@@ -385,26 +415,29 @@ function taskPrompt(task: TaskRow, coding: { repo: string; base: string; branch:
 
 /** Start (or restart) the agent on a task in Todo / In progress. Never throws; problems block the task. */
 export async function dispatch(id: string): Promise<void> {
-  if (busy.has(id)) return;
+  if (busy.has(id)) {
+    again.add(id);
+    return;
+  }
   busy.add(id);
   try {
     let task = row(id);
-    if (!task || !task.agent_id || (task.status !== "todo" && task.status !== "in_progress")) return;
+    if (!task || !task.agent_id || !STARTABLE.includes(task.status)) return;
     let agent: Agent;
     try {
       agent = getAgent(task.agent_id);
     } catch {
-      return block(id, "The assigned agent doesn't exist anymore.");
+      return block(id, "The assigned agent doesn't exist anymore.", STARTABLE);
     }
-    if (!agent.enabled) return block(id, `${agent.name} is disabled — turn it on or assign another agent.`);
+    if (!agent.enabled) return block(id, `${agent.name} is disabled — turn it on or assign another agent.`, STARTABLE);
 
     const previous = task.conversation_id ? activeRunForConversation(task.conversation_id) : null;
     if (previous) {
       await cancelRun(previous, "Restarted from the task board").catch(() => {});
       await waitForRun(previous, 15_000).catch(() => {});
     }
-    const ts = now();
-    sql("UPDATE tasks SET status = 'in_progress', blocked_reason = NULL, started_at = ?, completed_at = NULL, updated_at = ? WHERE id = ?", ts, ts, id);
+    if (!transition(id, "in_progress", STARTABLE)) return;
+    sql("UPDATE tasks SET started_at = ?, completed_at = NULL WHERE id = ?", now(), id);
 
     let coding: { repo: string; base: string; branch: string } | null = null;
     let workDir: string | null = null;
@@ -426,8 +459,13 @@ export async function dispatch(id: string): Promise<void> {
     }
 
     task = row(id);
-    // Moved away (or reassigned) while the repository was being cloned.
-    if (!task || task.status !== "in_progress" || task.agent_id !== agent.id) return;
+    if (!task) {
+      // Deleted while the repository was being cloned.
+      if (workDir) rmSync(workDir, { recursive: true, force: true });
+      return;
+    }
+    // Moved away (or reassigned) while the repository was being cloned; a restart asked for meanwhile follows.
+    if (task.status !== "in_progress" || task.agent_id !== agent.id) return;
 
     let conversationId = task.conversation_id;
     const reusable =
@@ -449,10 +487,25 @@ export async function dispatch(id: string): Promise<void> {
     emit(id);
   } catch (err) {
     log.warn(`task ${id} could not start`, err);
-    block(id, err instanceof Error ? err.message : String(err));
+    block(id, err instanceof Error ? err.message : String(err), STARTABLE);
   } finally {
-    busy.delete(id);
+    release(id);
   }
+}
+
+/** The task is free again: start it if the board asked meanwhile, else handle a run that ended while it was busy. */
+function release(id: string) {
+  busy.delete(id);
+  if (again.delete(id)) void dispatch(id);
+  else void settle(id).catch((err) => log.warn(`task ${id}: could not settle`, err));
+}
+
+async function settle(id: string): Promise<void> {
+  const t = row(id);
+  if (!t || t.status !== "in_progress" || !t.conversation_id || !t.run_id || busy.has(id)) return;
+  if (activeRunForConversation(t.conversation_id)) return;
+  const latest = getRun(t.run_id);
+  if (TERMINAL.has(latest.status)) await finished(id, latest);
 }
 
 /* ------------------------------------------------------------------ */
@@ -469,8 +522,8 @@ function onBusEvent(event: ServerEvent) {
   if (!task) return;
   if (event.type === "run.started") {
     // A follow-up (review feedback, a question) puts a delivered or blocked task back to work.
-    if (event.run.status === "queued" && task.status !== "in_progress" && task.status !== "todo" && !busy.has(task.id)) {
-      sql("UPDATE tasks SET status = 'in_progress', blocked_reason = NULL, completed_at = NULL, updated_at = ? WHERE id = ?", now(), task.id);
+    if (event.run.status === "queued" && !busy.has(task.id) && transition(task.id, "in_progress", ["in_review", "blocked", "done", "cancelled", "backlog"])) {
+      sql("UPDATE tasks SET completed_at = NULL WHERE id = ?", task.id);
     }
     emit(task.id);
     return;
@@ -481,8 +534,10 @@ function onBusEvent(event: ServerEvent) {
 async function finished(id: string, run: Run): Promise<void> {
   const task = row(id);
   if (!task) return;
+  // Starting or publishing: handled once the task is free (settle).
+  if (busy.has(id)) return;
   // Another turn is already queued in the conversation, or the board moved the task away meanwhile.
-  if (latestRunId(run.conversationId) !== run.id || task.status !== "in_progress" || busy.has(id)) return emit(id);
+  if (latestRunId(run.conversationId) !== run.id || task.status !== "in_progress") return emit(id);
   const link = `/tasks?task=${id}`;
   if (run.status === "cancelled") return block(id, "Stopped before it finished.");
   if (run.status === "failed") {
@@ -500,20 +555,22 @@ async function finished(id: string, run: Run): Promise<void> {
   if (task.type === "coding" && task.branch) {
     busy.add(id);
     try {
-      await publish(requireRow(id), summary);
+      await publish(requireRow(id), summary, run.id);
     } finally {
-      busy.delete(id);
+      release(id);
     }
     return;
   }
-  deliver(id);
-  notify("success", `Task #${task.number} is ready for review`, task.title, link);
+  if (deliver(id, run.id)) notify("success", `Task #${task.number} is ready for review`, task.title, link);
 }
 
-function deliver(id: string) {
+/** In review — unless a newer turn (a follow-up) started meanwhile; its end decides then. */
+function deliver(id: string, runId: string): boolean {
   activity.delete(id);
-  sql("UPDATE tasks SET status = 'in_review', blocked_reason = NULL, updated_at = ? WHERE id = ?", now(), id);
+  const conv = get<{ conversation_id: string | null }>("SELECT conversation_id FROM tasks WHERE id = ?", id)?.conversation_id;
+  const moved = !!conv && latestRunId(conv) === runId && transition(id, "in_review", WORKING);
   emit(id);
+  return moved;
 }
 
 function prBody(task: TaskRow, summary: string | null): string {
@@ -526,22 +583,30 @@ function prBody(task: TaskRow, summary: string | null): string {
   ].join("\n");
 }
 
-/** Push the task's branch and open its pull request (once; later pushes update it). */
-async function publish(task: TaskRow, summary: string | null): Promise<void> {
+/**
+ * Commit and push the task's branch and open its pull request (once; later pushes update it). Nothing is pushed when
+ * the changes contain a secret from the vault; new env/key files are left out.
+ */
+async function publish(task: TaskRow, summary: string | null, runId: string): Promise<void> {
   const id = task.id;
   const dir = checkoutDir(id);
   const link = `/tasks?task=${id}`;
+  const title = redact(task.title);
   try {
     setActivity(id, "Pushing the branch…");
-    const { pushed } = await pushBranch({ dir, base: task.base_branch, branch: task.branch!, message: `${task.title} (#${task.number})` });
+    const { skipped } = await commitWork({ dir, message: `${title} (#${task.number})` });
+    if (skipped.length) notify("warning", `Task #${task.number}: files left out`, `Not committed because they look like secrets: ${skipped.join(", ")}`, link);
+    if (containsSecret(await branchDiff(dir, task.base_branch))) {
+      return block(id, `The changes on ${task.branch} contain a secret saved in the vault, so Godmode didn't push them. Remove it from the branch (the checkout is in ${dir}), then move the task to Todo.`);
+    }
+    const { pushed, sha } = await pushBranch({ dir, base: task.base_branch, branch: task.branch!, lastPushed: task.pushed_sha });
     if (!pushed) {
-      deliver(id);
-      notify("info", `Task #${task.number}: no code changes`, "The agent finished without changing the code.", link);
+      if (deliver(id, runId)) notify("info", `Task #${task.number}: no code changes`, "The agent finished without changing the code.", link);
       return;
     }
+    sql("UPDATE tasks SET pushed_sha = ? WHERE id = ?", sha, id);
     if (task.pr_url && task.pr_number && task.pr_state === "open") {
-      deliver(id);
-      notify("success", `Task #${task.number}: pull request updated`, task.title, link);
+      if (deliver(id, runId)) notify("success", `Task #${task.number}: pull request updated`, title, link);
       return;
     }
     setActivity(id, "Opening the pull request…");
@@ -550,15 +615,15 @@ async function publish(task: TaskRow, summary: string | null): Promise<void> {
       url: task.repo_url,
       base: task.base_branch,
       branch: task.branch!,
-      title: task.title,
+      title,
       body: redact(prBody(task, summary)),
     });
     if (pullRequest) sql("UPDATE tasks SET pr_url = ?, pr_number = ?, pr_state = ? WHERE id = ?", pullRequest.url, pullRequest.number, pullRequest.state, id);
-    deliver(id);
-    if (pullRequest?.number) notify("success", `Task #${task.number}: pull request #${pullRequest.number} is open`, task.title, link);
+    if (!deliver(id, runId)) return;
+    if (pullRequest?.number) notify("success", `Task #${task.number}: pull request #${pullRequest.number} is open`, title, link);
     else notify("warning", `Task #${task.number}: open the pull request`, `The branch ${task.branch} was pushed. ${problem ?? ""}`.trim(), link);
   } catch (err) {
-    const message = err instanceof GitError || err instanceof Error ? err.message : String(err);
+    const message = hideCredentials(err instanceof Error ? err.message : String(err));
     block(id, `Couldn't push the branch: ${message}`);
     notify("error", `Task #${task.number} is blocked`, message, link);
   }
@@ -570,11 +635,11 @@ export async function checkPullRequests(): Promise<void> {
   for (const task of open) {
     const state = await pullRequestState(checkoutDir(task.id), task.pr_url!).catch(() => null);
     if (!state || state === "open") continue;
-    const ts = now();
-    if (state === "merged") {
-      sql("UPDATE tasks SET pr_state = 'merged', status = 'done', completed_at = ?, updated_at = ? WHERE id = ? AND status = 'in_review'", ts, ts, task.id);
+    sql("UPDATE tasks SET pr_state = ?, updated_at = ? WHERE id = ?", state, now(), task.id);
+    if (state === "merged" && transition(task.id, "done", ["in_review"])) {
+      sql("UPDATE tasks SET completed_at = ? WHERE id = ?", now(), task.id);
       log.info(`task #${task.number}: pull request merged — done`);
-    } else sql("UPDATE tasks SET pr_state = 'closed', updated_at = ? WHERE id = ?", ts, task.id);
+    }
     emit(task.id);
   }
 }

@@ -324,9 +324,12 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   ever prompts) and checks out `godmode/<number>-<slug>` from `origin/<base>` (the task's, the workspace's, else the
   remote's default branch). The URL and resolved base are pinned on the task. The checkout is the conversation's
   working folder — the only folder inside the data directory allowed as one. When a run succeeds, Godmode commits what
-  the agent left uncommitted, pushes the branch (`--force-with-lease`) and opens a pull request with `gh pr create`
-  (body: the agent's summary, redacted); without `gh`, or for GitLab, the task links to the page that opens one.
-  A branch without commits on top of its base goes to review without a pull request.
+  the agent left uncommitted (new `.env`/key files are left out), refuses to push when the branch's diff contains a
+  secret from the vault, merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks
+  the task), and pushes with an explicit lease on what it saw — so nothing pushed meanwhile is overwritten. It then
+  opens a pull request with `gh pr create` (body: the agent's summary, redacted); without `gh`, or for GitLab, the task
+  links to the page that opens one. A branch without commits on top of its base goes to review without a pull request.
+  Restarting fast-forwards the checkout to the remote branch first.
 * **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
   `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
   `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
@@ -334,6 +337,13 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
 * **Moving on the board**: away from `in_progress` cancels the run (the UI asks first); into `todo` (or
   `in_progress`) with an agent starts it. Every 5 minutes, tasks in review with an open pull request are checked with
   `gh pr view`: merged → `done`, closed → noted on the task.
+* **Races**: one start or publish per task at a time; a start the board asks for meanwhile runs once the task is free,
+  and a run that ended meanwhile is handled then. Moves caused by the work (to In review, Blocked, Done) only apply
+  from the status the work expects — a move the human made meanwhile wins — and put the task at the top of its column.
+* **Agents managing the board**: `task_create` / `task_update` follow the delegation rules (no reveal-mode or unattended
+  computer agents from callers that couldn't use them, VM-kept runs stay off the host); coding tasks created by agents
+  use the workspace's repository; and a run working on a task can't start a manager agent (itself included), so tasks
+  can't spawn tasks without end. Task numbers are never reused.
 * **Restart**: tasks left `in_progress` without a live run are blocked ("Interrupted"), tasks waiting in `todo` with an
   agent are started. Deleting a task cancels its run and removes the checkout (the conversation stays); deleting a
   workspace counts its tasks as dependents.

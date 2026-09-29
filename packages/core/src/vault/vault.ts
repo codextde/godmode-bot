@@ -344,6 +344,12 @@ function loadKnownSecrets() {
 }
 
 /** Replace every known secret value in `text` with a mask. */
+/** The text contains a secret Godmode knows (a password, 2FA secret, API key) — regardless of the redaction setting. */
+export function containsSecret(text: string): boolean {
+  for (const secret of knownSecrets) if (secret.length >= 8 && text.includes(secret)) return true;
+  return false;
+}
+
 export function redact(text: string): string {
   if (!text || knownSecrets.size === 0 || !getSettings().security.redactSecrets) return text;
   let out = text;

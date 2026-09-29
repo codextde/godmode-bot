@@ -14,6 +14,8 @@
  *   CALL_VM     call the `vm` MCP server from --mcp-config (initialize, tools/list, shell, write_file, edit_file, read_file)
  *              and answer "VM {json}"; "no vm server" when the run has none
  *   TASK_EDIT   write TASK_CHANGE.md into the cwd (a coding task's checkout) and answer with a summary
+ *   TASK_ENV    write .env and feature.txt into the cwd
+ *   TASK_LEAK:<value>  write config.txt containing <value> into the cwd
  *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
  *   CRASH       print to stderr and exit 3 without a result
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
@@ -251,6 +253,19 @@ if (slash?.[1] === "clear") {
   out(init);
   appendFileSync(join(process.cwd(), "TASK_CHANGE.md"), `${prompt.split("\n")[0]}\n`);
   const text = "Added TASK_CHANGE.md with the requested change.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_ENV")) {
+  out(init);
+  writeFileSync(join(process.cwd(), ".env"), "API_TOKEN=abc123\n");
+  writeFileSync(join(process.cwd(), "feature.txt"), "a feature\n");
+  const text = "Added feature.txt.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_LEAK:")) {
+  out(init);
+  writeFileSync(join(process.cwd(), "config.txt"), `token=${/TASK_LEAK:(\S+)/.exec(prompt)![1]}\n`);
+  const text = "Wrote the config.";
   textTurn(text);
   result(text);
 } else if (prompt.includes("TASK_BLOCKED")) {

@@ -21,6 +21,9 @@ import {
 } from "../src/tasks/service";
 import { __setGhForTests, compareUrl, hostedRepo, openPullRequest, validBranchName, validRepoUrl } from "../src/tasks/git";
 import { HttpError } from "../src/util";
+import { rememberSecret } from "../src/vault/vault";
+import { updateSettings } from "../src/services/settings";
+import { mkdtempSync } from "node:fs";
 
 let env: TestEnv;
 let agent: Agent;
@@ -239,6 +242,86 @@ describe("coding tasks", () => {
     await deleteTask(task.id);
     expect(existsSync(checkoutDir(task.id))).toBe(false);
     expect(listTasks().some((t) => t.id === task.id)).toBe(false);
+  });
+});
+
+describe("races and safety", () => {
+  let remote = "";
+  beforeAll(async () => {
+    remote = await makeRemote("safety");
+    updateWorkspace(workspaceId, { repoUrl: remote });
+  });
+
+  test("a restart asked for while the repository is being cloned isn't lost", async () => {
+    const task = createTask({ workspaceId, title: "TASK_EDIT restart while cloning", type: "coding", agentId: wsAgent.id });
+    expect(getTask(task.id).activity).toBe("Cloning the repository…");
+    updateTask(task.id, { status: "backlog" });
+    updateTask(task.id, { status: "todo" });
+    await settled(task.id, ["in_review"]);
+    expect(getTask(task.id).runStatus).toBe("succeeded");
+  });
+
+  test("reassigning a task whose run is still queued hands it to the new agent", async () => {
+    updateSettings({ runner: { maxConcurrentRuns: 1 } });
+    try {
+      const hog = createTask({ workspaceId, title: "SLEEP hogging the only slot", agentId: wsAgent.id });
+      await until(() => getTask(hog.id).runStatus === "running", 10_000, "hog to run");
+      const task = createTask({ workspaceId, title: "Waiting in line", agentId: wsAgent.id });
+      await until(() => getTask(task.id).runStatus === "queued", 10_000, "queued run");
+      const first = getTask(task.id).conversationId;
+      updateTask(task.id, { agentId: agent.id });
+      await until(() => getTask(task.id).conversationId !== first && getTask(task.id).runStatus === "queued", 10_000, "run for the new agent");
+      expect(getTask(task.id).status).toBe("in_progress");
+      updateTask(hog.id, { status: "backlog" });
+      await settled(task.id, ["in_review"]);
+      expect(get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", getTask(task.id).conversationId!)?.agent_id).toBe(agent.id);
+    } finally {
+      updateSettings({ runner: { maxConcurrentRuns: 3 } });
+    }
+  });
+
+  test("commits someone else pushed to the branch are merged in, never overwritten", async () => {
+    const task = createTask({ workspaceId, title: "TASK_EDIT shared branch", type: "coding", agentId: wsAgent.id });
+    await settled(task.id, ["in_review"]);
+    const branch = getTask(task.id).branch!;
+    const other = mkdtempSync(join(env.dataDir, "reviewer-"));
+    await git(["clone", "-q", "--branch", branch, remote, other], env.dataDir);
+    writeFileSync(join(other, "REVIEW.md"), "reviewer fix\n");
+    await git(["add", "-A"], other);
+    await git(["-c", "user.name=Reviewer", "-c", "user.email=r@example.com", "commit", "-qm", "Reviewer fix"], other);
+    await git(["push", "-q", "origin", branch], other);
+
+    await sendTaskMessage(task.id, "TASK_EDIT address the review");
+    await until(() => getTask(task.id).status === "in_progress", 5_000, "follow-up");
+    await settled(task.id, ["in_review"]);
+    const log = await git(["log", "--format=%s", branch], remote);
+    expect(log).toContain("Reviewer fix");
+    expect(log.split("\n")[0]).toMatch(/shared branch|Merge/);
+    expect(await git(["show", `${branch}:REVIEW.md`], remote)).toBe("reviewer fix");
+  });
+
+  test("new env files are left out of the commit", async () => {
+    const task = createTask({ workspaceId, title: "TASK_ENV add a feature", type: "coding", agentId: wsAgent.id });
+    await settled(task.id, ["in_review"]);
+    const files = await git(["ls-tree", "-r", "--name-only", getTask(task.id).branch!], remote);
+    expect(files).toContain("feature.txt");
+    expect(files).not.toContain(".env");
+  });
+
+  test("changes containing a vault secret are not pushed", async () => {
+    const secret = "Zq9-vault-Secret-4242";
+    rememberSecret(secret);
+    const task = createTask({ workspaceId, title: "Configure it", description: `TASK_LEAK:${secret}`, type: "coding", agentId: wsAgent.id });
+    await settled(task.id, ["blocked"]);
+    const t = getTask(task.id);
+    expect(t.blockedReason).toContain("secret saved in the vault");
+    expect(await git(["branch", "--list", t.branch!], remote)).toBe("");
+  });
+
+  test("task numbers are never reused", async () => {
+    const a = createTask({ workspaceId, title: "Short-lived" });
+    await deleteTask(a.id);
+    expect(createTask({ workspaceId, title: "Next" }).number).toBe(a.number + 1);
   });
 });
 

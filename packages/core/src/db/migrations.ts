@@ -402,6 +402,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   pr_url TEXT,
   pr_number INTEGER,
   pr_state TEXT,
+  -- Last commit Godmode pushed to the branch (commits pushed by others since are merged in, never overwritten).
+  pushed_sha TEXT,
   summary TEXT,
   blocked_reason TEXT,
   started_at TEXT,
