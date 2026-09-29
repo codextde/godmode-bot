@@ -162,6 +162,29 @@ export function StatusDot({ status, className }: { status: "ok" | "warn" | "erro
   return <span className={cn("inline-block size-2 rounded-full", map[status], className)} />;
 }
 
+export function DraftStatus({ onDiscard, className }: { onDiscard: () => void; className?: string }) {
+  return (
+    <motion.span
+      initial={{ opacity: 0, y: 2 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn("inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground", className)}
+    >
+      <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />
+      Draft saved
+      <span aria-hidden className="opacity-40">
+        ·
+      </span>
+      <button
+        type="button"
+        onClick={onDiscard}
+        className="rounded-sm font-medium text-foreground/70 transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+      >
+        Discard
+      </button>
+    </motion.span>
+  );
+}
+
 export function Kbd({ children }: { children: ReactNode }) {
   return (
     <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-0.5 rounded-[4px] border bg-card px-1.5 font-mono text-[10px] font-medium text-muted-foreground">

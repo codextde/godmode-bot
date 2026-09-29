@@ -13,6 +13,7 @@ import { reloadSchedules } from "../scheduler/scheduler";
 import { HttpError, badRequest, newId, notFound, now, slugify } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { gitSourceRows, listSources, setSources, sourcesByWorkspace, trashClones } from "./workspaceSources";
+import { removeWorkspaceTasks } from "../tasks/service";
 
 const log = logger("workspaces");
 
@@ -155,6 +156,7 @@ const DEPENDENTS = [
   { table: "api_tools", key: "apiTools" },
   { table: "browser_profiles", key: "browserProfiles" },
   { table: "composio_connections", key: "composioConnections" },
+  { table: "tasks", key: "tasks" },
 ] as const;
 
 type DependentCounts = Record<(typeof DEPENDENTS)[number]["key"], number>;
@@ -176,6 +178,7 @@ function describeCounts(counts: DependentCounts): string {
     apiTools: ["API tool", "API tools"],
     browserProfiles: ["browser profile", "browser profiles"],
     composioConnections: ["Composio connection", "Composio connections"],
+    tasks: ["task", "tasks"],
   };
   return (Object.keys(labels) as (keyof DependentCounts)[])
     .filter((k) => counts[k] > 0)
@@ -202,6 +205,7 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
   }
 
   const agents = listAgents({ workspaceId: id }).filter((a) => a.workspaceId === id && !a.isDefault);
+  await removeWorkspaceTasks(id);
   for (const agent of agents) await stopAgentRuns(agent.id);
   const clones = gitSourceRows(id);
 
@@ -251,4 +255,5 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
   if (counts.apiTools) bus.changed("api-tools");
   if (counts.browserProfiles) bus.changed("browser-profiles");
   if (counts.composioConnections) bus.changed("composio");
+  if (counts.tasks) bus.changed("tasks");
 }

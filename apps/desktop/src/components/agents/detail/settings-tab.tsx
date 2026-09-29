@@ -6,6 +6,7 @@ import { Trash2 } from "lucide-react";
 import type { Agent, AgentInput } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { clearDraft } from "@/lib/drafts";
 import { Section } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
@@ -17,10 +18,12 @@ export function SettingsTab({ agent }: { agent: Agent }) {
   const navigate = useNavigate();
   const [formKey, setFormKey] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const draftKey = `agent:${agent.id}`;
 
   const save = useMutation({
     mutationFn: (input: AgentInput) => withGrant((grant) => api.agents.update(agent.id, input, grant)),
     onSuccess: (updated) => {
+      clearDraft(draftKey);
       qc.setQueryData(qk.agent(agent.id), updated);
       qc.invalidateQueries({ queryKey: qk.agents });
       qc.invalidateQueries({ queryKey: qk.agentFile(agent.id, "CLAUDE.md") });
@@ -34,10 +37,11 @@ export function SettingsTab({ agent }: { agent: Agent }) {
   return (
     <div className="space-y-6">
       <AgentForm
-        key={formKey}
+        key={`${agent.id}:${formKey}`}
         mode="edit"
         initial={agent}
         agentId={agent.id}
+        draftKey={draftKey}
         isDefault={agent.isDefault}
         submitLabel="Save changes"
         pending={save.isPending}
