@@ -7,7 +7,9 @@ import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { ConversationRow, RunCard } from "@/components/rows";
 import { ScreenTile } from "@/components/screen-tile";
-import { Card, LiveDot, Row, SectionTitle, T, tap } from "@/components/ui";
+import { TaskRow } from "@/components/task-row";
+import { Card, Hairline, LiveDot, Row, SectionTitle, T, tap } from "@/components/ui";
+import { WorkspaceChip } from "@/components/workspace-chip";
 import { api } from "@/lib/api";
 import { greeting } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
@@ -17,6 +19,7 @@ import { reconnectNow } from "@/lib/realtime";
 import { isLive, useLiveScreens } from "@/lib/screens";
 import { useSession } from "@/lib/session";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
+import { useWorkspace } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
 export default function Home() {
@@ -26,7 +29,9 @@ export default function Home() {
   const runs = useLive((s) => s.runs);
   const { byId: agents } = useAgents();
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
-  const recent = useQuery({ queryKey: qk.conversationList(""), queryFn: () => api.conversations.list({ limit: 100 }) });
+  const { id: workspaceId, workspace } = useWorkspace();
+  const recent = useQuery({ queryKey: qk.conversationList("", workspaceId), queryFn: () => api.conversations.list({ limit: 100, workspaceId }) });
+  const tasks = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }) });
   const missing = useQuery({ queryKey: qk.missingLogins, queryFn: api.missingLogins.open });
   const { screens } = useLiveScreens();
   const pull = usePullRefresh(async () => {
@@ -39,6 +44,10 @@ export default function Home() {
   const runningConversations = new Set(working.map((w) => w.run.conversationId));
   const chats = (recent.data ?? []).filter((conv) => conv.origin !== "dream").slice(0, 5);
   const titleOf = (id: string) => recent.data?.find((conv) => conv.id === id)?.title;
+  const openTasks = (tasks.data ?? [])
+    .filter((t) => t.status === "in_review" || t.status === "blocked" || t.status === "in_progress" || t.status === "todo")
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+    .slice(0, 4);
   const vaultLocked = boot.data && boot.data.vault.initialized && !boot.data.vault.unlocked;
 
   return (
@@ -51,6 +60,7 @@ export default function Home() {
       <HeaderActions
         actions={[
           { icon: "compose", label: "New chat", onPress: () => router.push("/compose") },
+          { icon: "tasks", label: "New task", onPress: () => router.push("/new-task") },
           { icon: "settings", label: "Settings", onPress: () => router.push("/settings") },
         ]}
       />
@@ -62,6 +72,8 @@ export default function Home() {
         </T>
       </Pressable>
 
+      <WorkspaceChip />
+
       <Pressable
         onPress={() => {
           tap();
@@ -71,7 +83,7 @@ export default function Home() {
         <Glass interactive style={styles.ask} fallback={c.surface}>
           <Icon name="sparkles" size={18} color={c.textMuted} />
           <T variant="body" muted style={{ flex: 1 }}>
-            Ask Godmode to do something…
+            {workspace ? `Ask Godmode in ${workspace.name}…` : "Ask Godmode to do something…"}
           </T>
           <View style={[styles.askSend, { backgroundColor: c.primary }]}>
             <Icon name="send" size={14} color={c.onPrimary} weight="bold" />
@@ -142,6 +154,20 @@ export default function Home() {
               <ScreenTile key={s.key} screen={s} style={{ width: 260 }} />
             ))}
           </ScrollView>
+        </View>
+      )}
+
+      {openTasks.length > 0 && (
+        <View style={styles.section}>
+          <SectionTitle title="Tasks" action="All" onAction={() => router.push("/tasks")} />
+          <Card style={{ paddingVertical: 4 }}>
+            {openTasks.map((t, i) => (
+              <View key={t.id}>
+                {i > 0 && <Hairline inset={72} />}
+                <TaskRow task={t} agent={t.agentId ? agents.get(t.agentId) : undefined} />
+              </View>
+            ))}
+          </Card>
         </View>
       )}
 

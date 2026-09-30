@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { Pressable, StyleSheet, View } from "react-native";
+import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { LiveDot, T, tap } from "./ui";
 import { api } from "@/lib/api";
@@ -47,7 +48,7 @@ export function LiveAccessory() {
         router.push({ pathname: "/chat/[id]", params: { id: first.run.conversationId } });
       }}
     >
-      <LiveDot />
+      {inline || !agent ? <LiveDot /> : <CharacterAvatar agent={agent} size={26} mood={first.run.status === "queued" ? "idle" : "working"} />}
       {inline ? (
         <T variant="footnote" numberOfLines={1} style={{ fontWeight: "600" }}>
           {list.length > 1 ? `${list.length} working` : (agent?.name ?? "Working")}
@@ -56,7 +57,7 @@ export function LiveAccessory() {
         <>
           <View style={{ flex: 1, minWidth: 0 }}>
             <T variant="footnote" numberOfLines={1} style={{ fontWeight: "600" }}>
-              {agent ? `${agent.avatar} ${agent.name}` : "Working"}
+              {agent?.name ?? "Working"}
               {list.length > 1 ? <T variant="footnote" muted>{`  +${list.length - 1}`}</T> : null}
             </T>
             <T variant="caption" muted numberOfLines={1}>

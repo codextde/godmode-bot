@@ -75,7 +75,7 @@ export default function Settings() {
           <Hairline inset={48} />
           <Info icon="phone" label="This phone" value={me.data?.device.name ?? connection.deviceName} />
           <Hairline inset={48} />
-          <Info icon="lock" label="Access" value="Chats, agents, screens" />
+          <Info icon="lock" label="Access" value="Chats, tasks, agents, screens" />
         </Card>
         <T variant="caption" muted style={styles.note}>
           Logins, 2FA codes, backups and settings stay on your computer. Remove this phone there anytime in Settings → Phone.

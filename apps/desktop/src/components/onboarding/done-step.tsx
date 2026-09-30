@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { ArrowRight, Bot, CircleCheck, CircleDashed, Plug, ShieldCheck } from "lucide-react";
-import { DrawCheck } from "@/components/aicss/Motion";
+import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
+import { Character } from "@/components/character";
 import { FormError, SubmitButton } from "./auth-layout";
 import { Confetti, StepCard } from "./step-kit";
 
@@ -73,9 +74,8 @@ export function DoneStep({
           initial={{ scale: 0.6, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.1 }}
-          className="grid size-14 place-items-center rounded-xl border border-brand/25 bg-brand-soft text-brand-strong"
         >
-          <DrawCheck className="size-7" />
+          <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={88} mood="happy" follow title="Godmode" />
         </motion.div>
         <p className="eyebrow mt-7">Setup complete</p>
         <h2 className="heading-display mt-3 text-[40px] sm:text-[48px]">

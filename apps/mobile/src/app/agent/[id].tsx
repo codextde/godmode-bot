@@ -4,8 +4,9 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import type { Routine } from "@godmode/shared";
 import { Icon } from "@/components/icon";
+import { CharacterAvatar } from "@/components/character";
 import { ConversationRow, RunCard } from "@/components/rows";
-import { Avatar, Badge, Button, Card, Hairline, Row, SectionTitle, T, tap } from "@/components/ui";
+import { Badge, Button, Card, Hairline, Row, SectionTitle, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
@@ -27,7 +28,7 @@ export default function AgentScreen() {
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Title>{agent.name}</Stack.Title>
       <View style={styles.hero}>
-        <Avatar emoji={agent.avatar} size={76} running={working.length > 0} />
+        <CharacterAvatar agent={agent} size={76} running={working.length > 0} style={{ marginTop: space.md }} />
         <T variant="title">{agent.name}</T>
         <Row style={{ gap: 6 }}>
           {agent.isDefault && <Badge label="Main assistant" />}

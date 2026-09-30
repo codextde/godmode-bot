@@ -62,6 +62,8 @@ function agentModel(p: Partial<Agent> & { id: string }): Agent {
     slug: p.id,
     avatar: "🤖",
     color: "violet",
+    character: { body: "blob", eyes: "dots", mouth: "smile", top: "none", face: "none", neck: "none" },
+    personality: "",
     description: "",
     instructions: "",
     model: "",

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type {
   Agent,
   AgentBrowserConfig,
+  AgentCharacter,
   AgentFileEntry,
   AgentInput,
   AgentPermissions,
@@ -16,9 +17,17 @@ import type {
   Settings,
   SubagentDefinition,
 } from "@godmode/shared";
-import { DEFAULT_AGENT_SLUG, EFFORT_OPTIONS } from "@godmode/shared";
+import {
+  DEFAULT_AGENT_SLUG,
+  EFFORT_OPTIONS,
+  MASCOT_CHARACTER,
+  MASCOT_COLOR,
+  defaultCharacter,
+  normalizeCharacter,
+  parseCharacter,
+} from "@godmode/shared";
 import { config } from "../config";
-import { all, bool, get, insert, int, json, run, tx, update } from "../db";
+import { all, bool, get, getMeta, insert, int, json, run, setMeta, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
@@ -52,6 +61,8 @@ interface AgentRow {
   slug: string;
   avatar: string;
   color: string;
+  character: string | null;
+  personality: string | null;
   description: string;
   instructions: string;
   model: string;
@@ -98,7 +109,9 @@ const DEFAULT_AGENT_INSTRUCTIONS = `You are the human's main assistant and the o
 const DEFAULT_AGENT_INPUT: AgentInput = {
   name: "Godmode",
   avatar: "⚡",
-  color: "violet",
+  color: MASCOT_COLOR,
+  character: MASCOT_CHARACTER,
+  personality: "buddy",
   description: "Your main AI coworker. Ask it anything — it can also create, configure and supervise your other agents.",
   instructions: DEFAULT_AGENT_INSTRUCTIONS,
   permissions: { canManageAgents: true, allowDelegation: true },
@@ -116,6 +129,18 @@ function trashDir(): string {
   return join(config().agentsDir, ".trash");
 }
 
+/** The stored look; none stored = the agent's stable default (the mascot for the built-in agent). */
+function characterOf(r: Pick<AgentRow, "id" | "character" | "is_default">): AgentCharacter {
+  if (!bool(r.is_default)) return parseCharacter(r.character, r.id);
+  return normalizeCharacter(parseJson<unknown>(r.character, null), MASCOT_CHARACTER);
+}
+
+const MAX_PERSONALITY = 2000;
+
+function normalizePersonality(value: string | null | undefined): string {
+  return (value ?? "").trim().slice(0, MAX_PERSONALITY);
+}
+
 function toModel(r: AgentRow): Agent {
   const enabled = bool(r.enabled);
   return {
@@ -125,6 +150,8 @@ function toModel(r: AgentRow): Agent {
     slug: r.slug,
     avatar: r.avatar,
     color: r.color,
+    character: characterOf(r),
+    personality: r.personality ?? "",
     description: r.description,
     instructions: r.instructions,
     model: r.model,
@@ -157,6 +184,8 @@ function toRow(a: Agent): Record<string, string | number | null> {
     slug: a.slug,
     avatar: a.avatar,
     color: a.color,
+    character: json(a.character)!,
+    personality: a.personality,
     description: a.description,
     instructions: a.instructions,
     model: a.model,
@@ -461,13 +490,17 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
   let permissions = normalizePermissions({ ...defaultPermissions(settings), ...input.permissions });
   if (isAgentActor(actor)) permissions = lockHumanOnlyPermissions(permissions, null);
   const ts = now();
+  const id = newId("agt");
   const agent: Agent = {
-    id: newId("agt"),
+    id,
     workspaceId,
     name,
     slug,
     avatar: input.avatar?.trim() || "🤖",
     color: input.color?.trim() || "violet",
+    // Stored explicitly so the look never depends on how defaults are derived later.
+    character: normalizeCharacter(input.character, isDefault ? MASCOT_CHARACTER : defaultCharacter(id)),
+    personality: normalizePersonality(input.personality),
     description: input.description?.trim() ?? "",
     instructions: input.instructions?.trim() ?? "",
     model: input.model?.trim() ?? "",
@@ -533,6 +566,8 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   }
   if (patch.avatar !== undefined) next.avatar = patch.avatar.trim() || "🤖";
   if (patch.color !== undefined) next.color = patch.color.trim() || "violet";
+  if (patch.character !== undefined) next.character = normalizeCharacter(patch.character, current.character);
+  if (patch.personality !== undefined) next.personality = normalizePersonality(patch.personality);
   if (patch.description !== undefined) next.description = patch.description.trim();
   if (patch.instructions !== undefined) next.instructions = patch.instructions.trim();
   if (patch.model !== undefined) next.model = patch.model.trim();
@@ -631,6 +666,9 @@ let ensuring: Promise<Agent> | null = null;
 let settingsHookRegistered = false;
 let lastUserName: string | null = null;
 
+/** Meta key: the built-in agent's files were rewritten after it became the mascot (migration 20). */
+const MASCOT_FILES_KEY = "agents.mascot_files";
+
 /** Regenerate every agent's CLAUDE.md when the user's display name changes (it is part of each CLAUDE.md). */
 function registerSettingsHook() {
   if (settingsHookRegistered) return;
@@ -675,7 +713,11 @@ async function ensureDefaultAgentOnce(): Promise<Agent> {
 
 async function ensureDefaultRecord(): Promise<Agent> {
   const row = get<AgentRow>("SELECT * FROM agents WHERE is_default = 1 ORDER BY created_at LIMIT 1");
-  if (!row) return createAgentRecord(DEFAULT_AGENT_INPUT, true, "system", DEFAULT_AGENT_SLUG);
+  if (!row) {
+    const created = await createAgentRecord(DEFAULT_AGENT_INPUT, true, "system", DEFAULT_AGENT_SLUG);
+    setMeta(MASCOT_FILES_KEY, "1");
+    return created;
+  }
 
   const current = toModel(row);
   run("UPDATE agents SET is_default = 0 WHERE is_default = 1 AND id != ?", current.id);
@@ -689,6 +731,11 @@ async function ensureDefaultRecord(): Promise<Agent> {
   const agent = getAgent(current.id);
   try {
     await ensureAgentRepo(agent);
+    // Migration 20 gave the built-in agent its look and personality: write them into its CLAUDE.md once.
+    if (getMeta(MASCOT_FILES_KEY) !== "1") {
+      await refreshAgentFiles(agent.id, "Add personality");
+      setMeta(MASCOT_FILES_KEY, "1");
+    }
   } catch (err) {
     log.error("failed to repair the default agent repository", err);
   }

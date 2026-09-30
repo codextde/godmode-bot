@@ -45,6 +45,8 @@ function makeAgent(workspaceId: string | null, permissions: Partial<AgentPermiss
     slug: "test-agent",
     avatar: "🤖",
     color: "violet",
+    character: { body: "blob", eyes: "dots", mouth: "smile", top: "none", face: "none", neck: "none" },
+    personality: "",
     description: "",
     instructions: "",
     model: "",

@@ -1,6 +1,7 @@
 import type { Agent, TaskStatus, TaskType } from "@godmode/shared";
 import { TASK_TYPES } from "@godmode/shared";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AgentAvatar } from "@/components/common";
 import { cn } from "@/lib/utils";
 import { BOARD_COLUMNS, STATUS_META, StatusIcon, TYPE_META, TypeIcon } from "./task-meta";
 
@@ -36,7 +37,7 @@ export function AgentSelect({
         {agents.length > 0 && <SelectSeparator />}
         {agents.map((a) => (
           <SelectItem key={a.id} value={a.id}>
-            <span>{a.avatar}</span> {a.name}
+            <AgentAvatar agent={a} size="sm" still className="size-4" /> {a.name}
             {!a.workspaceId && !a.isDefault && <span className="text-xs text-muted-foreground">· global</span>}
           </SelectItem>
         ))}

@@ -1,7 +1,7 @@
 ---
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
-import Logo from '../ui/Logo.astro';
+import Character from '../ui/Character.astro';
 import CheckoutButton from '../ui/CheckoutButton.astro';
 import { PRICING } from '@/config/site';
 ---
@@ -9,14 +9,16 @@ import { PRICING } from '@/config/site';
 <section class="relative overflow-hidden py-24 sm:py-32">
   <div class="final-glow pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
   <div class="container-x text-center">
-    <div class="mx-auto grid size-20 place-items-center" data-reveal="scale">
-      <div class="final-logo relative">
-        <Logo size={76} />
-      </div>
+    <div class="final-logo face-row relative mx-auto w-fit" data-reveal="scale" aria-hidden="true">
+      <Character character={{ body: 'drop', eyes: 'happy', mouth: 'grin', top: 'sprout', face: 'blush', neck: 'none' }} color="orange" size={54} seed="cta-1" follow />
+      <Character character={{ body: 'gumdrop', eyes: 'dots', mouth: 'smile', top: 'none', face: 'glasses', neck: 'bowtie' }} color="amber" size={64} seed="cta-2" follow />
+      <Character size={96} seed="cta-3" follow class="relative z-[1] mx-1" />
+      <Character character={{ body: 'kitty', eyes: 'dots', mouth: 'cat', top: 'none', face: 'shades', neck: 'none' }} color="rose" size={64} seed="cta-4" follow />
+      <Character character={{ body: 'ghost', eyes: 'wide', mouth: 'smile', top: 'antenna', face: 'none', neck: 'scarf' }} color="sky" size={54} seed="cta-5" follow />
     </div>
-    <Words text="Stop doing work *a computer can do.*" class="h-display text-grad mx-auto mt-10 max-w-[13ch] !text-[clamp(42px,7vw,96px)]" />
+    <Words text="Stop doing work *a computer can do.*" class="h-display text-grad mx-auto mt-8 max-w-[13ch] !text-[clamp(42px,7vw,96px)]" />
     <p class="lead mx-auto mt-7 max-w-[560px]" data-reveal style="--d:300">
-      Hand it the busywork today. Tomorrow morning, it’s done — and your agent knows how you like it.
+      Hand it the busywork today. Tomorrow morning, it’s done — and your crew knows how you like it.
     </p>
     <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal style="--d:450">
       <CheckoutButton plan="lifetime" label={`Get lifetime — $${PRICING.plans.lifetime.price}`} source="final" size="lg" />

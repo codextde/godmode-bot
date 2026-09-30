@@ -2,6 +2,7 @@
 import { Image } from 'astro:assets';
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
+import Character from '../ui/Character.astro';
 import CheckoutButton from '../ui/CheckoutButton.astro';
 import { PRICING } from '@/config/site';
 import chat from '@/assets/shots/chat.png';
@@ -60,16 +61,22 @@ import chat from '@/assets/shots/chat.png';
   </div>
 
   <!-- Product window -->
-  <div class="container-x relative mt-14 sm:mt-20" data-reveal="fade" style="--d:800">
+  <div class="container-x relative mt-20 sm:mt-24" data-reveal="fade" style="--d:800">
     <div class="tilt-stage">
-      <div data-tilt class="tilt window relative mx-auto max-w-[1120px]">
+      <div data-tilt class="tilt window hero-window relative mx-auto max-w-[1120px]">
+        <!-- The mascot peeks over the window; its eyes follow the cursor. -->
+        <div class="hero-mascot" data-mascot aria-hidden="true">
+          <Character size={92} follow class="mascot-idle" seed="hero" />
+          <Character size={92} mood="happy" class="mascot-happy" seed="hero" />
+          <span class="say"><span class="sm:hidden">Hi, I’m Godmode!</span><span class="hidden sm:inline">Hi, I’m Godmode. Hand me the busywork.</span></span>
+        </div>
         <div class="window-bar">
           <i></i><i></i><i></i>
           <div class="mx-auto flex items-center gap-2 font-mono text-[11px] text-dim">
             <span class="live-dot !size-1.5"></span> Godmode · working
           </div>
         </div>
-        <div class="relative aspect-video bg-bg">
+        <div class="hero-screen relative aspect-video bg-bg">
           <Image
             src={chat}
             alt="Godmode logging into a billing portal: the password and 2FA code are filled from the encrypted vault and marked ‘Secret hidden’, next to a live preview of its browser."

@@ -615,3 +615,107 @@ describe("workspaces", () => {
     expect(listTasks({ workspaceId: otherWorkspaceId })).toEqual([]);
   });
 });
+
+describe("attachments", () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+  async function upload(name: string, type: string, bytes: Uint8Array<ArrayBuffer>) {
+    const { createApp } = await import("../src/server/app");
+    const { getAccessToken } = await import("../src/server/auth");
+    const form = new FormData();
+    form.set("file", new File([bytes], name, { type }));
+    const res = await createApp().request("http://127.0.0.1/api/tasks/attachments", {
+      method: "POST",
+      headers: { authorization: `Bearer ${getAccessToken()}` },
+      body: form,
+    });
+    return { status: res.status, data: (await res.json()) as import("@godmode/shared").TaskAttachment };
+  }
+
+  test("uploads are served back (images inline, other files as downloads) and need a login", async () => {
+    const { createApp } = await import("../src/server/app");
+    const { getAccessToken } = await import("../src/server/auth");
+    const app = createApp();
+    const img = await upload("shot (1).png", "image/png", png);
+    expect(img.status).toBe(200);
+    expect(img.data.url).toBe(`/api/tasks/attachments/${img.data.id}/shot%20%281%29.png`);
+
+    expect((await app.request(`http://127.0.0.1${img.data.url}`)).status).toBe(401);
+    const res = await app.request(`http://127.0.0.1${img.data.url}`, { headers: { authorization: `Bearer ${getAccessToken()}` } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(res.headers.get("content-disposition")).toStartWith("inline");
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(png);
+
+    const page = await upload("evil.html", "text/html", new TextEncoder().encode("<script>alert(1)</script>"));
+    const html = await app.request(`http://127.0.0.1${page.data.url}`, { headers: { authorization: `Bearer ${getAccessToken()}` } });
+    expect(html.headers.get("content-type")).toBe("application/octet-stream");
+    expect(html.headers.get("content-disposition")).toStartWith("attachment");
+    expect(html.headers.get("content-security-policy")).toContain("sandbox");
+  });
+
+  test("the agent gets a copy of every linked file and is told to read them", async () => {
+    const { taskAttachmentMarkdown } = await import("@godmode/shared");
+    const img = (await upload("screenshot.png", "image/png", png)).data;
+    const pdf = (await upload("spec sheet.pdf", "application/pdf", new TextEncoder().encode("%PDF-1.4 fake"))).data;
+    const description = `The button is broken:\n\n${taskAttachmentMarkdown(img)}\n\nSee ${taskAttachmentMarkdown(pdf)} and ${taskAttachmentMarkdown(img)}.`;
+    const task = createTask({ title: "Fix the button from the screenshot", description, agentId: agent.id });
+    expect(get<{ n: number }>("SELECT COUNT(*) AS n FROM task_attachments WHERE task_id = ?", task.id)?.n).toBe(2);
+
+    await settled(task.id, ["in_review"]);
+    const run = invocations(env).find((i) => i.prompt.includes("# Fix the button from the screenshot"))!;
+    const dir = join(agent.repoPath, "workspace", "uploads", `task-${task.number}`);
+    expect(run.prompt).toContain("Open every one with the Read tool");
+    expect(run.prompt).toContain(`![screenshot.png](${join(dir, "screenshot.png")})`);
+    expect(run.prompt).toContain(`[spec sheet.pdf](<${join(dir, "spec sheet.pdf")}>)`);
+    expect(run.prompt).not.toContain("/api/tasks/attachments/");
+    expect(readFileSync(join(dir, "screenshot.png"))).toEqual(Buffer.from(png));
+    expect(readFileSync(join(dir, "spec sheet.pdf"), "utf8")).toBe("%PDF-1.4 fake");
+
+    // The conversation shows the files attached to the message, and their names in the text.
+    const message = get<{ content: string; attachments: string }>(
+      "SELECT content, attachments FROM messages WHERE conversation_id = ? AND role = 'user' ORDER BY created_at LIMIT 1",
+      getTask(task.id).conversationId!,
+    )!;
+    expect(message.content).toContain("📎 screenshot.png");
+    expect(message.content).toContain("See 📎 spec sheet.pdf and 📎 screenshot.png.");
+    expect(message.content).not.toContain("/api/tasks/attachments/");
+    expect(JSON.parse(message.attachments).map((a: { name: string }) => a.name)).toEqual(["screenshot.png", "spec sheet.pdf"]);
+  });
+
+  test("a deleted task takes its files along; unclaimed uploads are swept after a day", async () => {
+    const { sweepTaskAttachments } = await import("../src/tasks/attachments");
+    const { taskAttachmentMarkdown } = await import("@godmode/shared");
+    const kept = (await upload("kept.png", "image/png", png)).data;
+    const stray = (await upload("stray.png", "image/png", png)).data;
+    const fresh = (await upload("fresh.png", "image/png", png)).data;
+    const task = createTask({ title: "Has a file", description: taskAttachmentMarkdown(kept), status: "backlog" });
+    const fileOf = (id: string, name: string) => join(env.dataDir, "attachments", "tasks", id, name);
+    expect(existsSync(fileOf(kept.id, "kept.png"))).toBe(true);
+
+    sql("UPDATE task_attachments SET created_at = ? WHERE id = ?", new Date(Date.now() - 2 * 86_400_000).toISOString(), stray.id);
+    sweepTaskAttachments();
+    expect(existsSync(fileOf(stray.id, "stray.png"))).toBe(false);
+    expect(existsSync(fileOf(fresh.id, "fresh.png"))).toBe(true);
+    expect(existsSync(fileOf(kept.id, "kept.png"))).toBe(true);
+
+    // A copy of the description in another task keeps the file alive.
+    const copy = createTask({ title: "Copied description", description: taskAttachmentMarkdown(kept), status: "backlog" });
+    await deleteTask(task.id);
+    expect(existsSync(fileOf(kept.id, "kept.png"))).toBe(true);
+    expect(get<{ task_id: string }>("SELECT task_id FROM task_attachments WHERE id = ?", kept.id)?.task_id).toBe(copy.id);
+
+    await deleteTask(copy.id);
+    expect(existsSync(fileOf(kept.id, "kept.png"))).toBe(false);
+    expect(get("SELECT id FROM task_attachments WHERE id = ?", kept.id)).toBeNull();
+  });
+
+  test("follow-ups carry files like chat messages", async () => {
+    const task = createTask({ title: "Reply with a file", agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+    await sendTaskMessage(task.id, "", [{ name: "notes.txt", mime: "text/plain", data: Buffer.from("more details").toString("base64") }]);
+    await settled(task.id, ["in_review"]);
+    const run = invocations(env).filter((i) => i.prompt.includes("Attached files:")).at(-1)!;
+    expect(run.prompt).toContain("notes.txt");
+  });
+});

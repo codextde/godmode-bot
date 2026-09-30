@@ -1,0 +1,379 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+import Character from '../ui/Character.astro';
+import {
+  CHARACTER_LABELS,
+  MASCOT_CHARACTER,
+  MASCOT_COLOR,
+  PERSONALITY_PRESETS,
+  characterGreeting,
+  characterPalette,
+  personalityPreset,
+  type AgentCharacter,
+  type CharacterMood,
+} from '@godmode/shared';
+
+// The human in the demo chats.
+const human = 'Sam';
+
+interface Member {
+  key: string;
+  name: string;
+  job: string;
+  color: string;
+  character: AgentCharacter;
+  personality: string;
+  about: string;
+  ask: string;
+  report: string;
+  tag: string;
+  /** How the agent looks in the chat header once it has reported. */
+  mood: CharacterMood;
+}
+
+// Built from the real agent templates (packages/core/src/agents/templates.ts) plus the main agent.
+const crew: Member[] = [
+  {
+    key: 'godmode',
+    name: 'Godmode',
+    job: 'Main coworker',
+    color: MASCOT_COLOR,
+    character: MASCOT_CHARACTER,
+    personality: 'buddy',
+    about: 'Your main agent. Takes on anything, hires specialists for recurring work and keeps an eye on all of them.',
+    ask: 'I need someone to collect our supplier invoices every month.',
+    report: 'On it. I just hired Penny as your Invoice Collector. Penny runs on the 1st and reports back to me.',
+    tag: 'Created agent · Penny',
+    mood: 'happy',
+  },
+  {
+    key: 'penny',
+    name: 'Penny',
+    job: 'Invoice Collector',
+    color: 'amber',
+    character: { body: 'gumdrop', eyes: 'dots', mouth: 'smile', top: 'none', face: 'glasses', neck: 'bowtie' },
+    personality: 'butler',
+    about: 'Logs into your vendor portals every month, 2FA included, and files every new invoice.',
+    ask: 'Anything new from the suppliers?',
+    report: 'Indeed. 23 invoices from 6 portals, filed in Drive › Invoices. Two portals asked for a 2FA code; I took care of it from the vault.',
+    tag: '23 invoices filed',
+    mood: 'happy',
+  },
+  {
+    key: 'iris',
+    name: 'Iris',
+    job: 'Inbox Triage',
+    color: 'indigo',
+    character: { body: 'cloud', eyes: 'sleepy', mouth: 'smile', top: 'headphones', face: 'none', neck: 'none' },
+    personality: 'calm',
+    about: 'Sorts your inbox, drafts replies and surfaces what actually needs you.',
+    ask: 'Can you get my inbox under control before nine?',
+    report: 'Done. 84 emails sorted and 12 replies drafted for your review. Three need you today; they’re pinned at the top.',
+    tag: '12 drafts ready',
+    mood: 'happy',
+  },
+  {
+    key: 'sage',
+    name: 'Sage',
+    job: 'Research Analyst',
+    color: 'sky',
+    character: { body: 'ghost', eyes: 'wide', mouth: 'smile', top: 'antenna', face: 'none', neck: 'scarf' },
+    personality: 'curious',
+    about: 'Deep-dives any topic on the web and delivers a sourced, decision-ready report.',
+    ask: 'Which CRM should we move to?',
+    report: 'I compared 7 CRMs across 41 sources. Short answer: HubSpot. The surprising bit: the price jumps at 10 seats. Full report is in your Drive.',
+    tag: 'Report · 41 sources',
+    mood: 'happy',
+  },
+  {
+    key: 'sunny',
+    name: 'Sunny',
+    job: 'Daily Briefing',
+    color: 'orange',
+    character: { body: 'drop', eyes: 'happy', mouth: 'grin', top: 'sprout', face: 'blush', neck: 'none' },
+    personality: 'sunny',
+    about: 'A crisp morning briefing: calendar, priorities, news and anything that needs attention.',
+    ask: 'Morning! What does today look like?',
+    report: 'A good one! 5 meetings, 2 deadlines, and revenue was up 8% yesterday. Your briefing is waiting on Telegram.',
+    tag: 'Sent · 07:00',
+    mood: 'happy',
+  },
+  {
+    key: 'scout',
+    name: 'Scout',
+    job: 'Competitor Monitor',
+    color: 'rose',
+    character: { body: 'kitty', eyes: 'dots', mouth: 'cat', top: 'none', face: 'shades', neck: 'none' },
+    personality: 'witty',
+    about: 'Checks competitor prices, offers and product pages every day and reports what moved.',
+    ask: 'Anything move overnight?',
+    report: 'Acme cut their Pro plan to $39 at 2 a.m. Bold. Screenshots and a before/after diff are in your inbox.',
+    tag: '1 change spotted',
+    mood: 'happy',
+  },
+  {
+    key: 'quinn',
+    name: 'Quinn',
+    job: 'QA Tester',
+    color: 'lime',
+    character: { body: 'squircle', eyes: 'dots', mouth: 'flat', top: 'cap', face: 'none', neck: 'none' },
+    personality: 'straight',
+    about: 'Runs a smoke test of your web app in a real browser every night and reports regressions.',
+    ask: 'How did last night’s test run go?',
+    report: 'Checkout is broken in Safari: the pay button doesn’t respond. Repro steps and a screenshot attached. Everything else passes.',
+    tag: 'Needs your eyes',
+    mood: 'attention',
+  },
+  {
+    key: 'juno',
+    name: 'Juno',
+    job: 'Social Media',
+    color: 'fuchsia',
+    character: { body: 'pebble', eyes: 'wink', mouth: 'grin', top: 'party', face: 'none', neck: 'none' },
+    personality: 'hype',
+    about: 'Plans, drafts and schedules on-brand posts and keeps an eye on engagement.',
+    ask: 'Can you plan next week’s posts?',
+    report: 'Five posts drafted and scheduled Monday to Friday, all on-brand and waiting for your OK. Tuesday’s thread is going to fly.',
+    tag: '5 posts scheduled',
+    mood: 'happy',
+  },
+];
+
+const members = crew.map((m) => ({
+  ...m,
+  preset: personalityPreset(m.personality)!,
+  greeting: characterGreeting({ name: m.name, personality: m.personality, human, seed: m.key }),
+}));
+
+// Live expressions demo: one character, every state it can be in.
+const moods: { mood: CharacterMood; label: string; tone: string }[] = [
+  { mood: 'idle', label: 'Ready when you are', tone: 'dim' },
+  { mood: 'thinking', label: 'Thinking…', tone: 'dream' },
+  { mood: 'working', label: 'Working in your browser…', tone: 'brand' },
+  { mood: 'attention', label: 'Needs your OK', tone: 'warn' },
+  { mood: 'happy', label: 'Done ✓', tone: 'brand' },
+  { mood: 'sleeping', label: 'Paused · napping', tone: 'dim' },
+];
+const moodNames: Record<string, string> = {
+  idle: 'Idle',
+  thinking: 'Thinking',
+  working: 'Working',
+  attention: 'Needs you',
+  happy: 'Done',
+  sleeping: 'Paused',
+};
+
+// Studio demo: a few looks to flip through, and every personality preset.
+const looks: { character: AgentCharacter; color: string }[] = [
+  { character: { body: 'blob', eyes: 'wide', mouth: 'cat', top: 'beret', face: 'blush', neck: 'none' }, color: 'violet' },
+  { character: { body: 'kitty', eyes: 'happy', mouth: 'smile', top: 'bow', face: 'none', neck: 'none' }, color: 'rose' },
+  { character: { body: 'cloud', eyes: 'dots', mouth: 'grin', top: 'crown', face: 'none', neck: 'none' }, color: 'amber' },
+  { character: { body: 'squircle', eyes: 'lines', mouth: 'smile', top: 'headphones', face: 'none', neck: 'scarf' }, color: 'cyan' },
+  { character: { body: 'ghost', eyes: 'dots', mouth: 'o', top: 'party', face: 'blush', neck: 'none' }, color: 'lime' },
+  { character: { body: 'gumdrop', eyes: 'wink', mouth: 'smile', top: 'none', face: 'shades', neck: 'bowtie' }, color: 'indigo' },
+];
+const lookLabel = (c: AgentCharacter) =>
+  [CHARACTER_LABELS.body[c.body], c.top !== 'none' && CHARACTER_LABELS.top[c.top], c.face !== 'none' && CHARACTER_LABELS.face[c.face], c.neck !== 'none' && CHARACTER_LABELS.neck[c.neck]]
+    .filter(Boolean)
+    .join(' · ');
+// Greetings keep {name} so the page can drop in whatever name the visitor types.
+const presets = PERSONALITY_PRESETS.map((p) => ({ ...p, line: p.greetings[0]!.replaceAll('{human}', human) }));
+const studioName = 'Nova';
+---
+
+<section id="crew" class="relative py-20 sm:py-28" data-track-view="crew">
+  <div class="crew-glow pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
+  <div class="container-x">
+    <div class="mx-auto max-w-[820px] text-center">
+      <p class="eyebrow justify-center" data-reveal><span class="n">03</span> Meet your crew</p>
+      <Words text="Not a bot. *A crew with faces.*" class="h-section mt-6" />
+      <p class="lead mx-auto mt-6 max-w-[640px]" data-reveal style="--d:200">
+        Godmode runs a team of agents, each with a job, a name, a look and a personality. The main agent hires the rest
+        and keeps them on track, and you can tell at a glance who’s thinking, who’s busy and who needs you.
+      </p>
+    </div>
+
+    <!-- Lineup: pick an agent to hear from it -->
+    <div class="mt-14" data-crew data-reveal style="--d:100">
+      <div role="tablist" aria-label="Agents" class="crew-lineup grid grid-cols-4 gap-x-1 gap-y-3 lg:grid-cols-8">
+        {
+          members.map((m, i) => (
+            <button
+              type="button"
+              role="tab"
+              id={`crew-tab-${m.key}`}
+              aria-controls={`crew-panel-${m.key}`}
+              aria-selected={i === 0 ? 'true' : 'false'}
+              tabindex={i === 0 ? 0 : -1}
+              data-key={m.key}
+              class="crew-tab"
+              style={`--c:${characterPalette(m.color).fill}`}
+            >
+              <span class="crew-face">
+                <Character character={m.character} color={m.color} size={76} follow seed={m.key} class="crew-idle" />
+                <Character character={m.character} color={m.color} size={76} mood="happy" seed={m.key} class="crew-happy" />
+              </span>
+              <span class="crew-name">{m.name}</span>
+              <span class="crew-job">{m.job}</span>
+            </button>
+          ))
+        }
+      </div>
+
+      <div class="card crew-card mt-2">
+        {
+          members.map((m, i) => (
+            <div
+              role="tabpanel"
+              id={`crew-panel-${m.key}`}
+              aria-labelledby={`crew-tab-${m.key}`}
+              hidden={i !== 0}
+              class="crew-panel grid lg:grid-cols-[1fr_1.2fr]"
+            >
+              <div class="flex flex-col justify-center border-b border-line p-7 sm:p-10 lg:border-r lg:border-b-0">
+                <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">{m.job}</p>
+                <h3 class="mt-3 text-[34px] font-semibold tracking-[-0.04em] sm:text-[40px]">{m.name}</h3>
+                <p class="mt-3 max-w-[420px] text-[15.5px] leading-relaxed text-muted">{m.about}</p>
+                <div class="mt-6 flex flex-wrap items-center gap-2">
+                  <span class="chip chip-brand">
+                    <Icon name="smile" size={12} /> {m.preset.label}
+                  </span>
+                  <span class="text-[13px] text-dim">{m.preset.blurb}</span>
+                </div>
+              </div>
+
+              <div class="p-5 sm:p-8" aria-label={`Example chat with ${m.name}`}>
+                <div class="crew-chat window">
+                  <div class="flex items-center gap-2.5 border-b border-line px-4 py-3">
+                    <Character character={m.character} color={m.color} size={30} mood={m.mood} seed={`${m.key}-chat`} />
+                    <div class="min-w-0 flex-1 leading-tight">
+                      <p class="text-[13.5px] font-medium">{m.name}</p>
+                      <p class="font-mono text-[10.5px] text-dim">{m.job}</p>
+                    </div>
+                    <span class="live-dot !size-1.5" aria-hidden="true" />
+                  </div>
+                  <div class="flex min-h-[248px] flex-col gap-2.5 p-4">
+                    <p class="crew-msg bubble bubble-bot" style="--b:0">{m.greeting}</p>
+                    <p class="crew-msg bubble bubble-me" style="--b:1">{m.ask}</p>
+                    <p class="crew-typing" aria-hidden="true"><i /><i /><i /></p>
+                    <div class="crew-msg" style="--b:3">
+                      <p class="bubble bubble-bot w-fit !max-w-[92%]">{m.report}</p>
+                      <span class:list={['chip mt-2', m.mood === 'attention' ? 'chip-warn' : 'chip-brand']}>
+                        <Icon name={m.mood === 'attention' ? 'bell' : 'check'} size={11} stroke={2.4} /> {m.tag}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+
+    <div class="mt-3 grid gap-3 md:grid-cols-2">
+      <!-- Live expressions -->
+      <article class="card flex flex-col" data-expressions data-reveal>
+        <div class="p-7 pb-0 sm:p-9 sm:pb-0">
+          <span class="chip"><Icon name="activity" size={12} /> Live status</span>
+          <h3 class="h-card mt-5 text-[24px]">You can read its face.</h3>
+          <p class="mt-2.5 max-w-[440px] text-[15px] leading-relaxed text-muted">
+            Agents think, look busy while they work, wave when they need your OK and hop when the job’s done. Pause one
+            and it takes a nap.
+          </p>
+        </div>
+        <div class="mt-auto flex flex-col items-center gap-5 px-7 pt-8 pb-7 sm:px-9 sm:pb-9">
+          <div class="expr-stage" aria-hidden="true">
+            {
+              moods.map((m, i) => (
+                <span class="expr-state" data-mood-state={m.mood} data-active={i === 0 ? '' : undefined}>
+                  <Character mood={m.mood} size={116} seed="expr" follow={m.mood === 'idle'} />
+                </span>
+              ))
+            }
+          </div>
+          <p class="expr-caption" aria-live="polite">
+            {
+              moods.map((m, i) => (
+                <span class={`expr-label tone-${m.tone}`} data-mood-label={m.mood} hidden={i !== 0}>
+                  {m.label}
+                </span>
+              ))
+            }
+          </p>
+          <div class="flex flex-wrap justify-center gap-1.5" role="group" aria-label="Show a state">
+            {
+              moods.map((m, i) => (
+                <button type="button" class="expr-pick" data-mood-pick={m.mood} aria-pressed={i === 0 ? 'true' : 'false'}>
+                  {moodNames[m.mood]}
+                </button>
+              ))
+            }
+          </div>
+        </div>
+      </article>
+
+      <!-- Make it yours -->
+      <article class="card flex flex-col" data-studio data-reveal style="--d:80">
+        <div class="p-7 pb-0 sm:p-9 sm:pb-0">
+          <span class="chip"><Icon name="palette" size={12} /> Character studio</span>
+          <h3 class="h-card mt-5 text-[24px]">Give it a name, a look and a personality.</h3>
+          <p class="mt-2.5 max-w-[440px] text-[15px] leading-relaxed text-muted">
+            Pick a body, eyes, a hat, glasses or a bow tie, and how it talks. It’s your coworker. Make it yours.
+          </p>
+        </div>
+        <div class="mt-auto px-7 pt-8 pb-7 sm:px-9 sm:pb-9">
+          <div class="flex items-center gap-5">
+            <div class="studio-stage flex-none">
+              {
+                looks.map((l, i) => (
+                  <span class="studio-look" data-look={i} data-label={lookLabel(l.character)} data-active={i === 0 ? '' : undefined}>
+                    <Character character={l.character} color={l.color} size={96} follow seed={`look-${i}`} />
+                  </span>
+                ))
+              }
+            </div>
+            <div class="min-w-0 flex-1">
+              <label class="block">
+                <span class="sr-only">Agent name</span>
+                <input
+                  data-studio-name
+                  type="text"
+                  value={studioName}
+                  maxlength="16"
+                  spellcheck="false"
+                  autocomplete="off"
+                  class="studio-name"
+                />
+              </label>
+              <p class="mt-1 truncate font-mono text-[11px] text-dim" data-studio-label>{lookLabel(looks[0]!.character)}</p>
+              <button type="button" class="btn btn-ghost btn-sm mt-3 !h-8 !px-3 !text-[13px]" data-studio-shuffle>
+                <Icon name="shuffle" size={13} /> Surprise me
+              </button>
+            </div>
+          </div>
+          <p class="studio-greeting bubble bubble-bot mt-5 !max-w-none" data-studio-greeting aria-live="polite">
+            {presets[0]!.line.replaceAll('{name}', studioName)}
+          </p>
+          <div class="mt-4 flex flex-wrap gap-1.5" role="group" aria-label="Personality">
+            {
+              presets.map((p, i) => (
+                <button
+                  type="button"
+                  class="expr-pick"
+                  data-personality={p.id}
+                  data-line={p.line}
+                  aria-pressed={i === 0 ? 'true' : 'false'}
+                  title={p.blurb}
+                >
+                  {p.label}
+                </button>
+              ))
+            }
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>

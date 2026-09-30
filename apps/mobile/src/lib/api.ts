@@ -16,6 +16,9 @@ import type {
   Run,
   SendMessageResult,
   StartChatResult,
+  Task,
+  TaskStatus,
+  TaskType,
   Vm,
   Workspace,
 } from "@godmode/shared";
@@ -195,7 +198,8 @@ export const api = {
   },
 
   conversations: {
-    list: (q: { search?: string; limit?: number; agentId?: string } = {}) => get<Conversation[]>("/api/conversations", q),
+    /** With `workspaceId`: the workspace's chats. */
+    list: (q: { search?: string; limit?: number; agentId?: string; workspaceId?: string | null } = {}) => get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
     send: (id: string, content: string) => post<SendMessageResult>(`/api/conversations/${id}/messages`, { content }),
     update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean }) => patch<Conversation>(`/api/conversations/${id}`, input),
@@ -203,7 +207,21 @@ export const api = {
   },
 
   chat: {
-    start: (input: { agentId?: string; content: string }) => post<StartChatResult>("/api/chat", input),
+    /** With `workspaceId`: a global agent's chat belongs to that workspace. */
+    start: (input: { agentId?: string; content: string; workspaceId?: string | null }) => post<StartChatResult>("/api/chat", input),
+  },
+
+  tasks: {
+    /** `workspaceId`: a workspace's board, or all of them when omitted. */
+    list: (q: { workspaceId?: string | null } = {}) => get<Task[]>("/api/tasks", q),
+    get: (id: string) => get<Task>(`/api/tasks/${id}`),
+    /** With an agent (and no status) the task goes to To do and the agent starts right away. */
+    create: (input: { workspaceId: string | null; title: string; description?: string; type?: TaskType; status?: TaskStatus; agentId?: string | null }) =>
+      post<Task>("/api/tasks", input),
+    /** Moving to To do starts the agent; moving away from In progress stops it. */
+    update: (id: string, input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null }) => patch<Task>(`/api/tasks/${id}`, input),
+    /** Feedback for the agent in the task's chat; the task goes back to work. */
+    message: (id: string, content: string) => post<Task>(`/api/tasks/${id}/messages`, { content }),
   },
 
   runs: {

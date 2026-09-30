@@ -32,6 +32,42 @@ export const TASK_TYPES: readonly TaskType[] = ["general", "coding", "research"]
 
 export const MAX_TASK_TITLE_LENGTH = 200;
 export const MAX_TASK_DESCRIPTION_LENGTH = 20_000;
+export const MAX_TASK_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+/**
+ * A file (image, PDF, anything) added to a task's description. The description links it by its `url` —
+ * `![shot.png](/api/tasks/attachments/<id>/shot.png)` for images, `[spec.pdf](/api/tasks/attachments/<id>/spec.pdf)`
+ * for other files — and the agent gets a copy of every linked file when it starts.
+ */
+export interface TaskAttachment {
+  id: ID;
+  name: string;
+  mime: string;
+  size: number;
+  url: string;
+}
+
+export const TASK_ATTACHMENT_PATH = "/api/tasks/attachments/";
+
+export function taskAttachmentUrl(id: string, name: string): string {
+  // Parentheses too: they would end a Markdown link.
+  const encoded = encodeURIComponent(name).replace(/[()'!*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `${TASK_ATTACHMENT_PATH}${id}/${encoded}`;
+}
+
+/** Matches a task attachment's url (group 1: its id, group 2: its encoded name). */
+export const TASK_ATTACHMENT_URL = /\/api\/tasks\/attachments\/(tat_[A-Za-z0-9_-]+)\/([^\s)"'<>]+)/g;
+
+/** Ids of the attachments a description links, in order, without repeats. */
+export function taskAttachmentIds(markdown: string): string[] {
+  return [...new Set([...markdown.matchAll(TASK_ATTACHMENT_URL)].map((m) => m[1]!))];
+}
+
+/** Markdown that shows (image) or links (other file) an attachment. */
+export function taskAttachmentMarkdown(a: Pick<TaskAttachment, "name" | "mime" | "url">): string {
+  const label = a.name.replace(/[[\]\\]/g, "\\$&");
+  return a.mime.startsWith("image/") ? `![${label}](${a.url})` : `[${label}](${a.url})`;
+}
 
 export interface TaskPullRequest {
   /** Pull request page, or — when it couldn't be opened automatically — the page to open it. */
@@ -112,4 +148,6 @@ export interface TaskPatch {
 
 export interface TaskMessageInput {
   content: string;
+  /** Files for the agent (base64), as in chats. */
+  attachments?: { name: string; mime: string; data: string }[];
 }

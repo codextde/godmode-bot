@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
+@import "@godmode/shared/character.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -373,11 +374,11 @@
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--brand), transparent);
     transform: translateX(-100%);
-    animation: gm-scan 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    animation: gm-scan-line 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     pointer-events: none;
   }
 }
-@keyframes gm-scan {
+@keyframes gm-scan-line {
   to {
     transform: translateX(100%);
   }
@@ -521,6 +522,12 @@
 }
 .prose-chat hr {
   @apply border-border;
+}
+
+/* Agent characters in long lists: keep the face, drop the idle blinking and breathing. */
+.gm-still .gm-char *,
+.gm-still .gm-char {
+  animation: none !important;
 }
 
 /* Tauri: draggable title bar region */

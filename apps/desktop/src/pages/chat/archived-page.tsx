@@ -80,7 +80,7 @@ export default function ArchivedPage() {
                 <SelectSeparator />
                 {agents.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
-                    <span>{a.avatar}</span> {a.name}
+                    <AgentAvatar agent={a} size="sm" still className="size-4" /> {a.name}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -1,3 +1,4 @@
+import type { AgentCharacter } from "./character";
 /**
  * Core domain models shared between the Godmode core daemon and the UI.
  *
@@ -118,9 +119,13 @@ export interface Agent {
   workspaceId: ID | null;
   name: string;
   slug: string;
-  /** Emoji avatar */
+  /** Emoji — the agent's glyph where only text fits (chat apps, CLAUDE.md). The app shows `character`. */
   avatar: string;
   color: string;
+  /** What the agent looks like: a small creature with a face (see character.ts). */
+  character: AgentCharacter;
+  /** How the agent sounds: a PERSONALITY_PRESETS id, free text, or "" for no particular tone. */
+  personality: string;
   description: string;
   /** The agent's role / standing instructions (goes into its CLAUDE.md). */
   instructions: string;

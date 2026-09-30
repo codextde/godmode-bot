@@ -23,8 +23,8 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import type { Agent, AgentInput, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
-import { DEFAULT_MODEL, EFFORT_LABELS, EFFORT_OPTIONS, effortForModel, findModel } from "@godmode/shared";
+import type { Agent, AgentCharacter, AgentInput, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
+import { DEFAULT_MODEL, EFFORT_LABELS, EFFORT_OPTIONS, characterGreeting, defaultCharacter, effortForModel, findModel } from "@godmode/shared";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useModelCatalog, useSshServers, useVmChoices, useWorkspaces } from "@/lib/hooks";
@@ -44,6 +44,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AvatarPicker, ColorSwatches } from "./avatar-picker";
+import { CharacterPartsPicker, CharacterStage, PersonalityPicker, randomLook } from "./character-studio";
 import { MultiSelect } from "./multi-select";
 import { ModelOptions } from "./model-options";
 import { useVaultGrant } from "@/components/vault/grant";
@@ -61,6 +62,9 @@ export interface AgentFormValues {
   name: string;
   avatar: string;
   color: string;
+  character: AgentCharacter;
+  /** Preset id, custom text, or "" for no particular voice. */
+  personality: string;
   description: string;
   instructions: string;
   workspaceId: string | null;
@@ -96,6 +100,8 @@ export function agentToValues(
     name: source?.name ?? "",
     avatar: source?.avatar || "🤖",
     color: source?.color || "violet",
+    character: source?.character ?? defaultCharacter(source?.id ?? source?.name ?? "new-agent"),
+    personality: source?.personality ?? "",
     description: source?.description ?? "",
     instructions: source?.instructions ?? "",
     workspaceId: source?.workspaceId !== undefined ? source.workspaceId : (defaults.workspaceId ?? null),
@@ -127,6 +133,8 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
     name: v.name.trim(),
     avatar: v.avatar,
     color: v.color,
+    character: v.character,
+    personality: v.personality.trim(),
     description: v.description.trim(),
     instructions: v.instructions,
     model: v.model,
@@ -179,6 +187,7 @@ function validate(v: AgentFormValues): Record<string, string> {
 
 const SECTIONS = [
   { id: "identity", label: "Identity" },
+  { id: "personality", label: "Personality" },
   { id: "instructions", label: "Instructions" },
   { id: "brain", label: "Model" },
   { id: "folder", label: "Folder" },
@@ -278,7 +287,8 @@ export function AgentForm({
   }, []);
 
   const err = (k: string) => (showErrors ? errors[k] : undefined);
-  const preview = { id: agentId, avatar: values.avatar, color: values.color };
+  const preview = { id: agentId, name: values.name, avatar: values.avatar, color: values.color, character: values.character };
+  const human = boot?.settings.general.userName;
   const inherited = useInheritedInstructions(values.workspaceId);
   const vmChoices = useVmChoices();
   const sections = vmChoices.available ? SECTIONS : SECTIONS.filter((s) => s.id !== "vm");
@@ -301,12 +311,18 @@ export function AgentForm({
     >
       <div className="grid grid-cols-1 gap-6 @5xl:grid-cols-[minmax(0,1fr)_240px]">
         <div className="min-w-0 space-y-5">
-          <FormSection id="identity" title="Identity" description="How this agent shows up across Godmode.">
-            <div className="flex flex-col gap-5 @lg:flex-row @lg:items-start">
-              <div className="flex flex-col items-center gap-3">
-                <AvatarPicker id="agent-avatar" avatar={values.avatar} color={values.color} onChange={(v) => set("avatar", v)} />
-              </div>
-              <div className="min-w-0 flex-1 space-y-4">
+          <FormSection id="identity" title="Identity" description="What this agent looks like and how it shows up across Godmode.">
+            <div className="grid grid-cols-1 gap-5 @2xl:grid-cols-[15rem_minmax(0,1fr)]">
+              <CharacterStage
+                character={values.character}
+                color={values.color}
+                name={values.name}
+                personality={values.personality}
+                human={human}
+                onSurprise={() => setValues((v) => ({ ...v, ...randomLook() }))}
+                className="min-h-64"
+              />
+              <div className="min-w-0 space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="agent-name">Name</Label>
                   <Input
@@ -334,8 +350,26 @@ export function AgentForm({
                   <span className="text-sm font-medium">Color</span>
                   <ColorSwatches value={values.color} onChange={(c) => set("color", c)} />
                 </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="agent-avatar">Emoji in chat apps</Label>
+                  <div className="flex items-center gap-3">
+                    <AvatarPicker id="agent-avatar" avatar={values.avatar} color={values.color} onChange={(v) => set("avatar", v)} />
+                    <p className="text-xs text-muted-foreground">Signs its messages where only text fits — Slack, Telegram, Teams.</p>
+                  </div>
+                </div>
               </div>
             </div>
+            <div className="mt-5 border-t pt-4">
+              <CharacterPartsPicker character={values.character} color={values.color} onChange={(c) => set("character", c)} />
+            </div>
+          </FormSection>
+
+          <FormSection
+            id="personality"
+            title="Personality"
+            description="How it talks to you — greetings, updates and reports. Goes into the agent's CLAUDE.md."
+          >
+            <PersonalityPicker value={values.personality} onChange={(p) => set("personality", p)} />
           </FormSection>
 
           <FormSection
@@ -641,12 +675,15 @@ export function AgentForm({
             <div className="rounded-xl border bg-card p-4 shadow-card">
               <div className="eyebrow mb-3">Preview</div>
               <div className="flex items-center gap-3">
-                <AgentAvatar agent={preview} size="lg" />
+                <AgentAvatar agent={preview} size="lg" follow />
                 <div className="min-w-0">
                   <div className="truncate font-medium tracking-[-0.01em]">{values.name || "Unnamed agent"}</div>
                   <div className="line-clamp-2 text-xs text-muted-foreground">{values.description || "No description yet"}</div>
                 </div>
               </div>
+              <p className="mt-3 rounded-lg rounded-tl-sm border bg-paper-2 px-3 py-2 text-xs leading-relaxed text-foreground/85">
+                {characterGreeting({ name: values.name.trim() || "Your agent", personality: values.personality, human, seed: "studio" })}
+              </p>
               <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
                 <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{findModel(catalog.models, values.model)?.label ?? (values.model || "Default model")}</span>
                 {values.browserEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">Browser</span>}
@@ -958,7 +995,7 @@ function DelegateField({ agentId, value, onChange }: { agentId?: string; value: 
   const { data: agents = [] } = useAllAgents();
   const options = agents
     .filter((a) => a.id !== agentId)
-    .map((a) => ({ value: a.id, label: a.name, icon: <span className="text-sm">{a.avatar}</span>, hint: a.description }));
+    .map((a) => ({ value: a.id, label: a.name, icon: <AgentAvatar agent={a} size="sm" still className="size-5" />, hint: a.description }));
   return (
     <div className="space-y-1.5 pl-11">
       <Label htmlFor="agent-delegate-to" className="text-xs text-muted-foreground">

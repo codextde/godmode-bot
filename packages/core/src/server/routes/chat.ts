@@ -68,6 +68,7 @@ export function registerChatRoutes(app: Hono): void {
     c.json(
       listConversations({
         agentId: c.req.query("agentId") || undefined,
+        workspaceId: c.req.query("workspaceId") || undefined,
         search: c.req.query("search") || undefined,
         limit: num(c.req.query("limit")),
         archived: flag(c.req.query("archived")),

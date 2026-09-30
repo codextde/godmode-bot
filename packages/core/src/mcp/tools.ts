@@ -6,7 +6,21 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { Agent, ApiTool, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Task, Vm } from "@godmode/shared";
-import { isModelId, MAX_START_WINDOW_MINUTES, TASK_STATUSES, TASK_TYPES } from "@godmode/shared";
+import {
+  AGENT_COLORS,
+  CHARACTER_BODIES,
+  CHARACTER_EYES,
+  CHARACTER_FACES,
+  CHARACTER_LABELS,
+  CHARACTER_MOUTHS,
+  CHARACTER_NECKS,
+  CHARACTER_TOPS,
+  isModelId,
+  MAX_START_WINDOW_MINUTES,
+  PERSONALITY_PRESETS,
+  TASK_STATUSES,
+  TASK_TYPES,
+} from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
 import { logger } from "../log";
@@ -287,11 +301,41 @@ async function fillScopeFor(target: FillTarget, login: Credential): Promise<{ sc
 const effortSchema = z.enum(["low", "medium", "high", "xhigh", "max"]);
 const missingKind = z.enum(["missing_credential", "invalid_credential", "missing_totp", "missing_account", "other"]);
 
+/** "blob (Mochi), gumdrop (Gumdrop), …" — the ids with the names the app shows. */
+function characterParts<K extends keyof typeof CHARACTER_LABELS>(part: K): string {
+  return Object.entries(CHARACTER_LABELS[part])
+    .map(([id, label]) => (id.toLowerCase() === label.toLowerCase() ? id : `${id} (${label})`))
+    .join(", ");
+}
+
+/** An agent's look in the app: a small creature. Any subset of parts; the rest keep their current value. */
+const characterSchema = z
+  .object({
+    body: z.enum(CHARACTER_BODIES).optional().describe(`Body shape: ${characterParts("body")}`),
+    eyes: z.enum(CHARACTER_EYES).optional().describe(`Eyes: ${characterParts("eyes")}`),
+    mouth: z.enum(CHARACTER_MOUTHS).optional().describe(`Mouth: ${characterParts("mouth")}`),
+    top: z.enum(CHARACTER_TOPS).optional().describe(`Hat or headwear: ${characterParts("top")}`),
+    face: z.enum(CHARACTER_FACES).optional().describe(`Face accessory: ${characterParts("face")}`),
+    neck: z.enum(CHARACTER_NECKS).optional().describe(`Neck accessory: ${characterParts("neck")}`),
+  })
+  .describe(
+    "How the agent looks in the Godmode app: a small, cute creature. Pick parts that hint at its job — e.g. glasses for research, " +
+      "headphones for inbox or support work, a bow tie for finance, a sprout for daily routines, a cap for marketing. " +
+      "Keep it tasteful: one or two accessories, not every slot. Omitted parts keep their current (or a random default) value.",
+  );
+
+const PERSONALITY_HELP =
+  "How the agent sounds in chats and reports (written into its CLAUDE.md). A preset id — " +
+  PERSONALITY_PRESETS.map((p) => `${p.id}: ${p.blurb.toLowerCase()}`).join("; ") +
+  ' — or one to three sentences of custom tone; "" = no particular tone. Pick what suits the job and the human.';
+
 /** Agent fields an orchestrator may set. Secret access and management rights stay human-only. */
 const agentFields = {
   workspaceId: z.string().nullable().optional().describe("Workspace id, or null for a global agent (agent_create only; moving agents is human-only)"),
-  avatar: z.string().max(16).optional().describe("Emoji avatar"),
-  color: z.string().max(32).optional(),
+  avatar: z.string().max(16).optional().describe("Emoji shown where only text fits (chat apps, file titles)"),
+  color: z.string().max(32).optional().describe(`Character colour: ${AGENT_COLORS.join(", ")}`),
+  character: characterSchema.optional(),
+  personality: z.string().max(2000).optional().describe(PERSONALITY_HELP),
   description: z.string().max(2000).optional().describe("One-line description of what the agent does"),
   instructions: z.string().max(20000).optional().describe("Standing instructions / role (goes into the agent's CLAUDE.md)"),
   model: z
@@ -808,7 +852,7 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "agent_get",
-    description: "Details of one agent: description, instructions, model, permissions summary and its scheduled routines.",
+    description: "Details of one agent: description, look, personality, instructions, model, permissions summary and its scheduled routines.",
     schema: z.object({ agentId: z.string() }),
     when: canDelegate,
     run: ({ agentId }, { agent }) => {
@@ -822,6 +866,8 @@ const TOOLS: ToolDef[] = [
       }
       return json({
         ...agentSummary(target, names),
+        look: { avatar: target.avatar, color: target.color, character: target.character },
+        personality: target.personality || "(none)",
         instructions: snippet(target.instructions, 4000),
         model: target.model || "(default)",
         effort: target.effort,
@@ -913,7 +959,8 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "agent_create",
     description:
-      "Create a new agent (bot) with its own git repo, instructions and optional recurring routine. Give it a clear description and concrete instructions.",
+      "Create a new agent (bot) with its own git repo, instructions and optional recurring routine. Give it a clear description and concrete instructions, " +
+      "plus a fitting emoji, colour, character (its little face in the app) and personality — each agent should be recognisable at a glance.",
     schema: z.object({
       name: z.string().min(1).max(100),
       ...agentFields,
@@ -938,7 +985,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "agent_update",
     description:
-      "Update an agent's name, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope) or subagents. Workspace, browser profile, secret access and login permissions can only be changed by the human in Settings.",
+      "Update an agent's name, look (emoji, colour, character), personality, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope) or subagents. Workspace, browser profile, secret access and login permissions can only be changed by the human in Settings.",
     schema: z.object({ agentId: z.string(), name: z.string().min(1).max(100).optional(), ...agentFields }),
     when: isManager,
     run: async ({ agentId, ...patch }, { agent, ctx }) => {

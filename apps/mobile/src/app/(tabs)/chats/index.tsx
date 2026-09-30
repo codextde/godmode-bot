@@ -6,16 +6,22 @@ import type { Agent, Conversation } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
 import { ConversationRow } from "@/components/rows";
 import { EmptyState, Hairline } from "@/components/ui";
+import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
+import { useWorkspace } from "@/lib/workspace";
 import { space } from "@/lib/theme";
 
 export default function Chats() {
   const [search, setSearch] = useState("");
   const q = useDeferredValue(search.trim());
-  const list = useQuery({ queryKey: qk.conversationList(q), queryFn: () => api.conversations.list({ search: q || undefined, limit: 200 }) });
+  const { id: workspaceId, workspace } = useWorkspace();
+  const list = useQuery({
+    queryKey: qk.conversationList(q, workspaceId),
+    queryFn: () => api.conversations.list({ search: q || undefined, limit: 200, workspaceId }),
+  });
   const { byId } = useAgents();
   const runs = useLive((s) => s.runs);
   const running = useMemo(() => new Set(Object.values(runs).map((r) => r.run.conversationId)), [runs]);
@@ -31,13 +37,26 @@ export default function Chats() {
         keyExtractor={(conv) => conv.id}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: 140 }}
+        ListHeaderComponent={
+          <View style={{ paddingHorizontal: space.sm, paddingVertical: space.sm }}>
+            <WorkspaceChip />
+          </View>
+        }
         ItemSeparatorComponent={() => <Hairline inset={76} />}
         renderItem={({ item }) => <ChatItem conversation={item} agent={byId.get(item.agentId)} running={running.has(item.id)} />}
         ListEmptyComponent={
           list.isLoading ? null : q ? (
             <EmptyState icon="search" title="Nothing found" body={`No chat mentions “${q}”.`} />
           ) : (
-            <EmptyState icon="chats" title="No chats yet" body="Ask Godmode something and the conversation shows up here, on your computer too." />
+            <EmptyState
+              icon="chats"
+              title="No chats yet"
+              body={
+                workspace
+                  ? `Chats in ${workspace.name} show up here. Start one and it runs with this workspace's context.`
+                  : "Ask Godmode something and the conversation shows up here, on your computer too."
+              }
+            />
           )
         }
       />

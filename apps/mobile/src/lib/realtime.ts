@@ -21,7 +21,8 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
   runs: [qk.runs],
   vms: [qk.vms],
   settings: [qk.bootstrap],
-  workspaces: [qk.agents],
+  workspaces: [qk.workspaces, qk.agents],
+  tasks: [qk.tasks],
 };
 
 function sendEvent(event: ClientEvent) {
@@ -114,6 +115,14 @@ function handle(event: ServerEvent) {
     case "agent.deleted":
       void queryClient.invalidateQueries({ queryKey: qk.agents });
       break;
+    case "task.updated":
+      queryClient.setQueryData(qk.task(event.task.id), event.task);
+      void queryClient.invalidateQueries({ queryKey: [...qk.tasks, "list"] });
+      break;
+    case "task.deleted":
+      queryClient.removeQueries({ queryKey: qk.task(event.id) });
+      void queryClient.invalidateQueries({ queryKey: qk.tasks });
+      break;
     case "routine.updated":
     case "routine.deleted":
       void queryClient.invalidateQueries({ queryKey: qk.routines });
@@ -188,7 +197,9 @@ async function connect() {
   useLive.getState().setStatus("connecting");
   const base = await reachableBase(connection);
   connecting = false;
-  if (!running || socket || useSession.getState().connection?.token !== connection.token) return;
+  if (!running || socket) return;
+  // Paired again while this attempt looked for the computer: the new pairing's attempt was skipped, so make it now.
+  if (useSession.getState().connection?.token !== connection.token) return void connect();
   if (!base) {
     useLive.getState().setStatus("offline");
     scheduleReconnect();

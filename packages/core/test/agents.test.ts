@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ServerEvent } from "@godmode/shared";
+import type { Agent, ServerEvent } from "@godmode/shared";
+import { MASCOT_CHARACTER, PERSONALITY_PRESETS, defaultCharacter, normalizeCharacter, personalityPreset } from "@godmode/shared";
 import { loadConfig } from "../src/config";
-import { closeDb, insert, openDb, run } from "../src/db";
+import { closeDb, deleteMeta, get, getMeta, insert, openDb, run } from "../src/db";
+import { MIGRATIONS } from "../src/db/migrations";
 import { bus } from "../src/events/bus";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
@@ -27,6 +30,7 @@ import {
   writeAgentFile,
 } from "../src/agents/service";
 import * as repo from "../src/agents/repo";
+import { describeAppearance, renderClaudeMd } from "../src/agents/claudeMd";
 import { AGENT_TEMPLATES } from "../src/agents/templates";
 import { HttpError } from "../src/util";
 
@@ -527,5 +531,144 @@ describe("templates", () => {
       if (t.routine) expect(t.routine.cron.split(" ")).toHaveLength(5);
     }
     expect(AGENT_TEMPLATES.find((t) => t.id === "daily-briefing")!.routine!.cron).toBe("0 8 * * 1-5");
+  });
+});
+
+describe("characters and personality", () => {
+  test("migration 20 adds the columns and turns the built-in agent into the mascot", () => {
+    const db = new Database(":memory:");
+    for (const m of MIGRATIONS.filter((m) => m.id < 20)) db.run(m.sql);
+    const ts = new Date().toISOString();
+    const add = db.query(
+      "INSERT INTO agents (id, name, slug, avatar, color, is_default, repo_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, '', ?, ?)",
+    );
+    add.run("agt_main", "Godmode", "godmode", "⚡", "violet", 1, ts, ts);
+    add.run("agt_other", "Other", "other", "⚡", "violet", 0, ts, ts);
+    db.run(MIGRATIONS.find((m) => m.id === 20)!.sql);
+
+    type Row = { character: string | null; personality: string; color: string };
+    const row = (id: string) => db.query<Row, [string]>("SELECT character, personality, color FROM agents WHERE id = ?").get(id)!;
+    expect(JSON.parse(row("agt_main").character!)).toEqual(MASCOT_CHARACTER);
+    expect(row("agt_main").personality).toBe("buddy");
+    expect(row("agt_main").color).toBe("emerald");
+    expect(row("agt_other")).toEqual({ character: null, personality: "", color: "violet" });
+    db.close();
+
+    // A restyled built-in agent keeps its colour.
+    const styled = new Database(":memory:");
+    for (const m of MIGRATIONS.filter((m) => m.id < 20)) styled.run(m.sql);
+    styled
+      .query("INSERT INTO agents (id, name, slug, avatar, color, is_default, repo_path, created_at, updated_at) VALUES ('a', 'G', 'g', '⚡', 'rose', 1, '', ?, ?)")
+      .run(ts, ts);
+    styled.run(MIGRATIONS.find((m) => m.id === 20)!.sql);
+    expect(styled.query<{ color: string }, []>("SELECT color FROM agents").get()!.color).toBe("rose");
+    styled.close();
+  });
+
+  test("the default agent is the mascot with the buddy personality", async () => {
+    const agent = await ensureDefaultAgent();
+    expect(agent.character).toEqual(MASCOT_CHARACTER);
+    expect(agent.personality).toBe("buddy");
+    const claudeMd = readFileSync(join(agent.repoPath, "CLAUDE.md"), "utf8");
+    expect(claudeMd).toContain("## Your personality");
+    expect(claudeMd).toContain(personalityPreset("buddy")!.prompt);
+
+    // Without a stored look the built-in agent falls back to the mascot, other agents to their own stable default.
+    run("UPDATE agents SET character = NULL WHERE id = ?", agent.id);
+    expect(getAgent(agent.id).character).toEqual(MASCOT_CHARACTER);
+  });
+
+  test("an upgraded built-in agent gets its personality written into CLAUDE.md once", async () => {
+    const agent = await ensureDefaultAgent();
+    expect(getMeta("agents.mascot_files")).toBe("1");
+    deleteMeta("agents.mascot_files");
+    writeFileSync(join(agent.repoPath, "CLAUDE.md"), "# Old CLAUDE.md\n");
+    await ensureDefaultAgent();
+    expect(readFileSync(join(agent.repoPath, "CLAUDE.md"), "utf8")).toContain("## Your personality");
+    expect(getMeta("agents.mascot_files")).toBe("1");
+
+    writeFileSync(join(agent.repoPath, "CLAUDE.md"), "# Edited by the human\n");
+    await ensureDefaultAgent();
+    expect(readFileSync(join(agent.repoPath, "CLAUDE.md"), "utf8")).toBe("# Edited by the human\n");
+  });
+
+  test("new agents store a stable default look, or the one given, normalized", async () => {
+    const plain = await createAgent({ name: "Plain Look" });
+    expect(plain.character).toEqual(defaultCharacter(plain.id));
+    expect(plain.personality).toBe("");
+    const stored = get<{ character: string | null }>("SELECT character FROM agents WHERE id = ?", plain.id)!.character;
+    expect(JSON.parse(stored!)).toEqual(defaultCharacter(plain.id));
+
+    const styled = await createAgent({
+      name: "Styled Look",
+      character: { body: "kitty", top: "crown", eyes: "lasers" as never },
+      personality: "  witty  ",
+    });
+    const base = defaultCharacter(styled.id);
+    expect(styled.character).toEqual({ ...base, body: "kitty", top: "crown" });
+    expect(styled.personality).toBe("witty");
+    expect(getAgent(styled.id).character).toEqual(styled.character);
+
+    const long = await createAgent({ name: "Chatty", personality: "x".repeat(3000) });
+    expect(long.personality).toHaveLength(2000);
+  });
+
+  test("updates patch the look and personality and rewrite CLAUDE.md", async () => {
+    const agent = await createAgent({ name: "Shapeshifter", color: "sky", character: { body: "ghost", top: "none", face: "none", neck: "none" } });
+    const claudeMd = () => readFileSync(join(agent.repoPath, "CLAUDE.md"), "utf8");
+    expect(claudeMd()).toContain("In the Godmode app you appear as a little sky ghost character.");
+    expect(claudeMd()).not.toContain("## Your personality");
+
+    const updated = await updateAgent(agent.id, { character: { face: "glasses", body: "nope" as never }, personality: "Talk like a pirate." });
+    expect(updated.character).toEqual({ ...agent.character, face: "glasses" });
+    expect(updated.personality).toBe("Talk like a pirate.");
+    expect(claudeMd()).toContain("## Your personality\n\nTalk like a pirate.\n\nLet it shape your tone");
+    expect(claudeMd()).toContain("a little sky ghost character with glasses.");
+    const state = JSON.parse(readFileSync(join(agent.repoPath, "state/agent.json"), "utf8"));
+    expect(state.character).toEqual(updated.character);
+    expect(state.personality).toBe("Talk like a pirate.");
+
+    await updateAgent(agent.id, { personality: "butler" });
+    expect(claudeMd()).toContain(personalityPreset("butler")!.prompt);
+
+    // Other updates leave the look alone.
+    expect((await updateAgent(agent.id, { name: "Shapeshifter 2", personality: "" })).character).toEqual(updated.character);
+    expect(claudeMd()).not.toContain("## Your personality");
+  });
+
+  test("CLAUDE.md personality section: preset, custom text or none", () => {
+    const base = getAgent(getDefaultAgentId()!);
+    const ctx = { userName: "Ada", workspace: null };
+    const render = (personality: string) => renderClaudeMd({ ...base, personality } as Agent, ctx);
+    for (const preset of PERSONALITY_PRESETS) expect(render(preset.id)).toContain(`## Your personality\n\n${preset.prompt}`);
+    expect(render("Speak in haiku.")).toContain("## Your personality\n\nSpeak in haiku.");
+    expect(render("")).not.toContain("## Your personality");
+    expect(render("   ")).not.toContain("## Your personality");
+    // Right after "Who you are".
+    const md = render("calm");
+    expect(md.indexOf("## Who you are")).toBeLessThan(md.indexOf("## Your personality"));
+    expect(md.indexOf("## Your personality")).toBeLessThan(md.indexOf("## Your instructions"));
+  });
+
+  test("describeAppearance reads naturally", () => {
+    expect(describeAppearance({ color: "emerald", character: MASCOT_CHARACTER })).toBe(
+      "In the Godmode app you appear as a little emerald mochi character with a lightning bolt and rosy cheeks.",
+    );
+    const plain = { body: "squircle", eyes: "dots", mouth: "smile", top: "none", face: "none", neck: "none" } as const;
+    expect(describeAppearance({ color: "not-a-colour", character: plain })).toBe("In the Godmode app you appear as a little violet cube character.");
+    expect(describeAppearance({ color: "rose", character: { ...plain, top: "antenna", face: "glasses", neck: "scarf" } })).toBe(
+      "In the Godmode app you appear as a little rose cube character with an antenna, glasses and a scarf.",
+    );
+    expect(describeAppearance({ color: "amber", character: { ...plain, top: "headphones" } })).toBe(
+      "In the Godmode app you appear as a little amber cube character with headphones.",
+    );
+  });
+
+  test("templates come with a look and a known personality", () => {
+    for (const t of AGENT_TEMPLATES) {
+      expect(personalityPreset(t.personality)).toBeDefined();
+      expect(normalizeCharacter(t.character, { ...MASCOT_CHARACTER, body: "ghost" })).toEqual(t.character);
+    }
+    expect(new Set(AGENT_TEMPLATES.map((t) => t.character.body)).size).toBeGreaterThanOrEqual(6);
   });
 });

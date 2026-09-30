@@ -1,3 +1,4 @@
+import type { AgentCharacter } from "./character";
 import type { AgentComputerConfig, ComputerTarget } from "./computer";
 import type {
   Agent,
@@ -48,6 +49,10 @@ export interface AgentInput {
   name: string;
   avatar?: string;
   color?: string;
+  /** Missing or unknown parts keep their current (or default) value. */
+  character?: Partial<AgentCharacter>;
+  /** PERSONALITY_PRESETS id or free text; "" = none. */
+  personality?: string;
   description?: string;
   instructions?: string;
   model?: string;
@@ -71,6 +76,8 @@ export interface AgentTemplate {
   name: string;
   avatar: string;
   color: string;
+  character: AgentCharacter;
+  personality: string;
   description: string;
   instructions: string;
   routine?: { name: string; cron: string; prompt: string };

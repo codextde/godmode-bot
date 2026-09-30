@@ -1,28 +1,36 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { CharacterAvatar } from "@/components/character";
 import { Composer } from "@/components/composer";
 import { T, tap } from "@/components/ui";
+import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
+import { agentsFor, useWorkspace } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
 const IDEAS = ["Check my inbox and summarize what needs me", "Find the cheapest flight to Berlin next Friday", "What did you work on today?"];
 
-/** A new chat: pick who does it, say what to do. */
+/** A new chat in the picked workspace: pick who does it, say what to do. */
 export default function Compose() {
   const c = useColors();
   const { agentId } = useLocalSearchParams<{ agentId?: string }>();
   const { data: agents } = useAgents();
-  const enabled = (agents ?? []).filter((a) => a.enabled);
+  const { id: workspaceId } = useWorkspace();
+  const enabled = agentsFor(agents ?? [], workspaceId).filter((a) => a.enabled);
   const [picked, setPicked] = useState<string | undefined>(agentId);
-  const current = enabled.find((a) => a.id === picked) ?? enabled.find((a) => a.isDefault) ?? enabled[0];
+  const current =
+    enabled.find((a) => a.id === picked) ??
+    (workspaceId ? enabled.find((a) => a.workspaceId === workspaceId) : undefined) ??
+    enabled.find((a) => a.isDefault) ??
+    enabled[0];
   const [idea, setIdea] = useState("");
 
   const start = async (content: string) => {
     try {
-      const result = await api.chat.start({ agentId: current?.id, content });
+      const result = await api.chat.start({ agentId: current?.id, content, workspaceId });
       useLive.getState().runStarted(result.run);
       router.dismiss();
       router.push({ pathname: "/chat/[id]", params: { id: result.conversation.id } });
@@ -34,9 +42,10 @@ export default function Compose() {
 
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
-      <T variant="title" style={{ paddingHorizontal: space.xl }}>
-        New chat
-      </T>
+      <View style={{ paddingHorizontal: space.xl, gap: space.sm }}>
+        <T variant="title">New chat</T>
+        <WorkspaceChip />
+      </View>
       <View style={styles.agents}>
         {enabled.map((a) => {
           const active = a.id === current?.id;
@@ -49,7 +58,7 @@ export default function Compose() {
               }}
               style={[styles.chip, { backgroundColor: active ? c.primary : c.sunken }]}
             >
-              <T style={{ fontSize: 16 }}>{a.avatar}</T>
+              <CharacterAvatar agent={a} size={24} />
               <T variant="subhead" color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
                 {a.name}
               </T>
@@ -96,7 +105,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     height: 36,
-    paddingHorizontal: 14,
+    paddingLeft: 8,
+    paddingRight: 14,
     borderRadius: radius.pill,
   },
   idea: {

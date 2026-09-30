@@ -616,4 +616,36 @@ CREATE TABLE IF NOT EXISTS mobile_devices (
 ALTER TABLE tasks ADD COLUMN repo_path TEXT NOT NULL DEFAULT '';
 `,
   },
+  {
+    id: 19,
+    name: "task_attachments",
+    sql: /* sql */ `
+-- Files added to task descriptions (images, PDFs, …), stored at <data>/attachments/tasks/<id>/<name>. An upload belongs
+-- to no task until a task's description links it (task_id); unclaimed uploads are swept after a day.
+CREATE TABLE IF NOT EXISTS task_attachments (
+  id TEXT PRIMARY KEY,
+  task_id TEXT,
+  name TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);
+`,
+  },
+  {
+    id: 20,
+    name: "agent_characters",
+    sql: /* sql */ `
+-- Every agent is a small character with a face and a personality. character is JSON (body, eyes, mouth, top, face,
+-- neck); NULL = the stable default look derived from the agent id. personality is a preset id, free text or '' (none).
+ALTER TABLE agents ADD COLUMN character TEXT;
+ALTER TABLE agents ADD COLUMN personality TEXT NOT NULL DEFAULT '';
+-- The built-in agent becomes Godmode's mascot, and turns emerald unless someone already restyled it.
+UPDATE agents SET personality = 'buddy',
+  character = '{"body":"blob","eyes":"dots","mouth":"smile","top":"bolt","face":"blush","neck":"none"}'
+  WHERE is_default = 1;
+UPDATE agents SET color = 'emerald' WHERE is_default = 1 AND color = 'violet' AND avatar = '⚡';
+`,
+  },
 ];

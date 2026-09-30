@@ -156,7 +156,12 @@ export default function ChatHome() {
             )}
           </span>
         </motion.div>
-        <motion.h1 {...fade(0.05)} className="heading-display mt-6 text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]">
+        {selected && (
+          <motion.div {...fade(0.03)} className="mt-7">
+            <AgentAvatar key={selected.id} agent={selected} size="xl" follow className="size-20" />
+          </motion.div>
+        )}
+        <motion.h1 {...fade(0.05)} className={cn("heading-display text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]", selected ? "mt-4" : "mt-6")}>
           {greeting(now)}
           {userName ? `, ${userName}` : ""}.
           <span className="block text-foreground/35">What should we get done?</span>

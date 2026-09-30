@@ -16,6 +16,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSidebar } from "@/components/ui/sidebar";
 import { AgentAvatar } from "@/components/common";
+import type { AgentMood } from "@/components/chat/conversation-mood";
 import { PLATFORMS } from "@/components/messaging/platform";
 import { DeleteChatDialog, useArchiveChat } from "@/components/chat/chat-actions";
 import { useModelLabel } from "@/components/runs/run-status";
@@ -39,11 +40,14 @@ const ORIGIN_META = {
 export function ConversationHeader({
   conversation,
   agent,
+  mood,
   onVoiceMode,
   browserToggle,
 }: {
   conversation: Conversation;
   agent?: Agent;
+  /** The agent's live mood in this chat (its character reacts; the label shows next to its name). */
+  mood?: AgentMood;
   onVoiceMode?: () => void;
   browserToggle?: ReactNode;
 }) {
@@ -90,8 +94,23 @@ export function ConversationHeader({
             className="flex shrink-0 items-center gap-2 rounded-lg py-1 pr-1.5 pl-1 text-sm font-medium transition hover:bg-accent/50"
             aria-label={`Open ${agent.name}`}
           >
-            <AgentAvatar agent={agent} size="sm" />
-            <span className="hidden max-w-[10rem] truncate @2xl:inline">{agent.name}</span>
+            <AgentAvatar agent={agent} size="sm" mood={mood?.mood} className="size-7" />
+            <span className="hidden min-w-0 flex-col leading-tight @2xl:flex">
+              <span className="max-w-[10rem] truncate">{agent.name}</span>
+              {mood?.label && (
+                <span
+                  aria-live="polite"
+                  className={cn(
+                    "max-w-[10rem] truncate text-[11px] font-normal text-muted-foreground",
+                    (mood.mood === "thinking" || mood.mood === "working") && "text-shimmer",
+                    mood.mood === "attention" && "font-medium text-warning",
+                    mood.mood === "error" && "text-destructive",
+                  )}
+                >
+                  {mood.label}
+                </span>
+              )}
+            </span>
           </Link>
         ) : (
           <span className="size-6 shrink-0 animate-pulse rounded-md bg-muted" />

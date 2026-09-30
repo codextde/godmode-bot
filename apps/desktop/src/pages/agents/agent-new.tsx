@@ -22,6 +22,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentForm, agentToValues, type AgentFormValues } from "@/components/agents/agent-form";
 import { cronToHuman, localTimezone } from "@/components/agents/cron";
+import { randomLook } from "@/components/agents/character-studio";
 
 const EXAMPLES = [
   "Download my invoices from all vendor portals on the 1st of every month",
@@ -250,7 +251,7 @@ function DraftCard({
       transition={{ delay: Math.min(index, 6) * 0.04 }}
       className="group relative flex items-center gap-3 rounded-xl border bg-card p-3 pr-2 shadow-card transition hover:border-foreground/15 hover:shadow-float has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-ring/50"
     >
-      <AgentAvatar agent={{ avatar: values.avatar, color: values.color }} size="md" />
+      <AgentAvatar agent={{ name, avatar: values.avatar, color: values.color, character: values.character }} size="md" />
       <button
         type="button"
         onClick={onOpen}
@@ -288,7 +289,7 @@ function TemplateCard({ template, index, onPick }: { template: AgentTemplate; in
       transition={{ delay: Math.min(index + 1, 10) * 0.04 }}
       className="group flex min-h-44 flex-col rounded-xl border bg-card p-5 text-left shadow-card transition hover:border-foreground/15 hover:shadow-float focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
     >
-      <AgentAvatar agent={{ avatar: template.avatar, color: template.color }} size="lg" />
+      <AgentAvatar agent={{ id: template.id, avatar: template.avatar, color: template.color, character: template.character }} size="lg" />
       <span className="mt-4 block font-medium tracking-[-0.01em]">{template.name}</span>
       <span className="mt-1 line-clamp-3 block flex-1 text-sm text-muted-foreground">{template.description}</span>
       {template.routine && (
@@ -314,6 +315,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
   const template = isScratch ? null : (templates.data?.find((t) => t.id === templateId) ?? null);
   const [withRoutine, setWithRoutine] = useState(true);
 
+  // Scratch agents get a fresh random look (once per visit); templates bring their own.
   const initial = useMemo<Partial<Agent> | undefined>(
     () =>
       template
@@ -321,11 +323,15 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
             name: template.name,
             avatar: template.avatar,
             color: template.color,
+            character: template.character,
+            personality: template.personality,
             description: template.description,
             instructions: template.instructions,
           }
-        : undefined,
-    [template],
+        : isScratch
+          ? { ...randomLook(), personality: "buddy" }
+          : undefined,
+    [template, isScratch],
   );
 
   const create = useMutation({
@@ -353,7 +359,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
       qc.invalidateQueries({ queryKey: qk.agents });
       qc.invalidateQueries({ queryKey: qk.routines });
       qc.invalidateQueries({ queryKey: qk.bootstrap });
-      toast.success(`${agent.avatar} ${agent.name} is ready`, { description: "Say hi or give it a first task." });
+      toast.success(`${agent.name} is ready`, { description: "Say hi or give it a first task." });
       if (routineError) toast.error("The automation couldn't be created", { description: errorMessage(routineError) });
       navigate(`/agents/${agent.id}`);
     },
@@ -390,7 +396,13 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
   return (
     <>
       <PageHeader
-        icon={template ? <span className="text-xl">{template.avatar}</span> : <Plus />}
+        icon={
+          template ? (
+            <AgentAvatar agent={{ id: template.id, avatar: template.avatar, color: template.color, character: template.character }} className="size-8 [&_svg]:size-full!" />
+          ) : (
+            <Plus />
+          )
+        }
         title={template ? `New agent from “${template.name}”` : "Start from scratch"}
         description="Fine-tune it now or later — everything can be changed in the agent's settings."
         actions={

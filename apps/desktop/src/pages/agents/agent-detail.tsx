@@ -39,7 +39,7 @@ import {
   AgentStatus,
   DeleteAgentDialog,
   RunTaskDialog,
-  useAgentLiveRun,
+  useAgentMood,
   useStartAgentChat,
   useToggleAgent,
 } from "@/components/agents/agent-actions";
@@ -126,7 +126,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
   const navigate = useNavigate();
   const chat = useStartAgentChat();
   const toggle = useToggleAgent();
-  const live = useAgentLiveRun(agent.id);
+  const mood = useAgentMood(agent);
   const shortPath = useShortPath();
   const [runTask, setRunTask] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -138,9 +138,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
           <ArrowLeft className="size-3.5" /> Agents
         </Link>
         <div className="flex flex-wrap items-start gap-x-4 gap-y-4 @2xl:gap-x-5">
-          <div className={cn("rounded-2xl", live && "glow-border")}>
-            <AgentAvatar agent={agent} size="xl" className="@max-xl:size-12 @max-xl:rounded-xl @max-xl:text-2xl" />
-          </div>
+          <AgentAvatar agent={agent} size="xl" mood={mood} follow className="@max-xl:size-12" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="truncate text-[23px] leading-tight font-medium tracking-[-0.03em] @2xl:text-[26px]">{agent.name}</h1>

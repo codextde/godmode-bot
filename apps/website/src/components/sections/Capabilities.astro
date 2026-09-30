@@ -1,6 +1,7 @@
 ---
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
+import Character from '../ui/Character.astro';
 ---
 
 <section id="features" class="relative py-20 sm:py-28" data-track-view="features">
@@ -193,12 +194,16 @@ import Icon from '../ui/Icon.astro';
       <!-- 8. Delegation + integrations (wide, compact) -->
       <article class="card md:col-span-3" data-reveal>
         <div class="flex h-full items-start gap-5 p-7 sm:p-8">
-          <span class="grid size-11 flex-none place-items-center rounded-xl bg-[rgb(255_250_240/0.05)] ring-1 ring-line"><Icon name="network" size={19} /></span>
+          <span class="face-cluster flex-none pt-1" aria-hidden="true">
+            <Character character={{ body: 'gumdrop', eyes: 'dots', mouth: 'smile', top: 'none', face: 'glasses', neck: 'bowtie' }} color="amber" size={34} seed="team-a" />
+            <Character size={44} seed="team-b" follow />
+            <Character character={{ body: 'cloud', eyes: 'sleepy', mouth: 'smile', top: 'headphones', face: 'none', neck: 'none' }} color="indigo" size={34} seed="team-c" />
+          </span>
           <div>
             <h3 class="h-card">A team, not a bot.</h3>
             <p class="mt-2 text-[15px] leading-relaxed text-muted">
               Agents hand tasks to each other and spin up helpers for side quests. Ask the main agent to create, check
-              or reconfigure any of them — in plain words.
+              or reconfigure any of them — in plain words. <a href="#crew" class="text-text-2 underline decoration-line-3 underline-offset-3 hover:decoration-brand">Meet the crew</a>
             </p>
           </div>
         </div>

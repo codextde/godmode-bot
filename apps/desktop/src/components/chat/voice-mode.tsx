@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, Message } from "@godmode/shared";
+import type { Agent, CharacterMood, Message } from "@godmode/shared";
 import { Mic, MicOff, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,16 @@ import { cn } from "@/lib/utils";
 import { VoiceOrb, type VoiceOrbPhase } from "./voice-visuals";
 
 type Phase = VoiceOrbPhase | "waiting";
+
+/** The agent's face during a voice conversation: all ears, pondering, then beaming while it answers. */
+const VOICE_MOOD: Record<VoiceOrbPhase, CharacterMood> = {
+  listening: "idle",
+  transcribing: "thinking",
+  sending: "thinking",
+  thinking: "thinking",
+  speaking: "happy",
+  paused: "sleeping",
+};
 
 /** Assistant replies already spoken (or deliberately skipped) this session — survives remounts. */
 const handled = new Set<string>();
@@ -240,7 +250,7 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
       <Backdrop />
       <div className="relative flex items-center justify-between gap-3 px-5 pt-5 sm:px-8 sm:pt-7">
         <div className="flex min-w-0 items-center gap-2.5">
-          {agent && <AgentAvatar agent={agent} size="md" />}
+          {agent && <AgentAvatar agent={agent} size="md" mood={VOICE_MOOD[shownPhase]} className="size-10" />}
           <div className="min-w-0 leading-tight">
             <div className="truncate text-sm font-medium tracking-[-0.01em]">{agent?.name ?? "Godmode"}</div>
             <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">

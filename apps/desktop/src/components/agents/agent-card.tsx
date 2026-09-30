@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { AgentStatus, useAgentLiveRun, useStartAgentChat, useToggleAgent } from "./agent-actions";
+import { AgentStatus, useAgentLiveRun, useAgentMood, useStartAgentChat, useToggleAgent } from "./agent-actions";
 
 export function AgentCard({
   agent,
@@ -32,6 +32,7 @@ export function AgentCard({
   const modelLabel = useModelLabel();
   const live = useAgentLiveRun(agent.id);
   const running = !!live;
+  const mood = useAgentMood(agent);
   const chat = useStartAgentChat();
   const toggle = useToggleAgent();
   const chatting = chat.isPending && chat.variables === agent.id;
@@ -46,7 +47,7 @@ export function AgentCard({
       )}
     >
       <div className="flex items-start gap-3">
-        <AgentAvatar agent={agent} size="lg" />
+        <AgentAvatar agent={agent} size="lg" mood={mood} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <Link

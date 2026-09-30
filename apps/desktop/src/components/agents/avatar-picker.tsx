@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
-import { AGENT_COLORS } from "@godmode/shared";
-import { colorGradient, colorSwatch } from "@/components/common";
+import { AGENT_COLORS, characterPalette } from "@godmode/shared";
+import { colorGradient } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,7 @@ export const AGENT_EMOJIS = [
   "🛒", "✈️", "🏠", "🌱", "☕️", "🐙", "🦉", "🦊",
 ];
 
-/** Big emoji avatar button that opens a curated emoji grid (plus free input). */
+/** The emoji an agent signs with where only text fits (chat apps, CLAUDE.md): a small button with a curated grid. */
 export function AvatarPicker({
   avatar,
   color,
@@ -35,16 +35,13 @@ export function AvatarPicker({
         <button
           id={id}
           type="button"
-          aria-label={`Avatar ${avatar || "🤖"} — change`}
+          aria-label={`Emoji ${avatar || "🤖"} — change`}
           className={cn(
-            "group relative grid size-20 shrink-0 place-items-center rounded-2xl text-4xl ring-1 ring-inset transition hover:ring-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+            "grid size-9 shrink-0 place-items-center rounded-lg text-lg ring-1 ring-inset transition hover:ring-foreground/25 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
             colorGradient(color),
           )}
         >
-          <span>{avatar || "🤖"}</span>
-          <span className="absolute -right-1 -bottom-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground opacity-0 shadow-card transition group-hover:opacity-100 group-focus-visible:opacity-100">
-            Edit
-          </span>
+          {avatar || "🤖"}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-3">
@@ -101,11 +98,11 @@ export function ColorSwatches({ value, onChange }: { value: string; onChange: (c
           onClick={() => onChange(c)}
           className={cn(
             "grid size-7 place-items-center rounded-full ring-offset-2 ring-offset-background transition hover:opacity-85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            colorSwatch(c),
             value === c && "ring-2 ring-foreground/70",
           )}
+          style={{ background: characterPalette(c).fill }}
         >
-          {value === c && <Check className="size-3.5 text-white" />}
+          {value === c && <Check className="size-3.5 text-[#24211d]" />}
         </button>
       ))}
     </div>

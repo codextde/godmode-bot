@@ -1,6 +1,7 @@
 /**
  * Ready-made agent templates offered in the "New agent" dialog (GET /api/agent-templates).
- * Instructions are written for an autonomous agent: goal, first-run setup, procedure, output, boundaries.
+ * Instructions are written for an autonomous agent: goal, first-run setup, procedure, output, boundaries. Each template
+ * comes with a look and a personality that hint at its job.
  */
 import type { AgentTemplate } from "@godmode/shared";
 
@@ -10,6 +11,8 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
     name: "Inbox Triage",
     avatar: "📥",
     color: "sky",
+    character: { body: "squircle", eyes: "dots", mouth: "smile", top: "headphones", face: "none", neck: "none" },
+    personality: "calm",
     description: "Sorts your email inbox, drafts replies and surfaces what actually needs you.",
     instructions: `Goal: keep the human's inbox under control so they only spend time on messages that need them.
 
@@ -36,6 +39,8 @@ Never: send emails, unsubscribe, delete messages or click links in suspicious em
     name: "Research Analyst",
     avatar: "🔎",
     color: "indigo",
+    character: { body: "kitty", eyes: "wide", mouth: "cat", top: "none", face: "glasses", neck: "none" },
+    personality: "curious",
     description: "Deep-dives any topic on the web and delivers a sourced, decision-ready report.",
     instructions: `Goal: answer research questions with a thorough, well-sourced report the human can act on.
 
@@ -54,6 +59,8 @@ Keep a list of trusted and untrustworthy sources per domain in MEMORY.md.`,
     name: "Invoice Collector",
     avatar: "🧾",
     color: "emerald",
+    character: { body: "gumdrop", eyes: "sleepy", mouth: "smile", top: "none", face: "glasses", neck: "bowtie" },
+    personality: "butler",
     description: "Logs into your vendor portals every month (including 2FA) and downloads all new invoices.",
     instructions: `Goal: every month, collect all new invoices from the human's vendor and service portals so bookkeeping is complete.
 
@@ -79,6 +86,8 @@ Never pay invoices, change payment methods, cancel subscriptions or change accou
     name: "Daily Briefing",
     avatar: "☀️",
     color: "amber",
+    character: { body: "cloud", eyes: "happy", mouth: "grin", top: "sprout", face: "blush", neck: "none" },
+    personality: "sunny",
     description: "A crisp morning briefing: calendar, priorities, news and anything that needs attention.",
     instructions: `Goal: start the human's workday with a briefing they can read in two minutes.
 
@@ -104,6 +113,8 @@ Learn what the human reads and what they skip; adjust the format in MEMORY.md ac
     name: "Social Media Manager",
     avatar: "📣",
     color: "fuchsia",
+    character: { body: "drop", eyes: "wink", mouth: "grin", top: "cap", face: "none", neck: "none" },
+    personality: "hype",
     description: "Plans, drafts and schedules on-brand posts and keeps an eye on engagement.",
     instructions: `Goal: keep the human's social channels active and on-brand with minimal effort from them.
 
@@ -125,6 +136,8 @@ Update MEMORY.md with performance learnings (best times, formats and topics).`,
     name: "Price & Competitor Monitor",
     avatar: "📈",
     color: "orange",
+    character: { body: "pebble", eyes: "dots", mouth: "smile", top: "none", face: "shades", neck: "none" },
+    personality: "witty",
     description: "Tracks competitor prices, offers and product changes every day and reports what moved.",
     instructions: `Goal: detect relevant changes in competitors' pricing, offers and products early.
 
@@ -149,6 +162,8 @@ Pages change layout: when extraction breaks, record the new selectors/steps in M
     name: "Lead Researcher",
     avatar: "🎯",
     color: "rose",
+    character: { body: "blob", eyes: "dots", mouth: "cat", top: "beret", face: "none", neck: "scarf" },
+    personality: "buddy",
     description: "Finds and qualifies prospects that match your ideal customer profile, with verified context.",
     instructions: `Goal: deliver qualified, well-researched leads that match the human's ideal customer profile (ICP).
 
@@ -169,6 +184,8 @@ Never send outreach messages or connection requests yourself, never buy data, an
     name: "Web App QA Tester",
     avatar: "🧪",
     color: "cyan",
+    character: { body: "ghost", eyes: "wide", mouth: "flat", top: "antenna", face: "none", neck: "none" },
+    personality: "straight",
     description: "Runs a daily smoke test of your web app in a real browser and reports regressions with screenshots.",
     instructions: `Goal: catch broken critical flows in the human's web app before users do.
 
@@ -194,6 +211,8 @@ Keep flow scripts and known flaky steps up to date in MEMORY.md.`,
     name: "Bookkeeping Helper",
     avatar: "📒",
     color: "lime",
+    character: { body: "squircle", eyes: "sleepy", mouth: "smile", top: "crown", face: "none", neck: "none" },
+    personality: "calm",
     description: "Organizes receipts and invoices, reconciles transactions and prepares data for your accountant.",
     instructions: `Goal: keep the books tidy and ready for the accountant with as little manual work as possible.
 

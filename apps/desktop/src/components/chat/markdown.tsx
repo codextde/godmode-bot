@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import { openExternal } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { CodeBlock as AicssCodeBlock } from "@/components/aicss/CodeBlock";
+import { CoreFileLink, CoreImage, isCoreFile } from "./core-file";
 
 /** Fenced code in chat — aicss code block (line numbers + copy), height-capped for long snippets. */
 export function CodeBlock({ lang, code, className }: { lang: string; code: string; className?: string }) {
@@ -32,6 +33,7 @@ const components: Components = {
     return <CodeBlock lang={lang} code={code} />;
   },
   a({ href, children, ...rest }) {
+    if (href && isCoreFile(href)) return <CoreFileLink href={href}>{children}</CoreFileLink>;
     if (href && href.startsWith("/") && !href.startsWith("//")) {
       return <Link to={href}>{children}</Link>;
     }
@@ -60,6 +62,7 @@ const components: Components = {
   },
   img({ src, alt }) {
     if (!src || typeof src !== "string") return null;
+    if (isCoreFile(src)) return <CoreImage src={src} alt={alt} />;
     return <img src={src} alt={alt ?? ""} loading="lazy" className="max-h-96 max-w-full rounded-lg border" />;
   },
   input({ type, checked, ...rest }) {

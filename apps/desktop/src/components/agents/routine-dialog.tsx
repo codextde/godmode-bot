@@ -10,7 +10,7 @@ import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useModelCatalog } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { clearDraft, useDraft } from "@/lib/drafts";
-import { DraftStatus, Kbd } from "@/components/common";
+import { AgentAvatar, DraftStatus, Kbd } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -298,7 +298,7 @@ export function RoutineDialog({
                     <SelectContent position="popper">
                       {selectableAgents.map((a) => (
                         <SelectItem key={a.id} value={a.id}>
-                          <span>{a.avatar}</span> {a.name}
+                          <AgentAvatar agent={a} size="sm" still className="size-4" /> {a.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -255,12 +255,19 @@ export function getConversation(id: string): ConversationWithMessages {
   return { ...conversation, messages: listMessages(id), activeRunId: activeRunForConversation(id) };
 }
 
-export function listConversations(opts: { agentId?: string; search?: string; limit?: number; archived?: boolean } = {}): Conversation[] {
+/** `workspaceId`: chats of the workspace's agents, and global agents' chats started in it. */
+export function listConversations(
+  opts: { agentId?: string; workspaceId?: string; search?: string; limit?: number; archived?: boolean } = {},
+): Conversation[] {
   const where: string[] = ["c.archived = ?"];
   const params: (string | number)[] = [opts.archived ? 1 : 0];
   if (opts.agentId) {
     where.push("c.agent_id = ?");
     params.push(opts.agentId);
+  }
+  if (opts.workspaceId) {
+    where.push("(c.workspace_id = ? OR c.agent_id IN (SELECT id FROM agents WHERE workspace_id = ?))");
+    params.push(opts.workspaceId, opts.workspaceId);
   }
   const search = opts.search?.trim();
   if (search) {
@@ -487,6 +494,8 @@ export async function sendMessage(
     prompt?: string;
     /** Store a system message with these blocks instead of a message from the human. */
     marker?: MessageBlock[];
+    /** Files already in the agent's repository (e.g. a task's attachments), attached like uploads. */
+    files?: Attachment[];
   },
 ): Promise<SendMessageResult> {
   const conv = requireConversationRow(conversationId);
@@ -497,9 +506,9 @@ export async function sendMessage(
   }
   const content = (input.content ?? "").trim();
   const files = input.attachments ?? [];
-  if (!content && files.length === 0) throw badRequest("Message is empty");
+  if (!content && files.length === 0 && !input.files?.length) throw badRequest("Message is empty");
 
-  const attachments = files.length ? saveAttachments(agent, files) : [];
+  const attachments = [...(input.files ?? []), ...(files.length ? saveAttachments(agent, files) : [])];
   const message = addMessage({ conversationId, role: input.marker ? "system" : "user", content: redact(content), blocks: input.marker, attachments });
   // Absolute: the run's cwd is not the agent repo when the chat works in a folder.
   let prompt = input.prompt ?? content;

@@ -5,19 +5,20 @@ import { useEffect, useMemo, useRef } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { ConversationWithMessages, Message, MessageBlock } from "@godmode/shared";
+import { characterGreeting, type Agent, type ConversationWithMessages, type Message, type MessageBlock } from "@godmode/shared";
+import { CharacterAvatar } from "@/components/character";
 import { Composer, ComposerDock } from "@/components/composer";
 import { HeaderActions } from "@/components/header-actions";
 import { LiveStrip } from "@/components/live-strip";
 import { AssistantMessage, UserMessage } from "@/components/message";
-import { Avatar, EmptyState, T } from "@/components/ui";
+import { EmptyState, T } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useConversationRun, useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { subscribeConversation } from "@/lib/realtime";
 import { screenHref, useChatScreens } from "@/lib/screens";
-import { space } from "@/lib/theme";
+import { radius, space, useColors } from "@/lib/theme";
 
 type Item =
   | { key: string; role: "intro" }
@@ -94,7 +95,7 @@ export default function Chat() {
           ListEmptyComponent={conversation.isError ? <EmptyState icon="warning" title="Couldn't open this chat" body={errorText(conversation.error)} /> : null}
           renderItem={({ item }) =>
             item.role === "intro" ? (
-              agent ? <Intro emoji={agent.avatar} name={agent.name} description={agent.description} /> : null
+              agent ? <Intro agent={agent} conversationId={id} running={!!run} /> : null
             ) : item.role === "user" ? (
               <UserMessage message={item.message} />
             ) : (
@@ -119,14 +120,29 @@ export default function Chat() {
   );
 }
 
-function Intro({ emoji, name, description }: { emoji: string; name: string; description: string }) {
+/** The agent at the top of the chat, saying hello in its own voice. */
+function Intro({ agent, conversationId, running }: { agent: Agent; conversationId: string; running: boolean }) {
+  const c = useColors();
+  // The phone doesn't know the human's name, so the greeting says "there".
+  const greeting = useMemo(
+    () => characterGreeting({ name: agent.name, personality: agent.personality ?? "", seed: conversationId }),
+    [agent.name, agent.personality, conversationId],
+  );
   return (
     <View style={styles.intro}>
-      <Avatar emoji={emoji} size={52} />
-      <T variant="headline">{name}</T>
-      {description ? (
-        <T variant="footnote" muted style={{ textAlign: "center", maxWidth: 280 }} numberOfLines={3}>
-          {description}
+      <CharacterAvatar agent={agent} size={88} running={running} />
+      <T variant="headline" style={{ marginTop: 4 }}>
+        {agent.name}
+      </T>
+      <View style={[styles.bubble, { backgroundColor: c.surface, borderColor: c.border }]}>
+        <View style={[styles.tail, { backgroundColor: c.surface, borderColor: c.border }]} />
+        <T variant="subhead" style={{ textAlign: "center" }}>
+          {greeting}
+        </T>
+      </View>
+      {agent.description ? (
+        <T variant="footnote" muted style={{ textAlign: "center", maxWidth: 280, marginTop: 4 }} numberOfLines={3}>
+          {agent.description}
         </T>
       ) : null}
     </View>
@@ -142,7 +158,27 @@ const styles = StyleSheet.create({
   intro: {
     alignItems: "center",
     gap: 6,
-    paddingTop: space.lg,
+    paddingTop: space.xl,
     paddingBottom: 6,
+  },
+  bubble: {
+    marginTop: 8,
+    maxWidth: 300,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.lg,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  tail: {
+    position: "absolute",
+    top: -6,
+    alignSelf: "center",
+    width: 12,
+    height: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: 3,
+    transform: [{ rotate: "45deg" }],
   },
 });

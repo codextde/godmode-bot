@@ -41,9 +41,18 @@ export interface ComputerAction {
   at: number;
 }
 
+/** How the latest run of a conversation ended (for the character's reaction). */
+export interface FinishedRun {
+  runId: string;
+  status: Run["status"];
+  at: number;
+}
+
 interface LiveState {
   connected: boolean;
   runs: Record<string, LiveRun>;
+  /** Last finished run per conversation id. */
+  finished: Record<string, FinishedRun>;
   /** Browser live view frames per view (`browserView`: a profile's active tab, or one chat's tab). */
   frames: Record<string, BrowserFrame>;
   /** Computer live view frames per view ("display:1", "window:812:4711", …). */
@@ -66,6 +75,7 @@ interface LiveState {
 export const useLive = create<LiveState>((set) => ({
   connected: false,
   runs: {},
+  finished: {},
   frames: {},
   computerFrames: {},
   computerActions: {},
@@ -111,7 +121,10 @@ export const useLive = create<LiveState>((set) => ({
     set((s) => {
       const next = { ...s.runs };
       delete next[run.id];
-      return { runs: next };
+      return {
+        runs: next,
+        finished: { ...s.finished, [run.conversationId]: { runId: run.id, status: run.status, at: Date.now() } },
+      };
     }),
   browserFrame: (view, frame) => set((s) => ({ frames: { ...s.frames, [view]: frame } })),
   /** Forget every frame of the profile (its browser stopped). */
@@ -149,6 +162,10 @@ export function useConversationLiveRun(conversationId: string | undefined): Live
     for (const r of Object.values(s.runs)) if (r.conversationId === conversationId) return r;
     return null;
   });
+}
+
+export function useConversationFinishedRun(conversationId: string | undefined): FinishedRun | null {
+  return useLive((s) => (conversationId ? (s.finished[conversationId] ?? null) : null));
 }
 
 export function useAgentRunning(agentId: string | undefined): boolean {

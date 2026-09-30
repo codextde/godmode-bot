@@ -1,5 +1,14 @@
 import type { Hono } from "hono";
-import { EFFORT_OPTIONS, isModelId } from "@godmode/shared";
+import {
+  CHARACTER_BODIES,
+  CHARACTER_EYES,
+  CHARACTER_FACES,
+  CHARACTER_MOUTHS,
+  CHARACTER_NECKS,
+  CHARACTER_TOPS,
+  EFFORT_OPTIONS,
+  isModelId,
+} from "@godmode/shared";
 import {
   createAgent,
   deleteAgent,
@@ -61,6 +70,18 @@ const computerSchema = z
   })
   .partial();
 
+/** Any subset of parts; the rest keep their current (or default) value. */
+const characterSchema = z
+  .object({
+    body: z.enum(CHARACTER_BODIES),
+    eyes: z.enum(CHARACTER_EYES),
+    mouth: z.enum(CHARACTER_MOUTHS),
+    top: z.enum(CHARACTER_TOPS),
+    face: z.enum(CHARACTER_FACES),
+    neck: z.enum(CHARACTER_NECKS),
+  })
+  .partial();
+
 const subagentSchema = z.object({
   name: z
     .string()
@@ -78,6 +99,8 @@ export const agentSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(80),
   avatar: z.string().trim().max(32).optional(),
   color: z.string().trim().max(32).optional(),
+  character: characterSchema.optional(),
+  personality: z.string().max(2000).optional(),
   description: z.string().max(2000).optional(),
   instructions: z.string().max(50_000).optional(),
   model: modelId,

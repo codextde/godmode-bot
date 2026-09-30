@@ -8,10 +8,13 @@
  * conversation — the first one and the human's follow-ups — moves the task along when it ends: In review when it
  * succeeded (coding: after pushing the branch and opening the pull request), Blocked when it failed, was stopped, or
  * the agent reported it can't go on. Merged pull requests move their task to Done.
+ *
+ * Descriptions are Markdown and may link files (screenshots, PDFs…, see ./attachments.ts): the agent gets a copy of
+ * each and is told to read them first.
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Agent, PullRequestState, Run, RunStatus, ServerEvent, Task, TaskInput, TaskPatch, TaskStatus, TaskType } from "@godmode/shared";
+import type { Agent, PullRequestState, Run, RunStatus, ServerEvent, Task, TaskInput, TaskMessageInput, TaskPatch, TaskStatus, TaskType } from "@godmode/shared";
 import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES, isValidBranch, parseGitUrl } from "@godmode/shared";
 import { config } from "../config";
 import { all, get, getMeta, insert, run as sql, setMeta, tx, update } from "../db";
@@ -22,6 +25,15 @@ import { containsSecret, redact } from "../vault/vault";
 import { getAgent } from "../agents/service";
 import { activeRunForConversation, cancelRun, getRun, waitForRun } from "../runner/runner";
 import { conversationExists, createConversation, sendMessage } from "../services/conversations";
+import {
+  claimTaskAttachments,
+  removeTaskAttachments,
+  stageTaskAttachments,
+  sweepTaskAttachments,
+  withFileNames,
+  withLocalPaths,
+  type StagedAttachments,
+} from "./attachments";
 import { notify } from "../services/notifications";
 import { workingDirectoryProblem } from "../services/folders";
 import { isRepoFolder, reposDir } from "../services/workspaceSources";
@@ -270,12 +282,13 @@ export function createTask(input: TaskInput): Task {
     setMeta("task_number", String(n));
     return n;
   });
+  const description = cleanDescription(input.description);
   insert("tasks", {
     id,
     workspace_id: workspaceId,
     number,
     title: cleanTitle(input.title),
-    description: cleanDescription(input.description),
+    description,
     type: cleanType(input.type),
     status,
     position: positionIn(workspaceId, status, null),
@@ -287,6 +300,7 @@ export function createTask(input: TaskInput): Task {
     created_at: ts,
     updated_at: ts,
   });
+  claimTaskAttachments(id, description);
   emit(id);
   if (agentId && (status === "todo" || status === "in_progress")) void dispatch(id);
   return getTask(id);
@@ -300,9 +314,10 @@ export function updateTask(id: string, patch: TaskPatch): Task {
   if (!agentId && patch.status === undefined && status === "in_progress") status = "backlog";
   const moved = status !== current.status || patch.beforeId !== undefined;
   const finished = status === "done" || status === "cancelled";
+  const description = patch.description !== undefined ? cleanDescription(patch.description) : undefined;
   update("tasks", id, {
     title: patch.title !== undefined ? cleanTitle(patch.title) : undefined,
-    description: patch.description !== undefined ? cleanDescription(patch.description) : undefined,
+    description,
     type: patch.type !== undefined ? cleanType(patch.type) : undefined,
     repo_url: patch.repoUrl !== undefined ? cleanRepoUrl(patch.repoUrl) : undefined,
     repo_path: patch.repoPath !== undefined ? cleanRepoPath(patch.repoPath, current.workspace_id) : undefined,
@@ -314,6 +329,7 @@ export function updateTask(id: string, patch: TaskPatch): Task {
     blocked_reason: (status !== current.status && status !== "blocked") || agentId !== current.agent_id ? null : undefined,
     updated_at: now(),
   });
+  if (description !== undefined) claimTaskAttachments(id, description);
 
   const wasWorking = current.status === "in_progress";
   const reassigned = agentId !== current.agent_id;
@@ -352,6 +368,7 @@ export async function deleteTask(id: string): Promise<void> {
     await waitForRun(active, 15_000).catch(() => {});
   }
   await removeCheckout(checkoutDir(id)).catch((err) => log.warn(`could not remove the worktree of task ${id}`, err));
+  removeTaskAttachments(id);
 }
 
 /** Stop and clean up every task of a workspace that is being deleted (its rows go with the workspace). */
@@ -361,18 +378,19 @@ export async function removeWorkspaceTasks(workspaceId: string): Promise<void> {
     await stopWork(t);
     if (active) await waitForRun(active, 15_000).catch(() => {});
     await removeCheckout(checkoutDir(t.id)).catch((err) => log.warn(`could not remove the worktree of task ${t.id}`, err));
+    removeTaskAttachments(t.id);
   }
 }
 
 /** A follow-up from the human in the task's conversation (e.g. review feedback); the task goes back to work. */
-export async function sendTaskMessage(id: string, content: string): Promise<Task> {
+export async function sendTaskMessage(id: string, content: string, attachments: TaskMessageInput["attachments"] = []): Promise<Task> {
   const task = requireRow(id);
-  if (!content.trim()) throw badRequest("Message is empty");
+  if (!content.trim() && !attachments.length) throw badRequest("Message is empty");
   if (!task.conversation_id || !conversationExists(task.conversation_id)) throw conflict("The task hasn't started yet — move it to Todo to start it");
   const owner = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", task.conversation_id)?.agent_id;
   if (!task.agent_id || owner !== task.agent_id) throw conflict("Move the task to Todo to hand it to its agent");
   if (busy.has(id)) throw conflict(`Godmode is ${activity.get(id)?.replace(/…$/, "").toLowerCase() ?? "preparing the task"} — send it again in a moment`);
-  await sendMessage(task.conversation_id, { content, trigger: "task" });
+  await sendMessage(task.conversation_id, { content, attachments, trigger: "task" });
   return getTask(id);
 }
 
@@ -465,15 +483,28 @@ function worktreeBrief(task: TaskRow, w: Worktree): string {
   ].join("\n");
 }
 
-function taskPrompt(task: TaskRow, worktree: Worktree | null, restarted: boolean): string {
+function attachmentsBrief(staged: StagedAttachments): string[] {
+  const lines: string[] = [];
+  if (staged.files.length) {
+    lines.push(
+      "The description links files the human attached (listed with their paths at the end). Open every one with the Read tool before you start — it shows images and reads PDFs — and treat what they show as part of the task.",
+    );
+  }
+  if (staged.missing.length) lines.push(`These attached files couldn't be found anymore: ${staged.missing.join(", ")}.`);
+  return lines;
+}
+
+/** `description`: the task's, or with its attachments pointing at their local copies (what Claude gets). */
+function taskPrompt(task: TaskRow, worktree: Worktree | null, restarted: boolean, description: string, staged: StagedAttachments): string {
   const lines = [
     restarted ? `The task #${task.number} was restarted from the board — here it is again (it may have changed):` : `You were assigned task #${task.number} on the task board.`,
     "",
     `# ${task.title}`,
     "",
-    task.description.trim() || "_No description._",
+    description.trim() || "_No description._",
     "",
     "---",
+    ...attachmentsBrief(staged),
     ...(worktree ? [worktreeBrief(task, worktree)] : []),
     TYPE_BRIEF[task.type],
     "If you can't finish because something is missing (access, information, a decision), call the `task_report_blocked` tool with what you need, then stop.",
@@ -562,8 +593,15 @@ export async function dispatch(id: string): Promise<void> {
       sql("UPDATE conversations SET archived = 1 WHERE id = ?", conversationId);
       sql("UPDATE tasks SET conversation_id = ? WHERE id = ?", conversationId, id);
     }
+    // The conversation shows the files attached to the message; Claude gets the description with their local copies.
+    const staged = stageTaskAttachments(agent, task.number, task.description);
     activity.delete(id);
-    await sendMessage(conversationId!, { content: taskPrompt(task, worktree, restarted), trigger: "task" });
+    await sendMessage(conversationId!, {
+      content: taskPrompt(task, worktree, restarted, withFileNames(task.description), staged),
+      prompt: taskPrompt(task, worktree, restarted, withLocalPaths(task.description, staged.paths), staged),
+      files: staged.files,
+      trigger: "task",
+    });
     emit(id);
   } catch (err) {
     log.warn(`task ${id} could not start`, err);
@@ -755,6 +793,11 @@ export async function checkPullRequests(): Promise<void> {
 
 export function startTasks(): void {
   unsubscribe ??= bus.on(onBusEvent);
+  try {
+    sweepTaskAttachments();
+  } catch (err) {
+    log.warn("could not sweep task attachments", err);
+  }
   // Work that was going on when Godmode stopped: its runs were marked interrupted.
   for (const t of all<TaskRow>("SELECT * FROM tasks WHERE status = 'in_progress'")) {
     if (!t.conversation_id || !activeRunForConversation(t.conversation_id)) {
@@ -763,7 +806,14 @@ export function startTasks(): void {
   }
   for (const t of all<{ id: string }>("SELECT id FROM tasks WHERE status = 'todo' AND agent_id IS NOT NULL ORDER BY position")) void dispatch(t.id);
   if (!watchTimer) {
-    watchTimer = setInterval(() => void checkPullRequests().catch((err) => log.warn("could not check pull requests", err)), PR_WATCH_INTERVAL_MS);
+    watchTimer = setInterval(() => {
+      void checkPullRequests().catch((err) => log.warn("could not check pull requests", err));
+      try {
+        sweepTaskAttachments();
+      } catch (err) {
+        log.warn("could not sweep task attachments", err);
+      }
+    }, PR_WATCH_INTERVAL_MS);
     watchTimer.unref?.();
   }
 }

@@ -1,5 +1,7 @@
 import { motion } from "motion/react";
-import { Backdrop, Logo } from "@/components/brand";
+import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
+import { Backdrop } from "@/components/brand";
+import { Character } from "@/components/character";
 import { Orb } from "@/components/aicss/Orb";
 import { Button } from "@/components/ui/button";
 
@@ -13,7 +15,7 @@ export function SplashScreen({ error }: { error?: string }) {
         transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
         className="relative flex flex-col items-center gap-6 text-center"
       >
-        <Logo className="size-12" />
+        <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={72} mood={error ? "error" : "working"} title="Godmode" />
         {error ? (
           <>
             <div>

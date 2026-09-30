@@ -138,7 +138,7 @@ export function MissingLoginCard({
                 to={`/agents/${agent.id}`}
                 className="mr-auto inline-flex min-w-0 items-center gap-1.5 rounded-md py-0.5 pr-2 pl-0.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
               >
-                <AgentAvatar agent={agent} size="sm" />
+                <AgentAvatar agent={agent} size="sm" mood={open ? "attention" : "idle"} />
                 <span className="truncate">
                   Reported by <span className="font-medium text-foreground">{agent.name}</span>
                 </span>

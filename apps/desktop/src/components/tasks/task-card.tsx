@@ -1,7 +1,8 @@
 import { forwardRef, type HTMLAttributes } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, OctagonAlert } from "lucide-react";
+import { GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, OctagonAlert, Paperclip } from "lucide-react";
 import type { Agent, Task, Workspace } from "@godmode/shared";
+import { taskAttachmentIds } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { LiveDot } from "@/components/aicss/Motion";
 import { useLive } from "@/stores/live";
@@ -62,6 +63,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
 ) {
   const activity = useTaskActivity(task);
   const working = isWorking(task);
+  const files = taskAttachmentIds(task.description).length;
   return (
     <div
       ref={ref}
@@ -119,6 +121,12 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
           </span>
         )}
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          {files > 0 && (
+            <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums" title={`${files} attached file${files === 1 ? "" : "s"}`}>
+              <Paperclip className="size-3" />
+              {files}
+            </span>
+          )}
           <PullRequestChip task={task} />
           {!task.pullRequest && (
             <span className="font-mono text-[11px] text-muted-foreground tabular-nums">

@@ -1,5 +1,6 @@
 import { attribution, initConsent, track, xEvent } from './analytics';
 import { initDotField } from './dotfield';
+import { initCharacters } from './characters';
 
 window.__gm = true;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -113,6 +114,9 @@ if (tilt && !reduced) {
 // Dot field behind the hero ---------------------------------------------------------------------
 const field = document.querySelector<HTMLCanvasElement>('[data-dotfield]');
 if (field) initDotField(field, reduced);
+
+// Agent characters (eyes follow the pointer, crew picker, expression + studio demos) ----------------
+initCharacters(reduced);
 
 // Videos: play only while visible (saves battery + bandwidth) ----------------------------------
 const videoIO = new IntersectionObserver(

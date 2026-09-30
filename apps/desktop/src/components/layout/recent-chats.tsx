@@ -12,6 +12,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AgentAvatar } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { followupWhen } from "@/components/chat/followup";
 import { api } from "@/lib/api";
@@ -61,7 +62,7 @@ export function RecentChats() {
                   className="h-auto py-1.5 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
                 >
                   <Link to={`/chat/${c.id}`} className="flex items-start gap-2">
-                    <span className="mt-0.5 text-sm leading-none">{agent?.avatar ?? "💬"}</span>
+                    <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-mt-0.5 size-5" />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1">
                         <span className="truncate text-[13px]">{c.title || "New chat"}</span>

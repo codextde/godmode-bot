@@ -85,6 +85,7 @@ import type {
   StartChatInput,
   StartChatResult,
   Task,
+  TaskAttachment,
   TaskInput,
   TaskPatch,
   TotpCode,
@@ -181,6 +182,19 @@ export async function request<T>(method: string, path: string, body?: unknown, i
   if (type.includes("application/json")) return (await res.json()) as T;
   if (type.startsWith("text/")) return (await res.text()) as T;
   return (await res.blob()) as T;
+}
+
+/** A file from the core as a Blob, whatever its type (authenticated, unlike a plain <img src> or link). */
+export async function fetchBlob(path: string): Promise<Blob> {
+  const { baseUrl, token } = await getCoreInfo();
+  const headers = new Headers();
+  if (token) headers.set("authorization", `Bearer ${token}`);
+  const res = await fetch(`${baseUrl}${path}`, { headers, credentials: "same-origin" });
+  if (!res.ok) {
+    if (res.status === 401) onUnauthorized?.();
+    throw new ApiRequestError(res.status, res.status === 404 ? "The file doesn't exist anymore" : res.statusText || `HTTP ${res.status}`);
+  }
+  return res.blob();
 }
 
 const get = <T>(path: string, query?: Query) => request<T>("GET", path + qs(query));
@@ -308,7 +322,14 @@ export const api = {
     update: (id: string, input: TaskPatch) => patch<Task>(`/api/tasks/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/tasks/${id}`),
     /** Follow-up for the agent in the task's conversation (review feedback); the task goes back to work. */
-    message: (id: string, content: string) => post<Task>(`/api/tasks/${id}/messages`, { content }),
+    message: (id: string, content: string, attachments?: SendMessageInput["attachments"]) =>
+      post<Task>(`/api/tasks/${id}/messages`, { content, attachments }),
+    /** Upload a file for a description; link it there with its `url`. */
+    upload: (file: File) => {
+      const form = new FormData();
+      form.set("file", file, file.name || "file");
+      return request<TaskAttachment>("POST", "/api/tasks/attachments", form);
+    },
   },
 
   agents: {

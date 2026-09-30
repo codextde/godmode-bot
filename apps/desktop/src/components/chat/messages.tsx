@@ -20,6 +20,7 @@ import { CopyButton } from "./copy-button";
 import { CommandText } from "./slash-commands";
 import { describeTool } from "./tool-meta";
 import { FollowupMarker, followupBlock } from "./followup";
+import { liveMood } from "./conversation-mood";
 
 const FALLBACK_AGENT = { avatar: "🤖", color: "violet" };
 
@@ -113,7 +114,7 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
 
   return (
     <div className="group/msg flex gap-3" onMouseEnter={() => setHovered(true)} onFocus={() => setHovered(true)}>
-      <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" className="mt-0.5" />
+      <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" mood="idle" still className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <AgentHeader agent={agent} />
         <MessageBlocks blocks={blocks} />
@@ -248,7 +249,7 @@ export function LiveAssistantMessage({
   const since = live?.startedAt ?? startedAt;
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3" aria-live="polite" aria-busy="true">
-      <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" className="mt-0.5" />
+      <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" mood={liveMood(live).mood} className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <AgentHeader agent={agent}>
           <span className="flex min-w-0 items-center gap-2 rounded-md border bg-card py-1 pr-2 pl-1.5 text-xs shadow-card">

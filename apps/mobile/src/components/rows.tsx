@@ -1,8 +1,9 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { Agent, Conversation } from "@godmode/shared";
+import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
-import { Avatar, Badge, Card, LiveDot, Row, T, tap } from "./ui";
+import { Badge, Card, LiveDot, Row, T, tap } from "./ui";
 import { api } from "@/lib/api";
 import { activityText, elapsed, shortTime } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
@@ -28,7 +29,7 @@ export function ConversationRow({ conversation, agent, running }: { conversation
   const origin = ORIGIN_LABEL[conversation.origin];
   return (
     <Pressable onPress={() => openChat(conversation.id)} style={({ pressed }) => [styles.convo, pressed && { backgroundColor: c.sunken }]}>
-      <Avatar emoji={agent?.avatar ?? "🤖"} size={44} running={running} />
+      <CharacterAvatar agent={agent} size={44} running={running} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Row style={{ gap: space.sm }}>
           {conversation.pinned && <Icon name="pin" size={11} color={c.textMuted} />}
@@ -57,7 +58,7 @@ export function RunCard({ live, agent, title }: { live: LiveRun; agent?: Agent; 
   return (
     <Card onPress={() => openChat(run.conversationId)} style={styles.run}>
       <Row style={{ gap: space.md }}>
-        <Avatar emoji={agent?.avatar ?? "🤖"} size={40} />
+        <CharacterAvatar agent={agent} size={40} mood={queued ? "idle" : "working"} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
             {agent?.name ?? "Agent"}
@@ -96,7 +97,7 @@ export function AgentRow({ agent, running, onPress }: { agent: Agent; running?: 
   const status = running ? "Working" : !agent.enabled ? "Paused" : agent.status === "error" ? "Last run failed" : agent.lastRunAt ? `Active ${shortTime(agent.lastRunAt)}` : "Ready";
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.agent, pressed && { backgroundColor: c.sunken }]}>
-      <Avatar emoji={agent.avatar} size={46} running={running} />
+      <CharacterAvatar agent={agent} size={46} running={running} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Row style={{ gap: space.sm }}>
           <T variant="headline" numberOfLines={1} style={{ flexShrink: 1, fontSize: 16 }}>

@@ -465,6 +465,36 @@ describe("management tools", () => {
   });
 });
 
+describe("agent looks through MCP", () => {
+  test("agent_create and agent_update take a character and a personality", async () => {
+    const tools = (await rpc(tokens[manager.id]!, "tools/list")).result.tools as { name: string; description: string; inputSchema: { properties: Record<string, { description?: string; properties?: Record<string, { enum?: string[] }> }> } }[];
+    const create = tools.find((t) => t.name === "agent_create")!;
+    expect(create.description).toContain("personality");
+    expect(create.inputSchema.properties.character!.properties!.body!.enum).toContain("kitty");
+    expect(create.inputSchema.properties.personality!.description).toContain("butler");
+
+    const created = await call(tokens[manager.id]!, "agent_create", {
+      name: "Styled Bot",
+      color: "amber",
+      character: { body: "cloud", top: "sprout" },
+      personality: "sunny",
+    });
+    expect(created.isError).toBeUndefined();
+    const id = (JSON.parse(created.content[0]!.text) as { created: { id: string } }).created.id;
+    expect(getAgent(id).character.body).toBe("cloud");
+    expect(getAgent(id).character.top).toBe("sprout");
+    expect(getAgent(id).personality).toBe("sunny");
+
+    expect((await call(tokens[manager.id]!, "agent_update", { agentId: id, character: { face: "glasses" }, personality: "calm" })).isError).toBeUndefined();
+    expect(getAgent(id).character).toMatchObject({ body: "cloud", top: "sprout", face: "glasses" });
+    const details = JSON.parse((await call(tokens[manager.id]!, "agent_get", { agentId: id })).content[0]!.text) as { personality: string; look: { color: string } };
+    expect(details.personality).toBe("calm");
+    expect(details.look.color).toBe("amber");
+    expect((await call(tokens[manager.id]!, "agent_update", { agentId: id, character: { body: "dragon" } })).isError).toBe(true);
+    await call(tokens[manager.id]!, "agent_delete", { agentId: id });
+  });
+});
+
 describe("no privilege escalation through agent tools", () => {
   test("agent-created agents are fill-only without management, even when the default is reveal", async () => {
     updateSettings({ security: { defaultSecretAccess: "reveal" } });

@@ -5,7 +5,8 @@
  * The tool guide (browser, vault login procedure, missing logins, delegation, management), memory and final-answer
  * policies are appended to every run by the runner (runner/prompt.ts) and deliberately not repeated here.
  */
-import type { Agent } from "@godmode/shared";
+import type { Agent, CharacterFace, CharacterNeck, CharacterTop } from "@godmode/shared";
+import { AGENT_COLORS, CHARACTER_LABELS, personalityPrompt } from "@godmode/shared";
 
 export interface ClaudeMdContext {
   /** settings.general.userName ("" = unknown) */
@@ -34,6 +35,31 @@ function section(title: string, lines: string[]): string {
   return [`## ${title}`, "", ...lines, ""].join("\n");
 }
 
+const TOP_PHRASES: Record<CharacterTop, string> = {
+  none: "",
+  bolt: "a lightning bolt",
+  antenna: "an antenna",
+  sprout: "a little sprout",
+  beret: "a beret",
+  cap: "a cap",
+  crown: "a crown",
+  bow: "a bow",
+  party: "a party hat",
+  headphones: "headphones",
+};
+const FACE_PHRASES: Record<CharacterFace, string> = { none: "", glasses: "glasses", shades: "sunglasses", blush: "rosy cheeks" };
+const NECK_PHRASES: Record<CharacterNeck, string> = { none: "", bowtie: "a bow tie", scarf: "a scarf" };
+
+/** e.g. "In the Godmode app you appear as a little emerald mochi character with a lightning bolt and rosy cheeks." */
+export function describeAppearance(agent: Pick<Agent, "color" | "character">): string {
+  const c = agent.character;
+  const color = (AGENT_COLORS as readonly string[]).includes(agent.color) ? agent.color : "violet";
+  const extras = [TOP_PHRASES[c.top], FACE_PHRASES[c.face], NECK_PHRASES[c.neck]].filter(Boolean);
+  const list = extras.length > 1 ? `${extras.slice(0, -1).join(", ")} and ${extras.at(-1)}` : (extras[0] ?? "");
+  const body = CHARACTER_LABELS.body[c.body].toLowerCase();
+  return `In the Godmode app you appear as a little ${color} ${body} character${list ? ` with ${list}` : ""}.`;
+}
+
 export function renderClaudeMd(agent: Agent, ctx: ClaudeMdContext): string {
   const human = ctx.userName.trim() || "your human";
   const humanRef = ctx.userName.trim() || "the human";
@@ -50,6 +76,7 @@ export function renderClaudeMd(agent: Agent, ctx: ClaudeMdContext): string {
   const who = [
     `You are **${agent.name}**, an AI coworker working for ${human} through Godmode Bot` +
       (ctx.workspace ? ` in the **${ctx.workspace.name}** workspace.` : "."),
+    describeAppearance(agent),
   ];
   if (agent.description.trim()) who.push("", agent.description.trim());
   if (ctx.workspace?.description.trim()) who.push("", `Workspace context: ${ctx.workspace.description.trim()}`);
@@ -57,6 +84,17 @@ export function renderClaudeMd(agent: Agent, ctx: ClaudeMdContext): string {
     who.push("", `Each run is capped at $${agent.permissions.maxBudgetUsd} — work efficiently and prioritize.`);
   }
   out.push(section("Who you are", who));
+
+  const personality = personalityPrompt(agent.personality);
+  if (personality) {
+    out.push(
+      section("Your personality", [
+        personality,
+        "",
+        "Let it shape your tone in chats and reports — never at the expense of accuracy, safety or brevity.",
+      ]),
+    );
+  }
 
   out.push(
     section("Your instructions", [
@@ -131,6 +169,8 @@ export function renderAgentState(agent: Agent): string {
     workspaceId: agent.workspaceId,
     avatar: agent.avatar,
     color: agent.color,
+    character: agent.character,
+    personality: agent.personality,
     description: agent.description,
     instructions: agent.instructions,
     model: agent.model,

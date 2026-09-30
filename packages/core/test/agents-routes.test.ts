@@ -92,6 +92,25 @@ describe("agent routes", () => {
     expect((await call("PATCH", `/api/agents/${agent.id}`, { effort: "ludicrous" })).status).toBe(400);
   });
 
+  test("characters and personalities: partial looks are merged, unknown parts rejected", async () => {
+    const templates = (await call<AgentTemplate[]>("GET", "/api/agent-templates")).data;
+    expect(templates.every((t) => t.character.body && typeof t.personality === "string")).toBe(true);
+
+    expect(agent.character.body).toBeTruthy();
+    expect(agent.personality).toBe("");
+    const res = await call<Agent>("PATCH", `/api/agents/${agent.id}`, { character: { top: "crown" }, personality: "sunny" });
+    expect(res.status).toBe(200);
+    expect(res.data.character).toEqual({ ...agent.character, top: "crown" });
+    expect(res.data.personality).toBe("sunny");
+    expect((await call("PATCH", `/api/agents/${agent.id}`, { character: { body: "dragon" } })).status).toBe(400);
+    expect((await call("PATCH", `/api/agents/${agent.id}`, { personality: "x".repeat(2001) })).status).toBe(400);
+
+    const created = await call<Agent>("POST", "/api/agents", { name: "Styled Route Bot", character: { body: "kitty", face: "glasses" }, personality: "curious" });
+    expect(created.data.character.body).toBe("kitty");
+    expect(created.data.character.face).toBe("glasses");
+    expect(created.data.personality).toBe("curious");
+  });
+
   test("repository file endpoints", async () => {
     const files = await call<AgentFileEntry[]>("GET", `/api/agents/${agent.id}/files?path=`);
     expect(files.status).toBe(200);

@@ -3,13 +3,14 @@ import { Link, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, SshServer, Vm } from "@godmode/shared";
-import { computerTargetLabel } from "@godmode/shared";
+import { characterGreeting, computerTargetLabel } from "@godmode/shared";
 import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { AgentAvatar, EmptyState } from "@/components/common";
+import { SpeechBubble } from "@/components/character";
 import { BrowserFocus, BrowserPanel, BrowserToggle, agentBrowserProfile, useChatBrowser, useChatTab, type BrowserFocusMode } from "@/components/chat/browser-panel";
 import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { ComputerFocus, ComputerPanel, ComputerShareChip, ComputerToggle, type ComputerFocusMode } from "@/components/computer/computer-panel";
@@ -17,6 +18,7 @@ import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { useArchiveChat } from "@/components/chat/chat-actions";
 import { ConversationHeader } from "@/components/chat/conversation-header";
+import { useConversationMood } from "@/components/chat/conversation-mood";
 import { FollowupBar } from "@/components/chat/followup";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
@@ -31,7 +33,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { useVoiceSettings } from "@/hooks/use-voice";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useConversation, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useConversation, useWorkspaces } from "@/lib/hooks";
 import { onServerEvent } from "@/lib/realtime";
 import { speak, useVoicePrefs, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
@@ -94,6 +96,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   }, [computerTarget]);
 
   const messages = useMemo(() => conv?.messages ?? [], [conv?.messages]);
+  const mood = useConversationMood(conversationId, messages, live);
   const activeRunId = live?.runId ?? conv?.activeRunId ?? null;
   const busyRef = useRef(false);
   busyRef.current = !!activeRunId;
@@ -352,6 +355,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         <ConversationHeader
           conversation={conv}
           agent={agent}
+          mood={mood}
           onVoiceMode={dreamLog ? undefined : onVoiceMode}
           browserToggle={
             chatVm ? (
@@ -380,7 +384,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           onStop={() => activeRunId && cancel.mutate(activeRunId)}
           stopping={cancel.isPending}
           empty={
-            <ConversationWelcome agent={agent} onPick={(text) => composerRef.current?.setText(text)} />
+            <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
           }
         />
 
@@ -565,7 +569,8 @@ function DreamLogNote({ agentId, agentName }: { agentId: string; agentName: stri
   );
 }
 
-function ConversationWelcome({ agent, onPick }: { agent?: Agent; onPick: (text: string) => void }) {
+function ConversationWelcome({ agent, seed, onPick }: { agent?: Agent; seed: string; onPick: (text: string) => void }) {
+  const { data: boot } = useBootstrap();
   const ideas = agent?.isDefault
     ? [
         { icon: Sparkles, text: "What can you do for me?" },
@@ -578,12 +583,17 @@ function ConversationWelcome({ agent, onPick }: { agent?: Agent; onPick: (text: 
         { icon: Brain, text: "What have you learned so far?" },
       ];
   return (
-    <div className="flex flex-col items-center pt-[10vh] text-center">
-      {agent && <AgentAvatar agent={agent} size="xl" className="animate-float" />}
-      <h2 className="heading-display mt-6 text-[26px] text-balance @lg:text-[32px]">
-        {agent?.name ?? "Your agent"}. <span className="text-muted-foreground">Ready when you are.</span>
-      </h2>
-      {agent?.description && <p className="mt-3 max-w-md text-sm text-muted-foreground">{agent.description}</p>}
+    <div className="flex flex-col items-center pt-[8vh] text-center">
+      {agent && (
+        <>
+          <SpeechBubble tail="bottom" className="max-w-sm text-balance">
+            {characterGreeting({ name: agent.name, personality: agent.personality, human: boot?.settings.general.userName, seed })}
+          </SpeechBubble>
+          <AgentAvatar agent={agent} size="xl" follow className="mt-4 size-28" />
+        </>
+      )}
+      <h2 className="mt-4 text-lg font-medium tracking-[-0.02em]">{agent?.name ?? "Your agent"}</h2>
+      {agent?.description && <p className="mt-1 max-w-md text-sm text-muted-foreground">{agent.description}</p>}
       <div className="mt-8 grid w-full max-w-lg overflow-hidden rounded-xl border bg-card shadow-card">
         {ideas.map(({ icon: Icon, text }) => (
           <button

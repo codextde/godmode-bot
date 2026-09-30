@@ -144,6 +144,12 @@ describe("device scope", () => {
     expect(deviceMayCall("POST", "/api/mobile/pairing")).toBe(false);
     expect(deviceMayCall("GET", "/api/agents/a1/file")).toBe(false);
     expect(deviceMayCall("GET", "/api/folders")).toBe(false);
+    expect(deviceMayCall("GET", "/api/tasks")).toBe(true);
+    expect(deviceMayCall("POST", "/api/tasks")).toBe(true);
+    expect(deviceMayCall("PATCH", "/api/tasks/tsk_1")).toBe(true);
+    expect(deviceMayCall("POST", "/api/tasks/tsk_1/messages")).toBe(true);
+    expect(deviceMayCall("DELETE", "/api/tasks/tsk_1")).toBe(false);
+    expect(deviceMayCall("POST", "/api/workspaces")).toBe(false);
   });
 });
 
@@ -227,11 +233,29 @@ describe("phone access", () => {
     expect((await phone("/api/conversations/cnv_missing", json("PATCH", { pinned: true }))).status).toBe(404);
     expect((await phone("/api/chat", json("POST", { content: "hi", computerTarget: { kind: "desktop" } }))).status).toBe(403);
     expect((await phone("/api/routines/rtn_missing", json("PATCH", { prompt: "rm -rf" }))).status).toBe(403);
+    expect((await phone("/api/tasks", json("POST", { title: "Fork it", repoUrl: "https://evil.example.com/x.git" }))).status).toBe(403);
+    expect((await phone("/api/tasks/tsk_missing", json("PATCH", { repoPath: "/" }))).status).toBe(403);
+    expect((await phone("/api/tasks/tsk_missing", json("PATCH", { status: "todo" }))).status).toBe(404);
     expect((await phone("/api/browser/profiles/bpr_missing/launch", json("POST", { headless: false }))).status).toBe(403);
     expect((await phone("/api/browser/profiles/bpr_missing/launch", json("POST", {}))).status).toBe(404);
     const screen = await phone("/api/computer/input", json("POST", { view: "display:1", event: { type: "click", x: 1, y: 1 } }));
     expect(screen.status).toBe(403);
     expect(((await screen.json()) as { error: string }).error).toMatch(/shared in a chat/);
+  });
+
+  test("phones create and follow tasks in a workspace", async () => {
+    const { token: device } = await pair("Tasks");
+    const json = (method: string, body: unknown) => ({ bearer: device, method, body: JSON.stringify(body) });
+    const ws = (await (await desktop("/api/workspaces", { method: "POST", body: JSON.stringify({ name: "Phone work" }) })).json()) as { id: string };
+    const created = await phone("/api/tasks", json("POST", { workspaceId: ws.id, title: "Write the release notes", description: "For 0.2", type: "research" }));
+    expect(created.status).toBe(200);
+    const task = (await created.json()) as { id: string; workspaceId: string; status: string };
+    expect(task).toMatchObject({ workspaceId: ws.id, status: "backlog" });
+    const listed = (await (await phone(`/api/tasks?workspaceId=${ws.id}`, { bearer: device })).json()) as { id: string }[];
+    expect(listed.map((t) => t.id)).toEqual([task.id]);
+    const moved = await phone(`/api/tasks/${task.id}`, json("PATCH", { status: "cancelled" }));
+    expect(((await moved.json()) as { status: string }).status).toBe("cancelled");
+    expect((await phone(`/api/conversations?workspaceId=${ws.id}`, { bearer: device })).status).toBe(200);
   });
 
   test("the phones' listener refuses everything but paired phones", async () => {

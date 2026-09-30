@@ -2,10 +2,12 @@ import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Archive, CircleCheck, Inbox, PartyPopper, RefreshCw } from "lucide-react";
 import type { Agent, MissingLoginStatus } from "@godmode/shared";
+import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, PageBody, PageHeader } from "@/components/common";
+import { Character } from "@/components/character";
 import { MissingLoginCard, useMissingLoginStatus } from "@/components/inbox/missing-login-card";
 import { NotificationList } from "@/components/inbox/notification-list";
 import { isVaultLocked } from "@/components/vault/vault-utils";
@@ -111,6 +113,7 @@ export default function InboxPage() {
               <EmptyState
                 key={tab}
                 icon={EMPTY[tab].icon}
+                art={tab === "open" ? <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={64} follow /> : undefined}
                 title={EMPTY[tab].title}
                 description={EMPTY[tab].description}
                 className={tab === "open" ? "border-success/30 bg-success/[0.03]" : undefined}

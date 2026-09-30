@@ -38,6 +38,10 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Label>Chats</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "bubble.left.and.bubble.right", selected: "bubble.left.and.bubble.right.fill" }} md="forum" />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="tasks">
+        <NativeTabs.Trigger.Label>Tasks</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="checklist" md="checklist" />
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="screens">
         <NativeTabs.Trigger.Label>Screens</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="macwindow.on.rectangle" md="desktop_windows" />

@@ -3,14 +3,15 @@ import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Play } from "lucide-react";
-import type { Agent } from "@godmode/shared";
+import type { Agent, CharacterMood } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useScopeWorkspace } from "@/lib/hooks";
+import { useMissingLogins, useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { clearDraft, useDraft } from "@/lib/drafts";
 import { useLive, type LiveRun } from "@/stores/live";
 import { AgentAvatar, Kbd } from "@/components/common";
+import { liveMood } from "@/components/chat/conversation-mood";
 import { LiveDot } from "@/components/aicss/Motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,6 +40,17 @@ import { cn } from "@/lib/utils";
 /** The live run of an agent, if it is working right now. */
 export function useAgentLiveRun(agentId: string | undefined): LiveRun | null {
   return useLive((s) => (agentId ? (Object.values(s.runs).find((r) => r.agentId === agentId) ?? null) : null));
+}
+
+/** The agent's character mood outside a chat: busy while it runs, waving while a login it needs is missing. */
+export function useAgentMood(agent: Agent): CharacterMood {
+  const live = useAgentLiveRun(agent.id);
+  const { data: missing = [] } = useMissingLogins("open");
+  if (live) return liveMood(live).mood;
+  if (!agent.enabled) return "sleeping";
+  if (missing.some((m) => m.agentId === agent.id)) return "attention";
+  if (agent.status === "error") return "error";
+  return "idle";
 }
 
 /** Start a fresh conversation with an agent and open it. */
@@ -230,8 +242,18 @@ export function DeleteAgentDialog({
 /** Status dot + label, live-aware ("Browsing github.com…" while running). */
 export function AgentStatus({ agent, className, showActivity = true }: { agent: Agent; className?: string; showActivity?: boolean }) {
   const live = useAgentLiveRun(agent.id);
+  const { data: missing = [] } = useMissingLogins("open");
   const running = !!live || agent.status === "running";
-  const state = !agent.enabled ? "disabled" : running ? "running" : agent.status === "error" ? "error" : "idle";
+  const needsLogin = missing.some((m) => m.agentId === agent.id);
+  const state = !agent.enabled
+    ? "disabled"
+    : running
+      ? "running"
+      : needsLogin
+        ? "attention"
+        : agent.status === "error"
+          ? "error"
+          : "idle";
   const label =
     state === "running"
       ? showActivity && live?.activity
@@ -239,9 +261,11 @@ export function AgentStatus({ agent, className, showActivity = true }: { agent: 
         : "Working…"
       : state === "disabled"
         ? "Disabled"
-        : state === "error"
-          ? "Last run failed"
-          : "Idle";
+        : state === "attention"
+          ? "Needs a login"
+          : state === "error"
+            ? "Last run failed"
+            : "Idle";
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-xs", className)}>
       {state === "running" ? (
@@ -251,6 +275,7 @@ export function AgentStatus({ agent, className, showActivity = true }: { agent: 
           className={cn(
             "size-1.5 shrink-0 rounded-full",
             state === "idle" && "bg-success",
+            state === "attention" && "bg-warning",
             state === "error" && "bg-destructive",
             state === "disabled" && "bg-muted-foreground/50",
           )}

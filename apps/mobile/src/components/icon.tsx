@@ -54,6 +54,10 @@ const ICONS = {
   wifi: ["wifi.slash", "wifi_off"],
   pin: ["pin.fill", "push_pin"],
   phone: ["iphone", "smartphone"],
+  layers: ["square.stack.3d.up.fill", "layers"],
+  tasks: ["checklist", "checklist"],
+  branch: ["arrow.triangle.branch", "merge"],
+  external: ["arrow.up.right", "open_in_new"],
 } as const satisfies Record<string, readonly [SFSymbol, AndroidSymbol]>;
 
 export type IconName = keyof typeof ICONS;

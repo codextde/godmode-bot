@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FolderGit2, Plus, Search, SquareKanban } from "lucide-react";
 import { toast } from "sonner";
 import type { Task, TaskStatus, Workspace } from "@godmode/shared";
-import { PageHeader } from "@/components/common";
+import { AgentAvatar, PageHeader } from "@/components/common";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -205,7 +205,7 @@ export default function TasksPage() {
             {scoped.length > 0 && <SelectSeparator />}
             {scoped.map((a) => (
               <SelectItem key={a.id} value={a.id}>
-                <span>{a.avatar}</span> {a.name}
+                <AgentAvatar agent={a} size="sm" still className="size-4" /> {a.name}
               </SelectItem>
             ))}
           </SelectContent>

@@ -40,8 +40,7 @@ import { useTheme } from "@/components/theme-provider";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { modKey } from "@/lib/desktop";
-import { colorGradient } from "@/components/common";
-import { cn } from "@/lib/utils";
+import { AgentAvatar } from "@/components/common";
 
 export function CommandPalette() {
   const open = useUi((s) => s.commandOpen);
@@ -153,9 +152,7 @@ export function CommandPalette() {
             <CommandGroup heading="Agents">
               {agents.map((a) => (
                 <CommandItem key={a.id} value={`agent ${a.name} ${a.description}`} onSelect={() => go(`/agents/${a.id}`)}>
-                  <span className={cn("grid size-5 shrink-0 place-items-center rounded-[5px] text-[11px] ring-1 ring-inset", colorGradient(a.color))}>
-                    {a.avatar}
-                  </span>
+                  <AgentAvatar agent={a} size="sm" still className="size-5" />
                   {a.name}
                   <span className="ml-2 truncate text-xs text-muted-foreground">{a.description}</span>
                 </CommandItem>

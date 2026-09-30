@@ -1,7 +1,8 @@
 import type { FormEvent } from "react";
 import { motion } from "motion/react";
 import { Bot, KeyRound, Workflow } from "lucide-react";
-import { Logo } from "@/components/brand";
+import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
+import { Character, SpeechBubble } from "@/components/character";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "./auth-layout";
@@ -26,6 +27,7 @@ const FEATURES = [
 ];
 
 export function WelcomeStep({ userName, onUserName, onNext }: { userName: string; onUserName: (v: string) => void; onNext: () => void }) {
+  const first = userName.trim().split(/\s+/)[0];
   const submit = (e: FormEvent) => {
     e.preventDefault();
     onNext();
@@ -33,8 +35,16 @@ export function WelcomeStep({ userName, onUserName, onNext }: { userName: string
   return (
     <form onSubmit={submit}>
       <div className="mb-8 flex flex-col items-start">
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}>
-          <Logo className="size-11" />
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
+          className="flex items-center gap-4"
+        >
+          <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={76} follow title="Godmode" />
+          <SpeechBubble tail="left" delay={0.35} className="max-w-xs text-[14px]">
+            {first ? `Hi ${first}, I'm Godmode 👋` : "Hi, I'm Godmode 👋"} — your new coworker. Let's get me set up.
+          </SpeechBubble>
         </motion.div>
         <p className="eyebrow mt-7">Setup · about a minute</p>
         <h1 className="heading-display mt-3 text-[40px] sm:text-[48px]">
@@ -80,7 +90,7 @@ export function WelcomeStep({ userName, onUserName, onNext }: { userName: string
 
         <StepFooter>
           <SubmitButton busy={false} className="w-auto px-6">
-            {userName.trim() ? `Let's go, ${userName.trim().split(/\s+/)[0]}` : "Get started"}
+            {first ? `Let's go, ${first}` : "Get started"}
           </SubmitButton>
         </StepFooter>
       </StepCard>

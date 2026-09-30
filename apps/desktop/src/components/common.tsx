@@ -1,6 +1,9 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { Globe2, Layers } from "lucide-react";
+import type { AgentCharacter, CharacterMood } from "@godmode/shared";
+import { defaultCharacter } from "@godmode/shared";
+import { Character } from "@/components/character";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useWorkspaceName } from "@/lib/hooks";
@@ -44,12 +47,15 @@ export function PageBody({ children, className }: { children: ReactNode; classNa
 
 export function EmptyState({
   icon,
+  art,
   title,
   description,
   action,
   className,
 }: {
   icon?: ReactNode;
+  /** Larger illustration (e.g. a character) shown instead of the icon tile. */
+  art?: ReactNode;
   title: string;
   description?: ReactNode;
   action?: ReactNode;
@@ -64,7 +70,8 @@ export function EmptyState({
         className,
       )}
     >
-      {icon && (
+      {art && <div className="mb-4">{art}</div>}
+      {icon && !art && (
         <div className="mb-4 grid size-11 place-items-center rounded-lg border bg-card text-foreground shadow-card [&_svg]:size-5">
           {icon}
         </div>
@@ -113,31 +120,44 @@ export function colorSwatch(color: string | undefined) {
   return SWATCH_CLASSES[color ?? "violet"] ?? SWATCH_CLASSES.violet;
 }
 
-/** Emoji avatar on a flat tinted tile; a live dot and soft pulse while the agent is running. */
+/** Rendered sizes of `AgentAvatar`; `sm` gets an enlarged face so it still reads at 16–24px. */
+const AVATAR_SIZES = { sm: "size-6", md: "size-8", lg: "size-12", xl: "size-16" } as const;
+
+/**
+ * The agent's character — the creature itself is the avatar. It works while a run is live and naps while the agent is
+ * disabled; `mood` overrides both (e.g. "attention" where the agent waits for the human). Decorative — the name is
+ * almost always written next to it; label the surrounding link or button where it stands alone.
+ */
 export function AgentAvatar({
   agent,
   size = "md",
+  mood,
+  follow,
+  still,
   className,
 }: {
-  agent: { id?: string; avatar: string; color: string };
-  size?: "sm" | "md" | "lg" | "xl";
+  agent: { id?: string; name?: string; avatar?: string; color: string; character?: AgentCharacter; enabled?: boolean };
+  size?: keyof typeof AVATAR_SIZES;
+  mood?: CharacterMood;
+  follow?: boolean;
+  still?: boolean;
   className?: string;
 }) {
   const running = useAgentRunning(agent.id);
-  const sizes = { sm: "size-6 text-[13px] rounded-md", md: "size-8 text-base rounded-lg", lg: "size-12 text-2xl rounded-xl", xl: "size-16 text-3xl rounded-2xl" };
+  const seed = agent.id ?? agent.avatar ?? agent.name ?? "agent";
+  const character = useMemo(() => agent.character ?? defaultCharacter(seed), [agent.character, seed]);
   return (
-    <div
-      className={cn(
-        "relative grid shrink-0 place-items-center ring-1 ring-inset",
-        colorGradient(agent.color),
-        sizes[size],
-        running && "animate-pulse-ring",
-        className,
-      )}
-    >
-      <span>{agent.avatar || "🤖"}</span>
-      {running && <span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-background bg-brand" />}
-    </div>
+    <Character
+      character={character}
+      color={agent.color}
+      mood={mood ?? (running ? "working" : agent.enabled === false ? "sleeping" : "idle")}
+      size={AVATAR_SIZES[size]}
+      faceScale={size === "sm" ? 1.25 : size === "md" ? 1.1 : 1}
+      follow={follow}
+      still={still}
+      phaseSeed={seed}
+      className={className}
+    />
   );
 }
 

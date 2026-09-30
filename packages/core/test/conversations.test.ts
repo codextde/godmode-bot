@@ -15,6 +15,7 @@ import {
 } from "../src/services/conversations";
 import { waitForRun } from "../src/runner/runner";
 import { ensureDefaultAgent } from "../src/agents/service";
+import { createWorkspace } from "../src/services/workspaces";
 import { getAccessToken } from "../src/server/auth";
 
 let env: TestEnv;
@@ -72,6 +73,21 @@ describe("conversation list", () => {
     expect(listConversations({ agentId: agent.id }).some((x) => x.id === a.id)).toBe(false);
     expect(listConversations({ agentId: agent.id, archived: true }).map((x) => x.id)).toEqual([a.id]);
     expect(listConversations({ agentId: agent.id, limit: 1 })).toHaveLength(1);
+  });
+
+  test("a workspace's chats: its agents' and global agents' chats started in it", async () => {
+    const ws = createWorkspace({ name: "Chat scope" });
+    const other = createWorkspace({ name: "Other scope" });
+    const member = await makeAgent({ name: "Scoped Bot", workspaceId: ws.id });
+    const own = createConversation({ agentId: member.id, title: "Member chat" });
+    const started = createConversation({ agentId: agent.id, title: "Global chat in it", workspaceId: ws.id });
+    const elsewhere = createConversation({ agentId: agent.id, title: "Global chat elsewhere", workspaceId: other.id });
+    const unscoped = createConversation({ agentId: agent.id, title: "Global chat" });
+    const ids = listConversations({ workspaceId: ws.id }).map((x) => x.id);
+    expect(ids.sort()).toEqual([own.id, started.id].sort());
+    expect(ids).not.toContain(elsewhere.id);
+    expect(ids).not.toContain(unscoped.id);
+    expect(listConversations({ workspaceId: other.id }).map((x) => x.id)).toEqual([elsewhere.id]);
   });
 
   test("archived chats are listed by last activity, pinned or not", () => {

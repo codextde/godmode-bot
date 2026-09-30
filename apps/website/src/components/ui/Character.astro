@@ -1,0 +1,59 @@
+---
+// An agent character (see @godmode/shared/character). Rendered to inline SVG at build time; blinking,
+// breathing and mood animations are pure CSS. `follow` makes its eyes track the pointer (scripts/characters.ts).
+import {
+  MASCOT_CHARACTER,
+  MASCOT_COLOR,
+  characterPhase,
+  renderCharacterSvg,
+  type AgentCharacter,
+  type CharacterMood,
+} from '@godmode/shared';
+
+interface Props {
+  character?: AgentCharacter;
+  color?: string;
+  mood?: CharacterMood;
+  /** Rendered size in px (square). */
+  size?: number;
+  /** Accessible name; omitted = decorative. */
+  title?: string;
+  follow?: boolean;
+  class?: string;
+  /** Staggers blinking so a group doesn't blink in unison. */
+  seed?: string;
+}
+
+const {
+  character = MASCOT_CHARACTER,
+  color = MASCOT_COLOR,
+  mood = 'idle',
+  size = 64,
+  title,
+  follow = false,
+  class: className = '',
+  seed,
+} = Astro.props;
+
+// Ids inside each SVG (its clip path) must be unique on the page.
+const g = globalThis as { __gmCharUid?: number };
+g.__gmCharUid = (g.__gmCharUid ?? 0) + 1;
+const uid = `gmc${g.__gmCharUid}`;
+
+const svg = renderCharacterSvg(character, {
+  color,
+  mood,
+  uid,
+  title,
+  // Tiny avatars get a bigger face so it still reads.
+  faceScale: size <= 28 ? 1.18 : 1,
+});
+const phase = characterPhase(seed ?? uid);
+---
+
+<span
+  class:list={['gm-char-wrap', className]}
+  style={`--gm-size:${size}px;--gm-phase:${phase}s`}
+  data-follow={follow ? '' : undefined}
+  set:html={svg}
+/>

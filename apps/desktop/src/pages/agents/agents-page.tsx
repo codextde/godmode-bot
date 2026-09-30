@@ -3,12 +3,15 @@ import { Link, useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { Bot, Plus, Search, Sparkles } from "lucide-react";
 import type { Agent } from "@godmode/shared";
+import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
 import { useAgents, useRoutines, useWorkspaces } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
 import { useLive } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
-import { EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
+import { AgentAvatar, EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
+import { Character } from "@/components/character";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -151,6 +154,7 @@ export default function AgentsPage() {
               </button>
             ))}
           </div>
+          {agents.length > 1 && <Crew agents={agents} />}
         </div>
 
         {agentsQ.isLoading ? (
@@ -182,7 +186,7 @@ export default function AgentsPage() {
           />
         ) : agents.length === 0 ? (
           <EmptyState
-            icon={<Bot />}
+            art={<Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={88} follow title="Godmode" />}
             title="Create your first agent"
             description="Agents are coworkers with their own instructions, memory and schedule — e.g. one that downloads your invoices every month."
             action={
@@ -251,5 +255,34 @@ export default function AgentsPage() {
       <RunTaskDialog agent={runTaskFor} open={!!runTaskFor} onOpenChange={(o) => !o && setRunTaskFor(null)} />
       <DeleteAgentDialog agent={deleteFor} open={!!deleteFor} onOpenChange={(o) => !o && setDeleteFor(null)} />
     </>
+  );
+}
+
+/** The team at a glance: every agent's face in a row, watching the pointer. */
+function Crew({ agents }: { agents: Agent[] }) {
+  const shown = agents.slice(0, 8);
+  return (
+    <div aria-label="Your crew" className="ml-auto hidden items-end @3xl:flex">
+      {shown.map((a, i) => (
+        <Tooltip key={a.id}>
+          <TooltipTrigger asChild>
+            <Link
+              to={`/agents/${a.id}`}
+              aria-label={a.name}
+              className={cn(
+                "rounded-full transition-transform duration-200 hover:z-10 hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                i > 0 && "-ml-1.5",
+              )}
+            >
+              <AgentAvatar agent={a} size="md" follow />
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent>{a.name}</TooltipContent>
+        </Tooltip>
+      ))}
+      {agents.length > shown.length && (
+        <span className="ml-1.5 self-center rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground tabular-nums">+{agents.length - shown.length}</span>
+      )}
+    </div>
   );
 }

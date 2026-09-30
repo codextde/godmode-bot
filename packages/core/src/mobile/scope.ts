@@ -1,7 +1,7 @@
 /**
- * What a paired phone may call. The app controls Godmode — chats, runs, automations and the screens agents work on —
- * but never reaches secrets, backups, settings, integrations or this computer's files, can't change what a chat or an
- * automation is allowed to do, and only controls screens the human shared in a chat.
+ * What a paired phone may call. The app controls Godmode — chats, tasks, runs, automations and the screens agents work
+ * on — but never reaches secrets, backups, settings, integrations or this computer's files, can't change what a chat, a
+ * task or an automation is allowed to do, and only controls screens the human shared in a chat.
  */
 import { computerView, type ComputerTarget } from "@godmode/shared";
 import { all } from "../db";
@@ -27,6 +27,12 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["POST", new RegExp(`^/api/conversations/${ID}/messages$`)],
   ["POST", /^\/api\/chat$/],
 
+  ["GET", /^\/api\/tasks$/],
+  ["GET", new RegExp(`^/api/tasks/${ID}$`)],
+  ["POST", /^\/api\/tasks$/],
+  ["PATCH", new RegExp(`^/api/tasks/${ID}$`)],
+  ["POST", new RegExp(`^/api/tasks/${ID}/messages$`)],
+
   ["GET", /^\/api\/runs$/],
   ["POST", new RegExp(`^/api/runs/${ID}/cancel$`)],
 
@@ -48,7 +54,11 @@ const ROUTES: [method: string, path: RegExp][] = [
 const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["PATCH", new RegExp(`^/api/conversations/${ID}$`), ["title", "pinned", "archived"]],
   ["POST", new RegExp(`^/api/conversations/${ID}/messages$`), ["content"]],
-  ["POST", /^\/api\/chat$/, ["agentId", "content"]],
+  ["POST", /^\/api\/chat$/, ["agentId", "content", "workspaceId"]],
+  // A task's repository and branch are picked on the computer: the phone never points an agent at another repository.
+  ["POST", /^\/api\/tasks$/, ["workspaceId", "title", "description", "type", "status", "agentId"]],
+  ["PATCH", new RegExp(`^/api/tasks/${ID}$`), ["title", "description", "status", "agentId"]],
+  ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content"]],
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],
   ["POST", /^\/api\/computer\/input$/, ["view", "event", "frame"]],
