@@ -204,6 +204,7 @@ export interface LaunchMarker {
   pid: number;
   port: number;
   headless: boolean;
+  stealth?: boolean;
 }
 
 export function writeLaunchMarker(userDataDir: string, marker: LaunchMarker) {
@@ -218,7 +219,7 @@ export function readLaunchMarker(userDataDir: string): LaunchMarker | null {
   try {
     const m = JSON.parse(readFileSync(join(userDataDir, LAUNCH_MARKER), "utf8")) as Partial<LaunchMarker>;
     const valid = Number.isInteger(m.pid) && m.pid! > 0 && Number.isInteger(m.port) && m.port! > 0 && m.port! <= 65535;
-    return valid ? { pid: m.pid!, port: m.port!, headless: !!m.headless } : null;
+    return valid ? { pid: m.pid!, port: m.port!, headless: !!m.headless, stealth: !!m.stealth } : null;
   } catch {
     return null;
   }
@@ -250,6 +251,8 @@ export interface LaunchOptions {
   /** URL to open instead of the browser's default start page. */
   startUrl?: string;
   timeoutMs?: number;
+  /** Kills the browser (or the launch in progress) when aborted. */
+  signal?: AbortSignal;
 }
 
 export interface ChromeProcess {
@@ -257,6 +260,7 @@ export interface ChromeProcess {
   port: number;
   wsUrl: string;
   browserVersion: string;
+  userAgent: string;
   /** The browser, or `open` when LaunchServices started it (macOS, visible). */
   proc: Subprocess;
   /** Resolves with the exit code once the process is gone. */
@@ -311,7 +315,7 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
     } else {
       cmd = [opts.executable, ...args, ...(opts.startUrl ? [opts.startUrl] : [])];
     }
-    const proc = Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+    const proc = Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "pipe", signal: opts.signal, killSignal: "SIGKILL" });
 
     let tail = "";
     let alive = true;
@@ -352,6 +356,7 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
             port,
             wsUrl: version.webSocketDebuggerUrl,
             browserVersion: version.Browser,
+            userAgent: version["User-Agent"],
             proc,
             exited,
             isAlive: () => alive,
@@ -385,6 +390,7 @@ export async function launchChrome(opts: LaunchOptions): Promise<ChromeProcess> 
           port,
           wsUrl: version.webSocketDebuggerUrl,
           browserVersion: version.Browser,
+          userAgent: version["User-Agent"],
           proc,
           exited: exited.then(async () => {
             while (isAlive()) await sleep(250);

@@ -532,6 +532,34 @@ CREATE INDEX IF NOT EXISTS idx_runs_conversation ON runs(conversation_id, create
   },
   {
     id: 15,
+    name: "api_tools",
+    sql: /* sql */ `
+-- APIs agents may call with a stored key (\`key_enc\`, sealed): what they're for, their docs, where the key may be sent
+-- (\`base_url\`, \`auth\`) and the optional environment variable runs get it in.
+CREATE TABLE IF NOT EXISTS api_tools (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  agent_id TEXT REFERENCES agents(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  docs TEXT NOT NULL DEFAULT '',
+  docs_url TEXT NOT NULL DEFAULT '',
+  base_url TEXT NOT NULL DEFAULT '',
+  auth TEXT NOT NULL DEFAULT '{}',
+  test_path TEXT NOT NULL DEFAULT '',
+  env_var TEXT,
+  preset TEXT,
+  key_enc TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_api_tools_scope ON api_tools(workspace_id, agent_id);
+`,
+  },
+  {
+    id: 16,
     name: "ssh_servers",
     sql: /* sql */ `
 -- Remote machines agents sign in to over SSH. \`*_enc\` are sealed with the vault key; \`key_info\` describes the private

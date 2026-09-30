@@ -61,6 +61,7 @@ needs to be useful:
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
 | 🗂️ **Parallel chats, own tabs** | Every chat gets its own tab (in its own background window) in the shared browser profile, so several chats and agents browse at the same time — signed in with the same logins, without ever touching each other's pages. |
+| 🥷 **Bot-detection hardening** | Sites that block automated browsers see a normal Chrome: the automation flag stays off, and even a headless browser has the user agent and screen of a regular Chrome window. *Run check* (Settings → Browser) shows what bot detection sees, signal by signal. |
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
 | 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent works *entirely inside the VM* — commands, files, apps (computer use with Cua Driver) and the web (Google Chrome with browser-use) — and no browser opens on your Mac. Watch the VM's screen next to the chat and take control anytime. Allow it once and agents sign in inside the VM too: Godmode fills your saved logins and 2FA codes for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
 | 🔌 **SSH servers** | Let agents work on your servers: save a server with a password or an SSH key (paste it, pick one from `~/.ssh` or generate a new one) and give it to a chat or an agent. Godmode signs in and answers `sudo` — the AI never sees the password or the key. Agents run commands, edit config files and copy files back and forth; the host key is pinned on the first connection. |
@@ -70,6 +71,7 @@ needs to be useful:
 | 🔢 **2FA / TOTP** | Import Google Authenticator QR codes from screenshots — including multi-account *export* QR codes — or scan with your camera. |
 | 📬 **Missing-login inbox** | Agents report missing or broken logins, accounts and 2FA; add them in one click. |
 | 🧩 **Integrations** | Composio toolkits (Gmail, Slack, GitHub, Notion…) and custom MCP servers — globally, per workspace, or per agent. |
+| 🔧 **Tools** | Hand agents any API with your key — Nano Banana image generation, OpenAI, ElevenLabs voices, Perplexity search or your own services. Add the key, say what it's for and paste the docs (presets fill them in); agents work out the calls themselves. Godmode adds the key to each request and only sends it to the tool's address, so the model never sees it — or opt in to an environment variable for scripts and SDKs. Global, per workspace or per agent; images, audio and files from responses land as files. |
 | 💬 **Messaging** | Talk to your agents from **Slack**, **Telegram** and **Microsoft Teams**. Connect a bot, pick which agents it reaches, and approve who may use it; `/agent`, `/new` and `/stop` work right in the chat, and every chat is also a Godmode conversation. |
 | 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA, integrations and browser profile, plus shared global ones. Assign any browser profile to a workspace (Browser → profile menu, or in the workspace's settings) and its agents browse with it. |
 | 🧬 **Workspace folders & repos** | Attach project folders and git repositories to a workspace — paste `https://github.com/you/app` and Godmode clones it with your git sign-in, keeps it up to date and hands it to every agent in the workspace. |
@@ -130,6 +132,14 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/followup-waiting.png" alt="An agent waiting for a signed contract, set to continue tomorrow at 09:00" /><br /><sub><b>Follow-ups</b> — the agent sets itself a time to continue; move it, cancel it or continue now</sub></td>
     <td><img src="docs/screenshots/followup.png" alt="The agent picked the chat up again at the time it set and finished the task" /><br /><sub><b>Back on it</b> — at that time the agent picks the chat up again, with all the context</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/bot-check.png" alt="Bot check of a hardened headless browser: 9 of 10 checks pass" /><br /><sub><b>Bot check</b> — what bot detection sees in the agents' browser</sub></td>
+    <td><img src="docs/screenshots/bot-check-off.png" alt="Bot check without hardening: the headless user agent and screen give the browser away" /><br /><sub><b>Without hardening</b> — headless Chrome gives itself away</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/api-tools.png" alt="API tools with their keys, scopes and addresses" /><br /><sub><b>Tools</b> — APIs agents use with your keys, scoped globally, per workspace or per agent</sub></td>
+    <td><img src="docs/screenshots/api-tool-dialog.png" alt="Add Nano Banana: name, what it's for and the API key" /><br /><sub><b>Add a tool</b> — presets bring the address and docs, you add the key</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/ssh-servers.png" alt="SSH servers with their connection status, pinned host keys and the agents and chats using them" /><br /><sub><b>SSH servers</b> — password or key, sealed in the vault; host keys pinned on the first connection</sub></td>
@@ -310,6 +320,8 @@ Every run is committed, so you can see exactly what an agent learned and did —
   never enters the model's context. *Reveal* mode is opt-in per agent and audited.
 - **Site-bound fills**: a login is only ever typed into its own website (https, real password fields) — a phishing or
   prompt-injected lookalike page gets nothing.
+- **Address-bound API keys**: a tool's key is added by Godmode and only sent to URLs under the tool's address (redirects
+  elsewhere aren't followed); moving a saved key to another address or into agents' environment needs your passphrase.
 - **Re-auth for sensitive actions**: revealing a password or granting an agent reveal access needs your vault passphrase.
 - **Redaction** of known secrets in transcripts, logs and the UI · **audit log** of every secret access.
 - **Local-first**: API on `127.0.0.1`, per-run MCP tokens, DNS-rebinding & CSRF protection, strict CSP,
@@ -344,6 +356,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Computer use: share a window (background control via Cua Driver), a display, every monitor or a browser tab
 - [x] Automations: schedules, app events (Composio triggers), plain-language conditions and webhooks
 - [x] Agents working in a dedicated macOS VM (Tart / Virtualization.framework): shell, files and screen, assigned per agent, chat or workspace
+- [x] API tools: any API with a key (Nano Banana, OpenAI, ElevenLabs…) for agents, global / workspace / agent
 - [x] SSH servers: agents run commands, edit files and copy files on remote machines — password or key, sudo, pinned host keys
 - [ ] Windows / Linux VMs
 - [ ] Mobile companion app & push notifications

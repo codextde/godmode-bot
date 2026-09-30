@@ -338,6 +338,14 @@ function loadKnownSecrets() {
         }
       }
     }
+    for (const row of all<{ id: string; key_enc: string | null }>("SELECT id, key_enc FROM api_tools")) {
+      if (!row.key_enc) continue;
+      try {
+        rememberSecret(decrypt(dek, row.key_enc, `api_tools.key:${row.id}`));
+      } catch {
+        /* ignore */
+      }
+    }
     for (const row of all<{ id: string; password_enc: string | null; private_key_enc: string | null; passphrase_enc: string | null }>(
       "SELECT id, password_enc, private_key_enc, passphrase_enc FROM ssh_servers",
     )) {

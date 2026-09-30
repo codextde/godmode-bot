@@ -21,6 +21,7 @@ import {
   TriangleAlert,
   UserRound,
   Users,
+  Wrench,
 } from "lucide-react";
 import type { Agent, AgentInput, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
 import { DEFAULT_MODEL, EFFORT_LABELS, EFFORT_OPTIONS, effortForModel, findModel } from "@godmode/shared";
@@ -50,6 +51,10 @@ import { FolderPickerDialog, folderName, useShortPath } from "@/components/chat/
 import { defaultProfileFor } from "@/components/chat/browser-panel";
 import { InheritedInstructions, useInheritedInstructions } from "@/components/instructions/instructions";
 import { VmSelectField } from "@/components/vms/vm-picker";
+import { useApiTools } from "@/components/integrations/api-tools-tab";
+import { ApiToolDialog, type ApiToolDialogState } from "@/components/integrations/api-tool-dialog";
+import { toolIcon } from "@/components/integrations/api-tool-presets";
+import { ScopeChip } from "@/components/integrations/scope-picker";
 import { SSH_STATUS_LABEL, SshStatusDot, sshAddress, sshStatus } from "@/components/ssh/ssh-parts";
 
 export interface AgentFormValues {
@@ -264,6 +269,7 @@ export function AgentForm({
       const mod = isMac ? e.metaKey : e.ctrlKey;
       if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
+        if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
         submitRef.current();
       }
     };
@@ -591,16 +597,17 @@ export function AgentForm({
             <SshField value={values.sshServerIds} onChange={(v) => set("sshServerIds", v)} />
           </FormSection>
 
-          <FormSection id="tools" title="Tools & integrations" description="MCP servers and connected apps this agent can use.">
+          <FormSection id="tools" title="Tools & integrations" description="APIs, MCP servers and connected apps this agent can use.">
             <div className="space-y-5">
               <ToggleRow
                 id="agent-inherit-mcp"
                 icon={<Plug className="size-4" />}
                 title="Inherit shared integrations"
-                description="Also use the global and workspace MCP servers and Composio apps."
+                description="Also use the global and workspace tools, MCP servers and Composio apps."
                 checked={values.inheritMcp}
                 onChange={(v) => set("inheritMcp", v)}
               />
+              <ApiToolsField agentId={agentId} workspaceId={values.workspaceId} savedWorkspaceId={initial?.workspaceId ?? null} inherit={values.inheritMcp} />
               <McpField agentId={agentId} value={values.mcpServerIds} onChange={(v) => set("mcpServerIds", v)} />
             </div>
           </FormSection>
@@ -1027,6 +1034,67 @@ function BrowserProfileField({
           ))}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+/** The API tools this agent gets (from its scope), with a shortcut to add one only for it. */
+function ApiToolsField({
+  agentId,
+  workspaceId,
+  savedWorkspaceId,
+  inherit,
+}: {
+  agentId?: string;
+  workspaceId: string | null;
+  savedWorkspaceId: string | null;
+  inherit: boolean;
+}) {
+  const { data: tools = [], isLoading } = useApiTools();
+  const [dialog, setDialog] = useState<ApiToolDialogState>(null);
+  const available = tools.filter(
+    (t) => t.enabled && (t.agentId ? t.agentId === agentId : inherit && (t.workspaceId === null || t.workspaceId === workspaceId)),
+  );
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label>API tools</Label>
+        <Link to="/integrations?tab=tools" className="text-xs font-medium text-muted-foreground underline-offset-[3px] hover:text-foreground hover:underline">
+          Manage tools
+        </Link>
+      </div>
+      {isLoading ? (
+        <div className="h-10 animate-pulse rounded-lg bg-paper-2" />
+      ) : available.length ? (
+        <ul className="divide-y rounded-lg border">
+          {available.map((t) => {
+            const Icon = toolIcon(t.preset);
+            return (
+              <li key={t.id} className="flex items-center gap-2.5 px-3 py-2">
+                <Icon className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm">{t.name}</span>
+                  {t.description && <span className="block truncate text-xs text-muted-foreground">{t.description}</span>}
+                </span>
+                <ScopeChip workspaceId={t.workspaceId} agentId={t.agentId} className="shrink-0" />
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="rounded-lg border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
+          No API tools {inherit ? "yet" : "of its own"}. Add one to let it generate images, speak, search or call your own APIs.
+        </p>
+      )}
+      {agentId && (
+        <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ mode: "create", preset: null, scope: { workspaceId: savedWorkspaceId, agentId } })}>
+          <Wrench /> Add a tool only for this agent
+        </Button>
+      )}
+      {/* Keep the dialog's submit from reaching this form (React events bubble through portals). */}
+      <div onSubmit={(e) => e.stopPropagation()}>
+        <ApiToolDialog state={dialog} onOpenChange={(o) => !o && setDialog(null)} />
+      </div>
     </div>
   );
 }

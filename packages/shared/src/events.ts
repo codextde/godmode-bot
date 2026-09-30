@@ -99,6 +99,7 @@ export type EntityName =
   | "credentials"
   | "totp"
   | "mcp-servers"
+  | "api-tools"
   | "composio"
   | "browser-profiles"
   | "missing-logins"

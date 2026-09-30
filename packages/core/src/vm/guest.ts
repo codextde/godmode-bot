@@ -23,9 +23,11 @@ import { BROWSER_USE_SPEC, BROWSER_USE_VERSION, browserUseConfig } from "../brow
 import { CdpClient, pickActivePage, probeCdp } from "../browser/cdp";
 import { findFreePort } from "../browser/chrome";
 import { fillIntoActivePage, fillPrecheck, type FillOptions, type FillResult } from "../browser/fill";
+import { stealthArgs } from "../browser/stealth";
 import { CUA_DRIVER_SPEC, CUA_DRIVER_VERSION } from "../computer/cua";
 import { logger } from "../log";
 import { resolveUvx } from "../services/doctor";
+import { getSettings } from "../services/settings";
 import type { McpServerJson } from "../types";
 import { GUEST_USER, execInVm, onVmStopped, shq, sshKeyPath, vmAddress, vmName } from "./service";
 import { TartError, resolveTart, tartEnv } from "./tart";
@@ -57,7 +59,7 @@ const BROWSER_STAMP = `"$HOME/.godmode/stamps/browser-use-${BROWSER_USE_VERSION}
 const CUA_STAMP = `"$HOME/.godmode/stamps/cua-driver-${CUA_DRIVER_VERSION}"`;
 const CDP_UP = `curl -fsS -m 2 http://127.0.0.1:${GUEST_CDP_PORT}/json/version >/dev/null 2>&1`;
 
-const CHROME_FLAGS = [
+const chromeFlags = (stealth: boolean) => [
   `--remote-debugging-port=${GUEST_CDP_PORT}`,
   "--remote-debugging-address=127.0.0.1",
   '"--user-data-dir=$HOME/.godmode/browser-profile"',
@@ -69,6 +71,7 @@ const CHROME_FLAGS = [
   "--disable-background-timer-throttling",
   "--disable-backgrounding-occluded-windows",
   "--disable-renderer-backgrounding",
+  ...(stealth ? stealthArgs({ headless: false, userAgent: null }) : []),
 ].join(" ");
 
 /** Lines "uv", "chrome", "browser-use=<path>", "cua=<path>" for what is installed. */
@@ -81,9 +84,9 @@ const PROBE = [
 ].join("\n");
 
 /** Start Chrome with DevTools unless it already answers. Output goes to stderr (the MCP wrapper's stdout is JSON-RPC). */
-const START_CHROME = `if ! ${CDP_UP}; then
+const startChrome = () => `if ! ${CDP_UP}; then
   mkdir -p ${KIT}/browser-profile "$HOME/Downloads"
-  open -n -a ${CHROME_APP} --args ${CHROME_FLAGS} >&2
+  open -n -a ${CHROME_APP} --args ${chromeFlags(getSettings().browser.stealth)} >&2
   i=0
   until ${CDP_UP}; do
     i=$((i + 1))
@@ -307,7 +310,7 @@ export async function prepareGuest(
       BROWSER_PROFILE_ID,
       "2026-01-01T00:00:00.000Z",
     );
-    const script = `mkdir -p ${KIT}/browser-use/files && cat > ${KIT}/browser-use/config.json\n${START_CHROME}`;
+    const script = `mkdir -p ${KIT}/browser-use/files && cat > ${KIT}/browser-use/config.json\n${startChrome()}`;
     const res = await execInVm(vmId, script, { stdin: JSON.stringify(config, null, 2), timeoutMs: 90_000, signal: opts.signal });
     if (res.exitCode !== 0) {
       if (opts.signal?.aborted) throw new Error("cancelled");
@@ -331,7 +334,7 @@ function inGuest(vmId: string, script: string): McpServerJson {
 
 /** browser-use's MCP server in the VM, connected to the VM's Chrome (started again if it was closed). */
 export function guestBrowserServer(vmId: string, browserUse: string): McpServerJson {
-  return inGuest(vmId, `{\n${START_CHROME}\n} >&2 || exit 1\nexport BROWSER_USE_CONFIG_DIR=${KIT}/browser-use ${GUEST_ENV}\nexec ${shq(browserUse)} --mcp`);
+  return inGuest(vmId, `{\n${startChrome()}\n} >&2 || exit 1\nexport BROWSER_USE_CONFIG_DIR=${KIT}/browser-use ${GUEST_ENV}\nexec ${shq(browserUse)} --mcp`);
 }
 
 /**
