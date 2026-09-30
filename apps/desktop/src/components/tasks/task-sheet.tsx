@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
-import { ArrowUpRight, EllipsisVertical, GitBranch, MessagesSquare, OctagonAlert, Paperclip, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
+import { ArrowUpRight, ChevronRight, EllipsisVertical, GitBranch, MessagesSquare, OctagonAlert, Paperclip, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
 import type { Agent, Task, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
 import { MAX_TASK_TITLE_LENGTH } from "@godmode/shared";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -20,7 +20,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { AttachmentChip, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, formatBytes, readAttachment, type PendingAttachment } from "@/components/chat/attachments";
 import { api } from "@/lib/api";
 import { modKey } from "@/lib/desktop";
-import { draftKeys, useDraft } from "@/lib/drafts";
+import { draftKeys, saveDraft, useDraft } from "@/lib/drafts";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { DescriptionEditor, withoutPlaceholders, type DescriptionEditorHandle, type TextUpdate } from "./description-editor";
@@ -46,12 +46,32 @@ export function TaskSheet({
 }) {
   return (
     <Sheet open={!!task} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="w-full gap-0 p-0 sm:max-w-[40rem]" showCloseButton={false}>
+      <SheetContent
+        side="right"
+        className="w-full gap-0 p-0 outline-none sm:max-w-[40rem]"
+        showCloseButton={false}
+        // The sheet itself takes the focus, not the first button (which then shows a focus ring for no reason).
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          (e.currentTarget as HTMLElement | null)?.focus();
+        }}
+        // Radix sees Esc before the field does: in a text field it cancels that edit and leaves the sheet open.
+        onEscapeKeyDown={(e) => {
+          if (isTextField(document.activeElement)) e.preventDefault();
+        }}
+      >
         {task && <TaskDetail key={task.id} task={task} agents={agents} workspaces={workspaces} onClose={onClose} onMove={onMove} onDelete={onDelete} />}
       </SheetContent>
     </Sheet>
   );
 }
+
+function isTextField(el: Element | null): boolean {
+  return el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !["checkbox", "radio", "button", "submit"].includes(el.type));
+}
+
+/** Property values read as text and turn into a control on hover, as in Linear. */
+const PROP_CONTROL = "-ml-2.5 h-8 w-auto max-w-full border-transparent bg-transparent px-2.5 shadow-none hover:bg-accent/60 data-[state=open]:bg-accent/60 dark:bg-transparent";
 
 function TaskDetail({
   task,
@@ -75,22 +95,26 @@ function TaskDetail({
   const started = !!task.conversationId;
   const defaultRepo = workspaceRepos(workspace)[0];
 
+  const put = (next: (t: Task) => Task) =>
+    qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((x) => (x.id === task.id ? next(x) : x)));
   const save = useMutation({
     mutationFn: (patch: TaskPatch) => api.tasks.update(task.id, patch),
-    onSuccess: (t) => qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((x) => (x.id === t.id ? t : x))),
-    onError: (e) => toastApiError(e, "Could not update the task", qc),
+    // Shown right away, not when the server answers. Not the description: its editor shows what it saved itself, and
+    // must still tell the saved text from a failed save's (which it gets back as a draft).
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onMutate: ({ description, ...patch }) => put((t) => ({ ...t, ...patch })),
+    // Only this save's fields: another save still on its way keeps its optimistic value.
+    onSuccess: (t, patch) => put((x) => ({ ...x, ...Object.fromEntries(Object.keys(patch).map((k) => [k, t[k as keyof Task]])) })),
+    onError: (e) => {
+      void qc.invalidateQueries({ queryKey: qk.tasks });
+      toastApiError(e, "Could not update the task", qc);
+    },
   });
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-        <span className="flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs text-muted-foreground">
-          <TypeIcon type={task.type} />
-          {TYPE_META[task.type].label}
-        </span>
-        <span className="font-mono text-xs text-muted-foreground tabular-nums">#{task.number}</span>
-        <span className="text-muted-foreground/50">·</span>
-        <span className="flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground">
+        <span className="flex min-w-0 items-center gap-1.5 truncate text-[13px] text-muted-foreground">
           {workspace ? (
             <>
               <span>{workspace.icon}</span> {workspace.name}
@@ -98,6 +122,11 @@ function TaskDetail({
           ) : (
             "Global"
           )}
+        </span>
+        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/50" />
+        <span className="flex shrink-0 items-center gap-1.5 text-[13px] font-medium">
+          <TypeIcon type={task.type} className="text-muted-foreground" />
+          <span className="font-mono tabular-nums">#{task.number}</span>
         </span>
         <div className="ml-auto flex items-center gap-1">
           <DropdownMenu>
@@ -127,24 +156,24 @@ function TaskDetail({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-6 px-6 pt-5 pb-8">
-          <div>
+          <div className="space-y-1">
             <SheetTitle asChild>
               <EditableTitle value={task.title} onSave={(title) => save.mutate({ title })} />
             </SheetTitle>
             <SheetDescription className="sr-only">Task details</SheetDescription>
-            <EditableDescription taskId={task.id} value={task.description} onSave={(description) => save.mutate({ description })} />
+            <EditableDescription taskId={task.id} value={task.description} onSave={(description) => save.mutateAsync({ description })} />
           </div>
 
-          <dl className="grid grid-cols-[7.5rem_1fr] items-center gap-x-4 gap-y-2.5 text-sm">
+          <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 border-t pt-4 text-sm">
             <Prop label="Status">
-              <StatusSelect value={task.status} onChange={(s) => onMove(task, s)} className="h-8" />
+              <StatusSelect value={task.status} onChange={(s) => onMove(task, s)} className={PROP_CONTROL} />
             </Prop>
             <Prop label="Agent">
-              <AgentSelect agents={reachable} value={task.agentId} onChange={(agentId) => save.mutate({ agentId })} className="h-8" />
+              <AgentSelect agents={reachable} value={task.agentId} onChange={(agentId) => save.mutate({ agentId })} className={PROP_CONTROL} />
             </Prop>
             <Prop label="Type">
               <Select value={task.type} onValueChange={(type) => save.mutate({ type: type as Task["type"] })} disabled={started}>
-                <SelectTrigger className="h-8 w-full">
+                <SelectTrigger aria-label="Type" className={cn(PROP_CONTROL, "disabled:opacity-100 disabled:hover:bg-transparent")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">
@@ -160,7 +189,7 @@ function TaskDetail({
               <>
                 <Prop label="Repository">
                   {started || task.repoPath ? (
-                    <span className="flex min-w-0 items-center gap-1.5 font-mono text-[13px]" title={task.repoPath || task.repoUrl || undefined}>
+                    <span className="flex h-8 min-w-0 items-center gap-1.5 font-mono text-[13px]" title={task.repoPath || task.repoUrl || undefined}>
                       <span className="truncate">{taskRepoLabel(task, defaultRepo)}</span>
                     </span>
                   ) : (
@@ -173,7 +202,7 @@ function TaskDetail({
                 </Prop>
                 <Prop label={task.branch ? "Branch" : "Base branch"}>
                   {task.branch ? (
-                    <span className="flex min-w-0 items-center gap-1.5 font-mono text-[13px]">
+                    <span className="flex h-8 min-w-0 items-center gap-1.5 font-mono text-[13px]">
                       <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="truncate">{task.branch}</span>
                       <span className="shrink-0 text-muted-foreground">→ {task.baseBranch}</span>
@@ -189,7 +218,7 @@ function TaskDetail({
                 </Prop>
                 {task.worktree && (
                   <Prop label="Worktree">
-                    <span className="flex min-w-0 items-center gap-1.5 font-mono text-[13px]" title={task.worktree}>
+                    <span className="flex h-8 min-w-0 items-center gap-1.5 font-mono text-[13px]" title={task.worktree}>
                       <span className="truncate">{task.worktree}</span>
                       <CopyButton value={task.worktree} label="Copy the worktree's path" size="icon-xs" />
                     </span>
@@ -311,7 +340,11 @@ function WorkPanel({ task, agent, onMove }: { task: Task; agent?: Agent; onMove:
       <Panel>
         <div className="flex items-center justify-between gap-3">
           <p className="text-[13px] text-muted-foreground">
-            {agent ? `Ready for ${agent.name}.` : "Assign an agent, then move it to Todo — it starts right away."}
+            {agent
+              ? `Ready for ${agent.name}.`
+              : task.status === "todo"
+                ? "Assign an agent — it starts right away."
+                : "Assign an agent and move it to Todo to start it."}
           </p>
           {agent && (
             <Button size="sm" onClick={() => onMove(task, "todo")}>
@@ -368,9 +401,11 @@ function EditableTitle({ value, onSave, ...rest }: { value: string; onSave: (v: 
         if (e.key === "Enter") {
           e.preventDefault();
           e.currentTarget.blur();
-        } else if (e.key === "Escape") {
+        } else if (e.key === "Escape" && !e.nativeEvent.isComposing) {
           setDraft(value);
-          e.stopPropagation();
+          // After the reset renders: the blur must not save the text that was just thrown away.
+          const el = e.currentTarget;
+          requestAnimationFrame(() => el.blur());
         }
       }}
       className="-mx-2 w-[calc(100%+1rem)] resize-none overflow-hidden rounded-lg bg-transparent px-2 py-1 text-xl leading-snug font-medium tracking-[-0.02em] outline-none hover:bg-accent/50 focus:bg-accent/60"
@@ -379,12 +414,18 @@ function EditableTitle({ value, onSave, ...rest }: { value: string; onSave: (v: 
 }
 
 /** Click to edit; leaving the editor saves. Files pasted, dropped or picked are uploaded and linked in the Markdown. */
-function EditableDescription({ taskId, value, onSave }: { taskId: string; value: string; onSave: (v: string) => void }) {
+function EditableDescription({ taskId, value: stored, onSave }: { taskId: string; value: string; onSave: (v: string) => Promise<unknown> }) {
   const draftKey = `task:${taskId}:description`;
   const [editing, setEditing] = useState(() => draftKeys(draftKey).length > 0);
+  /** Just saved: shown until the task has it, so leaving the editor never shows the old text for a frame. */
+  const [saved, setSaved] = useState<string | null>(null);
+  if (saved !== null && stored.trim() === saved) setSaved(null);
+  const value = saved ?? stored;
   const [draft, setDraft, kept] = useDraft(editing ? draftKey : undefined, value);
   const editor = useRef<DescriptionEditorHandle>(null);
   const box = useRef<HTMLDivElement>(null);
+  /** The text's height when editing starts: the editor opens at least that tall, so nothing below jumps. */
+  const [shownHeight, setShownHeight] = useState(0);
   const [uploading, setUploading] = useState(false);
   /** Save once the uploads are done (asked to while they ran). */
   const finishLater = useRef(false);
@@ -398,7 +439,15 @@ function EditableDescription({ taskId, value, onSave }: { taskId: string; value:
     }
     finishLater.current = false;
     const next = withoutPlaceholders(draft);
-    if (next !== value.trim()) onSave(next);
+    if (next !== value.trim()) {
+      setSaved(next);
+      onSave(next).catch(() => {
+        // Not saved: the text comes back as a draft in the editor instead of being lost.
+        setSaved(null);
+        saveDraft(draftKey, next, stored);
+        setEditing(true);
+      });
+    }
     kept.discard();
     setEditing(false);
   };
@@ -411,23 +460,34 @@ function EditableDescription({ taskId, value, onSave }: { taskId: string; value:
     kept.discard();
     setEditing(false);
   };
+  const edit = (shown: HTMLElement) => {
+    setShownHeight(shown.getBoundingClientRect().height);
+    setEditing(true);
+  };
 
+  const empty = !value.trim();
   if (!editing) {
     return (
       <div
         role="button"
         tabIndex={0}
+        aria-label={empty ? "Add a description" : "Edit the description"}
         onClick={(e) => {
           // Links and file cards inside do their own thing.
           if ((e.target as HTMLElement).closest("a, button")) return;
-          setEditing(true);
+          // Selecting text to copy it isn't "edit".
+          if (window.getSelection()?.toString()) return;
+          edit(e.currentTarget);
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && e.target === e.currentTarget) setEditing(true);
+          if (e.key === "Enter" && e.target === e.currentTarget) {
+            e.preventDefault();
+            edit(e.currentTarget);
+          }
         }}
-        className="-mx-2 mt-1 block w-[calc(100%+1rem)] cursor-text rounded-lg px-2 py-1.5 text-left text-sm transition outline-none hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        className="-mx-2.5 block cursor-text rounded-lg px-2.5 py-2 text-left text-sm leading-relaxed transition-colors outline-none hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/40"
       >
-        {value.trim() ? <Markdown>{value}</Markdown> : <span className="text-muted-foreground">Add a description… paste or drop images, PDFs and files</span>}
+        {empty ? <span className="text-muted-foreground/80">Add a description…</span> : <Markdown breaks>{value}</Markdown>}
       </div>
     );
   }
@@ -435,9 +495,11 @@ function EditableDescription({ taskId, value, onSave }: { taskId: string; value:
     <div
       ref={box}
       onBlur={(e) => {
+        // Switching to another app (to grab a screenshot, say) isn't leaving the editor: it's still there on return.
+        if (!document.hasFocus()) return;
         if (!box.current?.contains(e.relatedTarget as Node | null)) finish();
       }}
-      className="-mx-2 mt-1 rounded-lg border bg-card px-3 pt-2.5 pb-2 shadow-card focus-within:ring-[3px] focus-within:ring-ring/40"
+      className="-mx-2.5 rounded-lg bg-card px-2.5 pt-2 pb-1.5 shadow-card ring-1 ring-border transition-shadow focus-within:ring-2 focus-within:ring-ring/50"
     >
       <DescriptionEditor
         ref={editor}
@@ -446,12 +508,13 @@ function EditableDescription({ taskId, value, onSave }: { taskId: string; value:
         value={draft}
         onChange={setText}
         onBusyChange={setUploading}
-        minHeight={128}
-        placeholder="Details, acceptance criteria, links… Markdown works. Paste or drop screenshots, PDFs and other files."
+        // The text area alone (the toolbar comes on top): at least the text's former height, and room to write.
+        minHeight={Math.max(72, shownHeight - 16)}
+        placeholder="Details, acceptance criteria, links… Markdown works."
         textClassName="text-sm leading-relaxed"
         onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.stopPropagation();
+          if (e.key === "Escape" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
             cancel();
           } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
@@ -460,15 +523,23 @@ function EditableDescription({ taskId, value, onSave }: { taskId: string; value:
         }}
       />
       {/* Clicks here keep the focus in the text (WebKit doesn't focus buttons), so they don't end the edit. */}
-      <div className="mt-2 flex items-center gap-1" onMouseDown={(e) => e.preventDefault()}>
-        <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label="Attach files" onClick={() => editor.current?.pickFiles()}>
-          <Paperclip className="size-3.5" />
+      <div className="mt-1.5 -mr-1 flex items-center gap-1 border-t pt-1.5" onMouseDown={(e) => e.preventDefault()}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="-ml-1.5 h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground"
+          title="Attach images, PDFs or other files — or paste or drop them into the text"
+          onClick={() => editor.current?.pickFiles()}
+        >
+          <Paperclip className="size-3.5" /> Attach
         </Button>
-        <span className="ml-auto text-[11px] text-muted-foreground">
-          {modKey}↵ save · Esc cancel
-        </span>
-        <Button type="button" size="sm" className="ml-2 h-7" onClick={finish} disabled={uploading}>
+        <Button type="button" variant="ghost" size="sm" className="ml-auto h-7 px-2 text-xs text-muted-foreground" onClick={cancel}>
+          Cancel
+        </Button>
+        <Button type="button" size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={finish} disabled={uploading}>
           {uploading ? "Uploading…" : "Save"}
+          {!uploading && <kbd className="font-sans text-[10px] opacity-60">{modKey}↵</kbd>}
         </Button>
       </div>
     </div>
@@ -484,8 +555,16 @@ function BlurInput({ value, placeholder, onSave }: { value: string; placeholder:
       placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => draft.trim() !== value && onSave(draft.trim())}
-      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-      className="h-8 font-mono text-[13px]"
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        else if (e.key === "Escape") {
+          setDraft(value);
+          // After the state update: the blur must not save the text that was just thrown away.
+          const el = e.currentTarget;
+          requestAnimationFrame(() => el.blur());
+        }
+      }}
+      className={cn(PROP_CONTROL, "w-full font-mono text-[13px] md:text-[13px] focus-visible:border-input focus-visible:bg-card")}
     />
   );
 }
@@ -581,7 +660,7 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 submit();
-              }
+              } else if (e.key === "Escape") e.currentTarget.blur();
             }}
             placeholder={task.type === "coding" ? `Ask ${agent?.name ?? "the agent"} for changes — the pull request updates` : `Reply to ${agent?.name ?? "the agent"}…`}
             className="max-h-40 min-h-9 resize-none border-0 px-2 py-2 text-sm shadow-none focus-visible:ring-0"

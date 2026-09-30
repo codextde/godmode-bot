@@ -1,5 +1,6 @@
 import { isValidElement, memo, type ReactElement, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { Link } from "react-router";
 import { openExternal } from "@/lib/desktop";
@@ -75,12 +76,14 @@ const components: Components = {
 };
 
 const remarkPlugins = [remarkGfm];
+/** Every line break is kept, as typed: for text people write by hand (task descriptions), not model output. */
+const remarkPluginsWithBreaks = [remarkGfm, remarkBreaks];
 
 /** GitHub-flavoured markdown with the chat prose styles, copyable code blocks and safe external links. */
-export const Markdown = memo(function Markdown({ children, className }: { children: string; className?: string }) {
+export const Markdown = memo(function Markdown({ children, className, breaks }: { children: string; className?: string; breaks?: boolean }) {
   return (
     <div className={cn("prose-chat min-w-0 break-words", className)}>
-      <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
+      <ReactMarkdown remarkPlugins={breaks ? remarkPluginsWithBreaks : remarkPlugins} components={components}>
         {children}
       </ReactMarkdown>
     </div>

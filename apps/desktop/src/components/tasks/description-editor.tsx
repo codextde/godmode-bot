@@ -91,6 +91,13 @@ export const DescriptionEditor = forwardRef<
 
   useEffect(() => onBusyChange?.(uploads > 0), [uploads, onBusyChange]);
 
+  // Opened to go on writing: the caret starts after the text, not before it.
+  useLayoutEffect(() => {
+    const el = area.current;
+    if (autoFocus && el) el.setSelectionRange(el.value.length, el.value.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
