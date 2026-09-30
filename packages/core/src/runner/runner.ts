@@ -17,6 +17,7 @@ import type { Agent, BrowserProfile, ComputerTarget, Effort, Message, Run, RunSt
 import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
+import { setWelcomeEvents } from "../server/ws";
 import { excerpt, logger } from "../log";
 import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson } from "../util";
 import { isUnlocked, redact } from "../vault/vault";
@@ -704,6 +705,12 @@ export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record
   if (apiKeys) Object.assign(env, apiToolEnv(agent));
   return env;
 }
+
+setWelcomeEvents(() =>
+  [...jobs.values()]
+    .filter((j) => j.lastLabel)
+    .map((j) => ({ type: "run.activity" as const, runId: j.runId, agentId: j.agentId, label: j.lastLabel })),
+);
 
 function emitActivity(job: Job, label: string) {
   if (label === job.lastLabel) return;

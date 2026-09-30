@@ -1,0 +1,83 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link, router, Stack } from "expo-router";
+import { useDeferredValue, useMemo, useState } from "react";
+import { Alert, FlatList, View } from "react-native";
+import type { Agent, Conversation } from "@godmode/shared";
+import { HeaderActions } from "@/components/header-actions";
+import { ConversationRow } from "@/components/rows";
+import { EmptyState, Hairline } from "@/components/ui";
+import { api, errorText } from "@/lib/api";
+import { useAgents } from "@/lib/hooks";
+import { useLive } from "@/lib/live";
+import { qk, queryClient } from "@/lib/query";
+import { space } from "@/lib/theme";
+
+export default function Chats() {
+  const [search, setSearch] = useState("");
+  const q = useDeferredValue(search.trim());
+  const list = useQuery({ queryKey: qk.conversationList(q), queryFn: () => api.conversations.list({ search: q || undefined, limit: 200 }) });
+  const { byId } = useAgents();
+  const runs = useLive((s) => s.runs);
+  const running = useMemo(() => new Set(Object.values(runs).map((r) => r.run.conversationId)), [runs]);
+  const data = (list.data ?? []).filter((conv) => conv.origin !== "dream");
+
+  return (
+    <>
+      <Stack.Title large>Chats</Stack.Title>
+      <Stack.SearchBar placeholder="Search chats" hideWhenScrolling={false} onChangeText={(e) => setSearch(e.nativeEvent.text)} onCancelButtonPress={() => setSearch("")} />
+      <HeaderActions actions={[{ icon: "compose", label: "New chat", onPress: () => router.push("/compose") }]} />
+      <FlatList
+        data={data}
+        keyExtractor={(conv) => conv.id}
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: 140 }}
+        ItemSeparatorComponent={() => <Hairline inset={76} />}
+        renderItem={({ item }) => <ChatItem conversation={item} agent={byId.get(item.agentId)} running={running.has(item.id)} />}
+        ListEmptyComponent={
+          list.isLoading ? null : q ? (
+            <EmptyState icon="search" title="Nothing found" body={`No chat mentions “${q}”.`} />
+          ) : (
+            <EmptyState icon="chats" title="No chats yet" body="Ask Godmode something and the conversation shows up here, on your computer too." />
+          )
+        }
+      />
+    </>
+  );
+}
+
+function ChatItem({ conversation, agent, running }: { conversation: Conversation; agent?: Agent; running: boolean }) {
+  const update = useMutation({
+    mutationFn: (patch: { pinned?: boolean; archived?: boolean }) => api.conversations.update(conversation.id, patch),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: qk.conversations }),
+    onError: (err) => Alert.alert("Couldn't change the chat", errorText(err)),
+  });
+  const remove = () =>
+    Alert.alert("Delete this chat?", "It's removed on your computer too.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () =>
+          void api.conversations
+            .delete(conversation.id)
+            .then(() => queryClient.invalidateQueries({ queryKey: qk.conversations }))
+            .catch((err) => Alert.alert("Couldn't delete the chat", errorText(err))),
+      },
+    ]);
+
+  const row = <ConversationRow conversation={conversation} agent={agent} running={running} />;
+  if (process.env.EXPO_OS !== "ios") return row;
+  return (
+    <Link href={{ pathname: "/chat/[id]", params: { id: conversation.id } }} asChild>
+      <Link.Trigger>
+        <View>{row}</View>
+      </Link.Trigger>
+      <Link.Preview />
+      <Link.Menu>
+        <Link.MenuAction title={conversation.pinned ? "Unpin" : "Pin"} icon={conversation.pinned ? "pin.slash" : "pin"} onPress={() => update.mutate({ pinned: !conversation.pinned })} />
+        <Link.MenuAction title="Archive" icon="archivebox" onPress={() => update.mutate({ archived: true })} />
+        <Link.MenuAction title="Delete" icon="trash" destructive onPress={remove} />
+      </Link.Menu>
+    </Link>
+  );
+}

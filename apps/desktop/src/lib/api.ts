@@ -60,6 +60,9 @@ import type {
   MessagingVerifyResult,
   MissingLogin,
   MissingLoginPatch,
+  MobileDevice,
+  MobilePairingOffer,
+  MobileStatus,
   ModelCatalog,
   Routine,
   RoutineInput,
@@ -432,6 +435,17 @@ export const api = {
     /** Private keys in ~/.ssh on the computer running Godmode. */
     localKeys: () => get<SshLocalKey[]>("/api/ssh/local-keys"),
     generateKey: (comment?: string) => post<SshGeneratedKey>("/api/ssh/keys", comment ? { comment } : {}),
+  },
+
+  mobile: {
+    /** Tailscale, where phones reach Godmode, and the paired phones. `refresh` asks Tailscale again. */
+    status: (refresh = false) => get<MobileStatus>("/api/mobile", { refresh: refresh ? 1 : undefined }),
+    update: (input: { enabled?: boolean; port?: number }) => put<MobileStatus>("/api/mobile", input),
+    /** A one-time QR code (5 minutes); turns phone access on. 409 while Tailscale isn't connected. */
+    pairing: () => post<MobilePairingOffer>("/api/mobile/pairing"),
+    cancelPairing: () => del<{ ok: true }>("/api/mobile/pairing"),
+    renameDevice: (id: string, name: string) => patch<MobileDevice>(`/api/mobile/devices/${id}`, { name }),
+    removeDevice: (id: string) => del<{ ok: true }>(`/api/mobile/devices/${id}`),
   },
 
   chat: {

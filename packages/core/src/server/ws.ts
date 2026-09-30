@@ -3,6 +3,8 @@ import { browserView, type ClientEvent, type ServerEvent } from "@godmode/shared
 import { bus } from "../events/bus";
 import { VERSION } from "../config";
 import { logger } from "../log";
+import { setDeviceSocketHooks } from "../mobile/devices";
+import { deviceMayUseView } from "../mobile/scope";
 
 const log = logger("ws");
 
@@ -11,8 +13,12 @@ export interface WsData {
   subscriptions: Set<string>;
   /** Subscriptions that only watch — they don't keep an idle browser running. */
   passive?: Set<string>;
-  /** How the socket authenticated; cookie sessions are closed when sessions are revoked. */
-  auth?: "token" | "session";
+  /** How the socket authenticated; cookie sessions are closed when sessions are revoked, phones when removed. */
+  auth?: "token" | "session" | "device";
+  /** The paired phone (auth "device"). */
+  deviceId?: string;
+  /** Phones: conversations whose streaming replies (`run.delta`) they want. */
+  conversations?: Set<string>;
 }
 
 const clients = new Set<ServerWebSocket<WsData>>();
@@ -27,6 +33,13 @@ export interface BrowserViewRef {
 }
 
 const computerSubscribers = new Map<string, number>();
+
+/** Events a newly connected UI needs to catch up on (e.g. what running agents are doing right now). */
+let welcomeEvents: () => ServerEvent[] = () => [];
+
+export function setWelcomeEvents(fn: () => ServerEvent[]) {
+  welcomeEvents = fn;
+}
 
 /** Hooks invoked when the first/last UI subscribes to a browser live view. */
 let onBrowserSubscribe: ((view: BrowserViewRef, subscribed: boolean) => void) | null = null;
@@ -106,12 +119,35 @@ bus.on((event) => {
   }
   const payload = JSON.stringify(event);
   for (const ws of clients) {
+    // Streaming replies are large and frequent; phones only get them for the chats they have open.
+    if (event.type === "run.delta" && ws.data.auth === "device" && !ws.data.conversations?.has(event.conversationId)) continue;
     try {
       ws.send(payload);
     } catch {
       /* ignore */
     }
   }
+});
+
+const MAX_CONVERSATIONS_PER_SOCKET = 20;
+
+function deviceOnline(deviceId: string): boolean {
+  for (const ws of clients) if (ws.data.deviceId === deviceId) return true;
+  return false;
+}
+
+setDeviceSocketHooks({
+  online: deviceOnline,
+  revoked: (deviceId) => {
+    for (const ws of clients) {
+      if (ws.data.deviceId !== deviceId) continue;
+      try {
+        ws.close(4003, "Phone removed");
+      } catch {
+        /* already closing */
+      }
+    }
+  },
 });
 
 const ID = /^[\w-]{1,100}$/;
@@ -153,8 +189,11 @@ function changeComputerSubscription(ws: ServerWebSocket<WsData>, view: string, s
 
 export const websocketHandler = {
   open(ws: ServerWebSocket<WsData>) {
+    const wasOnline = ws.data.deviceId ? deviceOnline(ws.data.deviceId) : true;
     clients.add(ws);
     send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString() });
+    for (const event of welcomeEvents()) send(ws, event);
+    if (!wasOnline) bus.changed("mobile");
   },
   message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
     let msg: ClientEvent;
@@ -174,10 +213,18 @@ export const websocketHandler = {
         changeSubscription(ws, { profileId: msg.profileId, conversationId: msg.conversationId ?? null }, false);
         break;
       case "computer.subscribe":
-        if (validView(msg.view)) changeComputerSubscription(ws, msg.view, true);
+        if (validView(msg.view) && (ws.data.auth !== "device" || deviceMayUseView(msg.view))) changeComputerSubscription(ws, msg.view, true);
         break;
       case "computer.unsubscribe":
         if (validView(msg.view)) changeComputerSubscription(ws, msg.view, false);
+        break;
+      case "conversation.subscribe":
+        if (typeof msg.conversationId !== "string" || msg.conversationId.length > 100) break;
+        ws.data.conversations ??= new Set();
+        if (ws.data.conversations.size < MAX_CONVERSATIONS_PER_SOCKET) ws.data.conversations.add(msg.conversationId);
+        break;
+      case "conversation.unsubscribe":
+        if (typeof msg.conversationId === "string") ws.data.conversations?.delete(msg.conversationId);
         break;
     }
   },
@@ -188,6 +235,7 @@ export const websocketHandler = {
       else if (key.startsWith("computer:")) changeComputerSubscription(ws, key.slice(9), false);
     }
     clients.delete(ws);
+    if (ws.data.deviceId && !deviceOnline(ws.data.deviceId)) bus.changed("mobile");
   },
   error(_ws: ServerWebSocket<WsData>, err: Error) {
     log.warn("websocket error", err);

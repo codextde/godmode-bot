@@ -589,4 +589,22 @@ ALTER TABLE agents ADD COLUMN ssh_server_ids TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE conversations ADD COLUMN ssh_server_ids TEXT NOT NULL DEFAULT '[]';
 `,
   },
+  {
+    id: 17,
+    name: "mobile_devices",
+    sql: /* sql */ `
+-- Phones paired with the Godmode app. \`token_hash\` is the SHA-256 of the phone's device token.
+CREATE TABLE IF NOT EXISTS mobile_devices (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  model TEXT,
+  app_version TEXT,
+  token_hash TEXT NOT NULL UNIQUE,
+  last_seen_at TEXT,
+  last_address TEXT,
+  created_at TEXT NOT NULL
+);
+`,
+  },
 ];

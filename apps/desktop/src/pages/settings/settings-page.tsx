@@ -16,6 +16,7 @@ import {
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
+  Smartphone,
   Sparkles,
 } from "lucide-react";
 import { EmptyState, PageBody, PageHeader } from "@/components/common";
@@ -28,6 +29,7 @@ import { GeneralSection } from "@/components/settings/general-section";
 import { InstructionsSection } from "@/components/settings/instructions-section";
 import { LogsSection } from "@/components/settings/logs-section";
 import { MemorySection } from "@/components/settings/memory-section";
+import { PhoneSection } from "@/components/settings/phone-section";
 import { SecuritySection } from "@/components/settings/security-section";
 import { SystemSection } from "@/components/settings/system-section";
 import { VmSection } from "@/components/settings/vm-section";
@@ -49,6 +51,7 @@ const SECTIONS = [
   { id: "memory", label: "Memory", icon: <BrainCircuit />, group: "Preferences" },
   { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
   { id: "backup", label: "Backup", icon: <DatabaseBackup />, group: "Data & privacy" },
+  { id: "phone", label: "Phone", icon: <Smartphone />, group: "App" },
   { id: "system", label: "System", icon: <HeartPulse />, group: "App" },
   { id: "logs", label: "Logs", icon: <Activity />, group: "App" },
   { id: "about", label: "About", icon: <Info />, group: "App" },
@@ -96,6 +99,7 @@ export default function SettingsPage() {
       memory: () => <MemorySection settings={s} />,
       security: () => <SecuritySection settings={s} />,
       backup: () => <BackupSection />,
+      phone: () => <PhoneSection settings={s} />,
       system: () => <SystemSection bootstrap={boot} />,
       logs: () => <LogsSection settings={s} />,
       about: () => <AboutSection version={boot?.version} />,

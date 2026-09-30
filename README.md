@@ -79,6 +79,11 @@ needs to be useful:
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
 | 🩺 **Diagnostic log** | Errors, slow spots and how every run went, with secrets masked. Settings → Logs groups recurring problems and copies an AI-ready report — paste it into Claude to find bugs and speed things up. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
+| 📱 **Phone app** | Control Godmode from your iPhone or Android phone: hand over tasks, follow answers as they're written, stop runs, run automations and watch an agent's browser, shared screen or VM live — tap to take control. Pair once by scanning a QR code; the phone talks to your computer over [Tailscale](https://tailscale.com), never the open internet. Liquid Glass on iOS 26. |
+
+<img src="docs/screenshots/phone.png" alt="The Godmode phone app: what agents are doing now, a chat with a live browser strip, taking control of the agent's browser, and a finished answer" width="100%" />
+
+<sub><b>Phone app</b> — what your agents are doing right now, a chat that streams as it's written, the agent's browser live (tap to take control), and the answer.</sub>
 
 <table>
   <tr>
@@ -120,6 +125,10 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/workspace-sources.png" alt="Folders and git repositories attached to a workspace" /><br /><sub><b>Workspace folders & repos</b> — every agent in the workspace works with them</sub></td>
     <td><img src="docs/screenshots/workspace-add-repo.png" alt="Add a git repository to a workspace" /><br /><sub><b>Add a repository</b> — paste a URL, Godmode clones it and keeps it up to date</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/phone-pairing.png" alt="Connect a phone by scanning a one-time QR code" /><br /><sub><b>Connect a phone</b> — scan a one-time code; the phone gets its own key</sub></td>
+    <td><img src="docs/screenshots/phone-settings.png" alt="Phone settings: Tailscale status, phone access and paired phones" /><br /><sub><b>Phone settings</b> — Tailscale status, paired phones, remove one anytime</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/messaging.png" alt="Slack, Telegram and Teams bots connected to agents" /><br /><sub><b>Messaging</b> — talk to agents from Slack, Telegram and Microsoft Teams</sub></td>
@@ -189,6 +198,17 @@ docker compose up -d   # dashboard on http://localhost:7777
 ```
 
 > Put the dashboard behind TLS (Caddy, Traefik, Tailscale…) when you expose it beyond your machine.
+
+### Phone app (iOS and Android)
+
+1. Install [Tailscale](https://tailscale.com/download) on the computer that runs Godmode and on your phone, and sign in
+   with the same account.
+2. In Godmode open **Settings → Phone → Connect a phone**.
+3. Open the Godmode app and tap **Scan QR code** (or point the camera app at the code).
+
+The code works once and for five minutes; the phone gets its own key, and you can remove it anytime in the same place.
+Godmode only listens for phones on the computer's Tailscale address. The app lives in [`apps/mobile`](apps/mobile)
+(Expo) — build it with `bun run ios` / `bun run android` or EAS until it's in the stores.
 
 ## ⚡ Quick start
 
@@ -328,6 +348,11 @@ Every run is committed, so you can see exactly what an agent learned and did —
   rate-limited logins, HttpOnly/SameSite cookies for the dashboard.
 - **Remember this device** keeps the data key in the OS keychain so routines run unattended — disable it to require
   your passphrase after every restart.
+- **Phones** pair with a one-time, five-minute QR code and get their own key (stored hashed on the computer, in the
+  Keychain / Keystore on the phone). Their key only works on the computer's Tailscale address, is only sent to an
+  address that proves it's your Godmode, and opens a fixed set of routes: no logins, 2FA codes, backups, integrations,
+  settings or folders, and only screens shared in a chat can be controlled. A paired phone can still ask agents to act
+  on your computer — remove a lost phone in Settings → Phone, and turn on *Require Face ID* in the app.
 
 > ⚠️ Agents run Claude Code with **bypass permissions** by default. Treat them like a trusted coworker with access to
 > your machine; for sensitive work give the agent its own **macOS VM** (see above), or run Godmode in a VM or
@@ -343,7 +368,8 @@ pnpm typecheck && pnpm test
 pnpm build:app    # desktop bundles
 ```
 
-Monorepo: `packages/shared` (types) · `packages/core` (daemon) · `apps/desktop` (UI + Tauri).
+Monorepo: `packages/shared` (types) · `packages/core` (daemon) · `apps/desktop` (UI + Tauri) · `apps/mobile` (phone
+app, Expo — its own toolchain, see [apps/mobile/README.md](apps/mobile/README.md)).
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 🗺️ Roadmap
@@ -359,7 +385,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] API tools: any API with a key (Nano Banana, OpenAI, ElevenLabs…) for agents, global / workspace / agent
 - [x] SSH servers: agents run commands, edit files and copy files on remote machines — password or key, sudo, pinned host keys
 - [ ] Windows / Linux VMs
-- [ ] Mobile companion app & push notifications
+- [x] Phone app (iOS / Android): chats, runs, automations, live browser, screen and VM views, paired over Tailscale
+- [ ] Push notifications and a hosted gateway for phones without Tailscale
 - [ ] Team mode: shared workspaces and approvals
 
 ## 🙏 Credits

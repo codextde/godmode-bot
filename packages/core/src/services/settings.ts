@@ -1,5 +1,5 @@
 import type { Settings } from "@godmode/shared";
-import { DEFAULT_MODEL, DEFAULT_PORT } from "@godmode/shared";
+import { DEFAULT_MODEL, DEFAULT_PORT, MOBILE_DEFAULT_PORT } from "@godmode/shared";
 import { all, run } from "../db";
 import { bus } from "../events/bus";
 import { parseJson } from "../util";
@@ -96,6 +96,10 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   diagnostics: {
     verbose: false,
+  },
+  mobile: {
+    enabled: false,
+    port: MOBILE_DEFAULT_PORT,
   },
   onboardingComplete: false,
 };

@@ -79,6 +79,8 @@ export const qk = {
   vmScreen: (id: string, size: number) => ["vm-screen", id, size],
   sshServers: ["ssh-servers"] as unknown[],
   sshLocalKeys: ["ssh-local-keys"] as unknown[],
+  /** Phone access: Tailscale status and paired phones. */
+  mobile: ["mobile"] as unknown[],
   chromeProfiles: ["chrome-profiles"] as unknown[],
   folders: ["folders"] as unknown[],
   folderList: (path: string, hidden: boolean) => ["folders", "list", path, hidden],
