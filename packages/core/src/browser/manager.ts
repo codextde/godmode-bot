@@ -5,7 +5,7 @@
  */
 import { existsSync, rmSync } from "node:fs";
 import { join, relative, resolve, isAbsolute } from "node:path";
-import type { Agent, BrowserChat, BrowserProfile, ChromeImportInput, ChromeImportResult, LocalChromeProfile } from "@godmode/shared";
+import type { Agent, BotCheckReport, BrowserChat, BrowserProfile, ChromeImportInput, ChromeImportResult, LocalChromeProfile } from "@godmode/shared";
 import type { McpServerJson } from "../types";
 import { config, ensureDir } from "../config";
 import { bool, get, all, insert, run, update, tx } from "../db";
@@ -21,6 +21,8 @@ import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type Pag
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
+import { stealthArgs, stopProbes, windowedUserAgent } from "./stealth";
+import { botCheckReport } from "./botCheck";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
 import { initLiveView, pauseLiveViews, resumeLiveViews } from "./screencast";
 import { TabRegistry } from "./tabs";
@@ -61,6 +63,8 @@ function toProfile(r: ProfileRow): BrowserProfile {
     cookieCount: r.cookie_count,
     running: !!rb,
     cdpUrl: rb ? rb.httpUrl : null,
+    headless: rb ? rb.headless : null,
+    stealth: rb ? rb.stealth : null,
     chats: rb ? chatsOf(rb) : [],
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -307,22 +311,35 @@ export async function launchBrowser(profileId: string, opts: { headless?: boolea
   return { cdpUrl: rb.httpUrl, port: rb.port };
 }
 
-async function ensureBrowser(profileId: string, opts: { headless?: boolean } = {}): Promise<RunningBrowser> {
+/** A transient user (bot check, import) borrows the browser; anyone else keeps it running afterwards. */
+function take(rb: RunningBrowser, transient?: boolean): RunningBrowser {
+  if (transient) rb.borrowers++;
+  else rb.transient = false;
+  return rb;
+}
+
+/** Hand a borrowed browser back: the last borrower stops a browser only borrowers used. */
+async function giveBack(rb: RunningBrowser) {
+  rb.borrowers--;
+  if (rb.transient && rb.borrowers <= 0 && getRegistered(rb.profileId) === rb) await stopBrowser(rb.profileId);
+}
+
+/** `transient`: only borrow the browser — pair with `giveBack` (see `RunningBrowser.transient`). */
+async function ensureBrowser(profileId: string, opts: { headless?: boolean; transient?: boolean } = {}): Promise<RunningBrowser> {
   const pendingStop = stopping.get(profileId);
   if (pendingStop) await pendingStop;
   const current = getRunning(profileId);
   if (current) {
     current.lastUsedAt = Date.now();
-    return current;
+    return take(current, opts.transient);
   }
   const inflight = launching.get(profileId);
-  if (inflight) return inflight;
-  const p = startBrowser(profileId, opts).finally(() => launching.delete(profileId));
-  launching.set(profileId, p);
-  return p;
+  const p = inflight ?? startBrowser(profileId, opts).finally(() => launching.delete(profileId));
+  if (!inflight) launching.set(profileId, p);
+  return p.then((rb) => take(rb, opts.transient));
 }
 
-async function startBrowser(profileId: string, opts: { headless?: boolean }): Promise<RunningBrowser> {
+async function startBrowser(profileId: string, opts: { headless?: boolean; transient?: boolean }): Promise<RunningBrowser> {
   const profile = requireRow(profileId);
   ensureDir(profile.user_data_dir);
   const settings = getSettings();
@@ -332,6 +349,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
   let port: number;
   let wsUrl: string;
   let headless: boolean;
+  let stealth: boolean;
   // A Chromium left running by a previous core process still owns this profile dir — adopt it.
   const marker = readLaunchMarker(profile.user_data_dir);
   const orphan = marker && isProcessAlive(marker.pid) ? await probeCdp(marker.port) : null;
@@ -340,20 +358,23 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
     port = marker.port;
     wsUrl = orphan.webSocketDebuggerUrl;
     headless = marker.headless;
+    stealth = !!marker.stealth;
     log.info(`adopting running browser for profile ${profileId} (pid ${pid}, port ${port})`);
   } else {
     if (marker) clearLaunchMarker(profile.user_data_dir);
     const chrome = requireChrome(settings.browser.chromePath);
     headless = opts.headless ?? settings.browser.headless;
+    stealth = settings.browser.stealth;
+    const extraArgs = stealth ? stealthArgs({ headless, userAgent: headless ? await windowedUserAgent(chrome.path) : null }) : [];
     try {
-      proc = await launchChrome({ executable: chrome.path, userDataDir: profile.user_data_dir, headless });
+      proc = await launchChrome({ executable: chrome.path, userDataDir: profile.user_data_dir, headless, extraArgs });
     } catch (err) {
       throw new HttpError(500, `Could not start ${chrome.browser}: ${err instanceof Error ? err.message : String(err)}`, "browser_launch_failed");
     }
     pid = proc.pid;
     port = proc.port;
     wsUrl = proc.wsUrl;
-    writeLaunchMarker(profile.user_data_dir, { pid, port, headless });
+    writeLaunchMarker(profile.user_data_dir, { pid, port, headless, stealth });
     log.info(`started ${chrome.browser} for profile ${profileId} (pid ${pid}, port ${port}, ${headless ? "headless" : "headed"})`);
   }
 
@@ -375,6 +396,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
     httpUrl: `http://127.0.0.1:${port}`,
     wsUrl,
     headless,
+    stealth,
     client,
     tabs,
     process: proc,
@@ -383,6 +405,8 @@ async function startBrowser(profileId: string, opts: { headless?: boolean }): Pr
     startedAt: Date.now(),
     lastUsedAt: Date.now(),
     stopping: false,
+    transient: !!opts.transient && !!proc,
+    borrowers: 0,
   };
 
   // Navigation / new tabs count as activity (this is how browser-use usage keeps the browser alive).
@@ -510,6 +534,7 @@ async function shutdownOne(rb: RunningBrowser) {
 
 export async function shutdownBrowsers(): Promise<void> {
   stopIdleWatcher();
+  stopProbes();
   stopChatProxy();
   for (const timer of emitTimers.values()) clearTimeout(timer);
   emitTimers.clear();
@@ -777,6 +802,33 @@ export async function navigate(profileId: string, url: string, conversationId?: 
   if (!done) await rb.client.send("Target.createTarget", { url: parsed.href });
 }
 
+/** What bot detection sees in the profile's browser; a browser started just for the check is stopped again. */
+export async function botCheck(profileId: string): Promise<BotCheckReport> {
+  requireRow(profileId);
+  const rb = await ensureBrowser(profileId, { transient: true });
+  rb.lastUsedAt = Date.now();
+  // The check's window may be the browser's last one: leave it blank for the next chat instead of closing the browser.
+  const close = async (targetId: string) => {
+    if (rb.tabs.userPages().some((p) => p.targetId !== targetId)) {
+      await rb.client.send("Target.closeTarget", { targetId });
+      return;
+    }
+    const page = await attachToPage(rb.client, targetId);
+    try {
+      await page.navigate("about:blank");
+    } finally {
+      await page.detach();
+    }
+    rb.tabs.addSpares([targetId]);
+  };
+  try {
+    const { product } = await rb.client.send<{ product: string }>("Browser.getVersion");
+    return await botCheckReport(rb.client, { profileId, browser: product.replace(/^HeadlessChrome/, "Chrome"), headless: rb.headless, stealth: rb.stealth }, close);
+  } finally {
+    await giveBack(rb);
+  }
+}
+
 /** Running browser for the profile or a 409. */
 export function requireRunning(profileId: string): RunningBrowser {
   requireRow(profileId);
@@ -860,7 +912,8 @@ export async function browserMcpServer(
 
   const profile = profileId ? getProfile(profileId) : resolveProfileForAgent(agent, run.conversationId);
   const headless = agent.browser.headless ?? settings.browser.headless;
-  if (!getRunning(profile.id)) requireChrome(settings.browser.chromePath);
+  const running = getRunning(profile.id);
+  if (!running) requireChrome(settings.browser.chromePath);
   // No browser starts here: browser-use asks the run's endpoint for it on its first browser tool call.
   const cdpUrl = openChatLease({
     runId: run.runId,
@@ -882,7 +935,8 @@ export async function browserMcpServer(
     configDir,
     configPath,
     cdpUrl,
-    headless,
+    headless: running?.headless ?? headless,
+    stealth: running?.stealth ?? settings.browser.stealth,
     userDataDir: profile.userDataDir,
     downloadsPath: join(workspace, "downloads"),
     fileSystemPath: join(runDir, "files"),
@@ -949,13 +1003,12 @@ export async function importChromeSession(profileId: string, input: ChromeImport
 
   // Import into the running browser, or start it headless just for the import and stop it afterwards
   // (Browser.close flushes the cookie store to disk).
-  const wasRunning = !!getRunning(profileId);
-  const rb = await ensureBrowser(profileId, wasRunning ? {} : { headless: true });
+  const rb = await ensureBrowser(profileId, { headless: true, transient: true });
   let result: { set: number; failed: number; total: number };
   try {
     result = await importer.injectCookies(rb.client, cookies);
   } finally {
-    if (!wasRunning) await stopBrowser(profileId);
+    await giveBack(rb);
   }
 
   update("browser_profiles", profileId, {

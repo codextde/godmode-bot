@@ -684,6 +684,9 @@ export interface BrowserProfile {
   cookieCount: number;
   running: boolean;
   cdpUrl: string | null;
+  /** How the running browser was started; null while it isn't running. */
+  headless: boolean | null;
+  stealth: boolean | null;
   /** Chats with tabs open in the running browser, in the order they opened their first tab. */
   chats: BrowserChat[];
   createdAt: ISODate;
@@ -814,6 +817,8 @@ export interface BrowserSettings {
   browserUseCommand: string;
   keepAliveMinutes: number;
   liveView: boolean;
+  /** Hide automation signals so sites don't treat agents as bots (applies when a browser launches). */
+  stealth: boolean;
 }
 
 export interface ComputerSettings {

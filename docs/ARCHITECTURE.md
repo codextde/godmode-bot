@@ -268,6 +268,20 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
   `profile-use` — copy the Chrome profile’s cookie store to a temp dir, start the real Chrome binary headless on it
   with CDP, read decrypted cookies via `Storage.getCookies`, inject them into the Godmode profile with
   `Storage.setCookies`. `profile-use` itself is supported for syncing to browser-use Cloud profiles.
+* **Bot detection** (`browser/stealth.ts`, `settings.browser.stealth`, on by default): Chromium starts with
+  `--disable-blink-features=AutomationControlled`, so `navigator.webdriver` stays false on every Chromium build (current
+  Chrome already leaves it false with a debugging port; the VM's Chrome gets the flag too). Headless it also gets the
+  user agent the same executable sends with a window (`--user-agent`, learned once per executable from a
+  throwaway headless launch, so requests, frames and workers agree) and a desktop screen (`--screen-info`), and
+  browser-use doesn't emulate a viewport over it (a page larger than its window gives headless away). The one difference
+  left: Chrome withholds detailed client hints (full version) while `--user-agent` is set. Takes effect when a browser
+  starts; the launch marker records it for adopted browsers.
+* **Bot check** (`browser/botCheck.ts`, `POST /api/browser/profiles/:id/bot-check`, Settings → Browser): serves a page
+  from a throwaway loopback server into a background window of the profile's browser and judges its navigator, a web
+  worker, window and screen metrics, WebGL, plugins, languages, permissions and request headers the way common bot
+  detection does (pass / warn / fail per signal). A browser started just for the check (or for a session import) is
+  *transient*: it's stopped again afterwards unless someone else got it meanwhile (`ensureBrowser` / `touchBrowser`
+  claim it).
 * **Live view**: CDP `Page.startScreencast` frames streamed to subscribed UIs; the human can take over
   (click/type) e.g. to solve a CAPTCHA. A view shows the profile's active tab, or with `conversationId` the tab one chat
   works in (`browser.subscribe { profileId, conversationId }`, frames carry `conversationId`; navigate and input take

@@ -61,6 +61,7 @@ needs to be useful:
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
 | 🗂️ **Parallel chats, own tabs** | Every chat gets its own tab (in its own background window) in the shared browser profile, so several chats and agents browse at the same time — signed in with the same logins, without ever touching each other's pages. |
+| 🥷 **Bot-detection hardening** | Sites that block automated browsers see a normal Chrome: the automation flag stays off, and even a headless browser has the user agent and screen of a regular Chrome window. *Run check* (Settings → Browser) shows what bot detection sees, signal by signal. |
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
 | 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent works *entirely inside the VM* — commands, files, apps (computer use with Cua Driver) and the web (Google Chrome with browser-use) — and no browser opens on your Mac. Watch the VM's screen next to the chat and take control anytime. Allow it once and agents sign in inside the VM too: Godmode fills your saved logins and 2FA codes for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
@@ -129,6 +130,10 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/followup-waiting.png" alt="An agent waiting for a signed contract, set to continue tomorrow at 09:00" /><br /><sub><b>Follow-ups</b> — the agent sets itself a time to continue; move it, cancel it or continue now</sub></td>
     <td><img src="docs/screenshots/followup.png" alt="The agent picked the chat up again at the time it set and finished the task" /><br /><sub><b>Back on it</b> — at that time the agent picks the chat up again, with all the context</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/bot-check.png" alt="Bot check of a hardened headless browser: 9 of 10 checks pass" /><br /><sub><b>Bot check</b> — what bot detection sees in the agents' browser</sub></td>
+    <td><img src="docs/screenshots/bot-check-off.png" alt="Bot check without hardening: the headless user agent and screen give the browser away" /><br /><sub><b>Without hardening</b> — headless Chrome gives itself away</sub></td>
   </tr>
 </table>
 
