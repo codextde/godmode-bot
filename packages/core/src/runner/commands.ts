@@ -46,7 +46,7 @@ async function probe(agent: Agent): Promise<SlashCommand[]> {
   const proc = Bun.spawn({
     cmd: [...cmd, ...args],
     cwd: agent.repoPath,
-    env: buildEnv(agent),
+    env: buildEnv(agent, false, false),
     stdin: "pipe",
     stdout: "pipe",
     stderr: "ignore",

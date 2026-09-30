@@ -70,6 +70,7 @@ needs to be useful:
 | 🔢 **2FA / TOTP** | Import Google Authenticator QR codes from screenshots — including multi-account *export* QR codes — or scan with your camera. |
 | 📬 **Missing-login inbox** | Agents report missing or broken logins, accounts and 2FA; add them in one click. |
 | 🧩 **Integrations** | Composio toolkits (Gmail, Slack, GitHub, Notion…) and custom MCP servers — globally, per workspace, or per agent. |
+| 🔧 **Tools** | Hand agents any API with your key — Nano Banana image generation, OpenAI, ElevenLabs voices, Perplexity search or your own services. Add the key, say what it's for and paste the docs (presets fill them in); agents work out the calls themselves. Godmode adds the key to each request and only sends it to the tool's address, so the model never sees it — or opt in to an environment variable for scripts and SDKs. Global, per workspace or per agent; images, audio and files from responses land as files. |
 | 💬 **Messaging** | Talk to your agents from **Slack**, **Telegram** and **Microsoft Teams**. Connect a bot, pick which agents it reaches, and approve who may use it; `/agent`, `/new` and `/stop` work right in the chat, and every chat is also a Godmode conversation. |
 | 🗂️ **Workspaces** | Separate clients/projects with their own agents, logins, 2FA, integrations and browser profile, plus shared global ones. Assign any browser profile to a workspace (Browser → profile menu, or in the workspace's settings) and its agents browse with it. |
 | 🧬 **Workspace folders & repos** | Attach project folders and git repositories to a workspace — paste `https://github.com/you/app` and Godmode clones it with your git sign-in, keeps it up to date and hands it to every agent in the workspace. |
@@ -134,6 +135,10 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/bot-check.png" alt="Bot check of a hardened headless browser: 9 of 10 checks pass" /><br /><sub><b>Bot check</b> — what bot detection sees in the agents' browser</sub></td>
     <td><img src="docs/screenshots/bot-check-off.png" alt="Bot check without hardening: the headless user agent and screen give the browser away" /><br /><sub><b>Without hardening</b> — headless Chrome gives itself away</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/api-tools.png" alt="API tools with their keys, scopes and addresses" /><br /><sub><b>Tools</b> — APIs agents use with your keys, scoped globally, per workspace or per agent</sub></td>
+    <td><img src="docs/screenshots/api-tool-dialog.png" alt="Add Nano Banana: name, what it's for and the API key" /><br /><sub><b>Add a tool</b> — presets bring the address and docs, you add the key</sub></td>
   </tr>
 </table>
 
@@ -296,6 +301,8 @@ Every run is committed, so you can see exactly what an agent learned and did —
   never enters the model's context. *Reveal* mode is opt-in per agent and audited.
 - **Site-bound fills**: a login is only ever typed into its own website (https, real password fields) — a phishing or
   prompt-injected lookalike page gets nothing.
+- **Address-bound API keys**: a tool's key is added by Godmode and only sent to URLs under the tool's address (redirects
+  elsewhere aren't followed); moving a saved key to another address or into agents' environment needs your passphrase.
 - **Re-auth for sensitive actions**: revealing a password or granting an agent reveal access needs your vault passphrase.
 - **Redaction** of known secrets in transcripts, logs and the UI · **audit log** of every secret access.
 - **Local-first**: API on `127.0.0.1`, per-run MCP tokens, DNS-rebinding & CSRF protection, strict CSP,
@@ -330,6 +337,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Computer use: share a window (background control via Cua Driver), a display, every monitor or a browser tab
 - [x] Automations: schedules, app events (Composio triggers), plain-language conditions and webhooks
 - [x] Agents working in a dedicated macOS VM (Tart / Virtualization.framework): shell, files and screen, assigned per agent, chat or workspace
+- [x] API tools: any API with a key (Nano Banana, OpenAI, ElevenLabs…) for agents, global / workspace / agent
 - [ ] Windows / Linux VMs
 - [ ] Mobile companion app & push notifications
 - [ ] Team mode: shared workspaces and approvals

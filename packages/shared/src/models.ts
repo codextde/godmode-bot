@@ -639,6 +639,68 @@ export interface McpServerInput {
   enabled?: boolean;
 }
 
+/* ------------------------------------------------------------------ */
+/* API tools: an API key, what it's for and how to call it              */
+/* ------------------------------------------------------------------ */
+
+/** Where Godmode puts the key on requests: a header (`<name>: <prefix><key>`) or a query parameter (`?<name>=<key>`). */
+export interface ApiToolAuth {
+  in: "header" | "query";
+  name: string;
+  prefix: string;
+}
+
+export interface ApiTool {
+  id: ID;
+  workspaceId: ID | null;
+  /** Pinned to a single agent (optional) */
+  agentId: ID | null;
+  name: string;
+  /** What agents can use it for. */
+  description: string;
+  /** How to call the API (Markdown). Agents read it before their first request. */
+  docs: string;
+  docsUrl: string;
+  /** The key is only ever sent to URLs under this address. "" = no requests through Godmode (env var only). */
+  baseUrl: string;
+  auth: ApiToolAuth;
+  /** GET path (under baseUrl) that checks the key. "" = no test. */
+  testPath: string;
+  /** Environment variable runs get the key in; null = only through Godmode (agents never see the key). */
+  envVar: string | null;
+  /** Preset it was created from, e.g. "gemini" (UI icon). */
+  preset: string | null;
+  hasKey: boolean;
+  enabled: boolean;
+  lastUsedAt: ISODate | null;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
+export interface ApiToolInput {
+  workspaceId?: ID | null;
+  agentId?: ID | null;
+  name: string;
+  description?: string;
+  docs?: string;
+  docsUrl?: string;
+  baseUrl?: string;
+  auth?: ApiToolAuth;
+  testPath?: string;
+  envVar?: string | null;
+  preset?: string | null;
+  /** New key. Omitted = keep the stored one, "" = remove it. */
+  apiKey?: string;
+  enabled?: boolean;
+}
+
+export interface ApiToolTestResult {
+  ok: boolean;
+  status: number | null;
+  ms: number;
+  message: string;
+}
+
 export interface ComposioToolkit {
   slug: string;
   name: string;
