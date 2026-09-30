@@ -41,6 +41,7 @@
       ]
     },
     "plugins": [
+      "./plugins/with-scene-lifecycle",
       "expo-router",
       [
         "expo-splash-screen",
