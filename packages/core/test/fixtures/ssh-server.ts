@@ -250,14 +250,14 @@ export async function startSshServer(opts: TestSshServerOptions = {}): Promise<T
     userKey: user.private,
     userPublicKey: user.public,
     commands,
-    close: () =>
-      new Promise<void>((resolve) => {
-        server.close(() => {
-          rmSync(root, { recursive: true, force: true });
-          resolve();
-        });
-        // Open connections would keep the server from closing.
-        for (const client of clients) client.end();
-      }),
+    close: async () => {
+      const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+      // Open connections would keep the server from closing.
+      for (const client of clients) client.end();
+      // Bun on Linux can leave a socket that both sides ended open without ever emitting "close", and server.close
+      // waits for it forever — don't let that hang the test.
+      await Promise.race([closed, Bun.sleep(1000)]);
+      rmSync(root, { recursive: true, force: true });
+    },
   };
 }
