@@ -34,7 +34,22 @@ use the Mac's own Tailscale address; open a pairing link with
 `xcrun simctl openurl booted "godmode://pair?d=…"` (copy it from the QR code dialog's request in the network tab, or
 use **Paste pairing link** in the scanner).
 
-Builds for devices and the stores go through EAS (`bunx eas-cli build --profile preview`, see `eas.json`).
+Builds for devices go through EAS (`bunx eas-cli build --profile preview`, see `eas.json`).
+
+## Releasing
+
+The app is **Godmode Bot** in both stores (Codext GmbH): App Store app id 6817670733 and Google Play package
+`de.codext.godmode`. The first release, 0.1.0 (iOS build 1, Android versionCode 2), was built locally. Bump
+`ios.buildNumber` and `android.versionCode` in `app.json` for every upload; each store accepts a number only once.
+
+- **iOS**: `bunx expo prebuild --platform ios --clean`, archive the `Godmode` scheme in Release, export for App Store
+  Connect with the "Godmode App Store" provisioning profile (Apple Distribution certificate), and upload with
+  `xcrun altool --upload-app`.
+- **Android**: `bunx expo prebuild --platform android --clean`, add a release `signingConfig` for the upload key (kept
+  outside the repo; Google Play App Signing holds the app signing key), then `./gradlew :app:bundleRelease`.
+- Store texts, screenshots and the review notes live in the consoles. The support page (`/support`) and the privacy
+  policy's phone app section are on the website, which also hosts the reviewers' demo video
+  (`/media/phone-app-demo.mp4`).
 
 ## Layout
 

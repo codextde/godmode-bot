@@ -6,8 +6,8 @@ import { LEGAL } from '@/config/site';
 <Legal title="Privacy policy" description="How the Godmode website handles your data: cookieless analytics, optional X pixel, Stripe payments.">
   <p>
     This policy explains what personal data we process when you visit this website or buy Godmode, why, and what rights
-    you have. It does not cover the Godmode app itself: the app runs on your device, has no telemetry and sends nothing
-    to us.
+    you have. The Godmode apps themselves, on your computer and on your phone, run on your devices, have no telemetry and
+    send nothing to us; section 10 explains the phone app.
   </p>
 
   <h2>1. Controller</h2>
@@ -85,5 +85,17 @@ import { LEGAL } from '@/config/site';
     processing based on legitimate interests (Art. 15–21 GDPR), and to withdraw consent at any time with effect for the
     future. You can also lodge a complaint with a supervisory authority, for example the Landesbeauftragte für den
     Datenschutz und die Informationsfreiheit Baden-Württemberg. Just email <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a>.
+  </p>
+  <h2>10. The Godmode phone app (iOS and Android)</h2>
+  <p>
+    The Godmode app for iPhone, iPad and Android is a remote control for Godmode on your own computer. It connects only to
+    that computer, over your private Tailscale network, and sends nothing to us: no account, no analytics, no crash
+    reports, no ads. We don’t collect personal data through the app. The camera is used only to scan the pairing QR code
+    and no images leave the phone. On Android, the QR scanner is Google’s ML Kit (part of Google Play services), which
+    sends Google technical usage data about the scanner, such as device and app information, performance metrics and
+    error codes; see Google’s ML Kit data disclosure. The key your phone receives when pairing is kept in the phone’s secure storage (the
+    Keychain on iOS, Keystore-protected storage on Android). Chats, agents and screens are loaded from your computer while
+    you use the app. Tailscale Inc. provides the network connection under its own terms and privacy policy. You can
+    remove a phone at any time in Godmode on your computer under Settings → Phone.
   </p>
 </Legal>

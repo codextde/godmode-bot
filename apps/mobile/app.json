@@ -9,6 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "de.codext.godmode",
+      "buildNumber": "1",
       "icon": "./assets/godmode.icon",
       "supportsTablet": true,
       "infoPlist": {
@@ -27,11 +28,17 @@
     },
     "android": {
       "package": "de.codext.godmode",
+      "versionCode": 2,
       "adaptiveIcon": {
         "backgroundColor": "#1C1C1C",
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/adaptive-icon.png"
-      }
+      },
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "plugins": [
       "expo-router",

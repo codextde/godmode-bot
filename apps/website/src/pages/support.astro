@@ -1,0 +1,56 @@
+---
+import Base from '@/layouts/Base.astro';
+import Nav from '@/components/Nav.astro';
+import Footer from '@/components/Footer.astro';
+import { LEGAL, SITE } from '@/config/site';
+---
+
+<Base title="Support" description="Help with Godmode and the Godmode phone app for iPhone, iPad and Android, and how to reach us.">
+  <Nav home={false} />
+  <main class="pt-36 pb-16">
+    <article class="container-x max-w-[760px]">
+      <p class="eyebrow"><span class="n">●</span> Support</p>
+      <h1 class="h-section mt-5">Support</h1>
+      <div class="prose-gm mt-10">
+        <p>
+          Questions, a bug, or stuck somewhere? Email <a href={`mailto:${SITE.email}`}>{SITE.email}</a> and tell us what
+          you tried and what happened; a screenshot helps. You can also call us at
+          <a href={`tel:${LEGAL.phone.replace(/\s/g, '')}`}>{LEGAL.phone}</a>.
+        </p>
+
+        <h2>The Godmode phone app</h2>
+        <p>
+          The app for iPhone, iPad and Android is a remote control for Godmode on your computer: hand over tasks, follow
+          answers as they're written, stop runs, run automations, and watch an agent's browser, shared screen or VM live.
+          It needs Godmode running on your computer.
+        </p>
+        <h3>Connect your phone</h3>
+        <ol>
+          <li>Install <a href="https://tailscale.com/download" rel="noopener">Tailscale</a> on your computer and your phone and sign in to the same account on both.</li>
+          <li>On the computer, open Godmode → <strong>Settings → Phone → Connect a phone</strong>. A QR code appears.</li>
+          <li>In the app, tap <strong>Scan QR code</strong> and point the camera at it. The phone's camera app works too.</li>
+        </ol>
+        <h3>If it doesn't connect</h3>
+        <ul>
+          <li>Check that Tailscale is connected on both devices, with the same account.</li>
+          <li>Make sure the computer is awake and Godmode is running. Phone access has to stay on in Settings → Phone.</li>
+          <li>A QR code works once and expires after five minutes. Create a new one and scan again.</li>
+          <li>Still stuck? Remove the phone in Settings → Phone on the computer, disconnect in the app's settings, and pair again.</li>
+        </ul>
+        <h3>Your data</h3>
+        <p>
+          The phone talks only to your computer, over your own Tailscale network. Logins, 2FA codes and settings stay on
+          the computer, and the app sends nothing to us. You can remove a phone at any time in Settings → Phone. Details
+          are in our <a href="/legal/privacy">privacy policy</a>.
+        </p>
+
+        <h2>Godmode on your computer</h2>
+        <p>
+          Answers to common questions are in the <a href="/#faq">FAQ</a>. Customers can download the latest version
+          from the <a href="/download">download page</a>.
+        </p>
+      </div>
+    </article>
+  </main>
+  <Footer />
+</Base>
