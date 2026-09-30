@@ -21,7 +21,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { AgentSelect, StatusSelect, agentsInReach } from "./task-fields";
 import { PullRequestChip, useTaskActivity } from "./task-card";
-import { TYPE_META, TypeIcon, isWorking, repoLabel, workspaceRepos } from "./task-meta";
+import { TYPE_META, TypeIcon, isWorking, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
 import { TASK_TYPES } from "@godmode/shared";
 
 export function TaskSheet({
@@ -151,22 +151,22 @@ function TaskDetail({
                 </SelectContent>
               </Select>
             </Prop>
-            {task.type === "coding" && (
+            {(task.type === "coding" || task.branch) && (
               <>
                 <Prop label="Repository">
-                  {started ? (
-                    <span className="flex min-w-0 items-center gap-1.5 font-mono text-[13px]">
-                      <span className="truncate">{repoLabel(task.repoUrl || defaultRepo?.url || "")}</span>
+                  {started || task.repoPath ? (
+                    <span className="flex min-w-0 items-center gap-1.5 font-mono text-[13px]" title={task.repoPath || task.repoUrl || undefined}>
+                      <span className="truncate">{taskRepoLabel(task, defaultRepo)}</span>
                     </span>
                   ) : (
                     <BlurInput
                       value={task.repoUrl}
-                      placeholder={defaultRepo?.url || "https://github.com/acme/app.git"}
+                      placeholder={defaultRepo ? (defaultRepo.url ?? defaultRepo.path) : "https://github.com/acme/app.git"}
                       onSave={(repoUrl) => save.mutate({ repoUrl })}
                     />
                   )}
                 </Prop>
-                <Prop label={started ? "Branch" : "Base branch"}>
+                <Prop label={task.branch ? "Branch" : "Base branch"}>
                   {task.branch ? (
                     <span className="flex min-w-0 items-center gap-1.5 font-mono text-[13px]">
                       <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
@@ -182,6 +182,14 @@ function TaskDetail({
                     />
                   )}
                 </Prop>
+                {task.worktree && (
+                  <Prop label="Worktree">
+                    <span className="flex min-w-0 items-center gap-1.5 font-mono text-[13px]" title={task.worktree}>
+                      <span className="truncate">{task.worktree}</span>
+                      <CopyButton value={task.worktree} label="Copy the worktree's path" size="icon-xs" />
+                    </span>
+                  </Prop>
+                )}
               </>
             )}
           </dl>

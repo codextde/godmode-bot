@@ -29,6 +29,8 @@ export interface PromptContext {
   voice?: boolean;
   /** Folder attached to the chat (Claude's cwd). null = the agent's own repository. */
   workingDirectory?: string | null;
+  /** The working directory is a task's own git worktree: of `repo` (URL or the human's folder), on `branch`. */
+  taskWorktree?: { repo: string; branch: string } | null;
   /** Folders and repositories of the agent's workspace (passed with --add-dir). */
   sources?: PromptSources | null;
   /** APIs the human gave the agent keys for (Integrations → Tools). */
@@ -141,8 +143,13 @@ export function buildSystemPrompt(ctx: PromptContext): string {
   const repo = agent.repoPath;
   const out: string[] = [];
 
+  const worktree = folder ? ctx.taskWorktree : null;
   const workplace = folder
-    ? `- Working directory: \`${folder}\` — a folder ${human} attached to this chat. Work on the files there and follow its conventions (and its own CLAUDE.md, if any). Godmode never commits anything in it: only use git there when asked.
+    ? `${
+        worktree
+          ? `- Working directory: \`${folder}\` — this task's own git worktree of ${worktree.repo}, on the branch \`${worktree.branch}\`. Other tasks work in worktrees of their own, and ${human}'s copy of the repository is separate: work on the files here and follow the project's conventions (and its own CLAUDE.md, if any).`
+          : `- Working directory: \`${folder}\` — a folder ${human} attached to this chat. Work on the files there and follow its conventions (and its own CLAUDE.md, if any). Godmode never commits anything in it: only use git there when asked.`
+      }
 - Your own git repository: \`${repo}\`. Its \`CLAUDE.md\` holds your identity and standing instructions; \`MEMORY.md\` (and \`memory/\`) is your long-term memory — read it at the start of a task when it may be relevant. Put scratch files and downloads in \`${join(repo, "workspace")}\`. Files the human attaches are saved under \`${join(repo, "workspace", "uploads")}\`.`
     : `- Working directory: your own git repository. \`CLAUDE.md\` holds your identity and standing instructions; \`MEMORY.md\` (and \`memory/\`) is your long-term memory — read it at the start of a task when it may be relevant. Put files you produce (downloads, reports, exports) in \`workspace/\`. Files the human attaches are saved under \`workspace/uploads/\`.`;
 

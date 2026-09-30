@@ -1,14 +1,15 @@
 /**
  * Tasks: the Kanban board agents work from (see packages/shared/src/tasks.ts for the status flow).
  *
- * A task with an agent starts when it enters Todo (or In progress): coding tasks first get a checkout of the repository
- * on their own branch (<data>/tasks/<id>), then the agent works in the task's conversation (origin "task", archived so
- * it stays off the chat list). Every run in that conversation — the first one and the human's follow-ups — moves the
- * task along when it ends: In review when it succeeded (coding: after pushing the branch and opening the pull
- * request), Blocked when it failed, was stopped, or the agent reported it can't go on. Merged pull requests move
- * their task to Done.
+ * A task with an agent starts when it enters Todo (or In progress): a task with a repository (its own, or the
+ * workspace's first git repository or repository folder) first gets its own git worktree on its own branch
+ * (<data>/tasks/<id>), so tasks working side by side never touch each other's files or the human's copy. Then the
+ * agent works in the task's conversation (origin "task", archived so it stays off the chat list). Every run in that
+ * conversation — the first one and the human's follow-ups — moves the task along when it ends: In review when it
+ * succeeded (coding: after pushing the branch and opening the pull request), Blocked when it failed, was stopped, or
+ * the agent reported it can't go on. Merged pull requests move their task to Done.
  */
-import { rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, PullRequestState, Run, RunStatus, ServerEvent, Task, TaskInput, TaskPatch, TaskStatus, TaskType } from "@godmode/shared";
 import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES, isValidBranch, parseGitUrl } from "@godmode/shared";
@@ -22,7 +23,21 @@ import { getAgent } from "../agents/service";
 import { activeRunForConversation, cancelRun, getRun, waitForRun } from "../runner/runner";
 import { conversationExists, createConversation, sendMessage } from "../services/conversations";
 import { notify } from "../services/notifications";
-import { branchDiff, commitWork, openPullRequest, prepareCheckout, pullRequestState, pushBranch, secretFilesAdded } from "./git";
+import { workingDirectoryProblem } from "../services/folders";
+import { isRepoFolder, reposDir } from "../services/workspaceSources";
+import {
+  branchDiff,
+  commitWork,
+  commitsAhead,
+  needsClone,
+  openPullRequest,
+  prepareWorktree,
+  pullRequestState,
+  pushBranch,
+  removeCheckout,
+  secretFilesAdded,
+  type TaskRepo,
+} from "./git";
 
 const log = logger("tasks");
 
@@ -46,6 +61,7 @@ interface TaskRow {
   agent_id: string | null;
   conversation_id: string | null;
   repo_url: string;
+  repo_path: string;
   base_branch: string;
   branch: string | null;
   pr_url: string | null;
@@ -89,8 +105,10 @@ function toModel(r: TaskRow): Task {
     runId: r.run_id ?? null,
     runStatus: r.run_status ?? null,
     repoUrl: r.repo_url,
+    repoPath: r.repo_path,
     baseBranch: r.base_branch,
     branch: r.branch,
+    worktree: r.branch ? checkoutDir(r.id) : null,
     pullRequest: r.pr_url ? { url: r.pr_url, number: r.pr_number, state: r.pr_state } : null,
     summary: r.summary,
     blockedReason: r.blocked_reason,
@@ -185,6 +203,16 @@ function cleanRepoUrl(url: string | undefined): string {
   return parsed.url;
 }
 
+/** Only the workspace's own folders that are git repositories: a task never makes worktrees of other folders. */
+function cleanRepoPath(path: string | undefined, workspaceId: string | null): string {
+  const p = (path ?? "").trim();
+  if (!p) return "";
+  const folder = workspaceId ? get<{ path: string }>("SELECT path FROM workspace_sources WHERE workspace_id = ? AND kind = 'folder' AND path = ?", workspaceId, p) : null;
+  if (!folder) throw badRequest("Pick one of the workspace's folders as the task's repository.");
+  if (!isRepoFolder(folder.path)) throw badRequest(`${folder.path} isn't a git repository.`);
+  return folder.path;
+}
+
 function cleanBranch(branch: string | undefined): string {
   const b = (branch ?? "").trim();
   if (b && !isValidBranch(b)) throw badRequest(`"${b}" isn't a valid branch name`);
@@ -253,6 +281,7 @@ export function createTask(input: TaskInput): Task {
     position: positionIn(workspaceId, status, null),
     agent_id: agentId,
     repo_url: cleanRepoUrl(input.repoUrl),
+    repo_path: cleanRepoPath(input.repoPath, workspaceId),
     base_branch: cleanBranch(input.baseBranch),
     completed_at: status === "done" || status === "cancelled" ? ts : null,
     created_at: ts,
@@ -276,6 +305,7 @@ export function updateTask(id: string, patch: TaskPatch): Task {
     description: patch.description !== undefined ? cleanDescription(patch.description) : undefined,
     type: patch.type !== undefined ? cleanType(patch.type) : undefined,
     repo_url: patch.repoUrl !== undefined ? cleanRepoUrl(patch.repoUrl) : undefined,
+    repo_path: patch.repoPath !== undefined ? cleanRepoPath(patch.repoPath, current.workspace_id) : undefined,
     base_branch: patch.baseBranch !== undefined ? cleanBranch(patch.baseBranch) : undefined,
     status,
     agent_id: agentId,
@@ -321,7 +351,7 @@ export async function deleteTask(id: string): Promise<void> {
     await cancelRun(active, "The task was deleted").catch(() => {});
     await waitForRun(active, 15_000).catch(() => {});
   }
-  rmSync(checkoutDir(id), { recursive: true, force: true });
+  await removeCheckout(checkoutDir(id)).catch((err) => log.warn(`could not remove the worktree of task ${id}`, err));
 }
 
 /** Stop and clean up every task of a workspace that is being deleted (its rows go with the workspace). */
@@ -330,7 +360,7 @@ export async function removeWorkspaceTasks(workspaceId: string): Promise<void> {
     const active = t.conversation_id ? activeRunForConversation(t.conversation_id) : null;
     await stopWork(t);
     if (active) await waitForRun(active, 15_000).catch(() => {});
-    rmSync(checkoutDir(t.id), { recursive: true, force: true });
+    await removeCheckout(checkoutDir(t.id)).catch((err) => log.warn(`could not remove the worktree of task ${t.id}`, err));
   }
 }
 
@@ -378,15 +408,29 @@ function block(id: string, reason: string, from: readonly TaskStatus[] = WORKING
   emit(id);
 }
 
-/** The workspace's first git repository: what coding tasks clone unless they name another one. */
-function workspaceRepo(workspaceId: string | null): { url: string; branch: string } {
-  const source = workspaceId
-    ? get<{ url: string | null; branch: string | null }>(
-        "SELECT url, branch FROM workspace_sources WHERE workspace_id = ? AND kind = 'git' AND url IS NOT NULL ORDER BY position, created_at LIMIT 1",
-        workspaceId,
+/**
+ * The repository a task works in: the one it names (a URL or one of the workspace's folders), else the workspace's
+ * first git repository — a cloned URL or a folder that is a git repository. null = the task has none.
+ */
+function taskRepo(task: TaskRow): { repo: TaskRepo; branch: string } | { error: string } | null {
+  const sources = task.workspace_id
+    ? all<{ kind: "folder" | "git"; path: string; url: string | null; branch: string | null }>(
+        "SELECT kind, path, url, branch FROM workspace_sources WHERE workspace_id = ? ORDER BY position, created_at",
+        task.workspace_id,
       )
-    : null;
-  return { url: source?.url ?? "", branch: source?.branch ?? "" };
+    : [];
+  // Checked again on every start: only a folder the workspace still has, and still may be worked in.
+  const usable = (path: string) => sources.some((s) => s.kind === "folder" && s.path === path) && !workingDirectoryProblem(path) && isRepoFolder(path);
+  if (task.repo_path) {
+    if (!usable(task.repo_path)) return { error: `The task's repository ${task.repo_path} isn't one of the workspace's git repository folders anymore.` };
+    return { repo: { kind: "local", path: task.repo_path }, branch: "" };
+  }
+  if (task.repo_url) return { repo: { kind: "remote", url: task.repo_url }, branch: "" };
+  for (const s of sources) {
+    if (s.kind === "git" && s.url) return { repo: { kind: "remote", url: s.url }, branch: s.branch ?? "" };
+    if (s.kind === "folder" && usable(s.path)) return { repo: { kind: "local", path: s.path }, branch: "" };
+  }
+  return null;
 }
 
 function branchName(task: TaskRow): string {
@@ -394,20 +438,34 @@ function branchName(task: TaskRow): string {
   return `godmode/${task.number}-${slug}`;
 }
 
-const TYPE_BRIEF: Record<TaskType, (t: { repo: string; base: string; branch: string }) => string> = {
-  general: () => "Do the task and finish with a short summary of what you did and anything the human should check.",
-  research: () =>
+interface Worktree {
+  /** The repository: its URL, or the human's folder it comes from. */
+  repo: string;
+  base: string;
+  branch: string;
+}
+
+const TYPE_BRIEF: Record<TaskType, string> = {
+  general: "Do the task and finish with a short summary of what you did and anything the human should check.",
+  research:
     "Research this thoroughly and answer with a well-structured report in Markdown: the key findings first, then details, sources (with links) and a recommendation where it helps.",
-  coding: ({ repo, base, branch }) =>
-    [
-      `You work in a fresh checkout of ${repo} (your current directory), on the branch \`${branch}\` created from \`${base}\`. Make every change here — not in other copies of the repository you may see.`,
-      "Implement the change, keep to the project's conventions, run its tests and linters when it has them, and commit your work with clear commit messages.",
-      "Don't push and don't open a pull request: Godmode pushes the branch and opens the pull request when you finish.",
-      "End with a summary of the changes — it becomes the pull request description.",
-    ].join("\n"),
+  coding: [
+    "Implement the change, keep to the project's conventions, run its tests and linters when it has them, and commit your work with clear commit messages.",
+    "Don't push and don't open a pull request: Godmode pushes the branch and opens the pull request when you finish.",
+    "End with a summary of the changes — it becomes the pull request description.",
+  ].join("\n"),
 };
 
-function taskPrompt(task: TaskRow, coding: { repo: string; base: string; branch: string } | null, restarted: boolean): string {
+function worktreeBrief(task: TaskRow, w: Worktree): string {
+  return [
+    `You work in your own git worktree of ${w.repo} (your current directory), on the branch \`${w.branch}\` created from \`${w.base}\`. Other tasks and the human's own copy of the repository have their own files, so nothing you do here gets in their way.`,
+    "Make every change here — not in other copies of the repository you may see. It's a fresh checkout: install dependencies first if you need to build or run something.",
+    "The repository's stash, branches and settings are shared with other tasks (and the human's copy): don't use `git stash` (commit work in progress instead), don't switch or delete other branches, and don't change the git config.",
+    ...(task.type === "coding" ? [] : ["When you finish, Godmode commits what you changed here on this branch (it isn't pushed)."]),
+  ].join("\n");
+}
+
+function taskPrompt(task: TaskRow, worktree: Worktree | null, restarted: boolean): string {
   const lines = [
     restarted ? `The task #${task.number} was restarted from the board — here it is again (it may have changed):` : `You were assigned task #${task.number} on the task board.`,
     "",
@@ -416,7 +474,8 @@ function taskPrompt(task: TaskRow, coding: { repo: string; base: string; branch:
     task.description.trim() || "_No description._",
     "",
     "---",
-    TYPE_BRIEF[task.type](coding ?? { repo: "", base: "", branch: "" }),
+    ...(worktree ? [worktreeBrief(task, worktree)] : []),
+    TYPE_BRIEF[task.type],
     "If you can't finish because something is missing (access, information, a decision), call the `task_report_blocked` tool with what you need, then stop.",
   ];
   return lines.join("\n");
@@ -448,32 +507,44 @@ export async function dispatch(id: string): Promise<void> {
     if (!transition(id, "in_progress", STARTABLE)) return;
     sql("UPDATE tasks SET started_at = ?, completed_at = NULL WHERE id = ?", now(), id);
 
-    let coding: { repo: string; base: string; branch: string } | null = null;
+    // Its own git worktree on its own branch: tasks working side by side never touch each other's files.
+    let worktree: Worktree | null = null;
     let workDir: string | null = null;
-    if (task.type === "coding") {
-      const fallback = workspaceRepo(task.workspace_id);
-      const repo = task.repo_url || fallback.url;
-      if (!repo) return block(id, "Coding tasks need a git repository — add one to the workspace (or the task).", STARTABLE);
-      const branch = task.branch ?? branchName(task);
+    const source = taskRepo(task);
+    if (!source && task.type === "coding") return block(id, "Coding tasks need a git repository — add one to the workspace (or the task).", STARTABLE);
+    if (source) {
       workDir = checkoutDir(id);
-      setActivity(id, task.branch ? "Updating the checkout…" : "Cloning the repository…");
-      let base: string;
       try {
-        ({ base } = await prepareCheckout({ dir: workDir, url: repo, base: task.base_branch || fallback.branch, branch }));
+        if ("error" in source) throw new Error(source.error);
+        setActivity(id, task.branch ? "Updating the worktree…" : needsClone(source.repo) ? "Cloning the repository…" : "Creating the worktree…");
+        const prepared = await prepareWorktree({
+          dir: workDir,
+          repo: source.repo,
+          base: task.base_branch || source.branch,
+          branch: task.branch ?? branchName(task),
+          fresh: !task.branch,
+          trashDir: join(reposDir(), ".trash"),
+        });
+        const repoPath = source.repo.kind === "local" ? source.repo.path : "";
+        sql("UPDATE tasks SET repo_url = ?, repo_path = ?, base_branch = ?, branch = ? WHERE id = ?", prepared.url, repoPath, prepared.base, prepared.branch, id);
+        worktree = { repo: repoPath || prepared.url, base: prepared.base, branch: prepared.branch };
       } catch (err) {
-        return block(id, `Couldn't get the repository: ${err instanceof Error ? err.message : String(err)}`);
+        const message = err instanceof Error ? err.message : String(err);
+        if (task.type === "coding") return block(id, `Couldn't create the task's worktree: ${message}`);
+        // Other tasks can do without one: they work next to the workspace's folders, as chats do.
+        log.warn(`task ${id} runs without a worktree: ${message}`);
+        notify("warning", `Task #${task.number} works without its own worktree`, `Couldn't create it: ${message}`, `/tasks?task=${id}`);
+        workDir = task.branch && existsSync(checkoutDir(id)) ? checkoutDir(id) : null;
       }
-      sql("UPDATE tasks SET repo_url = ?, base_branch = ?, branch = ? WHERE id = ?", repo, base, branch, id);
-      coding = { repo, base, branch };
     }
 
     task = row(id);
     if (!task) {
-      // Deleted while the repository was being cloned.
-      if (workDir) rmSync(workDir, { recursive: true, force: true });
+      // Deleted while the worktree was being created.
+      if (workDir) await removeCheckout(workDir).catch(() => {});
       return;
     }
-    // Moved away (or reassigned) while the repository was being cloned; a restart asked for meanwhile follows.
+    // Moved away (or reassigned) while the worktree was being created; a restart asked for meanwhile follows.
     if (task.status !== "in_progress" || task.agent_id !== agent.id) return;
 
     let conversationId = task.conversation_id;
@@ -492,7 +563,7 @@ export async function dispatch(id: string): Promise<void> {
       sql("UPDATE tasks SET conversation_id = ? WHERE id = ?", conversationId, id);
     }
     activity.delete(id);
-    await sendMessage(conversationId!, { content: taskPrompt(task, coding, restarted), trigger: "task" });
+    await sendMessage(conversationId!, { content: taskPrompt(task, worktree, restarted), trigger: "task" });
     emit(id);
   } catch (err) {
     log.warn(`task ${id} could not start`, err);
@@ -561,16 +632,29 @@ async function finished(id: string, run: Run): Promise<void> {
     notify("warning", `Task #${task.number} needs you`, task.blocked_reason, link);
     return;
   }
-  if (task.type === "coding" && task.branch) {
+  if (task.branch) {
     busy.add(id);
     try {
-      await publish(requireRow(id), summary, run.id);
+      if (task.type === "coding") await publish(requireRow(id), summary, run.id);
+      else await keepWork(requireRow(id), run.id);
     } finally {
       release(id);
     }
     return;
   }
   if (deliver(id, run.id)) notify("success", `Task #${task.number} is ready for review`, task.title, link);
+}
+
+/** A general or research task: what it changed in its worktree is committed on its branch (never pushed). */
+async function keepWork(task: TaskRow, runId: string): Promise<void> {
+  const link = `/tasks?task=${task.id}`;
+  try {
+    const { skipped } = await commitWork({ dir: checkoutDir(task.id), message: `${redact(task.title)} (#${task.number})` });
+    if (skipped.length) notify("warning", `Task #${task.number}: files left out`, `Not committed because they look like secrets: ${skipped.join(", ")}`, link);
+  } catch (err) {
+    log.warn(`task ${task.id}: could not commit its changes`, err);
+  }
+  if (deliver(task.id, runId)) notify("success", `Task #${task.number} is ready for review`, task.title, link);
 }
 
 /** In review — unless a newer turn (a follow-up) started meanwhile; its end decides then. */
@@ -602,15 +686,23 @@ async function publish(task: TaskRow, summary: string | null, runId: string): Pr
   const link = `/tasks?task=${id}`;
   const title = redact(task.title);
   try {
-    setActivity(id, "Pushing the branch…");
+    setActivity(id, task.repo_url ? "Pushing the branch…" : "Committing the changes…");
     const { skipped } = await commitWork({ dir, message: `${title} (#${task.number})` });
     if (skipped.length) notify("warning", `Task #${task.number}: files left out`, `Not committed because they look like secrets: ${skipped.join(", ")}`, link);
+    if (!task.repo_url) {
+      // A local repository without a remote: the work stays on the task's branch there.
+      const changed = (await commitsAhead(dir, task.base_branch)) > 0;
+      if (!deliver(id, runId)) return;
+      if (changed) notify("success", `Task #${task.number}: the changes are on ${task.branch}`, `${task.repo_path} has no remote Godmode can push to — merge the branch there.`, link);
+      else notify("info", `Task #${task.number}: no code changes`, "The agent finished without changing the code.", link);
+      return;
+    }
     const secretFiles = await secretFilesAdded(dir, task.base_branch);
     if (secretFiles.length) {
-      return block(id, `The branch ${task.branch} adds files that look like secrets (${secretFiles.join(", ")}), so Godmode didn't push it. Remove them from the branch (the checkout is in ${dir}), then move the task to Todo.`);
+      return block(id, `The branch ${task.branch} adds files that look like secrets (${secretFiles.join(", ")}), so Godmode didn't push it. Remove them from the branch (the task's worktree is in ${dir}), then move the task to Todo.`);
     }
     if (containsSecret(await branchDiff(dir, task.base_branch))) {
-      return block(id, `The changes on ${task.branch} contain a secret saved in the vault, so Godmode didn't push them. Remove it from the branch (the checkout is in ${dir}), then move the task to Todo.`);
+      return block(id, `The changes on ${task.branch} contain a secret saved in the vault, so Godmode didn't push them. Remove it from the branch (the task's worktree is in ${dir}), then move the task to Todo.`);
     }
     const { pushed, sha } = await pushBranch({ dir, base: task.base_branch, branch: task.branch!, lastPushed: task.pushed_sha });
     if (!pushed) {

@@ -607,4 +607,13 @@ CREATE TABLE IF NOT EXISTS mobile_devices (
 );
 `,
   },
+  {
+    id: 18,
+    name: "task_worktrees",
+    sql: /* sql */ `
+-- Every task with a repository works in its own git worktree at <data>/tasks/<id> on its own branch. repo_path is the
+-- workspace folder (a git repository) the worktree comes from; "" = a remote repository (repo_url) Godmode clones.
+ALTER TABLE tasks ADD COLUMN repo_path TEXT NOT NULL DEFAULT '';
+`,
+  },
 ];
