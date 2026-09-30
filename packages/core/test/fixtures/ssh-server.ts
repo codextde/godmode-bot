@@ -7,7 +7,7 @@ import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, rmSyn
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { Server, utils, type Attributes, type ParsedKey } from "ssh2";
-import { fingerprintOf } from "../../src/ssh/keys";
+import { fingerprintOf, generateEd25519 } from "../../src/ssh/keys";
 
 export interface TestSshServerOptions {
   username?: string;
@@ -74,8 +74,8 @@ export async function startSshServer(opts: TestSshServerOptions = {}): Promise<T
   const username = opts.username ?? "deploy";
   const password = opts.password ?? "hunter2-login";
   const sudoPassword = opts.sudoPassword === undefined ? password : opts.sudoPassword;
-  const hostKey = opts.hostKey ?? utils.generateKeyPairSync("ed25519").private;
-  const user = utils.generateKeyPairSync("ed25519", { comment: "test@godmode" });
+  const hostKey = opts.hostKey ?? generateEd25519().private;
+  const user = generateEd25519({ comment: "test@godmode" });
   const allowed = utils.parseKey(user.public) as ParsedKey;
   const hostParsed = utils.parseKey(hostKey) as ParsedKey;
   const root = mkdtempSync(join(tmpdir(), "godmode-sshd-"));

@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { utils } from "ssh2";
 import type { Agent, SshServer } from "@godmode/shared";
 import { argValue, invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import { startSshServer, type TestSshServer } from "./fixtures/ssh-server";
@@ -15,7 +14,7 @@ import { listAudit } from "../src/services/audit";
 import { get } from "../src/db";
 import { assignServer, attachSsh, createServer, deleteServer, detachSsh, execForHuman, getServer, listServers, testServer, tryServer, updateServer } from "../src/ssh/service";
 import { closeAllConnections } from "../src/ssh/client";
-import { listLocalKeys } from "../src/ssh/keys";
+import { generateEd25519, generateKeyPair, listLocalKeys } from "../src/ssh/keys";
 
 const PASSPHRASE = "correct horse battery staple";
 
@@ -61,7 +60,7 @@ describe("servers", () => {
   });
 
   test("keys: public keys are refused, a passphrase is required and checked", () => {
-    const encrypted = utils.generateKeyPairSync("ed25519", { passphrase: "open sesame", cipher: "aes256-ctr", rounds: 4 });
+    const encrypted = generateEd25519({ passphrase: "open sesame", cipher: "aes256-ctr", rounds: 4 });
     const base = { name: "Keyed", host: "example.com", username: "root", auth: "key" as const };
     expect(() => createServer({ ...base, privateKey: sshd.userPublicKey })).toThrow(/public key/);
     expect(() => createServer({ ...base, privateKey: encrypted.private })).toThrow(/passphrase/);
@@ -76,6 +75,10 @@ describe("servers", () => {
     // Switching to a password login drops the key.
     expect(updateServer(server.id, { auth: "password" }).key).toBeNull();
     deleteServer(server.id);
+  });
+
+  test("generated keys can always be read back (ssh2 alone drops a leading zero byte of 1 public key in 256)", () => {
+    for (let i = 0; i < 1500; i++) expect(generateKeyPair().publicKey).toMatch(/^ssh-ed25519 AAAA\S+ godmode$/);
   });
 
   test("moving a server forgets its host key", () => {
