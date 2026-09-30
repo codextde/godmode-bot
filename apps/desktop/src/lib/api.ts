@@ -13,6 +13,7 @@ import type {
   BackupExportInput,
   BackupImportResult,
   Bootstrap,
+  BotCheckReport,
   BrowserProfile,
   ChromeImportInput,
   ClientLogInput,
@@ -490,6 +491,7 @@ export const api = {
     /** With `conversationId`: that chat's tab (opened if it has none) instead of the active one. */
     navigate: (id: string, url: string, conversationId?: string | null) =>
       post<{ ok: true }>(`/api/browser/profiles/${id}/navigate`, { url, conversationId: conversationId ?? null }),
+    botCheck: (id: string) => post<BotCheckReport>(`/api/browser/profiles/${id}/bot-check`),
     /** Human takeover in live view: forward a click / key / text to the page (the chat's tab, with `conversationId`) */
     input: (
       id: string,

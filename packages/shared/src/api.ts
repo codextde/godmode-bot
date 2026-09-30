@@ -360,6 +360,26 @@ export type BrowserInputEvent =
   | { type: "key"; key: string }
   | { type: "text"; text: string };
 
+export type BotCheckStatus = "pass" | "warn" | "fail";
+
+export interface BotCheckItem {
+  id: "webdriver" | "userAgent" | "clientHints" | "worker" | "window" | "webgl" | "plugins" | "languages" | "permissions" | "chrome";
+  label: string;
+  status: BotCheckStatus;
+  detail: string;
+}
+
+/** POST /api/browser/profiles/:id/bot-check — what a website's bot detection sees in the profile's browser. */
+export interface BotCheckReport {
+  profileId: string;
+  /** e.g. "Chrome/154.0.8037.59" */
+  browser: string;
+  headless: boolean;
+  stealth: boolean;
+  checks: BotCheckItem[];
+  checkedAt: string;
+}
+
 /** GET /api/browser/profile-use — browser-use's `profile-use` CLI (sync local Chrome cookies to browser-use Cloud). */
 export interface ProfileUseStatus {
   installed: boolean;

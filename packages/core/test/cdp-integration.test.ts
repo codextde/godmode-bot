@@ -195,6 +195,51 @@ suite("managed Chromium (CDP integration)", () => {
     expect(res.ok).toBe(true);
   });
 
+  test("stealth: the bot check sees a regular Chrome in the headless browser and leaves no tab behind", async () => {
+    const report = await manager.botCheck(profileId);
+    expect(report).toMatchObject({ profileId, headless: true, stealth: true });
+    expect(report.browser).toMatch(/^Chrome\//);
+    const status = Object.fromEntries(report.checks.map((c) => [c.id, c.status]));
+    expect(status).toMatchObject({ webdriver: "pass", userAgent: "pass", worker: "pass", window: "pass" });
+    expect(status.clientHints).not.toBe("fail");
+    expect(manager.getProfile(profileId).running).toBe(true);
+    expect((await listPages(getRunning(profileId)!.client)).some((p) => p.title.includes("bot check"))).toBe(false);
+  }, 60_000);
+
+  test("without stealth the bot check shows what gives a headless browser away", async () => {
+    updateSettings({ browser: { stealth: false } });
+    const plain = manager.createProfile({ name: "Plain", workspaceId: null });
+    try {
+      await manager.launchBrowser(plain.id, { headless: true });
+      const report = await manager.botCheck(plain.id);
+      expect(report.stealth).toBe(false);
+      expect(report.checks.find((c) => c.id === "userAgent")).toMatchObject({ status: "fail" });
+      expect(report.checks.find((c) => c.id === "userAgent")!.detail).toContain("HeadlessChrome");
+    } finally {
+      updateSettings({ browser: { stealth: true } });
+      await manager.stopBrowser(plain.id);
+    }
+  }, 60_000);
+
+  test("a browser started for the bot check is stopped again, unless someone else got it meanwhile", async () => {
+    updateSettings({ browser: { headless: true } });
+    const borrowed = manager.createProfile({ name: "Borrowed", workspaceId: null });
+    try {
+      await manager.botCheck(borrowed.id);
+      expect(manager.getProfile(borrowed.id).running).toBe(false);
+      await Promise.all([manager.botCheck(borrowed.id), manager.botCheck(borrowed.id)]);
+      expect(manager.getProfile(borrowed.id).running).toBe(false);
+
+      const check = manager.botCheck(borrowed.id);
+      const joined = await manager.launchBrowser(borrowed.id);
+      await check;
+      expect(manager.getProfile(borrowed.id)).toMatchObject({ running: true, cdpUrl: joined.cdpUrl, headless: true, stealth: true });
+    } finally {
+      updateSettings({ browser: { headless: false } });
+      await manager.stopBrowser(borrowed.id);
+    }
+  }, 60_000);
+
   test("fills username and password by kind without a selector (and never into the focused wrong field)", async () => {
     await openPage(profileId, "/login");
     const user = await manager.fillIntoPage(profileId, { text: "alice@example.com", kind: "username", ...LOCAL });

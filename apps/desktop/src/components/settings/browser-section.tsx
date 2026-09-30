@@ -1,8 +1,9 @@
 import { Link } from "react-router";
-import { AppWindow, ArrowRight, Eye, Globe, Wrench } from "lucide-react";
+import { AppWindow, ArrowRight, Eye, Fingerprint, Globe, Wrench } from "lucide-react";
 import type { Settings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { BotCheck } from "./bot-check";
 import { CommitInput, NumberField, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 export function BrowserSection({ settings }: { settings: Settings }) {
@@ -54,6 +55,22 @@ export function BrowserSection({ settings }: { settings: Settings }) {
             onCommit={(v) => v !== null && patch({ browser: { keepAliveMinutes: v } })}
           />
         </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup
+        title="Bot detection"
+        icon={<Fingerprint />}
+        description="Many sites block browsers that look automated or bury them in CAPTCHAs. Godmode hides the signals they look for."
+      >
+        <SettingRow
+          label="Look like a regular browser"
+          htmlFor="stealth"
+          disabled={!b.enabled}
+          description="Hides the automation flag, and gives a headless browser the user agent and screen of a normal Chrome window. Applies the next time a browser starts."
+        >
+          <Switch id="stealth" checked={b.stealth} disabled={!b.enabled} onCheckedChange={(stealth) => patch({ browser: { stealth } })} />
+        </SettingRow>
+        <BotCheck browser={b} />
       </SettingsGroup>
 
       <SettingsGroup title="Live view" icon={<Eye />}>

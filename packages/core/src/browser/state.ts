@@ -12,6 +12,8 @@ export interface RunningBrowser {
   httpUrl: string;
   wsUrl: string;
   headless: boolean;
+  /** Launched with bot-detection hardening (see stealth.ts). */
+  stealth: boolean;
   /** Persistent browser-level CDP connection owned by Godmode. */
   client: CdpClient;
   /** Which chat owns which tab. */
@@ -24,6 +26,9 @@ export interface RunningBrowser {
   startedAt: number;
   lastUsedAt: number;
   stopping: boolean;
+  /** Started just for bot checks or imports, stopped when the last of them (`borrowers`) is done — unless anyone else got it meanwhile. */
+  transient: boolean;
+  borrowers: number;
 }
 
 const running = new Map<string, RunningBrowser>();
@@ -60,7 +65,10 @@ export function unregisterBrowser(rb: RunningBrowser): boolean {
 /** Mark the profile browser as in use (defers idle shutdown). */
 export function touchBrowser(profileId: string) {
   const rb = running.get(profileId);
-  if (rb) rb.lastUsedAt = Date.now();
+  if (rb) {
+    rb.lastUsedAt = Date.now();
+    rb.transient = false;
+  }
 }
 
 /** Called with the browser when one starts and with null when it stops. */

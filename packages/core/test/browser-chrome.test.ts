@@ -115,8 +115,10 @@ describe("Chromium executable detection", () => {
     const dir = join(tmp, "marker");
     mkdirSync(dir, { recursive: true });
     expect(readLaunchMarker(dir)).toBeNull();
-    writeLaunchMarker(dir, { pid: process.pid, port: 51234, headless: true });
-    expect(readLaunchMarker(dir)).toEqual({ pid: process.pid, port: 51234, headless: true });
+    writeLaunchMarker(dir, { pid: process.pid, port: 51234, headless: true, stealth: true });
+    expect(readLaunchMarker(dir)).toEqual({ pid: process.pid, port: 51234, headless: true, stealth: true });
+    writeFileSync(join(dir, LAUNCH_MARKER), JSON.stringify({ pid: process.pid, port: 51234, headless: false }));
+    expect(readLaunchMarker(dir)).toEqual({ pid: process.pid, port: 51234, headless: false, stealth: false });
     writeFileSync(join(dir, LAUNCH_MARKER), '{"pid":"x","port":1}');
     expect(readLaunchMarker(dir)).toBeNull();
     clearLaunchMarker(dir);
