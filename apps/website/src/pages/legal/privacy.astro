@@ -91,7 +91,9 @@ import { LEGAL } from '@/config/site';
     The Godmode app for iPhone, iPad and Android is a remote control for Godmode on your own computer. It connects only to
     that computer, over your private Tailscale network, and sends nothing to us: no account, no analytics, no crash
     reports, no ads. We don’t collect personal data through the app. The camera is used only to scan the pairing QR code
-    and no images leave the phone. The key your phone receives when pairing is kept in the phone’s secure storage (the
+    and no images leave the phone. On Android, the QR scanner is Google’s ML Kit (part of Google Play services), which
+    sends Google technical usage data about the scanner, such as device and app information, performance metrics and
+    error codes; see Google’s ML Kit data disclosure. The key your phone receives when pairing is kept in the phone’s secure storage (the
     Keychain on iOS, Keystore-protected storage on Android). Chats, agents and screens are loaded from your computer while
     you use the app. Tailscale Inc. provides the network connection under its own terms and privacy policy. You can
     remove a phone at any time in Godmode on your computer under Settings → Phone.
