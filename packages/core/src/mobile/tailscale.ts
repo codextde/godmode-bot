@@ -1,6 +1,10 @@
+import { Resolver } from "node:dns/promises";
 import { existsSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import type { TailscaleStatus } from "@godmode/shared";
+
+/** Tailscale's own DNS resolver, reachable from every device in the tailnet. */
+const MAGIC_DNS = "100.100.100.100";
 
 const CLI_PATHS: Partial<Record<NodeJS.Platform, string[]>> = {
   darwin: ["/Applications/Tailscale.app/Contents/MacOS/Tailscale", "/opt/homebrew/bin/tailscale", "/usr/local/bin/tailscale"],
@@ -73,22 +77,45 @@ export function parseTailscaleStatus(json: CliStatus): TailscaleStatus {
   return { installed: true, running, ip: running ? ip : null, dnsName: running ? dnsName : null, tailnet, detail };
 }
 
+/**
+ * This computer's MagicDNS name, asked from Tailscale's resolver. Phones need the name: iOS only allows plain http to
+ * the ts.net names, never to the bare address.
+ */
+async function magicDnsName(ip: string): Promise<string | null> {
+  try {
+    const resolver = new Resolver({ timeout: 1500, tries: 1 });
+    resolver.setServers([MAGIC_DNS]);
+    const [name] = await resolver.reverse(ip);
+    const host = name?.replace(/\.$/, "").toLowerCase();
+    return host && /^[a-z0-9-]+(\.[a-z0-9-]+)*\.ts\.net$/.test(host) ? host : null;
+  } catch {
+    return null;
+  }
+}
+
 async function probe(): Promise<TailscaleStatus> {
   const cli = findCli();
   if (cli) {
     try {
-      const proc = Bun.spawn([cli, "status", "--json"], { stdout: "pipe", stderr: "ignore", stdin: "ignore" });
+      // The CLI inside Tailscale.app only runs as a CLI with TERM set; otherwise (Godmode started from the Dock or at
+      // login) it tries to start the app and prints no status.
+      const env = { ...process.env, TERM: process.env.TERM || "dumb" };
+      const proc = Bun.spawn([cli, "status", "--json"], { stdout: "pipe", stderr: "ignore", stdin: "ignore", env });
       const timer = setTimeout(() => proc.kill(), STATUS_TIMEOUT_MS);
       const text = await new Response(proc.stdout).text();
       await proc.exited;
       clearTimeout(timer);
-      if (text.trim().startsWith("{")) return parseTailscaleStatus(JSON.parse(text) as CliStatus);
+      if (text.trim().startsWith("{")) {
+        const status = parseTailscaleStatus(JSON.parse(text) as CliStatus);
+        if (status.ip && !status.dnsName) status.dnsName = await magicDnsName(status.ip);
+        return status;
+      }
     } catch {
       /* fall back to the network interfaces */
     }
   }
   const ip = interfaceIp();
-  if (ip) return { installed: true, running: true, ip, dnsName: null, tailnet: null, detail: null };
+  if (ip) return { installed: true, running: true, ip, dnsName: await magicDnsName(ip), tailnet: null, detail: null };
   return cli
     ? { installed: true, running: false, ip: null, dnsName: null, tailnet: null, detail: "Tailscale isn't running. Open the Tailscale app and sign in." }
     : {

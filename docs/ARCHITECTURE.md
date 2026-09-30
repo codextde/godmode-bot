@@ -615,8 +615,11 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
 
 * **Transport: Tailscale.** With phone access on (`settings.mobile`, off until the first QR code), `mobile/access.ts`
   runs a second `Bun.serve` on this computer's Tailscale IPv4 address only (`settings.mobile.port`, default 7787),
-  never on the LAN. The address comes from `tailscale status --json` (the CLI on PATH or inside Tailscale.app), else
-  from a network interface in 100.64.0.0/10; it is re-checked every 30 s and the listener moves with it. Tailscale
+  never on the LAN. The address comes from `tailscale status --json` (the CLI on PATH or inside Tailscale.app, run with
+  `TERM` set: without it the app's binary tries to start the app instead), else from a network interface in
+  100.64.0.0/10; a missing MagicDNS name is asked from Tailscale's resolver (100.100.100.100, reverse lookup), because
+  iOS only allows plain HTTP to `*.ts.net` names, not to the bare address. It is re-checked every 30 s and the listener
+  moves with it. Tailscale
   encrypts and authenticates the traffic end to end (WireGuard), so the listener speaks plain HTTP. It checks the Host
   header against the Tailscale address and MagicDNS name, answers only `/api/*` (not `/api/auth/*`, the dashboard,
   `/mcp` or `/hooks`), accepts only device tokens (`c.env.channel = "mobile"`; the access token and dashboard sessions
@@ -630,7 +633,7 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
 * **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
   allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents, conversations and messages, runs (cancel),
-  routines (run, enable), browser profiles (input), computer input, VMs (list, screenshot, start/stop), notifications,
+  routines (run, enable), browser profiles (launch, input), computer input, VMs (list, screenshot, start/stop), notifications,
   missing logins and `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are
   restricted too: a phone can't set a chat's folder, VM, browser, shared screen or instructions, or change an
   automation beyond switching it on or off, and it only watches and controls screens that are shared in a chat

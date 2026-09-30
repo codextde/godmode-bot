@@ -219,6 +219,7 @@ export const api = {
 
   browser: {
     profiles: () => get<BrowserProfile[]>("/api/browser/profiles"),
+    launch: (id: string) => post<{ cdpUrl: string; port: number }>(`/api/browser/profiles/${id}/launch`),
     /** With `conversationId`: into that chat's tab. */
     input: (id: string, event: BrowserInput, conversationId?: string | null) =>
       post<{ ok: true }>(`/api/browser/profiles/${id}/input`, conversationId ? { ...event, conversationId } : event),

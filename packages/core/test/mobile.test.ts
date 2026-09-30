@@ -131,6 +131,8 @@ describe("device scope", () => {
     expect(deviceMayCall("POST", "/api/runs/run_1/cancel")).toBe(true);
     expect(deviceMayCall("GET", "/api/vms/vm_1/screenshot")).toBe(true);
     expect(deviceMayCall("POST", "/api/vms/vm_1/start")).toBe(true);
+    expect(deviceMayCall("POST", "/api/browser/profiles/bp_1/launch")).toBe(true);
+    expect(deviceMayCall("POST", "/api/browser/profiles/bp_1/stop")).toBe(false);
     expect(deviceMayCall("POST", "/api/vms/vm_1/exec")).toBe(false);
     expect(deviceMayCall("DELETE", "/api/vms/vm_1")).toBe(false);
     expect(deviceMayCall("GET", "/api/credentials")).toBe(false);
@@ -225,6 +227,8 @@ describe("phone access", () => {
     expect((await phone("/api/conversations/cnv_missing", json("PATCH", { pinned: true }))).status).toBe(404);
     expect((await phone("/api/chat", json("POST", { content: "hi", computerTarget: { kind: "desktop" } }))).status).toBe(403);
     expect((await phone("/api/routines/rtn_missing", json("PATCH", { prompt: "rm -rf" }))).status).toBe(403);
+    expect((await phone("/api/browser/profiles/bpr_missing/launch", json("POST", { headless: false }))).status).toBe(403);
+    expect((await phone("/api/browser/profiles/bpr_missing/launch", json("POST", {}))).status).toBe(404);
     const screen = await phone("/api/computer/input", json("POST", { view: "display:1", event: { type: "click", x: 1, y: 1 } }));
     expect(screen.status).toBe(403);
     expect(((await screen.json()) as { error: string }).error).toMatch(/shared in a chat/);
