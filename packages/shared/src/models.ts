@@ -55,6 +55,8 @@ export interface WorkspaceSource {
   url: string | null;
   /** Branch to check out (git only); null = the repository's default branch. */
   branch: string | null;
+  /** A git repository: a clone, or a folder with its own .git. Tasks work in their own worktree of it. */
+  git: boolean;
   status: WorkspaceSourceStatus;
   /** Why the folder can't be used, or why the last clone or update failed (a clone stays usable). */
   error: string | null;

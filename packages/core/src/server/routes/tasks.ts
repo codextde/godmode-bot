@@ -15,6 +15,7 @@ const createSchema = z.object({
   status: status.optional(),
   agentId: id.nullable().optional(),
   repoUrl: z.string().max(1000).optional(),
+  repoPath: z.string().max(4096).optional(),
   baseBranch: z.string().max(200).optional(),
 });
 
@@ -26,6 +27,7 @@ const patchSchema = z.object({
   beforeId: id.nullable().optional(),
   agentId: id.nullable().optional(),
   repoUrl: z.string().max(1000).optional(),
+  repoPath: z.string().max(4096).optional(),
   baseBranch: z.string().max(200).optional(),
 });
 

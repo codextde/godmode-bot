@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderGit2, Globe2 } from "lucide-react";
+import { Folder, FolderGit2, GitBranch, Globe2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Agent, Task, TaskStatus, TaskType, Workspace } from "@godmode/shared";
 import { MAX_TASK_TITLE_LENGTH } from "@godmode/shared";
@@ -16,7 +16,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { AgentSelect, TypePicker, agentsInReach } from "./task-fields";
-import { workspaceRepos } from "./task-meta";
+import { sourceLabel, workspaceRepos } from "./task-meta";
 
 const GLOBAL = "__global";
 const OTHER_REPO = "__other";
@@ -64,12 +64,12 @@ export function TaskDialog({
 
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
   const repos = workspaceRepos(workspace);
-  const choice = repos.length ? (repoChoice === OTHER_REPO || repos.some((r) => r.url === repoChoice) ? repoChoice : repos[0]!.url) : OTHER_REPO;
-  const picked = repos.find((r) => r.url === choice);
-  const chosenUrl = choice === OTHER_REPO ? repoUrl.trim() : choice;
+  const choice = repos.length ? (repoChoice === OTHER_REPO || repos.some((r) => r.id === repoChoice) ? repoChoice : repos[0]!.id) : OTHER_REPO;
+  const picked = repos.find((r) => r.id === choice);
+  const chosenUrl = choice === OTHER_REPO ? repoUrl.trim() : (picked?.url ?? "");
   const reachable = useMemo(() => agentsInReach(agents, workspaceId), [agents, workspaceId]);
   const agent = reachable.find((a) => a.id === agentId);
-  const needsRepo = type === "coding" && !chosenUrl;
+  const needsRepo = type === "coding" && !picked && !chosenUrl;
   const starting = !!agent && start;
 
   const create = useMutation({
@@ -81,7 +81,11 @@ export function TaskDialog({
         type,
         agentId,
         status: starting ? "todo" : agentId ? "backlog" : (defaultStatus ?? "backlog"),
-        ...(type === "coding" ? { repoUrl: chosenUrl, baseBranch: baseBranch.trim() || picked?.branch || "" } : {}),
+        ...(type !== "coding"
+          ? {}
+          : picked?.kind === "folder"
+            ? { repoPath: picked.path, baseBranch: baseBranch.trim() }
+            : { repoUrl: chosenUrl, baseBranch: baseBranch.trim() || picked?.branch || "" }),
       }),
     onSuccess: (task) => {
       void qc.invalidateQueries({ queryKey: qk.tasks });
@@ -131,6 +135,12 @@ export function TaskDialog({
             <div className="space-y-2">
               <Label>Type</Label>
               <TypePicker value={type} onChange={setType} />
+              {type !== "coding" && repos[0] && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <GitBranch className="size-3.5 shrink-0" />
+                  Works in its own git worktree of {sourceLabel(repos[0])}, so tasks never get in each other's way.
+                </p>
+              )}
             </div>
 
             {type === "coding" && (
@@ -146,8 +156,9 @@ export function TaskDialog({
                       </SelectTrigger>
                       <SelectContent position="popper">
                         {repos.map((r) => (
-                          <SelectItem key={r.id} value={r.url}>
-                            <span className="font-mono text-[13px]">{r.name}</span>
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.kind === "folder" && <Folder className="size-3.5 text-muted-foreground" />}
+                            <span className="font-mono text-[13px]">{r.kind === "folder" ? r.name : sourceLabel(r)}</span>
                             {r.branch && <span className="text-xs text-muted-foreground">{r.branch}</span>}
                           </SelectItem>
                         ))}
@@ -181,7 +192,8 @@ export function TaskDialog({
                 </div>
                 <p className="text-xs text-muted-foreground sm:col-span-2">
                   {!repos.length && "Tip: add repositories to the workspace to pick them here. "}
-                  Godmode clones it onto a new branch and opens a pull request when the agent is done — with your own git and GitHub CLI login.
+                  The task gets its own git worktree on a new branch, so your copy and other tasks are never touched. Godmode opens a
+                  pull request when the agent is done — with your own git and GitHub CLI login.
                 </p>
               </div>
             )}

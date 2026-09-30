@@ -523,19 +523,36 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   and the agent gets the task in its conversation (`origin = 'task'`, created archived so it stays off the chat list;
   reused while the agent and folder stay the same) as a `trigger = "task"` run. The prompt carries the title,
   description and what to deliver per type: `general` (do it, summarize), `research` (a Markdown report) or `coding`.
-* **Coding tasks** (`tasks/git.ts`): Godmode clones the repository (the task's `repoUrl` — any URL `parseGitUrl`
-  accepts — else the workspace's first git repository, see Workspace folders and repositories) into `<data>/tasks/<id>`
-  with the same hardened git as workspace clones (the human's credential helper / SSH keys, no prompts, no clone hooks)
-  and checks out `godmode/<number>-<slug>` from `origin/<base>` (the task's, the repository's configured branch, else
-  the remote's default branch). The URL and resolved base are pinned on the task. The checkout is the conversation's
-  working folder — the only folder inside the data directory allowed as one — and the workspace's shared clone of the
-  same repository is left out of the run's `--add-dir` folders, so the agent changes the task's branch only. When a run succeeds, Godmode commits what
-  the agent left uncommitted (new `.env`/key files are left out), refuses to push when the branch adds such files or its
-  diff contains a secret from the vault, merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks
-  the task), and pushes with an explicit lease on what it saw — so nothing pushed meanwhile is overwritten. It then
-  opens a pull request with `gh pr create` (body: the agent's summary, redacted); without `gh`, or for GitLab, the task
-  links to the page that opens one. A branch without commits on top of its base goes to review without a pull request.
-  Restarting fast-forwards the checkout to the remote branch first.
+* **Worktrees** (`tasks/git.ts`): every task with a repository works in its own git worktree at `<data>/tasks/<id>` on
+  its own branch `godmode/<number>-<slug>` (a new task never takes over an existing branch: `-2`, `-3`… when the name
+  is taken), so tasks running side by side never touch each other's files or the human's copy. The repository is the
+  task's own (`repoUrl` — any URL `parseGitUrl` accepts — or `repoPath`, one of the workspace's folders, checked again
+  on every start), else the workspace's first git repository: a cloned URL or a folder that is a repository's top
+  level (`WorkspaceSource.git`). A folder's worktree comes from the human's repository itself (its `origin` is fetched
+  first when it has one; the task branch lives there; an origin Godmode can't push to, like a local path, counts as
+  none); a URL's from Godmode's bare clone of it at `<data>/repos/.tasks/<name>-<hash>.git`, cloned once and fetched
+  before each task starts (offline, tasks start from what it has), shared by that URL's tasks. Git work that changes a
+  repository's shared refs (fetches, worktrees, pushes) runs one at a time per repository. The branch starts from
+  `origin/<base>` (the task's base, the repository's configured branch, else the remote's default branch — in a local
+  repository without one, the branch checked out in the folder), or the local `<base>` when origin doesn't have it.
+  The same hardened git as workspace clones is used (the human's credential helper / SSH keys, no prompts, no hooks).
+  The URL, folder and resolved base are pinned on the task. The worktree is the conversation's working folder — the
+  only folder inside the data directory allowed as one; without bypass mode the agent can't edit its `.git` — and the
+  workspace's shared copy of the same repository (folder or clone) is left out of the run's `--add-dir` folders, so the
+  agent changes the task's branch only. A restart checks the branch out again when its worktree is gone; a leftover
+  that isn't a usable worktree (an interrupted creation) is moved to `<data>/repos/.trash`, never deleted; tasks
+  started before worktrees keep their full clone. A coding task can't start without its worktree; other tasks work
+  without one when it can't be created (with a notification). Deleting a task removes its worktree and prunes it from
+  the repository; its branch stays (while the worktree exists, the branch can't be checked out elsewhere — merge it).
+* **Coding tasks** publish their branch: when a run succeeds, Godmode commits what the agent left uncommitted (new
+  `.env`/key files are left out), refuses to push when the branch adds such files or its diff contains a secret from
+  the vault, merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks the task),
+  and pushes with an explicit lease on what it saw — so nothing pushed meanwhile is overwritten. It then opens a pull
+  request with `gh pr create` (body: the agent's summary, redacted); without `gh`, or for GitLab, the task links to the
+  page that opens one. A branch without commits on top of its base goes to review without a pull request; a local
+  repository without a remote keeps the commits on the task's branch. Restarting fast-forwards the worktree to the
+  remote branch first; only the task's branch is fetched and pushed (nothing is written to the repository's config).
+  When a `general` or `research` task's run ends, what it changed is committed on its branch, which isn't pushed.
 * **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
   `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
   `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
@@ -551,7 +568,7 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   use the workspace's repositories; and a run working on a task — or delegated from one — can't start a manager agent
   (itself included), so tasks can't spawn tasks without end. Follow-ups wait while Godmode prepares or publishes a task. Task numbers are never reused.
 * **Restart**: tasks left `in_progress` without a live run are blocked ("Interrupted"), tasks waiting in `todo` with an
-  agent are started. Deleting a task cancels its run and removes the checkout (the conversation stays); deleting a
+  agent are started. Deleting a task cancels its run and removes the worktree (the conversation and the branch stay); deleting a
   workspace counts its tasks as dependents.
 
 ## Integrations

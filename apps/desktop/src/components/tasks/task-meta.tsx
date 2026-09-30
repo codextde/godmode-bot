@@ -17,7 +17,7 @@ export const STATUS_META: Record<TaskStatus, { label: string; hint: string; tone
 
 export const TYPE_META: Record<TaskType, { label: string; hint: string; icon: ComponentType<{ className?: string }> }> = {
   general: { label: "Task", hint: "The agent does it and reports back.", icon: ClipboardList },
-  coding: { label: "Coding", hint: "Clones the repository, works on a branch, opens a pull request.", icon: CodeXml },
+  coding: { label: "Coding", hint: "Works on its own branch and worktree, opens a pull request.", icon: CodeXml },
   research: { label: "Research", hint: "The agent investigates and writes a report.", icon: Telescope },
 };
 
@@ -94,7 +94,22 @@ export function repoLabel(url: string): string {
   return parts.slice(-2).join("/") || u;
 }
 
-/** The workspace's git repositories; coding tasks use the first unless they name another. */
-export function workspaceRepos(workspace: Workspace | null | undefined): (WorkspaceSource & { url: string })[] {
-  return (workspace?.sources ?? []).filter((s): s is WorkspaceSource & { url: string } => s.kind === "git" && !!s.url);
+/**
+ * The workspace's git repositories: clones and folders that are repositories. Tasks work in their own worktree of the
+ * first unless they name another.
+ */
+export function workspaceRepos(workspace: Workspace | null | undefined): WorkspaceSource[] {
+  return (workspace?.sources ?? []).filter((s) => s.git && (s.kind === "folder" || !!s.url));
+}
+
+/** How a repository reads: "owner/repo" of a clone, the name of a folder. */
+export function sourceLabel(source: WorkspaceSource): string {
+  return source.kind === "git" && source.url ? repoLabel(source.url) : source.name;
+}
+
+/** The repository a task works in: its folder's name, else "owner/repo" of its remote. */
+export function taskRepoLabel(task: Task, fallback: WorkspaceSource | undefined): string {
+  if (task.repoPath) return task.repoPath.split(/[\\/]/).filter(Boolean).at(-1) ?? task.repoPath;
+  if (task.repoUrl) return repoLabel(task.repoUrl);
+  return fallback ? sourceLabel(fallback) : "";
 }

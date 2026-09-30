@@ -988,6 +988,13 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         vaultFill: settings.vm.vaultFill,
       }
     : null;
+  // A task's own git worktree (tasks/service.ts), when this chat is one and works there.
+  const task = dreaming
+    ? null
+    : get<{ repo_url: string; repo_path: string; branch: string }>(
+        "SELECT repo_url, repo_path, branch FROM tasks WHERE conversation_id = ? AND branch IS NOT NULL",
+        job.conversationId,
+      );
   // The workspace's folders and repositories; a missing clone is cloned first. A dream only works on its memory.
   let sources: RunSource[] = [];
   if (!dreaming && agent.workspaceId) {
@@ -995,9 +1002,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const watch = setInterval(() => job.cancelReason && cancelled.abort(), 250);
     try {
       const prepared = await prepareSources(agent.workspaceId, { onActivity: (label) => emitActivity(job, label), signal: cancelled.signal });
-      // A coding task works in its own checkout: the workspace's shared clone of that repository stays out of reach.
-      const taskRepo = get<{ repo_url: string }>("SELECT repo_url FROM tasks WHERE conversation_id = ? AND type = 'coding'", job.conversationId)?.repo_url;
-      sources = prepared.sources.filter((s) => s.path !== cwd && s.path !== agent.repoPath && !(taskRepo && s.url === taskRepo));
+      // A task works in its own worktree: the workspace's shared copy of that repository (the human's folder or the
+      // clone) stays out of reach, so tasks never edit each other's files.
+      const taskRepo = (s: RunSource) => !!task && ((!!task.repo_path && s.path === task.repo_path) || (!!task.repo_url && s.url === task.repo_url));
+      sources = prepared.sources.filter((s) => s.path !== cwd && s.path !== agent.repoPath && !taskRepo(s));
       for (const text of prepared.notices) job.acc.addNotice("warning", text);
     } finally {
       clearInterval(watch);
@@ -1064,6 +1072,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         ssh,
         voice: job.voice,
         workingDirectory: folder,
+        taskWorktree: task ? { repo: task.repo_path || task.repo_url, branch: task.branch } : null,
         sources: promptSources,
         apiTools,
         standingInstructions: standing,
@@ -1110,6 +1119,11 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const bypass = settings.runner.bypassPermissions && !hostLocked;
   if (!bypass && sources.some((s) => s.kind === "git")) {
     disallowed.push("Edit(**/.git/**)", ...sources.filter((s) => s.kind === "git").map((s) => `Edit(/${s.path.replace(/\\/g, "/")}/.git/**)`));
+  }
+  // A task's checkout too: its `.git` (a worktree's pointer file, or a clone's folder) decides what Godmode's git runs on.
+  if (!bypass && task && folder) {
+    const checkout = folder.replace(/\\/g, "/");
+    disallowed.push(`Edit(/${checkout}/.git)`, `Edit(/${checkout}/.git/**)`);
   }
   if (disallowed.length) baseArgs.push("--disallowedTools", disallowed.join(","));
   if (viaFiles) baseArgs.push("--append-system-prompt-file", writeTempFile(res, `godmode-prompt-${job.runId}.md`, systemPrompt));

@@ -16,9 +16,12 @@ export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "blo
 
 /**
  * - `general`: the agent does the task and reports back.
- * - `coding`: Godmode clones the repository onto a fresh branch, the agent changes the code, and Godmode pushes the
- *   branch and opens a pull request when it finishes.
+ * - `coding`: the agent changes the code on the task's branch, and Godmode pushes the branch and opens a pull request
+ *   when it finishes.
  * - `research`: the agent investigates and answers with a written report.
+ *
+ * Every task whose workspace has a git repository (or that names one) works in its own git worktree on its own branch,
+ * so tasks running side by side never touch each other's files or the human's own copy.
  */
 export type TaskType = "general" | "coding" | "research";
 
@@ -57,12 +60,16 @@ export interface Task {
   /** Latest run in that conversation and its status. */
   runId: ID | null;
   runStatus: RunStatus | null;
-  /** Coding: git remote to clone. "" = the workspace's repository. */
+  /** Git remote of the task's repository. "" = the workspace's repository (or a local one without a remote). */
   repoUrl: string;
-  /** Coding: branch to start from and open the pull request against. "" = the workspace's, else the default branch. */
+  /** Workspace folder (a git repository) the task's worktree comes from. "" = the remote repository (`repoUrl`). */
+  repoPath: string;
+  /** Branch to start from (and open the pull request against). "" = the workspace's, else the default branch. */
   baseBranch: string;
-  /** Coding: the branch the agent works on, once created. */
+  /** The task's own branch, once its worktree was created. */
   branch: string | null;
+  /** The task's own git worktree the agent works in, once created. */
+  worktree: string | null;
   pullRequest: TaskPullRequest | null;
   /** The agent's final answer (report, summary of the changes). */
   summary: string | null;
@@ -85,6 +92,8 @@ export interface TaskInput {
   status?: TaskStatus;
   agentId?: ID | null;
   repoUrl?: string;
+  /** One of the workspace's folders that is a git repository. */
+  repoPath?: string;
   baseBranch?: string;
 }
 
@@ -97,6 +106,7 @@ export interface TaskPatch {
   beforeId?: ID | null;
   agentId?: ID | null;
   repoUrl?: string;
+  repoPath?: string;
   baseBranch?: string;
 }
 

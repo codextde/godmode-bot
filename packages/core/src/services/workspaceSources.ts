@@ -82,6 +82,11 @@ function isClone(path: string | null): path is string {
   return !!path && existsSync(join(path, ".git"));
 }
 
+/** A folder that is a git repository's top level (a worktree of its own counts): tasks get their own worktree of it. */
+export function isRepoFolder(path: string): boolean {
+  return isClone(path);
+}
+
 function nameOf(row: SourceRow): string {
   if (row.kind === "folder") return basename(row.path) || row.path;
   const parsed = parseGitUrl(row.url ?? "");
@@ -98,6 +103,7 @@ function toModel(row: SourceRow): WorkspaceSource {
       path: row.path,
       url: null,
       branch: null,
+      git: !problem && isRepoFolder(row.path),
       status: problem ? "missing" : "ready",
       error: problem,
       note: null,
@@ -115,6 +121,7 @@ function toModel(row: SourceRow): WorkspaceSource {
     path: path ?? "",
     url: row.url,
     branch: row.branch,
+    git: true,
     // A clone whose last update failed is still usable: `error` says what went wrong.
     status: busy.get(row.id)?.kind ?? (cloned ? "ready" : row.error ? "error" : "missing"),
     error: path ? row.error : "This repository can't be cloned: its folder name isn't valid. Remove it and add it again.",

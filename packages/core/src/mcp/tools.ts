@@ -468,6 +468,7 @@ function taskSummary(t: Task, names: Map<string, string>, agentNames: Map<string
     workspaceId: t.workspaceId,
     agent: t.agentId ? (agentNames.get(t.agentId) ?? t.agentId) : null,
     agentId: t.agentId,
+    ...(t.branch ? { branch: t.branch, worktree: t.worktree } : {}),
     ...(t.pullRequest ? { pullRequest: t.pullRequest.url } : {}),
     ...(t.blockedReason ? { blockedReason: t.blockedReason } : {}),
     description: snippet(t.description, 400),
@@ -1175,7 +1176,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "task_create",
     description:
-      "Add a task to the task board. type: general (do it and report), research (a written report) or coding (Godmode clones the workspace's git repository onto a new branch, the agent changes the code, and Godmode opens a pull request — the workspace needs a repository). With an agent and start=true (default) the agent starts right away (status todo); otherwise it waits in the backlog.",
+      "Add a task to the task board. type: general (do it and report), research (a written report) or coding (the agent changes the code and Godmode opens a pull request — the workspace needs a repository). In a workspace with a git repository every task works in its own git worktree on its own branch, so tasks never get in each other's way. With an agent and start=true (default) the agent starts right away (status todo); otherwise it waits in the backlog.",
     schema: z.object({
       title: z.string().min(1).max(200),
       description: z.string().max(20_000).optional(),
