@@ -17,6 +17,7 @@ import {
   PanelLeft,
   Plug,
   Search,
+  Server,
   Settings,
   ShieldCheck,
   SquareKanban,
@@ -116,6 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/browser", label: "Browser", icon: <Globe /> },
     { to: "/computer", label: "Computer", icon: <MonitorUp /> },
     { to: "/vms", label: "Virtual machines", icon: <Box /> },
+    { to: "/ssh", label: "SSH servers", icon: <Server /> },
   ];
 
   return (

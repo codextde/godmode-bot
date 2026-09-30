@@ -142,6 +142,8 @@ export interface Agent {
   workingDirectory: string | null;
   /** macOS VM the agent works in (unless its chat has its own). null = the workspace's VM, if any. */
   vmId: ID | null;
+  /** SSH servers the agent may sign in to and control in every run. */
+  sshServerIds: ID[];
   /** Absolute path of the agent's git repository. */
   repoPath: string;
   lastRunAt: ISODate | null;
@@ -307,6 +309,8 @@ export interface Conversation {
   browserProfileId: ID | null;
   /** Workspace a global agent's chat was started in; it browses with that workspace's default profile. */
   workspaceId: ID | null;
+  /** SSH servers runs in this chat may use, in addition to the agent's. */
+  sshServerIds: ID[];
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
   instructions: string;
   pinned: boolean;

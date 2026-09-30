@@ -69,6 +69,16 @@ import type {
   Settings,
   SetupInput,
   SlashCommand,
+  SshAssignInput,
+  SshExecInput,
+  SshExecResult,
+  SshGeneratedKey,
+  SshLocalKey,
+  SshServer,
+  SshServerInput,
+  SshServerPatch,
+  SshTestInput,
+  SshTestResult,
   StartChatInput,
   StartChatResult,
   Task,
@@ -405,6 +415,23 @@ export const api = {
     /** A picture of a running VM's screen (never boots it). */
     screenshot: (id: string, size = 640) => get<{ data: string; mime: string; width: number; height: number }>(`/api/vms/${id}/screenshot`, { size }),
     assign: (id: string, input: VmAssignInput) => post<Vm>(`/api/vms/${id}/assign`, input),
+  },
+
+  ssh: {
+    list: () => get<SshServer[]>("/api/ssh/servers"),
+    get: (id: string) => get<SshServer>(`/api/ssh/servers/${id}`),
+    create: (input: SshServerInput) => post<SshServer>("/api/ssh/servers", input),
+    update: (id: string, input: SshServerPatch) => patch<SshServer>(`/api/ssh/servers/${id}`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/ssh/servers/${id}`),
+    /** Sign in to a saved server; pins its host key when none is pinned yet. */
+    test: (id: string) => post<SshTestResult>(`/api/ssh/servers/${id}/test`),
+    /** Try an unsaved (or edited) server; `id` fills in the saved secrets the input leaves out. */
+    try: (input: SshTestInput) => post<SshTestResult>("/api/ssh/test", input),
+    exec: (id: string, input: SshExecInput) => post<SshExecResult>(`/api/ssh/servers/${id}/exec`, input),
+    assign: (id: string, input: SshAssignInput) => post<SshServer>(`/api/ssh/servers/${id}/assign`, input),
+    /** Private keys in ~/.ssh on the computer running Godmode. */
+    localKeys: () => get<SshLocalKey[]>("/api/ssh/local-keys"),
+    generateKey: (comment?: string) => post<SshGeneratedKey>("/api/ssh/keys", comment ? { comment } : {}),
   },
 
   chat: {

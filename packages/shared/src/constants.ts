@@ -89,6 +89,8 @@ export const COMPUTER_MCP_NAME = "computer";
 export const VM_MCP_NAME = "vm";
 /** Cua Driver running inside the VM a run works in: computer use of the VM's apps and windows. */
 export const CUA_MCP_NAME = "cua";
+/** MCP server with the tools of a run that has SSH servers (shell, files and transfers on the remote machines). */
+export const SSH_MCP_NAME = "ssh";
 
 /** Longest global, workspace or chat instructions the API accepts. */
 export const MAX_INSTRUCTIONS_LENGTH = 20_000;

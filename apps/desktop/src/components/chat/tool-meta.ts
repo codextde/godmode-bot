@@ -10,10 +10,12 @@ import {
   Camera,
   Code2,
   Eye,
+  FileDown,
   FilePen,
   FilePlus2,
   FileSearch,
   FileText,
+  FileUp,
   FolderSearch,
   Globe,
   History,
@@ -35,6 +37,7 @@ import {
   ScanText,
   ScrollText,
   Search,
+  Server,
   ShieldAlert,
   ShieldCheck,
   Terminal,
@@ -224,6 +227,46 @@ function vmMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "tool"> {
       return { kind: "other", icon: Box, title: "Checked the VM" };
     default:
       return { ...computerMeta(tool, input), kind: "computer" };
+  }
+}
+
+/** "the server" unless the input names it (a name, not an `ssh_…` id). */
+function sshTarget(input: Input): string {
+  const server = input.server;
+  return typeof server === "string" && server.trim() && !server.startsWith("ssh_") ? server.trim() : "the server";
+}
+
+/** The `ssh` server: commands, files and transfers on the user's SSH servers. */
+function sshMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "tool"> {
+  const on = sshTarget(input);
+  const path = str(input.path ?? input.remotePath ?? input.remote_path);
+  const local = str(input.localPath ?? input.local_path);
+  switch (tool) {
+    case "shell":
+      return {
+        kind: "shell",
+        icon: Terminal,
+        title: `Ran a command on ${on}${input.sudo === true ? " as root" : ""}`,
+        detail: truncate(str(input.command), 120) || undefined,
+      };
+    case "read_file":
+      return { kind: "file", icon: FileText, title: path ? `Read ${basename(path)} on ${on}` : `Read a file on ${on}`, detail: path || undefined };
+    case "write_file":
+      return { kind: "file", icon: FilePlus2, title: path ? `Wrote ${basename(path)} on ${on}` : `Wrote a file on ${on}`, detail: path || undefined };
+    case "edit_file":
+      return { kind: "file", icon: FilePen, title: path ? `Edited ${basename(path)} on ${on}` : `Edited a file on ${on}`, detail: path || undefined };
+    case "upload": {
+      const name = basename(local || path);
+      return { kind: "file", icon: FileUp, title: name ? `Uploaded ${name} to ${on}` : `Uploaded a file to ${on}`, detail: path || undefined };
+    }
+    case "download": {
+      const name = basename(path || local);
+      return { kind: "file", icon: FileDown, title: name ? `Downloaded ${name} from ${on}` : `Downloaded a file from ${on}`, detail: local || undefined };
+    }
+    case "list_servers":
+      return { kind: "other", icon: Server, title: "Checked SSH servers" };
+    default:
+      return { kind: "other", icon: Server, title: humanize(tool), detail: on === "the server" ? undefined : on };
   }
 }
 
@@ -427,6 +470,7 @@ export function describeTool(name: string, rawInput: unknown, ctx: ToolContext =
     return { ...computerMeta(tool, input), kind: "computer", server, tool };
   }
   if (server === "vm") return { ...vmMeta(tool, input), server, tool };
+  if (server === "ssh") return { ...sshMeta(tool, input), server, tool };
   if (server === "cua") return { ...cuaMeta(tool, input), kind: "computer", server, tool };
   if (server === "godmode" || (server === null && GODMODE_TOOLS.has(tool)) || GODMODE_TOOLS.has(tool)) {
     const m = godmodeMeta(tool, input, ctx);

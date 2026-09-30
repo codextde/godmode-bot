@@ -13,6 +13,7 @@ import { resolveRunToken } from "./tokens";
 import { UnknownToolError, callTool, listToolsFor, toolErrorMessage } from "./tools";
 import { COMPUTER_INSTRUCTIONS, UnknownComputerToolError, callComputerTool, listComputerTools } from "../computer/tools";
 import { UnknownVmToolError, VM_INSTRUCTIONS, callVmTool, listVmTools } from "../vm/tools";
+import { SSH_INSTRUCTIONS, UnknownSshToolError, callSshTool, listSshTools } from "../ssh/tools";
 
 const log = logger("mcp");
 
@@ -52,7 +53,10 @@ function idOf(msg: unknown): JsonRpcId {
 const ok = (id: JsonRpcId, result: unknown): JsonRpcResponse => ({ jsonrpc: "2.0", id, result });
 const rpcError = (id: JsonRpcId, code: number, message: string): JsonRpcResponse => ({ jsonrpc: "2.0", id, error: { code, message } });
 
-/** One MCP server behind the gateway: `/mcp` (Godmode tools), `/mcp/computer` (computer use) or `/mcp/vm` (macOS VM). */
+/**
+ * One MCP server behind the gateway: `/mcp` (Godmode tools), `/mcp/computer` (computer use), `/mcp/vm` (macOS VM) or
+ * `/mcp/ssh` (SSH servers).
+ */
 export interface McpServerDef {
   name: string;
   instructions: string;
@@ -83,6 +87,14 @@ export const VM_SERVER: McpServerDef = {
   list: listVmTools,
   call: callVmTool,
   isUnknownTool: (err) => err instanceof UnknownVmToolError,
+};
+
+export const SSH_SERVER: McpServerDef = {
+  name: "ssh",
+  instructions: SSH_INSTRUCTIONS,
+  list: listSshTools,
+  call: callSshTool,
+  isUnknownTool: (err) => err instanceof UnknownSshToolError,
 };
 
 /** Handle one JSON-RPC message. Returns null for notifications and client responses (nothing to send). */
@@ -231,9 +243,10 @@ export function registerMcpRoutes(app: Hono): void {
   app.post("/mcp", (c) => serve(c, GODMODE_SERVER));
   app.post("/mcp/computer", (c) => serve(c, COMPUTER_SERVER));
   app.post("/mcp/vm", (c) => serve(c, VM_SERVER));
+  app.post("/mcp/ssh", (c) => serve(c, SSH_SERVER));
 
   // Stateless servers: no server-initiated SSE stream and no sessions to terminate.
-  for (const path of ["/mcp", "/mcp/computer", "/mcp/vm"]) {
+  for (const path of ["/mcp", "/mcp/computer", "/mcp/vm", "/mcp/ssh"]) {
     app.get(path, (c) => c.body(null, 405, { Allow: "POST, DELETE" }));
     app.delete(path, (c) => c.body(null, 200));
   }

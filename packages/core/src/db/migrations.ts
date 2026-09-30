@@ -558,4 +558,35 @@ CREATE TABLE IF NOT EXISTS api_tools (
 CREATE INDEX IF NOT EXISTS idx_api_tools_scope ON api_tools(workspace_id, agent_id);
 `,
   },
+  {
+    id: 16,
+    name: "ssh_servers",
+    sql: /* sql */ `
+-- Remote machines agents sign in to over SSH. \`*_enc\` are sealed with the vault key; \`key_info\` describes the private
+-- key (type, fingerprint, public key — nothing secret). The host key is pinned on the first connection.
+CREATE TABLE IF NOT EXISTS ssh_servers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  host TEXT NOT NULL,
+  port INTEGER NOT NULL DEFAULT 22,
+  username TEXT NOT NULL,
+  auth TEXT NOT NULL DEFAULT 'password',
+  description TEXT NOT NULL DEFAULT '',
+  password_enc TEXT,
+  private_key_enc TEXT,
+  passphrase_enc TEXT,
+  key_info TEXT,
+  host_key_type TEXT,
+  host_key_fingerprint TEXT,
+  os TEXT,
+  last_connected_at TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+-- SSH servers an agent uses in every run, and the ones a chat adds (JSON arrays of ids).
+ALTER TABLE agents ADD COLUMN ssh_server_ids TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE conversations ADD COLUMN ssh_server_ids TEXT NOT NULL DEFAULT '[]';
+`,
+  },
 ];

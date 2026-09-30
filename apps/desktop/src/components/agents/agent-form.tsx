@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
+  ArrowRight,
   Bot,
   Box,
   BrainCircuit,
@@ -13,6 +14,7 @@ import {
   MonitorUp,
   Plug,
   Plus,
+  Server,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -25,13 +27,14 @@ import type { Agent, AgentInput, Effort, SecretAccessMode, SubagentDefinition } 
 import { DEFAULT_MODEL, EFFORT_LABELS, EFFORT_OPTIONS, effortForModel, findModel } from "@godmode/shared";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useModelCatalog, useVmChoices, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useModelCatalog, useSshServers, useVmChoices, useWorkspaces } from "@/lib/hooks";
 import { isMac, modKey } from "@/lib/desktop";
 import { useUi } from "@/stores/ui";
 import { useDraft } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, DraftStatus, Kbd, Section } from "@/components/common";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -52,6 +55,7 @@ import { useApiTools } from "@/components/integrations/api-tools-tab";
 import { ApiToolDialog, type ApiToolDialogState } from "@/components/integrations/api-tool-dialog";
 import { toolIcon } from "@/components/integrations/api-tool-presets";
 import { ScopeChip } from "@/components/integrations/scope-picker";
+import { SSH_STATUS_LABEL, SshStatusDot, sshAddress, sshStatus } from "@/components/ssh/ssh-parts";
 
 export interface AgentFormValues {
   name: string;
@@ -80,6 +84,7 @@ export interface AgentFormValues {
   workingDirectory: string | null;
   /** macOS VM the agent works in; null = its workspace's (if any). */
   vmId: string | null;
+  sshServerIds: string[];
 }
 
 /** Seed values for the form from an existing agent, a template, or nothing. */
@@ -111,6 +116,7 @@ export function agentToValues(
     subagents: source?.subagents ?? [],
     workingDirectory: source?.workingDirectory ?? null,
     vmId: source?.vmId ?? null,
+    sshServerIds: source?.sshServerIds ?? [],
   };
 }
 
@@ -141,6 +147,7 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
       .filter((s) => s.name),
     workingDirectory: v.workingDirectory,
     vmId: v.vmId,
+    sshServerIds: v.sshServerIds,
   };
 }
 
@@ -179,6 +186,7 @@ const SECTIONS = [
   { id: "browser", label: "Browser" },
   { id: "computer", label: "Computer" },
   { id: "vm", label: "Virtual machine" },
+  { id: "ssh", label: "SSH servers" },
   { id: "tools", label: "Tools" },
   { id: "subagents", label: "Subagents" },
 ];
@@ -585,6 +593,10 @@ export function AgentForm({
             </FormSection>
           )}
 
+          <FormSection id="ssh" title="SSH servers" description="Remote machines this agent can sign in to and control. Godmode types the password or key — the AI never sees it.">
+            <SshField value={values.sshServerIds} onChange={(v) => set("sshServerIds", v)} />
+          </FormSection>
+
           <FormSection id="tools" title="Tools & integrations" description="APIs, MCP servers and connected apps this agent can use.">
             <div className="space-y-5">
               <ToggleRow
@@ -643,6 +655,12 @@ export function AgentForm({
                   <span className="flex max-w-full items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
                     <Box className="size-3 shrink-0" />
                     <span className="truncate">{vmChoices.vms.find((v) => v.id === values.vmId)?.name ?? "VM"}</span>
+                  </span>
+                )}
+                {values.sshServerIds.length > 0 && (
+                  <span className="flex items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
+                    <Server className="size-3 shrink-0" />
+                    {values.sshServerIds.length === 1 ? "1 server" : `${values.sshServerIds.length} servers`}
                   </span>
                 )}
                 {values.workingDirectory && (
@@ -858,6 +876,57 @@ function VmField({ value, workspaceId, onChange }: { value: string | null; works
               : "Runs work on this Mac, unless its workspace or a chat has a VM."
         }
       />
+    </div>
+  );
+}
+
+function SshField({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const { data: servers = [], isLoading } = useSshServers();
+  if (!isLoading && servers.length === 0) {
+    return (
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3.5">
+        <Server className="size-5 shrink-0 text-muted-foreground" />
+        <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">No SSH servers yet — add one and this agent can work on it.</p>
+        <Button type="button" variant="outline" size="sm" asChild>
+          <Link to="/ssh?new=1">
+            <Plus /> Add a server
+          </Link>
+        </Button>
+      </div>
+    );
+  }
+  const toggle = (id: string, on: boolean) => onChange(on ? [...value.filter((x) => x !== id), id] : value.filter((x) => x !== id));
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <span id="agent-ssh-label" className="text-sm font-medium">
+          Can sign in to
+        </span>
+        <Link to="/ssh" className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
+          Manage servers <ArrowRight className="size-3" />
+        </Link>
+      </div>
+      <div role="group" aria-labelledby="agent-ssh-label" className="divide-y overflow-hidden rounded-lg border">
+        {isLoading
+          ? [0, 1].map((i) => <div key={i} className="h-[52px] animate-pulse bg-paper-2/60" />)
+          : servers.map((s) => {
+              const id = `agent-ssh-${s.id}`;
+              return (
+                <label key={s.id} htmlFor={id} className="flex cursor-pointer items-center gap-3 px-3 py-2.5 transition hover:bg-accent/50">
+                  <Checkbox id={id} checked={value.includes(s.id)} onCheckedChange={(v) => toggle(s.id, v === true)} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{s.name}</span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">{sshAddress(s)}</span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                    <SshStatusDot server={s} />
+                    <span className="hidden @xl:inline">{SSH_STATUS_LABEL[sshStatus(s)]}</span>
+                  </span>
+                </label>
+              );
+            })}
+      </div>
+      <p className="text-xs text-muted-foreground">Every run of this agent can sign in to these. A single chat can add more with the SSH button in its message box.</p>
     </div>
   );
 }

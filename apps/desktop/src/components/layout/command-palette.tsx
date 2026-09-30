@@ -17,6 +17,7 @@ import {
   Plug,
   Plus,
   ScrollText,
+  Server,
   Settings,
   ShieldCheck,
   Sun,
@@ -132,6 +133,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem value="virtual machines vms macos tart" onSelect={() => go("/vms")}>
             <Box /> Virtual machines
+          </CommandItem>
+          <CommandItem value="ssh servers remote linux" onSelect={() => go("/ssh")}>
+            <Server /> SSH servers
           </CommandItem>
           <CommandItem onSelect={() => go("/workspaces")}>
             <Layers /> Workspaces

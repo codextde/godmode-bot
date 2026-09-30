@@ -19,6 +19,7 @@ import { ComputerShareChip } from "@/components/computer/computer-panel";
 import { InstructionsChip } from "@/components/instructions/instructions";
 import { VmChip } from "@/components/vms/vm-picker";
 import { BrowserProfileChip } from "@/components/browser/profile-chip";
+import { SshChip } from "@/components/ssh/ssh-chip";
 import { ChatDropZone } from "@/components/chat/thread";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -64,6 +65,7 @@ function greeting(date: Date): string {
 
 const NO_MODEL_CHOICE: ModelChoice = { model: null, effort: null };
 const SETUP_DRAFT = "chat:home-setup:";
+const NO_SSH_SERVERS: string[] = [];
 
 const fade = (delay: number) => ({
   initial: { opacity: 0, y: 10 },
@@ -90,7 +92,9 @@ export default function ChatHome() {
   const [vmId, setVmId, vmDraft] = useDraft<string | null>(`${SETUP_DRAFT}vm`, null);
   /** Browser profile for the new chat; null = the agent's. */
   const [browserProfileId, setBrowserProfileId, browserDraft] = useDraft<string | null>(`${SETUP_DRAFT}browser`, null);
-  const resetSetup = () => [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft].forEach((d) => d.discard());
+  /** SSH servers for the new chat, on top of the agent's. */
+  const [sshServerIds, setSshServerIds, sshDraft] = useDraft<string[]>(`${SETUP_DRAFT}ssh`, NO_SSH_SERVERS);
+  const resetSetup = () => [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft].forEach((d) => d.discard());
   const { data: workspaces = [] } = useWorkspaces();
   const scopeWorkspaceId = useScopeWorkspace()?.id ?? null;
 
@@ -181,6 +185,7 @@ export default function ChatHome() {
                   />
                   <BrowserProfileChip agent={selected} value={browserProfileId} workspaceId={scopeWorkspaceId} onChange={setBrowserProfileId} />
                   <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />
+                  <SshChip agent={selected} value={sshServerIds} onChange={setSshServerIds} />
                   <VmChip
                     value={vmId}
                     inherited={[
@@ -206,6 +211,7 @@ export default function ChatHome() {
                 vmId: vmId ?? undefined,
                 browserProfileId: browserProfileId ?? undefined,
                 workspaceId: scopeWorkspaceId ?? undefined,
+                sshServerIds: sshServerIds.length ? sshServerIds : undefined,
                 instructions: instructions || undefined,
               })
             }
@@ -250,6 +256,7 @@ export default function ChatHome() {
             vmId: vmId ?? undefined,
             browserProfileId: browserProfileId ?? undefined,
             workspaceId: scopeWorkspaceId ?? undefined,
+            sshServerIds: sshServerIds.length ? sshServerIds : undefined,
             instructions: instructions || undefined,
             ...choice,
           });

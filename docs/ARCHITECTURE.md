@@ -179,6 +179,9 @@ works in its own tabs (see Browser).
 | `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
 | `api_tools_list()`, `api_tool_docs({ tool })`, `api_tool_request({ tool, method, path, json \| form \| body, query, saveAs })` | Only for agents with API tools: list them, read one's docs, call its API with the key added by Godmode (see Integrations) |
 
+Runs may get three more servers behind the gateway, all with the same run token: `/mcp/computer` (see Computer use),
+`/mcp/vm` (see macOS virtual machines) and `/mcp/ssh` (see SSH servers).
+
 ## HTTP API
 
 All routes are under `/api` and require auth except `/api/health` and `/api/auth/*`.
@@ -407,6 +410,43 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   (SSH with Godmode's key) or the shared folder in Finder; `GET /api/vms/:id/screenshot` feeds the card preview and the chat's VM panel
   (never boots a VM). Backups carry VM records and assignments, not disks; a restore keeps this Mac's own VM records, and a
   restored VM whose disk is missing shows an error and can be reset.
+
+## SSH servers
+
+Remote machines agents sign in to and control (`packages/core/src/ssh/`, `/api/ssh`, the **SSH servers** page):
+
+* **Records** (`ssh_servers`): name, host, port, user, `auth` (`password` | `key`) and a description agents read. The
+  password (for key logins: the password sudo asks for), private key and passphrase are sealed with the vault key
+  (`ssh_servers.<field>:<id>`), redacted like other secrets and never returned by the API; `key_info` keeps the key's type,
+  fingerprint and public key. Keys are parsed with ssh2 (OpenSSH, PEM, PuTTY; a passphrase is required and checked on
+  save), can be imported from `~/.ssh` of the core's machine (`GET /api/ssh/local-keys`, `privateKeyPath`: only files
+  listed there) or generated (`POST /api/ssh/keys`, Ed25519).
+* **Assignments**: `agents.ssh_server_ids` (every run of the agent) and `conversations.ssh_server_ids` (the chat's
+  composer chip, `sshServerIds` on `POST /api/chat` / `PATCH /api/conversations/:id`), JSON arrays. A run gets its chat's
+  and its agent's servers (`ssh/assignments.ts`). Only the human assigns: agent management tools can't, and delegated
+  conversations start without the caller's chat servers. Deleting a server removes it everywhere.
+* **Connections** (`ssh/client.ts`): [ssh2](https://github.com/mscdex/ssh2) (pure JavaScript, native bindings are never
+  built, so the compiled core works on every target). One pooled connection per server shared by runs and the human
+  (≤ 6 channels, keepalives, closed after 3 idle minutes or when the server changes). Password logins also answer
+  keyboard-interactive password prompts. The host key is pinned on the first successful connection (SHA-256 fingerprint,
+  like `StrictHostKeyChecking=accept-new`); a different key fails with both fingerprints and must be forgotten by the
+  human (`hostKey: null`; changing host or port forgets it too). `POST /api/ssh/servers/:id/test` signs in, pins the key
+  and records the OS (`uname` + `/etc/os-release`); `POST /api/ssh/test` tries unsaved settings (secrets left out come
+  from the saved server) without recording anything; `POST /api/ssh/servers/:id/exec` is the card's *Run command*.
+* **`ssh` MCP tools** (`/mcp/ssh`, `ssh/tools.ts`, only for runs that had servers when they started; the allowed servers
+  are re-read on every call, so taking one away applies at once; unknown ids in assignments are dropped):
+  `list_servers`, `shell` (command, `cwd`, `stdin`, `timeout_seconds`; `sudo: true` runs `sudo -n` when sudo needs no
+  password, else `sudo -S -k -p <random marker>` and writes the saved password only once that marker shows up on
+  stderr — so it never becomes input for the command — then the command's stdin; a second prompt means it was
+  rejected), `read_file` / `write_file` / `edit_file` (SFTP; `cat` through the shell when a server has no SFTP
+  subsystem) and `upload` / `download` (SFTP, any size; local paths must resolve — symlinks followed, dangling ones
+  refused — into the run's folders: its working directory, the agent repo, the VM's shared folder and the workspace's
+  sources; downloads default to `workspace/downloads`, go to a new file that is renamed into place, and never into a
+  `.git` or `.claude` folder). Every result masks the saved password, passphrase and the key's lines. Ending the run
+  aborts its in-flight commands (a timed-out command whose process ignores the closed session may keep running). The
+  system prompt lists the servers (address, OS, description, whether sudo can be answered) with rules for working on
+  real machines; resumed turns restate them. Audit: `ssh.use` (first call per run and server), `ssh.sudo`,
+  `ssh.assign` / `ssh.unassign`.
 
 ## Automations
 

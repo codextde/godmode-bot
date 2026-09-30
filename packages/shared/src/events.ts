@@ -110,6 +110,7 @@ export type EntityName =
   | "models"
   | "computer"
   | "vms"
+  | "ssh-servers"
   | "messaging"
   | "tasks"
   | "followups";
