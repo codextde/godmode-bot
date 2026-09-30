@@ -203,7 +203,8 @@ suite("managed Chromium (CDP integration)", () => {
     expect(status).toMatchObject({ webdriver: "pass", userAgent: "pass", worker: "pass", window: "pass" });
     expect(status.clientHints).not.toBe("fail");
     expect(manager.getProfile(profileId).running).toBe(true);
-    expect((await listPages(getRunning(profileId)!.client)).some((p) => p.title.includes("bot check"))).toBe(false);
+    // The browser closes the tab a moment after it confirmed closing it.
+    await waitFor(async () => !(await listPages(getRunning(profileId)!.client)).some((p) => p.title.includes("bot check")));
   }, 60_000);
 
   test("without stealth the bot check shows what gives a headless browser away", async () => {

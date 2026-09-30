@@ -71,9 +71,20 @@ export function parsePrivateKey(text: string, passphrase?: string | null): { key
   return { key: unlocked, info: infoOf(unlocked, true) };
 }
 
+/**
+ * ssh2's generateKeyPairSync for Ed25519, minus its bug: it strips leading zero bytes off the public key, so the 1 key
+ * in 256 whose public key starts with one can't be read back. Such a pair is drawn again.
+ */
+export function generateEd25519(opts: Parameters<typeof utils.generateKeyPairSync<"ed25519">>[1] = {}): utils.KeyPairReturn {
+  for (;;) {
+    const pair = utils.generateKeyPairSync("ed25519", opts);
+    if (!(utils.parseKey(pair.public) instanceof Error)) return pair;
+  }
+}
+
 /** A new Ed25519 key pair in OpenSSH format. */
 export function generateKeyPair(comment = "godmode"): SshGeneratedKey {
-  const pair = utils.generateKeyPairSync("ed25519", { comment });
+  const pair = generateEd25519({ comment });
   const { info } = parsePrivateKey(pair.private);
   return { privateKey: pair.private, publicKey: pair.public.trim(), type: info.type, fingerprint: info.fingerprint };
 }
