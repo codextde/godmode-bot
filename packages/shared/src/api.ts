@@ -62,6 +62,8 @@ export interface AgentInput {
   workingDirectory?: string | null;
   /** macOS VM the agent works in; null = the workspace's. */
   vmId?: ID | null;
+  /** SSH servers the agent may use in every run. */
+  sshServerIds?: ID[];
 }
 
 export interface AgentTemplate {
@@ -135,6 +137,8 @@ export interface StartChatInput {
   browserProfileId?: ID | null;
   /** Workspace selected in the sidebar: a global agent browses with its default profile. */
   workspaceId?: ID | null;
+  /** SSH servers the chat may use, in addition to the agent's. */
+  sshServerIds?: ID[];
   instructions?: string;
 }
 
@@ -158,6 +162,8 @@ export interface ConversationPatch {
   vmId?: ID | null;
   /** Browser profile for this chat; null = back to the agent's (or the default). */
   browserProfileId?: ID | null;
+  /** SSH servers of this chat (the whole list); the agent's servers apply anyway. */
+  sshServerIds?: ID[];
   /** "" = none. */
   instructions?: string;
 }
@@ -359,6 +365,26 @@ export type BrowserInputEvent =
   | { type: "scroll"; x: number; y: number; deltaY: number }
   | { type: "key"; key: string }
   | { type: "text"; text: string };
+
+export type BotCheckStatus = "pass" | "warn" | "fail";
+
+export interface BotCheckItem {
+  id: "webdriver" | "userAgent" | "clientHints" | "worker" | "window" | "webgl" | "plugins" | "languages" | "permissions" | "chrome";
+  label: string;
+  status: BotCheckStatus;
+  detail: string;
+}
+
+/** POST /api/browser/profiles/:id/bot-check — what a website's bot detection sees in the profile's browser. */
+export interface BotCheckReport {
+  profileId: string;
+  /** e.g. "Chrome/154.0.8037.59" */
+  browser: string;
+  headless: boolean;
+  stealth: boolean;
+  checks: BotCheckItem[];
+  checkedAt: string;
+}
 
 /** GET /api/browser/profile-use — browser-use's `profile-use` CLI (sync local Chrome cookies to browser-use Cloud). */
 export interface ProfileUseStatus {

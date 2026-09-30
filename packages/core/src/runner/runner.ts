@@ -20,7 +20,7 @@ import { bus } from "../events/bus";
 import { setWelcomeEvents } from "../server/ws";
 import { excerpt, logger } from "../log";
 import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson } from "../util";
-import { redact } from "../vault/vault";
+import { isUnlocked, redact } from "../vault/vault";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentStatus, touchAgentRun } from "../agents/service";
 import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
@@ -45,11 +45,14 @@ import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor } from "./models";
-import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix, type PromptVm } from "./prompt";
+import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix, type PromptApiTool, type PromptVm } from "./prompt";
+import { apiToolEnv, apiToolEnvOwners, apiToolsForAgent } from "../integrations/apiTools";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
 import { attachVm, detachVm, type RunVm } from "../vm/service";
 import { CUA_HIDDEN_TOOLS, currentVmPage, prepareGuest, type GuestTools } from "../vm/guest";
 import { resolveVmId } from "../vm/assignments";
+import { runSshServerIds } from "../ssh/assignments";
+import { attachSsh, detachSsh, promptServers } from "../ssh/service";
 import { parseComputerTarget } from "../computer/targets";
 import { StreamAccumulator, detectLoginFailure, redactBlocks } from "./stream";
 
@@ -693,11 +696,13 @@ function writeTempFile(res: Resources, name: string, content: string): string {
   return path;
 }
 
-export function buildEnv(agent: Agent, inFolder = false): Record<string, string | undefined> {
+export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record<string, string | undefined> {
   const env = claudeEnv();
   // Load CLAUDE.md files from --add-dir folders: the agent's repo when the cwd is an attached folder, and the workspace's folders.
   if (inFolder) env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
   if (getSettings().memory.backend === "claude-mem" && claudeMemPluginDir()) Object.assign(env, claudeMemEnv(agent));
+  // API tools that hand their key to runs (Integrations → Tools).
+  if (apiKeys) Object.assign(env, apiToolEnv(agent));
   return env;
 }
 
@@ -999,6 +1004,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     }
     if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
   }
+  // SSH servers of the chat and the agent. Uploads and downloads stay within the folders this run works with.
+  const ssh = dreaming ? [] : promptServers(runSshServerIds(job.conversationId, agent.id));
+  if (ssh.length) {
+    const folders = [cwd, agent.repoPath, vm?.hostSharedDir, ...sources.map((s) => s.path)].filter((f): f is string => !!f);
+    attachSsh(job.runId, [...new Set(folders)]);
+  }
   const mcp = await buildMcpConfig(agent, res.token, {
     onNotice: (text) => job.acc.addNotice("warning", text),
     computer: !!computer,
@@ -1006,6 +1017,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     gatewayOnly: dreaming,
     run: { runId: job.runId, conversationId: job.conversationId },
     browserProfileId: runProfileOf(job),
+    ssh: ssh.length > 0,
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
@@ -1024,6 +1036,17 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     ? get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", agent.workspaceId)
     : null;
   const promptSources = workspace && sources.length ? { workspace: workspace.name, items: sources } : null;
+  // Keys in the environment are only for Bash on this computer (and need an open vault).
+  const toolKeysInEnv = !dreaming && !(vm && settings.vm.isolateHostShell);
+  const toolList = dreaming ? [] : apiToolsForAgent(agent);
+  const envOwners = toolKeysInEnv && isUnlocked() ? apiToolEnvOwners(toolList) : new Map<string, string>();
+  const apiTools: PromptApiTool[] = toolList.map((t) => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    baseUrl: t.baseUrl,
+    envVar: t.envVar && envOwners.get(t.envVar) === t.id ? t.envVar : null,
+  }));
   const standing = instructionsSection(settings, {
     workspace: workspace ? { name: workspace.name, text: workspace.instructions } : null,
     chat: conv.instructions ?? "",
@@ -1038,9 +1061,11 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         browserAvailable: "browser" in mcp.mcpServers,
         computer,
         vm: promptVm,
+        ssh,
         voice: job.voice,
         workingDirectory: folder,
         sources: promptSources,
+        apiTools,
         standingInstructions: standing,
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath) : null,
@@ -1120,7 +1145,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   }
   const extraArgs = (settings.runner.extraArgs ?? []).filter((a) => typeof a === "string" && a.length > 0);
 
-  const env = buildEnv(agent, !!folder || sources.length > 0);
+  const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
   const logPath = runLogPath(agent, getRun(job.runId));
   mkdirSync(join(logPath, ".."), { recursive: true });
   const logSink = Bun.file(logPath).writer();
@@ -1156,7 +1181,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const followup = get<{ dueAt: string; note: string }>("SELECT due_at AS dueAt, note FROM followups WHERE conversation_id = ?", job.conversationId);
     const prompt =
       resuming && !command
-        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup }) +
+        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, apiTools, ssh }) +
           job.prompt
         : job.prompt;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
@@ -1225,6 +1250,7 @@ async function execute(job: Job): Promise<void> {
     for (const f of res.files) removeMcpConfigFile(f);
     await detachComputer(job.runId).catch(() => {});
     detachVm(job.runId);
+    detachSsh(job.runId);
   }
   // Always push the final streamed state (a throttled delta may still be pending).
   if (job.status === "running") safely("emit final delta", () => emitDelta(job));

@@ -19,6 +19,7 @@ import { registerFolderRoutes } from "./routes/folders";
 import { registerMcpRoutes } from "../mcp/http";
 import { registerComputerRoutes } from "./routes/computer";
 import { registerVmRoutes } from "./routes/vms";
+import { registerSshRoutes } from "./routes/ssh";
 import { registerLogRoutes } from "./routes/logs";
 import { registerTaskRoutes } from "./routes/tasks";
 import { serveStatic } from "./static";
@@ -145,6 +146,7 @@ export function createApp() {
   registerComputerRoutes(app);
   registerVmRoutes(app);
   registerTaskRoutes(app);
+  registerSshRoutes(app);
   registerBackupRoutes(app);
   registerVoiceRoutes(app);
   registerFolderRoutes(app);

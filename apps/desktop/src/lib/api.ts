@@ -1,6 +1,9 @@
 import type {
   Agent,
   AgentFileEntry,
+  ApiTool,
+  ApiToolInput,
+  ApiToolTestResult,
   AgentInput,
   AgentTemplate,
   ApiError,
@@ -10,6 +13,7 @@ import type {
   BackupExportInput,
   BackupImportResult,
   Bootstrap,
+  BotCheckReport,
   BrowserProfile,
   ChromeImportInput,
   ClientLogInput,
@@ -68,6 +72,16 @@ import type {
   Settings,
   SetupInput,
   SlashCommand,
+  SshAssignInput,
+  SshExecInput,
+  SshExecResult,
+  SshGeneratedKey,
+  SshLocalKey,
+  SshServer,
+  SshServerInput,
+  SshServerPatch,
+  SshTestInput,
+  SshTestResult,
   StartChatInput,
   StartChatResult,
   Task,
@@ -406,6 +420,23 @@ export const api = {
     assign: (id: string, input: VmAssignInput) => post<Vm>(`/api/vms/${id}/assign`, input),
   },
 
+  ssh: {
+    list: () => get<SshServer[]>("/api/ssh/servers"),
+    get: (id: string) => get<SshServer>(`/api/ssh/servers/${id}`),
+    create: (input: SshServerInput) => post<SshServer>("/api/ssh/servers", input),
+    update: (id: string, input: SshServerPatch) => patch<SshServer>(`/api/ssh/servers/${id}`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/ssh/servers/${id}`),
+    /** Sign in to a saved server; pins its host key when none is pinned yet. */
+    test: (id: string) => post<SshTestResult>(`/api/ssh/servers/${id}/test`),
+    /** Try an unsaved (or edited) server; `id` fills in the saved secrets the input leaves out. */
+    try: (input: SshTestInput) => post<SshTestResult>("/api/ssh/test", input),
+    exec: (id: string, input: SshExecInput) => post<SshExecResult>(`/api/ssh/servers/${id}/exec`, input),
+    assign: (id: string, input: SshAssignInput) => post<SshServer>(`/api/ssh/servers/${id}/assign`, input),
+    /** Private keys in ~/.ssh on the computer running Godmode. */
+    localKeys: () => get<SshLocalKey[]>("/api/ssh/local-keys"),
+    generateKey: (comment?: string) => post<SshGeneratedKey>("/api/ssh/keys", comment ? { comment } : {}),
+  },
+
   mobile: {
     /** Tailscale, where phones reach Godmode, and the paired phones. `refresh` asks Tailscale again. */
     status: (refresh = false) => get<MobileStatus>("/api/mobile", { refresh: refresh ? 1 : undefined }),
@@ -446,6 +477,15 @@ export const api = {
     update: (id: string, input: Partial<McpServerInput>) => patch<McpServer>(`/api/mcp-servers/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/mcp-servers/${id}`),
     test: (id: string) => post<{ ok: boolean; tools?: string[]; error?: string }>(`/api/mcp-servers/${id}/test`),
+  },
+
+  apiTools: {
+    list: (q: { workspaceId?: ScopeFilter; agentId?: string } = {}) => get<ApiTool[]>("/api/api-tools", q),
+    create: (input: ApiToolInput) => post<ApiTool>("/api/api-tools", input),
+    /** Handing a saved key to runs' environment or moving it to another address needs a vault grant. */
+    update: (id: string, input: Partial<ApiToolInput>, grant?: string) => request<ApiTool>("PATCH", `/api/api-tools/${id}`, input, withGrant(grant)),
+    delete: (id: string) => del<{ ok: true }>(`/api/api-tools/${id}`),
+    test: (id: string) => post<ApiToolTestResult>(`/api/api-tools/${id}/test`),
   },
 
   messaging: {
@@ -492,6 +532,7 @@ export const api = {
     /** With `conversationId`: that chat's tab (opened if it has none) instead of the active one. */
     navigate: (id: string, url: string, conversationId?: string | null) =>
       post<{ ok: true }>(`/api/browser/profiles/${id}/navigate`, { url, conversationId: conversationId ?? null }),
+    botCheck: (id: string) => post<BotCheckReport>(`/api/browser/profiles/${id}/bot-check`),
     /** Human takeover in live view: forward a click / key / text to the page (the chat's tab, with `conversationId`) */
     input: (
       id: string,

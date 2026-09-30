@@ -57,6 +57,7 @@ function agentModel(p: Partial<Agent> & { id: string }): Agent {
     subagents: [],
     workingDirectory: null,
     vmId: null,
+    sshServerIds: [],
     repoPath: "",
     lastRunAt: null,
     createdAt: "",

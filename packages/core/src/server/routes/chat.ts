@@ -43,6 +43,8 @@ const vmId = z.string().trim().max(100).nullable().optional();
 const browserProfileId = z.string().trim().max(100).nullable().optional();
 /** Workspace the chat is started in; a global agent browses with its default profile. */
 const workspaceId = z.string().trim().max(100).nullable().optional();
+/** SSH servers of the chat (the whole list); the agent's apply anyway. */
+const sshServerIds = z.array(z.string().trim().min(1).max(100)).max(50).optional();
 
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
@@ -74,7 +76,10 @@ export function registerChatRoutes(app: Hono): void {
   );
 
   app.post("/api/conversations", async (c) => {
-    const input = await body(c, z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, workspaceId, instructions, ...modelChoice }));
+    const input = await body(
+      c,
+      z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, workspaceId, sshServerIds, instructions, ...modelChoice }),
+    );
     return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
@@ -92,6 +97,7 @@ export function registerChatRoutes(app: Hono): void {
         computerTarget: computerTargetSchema.nullable().optional(),
         vmId,
         browserProfileId,
+        sshServerIds,
         instructions,
       }),
     );
@@ -136,6 +142,7 @@ export function registerChatRoutes(app: Hono): void {
         vmId,
         browserProfileId,
         workspaceId,
+        sshServerIds,
         instructions,
         ...modelChoice,
       }),

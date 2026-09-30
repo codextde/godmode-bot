@@ -2,16 +2,17 @@ import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
-import { Boxes, KeyRound, Plug, Server } from "lucide-react";
+import { Boxes, KeyRound, Plug, Server, Wrench } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageBody, PageHeader } from "@/components/common";
 import { ApiKeysTab } from "@/components/integrations/api-keys-tab";
+import { ApiToolsTab, useApiTools } from "@/components/integrations/api-tools-tab";
 import { ComposioTab, useComposioConnections, useComposioStatus } from "@/components/integrations/composio-tab";
 import { McpServersTab, useMcpServers } from "@/components/integrations/mcp-servers-tab";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 
-const TABS = ["composio", "mcp", "api-keys"] as const;
+const TABS = ["composio", "tools", "mcp", "api-keys"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function IntegrationsPage() {
@@ -34,10 +35,12 @@ export default function IntegrationsPage() {
   const composioReady = !!status.data?.configured && status.data.valid !== false;
   const connections = useComposioConnections(composioReady);
   const servers = useMcpServers();
+  const tools = useApiTools();
   const secrets = useQuery({ queryKey: qk.appSecrets, queryFn: api.vault.secrets.list });
 
   const counts: Record<Tab, number | undefined> = {
     composio: connections.data?.filter((c) => c.status.toUpperCase() === "ACTIVE").length,
+    tools: tools.data?.length,
     mcp: servers.data?.filter((s) => s.source === "custom").length,
     "api-keys": secrets.data?.filter((s) => s.set).length,
   };
@@ -47,18 +50,24 @@ export default function IntegrationsPage() {
       <PageHeader
         icon={<Plug />}
         title="Integrations"
-        description="Give your agents access to apps and tools — Composio for hundreds of SaaS apps, MCP servers for anything else."
+        description="Give your agents access to apps and APIs — Composio for hundreds of SaaS apps, tools for any API with a key, MCP servers for anything else."
       />
       <PageBody>
         <Tabs value={tab} onValueChange={setTab} className="gap-6">
           <TabsList className="h-10 p-1">
             <TabTrigger value="composio" icon={<Boxes />} label="Composio" count={counts.composio} />
+            <TabTrigger value="tools" icon={<Wrench />} label="Tools" count={counts.tools} />
             <TabTrigger value="mcp" icon={<Server />} label="MCP servers" count={counts.mcp} />
             <TabTrigger value="api-keys" icon={<KeyRound />} label="API keys" count={counts["api-keys"]} />
           </TabsList>
           <TabsContent value="composio">
             <FadeIn>
               <ComposioTab />
+            </FadeIn>
+          </TabsContent>
+          <TabsContent value="tools">
+            <FadeIn>
+              <ApiToolsTab />
             </FadeIn>
           </TabsContent>
           <TabsContent value="mcp">
@@ -68,7 +77,7 @@ export default function IntegrationsPage() {
           </TabsContent>
           <TabsContent value="api-keys">
             <FadeIn>
-              <ApiKeysTab onOpenComposio={() => setTab("composio")} />
+              <ApiKeysTab onOpenComposio={() => setTab("composio")} onOpenTools={() => setTab("tools")} />
             </FadeIn>
           </TabsContent>
         </Tabs>

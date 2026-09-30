@@ -47,6 +47,7 @@ function useScopeCounts(): { get: (workspaceId: string | null) => Counts; loadin
   const totp = useQuery({ queryKey: qk.totpList("all"), queryFn: () => api.totp.list({ workspaceId: "all" }), ...opts });
   const mcp = useQuery({ queryKey: qk.mcpServers, queryFn: () => api.mcpServers.list({ workspaceId: "all" }), ...opts });
   const composio = useQuery({ queryKey: qk.composioConnections, queryFn: api.composio.connections, ...opts });
+  const tools = useQuery({ queryKey: qk.apiTools, queryFn: () => api.apiTools.list({ workspaceId: "all" }), ...opts });
 
   const get = useMemo(() => {
     const count = <T extends { workspaceId: string | null }>(list: T[] | undefined, ws: string | null) =>
@@ -55,14 +56,15 @@ function useScopeCounts(): { get: (workspaceId: string | null) => Counts; loadin
       const custom = mcp.data?.filter((m) => m.source !== "composio");
       const mcpCount = count(custom, ws);
       const composioCount = count(composio.data, ws);
+      const toolCount = count(tools.data, ws);
       return {
         agents: count(agents.data, ws),
         logins: count(creds.data, ws),
         totp: count(totp.data, ws),
-        integrations: mcpCount === null && composioCount === null ? null : (mcpCount ?? 0) + (composioCount ?? 0),
+        integrations: mcpCount === null && composioCount === null && toolCount === null ? null : (mcpCount ?? 0) + (composioCount ?? 0) + (toolCount ?? 0),
       };
     };
-  }, [agents.data, creds.data, totp.data, mcp.data, composio.data]);
+  }, [agents.data, creds.data, totp.data, mcp.data, composio.data, tools.data]);
 
   return { get, loading: agents.isLoading || creds.isLoading || totp.isLoading };
 }
@@ -127,7 +129,7 @@ export default function WorkspacesPage() {
       toast.success(`${ws.name} deleted`);
       setDeleting(null);
       setForceDelete(null);
-      for (const key of [qk.workspaces, qk.bootstrap, qk.agents, qk.credentials, qk.totp, qk.mcpServers, qk.composio, qk.browserProfiles])
+      for (const key of [qk.workspaces, qk.bootstrap, qk.agents, qk.credentials, qk.totp, qk.mcpServers, qk.apiTools, qk.composio, qk.browserProfiles])
         void qc.invalidateQueries({ queryKey: key });
     },
     onError: (e, { ws, force }) => {

@@ -3,13 +3,14 @@
  * vault fills (the model never sees secrets), missing-login reports, notifications, peer agents and
  * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management.
  */
+import { join } from "node:path";
 import { z } from "zod";
-import type { Agent, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Task, Vm } from "@godmode/shared";
+import type { Agent, ApiTool, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Task, Vm } from "@godmode/shared";
 import { isModelId, MAX_START_WINDOW_MINUTES, TASK_STATUSES, TASK_TYPES } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
 import { logger } from "../log";
-import { hasAppSecret, redact } from "../vault/vault";
+import { hasAppSecret, isUnlocked, redact } from "../vault/vault";
 import { audit } from "../services/audit";
 import { notify } from "../services/notifications";
 import { listMissingLogins, reportMissingLogin } from "../services/missingLogins";
@@ -35,9 +36,13 @@ import { nameGuessMatchesHost } from "../vault/match";
 import { chatWorkspaceId, currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
 import { currentVmPage, fillIntoVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
+import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
+import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
+import { listSources } from "../services/workspaceSources";
+import { get } from "../db";
 import { loginFillScope } from "../browser/fill";
 import { createConversation, sendMessage } from "../services/conversations";
-import { assignVm, createVm, getVm, listVms, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
+import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
 import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun } from "../runner/runner";
@@ -198,6 +203,35 @@ function assertAgentPatchAllowed(
     }
   }
 }
+
+/** Folders an API tool request may read files from and save them to: the ones the run itself works with. */
+function apiCallPlaces(agent: Agent, ctx: RunContext): CallPlaces {
+  const conv = get<{ working_directory: string | null }>("SELECT working_directory FROM conversations WHERE id = ?", ctx.conversationId);
+  const folder = conv?.working_directory ?? agent.workingDirectory;
+  const vmId = vmOfRun(ctx.runId);
+  const shared = vmId ? sharedDirOf(vmId) : null;
+  // Like the runner: a coding task works in its own checkout, not in the workspace's shared clone.
+  const taskRepo = get<{ repo_url: string }>("SELECT repo_url FROM tasks WHERE conversation_id = ? AND type = 'coding'", ctx.conversationId)?.repo_url;
+  const sources = agent.workspaceId ? listSources(agent.workspaceId).filter((s) => !(taskRepo && s.url === taskRepo)).map((s) => s.path) : [];
+  return {
+    roots: [agent.repoPath, ...(folder ? [folder] : []), ...(shared ? [shared] : []), ...sources],
+    cwd: folder ?? agent.repoPath,
+    outputDir: shared ? join(shared, "api-tools") : join(agent.repoPath, "workspace", "api-tools"),
+  };
+}
+
+/** Tools whose key this run has in an environment variable (none when the run is kept off this computer). */
+function keysInEnv(tools: ApiTool[], ctx: RunContext): Set<string> {
+  if (lockedVm(ctx) || !isUnlocked()) return new Set();
+  return new Set(apiToolEnvOwners(tools).values());
+}
+
+const fileRef = z.object({
+  $file: z.string().min(1).describe("Path of the file to send"),
+  as: z.enum(["base64", "dataUrl"]).optional().describe('In json: plain base64 (default) or a "data:<type>;base64,…" URL'),
+  filename: z.string().max(200).optional().describe("File name for form uploads"),
+  type: z.string().max(200).optional().describe("Content type; default: from the file"),
+});
 
 /** Browser error text with the filled value removed (redact() only knows passwords, not usernames/codes). */
 function scrub(detail: string, value: string): string {
@@ -672,6 +706,91 @@ const TOOLS: ToolDef[] = [
     schema: z.object({}),
     when: canFollowUp,
     run: (_args, { ctx }) => (cancelFollowup(ctx.conversationId) ? "Follow-up removed." : "This chat had no follow-up."),
+  }),
+
+  defineTool({
+    name: "api_tools_list",
+    description:
+      "List the API tools the human set up for you: what each API is for, its address and whether its key is also in an environment variable. Read a tool's documentation with api_tool_docs, then call it with api_tool_request.",
+    schema: z.object({}),
+    when: (agent) => hasApiTools(agent),
+    run: (_args, { agent, ctx }) => {
+      const tools = apiToolsForAgent(agent);
+      const inEnv = keysInEnv(tools, ctx);
+      return json(
+        tools.map((t) => ({
+          id: t.id,
+          name: t.name,
+          usedFor: t.description,
+          address: t.baseUrl || null,
+          hasKey: t.hasKey,
+          ...(inEnv.has(t.id) ? { envVar: t.envVar } : {}),
+          hasDocs: !!t.docs || !!t.docsUrl,
+        })),
+      );
+    },
+  }),
+
+  defineTool({
+    name: "api_tool_docs",
+    description: "Read how to use an API tool — its documentation, address and how the key is sent. Read it before your first request to a tool.",
+    schema: z.object({ tool: z.string().min(1).describe("Tool id or name (api_tools_list)") }),
+    when: (agent) => hasApiTools(agent),
+    run: ({ tool: ref }, { agent, ctx }) => {
+      const t = findApiToolForAgent(agent, ref);
+      const inEnv = keysInEnv(apiToolsForAgent(agent), ctx).has(t.id);
+      const key = !t.hasKey
+        ? "No key is saved — the API is called without one."
+        : `Godmode sends the key ${t.auth.in === "query" ? `as the query parameter "${t.auth.name}"` : `in the header "${t.auth.name}"`} on every api_tool_request; don't add it yourself.`;
+      const head = [
+        `# ${t.name} (${t.id})`,
+        t.description && `Used for: ${t.description}`,
+        t.baseUrl ? `API address: ${t.baseUrl} — api_tool_request paths are relative to it.` : "No API address: requests through Godmode aren't possible.",
+        key,
+        inEnv && `The key is also in $${t.envVar} for scripts and SDKs (never print it).`,
+        t.docsUrl && `Official documentation: ${t.docsUrl}`,
+      ].filter(Boolean);
+      const docs = t.docs ? `## Documentation\n${t.docs}` : "The human didn't add documentation. Look up the API's official documentation on the web before calling it.";
+      return `${head.join("\n")}\n\n${docs}`;
+    },
+  }),
+
+  defineTool({
+    name: "api_tool_request",
+    description:
+      'Call an API tool over HTTP. Godmode adds the key (you never see it) and only sends it to the tool\'s address; `path` is relative to that address (or a full URL under it). Send JSON with `json`, text with `body`, multipart uploads with `form`. To send a file, put {"$file": "<path>"} where its base64 goes in `json`, as a `form` field, or as `body` (raw bytes). Files in the response — images, audio, PDFs, base64 data in JSON — are saved and returned as paths (`saveAs` picks a file or folder).',
+    schema: z.object({
+      tool: z.string().min(1).describe("Tool id or name (api_tools_list)"),
+      method: z.enum(METHODS).optional().describe("Default GET"),
+      path: z.string().max(4096).optional().describe('e.g. "/v1beta/models/gemini-2.5-flash-image:generateContent"'),
+      query: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+      headers: z.record(z.string(), z.string()).optional().describe("Extra headers (the key is added by Godmode)"),
+      json: z.unknown().optional().describe('JSON body; {"$file": path} inside becomes the file\'s base64'),
+      body: z.union([z.string(), fileRef]).optional().describe("Raw text body, or {$file} for raw bytes"),
+      form: z.record(z.string(), z.union([z.string(), fileRef])).optional().describe("multipart/form-data fields; {$file} for uploads"),
+      saveAs: z.string().max(4096).optional().describe("Where to save response files: a file path, or a folder ending in /"),
+      timeoutSeconds: z.number().int().min(5).max(600).optional().describe("Default 180"),
+    }),
+    when: (agent) => hasApiTools(agent),
+    run: async ({ tool: ref, ...call }, { agent, ctx }) => {
+      const tool = findApiToolForAgent(agent, ref);
+      const key = tool.hasKey ? apiToolKey(tool.id) : null;
+      let result: ApiCallResult | null = null;
+      try {
+        result = await callApiTool(tool, key, call, apiCallPlaces(agent, ctx));
+        return result.ok ? result.text : fail(result.text);
+      } finally {
+        audit(`agent:${agent.id}`, "api_tool.request", tool.id, {
+          method: call.method ?? "GET",
+          path: call.path ?? "",
+          status: result?.status ?? null,
+          files: result?.files.length ?? 0,
+          ...(result ? {} : { refused: true }),
+          runId: ctx.runId,
+        });
+        if (result) markApiToolUsed(tool.id);
+      }
+    },
   }),
 
   defineTool({

@@ -58,7 +58,11 @@ export class TabRegistry {
     if (owner && (!known || known.url !== info.url || known.title !== info.title)) this.changed(owner);
   }
 
-  private forget(targetId: string) {
+  /**
+   * A target that is gone. Also called for targets Godmode closes itself: the browser's targetDestroyed can come after
+   * the closeTarget reply, and until then the tab would still count as open (the last one could get closed too).
+   */
+  forget(targetId: string) {
     this.targets.delete(targetId);
     this.spares.delete(targetId);
     this.gone.add(targetId);

@@ -178,6 +178,10 @@ works in its own tabs (see Browser).
 | `memory_dream_report({ summary, changes })` | Only in dream runs — and the only tool they get: report what a memory consolidation changed (see Dreaming) |
 | `notify_user({ title, body })` | Push a notification to the human |
 | `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
+| `api_tools_list()`, `api_tool_docs({ tool })`, `api_tool_request({ tool, method, path, json \| form \| body, query, saveAs })` | Only for agents with API tools: list them, read one's docs, call its API with the key added by Godmode (see Integrations) |
+
+Runs may get three more servers behind the gateway, all with the same run token: `/mcp/computer` (see Computer use),
+`/mcp/vm` (see macOS virtual machines) and `/mcp/ssh` (see SSH servers).
 
 ## HTTP API
 
@@ -269,6 +273,20 @@ Server → UI events are defined in `packages/shared/src/events.ts`. The UI keep
   `profile-use` — copy the Chrome profile’s cookie store to a temp dir, start the real Chrome binary headless on it
   with CDP, read decrypted cookies via `Storage.getCookies`, inject them into the Godmode profile with
   `Storage.setCookies`. `profile-use` itself is supported for syncing to browser-use Cloud profiles.
+* **Bot detection** (`browser/stealth.ts`, `settings.browser.stealth`, on by default): Chromium starts with
+  `--disable-blink-features=AutomationControlled`, so `navigator.webdriver` stays false on every Chromium build (current
+  Chrome already leaves it false with a debugging port; the VM's Chrome gets the flag too). Headless it also gets the
+  user agent the same executable sends with a window (`--user-agent`, learned once per executable from a
+  throwaway headless launch, so requests, frames and workers agree) and a desktop screen (`--screen-info`), and
+  browser-use doesn't emulate a viewport over it (a page larger than its window gives headless away). The one difference
+  left: Chrome withholds detailed client hints (full version) while `--user-agent` is set. Takes effect when a browser
+  starts; the launch marker records it for adopted browsers.
+* **Bot check** (`browser/botCheck.ts`, `POST /api/browser/profiles/:id/bot-check`, Settings → Browser): serves a page
+  from a throwaway loopback server into a background window of the profile's browser and judges its navigator, a web
+  worker, window and screen metrics, WebGL, plugins, languages, permissions and request headers the way common bot
+  detection does (pass / warn / fail per signal). A browser started just for the check (or for a session import) is
+  *transient*: it's stopped again afterwards unless someone else got it meanwhile (`ensureBrowser` / `touchBrowser`
+  claim it).
 * **Live view**: CDP `Page.startScreencast` frames streamed to subscribed UIs; the human can take over
   (click/type) e.g. to solve a CAPTCHA. A view shows the profile's active tab, or with `conversationId` the tab one chat
   works in (`browser.subscribe { profileId, conversationId }`, frames carry `conversationId`; navigate and input take
@@ -394,6 +412,43 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   (never boots a VM). Backups carry VM records and assignments, not disks; a restore keeps this Mac's own VM records, and a
   restored VM whose disk is missing shows an error and can be reset.
 
+## SSH servers
+
+Remote machines agents sign in to and control (`packages/core/src/ssh/`, `/api/ssh`, the **SSH servers** page):
+
+* **Records** (`ssh_servers`): name, host, port, user, `auth` (`password` | `key`) and a description agents read. The
+  password (for key logins: the password sudo asks for), private key and passphrase are sealed with the vault key
+  (`ssh_servers.<field>:<id>`), redacted like other secrets and never returned by the API; `key_info` keeps the key's type,
+  fingerprint and public key. Keys are parsed with ssh2 (OpenSSH, PEM, PuTTY; a passphrase is required and checked on
+  save), can be imported from `~/.ssh` of the core's machine (`GET /api/ssh/local-keys`, `privateKeyPath`: only files
+  listed there) or generated (`POST /api/ssh/keys`, Ed25519).
+* **Assignments**: `agents.ssh_server_ids` (every run of the agent) and `conversations.ssh_server_ids` (the chat's
+  composer chip, `sshServerIds` on `POST /api/chat` / `PATCH /api/conversations/:id`), JSON arrays. A run gets its chat's
+  and its agent's servers (`ssh/assignments.ts`). Only the human assigns: agent management tools can't, and delegated
+  conversations start without the caller's chat servers. Deleting a server removes it everywhere.
+* **Connections** (`ssh/client.ts`): [ssh2](https://github.com/mscdex/ssh2) (pure JavaScript, native bindings are never
+  built, so the compiled core works on every target). One pooled connection per server shared by runs and the human
+  (≤ 6 channels, keepalives, closed after 3 idle minutes or when the server changes). Password logins also answer
+  keyboard-interactive password prompts. The host key is pinned on the first successful connection (SHA-256 fingerprint,
+  like `StrictHostKeyChecking=accept-new`); a different key fails with both fingerprints and must be forgotten by the
+  human (`hostKey: null`; changing host or port forgets it too). `POST /api/ssh/servers/:id/test` signs in, pins the key
+  and records the OS (`uname` + `/etc/os-release`); `POST /api/ssh/test` tries unsaved settings (secrets left out come
+  from the saved server) without recording anything; `POST /api/ssh/servers/:id/exec` is the card's *Run command*.
+* **`ssh` MCP tools** (`/mcp/ssh`, `ssh/tools.ts`, only for runs that had servers when they started; the allowed servers
+  are re-read on every call, so taking one away applies at once; unknown ids in assignments are dropped):
+  `list_servers`, `shell` (command, `cwd`, `stdin`, `timeout_seconds`; `sudo: true` runs `sudo -n` when sudo needs no
+  password, else `sudo -S -k -p <random marker>` and writes the saved password only once that marker shows up on
+  stderr — so it never becomes input for the command — then the command's stdin; a second prompt means it was
+  rejected), `read_file` / `write_file` / `edit_file` (SFTP; `cat` through the shell when a server has no SFTP
+  subsystem) and `upload` / `download` (SFTP, any size; local paths must resolve — symlinks followed, dangling ones
+  refused — into the run's folders: its working directory, the agent repo, the VM's shared folder and the workspace's
+  sources; downloads default to `workspace/downloads`, go to a new file that is renamed into place, and never into a
+  `.git` or `.claude` folder). Every result masks the saved password, passphrase and the key's lines. Ending the run
+  aborts its in-flight commands (a timed-out command whose process ignores the closed session may keep running). The
+  system prompt lists the servers (address, OS, description, whether sudo can be answered) with rules for working on
+  real machines; resumed turns restate them. Audit: `ssh.use` (first call per run and server), `ssh.sudo`,
+  `ssh.assign` / `ssh.unassign`.
+
 ## Automations
 
 An automation (internally a *routine*: table `routines`, `/api/routines`, `routine_*` tools, `state/routines.json`)
@@ -502,6 +557,26 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
 ## Integrations
 
 * **Custom MCP servers** (stdio/http/sse), scoped global / workspace / agent; env + headers encrypted.
+* **API tools** (`api_tools`, `integrations/apiTools.ts`, `/api/api-tools`, Integrations → Tools): an API key with what
+  it's for, docs (Markdown and/or a link), the API's address (`base_url`) and where the key goes (`auth`: a header with an
+  optional prefix, or a query parameter), scoped global / workspace / agent like MCP servers (shared ones only for agents
+  that inherit shared integrations). The key is sealed (`key_enc`, AAD `api_tools.key:<id>`) and write-only.
+  * Agents with tools get an "API tools" section in the system prompt (restated on resumed turns) and the gateway tools
+    `api_tools_list` / `api_tool_docs` / `api_tool_request` (`integrations/apiToolRequest.ts`). A request goes to a path
+    relative to `base_url` (or a full URL under it — anything else is refused, `..` included); Godmode adds the key, drops
+    a header of the same name from the agent, follows redirects only while they stay under the address, masks the key in
+    everything returned and audits the call (`api_tool.request`).
+  * Files both ways: `{ "$file": path }` sends a file (base64 or a data URL in `json`, an upload in `form`, raw bytes as
+    `body`); binary responses and base64/data-URL files inside JSON (sniffed or typed by a sibling `mimeType`) are saved to
+    `workspace/api-tools/` (the VM's shared folder in VM runs) or `saveAs`. Both only reach the run's own folders (agent
+    repo, chat folder, workspace folders, VM shared folder), symlinks resolved; files are never written through a link,
+    over an existing file in a folder, or into hidden paths (`.git`, `.claude`…), and `saveAs` is checked before the
+    request is sent. Files in a response that contain the key aren't saved; text is masked before it's cut or saved.
+  * `env_var` (opt-in) also puts the key into the environment of runs on this computer for scripts and SDKs; the agent
+    can then read it (the most specific tool wins a name). Names must end in `KEY`, `TOKEN`, `SECRET` or `PASSWORD`
+    (checked again when a run starts, e.g. after a restore) and can't use prefixes of Godmode, Claude and common tools, so a tool can't set `HTTPS_PROXY` or `BASH_ENV`. Turning that on for a saved key, or
+    moving a saved key to an address outside the current one, needs a vault grant unless a new key comes with it.
+  * `POST /api/api-tools/:id/test` GETs `test_path` with the key (Test / Save & test in the UI).
 * **Composio** (v3.1 REST, `x-api-key`): browse toolkits, connect accounts via `connected_accounts/link`
   (`user_id` = `global` | `ws_<workspaceId>` | `agent_<agentId>`), and expose them to agents through a Tool Router
   session MCP URL (`POST /api/v3.1/tool_router/session`). Connected accounts can also start automations (app

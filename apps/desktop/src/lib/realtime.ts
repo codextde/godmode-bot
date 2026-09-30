@@ -31,6 +31,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   credentials: [qk.credentials],
   totp: [qk.totp],
   "mcp-servers": [qk.mcpServers],
+  "api-tools": [qk.apiTools],
   composio: [qk.composio],
   "browser-profiles": [qk.browserProfiles],
   "missing-logins": [qk.missingLogins, qk.bootstrap],
@@ -41,6 +42,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   computer: [qk.computer],
   // VM list + status (installs, image downloads, assignment changes).
   vms: [qk.vms],
+  "ssh-servers": [qk.sshServers],
   // Bot status, access requests and chats (the sidebar badge counts requests).
   messaging: [qk.messaging, qk.bootstrap],
   tasks: [qk.tasks],

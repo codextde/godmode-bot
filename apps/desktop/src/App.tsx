@@ -31,6 +31,7 @@ const MessagingPage = lazy(() => import("@/pages/messaging/messaging-page"));
 const BrowserPage = lazy(() => import("@/pages/browser/browser-page"));
 const ComputerPage = lazy(() => import("@/pages/computer/computer-page"));
 const VmsPage = lazy(() => import("@/pages/vms/vms-page"));
+const SshPage = lazy(() => import("@/pages/ssh/ssh-page"));
 const InboxPage = lazy(() => import("@/pages/inbox/inbox-page"));
 const SettingsPage = lazy(() => import("@/pages/settings/settings-page"));
 
@@ -116,6 +117,7 @@ export function App() {
           <Route path="/browser" element={<BrowserPage />} />
           <Route path="/computer" element={<ComputerPage />} />
           <Route path="/vms" element={<VmsPage />} />
+          <Route path="/ssh" element={<SshPage />} />
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
           <Route path="/settings/:section" element={<SettingsPage />} />

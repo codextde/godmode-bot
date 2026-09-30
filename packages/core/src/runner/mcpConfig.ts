@@ -2,14 +2,14 @@
  * Builds the `--mcp-config` file for a run: the Godmode gateway (per-run bearer token), the browser
  * (browser-use MCP bound to the agent's Chromium profile), computer use (when a screen, window or tab is shared),
  * the macOS VM tools (when the run works in a VM — then the browser and computer use run inside the VM too, see
- * vm/guest.ts) and the agent's external MCP servers.
+ * vm/guest.ts), the SSH tools (when the run may use SSH servers) and the agent's external MCP servers.
  * The file contains the run token and decrypted MCP secrets, so it is written 0600 and deleted after the run.
  */
 import { rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
-import { BROWSER_MCP_NAME, COMPUTER_MCP_NAME, CUA_MCP_NAME, GODMODE_MCP_NAME, VM_MCP_NAME } from "@godmode/shared";
+import { BROWSER_MCP_NAME, COMPUTER_MCP_NAME, CUA_MCP_NAME, GODMODE_MCP_NAME, SSH_MCP_NAME, VM_MCP_NAME } from "@godmode/shared";
 import { config, isLoopbackHost } from "../config";
 import { browserMcpServer } from "../browser/manager";
 import { mcpServersForAgent } from "../integrations/mcpServers";
@@ -51,6 +51,8 @@ export async function buildMcpConfig(
     browserProfileId?: string | null;
     /** The run and its chat: browser tools only reach that chat's tabs. */
     run?: { runId: string; conversationId: string };
+    /** The run may use SSH servers. */
+    ssh?: boolean;
   } = {},
 ): Promise<McpConfigFile> {
   const servers: Record<string, McpServerJson> = {};
@@ -64,7 +66,7 @@ export async function buildMcpConfig(
     const external = await mcpServersForAgent(agent);
     for (const [name, server] of Object.entries(external)) {
       // "cua" is only taken in a VM run (the human may have their own Cua Driver server for runs on this computer).
-      if ([GODMODE_MCP_NAME, BROWSER_MCP_NAME, COMPUTER_MCP_NAME, VM_MCP_NAME].includes(name) || (opts.vm && name === CUA_MCP_NAME)) {
+      if ([GODMODE_MCP_NAME, BROWSER_MCP_NAME, COMPUTER_MCP_NAME, VM_MCP_NAME, SSH_MCP_NAME].includes(name) || (opts.vm && name === CUA_MCP_NAME)) {
         log.warn(`MCP server name "${name}" is reserved; skipping it for agent ${agent.id}`);
         opts.onNotice?.(`The MCP server "${name}" was skipped because its name is reserved by Godmode.`);
         continue;
@@ -113,6 +115,15 @@ export async function buildMcpConfig(
       headers: { Authorization: `Bearer ${runToken}` },
     };
     if (opts.vm.cua) servers[CUA_MCP_NAME] = guestCuaServer(opts.vm.id, opts.vm.cua);
+  }
+
+  // SSH servers: shell, file and transfer tools on the chat's and the agent's servers (scoped by the run token).
+  if (opts.ssh) {
+    servers[SSH_MCP_NAME] = {
+      type: "http",
+      url: `${gatewayUrl()}/ssh`,
+      headers: { Authorization: `Bearer ${runToken}` },
+    };
   }
 
   return { mcpServers: servers };
