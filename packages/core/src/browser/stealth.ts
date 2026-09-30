@@ -68,7 +68,9 @@ async function probeUserAgent(executable: string, launch: Launch): Promise<strin
   let proc: Awaited<ReturnType<Launch>> | null = null;
   try {
     dir = mkdtempSync(join(tmpdir(), "godmode-ua-"));
-    proc = await launch({ executable, userDataDir: dir, headless: true, timeoutMs: 5_000, signal: abort.signal });
+    // As long as a regular launch may take: on a busy machine a shorter wait gives up on a browser that is just slow,
+    // and headless would then introduce itself as HeadlessChrome until the next retry.
+    proc = await launch({ executable, userDataDir: dir, headless: true, signal: abort.signal });
     return proc.userAgent ? withoutHeadless(proc.userAgent) : null;
   } catch (err) {
     log.warn("could not learn the browser's user agent; headless keeps its own", err);
