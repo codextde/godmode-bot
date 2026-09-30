@@ -685,7 +685,11 @@ async function closeTabsOf(rb: RunningBrowser, conversationId: string) {
   // Closing its last window quits Chromium on Windows and Linux.
   const keep = rb.tabs.userPages().length > pages.length ? null : pages[0];
   for (const page of pages) {
-    if (page !== keep) await rb.client.send("Target.closeTarget", { targetId: page.targetId }, undefined, 5000).catch(() => {});
+    if (page === keep) continue;
+    await rb.client
+      .send("Target.closeTarget", { targetId: page.targetId }, undefined, 5000)
+      .then(() => rb.tabs.forget(page.targetId))
+      .catch(() => {});
   }
   if (keep) {
     const session = await attachToPage(rb.client, keep.targetId).catch(() => null);
@@ -811,6 +815,7 @@ export async function botCheck(profileId: string): Promise<BotCheckReport> {
   const close = async (targetId: string) => {
     if (rb.tabs.userPages().some((p) => p.targetId !== targetId)) {
       await rb.client.send("Target.closeTarget", { targetId });
+      rb.tabs.forget(targetId);
       return;
     }
     const page = await attachToPage(rb.client, targetId);
