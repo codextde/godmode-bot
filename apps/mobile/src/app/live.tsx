@@ -15,7 +15,7 @@ import { api, errorText, type BrowserInput } from "@/lib/api";
 import { hostOf } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { useLive, type Frame } from "@/lib/live";
-import { qk } from "@/lib/query";
+import { qk, queryClient } from "@/lib/query";
 import { useStreamFrame, useVmFrame, type LiveScreen } from "@/lib/screens";
 
 const WHITE = "#FFFFFF";
@@ -29,15 +29,19 @@ export default function Live() {
   const now = useNow(1000);
   const vms = useQuery({ queryKey: qk.vms, queryFn: api.vms.list, enabled: params.kind === "vm" });
   const vm = params.kind === "vm" ? (vms.data?.find((v) => v.id === params.id) ?? null) : null;
+  const profiles = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles, enabled: params.kind === "browser" });
+  const profile = params.kind === "browser" ? profiles.data?.find((p) => p.id === params.id) : undefined;
+  // Subscribed even while it's off: the core starts streaming as soon as the browser runs.
   const screen: LiveScreen | null =
     params.kind === "browser"
-      ? { kind: "browser", key: `browser:${browserView(params.id, chat)}`, id: params.id, conversationId: chat, title: params.title ?? "Browser", running: true }
+      ? { kind: "browser", key: `browser:${browserView(params.id, chat)}`, id: params.id, conversationId: chat, title: params.title ?? "Browser", running: profile?.running ?? true }
       : params.kind === "share"
         ? { kind: "share", key: `computer:${params.id}`, view: params.id, title: params.title ?? "Shared screen", conversationId: "" }
         : null;
   const stream = useStreamFrame(screen);
   const shot = useVmFrame(vm, true, 1500);
-  const frame: Frame | undefined = params.kind === "vm" ? shot.data : stream;
+  // A browser that stopped leaves its last frame behind; don't show it as live.
+  const frame: Frame | undefined = params.kind === "vm" ? shot.data : profile?.running === false ? undefined : stream;
   const uri = frameUri(frame);
   const online = useLive((s) => s.status === "online");
   const fresh = !!frame && (params.kind === "browser" ? online : now - frame.at < 8000);
@@ -59,6 +63,12 @@ export default function Live() {
   const vmAction = useMutation({
     mutationFn: (action: "start" | "stop") => (action === "start" ? api.vms.start(params.id) : api.vms.stop(params.id)),
     onError: (err) => Alert.alert("Couldn't change the VM", errorText(err)),
+  });
+
+  const launch = useMutation({
+    mutationFn: () => api.browser.launch(params.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.browserProfiles }),
+    onError: (err) => Alert.alert("Couldn't start the browser", errorText(err)),
   });
 
   const box = { width, height };
@@ -95,7 +105,9 @@ export default function Live() {
       : frame?.error
         ? frame.error
         : params.kind === "browser"
-          ? hostOf(frame?.url) || "Browser"
+          ? profile?.running === false
+            ? "Not running"
+            : hostOf(frame?.url) || "Browser"
           : frame?.title || "Shared screen";
 
   return (
@@ -130,12 +142,28 @@ export default function Live() {
                   <ActivityIndicator color={WHITE} />
                 )}
               </>
+            ) : profile && !profile.running ? (
+              <>
+                <Icon name="globe" size={34} color={DIM} />
+                <T variant="headline" color={WHITE}>
+                  {`${profile.name} isn't running`}
+                </T>
+                <T variant="subhead" color={DIM} style={{ textAlign: "center" }}>
+                  {chat ? "It starts when the agent needs the web." : "Agents start it when they need the web. Start it now to watch it here."}
+                </T>
+                {!chat && <Button title="Start browser" icon="play" variant="glass" dark loading={launch.isPending} onPress={() => launch.mutate()} />}
+              </>
             ) : (
               <>
                 <ActivityIndicator color={WHITE} />
                 <T variant="subhead" color={DIM} style={{ textAlign: "center" }}>
-                  {params.kind === "browser" ? "Waiting for the browser. It shows up here as soon as an agent uses it." : "Waiting for the picture…"}
+                  {params.kind === "browser" && chat ? "Waiting for the browser. It shows up here as soon as an agent uses it." : "Waiting for the picture…"}
                 </T>
+                {params.kind === "vm" && shot.error ? (
+                  <T variant="caption" color={DIM} style={{ textAlign: "center" }}>
+                    {errorText(shot.error)}
+                  </T>
+                ) : null}
               </>
             )}
           </View>

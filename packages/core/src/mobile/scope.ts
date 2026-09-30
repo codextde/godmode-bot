@@ -35,6 +35,7 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["POST", new RegExp(`^/api/routines/${ID}/run$`)],
 
   ["GET", /^\/api\/browser\/profiles$/],
+  ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`)],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/input$`)],
   ["POST", /^\/api\/computer\/input$/],
 
@@ -49,6 +50,7 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["POST", new RegExp(`^/api/conversations/${ID}/messages$`), ["content"]],
   ["POST", /^\/api\/chat$/, ["agentId", "content"]],
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
+  ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],
   ["POST", /^\/api\/computer\/input$/, ["view", "event", "frame"]],
 ];
 
