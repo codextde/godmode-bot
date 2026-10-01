@@ -15,6 +15,8 @@ import {
   MessageSquarePlus,
   MessagesSquare,
   PanelLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plug,
   Search,
   Server,
@@ -132,10 +134,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     >
       <Sidebar collapsible="icon" variant="sidebar">
         <SidebarHeader className={cn("gap-3 px-3 pt-3 group-data-[collapsible=icon]:items-center", isTauri && isMac && "pt-10")} data-tauri-drag-region>
-          <div className="flex items-center justify-between px-1 group-data-[collapsible=icon]:justify-center" data-tauri-drag-region>
+          <div className="relative flex items-center justify-between px-1 group-data-[collapsible=icon]:justify-center" data-tauri-drag-region>
             <Link to="/" className="no-drag">
               <Wordmark className="group-data-[collapsible=icon]:[&>div:last-child]:hidden" />
             </Link>
+            <SidebarToggle />
           </div>
           <WorkspaceSwitcher />
           <div className="flex gap-2 group-data-[collapsible=icon]:flex-col">
@@ -201,6 +204,40 @@ export function AppShell({ children }: { children: ReactNode }) {
       </SidebarInset>
       <CommandPalette />
     </SidebarProvider>
+  );
+}
+
+function SidebarToggle() {
+  const { open, isMobile, toggleSidebar } = useSidebar();
+  const expanded = isMobile || open;
+  const label = isMobile ? "Close navigation" : expanded ? "Collapse sidebar" : "Expand sidebar";
+  const Icon = expanded ? PanelLeftClose : PanelLeftOpen;
+  const button = (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className={cn(
+        "size-7 text-muted-foreground hover:text-foreground",
+        // The rail has no room for another row: the button takes the logo's place while the rail is hovered or it has focus.
+        !expanded &&
+          "absolute top-1/2 left-1/2 -translate-1/2 bg-sidebar opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
+      )}
+      aria-label={label}
+      aria-keyshortcuts={isMac ? "Meta+B" : "Control+B"}
+      onClick={toggleSidebar}
+    >
+      <Icon />
+    </Button>
+  );
+  // The sheet focuses this button as it opens, which would pop the tooltip over the navigation.
+  if (isMobile) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side={expanded ? "bottom" : "right"}>
+        {label} ({modKey}B)
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
