@@ -16,6 +16,7 @@
  * each and is told to read them first.
  */
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, PullRequestState, Run, RunStatus, ServerEvent, Task, TaskInput, TaskMessageInput, TaskPatch, TaskStatus, TaskType } from "@godmode/shared";
 import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES, isValidBranch, parseGitUrl } from "@godmode/shared";
@@ -31,16 +32,18 @@ import { conversationExists, createConversation, sendMessage } from "../services
 import { cancelFollowup } from "../services/followups";
 import {
   claimTaskAttachments,
+  removeStaleResultImages,
   removeTaskAttachments,
   stageTaskAttachments,
   sweepTaskAttachments,
   withFileNames,
   withLocalPaths,
+  withResultImages,
   type StagedAttachments,
 } from "./attachments";
 import { notify } from "../services/notifications";
 import { workingDirectoryProblem } from "../services/folders";
-import { isRepoFolder, reposDir } from "../services/workspaceSources";
+import { isRepoFolder, listSources, reposDir } from "../services/workspaceSources";
 import {
   branchDiff,
   commitWork,
@@ -700,7 +703,9 @@ async function finished(id: string, run: Run): Promise<void> {
     return;
   }
   const summary = run.result ? run.result.slice(0, SUMMARY_MAX) : null;
-  sql("UPDATE tasks SET summary = ? WHERE id = ?", summary, id);
+  const shown = summary && withResultImages(id, summary, resultFolders(task, run.conversationId));
+  sql("UPDATE tasks SET summary = ? WHERE id = ?", shown, id);
+  removeStaleResultImages(id, task.summary, shown);
   if (task.blocked_reason) {
     block(id, task.blocked_reason);
     notify("warning", `Task #${task.number} needs you`, task.blocked_reason, link);
@@ -717,6 +722,25 @@ async function finished(id: string, run: Run): Promise<void> {
     return;
   }
   if (deliver(id, run.id)) notify("success", `Task #${task.number} is ready for review`, task.title, link);
+}
+
+/** Where the agent keeps the screenshots its result names: the folders it works in, and the temp folders. */
+function resultFolders(task: TaskRow, conversationId: string): string[] {
+  let agent: Agent | null = null;
+  try {
+    agent = task.agent_id ? getAgent(task.agent_id) : null;
+  } catch {
+    /* deleted meanwhile */
+  }
+  const folder = get<{ working_directory: string | null }>("SELECT working_directory FROM conversations WHERE id = ?", conversationId)?.working_directory;
+  const workspaceId = task.workspace_id ?? agent?.workspaceId;
+  return [
+    ...(agent ? [agent.repoPath] : []),
+    ...[folder ?? agent?.workingDirectory].filter((f): f is string => !!f),
+    ...(workspaceId ? listSources(workspaceId).map((s) => s.path) : []),
+    tmpdir(),
+    ...(process.platform === "win32" ? [] : ["/tmp"]),
+  ];
 }
 
 /** A general or research task: what it changed in its worktree is committed on its branch (never pushed). */

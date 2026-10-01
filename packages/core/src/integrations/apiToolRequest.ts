@@ -190,7 +190,7 @@ export function formatBytes(n: number): string {
 /* Paths                                                                */
 /* ------------------------------------------------------------------ */
 
-function realRoots(roots: string[]): string[] {
+export function realRoots(roots: string[]): string[] {
   const out: string[] = [];
   for (const root of roots) {
     try {
@@ -202,7 +202,7 @@ function realRoots(roots: string[]): string[] {
   return out;
 }
 
-function within(path: string, roots: string[]): boolean {
+export function within(path: string, roots: string[]): boolean {
   return roots.some((root) => path === root || path.startsWith(root.endsWith(sep) ? root : root + sep));
 }
 

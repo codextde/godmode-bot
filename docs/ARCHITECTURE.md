@@ -562,7 +562,10 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
 * **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
   `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
   `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
-  blocked task back to `in_progress`; for coding tasks the next push updates the open pull request.
+  blocked task back to `in_progress`; for coding tasks the next push updates the open pull request. The run's answer
+  becomes the task's result: images it names by path in the agent's folders or the temp folder (checked by their
+  bytes, resolved symlinks included, at most 20) are copied into the task's files and the result shows them; the
+  previous result's copies go. The pull request body keeps the paths.
 * **Moving on the board**: away from `in_progress` cancels the run (the UI asks first); into `todo` (or
   `in_progress`) with an agent starts it. Every 5 minutes, tasks in review with an open pull request are checked with
   `gh pr view`: merged → `done`, closed → noted on the task.

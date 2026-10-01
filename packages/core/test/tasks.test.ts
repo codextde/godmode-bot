@@ -3,9 +3,10 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Agent, Task } from "@godmode/shared";
+import { taskAttachmentUrl } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { startSmartGitServer, type SmartGitServer } from "./fixtures/smart-git-server";
-import { get, run as sql } from "../src/db";
+import { all, get, run as sql } from "../src/db";
 import { getRun, activeRunForConversation } from "../src/runner/runner";
 import { createWorkspace, deleteWorkspace, updateWorkspace } from "../src/services/workspaces";
 import { workingDirectoryProblem } from "../src/services/folders";
@@ -830,6 +831,81 @@ describe("attachments", () => {
     await deleteTask(copy.id);
     expect(existsSync(fileOf(kept.id, "kept.png"))).toBe(false);
     expect(get("SELECT id FROM task_attachments WHERE id = ?", kept.id)).toBeNull();
+  });
+
+  test("screenshots the agent names in its result are kept with the task and shown", async () => {
+    const { readTaskAttachment } = await import("../src/tasks/attachments");
+    const dir = mkdtempSync(join(tmpdir(), "godmode-shots-"));
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+    writeFileSync(join(dir, "light.png"), png);
+    writeFileSync(join(dir, "dark mode.png"), jpeg);
+    writeFileSync(join(dir, "notes.txt"), "notes");
+    writeFileSync(join(dir, "fake.png"), "not a picture");
+    const task = createTask({ title: `Make the header yellow TASK_SHOTS:${dir}`, agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+
+    const pictures = () => all<{ id: string; name: string; mime: string }>("SELECT id, name, mime FROM task_attachments WHERE task_id = ? ORDER BY name", task.id);
+    const [dark, light] = pictures();
+    expect(pictures().map((p) => [p.name, p.mime])).toEqual([
+      ["dark mode.png", "image/jpeg"],
+      ["light.png", "image/png"],
+    ]);
+    const url = (p: { id: string; name: string }) => taskAttachmentUrl(p.id, p.name);
+    const summary = getTask(task.id).summary!;
+    expect(summary).toContain(`- ![light.png](${url(light!)})`);
+    expect(summary).toContain(`- ![Dark mode](${url(dark!)})`);
+    expect(summary).toContain(`- Again: ![light.png](${url(light!)}).`);
+    expect(summary).toContain(`- ![The same](${url(light!)})`);
+    expect(summary).toContain(`- Not shown: \`${dir}/notes.txt\`, \`${dir}/missing.png\`, \`${dir}/fake.png\`, [online](https://example.com/shot.png)`);
+    expect(summary).toContain(`\`\`\`sh\nopen ${dir}/light.png\n\`\`\``);
+    expect(readTaskAttachment(light!.id).data).toEqual(Buffer.from(png));
+
+    // A new result brings its own copies; the earlier ones go.
+    rmSync(join(dir, "dark mode.png"));
+    await sendTaskMessage(task.id, `TASK_SHOTS:${dir}`);
+    await until(() => !getTask(task.id).summary!.includes(light!.id), 10_000, "the new result");
+    await settled(task.id, ["in_review"]);
+    expect(pictures().map((p) => p.name)).toEqual(["light.png"]);
+    expect(getTask(task.id).summary).toContain(`- ![light.png](${url(pictures()[0]!)})`);
+    expect(getTask(task.id).summary).toContain(`- ![Dark mode](<${dir}/dark mode.png>)`);
+    expect(existsSync(join(env.dataDir, "attachments", "tasks", light!.id))).toBe(false);
+
+    // A picture the human copied into the description outlives the result it came from.
+    const kept = pictures()[0]!;
+    updateTask(task.id, { description: `Like this: ![light](${url(kept)})` });
+    await sendTaskMessage(task.id, "Thanks");
+    await until(() => !getTask(task.id).summary!.includes(kept.id), 10_000, "a result without pictures");
+    await settled(task.id, ["in_review"]);
+    expect(readTaskAttachment(kept.id).data).toEqual(Buffer.from(png));
+
+    await deleteTask(task.id);
+    expect(get("SELECT id FROM task_attachments WHERE task_id = ?", task.id)).toBeNull();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("only pictures in the agent's folders are taken, and the Markdown around them stays intact", async () => {
+    const { symlinkSync } = await import("node:fs");
+    const { withResultImages } = await import("../src/tasks/attachments");
+    const inside = mkdtempSync(join(tmpdir(), "godmode-inside-"));
+    const outside = mkdtempSync(join(tmpdir(), "godmode-outside-"));
+    writeFileSync(join(inside, "a.png"), png);
+    writeFileSync(join(outside, "b.png"), png);
+    symlinkSync(join(outside, "b.png"), join(inside, "link.png"));
+    const task = createTask({ title: "Pictures", status: "backlog" });
+    const result = [
+      `\`${outside}/b.png\` \`${inside}/link.png\` \`${inside}/../${outside.split("/").pop()}/b.png\``,
+      "`\\\\host\\share\\c.png` //host/share/c.png",
+      "```inline``` stays code",
+      `![titled](${inside}/a.png 'A title') and [![shot](${inside}/a.png)](${inside}/a.png)`,
+    ].join("\n");
+    const out = withResultImages(task.id, result, [inside]);
+    const [a] = all<{ id: string; name: string }>("SELECT id, name FROM task_attachments WHERE task_id = ?", task.id);
+    const lines = out.split("\n");
+    expect(lines.slice(0, 3)).toEqual(result.split("\n").slice(0, 3));
+    expect(lines[3]).toBe(`![titled](${taskAttachmentUrl(a!.id, "a.png")}) and ![a.png](${taskAttachmentUrl(a!.id, "a.png")})`);
+    await deleteTask(task.id);
+    rmSync(inside, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   });
 
   test("follow-ups carry files like chat messages", async () => {
