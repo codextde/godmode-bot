@@ -70,6 +70,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const chatTab = useChatTab(browser, conversationId);
   const browserPanel = useUi((s) => s.browserPanel);
   const setBrowserPanel = useUi((s) => s.setBrowserPanel);
+  // Opened by hand before there is a tab: stays for this chat and leaves the saved preference alone.
+  const [browserOpened, setBrowserOpened] = useState(false);
   const wide = useMediaQuery("(min-width: 1024px)");
   const [browserFocus, setBrowserFocus] = useState<BrowserFocusMode | null>(null);
   const { setArchived } = useArchiveChat();
@@ -89,7 +91,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const showVmPanel = !!chatVm && !!agent && wide && vmPanel;
   // Something shared takes the side panel; the browser stays one click away in the header.
   const showComputerPanel = !chatVm && !!computerTarget && !!agent && wide && computerPanel;
-  const showBrowserPanel = !chatVm && !!browser && !!chatTab && !!agent && wide && browserPanel && !showComputerPanel;
+  const showBrowserPanel = !chatVm && !!browser && !!agent && wide && !showComputerPanel && (browserOpened || (!!chatTab && browserPanel));
   useEffect(() => setBrowserFocus(null), [browser?.id]);
   useEffect(() => {
     if (!computerTarget) setComputerFocus(null);
@@ -365,10 +367,14 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               {computerTarget && !showComputerPanel && (
                 <ComputerToggle working={!!activeRunId} onClick={() => (wide ? setComputerPanel(true) : setComputerFocus("watch"))} />
               )}
-              {!!chatTab && !showBrowserPanel && (
+              {!!browser && !showBrowserPanel && (
                 <BrowserToggle
-                  working={!!activeRunId}
-                  onClick={() => (wide && !showComputerPanel ? setBrowserPanel(true) : setBrowserFocus("watch"))}
+                  working={!!activeRunId && !!chatTab}
+                  onClick={() => {
+                    if (!wide || showComputerPanel) setBrowserFocus("watch");
+                    else if (chatTab) setBrowserPanel(true);
+                    else setBrowserOpened(true);
+                  }}
                 />
               )}
             </>
@@ -539,7 +545,10 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             agent={agent}
             forChat={browser.id === chatProfileId}
             activity={activeRunId ? liveActivityLabel(live) : null}
-            onHide={() => setBrowserPanel(false)}
+            onHide={() => {
+              setBrowserOpened(false);
+              if (chatTab) setBrowserPanel(false);
+            }}
             onFocus={setBrowserFocus}
           />
         )}
