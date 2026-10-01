@@ -353,12 +353,17 @@ export function subscribeBrowser(
   };
 }
 
-/** Patch every cached task list the task belongs to (the key's third segment is the scope: all, global or a workspace id). */
-function upsertTask(qc: QueryClient, task: Task) {
+/**
+ * Patch every cached task list the task belongs to: the board's or the archive's (second key segment), of its scope
+ * (third: all, global or a workspace id).
+ */
+export function upsertTask(qc: QueryClient, task: Task) {
   for (const [key, list] of qc.getQueriesData<Task[]>({ queryKey: qk.tasks })) {
     if (!list) continue;
     const scope = key[2];
-    const belongs = scope === "all" || (scope === "global" ? task.workspaceId === null : task.workspaceId === scope);
+    const belongs =
+      (key[1] === "archived") === !!task.archivedAt &&
+      (scope === "all" || (scope === "global" ? task.workspaceId === null : task.workspaceId === scope));
     const idx = list.findIndex((t) => t.id === task.id);
     if (!belongs) {
       if (idx >= 0) qc.setQueryData(key, list.filter((t) => t.id !== task.id));

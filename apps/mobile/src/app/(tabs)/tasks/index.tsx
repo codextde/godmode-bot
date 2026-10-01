@@ -1,15 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
-import { router, Stack } from "expo-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link, router, Stack } from "expo-router";
 import { useMemo } from "react";
-import { RefreshControl, SectionList, View } from "react-native";
-import type { Task, TaskStatus } from "@godmode/shared";
+import { Alert, RefreshControl, SectionList, View } from "react-native";
+import type { Agent, Task, TaskStatus } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
 import { TaskRow } from "@/components/task-row";
 import { Button, EmptyState, Hairline, SectionTitle } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
-import { api } from "@/lib/api";
+import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
-import { qk } from "@/lib/query";
+import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { useWorkspace } from "@/lib/workspace";
 import { space } from "@/lib/theme";
@@ -58,7 +58,7 @@ export default function Tasks() {
         )}
         ItemSeparatorComponent={() => <Hairline inset={72} />}
         renderItem={({ item }) => (
-          <TaskRow task={item} agent={item.agentId ? agents.get(item.agentId) : undefined} workspaceName={workspaceId ? undefined : names.get(item.workspaceId ?? "")} />
+          <TaskItem task={item} agent={item.agentId ? agents.get(item.agentId) : undefined} workspaceName={workspaceId ? undefined : names.get(item.workspaceId ?? "")} />
         )}
         ListEmptyComponent={
           tasks.isLoading ? null : (
@@ -72,5 +72,35 @@ export default function Tasks() {
         }
       />
     </>
+  );
+}
+
+/** Long press on iOS: archive the task (off the board, restorable on the computer). */
+function TaskItem({ task, agent, workspaceName }: { task: Task; agent?: Agent; workspaceName?: string }) {
+  const archive = useMutation({
+    mutationFn: () => api.tasks.update(task.id, { archived: true }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: qk.tasks }),
+    onError: (err) => Alert.alert("Couldn't archive the task", errorText(err)),
+  });
+  const confirmArchive = () => {
+    if (task.status !== "in_progress") return archive.mutate();
+    Alert.alert("Stop the agent?", `${agent?.name ?? "The agent"} is still working on it. Archiving it stops the run.`, [
+      { text: "Keep working", style: "cancel" },
+      { text: "Stop and archive", style: "destructive", onPress: () => archive.mutate() },
+    ]);
+  };
+
+  const row = <TaskRow task={task} agent={agent} workspaceName={workspaceName} />;
+  if (process.env.EXPO_OS !== "ios") return row;
+  return (
+    <Link href={{ pathname: "/task/[id]", params: { id: task.id } }} asChild>
+      <Link.Trigger>
+        <View>{row}</View>
+      </Link.Trigger>
+      <Link.Preview />
+      <Link.Menu>
+        <Link.MenuAction title="Archive" icon="archivebox" onPress={confirmArchive} />
+      </Link.Menu>
+    </Link>
   );
 }

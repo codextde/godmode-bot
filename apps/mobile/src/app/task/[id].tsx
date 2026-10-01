@@ -29,7 +29,7 @@ export default function TaskScreen() {
     void queryClient.invalidateQueries({ queryKey: [...qk.tasks, "list"] });
   };
   const update = useMutation({
-    mutationFn: (patch: { status?: TaskStatus; agentId?: string | null }) => api.tasks.update(id, patch),
+    mutationFn: (patch: { status?: TaskStatus; agentId?: string | null; archived?: boolean }) => api.tasks.update(id, patch),
     onSuccess: onDone,
     onError: (err) => Alert.alert("Couldn't change the task", errorText(err)),
   });
@@ -40,7 +40,7 @@ export default function TaskScreen() {
   const agent = t.agentId ? byId.get(t.agentId) : undefined;
   const workspace = workspaces.find((w) => w.id === t.workspaceId);
   const working = t.status === "in_progress";
-  const canFollowUp = !!t.conversationId && !!t.agentId && (t.status === "in_review" || t.status === "blocked" || t.status === "done");
+  const canFollowUp = !!t.conversationId && !!t.agentId && !t.archivedAt && (t.status === "in_review" || t.status === "blocked" || t.status === "done");
   const assignable = agentsFor(agents ?? [], t.workspaceId).filter((a) => a.enabled);
 
   const move = (status: TaskStatus) => {
@@ -49,6 +49,15 @@ export default function TaskScreen() {
     Alert.alert("Stop the agent?", `${agent?.name ?? "The agent"} is still working on it. Moving it to ${STATUS_META[status].label} stops the run.`, [
       { text: "Keep working", style: "cancel" },
       { text: "Stop", style: "destructive", onPress: () => update.mutate({ status }) },
+    ]);
+  };
+
+  const archive = (archived: boolean) => {
+    tap();
+    if (!archived || !working) return update.mutate({ archived });
+    Alert.alert("Stop the agent?", `${agent?.name ?? "The agent"} is still working on it. Archiving it stops the run.`, [
+      { text: "Keep working", style: "cancel" },
+      { text: "Stop and archive", style: "destructive", onPress: () => update.mutate({ archived }) },
     ]);
   };
 
@@ -69,6 +78,7 @@ export default function TaskScreen() {
         <T variant="title">{t.title}</T>
         <Row style={{ gap: 6, flexWrap: "wrap" }}>
           <TaskStatusBadge task={t} />
+          {t.archivedAt ? <Badge label="Archived" /> : null}
           <Badge label={TYPE_META[t.type].label} />
           <Badge label={workspace ? `${workspace.icon || "🗂️"} ${workspace.name}` : "Global"} />
         </Row>
@@ -96,7 +106,14 @@ export default function TaskScreen() {
         </Card>
       ) : null}
 
-      <Actions task={t} busy={update.isPending} hasAgent={!!agent} onMove={move} onOpenChat={t.conversationId ? () => openChat(t.conversationId!) : undefined} />
+      <Actions
+        task={t}
+        busy={update.isPending}
+        hasAgent={!!agent}
+        onMove={move}
+        onArchive={archive}
+        onOpenChat={t.conversationId ? () => openChat(t.conversationId!) : undefined}
+      />
 
       {!agent && (t.status === "backlog" || t.status === "todo") && assignable.length > 0 && (
         <View>
@@ -172,20 +189,29 @@ export default function TaskScreen() {
   );
 }
 
+type Action = { title: string; icon: Parameters<typeof Button>[0]["icon"]; status?: TaskStatus; archived?: boolean; primary?: boolean; onPress?: () => void };
+
 function Actions({
   task,
   busy,
   hasAgent,
   onMove,
+  onArchive,
   onOpenChat,
 }: {
   task: Task;
   busy: boolean;
   hasAgent: boolean;
   onMove: (status: TaskStatus) => void;
+  onArchive: (archived: boolean) => void;
   onOpenChat?: () => void;
 }) {
-  const buttons: { title: string; icon: Parameters<typeof Button>[0]["icon"]; status?: TaskStatus; primary?: boolean; onPress?: () => void }[] = [];
+  const buttons: Action[] = [];
+  if (task.archivedAt) {
+    buttons.push({ title: "Back on the board", icon: "unarchive", archived: false, primary: true });
+    if (onOpenChat) buttons.push({ title: "Open chat", icon: "chats", onPress: onOpenChat });
+    return <ActionButtons buttons={buttons} busy={busy} onMove={onMove} onArchive={onArchive} />;
+  }
   switch (task.status) {
     case "backlog":
       if (hasAgent) buttons.push({ title: "Start", icon: "play", status: "todo", primary: true });
@@ -208,7 +234,22 @@ function Actions({
       break;
   }
   if (onOpenChat) buttons.push({ title: "Open chat", icon: "chats", onPress: onOpenChat });
+  buttons.push({ title: "Archive", icon: "archive", archived: true });
   if (task.status !== "done" && task.status !== "cancelled") buttons.push({ title: "Cancel task", icon: "close", status: "cancelled" });
+  return <ActionButtons buttons={buttons} busy={busy} onMove={onMove} onArchive={onArchive} />;
+}
+
+function ActionButtons({
+  buttons,
+  busy,
+  onMove,
+  onArchive,
+}: {
+  buttons: Action[];
+  busy: boolean;
+  onMove: (status: TaskStatus) => void;
+  onArchive: (archived: boolean) => void;
+}) {
   if (!buttons.length) return null;
   return (
     <View style={{ gap: space.sm }}>
@@ -218,8 +259,8 @@ function Actions({
           title={b.title}
           icon={b.icon}
           variant={b.primary ? "primary" : b.status === "cancelled" ? "danger" : "secondary"}
-          disabled={busy && !!b.status}
-          onPress={b.onPress ?? (() => onMove(b.status!))}
+          disabled={busy && (!!b.status || b.archived !== undefined)}
+          onPress={b.onPress ?? (() => (b.archived !== undefined ? onArchive(b.archived) : onMove(b.status!)))}
         />
       ))}
     </View>

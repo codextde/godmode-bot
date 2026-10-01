@@ -19,9 +19,11 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronsLeftRight, Plus } from "lucide-react";
+import { Link } from "react-router";
+import { Archive, ChevronsLeftRight, MessagesSquare, PanelRightOpen, Plus, Trash2 } from "lucide-react";
 import type { Agent, Task, TaskStatus, Workspace } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUi } from "@/stores/ui";
@@ -32,6 +34,7 @@ import { TaskCard } from "./task-card";
 type Columns = Record<TaskStatus, string[]>;
 
 const QUICK_ADD: ReadonlySet<TaskStatus> = new Set(["backlog", "todo"]);
+const ARCHIVE_ALL: ReadonlySet<TaskStatus> = new Set(["done", "cancelled"]);
 const COLUMN_ID = "col:";
 
 function group(tasks: Task[]): Columns {
@@ -53,9 +56,11 @@ export interface TaskBoardProps {
   onOpen: (task: Task) => void;
   onMove: (task: Task, status: TaskStatus, beforeId: string | null) => void;
   onQuickAdd: (status: TaskStatus, title: string) => Promise<unknown>;
+  onArchive: (tasks: Task[]) => void;
+  onDelete: (task: Task) => void;
 }
 
-export function TaskBoard({ tasks, agents, workspaces, onOpen, onMove, onQuickAdd }: TaskBoardProps) {
+export function TaskBoard({ tasks, agents, workspaces, onOpen, onMove, onQuickAdd, onArchive, onDelete }: TaskBoardProps) {
   const byId = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const grouped = useMemo(() => group(tasks), [tasks]);
   const [drag, setDrag] = useState<{ id: string; columns: Columns } | null>(null);
@@ -163,8 +168,11 @@ export function TaskBoard({ tasks, agents, workspaces, onOpen, onMove, onQuickAd
               dragging={!!drag}
               activeId={drag?.id ?? null}
               onOpen={onOpen}
+              onArchive={onArchive}
+              onDelete={onDelete}
               onCollapse={() => toggleColumn(status)}
               onQuickAdd={QUICK_ADD.has(status) ? (title) => onQuickAdd(status, title) : undefined}
+              archiveAll={ARCHIVE_ALL.has(status)}
             />
           ),
         )}
@@ -193,8 +201,11 @@ function Column({
   dragging,
   activeId,
   onOpen,
+  onArchive,
+  onDelete,
   onCollapse,
   onQuickAdd,
+  archiveAll,
 }: {
   status: TaskStatus;
   ids: string[];
@@ -204,8 +215,12 @@ function Column({
   dragging: boolean;
   activeId: string | null;
   onOpen: (task: Task) => void;
+  onArchive: (tasks: Task[]) => void;
+  onDelete: (task: Task) => void;
   onCollapse: () => void;
   onQuickAdd?: (title: string) => Promise<unknown>;
+  /** Offer to archive the whole column (finished work). */
+  archiveAll?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `${COLUMN_ID}${status}` });
   const [adding, setAdding] = useState(false);
@@ -234,6 +249,18 @@ function Column({
           </TooltipContent>
         </Tooltip>
         <div className="ml-auto flex items-center opacity-70 transition group-hover/col:opacity-100">
+          {archiveAll && tasks.length > 0 && !dragging && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={`Archive all ${meta.label} tasks`} onClick={() => onArchive(tasks)}>
+                  <Archive className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Archive all {tasks.length} — off the board, never deleted
+              </TooltipContent>
+            </Tooltip>
+          )}
           <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={`Fold ${meta.label}`} onClick={onCollapse}>
             <ChevronsLeftRight className="size-3.5" />
           </Button>
@@ -256,6 +283,8 @@ function Column({
               workspace={workspaces ? (task.workspaceId ? (workspaces.get(task.workspaceId) ?? null) : null) : undefined}
               ghost={task.id === activeId}
               onOpen={onOpen}
+              onArchive={onArchive}
+              onDelete={onDelete}
             />
           ))}
         </SortableContext>
@@ -285,12 +314,16 @@ function SortableCard({
   workspace,
   ghost,
   onOpen,
+  onArchive,
+  onDelete,
 }: {
   task: Task;
   agent?: Agent;
   workspace?: Workspace | null;
   ghost: boolean;
   onOpen: (task: Task) => void;
+  onArchive: (tasks: Task[]) => void;
+  onDelete: (task: Task) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: task.id });
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -302,18 +335,42 @@ function SortableCard({
     listeners?.onKeyDown?.(e);
   };
   return (
-    <TaskCard
-      ref={setNodeRef}
-      task={task}
-      agent={agent}
-      workspace={workspace}
-      ghost={ghost}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
-      {...attributes}
-      {...listeners}
-      onKeyDown={onKeyDown}
-      onClick={() => onOpen(task)}
-    />
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <TaskCard
+          ref={setNodeRef}
+          task={task}
+          agent={agent}
+          workspace={workspace}
+          ghost={ghost}
+          style={{ transform: CSS.Translate.toString(transform), transition }}
+          {...attributes}
+          {...listeners}
+          onKeyDown={onKeyDown}
+          onClick={() => onOpen(task)}
+        />
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => onOpen(task)}>
+          <PanelRightOpen /> Open
+          <ContextMenuShortcut>↵</ContextMenuShortcut>
+        </ContextMenuItem>
+        {task.conversationId && (
+          <ContextMenuItem asChild>
+            <Link to={`/chat/${task.conversationId}`}>
+              <MessagesSquare /> Open conversation
+            </Link>
+          </ContextMenuItem>
+        )}
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => onArchive([task])}>
+          <Archive /> Archive
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" onSelect={() => onDelete(task)}>
+          <Trash2 /> Delete…
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

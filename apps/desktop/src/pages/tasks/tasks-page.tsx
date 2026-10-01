@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { FolderGit2, Plus, Search, SquareKanban } from "lucide-react";
+import { Archive, FolderGit2, Plus, Search, SquareKanban } from "lucide-react";
 import { toast } from "sonner";
 import type { Task, TaskStatus, Workspace } from "@godmode/shared";
 import { AgentAvatar, PageHeader } from "@/components/common";
@@ -19,6 +19,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArchivedTasks } from "@/components/tasks/archived-tasks";
+import { useArchiveTasks } from "@/components/tasks/task-actions";
 import { TaskBoard } from "@/components/tasks/task-board";
 import { TaskDialog } from "@/components/tasks/task-dialog";
 import { TaskSheet } from "@/components/tasks/task-sheet";
@@ -26,12 +29,14 @@ import { STATUS_META, isWorking, workspaceRepos } from "@/components/tasks/task-
 import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
 import { api } from "@/lib/api";
-import { useAllAgents, useTasks, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useArchivedTasks, useTasks, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
+import { upsertTask } from "@/lib/realtime";
 import { useUi } from "@/stores/ui";
 
 const ALL = "all";
 const UNASSIGNED = "unassigned";
+const ARCHIVED = "archived";
 
 function typingIn(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -53,13 +58,15 @@ export default function TasksPage() {
   const scope = useUi((s) => s.workspace);
   const [params, setParams] = useSearchParams();
   const tasksQ = useTasks();
+  const archivedQ = useArchivedTasks();
+  const { setArchived } = useArchiveTasks();
   const { data: agents = [] } = useAllAgents();
   const { data: workspaceList = [] } = useWorkspaces();
   const [search, setSearch] = useState("");
   const [agentFilter, setAgentFilter] = useState(ALL);
   const [creating, setCreating] = useState(false);
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null);
-  const [stopping, setStopping] = useState<{ task: Task; status: TaskStatus; beforeId: string | null } | null>(null);
+  const [stopping, setStopping] = useState<{ task: Task; status: TaskStatus; beforeId: string | null; archive?: boolean } | null>(null);
   const [deleting, setDeleting] = useState<Task | null>(null);
 
   const workspace = workspaceList.find((w) => w.id === scope) ?? null;
@@ -68,18 +75,31 @@ export default function TasksPage() {
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const listKey = qk.taskList(scope);
   const tasks = useMemo(() => tasksQ.data ?? [], [tasksQ.data]);
+  const archived = useMemo(
+    () => [...(archivedQ.data ?? [])].sort((a, b) => (b.archivedAt ?? "").localeCompare(a.archivedAt ?? "") || b.number - a.number),
+    [archivedQ.data],
+  );
+  const view = params.get("view") === ARCHIVED ? ARCHIVED : "board";
+  const setView = (next: string) => {
+    const p = new URLSearchParams(params);
+    if (next === ARCHIVED) p.set("view", ARCHIVED);
+    else p.delete("view");
+    setParams(p, { replace: true });
+  };
 
-  const visible = useMemo(() => {
+  const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return tasks.filter((t) => {
+    return (t: Task) => {
       if (agentFilter === UNASSIGNED ? t.agentId : agentFilter !== ALL && t.agentId !== agentFilter) return false;
       if (!q) return true;
       return `#${t.number} ${t.title} ${t.description} ${t.agentId ? (agentById.get(t.agentId)?.name ?? "") : ""}`.toLowerCase().includes(q);
-    });
-  }, [tasks, search, agentFilter, agentById]);
+    };
+  }, [search, agentFilter, agentById]);
+  const visible = useMemo(() => tasks.filter(matches), [tasks, matches]);
+  const visibleArchived = useMemo(() => archived.filter(matches), [archived, matches]);
 
   const selectedId = params.get("task");
-  const selected = selectedId ? (tasks.find((t) => t.id === selectedId) ?? null) : null;
+  const selected = selectedId ? (tasks.find((t) => t.id === selectedId) ?? archived.find((t) => t.id === selectedId) ?? null) : null;
   const openTask = (task: Task | null) => {
     const next = new URLSearchParams(params);
     if (task) next.set("task", task.id);
@@ -87,7 +107,7 @@ export default function TasksPage() {
     setParams(next, { replace: !task });
   };
   useEffect(() => {
-    if (!selectedId || !tasksQ.data || selected) return;
+    if (!selectedId || !tasksQ.data || !(archivedQ.data || archivedQ.isError) || selected) return;
     // A link from a notification: the task may live in another scope.
     api.tasks
       .get(selectedId)
@@ -96,7 +116,7 @@ export default function TasksPage() {
       })
       .catch(() => openTask(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, tasksQ.data, selected]);
+  }, [selectedId, tasksQ.data, archivedQ.data, archivedQ.isError, selected]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -111,12 +131,17 @@ export default function TasksPage() {
   const move = useMutation({
     mutationFn: ({ task, status, beforeId }: { task: Task; status: TaskStatus; beforeId: string | null }) => api.tasks.update(task.id, { status, beforeId }),
     onMutate: ({ task, status, beforeId }) => {
+      // Moving an archived task brings it back on top of its new column.
+      if (task.archivedAt) {
+        const top = Math.min(1024, ...tasks.filter((t) => t.status === status).map((t) => t.position)) - 1024;
+        return upsertTask(qc, { ...task, status, archivedAt: null, position: top });
+      }
       qc.setQueryData<Task[]>(listKey, (list) =>
         list?.map((t) => (t.id === task.id ? { ...t, status, position: optimisticPosition(list, task, status, beforeId) } : t)),
       );
     },
     onSuccess: (t, { status }) => {
-      qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((x) => (x.id === t.id ? t : x)));
+      upsertTask(qc, t);
       if ((status === "todo" || status === "in_progress") && !t.agentId) {
         toast("Assign an agent to start it", { action: { label: "Assign", onClick: () => openTask(t) } });
       }
@@ -130,6 +155,12 @@ export default function TasksPage() {
   const requestMove = (task: Task, status: TaskStatus, beforeId: string | null = null) => {
     if (isWorking(task) && status !== "in_progress") setStopping({ task, status, beforeId });
     else move.mutate({ task, status, beforeId });
+  };
+
+  const archive = (list: Task[]) => {
+    const working = list.find(isWorking);
+    if (working && list.length === 1) setStopping({ task: working, status: "backlog", beforeId: null, archive: true });
+    else setArchived(list, true);
   };
 
   const quickAdd = useMutation({
@@ -191,6 +222,19 @@ export default function TasksPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2 px-5 pb-4 @2xl:px-8">
+        <Tabs value={view} onValueChange={setView}>
+          <TabsList className="group-data-[orientation=horizontal]/tabs:h-8">
+            <TabsTrigger value="board" className="gap-1.5 px-2.5 text-[13px]">
+              <SquareKanban className="size-3.5" /> Board
+            </TabsTrigger>
+            <TabsTrigger value={ARCHIVED} className="gap-1.5 px-2.5 text-[13px]">
+              <Archive className="size-3.5" /> Archived
+              {archived.length > 0 && (
+                <span className="rounded-[4px] bg-foreground/[0.06] px-1.5 font-mono text-[10px] text-muted-foreground tabular-nums">{archived.length}</span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="relative w-full max-w-64">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter tasks…" aria-label="Filter tasks" className="h-8 pl-8" />
@@ -210,16 +254,44 @@ export default function TasksPage() {
             ))}
           </SelectContent>
         </Select>
-        <p className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
-          {running > 0 && <span className="text-amber-700 dark:text-amber-300">{running} running</span>}
-          {review > 0 && <span>{review} {STATUS_META.in_review.label.toLowerCase()}</span>}
-          {blocked > 0 && <span className="text-rose-600 dark:text-rose-400">{blocked} blocked</span>}
-          <span className="font-mono tabular-nums">{tasks.length} total</span>
-        </p>
+        {view === ARCHIVED ? (
+          <p className="ml-auto text-xs text-muted-foreground">
+            <span className="font-mono tabular-nums">{archived.length}</span> archived · restoring puts a task back on top of its column
+          </p>
+        ) : (
+          <p className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+            {running > 0 && <span className="text-amber-700 dark:text-amber-300">{running} running</span>}
+            {review > 0 && <span>{review} {STATUS_META.in_review.label.toLowerCase()}</span>}
+            {blocked > 0 && <span className="text-rose-600 dark:text-rose-400">{blocked} blocked</span>}
+            <span className="font-mono tabular-nums">{tasks.length} total</span>
+          </p>
+        )}
       </div>
 
       <div className="min-h-0 flex-1">
-        {tasksQ.isPending ? (
+        {view === ARCHIVED ? (
+          archivedQ.isPending ? (
+            <div className="max-w-4xl space-y-2 px-5 @2xl:px-8">
+              {Array.from({ length: 5 }, (_, i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-xl" />
+              ))}
+            </div>
+          ) : (
+            <ArchivedTasks
+              tasks={visibleArchived}
+              agents={agentById}
+              workspaces={workspace ? undefined : workspaces}
+              filtered={archived.length > 0 && (!!search.trim() || agentFilter !== ALL)}
+              onClearFilters={() => {
+                setSearch("");
+                setAgentFilter(ALL);
+              }}
+              onOpen={openTask}
+              onRestore={(t) => setArchived(t, false)}
+              onDelete={setDeleting}
+            />
+          )
+        ) : tasksQ.isPending ? (
           <div className="flex h-full gap-3 overflow-hidden px-5 pb-5 @2xl:px-8">
             {Array.from({ length: 5 }, (_, i) => (
               <Skeleton key={i} className="h-full w-[272px] shrink-0 rounded-xl" />
@@ -233,6 +305,8 @@ export default function TasksPage() {
             onOpen={openTask}
             onMove={requestMove}
             onQuickAdd={(status, title) => quickAdd.mutateAsync({ status, title })}
+            onArchive={archive}
+            onDelete={setDeleting}
           />
         )}
       </div>
@@ -250,6 +324,7 @@ export default function TasksPage() {
         workspaces={workspaces}
         onClose={() => openTask(null)}
         onMove={(task, status) => requestMove(task, status)}
+        onArchive={(task, value) => (value ? archive([task]) : setArchived(task, false))}
         onDelete={setDeleting}
       />
       {editingWorkspace && (
@@ -262,18 +337,19 @@ export default function TasksPage() {
             <AlertDialogTitle>Stop the agent?</AlertDialogTitle>
             <AlertDialogDescription>
               {stopping &&
-                `${stopping.task.agentId ? (agentById.get(stopping.task.agentId)?.name ?? "The agent") : "The agent"} is still working on #${stopping.task.number}. Moving it to ${STATUS_META[stopping.status].label} stops the run.`}
+                `${stopping.task.agentId ? (agentById.get(stopping.task.agentId)?.name ?? "The agent") : "The agent"} is still working on #${stopping.task.number}. ${stopping.archive ? "Archiving it stops the run and parks the task in the Backlog." : `Moving it to ${STATUS_META[stopping.status].label} stops the run.`}`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep working</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (stopping) move.mutate(stopping);
+                if (stopping?.archive) setArchived(stopping.task, true);
+                else if (stopping) move.mutate(stopping);
                 setStopping(null);
               }}
             >
-              Stop and move
+              {stopping?.archive ? "Stop and archive" : "Stop and move"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -284,11 +360,22 @@ export default function TasksPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete #{deleting?.number}?</AlertDialogTitle>
             <AlertDialogDescription>
-              The task disappears from the board{deleting?.type === "coding" ? " and its local checkout is removed (a pushed branch and pull request stay)" : ""}. The agent's conversation is kept.
+              The task is gone for good{deleting?.branch ? " and its worktree is removed (a pushed branch and pull request stay)" : ""}. The agent's conversation is kept.
+              {deleting && !deleting.archivedAt && " To just get it off the board, archive it — you can restore it anytime."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
+            {deleting && !deleting.archivedAt && (
+              <AlertDialogCancel
+                onClick={() => {
+                  archive([deleting]);
+                  setDeleting(null);
+                }}
+              >
+                <Archive /> Archive instead
+              </AlertDialogCancel>
+            )}
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
