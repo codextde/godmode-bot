@@ -28,6 +28,28 @@ export async function openExternal(url: string) {
   }
 }
 
+/**
+ * Links that leave the app open in the default browser. The desktop webview can't follow them, and the shell plugin's
+ * own handler for `target="_blank"` links only cancels the click: the webview has no shell access.
+ */
+export function installExternalLinks() {
+  if (!isTauri) return;
+  document.addEventListener(
+    "click",
+    (e) => {
+      const a = e.target instanceof Element ? e.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!a || a.isContentEditable || a.hasAttribute("download")) return;
+      const external = a.protocol === "mailto:" || (/^https?:$/.test(a.protocol) && a.origin !== location.origin);
+      if (!external && a.target !== "_blank") return;
+      e.preventDefault();
+      // Without its target the shell plugin leaves the link alone.
+      a.removeAttribute("target");
+      if (external) void openExternal(a.href);
+    },
+    true,
+  );
+}
+
 /** Save a blob to disk (native dialog in Tauri, download in browser). */
 export async function saveBlob(blob: Blob, filename: string) {
   if (isTauri) {
