@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Agent, Task } from "@godmode/shared";
+import { githubBranchUrl, hostedRepo } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { startSmartGitServer, type SmartGitServer } from "./fixtures/smart-git-server";
 import { get, run as sql } from "../src/db";
@@ -16,12 +17,13 @@ import {
   deleteTask,
   getTask,
   listTasks,
+  pushTaskBranch,
   sendTaskMessage,
   startTasks,
   stopTasks,
   updateTask,
 } from "../src/tasks/service";
-import { __setGhForTests, compareUrl, hostedRepo, openPullRequest, repoCacheDir } from "../src/tasks/git";
+import { __setGhForTests, compareUrl, openPullRequest, repoCacheDir } from "../src/tasks/git";
 import { HttpError } from "../src/util";
 import { rememberSecret } from "../src/vault/vault";
 import { updateSettings } from "../src/services/settings";
@@ -597,12 +599,52 @@ exit 1
     expect(t.completedAt).not.toBeNull();
   });
 
+  test("the board pushes a task's branch and opens its pull request", async () => {
+    const { url, bare } = makeRemote("board-push");
+    const task = createTask({ title: "TASK_EDIT share from the board", repoUrl: url, agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+    const t = getTask(task.id);
+    expect(t.branchPushed).toBe(false);
+    expect(await git(["branch", "--list", t.branch!], bare)).toBe("");
+
+    const pushed = await pushTaskBranch(t.id, { pullRequest: false });
+    expect(pushed.branchPushed).toBe(true);
+    expect(pushed.activity).toBeNull();
+    expect(await git(["log", "-1", "--format=%s", t.branch!], bare)).toBe(`${t.title} (#${t.number})`);
+    expect((await catchHttp(() => pushTaskBranch(t.id, { pullRequest: true }))).message).toContain("GitHub repositories only");
+
+    // On GitHub, gh opens it; the push still goes to the task's origin.
+    sql("UPDATE tasks SET repo_url = ? WHERE id = ?", "https://github.com/acme/app.git", t.id);
+    __setGhForTests(fakeGh());
+    try {
+      const opened = await pushTaskBranch(t.id, { pullRequest: true });
+      expect(opened.pullRequest).toEqual({ url: "https://github.com/acme/app/pull/7", number: 7, state: "open" });
+      expect(opened.status).toBe("in_review");
+    } finally {
+      __setGhForTests(null);
+    }
+    expect(readFileSync(join(env.dataDir, "gh-calls.log"), "utf8")).toContain(`--head ${t.branch}`);
+  });
+
+  test("pushing from the board needs a branch with changes", async () => {
+    const unstarted = createTask({ title: "Not started yet", status: "backlog" });
+    expect((await catchHttp(() => pushTaskBranch(unstarted.id, { pullRequest: true }))).message).toContain("no branch yet");
+    const { url } = makeRemote("board-nothing");
+    const task = createTask({ title: "Say hello without changes", repoUrl: url, agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+    const err = await catchHttp(() => pushTaskBranch(task.id, { pullRequest: false }));
+    expect(err.status).toBe(409);
+    expect(err.message).toContain("no changes");
+    expect(getTask(task.id).branchPushed).toBe(false);
+  });
+
   test("url helpers", () => {
     expect(hostedRepo("https://github.com/acme/app.git")).toEqual({ host: "github", path: "acme/app" });
     expect(hostedRepo("git@github.com:acme/app.git")).toEqual({ host: "github", path: "acme/app" });
     expect(hostedRepo("https://git.example.com/acme/app.git")).toBeNull();
     expect(compareUrl("https://example.com/x.git", "main", "b")).toBeNull();
-
+    expect(githubBranchUrl("git@github.com:acme/app.git", "godmode/6-make-it-yellow")).toBe("https://github.com/acme/app/tree/godmode/6-make-it-yellow");
+    expect(githubBranchUrl("https://gitlab.com/acme/app.git", "main")).toBeNull();
   });
 });
 

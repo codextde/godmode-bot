@@ -104,6 +104,8 @@ export interface Task {
   baseBranch: string;
   /** The task's own branch, once its worktree was created. */
   branch: string | null;
+  /** Godmode pushed the branch to `repoUrl` (coding tasks when they finish, others when asked to from the board). */
+  branchPushed: boolean;
   /** The task's own git worktree the agent works in, once created. */
   worktree: string | null;
   pullRequest: TaskPullRequest | null;

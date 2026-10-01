@@ -96,3 +96,16 @@ export function parseGitUrl(input: string): ParsedGitUrl | { error: string } {
   u.hash = "";
   return { url: u.toString().replace(/\/+$/, ""), name, branch: null };
 }
+
+/** owner/repo of a github.com or gitlab.com remote. */
+export function hostedRepo(url: string): { host: "github" | "gitlab"; path: string } | null {
+  const m = /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/git@|git@)(github\.com|gitlab\.com)[/:](.+?)(?:\.git)?\/?$/i.exec(url.trim());
+  if (!m) return null;
+  return { host: m[1]!.toLowerCase() === "github.com" ? "github" : "gitlab", path: m[2]! };
+}
+
+/** The page of `branch` on GitHub, or null when the repository isn't on github.com. */
+export function githubBranchUrl(url: string, branch: string): string | null {
+  const repo = hostedRepo(url);
+  return repo?.host === "github" ? `https://github.com/${repo.path}/tree/${branch.split("/").map(encodeURIComponent).join("/")}` : null;
+}

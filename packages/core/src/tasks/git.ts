@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, realpathSync, renameSync, rmSync, statSync, writ
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { PullRequestState, TaskPullRequest } from "@godmode/shared";
-import { parseGitUrl } from "@godmode/shared";
+import { hostedRepo, parseGitUrl } from "@godmode/shared";
 import { resolveGh, runCommand, stripAnsi, toolPath } from "../services/doctor";
 import { moveToTrash } from "../agents/repo";
 import { logger } from "../log";
@@ -349,13 +349,6 @@ export async function pushBranch(opts: { dir: string; base: string; branch: stri
     await git(["push", `--force-with-lease=refs/heads/${branch}:${remote ?? ""}`, "origin", `HEAD:refs/heads/${branch}`], dir, PUSH_TIMEOUT_MS);
     return { pushed: true, sha: await sha() };
   });
-}
-
-/** owner/repo of a github.com or gitlab.com remote. */
-export function hostedRepo(url: string): { host: "github" | "gitlab"; path: string } | null {
-  const m = /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/git@|git@)(github\.com|gitlab\.com)[/:](.+?)(?:\.git)?\/?$/i.exec(url.trim());
-  if (!m) return null;
-  return { host: m[1]!.toLowerCase() === "github.com" ? "github" : "gitlab", path: m[2]! };
 }
 
 /** The page that opens a pull request for `branch` (github/gitlab), or null for other hosts. */

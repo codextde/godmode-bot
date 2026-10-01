@@ -324,6 +324,10 @@ export const api = {
     /** Follow-up for the agent in the task's conversation (review feedback); the task goes back to work. */
     message: (id: string, content: string, attachments?: SendMessageInput["attachments"]) =>
       post<Task>(`/api/tasks/${id}/messages`, { content, attachments }),
+    /** Push the task's branch (only coding tasks push theirs by themselves). */
+    push: (id: string) => post<Task>(`/api/tasks/${id}/push`),
+    /** Push the branch and open its pull request — or, when gh can't, link to the page that opens one. */
+    openPullRequest: (id: string) => post<Task>(`/api/tasks/${id}/pull-request`),
     /** Upload a file for a description; link it there with its `url`. */
     upload: (file: File) => {
       const form = new FormData();

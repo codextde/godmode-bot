@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { MAX_TASK_ATTACHMENT_BYTES, MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES } from "@godmode/shared";
-import { createTask, deleteTask, getTask, listTasks, sendTaskMessage, updateTask } from "../../tasks/service";
+import { createTask, deleteTask, getTask, listTasks, pushTaskBranch, sendTaskMessage, updateTask } from "../../tasks/service";
 import { readTaskAttachment, saveTaskAttachment } from "../../tasks/attachments";
 import { HttpError, badRequest } from "../../util";
 import { body, z } from "../validate";
@@ -100,4 +100,8 @@ export function registerTaskRoutes(app: Hono): void {
     );
     return c.json(await sendTaskMessage(c.req.param("id"), content, attachments));
   });
+
+  app.post("/api/tasks/:id/push", async (c) => c.json(await pushTaskBranch(c.req.param("id"), { pullRequest: false })));
+
+  app.post("/api/tasks/:id/pull-request", async (c) => c.json(await pushTaskBranch(c.req.param("id"), { pullRequest: true })));
 }
