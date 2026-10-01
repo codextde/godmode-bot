@@ -112,6 +112,9 @@ export function CommandPalette() {
           <CommandItem onSelect={() => go("/archived")}>
             <Archive /> Archived chats
           </CommandItem>
+          <CommandItem value="archived tasks board tickets" onSelect={() => go("/tasks?view=archived")}>
+            <Archive /> Archived tasks
+          </CommandItem>
           <CommandItem onSelect={() => go("/vault/logins")}>
             <KeyRound /> Logins
           </CommandItem>

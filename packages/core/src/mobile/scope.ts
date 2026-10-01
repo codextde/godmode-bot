@@ -57,7 +57,7 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["POST", /^\/api\/chat$/, ["agentId", "content", "workspaceId"]],
   // A task's repository and branch are picked on the computer: the phone never points an agent at another repository.
   ["POST", /^\/api\/tasks$/, ["workspaceId", "title", "description", "type", "status", "agentId"]],
-  ["PATCH", new RegExp(`^/api/tasks/${ID}$`), ["title", "description", "status", "agentId"]],
+  ["PATCH", new RegExp(`^/api/tasks/${ID}$`), ["title", "description", "status", "agentId", "archived"]],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content"]],
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],

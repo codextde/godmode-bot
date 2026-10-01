@@ -81,6 +81,12 @@ export function useTasks(workspaceId?: ScopeFilter) {
   return useQuery({ queryKey: qk.taskList(ws), queryFn: () => api.tasks.list({ workspaceId: ws }) });
 }
 
+export function useArchivedTasks(workspaceId?: ScopeFilter) {
+  const scope = useUi((s) => s.workspace);
+  const ws = workspaceId ?? scope;
+  return useQuery({ queryKey: qk.archivedTaskList(ws), queryFn: () => api.tasks.list({ workspaceId: ws, archived: true }) });
+}
+
 /** Resolve the workspace name for display. */
 export function useWorkspaceName(id: string | null | undefined): string {
   const { data } = useWorkspaces();

@@ -218,8 +218,9 @@ export const api = {
     /** With an agent (and no status) the task goes to To do and the agent starts right away. */
     create: (input: { workspaceId: string | null; title: string; description?: string; type?: TaskType; status?: TaskStatus; agentId?: string | null }) =>
       post<Task>("/api/tasks", input),
-    /** Moving to To do starts the agent; moving away from In progress stops it. */
-    update: (id: string, input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null }) => patch<Task>(`/api/tasks/${id}`, input),
+    /** Moving to To do starts the agent; moving away from In progress stops it. Archived tasks are off the board. */
+    update: (id: string, input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null; archived?: boolean }) =>
+      patch<Task>(`/api/tasks/${id}`, input),
     /** Feedback for the agent in the task's chat; the task goes back to work. */
     message: (id: string, content: string) => post<Task>(`/api/tasks/${id}/messages`, { content }),
   },

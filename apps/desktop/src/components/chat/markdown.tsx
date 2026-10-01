@@ -25,6 +25,15 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
+type HastNode = { type: string; tagName?: string; value?: string; children?: HastNode[] };
+
+const content = (n: HastNode) => (n.children ?? []).filter((c) => !(c.type === "text" && !c.value?.trim()));
+
+function onlyImage(n: HastNode): boolean {
+  const [child, ...rest] = content(n);
+  return !!child && !rest.length && (child.tagName === "img" || (child.tagName === "p" && onlyImage(child)));
+}
+
 const components: Components = {
   pre({ children }) {
     const child = (Array.isArray(children) ? children[0] : children) as ReactElement<{ className?: string; children?: ReactNode }>;
@@ -53,6 +62,12 @@ const components: Components = {
         {children}
       </a>
     );
+  },
+  ul({ node, className, children }) {
+    // A list of pictures (the screenshots of a result) reads best side by side.
+    const items = node ? content(node) : [];
+    const gallery = items.length > 0 && items.every(onlyImage);
+    return <ul className={cn(className, gallery && "gm-gallery")}>{children}</ul>;
   },
   table({ children }) {
     return (

@@ -3,13 +3,13 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
-import { AlignLeft, ArrowUpRight, ChevronRight, EllipsisVertical, GitBranch, GitPullRequestCreateArrow, MessagesSquare, OctagonAlert, Paperclip, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
+import { AlignLeft, Archive, ArchiveRestore, ArrowUpRight, ChevronRight, EllipsisVertical, GitBranch, GitPullRequestCreateArrow, MessagesSquare, OctagonAlert, Paperclip, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
 import type { Agent, Task, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
 import { MAX_TASK_TITLE_LENGTH, githubBranchUrl } from "@godmode/shared";
 import { WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
@@ -36,6 +36,7 @@ export function TaskSheet({
   workspaces,
   onClose,
   onMove,
+  onArchive,
   onDelete,
 }: {
   task: Task | null;
@@ -43,6 +44,7 @@ export function TaskSheet({
   workspaces: Map<string, Workspace>;
   onClose: () => void;
   onMove: (task: Task, status: TaskStatus) => void;
+  onArchive: (task: Task, archived: boolean) => void;
   onDelete: (task: Task) => void;
 }) {
   /** A file is uploading into the description: closing now would lose it (as the new-task dialog). */
@@ -78,6 +80,7 @@ export function TaskSheet({
             onClose={close}
             onUploading={(busy) => (uploading.current = busy)}
             onMove={onMove}
+            onArchive={onArchive}
             onDelete={onDelete}
           />}
       </SheetContent>
@@ -103,6 +106,7 @@ function TaskDetail({
   onClose,
   onUploading,
   onMove,
+  onArchive,
   onDelete,
 }: {
   task: Task;
@@ -111,6 +115,7 @@ function TaskDetail({
   onClose: () => void;
   onUploading: (uploading: boolean) => void;
   onMove: (task: Task, status: TaskStatus) => void;
+  onArchive: (task: Task, archived: boolean) => void;
   onDelete: (task: Task) => void;
 }) {
   const qc = useQueryClient();
@@ -169,6 +174,10 @@ function TaskDetail({
                   </Link>
                 </DropdownMenuItem>
               )}
+              <DropdownMenuItem onClick={() => onArchive(task, !task.archivedAt)}>
+                {task.archivedAt ? <ArchiveRestore /> : <Archive />} {task.archivedAt ? "Restore to the board" : "Archive task"}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={() => onDelete(task)}>
                 <Trash2 /> Delete task
               </DropdownMenuItem>
@@ -179,6 +188,19 @@ function TaskDetail({
           </Button>
         </div>
       </header>
+
+      {task.archivedAt && (
+        <div className="flex shrink-0 items-center gap-3 border-b bg-foreground/[0.025] px-6 py-2.5">
+          <Archive className="size-4 shrink-0 text-muted-foreground" />
+          <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">
+            <span className="font-medium text-foreground">Archived</span> {formatDistanceToNowStrict(new Date(task.archivedAt), { addSuffix: true })} — off the
+            board, nothing is lost.
+          </p>
+          <Button size="sm" variant="outline" className="h-7 shrink-0" onClick={() => onArchive(task, false)}>
+            <ArchiveRestore /> Restore
+          </Button>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="space-y-6 px-6 pt-5 pb-8">
@@ -281,7 +303,7 @@ function TaskDetail({
         </div>
       </div>
 
-      {started && task.agentId && <FollowUp task={task} agent={agent} />}
+      {started && task.agentId && !task.archivedAt && <FollowUp task={task} agent={agent} />}
     </div>
   );
 }

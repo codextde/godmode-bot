@@ -10,10 +10,14 @@
  * the agent reported it can't go on. Merged pull requests move their task to Done. Any task's branch can also be pushed,
  * and its pull request opened, from the board.
  *
+ * Archived tasks are off the board and never start (a working one is stopped and parked first); moving one, or a
+ * follow-up in its conversation, brings it back.
+ *
  * Descriptions are Markdown and may link files (screenshots, PDFs…, see ./attachments.ts): the agent gets a copy of
  * each and is told to read them first.
  */
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, PullRequestState, Run, RunStatus, ServerEvent, Task, TaskInput, TaskMessageInput, TaskPatch, TaskStatus, TaskType } from "@godmode/shared";
 import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES, isValidBranch, parseGitUrl } from "@godmode/shared";
@@ -26,18 +30,21 @@ import { containsSecret, redact } from "../vault/vault";
 import { getAgent } from "../agents/service";
 import { activeRunForConversation, cancelRun, getRun, waitForRun } from "../runner/runner";
 import { conversationExists, createConversation, sendMessage } from "../services/conversations";
+import { cancelFollowup } from "../services/followups";
 import {
   claimTaskAttachments,
+  removeStaleResultImages,
   removeTaskAttachments,
   stageTaskAttachments,
   sweepTaskAttachments,
   withFileNames,
   withLocalPaths,
+  withResultImages,
   type StagedAttachments,
 } from "./attachments";
 import { notify } from "../services/notifications";
 import { workingDirectoryProblem } from "../services/folders";
-import { isRepoFolder, reposDir } from "../services/workspaceSources";
+import { isRepoFolder, listSources, reposDir } from "../services/workspaceSources";
 import {
   branchDiff,
   commitWork,
@@ -85,6 +92,7 @@ interface TaskRow {
   blocked_reason: string | null;
   started_at: string | null;
   completed_at: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
   run_id?: string | null;
@@ -129,6 +137,7 @@ function toModel(r: TaskRow): Task {
     activity: activity.get(r.id) ?? null,
     startedAt: r.started_at,
     completedAt: r.completed_at,
+    archivedAt: r.archived_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -163,17 +172,15 @@ export function checkoutDir(taskId: string): string {
 /* Queries                                                             */
 /* ------------------------------------------------------------------ */
 
-/** Tasks of a scope: "all" (default), "global" or a workspace id. */
-export function listTasks(opts: { workspaceId?: string } = {}): Task[] {
+/** Tasks of a scope: "all" (default), "global" or a workspace id. The board's, or the archived ones (latest first). */
+export function listTasks(opts: { workspaceId?: string; archived?: boolean } = {}): Task[] {
   const ws = opts.workspaceId ?? "all";
-  const order = "ORDER BY t.position ASC, t.number ASC";
-  const rows =
-    ws === "all"
-      ? all<TaskRow>(`${SELECT} ${order}`)
-      : ws === "global"
-        ? all<TaskRow>(`${SELECT} WHERE t.workspace_id IS NULL ${order}`)
-        : all<TaskRow>(`${SELECT} WHERE t.workspace_id = ? ${order}`, ws);
-  return rows.map(toModel);
+  const where = [opts.archived ? "t.archived_at IS NOT NULL" : "t.archived_at IS NULL"];
+  if (ws === "global") where.push("t.workspace_id IS NULL");
+  else if (ws !== "all") where.push("t.workspace_id = ?");
+  const order = opts.archived ? "ORDER BY t.archived_at DESC, t.number DESC" : "ORDER BY t.position ASC, t.number ASC";
+  const params = ws === "all" || ws === "global" ? [] : [ws];
+  return all<TaskRow>(`${SELECT} WHERE ${where.join(" AND ")} ${order}`, ...params).map(toModel);
 }
 
 export function getTask(id: string): Task {
@@ -252,7 +259,7 @@ function checkWorkspace(id: string | null | undefined): string | null {
 /** Position for a task placed before `beforeId` in `status` (null = at the end of the column). */
 function positionIn(workspaceId: string | null, status: TaskStatus, beforeId: string | null | undefined, selfId?: string): number {
   const siblings = all<{ id: string; position: number }>(
-    "SELECT id, position FROM tasks WHERE workspace_id IS ? AND status = ? AND id IS NOT ? ORDER BY position ASC, number ASC",
+    "SELECT id, position FROM tasks WHERE workspace_id IS ? AND status = ? AND id IS NOT ? AND archived_at IS NULL ORDER BY position ASC, number ASC",
     workspaceId,
     status,
     selfId ?? null,
@@ -266,6 +273,16 @@ function positionIn(workspaceId: string | null, status: TaskStatus, beforeId: st
   siblings.forEach((s, i) => sql("UPDATE tasks SET position = ? WHERE id = ?", (i + 1) * POSITION_STEP, s.id));
   bus.changed("tasks");
   return idx * POSITION_STEP + POSITION_STEP / 2;
+}
+
+function topPosition(workspaceId: string | null, status: TaskStatus, selfId: string): number {
+  const top = get<{ p: number | null }>(
+    "SELECT MIN(position) AS p FROM tasks WHERE workspace_id IS ? AND status = ? AND id != ? AND archived_at IS NULL",
+    workspaceId,
+    status,
+    selfId,
+  )?.p;
+  return top == null ? POSITION_STEP : top - POSITION_STEP;
 }
 
 /* ------------------------------------------------------------------ */
@@ -314,6 +331,10 @@ export function updateTask(id: string, patch: TaskPatch): Task {
   let status = patch.status !== undefined ? cleanStatus(patch.status) : current.status;
   // Nobody left to work on it: park it.
   if (!agentId && patch.status === undefined && status === "in_progress") status = "backlog";
+  // Moving an archived task brings it back to the board; archiving a working one stops it and parks it.
+  const archived = patch.archived ?? (!!current.archived_at && status === current.status);
+  if (archived && status === "in_progress") status = "backlog";
+  const restored = !!current.archived_at && !archived;
   const moved = status !== current.status || patch.beforeId !== undefined;
   const finished = status === "done" || status === "cancelled";
   const description = patch.description !== undefined ? cleanDescription(patch.description) : undefined;
@@ -326,24 +347,42 @@ export function updateTask(id: string, patch: TaskPatch): Task {
     base_branch: patch.baseBranch !== undefined ? cleanBranch(patch.baseBranch) : undefined,
     status,
     agent_id: agentId,
-    position: moved ? positionIn(current.workspace_id, status, patch.beforeId, id) : undefined,
+    position:
+      restored && patch.beforeId === undefined
+        ? topPosition(current.workspace_id, status, id)
+        : moved
+          ? positionIn(current.workspace_id, status, patch.beforeId, id)
+          : undefined,
     completed_at: status === current.status ? undefined : finished ? now() : null,
+    archived_at: archived === !!current.archived_at ? undefined : archived ? now() : null,
     blocked_reason: (status !== current.status && status !== "blocked") || agentId !== current.agent_id ? null : undefined,
     updated_at: now(),
   });
   if (description !== undefined) claimTaskAttachments(id, description);
+  // A follow-up the agent scheduled would wake it up again.
+  if (archived && !current.archived_at && current.conversation_id) cancelFollowup(current.conversation_id);
 
   const wasWorking = current.status === "in_progress";
   const reassigned = agentId !== current.agent_id;
   const starts =
+    !archived &&
     !!agentId &&
     ((status !== current.status && (status === "todo" || (status === "in_progress" && !wasWorking))) ||
-      ((status === "todo" || status === "in_progress") && reassigned));
+      ((status === "todo" || status === "in_progress") && (reassigned || restored)));
   // Start first: the restart owns the task before the old run's end is reported.
   if (starts) void dispatch(id);
   if (wasWorking && (status !== "in_progress" || reassigned)) void stopWork(current);
   emit(id);
   return getTask(id);
+}
+
+/** Archive (or bring back) several tasks at once, e.g. a whole column. */
+export function archiveTasks(ids: string[], archived: boolean): Task[] {
+  const unique = [...new Set(ids)];
+  unique.forEach(requireRow);
+  // Each restored task goes on top of its column: the last one first, so the column keeps its order.
+  const updated = new Map((archived ? unique : [...unique].reverse()).map((id) => [id, updateTask(id, { archived })]));
+  return unique.map((id) => updated.get(id)!);
 }
 
 /** Cancel the run working on a task (the board moved it away from In progress). */
@@ -416,8 +455,7 @@ export function reportBlocked(conversationId: string, reason: string): Task {
 function transition(id: string, status: TaskStatus, from: readonly TaskStatus[], blockedReason: string | null = null): boolean {
   const t = get<{ workspace_id: string | null; status: TaskStatus; position: number }>("SELECT workspace_id, status, position FROM tasks WHERE id = ?", id);
   if (!t || !from.includes(t.status)) return false;
-  const top = get<{ p: number | null }>("SELECT MIN(position) AS p FROM tasks WHERE workspace_id IS ? AND status = ? AND id != ?", t.workspace_id, status, id)?.p;
-  const position = t.status === status ? t.position : top == null ? POSITION_STEP : top - POSITION_STEP;
+  const position = t.status === status ? t.position : topPosition(t.workspace_id, status, id);
   sql("UPDATE tasks SET status = ?, position = ?, blocked_reason = ?, updated_at = ? WHERE id = ?", status, position, blockedReason, now(), id);
   return true;
 }
@@ -523,7 +561,7 @@ export async function dispatch(id: string): Promise<void> {
   busy.add(id);
   try {
     let task = row(id);
-    if (!task || !task.agent_id || !STARTABLE.includes(task.status)) return;
+    if (!task || task.archived_at || !task.agent_id || !STARTABLE.includes(task.status)) return;
     let agent: Agent;
     try {
       agent = getAgent(task.agent_id);
@@ -537,7 +575,8 @@ export async function dispatch(id: string): Promise<void> {
       await cancelRun(previous, "Restarted from the task board").catch(() => {});
       await waitForRun(previous, 15_000).catch(() => {});
     }
-    if (!transition(id, "in_progress", STARTABLE)) return;
+    // Archived while the previous run was stopping.
+    if (row(id)?.archived_at || !transition(id, "in_progress", STARTABLE)) return;
     sql("UPDATE tasks SET started_at = ?, completed_at = NULL WHERE id = ?", now(), id);
 
     // Its own git worktree on its own branch: tasks working side by side never touch each other's files.
@@ -578,7 +617,7 @@ export async function dispatch(id: string): Promise<void> {
       return;
     }
     // Moved away (or reassigned) while the worktree was being created; a restart asked for meanwhile follows.
-    if (task.status !== "in_progress" || task.agent_id !== agent.id) return;
+    if (task.status !== "in_progress" || task.agent_id !== agent.id) return setActivity(id, null);
 
     let conversationId = task.conversation_id;
     const reusable =
@@ -648,9 +687,9 @@ function onBusEvent(event: ServerEvent) {
   void finished(task.id, event.run).catch((err) => log.warn(`task ${task.id}: could not handle the end of run ${event.run.id}`, err));
 }
 
-/** A follow-up (review feedback, a question) puts a delivered or blocked task back to work. */
+/** A follow-up (review feedback, a question) puts a delivered or blocked task back to work — and on the board. */
 function backToWork(id: string) {
-  if (transition(id, "in_progress", ["in_review", "blocked", "done", "cancelled", "backlog"])) sql("UPDATE tasks SET completed_at = NULL WHERE id = ?", id);
+  if (transition(id, "in_progress", ["in_review", "blocked", "done", "cancelled", "backlog"])) sql("UPDATE tasks SET completed_at = NULL, archived_at = NULL WHERE id = ?", id);
 }
 
 async function finished(id: string, run: Run): Promise<void> {
@@ -668,7 +707,9 @@ async function finished(id: string, run: Run): Promise<void> {
     return;
   }
   const summary = run.result ? run.result.slice(0, SUMMARY_MAX) : null;
-  sql("UPDATE tasks SET summary = ? WHERE id = ?", summary, id);
+  const shown = summary && withResultImages(id, summary, resultFolders(task, run.conversationId));
+  sql("UPDATE tasks SET summary = ? WHERE id = ?", shown, id);
+  removeStaleResultImages(id, task.summary, shown);
   if (task.blocked_reason) {
     block(id, task.blocked_reason);
     notify("warning", `Task #${task.number} needs you`, task.blocked_reason, link);
@@ -685,6 +726,25 @@ async function finished(id: string, run: Run): Promise<void> {
     return;
   }
   if (deliver(id, run.id)) notify("success", `Task #${task.number} is ready for review`, task.title, link);
+}
+
+/** Where the agent keeps the screenshots its result names: the folders it works in, and the temp folders. */
+function resultFolders(task: TaskRow, conversationId: string): string[] {
+  let agent: Agent | null = null;
+  try {
+    agent = task.agent_id ? getAgent(task.agent_id) : null;
+  } catch {
+    /* deleted meanwhile */
+  }
+  const folder = get<{ working_directory: string | null }>("SELECT working_directory FROM conversations WHERE id = ?", conversationId)?.working_directory;
+  const workspaceId = task.workspace_id ?? agent?.workspaceId;
+  return [
+    ...(agent ? [agent.repoPath] : []),
+    ...[folder ?? agent?.workingDirectory].filter((f): f is string => !!f),
+    ...(workspaceId ? listSources(workspaceId).map((s) => s.path) : []),
+    tmpdir(),
+    ...(process.platform === "win32" ? [] : ["/tmp"]),
+  ];
 }
 
 /** A general or research task: what it changed in its worktree is committed on its branch (pushed only when asked to). */
@@ -830,7 +890,7 @@ export async function pushTaskBranch(id: string, opts: { pullRequest: boolean })
     if (!(await pushWork(task))) throw conflict(`${task.branch} has no changes on top of ${task.base_branch} yet.`);
     const current = requireRow(id);
     if (opts.pullRequest && !(current.pr_number && current.pr_state === "open")) {
-      const { pullRequest, problem } = await openTaskPullRequest(current, current.summary);
+      const { pullRequest, problem } = await openTaskPullRequest(current, current.summary && withFileNames(current.summary));
       if (!pullRequest) throw conflict(`${task.branch} was pushed. ${problem ?? ""}`.trim());
       // Handed over for review: a task blocked on its push is unblocked, and moves to Done when it's merged.
       transition(id, "in_review", ["blocked"]);
@@ -881,7 +941,7 @@ export function startTasks(): void {
       sql("UPDATE tasks SET status = 'blocked', blocked_reason = ?, updated_at = ? WHERE id = ?", "Interrupted (Godmode restarted).", now(), t.id);
     }
   }
-  for (const t of all<{ id: string }>("SELECT id FROM tasks WHERE status = 'todo' AND agent_id IS NOT NULL ORDER BY position")) void dispatch(t.id);
+  for (const t of all<{ id: string }>("SELECT id FROM tasks WHERE status = 'todo' AND agent_id IS NOT NULL AND archived_at IS NULL ORDER BY position")) void dispatch(t.id);
   if (!watchTimer) {
     watchTimer = setInterval(() => {
       void checkPullRequests().catch((err) => log.warn("could not check pull requests", err));

@@ -648,4 +648,12 @@ UPDATE agents SET personality = 'buddy',
 UPDATE agents SET color = 'emerald' WHERE is_default = 1 AND color = 'violet' AND avatar = '⚡';
 `,
   },
+  {
+    id: 21,
+    name: "task_archive",
+    sql: /* sql */ `
+-- Archived tasks are off the board and never start; their status, worktree and branch stay. NULL = on the board.
+ALTER TABLE tasks ADD COLUMN archived_at TEXT;
+`,
+  },
 ];

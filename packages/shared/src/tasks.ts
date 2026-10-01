@@ -9,6 +9,9 @@
  *  - `blocked`: the run failed, was stopped, or the agent reported it can't go on.
  *  - `done`: accepted (set by the human, or automatically when the pull request is merged).
  *  - `cancelled`: decided not to do it.
+ *
+ * Archiving takes a task off the board without deleting it (`archivedAt`): it keeps its status and never starts.
+ * Changing its status, or a follow-up, brings it back.
  */
 import type { ID, ISODate, RunStatus } from "./models";
 
@@ -117,6 +120,8 @@ export interface Task {
   activity: string | null;
   startedAt: ISODate | null;
   completedAt: ISODate | null;
+  /** Off the board since then; null = on the board. */
+  archivedAt: ISODate | null;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -146,6 +151,8 @@ export interface TaskPatch {
   repoUrl?: string;
   repoPath?: string;
   baseBranch?: string;
+  /** Take it off the board (a running agent is stopped and the task parked in the backlog), or bring it back. */
+  archived?: boolean;
 }
 
 export interface TaskMessageInput {

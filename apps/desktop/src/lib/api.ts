@@ -314,13 +314,17 @@ export const api = {
   },
 
   tasks: {
-    list: (q: { workspaceId?: ScopeFilter } = {}) => get<Task[]>("/api/tasks", q),
+    /** The board's tasks, or the archived ones (latest first). */
+    list: (q: { workspaceId?: ScopeFilter; archived?: boolean } = {}) =>
+      get<Task[]>("/api/tasks", { workspaceId: q.workspaceId, archived: q.archived ? 1 : undefined }),
     get: (id: string) => get<Task>(`/api/tasks/${id}`),
     /** With an agent and status todo (the default then), the agent starts right away. */
     create: (input: TaskInput) => post<Task>("/api/tasks", input),
     /** Moving to todo starts the agent; moving away from in_progress stops it. */
     update: (id: string, input: TaskPatch) => patch<Task>(`/api/tasks/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/tasks/${id}`),
+    /** Take several tasks off the board at once (or bring them back). */
+    archive: (ids: string[], archived = true) => post<Task[]>("/api/tasks/archive", { ids, archived }),
     /** Follow-up for the agent in the task's conversation (review feedback); the task goes back to work. */
     message: (id: string, content: string, attachments?: SendMessageInput["attachments"]) =>
       post<Task>(`/api/tasks/${id}/messages`, { content, attachments }),

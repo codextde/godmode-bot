@@ -21,6 +21,7 @@
  *   TASK_COMMIT_ENV  write and commit .env.production in the cwd
  *   TASK_ENV    write .env and feature.txt into the cwd
  *   TASK_LEAK:<value>  write config.txt containing <value> into the cwd
+ *   TASK_SHOTS:<dir>  answer with a summary naming the files in <dir> in every way an agent does (code, links, paths)
  *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
  *   CRASH       print to stderr and exit 3 without a result
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
@@ -280,6 +281,25 @@ if (slash?.[1] === "clear") {
   out(init);
   writeFileSync(join(process.cwd(), "config.txt"), `token=${/TASK_LEAK:(\S+)/.exec(prompt)![1]}\n`);
   const text = "Wrote the config.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_SHOTS:")) {
+  out(init);
+  const dir = /TASK_SHOTS:(\S+)/.exec(prompt)![1]!;
+  const text = [
+    "Made the header yellow.",
+    "",
+    "Screenshots:",
+    `- \`${dir}/light.png\``,
+    `- ![Dark mode](<${dir}/dark mode.png>)`,
+    `- Again: ${dir}/light.png.`,
+    `- [The same](file://${dir}/light.png)`,
+    `- Not shown: \`${dir}/notes.txt\`, \`${dir}/missing.png\`, \`${dir}/fake.png\`, [online](https://example.com/shot.png)`,
+    "",
+    "```sh",
+    `open ${dir}/light.png`,
+    "```",
+  ].join("\n");
   textTurn(text);
   result(text);
 } else if (prompt.includes("TASK_BLOCKED")) {

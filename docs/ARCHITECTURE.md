@@ -519,6 +519,12 @@ agent, or getting one while in it, starts that agent), `in_progress`, `in_review
 neighbours; a column is re-spaced when they get too close). A task may only be assigned to an agent of its workspace or
 a global one. Every change is pushed as `task.updated` / `task.deleted` and patched into the UI's cached lists.
 
+* **Archive** (`archived_at`, `TaskPatch.archived`, `POST /api/tasks/archive` for a whole column): archived tasks are
+  off the board (`GET /api/tasks` lists them only with `archived=1`, latest first) and keep their status, worktree,
+  branch and conversation. They never start — `dispatch` and the restart skip them — and archiving a working task stops
+  its run and parks it in `backlog`. Moving an archived task to another status, or a follow-up run in its conversation,
+  brings it back; restoring it puts it on top of its column (and starts it when it waits in `todo` with an agent).
+
 * **Starting** (`dispatch`): an active run of the task is cancelled first (restart), the task moves to `in_progress`,
   and the agent gets the task in its conversation (`origin = 'task'`, created archived so it stays off the chat list;
   reused while the agent and folder stay the same) as a `trigger = "task"` run. The prompt carries the title,
@@ -556,7 +562,10 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
 * **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
   `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
   `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
-  blocked task back to `in_progress`; for coding tasks the next push updates the open pull request.
+  blocked task back to `in_progress`; for coding tasks the next push updates the open pull request. The run's answer
+  becomes the task's result: images it names by path in the agent's folders or the temp folder (checked by their
+  bytes, resolved symlinks included, at most 20) are copied into the task's files and the result shows them; the
+  previous result's copies go. The pull request body keeps the paths.
 * **Moving on the board**: away from `in_progress` cancels the run (the UI asks first); into `todo` (or
   `in_progress`) with an agent starts it. Every 5 minutes, tasks in review with an open pull request are checked with
   `gh pr view`: merged → `done`, closed → noted on the task.

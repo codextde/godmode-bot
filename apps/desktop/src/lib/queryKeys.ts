@@ -22,6 +22,7 @@ export const qk = {
   /** Task board; lists are patched in place by `task.updated` events (see realtime.ts). */
   tasks: ["tasks"] as unknown[],
   taskList: (workspaceId: string) => ["tasks", "list", workspaceId],
+  archivedTaskList: (workspaceId: string) => ["tasks", "archived", workspaceId],
   agents: ["agents"] as unknown[],
   agentList: (workspaceId: string) => ["agents", "list", workspaceId],
   agent: (id: string) => ["agents", "detail", id],

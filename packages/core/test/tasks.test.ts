@@ -3,14 +3,15 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Agent, Task } from "@godmode/shared";
-import { githubBranchUrl, hostedRepo } from "@godmode/shared";
+import { githubBranchUrl, hostedRepo, taskAttachmentUrl } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { startSmartGitServer, type SmartGitServer } from "./fixtures/smart-git-server";
-import { get, run as sql } from "../src/db";
+import { all, get, run as sql } from "../src/db";
 import { getRun, activeRunForConversation } from "../src/runner/runner";
 import { createWorkspace, deleteWorkspace, updateWorkspace } from "../src/services/workspaces";
 import { workingDirectoryProblem } from "../src/services/folders";
 import {
+  archiveTasks,
   checkPullRequests,
   checkoutDir,
   createTask,
@@ -23,6 +24,7 @@ import {
   stopTasks,
   updateTask,
 } from "../src/tasks/service";
+import { getFollowup, scheduleFollowup } from "../src/services/followups";
 import { __setGhForTests, compareUrl, openPullRequest, repoCacheDir } from "../src/tasks/git";
 import { HttpError } from "../src/util";
 import { rememberSecret } from "../src/vault/vault";
@@ -190,6 +192,126 @@ describe("agents work on tasks", () => {
     expect(getTask(t.id).status).toBe("blocked");
     expect(getTask(t.id).blockedReason).toContain("Interrupted");
     await settled(queued.id, ["in_review"]);
+  });
+});
+
+describe("archive", () => {
+  test("archived tasks leave the board with their status and come back on top of their column", () => {
+    const a = createTask({ workspaceId, title: "Shipped", status: "done" });
+    const b = createTask({ workspaceId, title: "Also shipped", status: "done" });
+    const archived = updateTask(a.id, { archived: true });
+    expect(archived.archivedAt).not.toBeNull();
+    expect(archived.status).toBe("done");
+    expect(listTasks({ workspaceId }).some((t) => t.id === a.id)).toBe(false);
+    expect(listTasks({ workspaceId, archived: true }).map((t) => t.id)).toContain(a.id);
+    expect(listTasks({ archived: true }).every((t) => t.archivedAt)).toBe(true);
+    expect(updateTask(a.id, { title: "Shipped!" }).archivedAt).not.toBeNull();
+
+    const back = updateTask(a.id, { archived: false });
+    expect(back.archivedAt).toBeNull();
+    expect(back.position).toBeLessThan(getTask(b.id).position);
+  });
+
+  test("moving an archived task brings it back on top of its new column", () => {
+    createTask({ workspaceId, title: "Already parked", status: "backlog" });
+    const t = createTask({ workspaceId, title: "Reopen me", status: "cancelled" });
+    updateTask(t.id, { archived: true });
+    const moved = updateTask(t.id, { status: "backlog" });
+    expect(moved.archivedAt).toBeNull();
+    expect(moved.status).toBe("backlog");
+    expect(listTasks({ workspaceId }).find((x) => x.status === "backlog")?.id).toBe(t.id);
+    expect(updateTask(t.id, { status: "done", archived: true }).archivedAt).not.toBeNull();
+  });
+
+  test("restoring a whole column keeps its order", () => {
+    const ids = ["Order A", "Order B", "Order C"].map((title) => createTask({ workspaceId: otherWorkspaceId, title, status: "done" }).id);
+    archiveTasks(ids, true);
+    expect(listTasks({ workspaceId: otherWorkspaceId }).some((t) => ids.includes(t.id))).toBe(false);
+    expect(archiveTasks(ids, false).map((t) => t.id)).toEqual(ids);
+    const column = listTasks({ workspaceId: otherWorkspaceId }).filter((t) => ids.includes(t.id));
+    expect(column.map((t) => t.id)).toEqual(ids);
+  });
+
+  test("archiving a working task stops its agent and parks it in the backlog", async () => {
+    const task = createTask({ workspaceId, title: "SLEEP forever", agentId: wsAgent.id });
+    await until(() => getTask(task.id).runStatus === "running", 10_000, "run to start");
+    expect(updateTask(task.id, { archived: true }).status).toBe("backlog");
+    await until(() => getTask(task.id).runStatus === "cancelled", 10_000, "run to be cancelled");
+    expect(getTask(task.id).status).toBe("backlog");
+    expect(getTask(task.id).archivedAt).not.toBeNull();
+  });
+
+  test("archiving while a restart waits for the old run keeps the task from starting", async () => {
+    const task = createTask({ workspaceId, title: "SLEEP forever", agentId: wsAgent.id });
+    await until(() => getTask(task.id).runStatus === "running", 10_000, "run to start");
+    const firstRun = getTask(task.id).runId;
+    updateTask(task.id, { status: "todo" });
+    updateTask(task.id, { archived: true });
+    await until(() => getTask(task.id).runStatus === "cancelled", 10_000, "old run to be cancelled");
+    await Bun.sleep(150);
+    const t = getTask(task.id);
+    expect(t.runId).toBe(firstRun);
+    expect(t.status).toBe("todo");
+    expect(t.archivedAt).not.toBeNull();
+    expect(t.activity).toBeNull();
+  });
+
+  test("archiving cancels the follow-up the agent scheduled", async () => {
+    const task = createTask({ workspaceId, title: "Hello, check back later", agentId: wsAgent.id });
+    await settled(task.id, ["in_review"]);
+    const conversationId = getTask(task.id).conversationId!;
+    scheduleFollowup({ conversationId, agentId: wsAgent.id, dueAt: new Date(Date.now() + 3_600_000), note: "Check the CI run" });
+    expect(getFollowup(conversationId)).not.toBeNull();
+    updateTask(task.id, { archived: true });
+    expect(getFollowup(conversationId)).toBeNull();
+  });
+
+  test("archived tasks never start, not even after a restart; restoring a queued one starts it", async () => {
+    const task = createTask({ workspaceId, title: "Say hello later", status: "todo" });
+    updateTask(task.id, { archived: true });
+    updateTask(task.id, { agentId: wsAgent.id });
+    stopTasks();
+    startTasks();
+    await Bun.sleep(150);
+    expect(getTask(task.id).conversationId).toBeNull();
+    expect(getTask(task.id).status).toBe("todo");
+
+    updateTask(task.id, { archived: false });
+    await settled(task.id, ["in_review"]);
+  });
+
+  test("a follow-up brings an archived task back to work", async () => {
+    const task = createTask({ workspaceId, title: "Hello archive", agentId: wsAgent.id });
+    await settled(task.id, ["in_review"]);
+    updateTask(task.id, { status: "done", archived: true });
+    const before = getTask(task.id).runId;
+    await sendTaskMessage(task.id, "One more thing");
+    await until(() => getTask(task.id).runId !== before, 5_000, "follow-up run");
+    await settled(task.id, ["in_review"]);
+    expect(getTask(task.id).archivedAt).toBeNull();
+  });
+
+  test("a whole column is archived in one request; archived tasks are listed apart", async () => {
+    const { createApp } = await import("../src/server/app");
+    const { getAccessToken } = await import("../src/server/auth");
+    const app = createApp();
+    const headers = { authorization: `Bearer ${getAccessToken()}`, "content-type": "application/json" };
+    const ids = [createTask({ title: "Global done 1", status: "done" }).id, createTask({ title: "Global done 2", status: "done" }).id];
+    const res = await app.request("http://127.0.0.1/api/tasks/archive", { method: "POST", headers, body: JSON.stringify({ ids }) });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as Task[]).every((t) => t.archivedAt)).toBe(true);
+
+    const list = async (query: string) => ((await (await app.request(`http://127.0.0.1/api/tasks?${query}`, { headers })).json()) as Task[]).map((t) => t.id);
+    expect((await list("workspaceId=global")).some((id) => ids.includes(id))).toBe(false);
+    expect(await list("workspaceId=global&archived=1")).toEqual(expect.arrayContaining(ids));
+
+    const unknown = await app.request("http://127.0.0.1/api/tasks/archive", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ids: [ids[0], "tsk_missing"], archived: false }),
+    });
+    expect(unknown.status).toBe(404);
+    expect(getTask(ids[0]!).archivedAt).not.toBeNull();
   });
 });
 
@@ -777,6 +899,81 @@ describe("attachments", () => {
     await deleteTask(copy.id);
     expect(existsSync(fileOf(kept.id, "kept.png"))).toBe(false);
     expect(get("SELECT id FROM task_attachments WHERE id = ?", kept.id)).toBeNull();
+  });
+
+  test("screenshots the agent names in its result are kept with the task and shown", async () => {
+    const { readTaskAttachment } = await import("../src/tasks/attachments");
+    const dir = mkdtempSync(join(tmpdir(), "godmode-shots-"));
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+    writeFileSync(join(dir, "light.png"), png);
+    writeFileSync(join(dir, "dark mode.png"), jpeg);
+    writeFileSync(join(dir, "notes.txt"), "notes");
+    writeFileSync(join(dir, "fake.png"), "not a picture");
+    const task = createTask({ title: `Make the header yellow TASK_SHOTS:${dir}`, agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+
+    const pictures = () => all<{ id: string; name: string; mime: string }>("SELECT id, name, mime FROM task_attachments WHERE task_id = ? ORDER BY name", task.id);
+    const [dark, light] = pictures();
+    expect(pictures().map((p) => [p.name, p.mime])).toEqual([
+      ["dark mode.png", "image/jpeg"],
+      ["light.png", "image/png"],
+    ]);
+    const url = (p: { id: string; name: string }) => taskAttachmentUrl(p.id, p.name);
+    const summary = getTask(task.id).summary!;
+    expect(summary).toContain(`- ![light.png](${url(light!)})`);
+    expect(summary).toContain(`- ![Dark mode](${url(dark!)})`);
+    expect(summary).toContain(`- Again: ![light.png](${url(light!)}).`);
+    expect(summary).toContain(`- ![The same](${url(light!)})`);
+    expect(summary).toContain(`- Not shown: \`${dir}/notes.txt\`, \`${dir}/missing.png\`, \`${dir}/fake.png\`, [online](https://example.com/shot.png)`);
+    expect(summary).toContain(`\`\`\`sh\nopen ${dir}/light.png\n\`\`\``);
+    expect(readTaskAttachment(light!.id).data).toEqual(Buffer.from(png));
+
+    // A new result brings its own copies; the earlier ones go.
+    rmSync(join(dir, "dark mode.png"));
+    await sendTaskMessage(task.id, `TASK_SHOTS:${dir}`);
+    await until(() => !getTask(task.id).summary!.includes(light!.id), 10_000, "the new result");
+    await settled(task.id, ["in_review"]);
+    expect(pictures().map((p) => p.name)).toEqual(["light.png"]);
+    expect(getTask(task.id).summary).toContain(`- ![light.png](${url(pictures()[0]!)})`);
+    expect(getTask(task.id).summary).toContain(`- ![Dark mode](<${dir}/dark mode.png>)`);
+    expect(existsSync(join(env.dataDir, "attachments", "tasks", light!.id))).toBe(false);
+
+    // A picture the human copied into the description outlives the result it came from.
+    const kept = pictures()[0]!;
+    updateTask(task.id, { description: `Like this: ![light](${url(kept)})` });
+    await sendTaskMessage(task.id, "Thanks");
+    await until(() => !getTask(task.id).summary!.includes(kept.id), 10_000, "a result without pictures");
+    await settled(task.id, ["in_review"]);
+    expect(readTaskAttachment(kept.id).data).toEqual(Buffer.from(png));
+
+    await deleteTask(task.id);
+    expect(get("SELECT id FROM task_attachments WHERE task_id = ?", task.id)).toBeNull();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("only pictures in the agent's folders are taken, and the Markdown around them stays intact", async () => {
+    const { symlinkSync } = await import("node:fs");
+    const { withResultImages } = await import("../src/tasks/attachments");
+    const inside = mkdtempSync(join(tmpdir(), "godmode-inside-"));
+    const outside = mkdtempSync(join(tmpdir(), "godmode-outside-"));
+    writeFileSync(join(inside, "a.png"), png);
+    writeFileSync(join(outside, "b.png"), png);
+    symlinkSync(join(outside, "b.png"), join(inside, "link.png"));
+    const task = createTask({ title: "Pictures", status: "backlog" });
+    const result = [
+      `\`${outside}/b.png\` \`${inside}/link.png\` \`${inside}/../${outside.split("/").pop()}/b.png\``,
+      "`\\\\host\\share\\c.png` //host/share/c.png",
+      "```inline``` stays code",
+      `![titled](${inside}/a.png 'A title') and [![shot](${inside}/a.png)](${inside}/a.png)`,
+    ].join("\n");
+    const out = withResultImages(task.id, result, [inside]);
+    const [a] = all<{ id: string; name: string }>("SELECT id, name FROM task_attachments WHERE task_id = ?", task.id);
+    const lines = out.split("\n");
+    expect(lines.slice(0, 3)).toEqual(result.split("\n").slice(0, 3));
+    expect(lines[3]).toBe(`![titled](${taskAttachmentUrl(a!.id, "a.png")}) and ![a.png](${taskAttachmentUrl(a!.id, "a.png")})`);
+    await deleteTask(task.id);
+    rmSync(inside, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   });
 
   test("follow-ups carry files like chat messages", async () => {
