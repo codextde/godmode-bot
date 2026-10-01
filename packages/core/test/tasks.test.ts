@@ -16,11 +16,13 @@ import {
   deleteTask,
   getTask,
   listTasks,
+  archiveTasks,
   sendTaskMessage,
   startTasks,
   stopTasks,
   updateTask,
 } from "../src/tasks/service";
+import { getFollowup, scheduleFollowup } from "../src/services/followups";
 import { __setGhForTests, compareUrl, hostedRepo, openPullRequest, repoCacheDir } from "../src/tasks/git";
 import { HttpError } from "../src/util";
 import { rememberSecret } from "../src/vault/vault";
@@ -188,6 +190,126 @@ describe("agents work on tasks", () => {
     expect(getTask(t.id).status).toBe("blocked");
     expect(getTask(t.id).blockedReason).toContain("Interrupted");
     await settled(queued.id, ["in_review"]);
+  });
+});
+
+describe("archive", () => {
+  test("archived tasks leave the board with their status and come back on top of their column", () => {
+    const a = createTask({ workspaceId, title: "Shipped", status: "done" });
+    const b = createTask({ workspaceId, title: "Also shipped", status: "done" });
+    const archived = updateTask(a.id, { archived: true });
+    expect(archived.archivedAt).not.toBeNull();
+    expect(archived.status).toBe("done");
+    expect(listTasks({ workspaceId }).some((t) => t.id === a.id)).toBe(false);
+    expect(listTasks({ workspaceId, archived: true }).map((t) => t.id)).toContain(a.id);
+    expect(listTasks({ archived: true }).every((t) => t.archivedAt)).toBe(true);
+    expect(updateTask(a.id, { title: "Shipped!" }).archivedAt).not.toBeNull();
+
+    const back = updateTask(a.id, { archived: false });
+    expect(back.archivedAt).toBeNull();
+    expect(back.position).toBeLessThan(getTask(b.id).position);
+  });
+
+  test("moving an archived task brings it back on top of its new column", () => {
+    createTask({ workspaceId, title: "Already parked", status: "backlog" });
+    const t = createTask({ workspaceId, title: "Reopen me", status: "cancelled" });
+    updateTask(t.id, { archived: true });
+    const moved = updateTask(t.id, { status: "backlog" });
+    expect(moved.archivedAt).toBeNull();
+    expect(moved.status).toBe("backlog");
+    expect(listTasks({ workspaceId }).find((x) => x.status === "backlog")?.id).toBe(t.id);
+    expect(updateTask(t.id, { status: "done", archived: true }).archivedAt).not.toBeNull();
+  });
+
+  test("restoring a whole column keeps its order", () => {
+    const ids = ["Order A", "Order B", "Order C"].map((title) => createTask({ workspaceId: otherWorkspaceId, title, status: "done" }).id);
+    archiveTasks(ids, true);
+    expect(listTasks({ workspaceId: otherWorkspaceId }).some((t) => ids.includes(t.id))).toBe(false);
+    expect(archiveTasks(ids, false).map((t) => t.id)).toEqual(ids);
+    const column = listTasks({ workspaceId: otherWorkspaceId }).filter((t) => ids.includes(t.id));
+    expect(column.map((t) => t.id)).toEqual(ids);
+  });
+
+  test("archiving a working task stops its agent and parks it in the backlog", async () => {
+    const task = createTask({ workspaceId, title: "SLEEP forever", agentId: wsAgent.id });
+    await until(() => getTask(task.id).runStatus === "running", 10_000, "run to start");
+    expect(updateTask(task.id, { archived: true }).status).toBe("backlog");
+    await until(() => getTask(task.id).runStatus === "cancelled", 10_000, "run to be cancelled");
+    expect(getTask(task.id).status).toBe("backlog");
+    expect(getTask(task.id).archivedAt).not.toBeNull();
+  });
+
+  test("archiving while a restart waits for the old run keeps the task from starting", async () => {
+    const task = createTask({ workspaceId, title: "SLEEP forever", agentId: wsAgent.id });
+    await until(() => getTask(task.id).runStatus === "running", 10_000, "run to start");
+    const firstRun = getTask(task.id).runId;
+    updateTask(task.id, { status: "todo" });
+    updateTask(task.id, { archived: true });
+    await until(() => getTask(task.id).runStatus === "cancelled", 10_000, "old run to be cancelled");
+    await Bun.sleep(150);
+    const t = getTask(task.id);
+    expect(t.runId).toBe(firstRun);
+    expect(t.status).toBe("todo");
+    expect(t.archivedAt).not.toBeNull();
+    expect(t.activity).toBeNull();
+  });
+
+  test("archiving cancels the follow-up the agent scheduled", async () => {
+    const task = createTask({ workspaceId, title: "Hello, check back later", agentId: wsAgent.id });
+    await settled(task.id, ["in_review"]);
+    const conversationId = getTask(task.id).conversationId!;
+    scheduleFollowup({ conversationId, agentId: wsAgent.id, dueAt: new Date(Date.now() + 3_600_000), note: "Check the CI run" });
+    expect(getFollowup(conversationId)).not.toBeNull();
+    updateTask(task.id, { archived: true });
+    expect(getFollowup(conversationId)).toBeNull();
+  });
+
+  test("archived tasks never start, not even after a restart; restoring a queued one starts it", async () => {
+    const task = createTask({ workspaceId, title: "Say hello later", status: "todo" });
+    updateTask(task.id, { archived: true });
+    updateTask(task.id, { agentId: wsAgent.id });
+    stopTasks();
+    startTasks();
+    await Bun.sleep(150);
+    expect(getTask(task.id).conversationId).toBeNull();
+    expect(getTask(task.id).status).toBe("todo");
+
+    updateTask(task.id, { archived: false });
+    await settled(task.id, ["in_review"]);
+  });
+
+  test("a follow-up brings an archived task back to work", async () => {
+    const task = createTask({ workspaceId, title: "Hello archive", agentId: wsAgent.id });
+    await settled(task.id, ["in_review"]);
+    updateTask(task.id, { status: "done", archived: true });
+    const before = getTask(task.id).runId;
+    await sendTaskMessage(task.id, "One more thing");
+    await until(() => getTask(task.id).runId !== before, 5_000, "follow-up run");
+    await settled(task.id, ["in_review"]);
+    expect(getTask(task.id).archivedAt).toBeNull();
+  });
+
+  test("a whole column is archived in one request; archived tasks are listed apart", async () => {
+    const { createApp } = await import("../src/server/app");
+    const { getAccessToken } = await import("../src/server/auth");
+    const app = createApp();
+    const headers = { authorization: `Bearer ${getAccessToken()}`, "content-type": "application/json" };
+    const ids = [createTask({ title: "Global done 1", status: "done" }).id, createTask({ title: "Global done 2", status: "done" }).id];
+    const res = await app.request("http://127.0.0.1/api/tasks/archive", { method: "POST", headers, body: JSON.stringify({ ids }) });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as Task[]).every((t) => t.archivedAt)).toBe(true);
+
+    const list = async (query: string) => ((await (await app.request(`http://127.0.0.1/api/tasks?${query}`, { headers })).json()) as Task[]).map((t) => t.id);
+    expect((await list("workspaceId=global")).some((id) => ids.includes(id))).toBe(false);
+    expect(await list("workspaceId=global&archived=1")).toEqual(expect.arrayContaining(ids));
+
+    const unknown = await app.request("http://127.0.0.1/api/tasks/archive", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ids: [ids[0], "tsk_missing"], archived: false }),
+    });
+    expect(unknown.status).toBe(404);
+    expect(getTask(ids[0]!).archivedAt).not.toBeNull();
   });
 });
 

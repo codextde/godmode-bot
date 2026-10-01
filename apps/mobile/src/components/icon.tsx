@@ -58,6 +58,8 @@ const ICONS = {
   tasks: ["checklist", "checklist"],
   branch: ["arrow.triangle.branch", "merge"],
   external: ["arrow.up.right", "open_in_new"],
+  archive: ["archivebox", "archive"],
+  unarchive: ["arrow.uturn.backward", "unarchive"],
 } as const satisfies Record<string, readonly [SFSymbol, AndroidSymbol]>;
 
 export type IconName = keyof typeof ICONS;

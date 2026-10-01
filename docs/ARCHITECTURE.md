@@ -519,6 +519,12 @@ agent, or getting one while in it, starts that agent), `in_progress`, `in_review
 neighbours; a column is re-spaced when they get too close). A task may only be assigned to an agent of its workspace or
 a global one. Every change is pushed as `task.updated` / `task.deleted` and patched into the UI's cached lists.
 
+* **Archive** (`archived_at`, `TaskPatch.archived`, `POST /api/tasks/archive` for a whole column): archived tasks are
+  off the board (`GET /api/tasks` lists them only with `archived=1`, latest first) and keep their status, worktree,
+  branch and conversation. They never start — `dispatch` and the restart skip them — and archiving a working task stops
+  its run and parks it in `backlog`. Moving an archived task to another status, or a follow-up run in its conversation,
+  brings it back; restoring it puts it on top of its column (and starts it when it waits in `todo` with an agent).
+
 * **Starting** (`dispatch`): an active run of the task is cancelled first (restart), the task moves to `in_progress`,
   and the agent gets the task in its conversation (`origin = 'task'`, created archived so it stays off the chat list;
   reused while the agent and folder stay the same) as a `trigger = "task"` run. The prompt carries the title,

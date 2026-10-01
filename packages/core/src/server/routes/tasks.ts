@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { MAX_TASK_ATTACHMENT_BYTES, MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES } from "@godmode/shared";
-import { createTask, deleteTask, getTask, listTasks, sendTaskMessage, updateTask } from "../../tasks/service";
+import { archiveTasks, createTask, deleteTask, getTask, listTasks, sendTaskMessage, updateTask } from "../../tasks/service";
 import { readTaskAttachment, saveTaskAttachment } from "../../tasks/attachments";
 import { HttpError, badRequest } from "../../util";
 import { body, z } from "../validate";
@@ -50,7 +50,10 @@ const patchSchema = z.object({
   repoUrl: z.string().max(1000).optional(),
   repoPath: z.string().max(4096).optional(),
   baseBranch: z.string().max(200).optional(),
+  archived: z.boolean().optional(),
 });
+
+const archiveSchema = z.object({ ids: z.array(id).min(1).max(1000), archived: z.boolean().default(true) });
 
 const attachmentSchema = z.object({
   name: z.string().min(1).max(255),
@@ -59,7 +62,14 @@ const attachmentSchema = z.object({
 });
 
 export function registerTaskRoutes(app: Hono): void {
-  app.get("/api/tasks", (c) => c.json(listTasks({ workspaceId: c.req.query("workspaceId") || "all" })));
+  app.get("/api/tasks", (c) =>
+    c.json(listTasks({ workspaceId: c.req.query("workspaceId") || "all", archived: ["1", "true"].includes(c.req.query("archived") ?? "") })),
+  );
+
+  app.post("/api/tasks/archive", async (c) => {
+    const { ids, archived } = await body(c, archiveSchema);
+    return c.json(archiveTasks(ids, archived));
+  });
 
   // Files for task descriptions: uploaded first, then linked from the Markdown.
   app.post("/api/tasks/attachments", async (c) => {
