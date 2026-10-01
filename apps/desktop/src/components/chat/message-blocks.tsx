@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Credential, MessageBlock } from "@godmode/shared";
 import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, Info, Lock, ShieldAlert, SquareSlash, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AgentAvatar } from "@/components/common";
 import { ThinkingState } from "@/components/aicss/ThinkingState";
 import { ThinkingReasoning } from "@/components/aicss/ThinkingReasoning";
@@ -18,6 +17,7 @@ import { useAllAgents } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./markdown";
 import { CopyButton } from "./copy-button";
+import { Lightbox } from "./lightbox";
 import { describeTool, formatToolInput, hostOf, todoItems, type ToolContext, type ToolKind, type ToolMeta } from "./tool-meta";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
@@ -513,12 +513,7 @@ function Screenshot({ image, alt }: { image: string; alt: string }) {
       >
         <img src={src} alt={alt} loading="lazy" className="max-h-56 w-auto max-w-full object-contain object-top" />
       </button>
-      <Dialog open={zoom} onOpenChange={setZoom}>
-        <DialogContent className="max-w-[min(92vw,1200px)] p-2 sm:max-w-[min(92vw,1200px)]">
-          <DialogTitle className="sr-only">{alt}</DialogTitle>
-          <img src={src} alt={alt} className="max-h-[85vh] w-full rounded-lg object-contain" />
-        </DialogContent>
-      </Dialog>
+      <Lightbox src={src} alt={alt} open={zoom} onOpenChange={setZoom} />
     </>
   );
 }

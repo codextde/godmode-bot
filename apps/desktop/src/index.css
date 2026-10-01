@@ -526,6 +526,15 @@
 .prose-chat li > p {
   @apply m-0;
 }
+.prose-chat ul.gm-gallery {
+  @apply flex list-none flex-wrap items-start gap-3 pl-0;
+}
+.prose-chat ul.gm-gallery > li {
+  @apply m-0 max-w-full;
+}
+.prose-chat ul.gm-gallery img {
+  @apply max-h-72;
+}
 
 /* Rich text editor (task descriptions): reads like the rendered Markdown above */
 .gm-editor {

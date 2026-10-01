@@ -2,14 +2,18 @@
  * Files added to task descriptions (screenshots, PDFs, specs…), as in Multica or Linear: the board uploads a file, gets
  * its url and puts it into the description's Markdown. When the agent starts, every file the description links is
  * copied into the agent's repository (next to chat uploads) and the prompt points at those copies, so Claude Code reads
- * them — images and PDFs included.
+ * them — images and PDFs included. The other way round, screenshots the agent names in its result become files of the
+ * task too, so the board shows them.
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { extname, join } from "node:path";
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, extname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Agent, Attachment, TaskAttachment } from "@godmode/shared";
-import { MAX_TASK_ATTACHMENT_BYTES, TASK_ATTACHMENT_URL, taskAttachmentIds, taskAttachmentUrl } from "@godmode/shared";
+import { MAX_TASK_ATTACHMENT_BYTES, TASK_ATTACHMENT_URL, taskAttachmentIds, taskAttachmentMarkdown, taskAttachmentUrl } from "@godmode/shared";
 import { config } from "../config";
 import { all, get, insert, run as sql } from "../db";
+import { realRoots, sniffType, within } from "../integrations/apiToolRequest";
 import { logger } from "../log";
 import { badRequest, newId, notFound, now } from "../util";
 import { safeFileName } from "../services/conversations";
@@ -40,12 +44,12 @@ function filePath(r: Pick<AttachmentRow, "id" | "name">): string {
   return join(dir(r.id), r.name);
 }
 
-export function saveTaskAttachment(file: { name: string; mime: string; data: Uint8Array }): TaskAttachment {
+export function saveTaskAttachment(file: { name: string; mime: string; data: Uint8Array }, taskId: string | null = null): TaskAttachment {
   if (file.data.byteLength === 0) throw badRequest("The file is empty");
   if (file.data.byteLength > MAX_TASK_ATTACHMENT_BYTES) throw badRequest(`File too large (max ${MAX_TASK_ATTACHMENT_BYTES / 1024 / 1024} MB)`);
   const row: AttachmentRow = {
     id: newId("tat"),
-    task_id: null,
+    task_id: taskId,
     name: safeFileName(file.name),
     mime: (file.mime || "application/octet-stream").slice(0, 255),
     size: file.data.byteLength,
@@ -181,4 +185,143 @@ export function withLocalPaths(description: string, paths: Map<string, string>):
     // Markdown link targets can't hold spaces: <…> can.
     return path ? (/[\s()]/.test(path) ? `<${path}>` : path) : url;
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* Pictures in the agent's result                                      */
+/* ------------------------------------------------------------------ */
+
+/** Images the board can show; other files stay paths. */
+const SHOWN_IMAGE = /^image\/(png|jpeg|gif|webp|avif|bmp)$/;
+const MAX_RESULT_IMAGES = 20;
+
+const LOCAL_START = String.raw`(?:file:\/\/|~)?(?:[A-Za-z]:)?[\\/]`;
+const IMAGE_EXT = String.raw`\.(?:png|jpe?g|gif|webp|avif|bmp)`;
+const LOCAL_IMAGE = new RegExp(String.raw`^${LOCAL_START}[^\n]*${IMAGE_EXT}$`, "i");
+
+/**
+ * Where a result names a file: a Markdown link or image (groups 1–3: `!`, label, target), inline code (4–5: backticks,
+ * code) or a bare path (6). Links and code match whole, so a path inside them is never taken on its own.
+ */
+const RESULT_REF = new RegExp(
+  [
+    String.raw`(!?)\[((?:\\.|\[[^\]\n]*\]|[^[\]\\\n])*)\]\(\s*(<[^>\n]+>|[^\s)]+)(?:\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?\s*\)`,
+    String.raw`(\`+)([^\`\n]+?)\4(?!\`)`,
+    String.raw`(?<![^\s(])(?<!\]\()(${LOCAL_START}[^\s()<>\`"']*?${IMAGE_EXT})(?=[.,;:!?)]*(?:\s|$))`,
+  ].join("|"),
+  "gi",
+);
+
+/**
+ * The image file an absolute path, `~/…` or file:// url names, when it lies in one of the folders — also once its links
+ * are resolved. Nothing else is touched: no file elsewhere, no network path.
+ */
+function localImage(ref: string, folders: string[], realFolders: string[]): { named: string; real: string } | null {
+  let path = ref.trim().replace(/^<(.*)>$/, "$1");
+  if (!LOCAL_IMAGE.test(path)) return null;
+  if (/^file:/i.test(path)) {
+    try {
+      path = fileURLToPath(path);
+    } catch {
+      return null;
+    }
+  } else if (path.startsWith("~")) path = join(homedir(), path.slice(2));
+  if (!isAbsolute(path) || /^[\\/]{2}/.test(path) || !within(resolve(path), folders)) return null;
+  try {
+    const real = realpathSync(path);
+    return within(real, realFolders) ? { named: path, real } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The file, if it really is an image the board can show (its first bytes say so). */
+function readImage(path: string, name: string): { name: string; mime: string; data: Buffer } | null {
+  let fd: number | null = null;
+  try {
+    const stat = statSync(path);
+    if (!stat.isFile() || stat.size === 0 || stat.size > MAX_TASK_ATTACHMENT_BYTES) return null;
+    fd = openSync(path, "r");
+    const head = Buffer.alloc(32);
+    const mime = sniffType(head.subarray(0, readSync(fd, head, 0, head.length, 0)));
+    return mime && SHOWN_IMAGE.test(mime) ? { name, mime, data: readFileSync(fd) } : null;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) closeSync(fd);
+  }
+}
+
+/** `edit` applied to every line outside fenced code blocks. */
+function outsideFences(markdown: string, edit: (line: string) => string): string {
+  let fence: string | null = null;
+  return markdown
+    .split(/(?<=\n)/)
+    .map((line) => {
+      const [, marker, rest = ""] = /^\s*(`{3,}|~{3,})(.*)/.exec(line) ?? [];
+      if (fence) {
+        if (marker && marker[0] === fence[0] && marker.length >= fence.length && !rest.trim()) fence = null;
+        return line;
+      }
+      // ```code``` within a line is inline code, not a fence.
+      if (!marker || (marker[0] === "`" && rest.includes("`"))) return edit(line);
+      fence = marker;
+      return line;
+    })
+    .join("");
+}
+
+/**
+ * The agent's result with the pictures it names by their path in its folders (the screenshots it took) shown: each is
+ * copied into the task's files — the board can't open local paths, and temporary files may be gone by the time someone
+ * looks — and the Markdown shows that copy. Other files, missing ones and code blocks stay as they are.
+ */
+export function withResultImages(taskId: string, result: string, folders: string[]): string {
+  const roots = folders.map((f) => resolve(f));
+  const realRootsOf = realRoots(roots);
+  const saved = new Map<string, TaskAttachment | null>();
+  let left = MAX_RESULT_IMAGES;
+  const save = (ref: string): TaskAttachment | null => {
+    const file = localImage(ref, roots, realRootsOf);
+    if (!file) return null;
+    if (!saved.has(file.real) && left > 0) {
+      left--;
+      const image = readImage(file.real, basename(file.named));
+      let attachment: TaskAttachment | null = null;
+      try {
+        if (image) attachment = saveTaskAttachment(image, taskId);
+      } catch (err) {
+        log.warn(`could not keep the picture ${file.real} of task ${taskId}`, err);
+      }
+      saved.set(file.real, attachment);
+    }
+    return saved.get(file.real) ?? null;
+  };
+  return outsideFences(result, (line) =>
+    line.replace(RESULT_REF, (ref, _bang, label: string | undefined, target: string | undefined, _ticks, code: string | undefined, bare: string | undefined) => {
+      if (target !== undefined) {
+        const image = save(target);
+        if (!image) return ref;
+        const own = label?.trim() && label.trim() !== target.trim() && !label.includes("](");
+        return own ? `![${label}](${image.url})` : taskAttachmentMarkdown(image);
+      }
+      const image = save(code ?? bare ?? "");
+      return image ? taskAttachmentMarkdown(image) : ref;
+    }),
+  );
+}
+
+/** Pictures an earlier result showed that the new one doesn't: they go, unless a description links them. */
+export function removeStaleResultImages(taskId: string, previous: string | null, current: string | null): void {
+  const kept = new Set(taskAttachmentIds(current ?? ""));
+  const stale = taskAttachmentIds(previous ?? "").filter((id) => !kept.has(id));
+  if (!stale.length) return;
+  remove(
+    all<AttachmentRow>(
+      `SELECT * FROM task_attachments a WHERE task_id = ? AND id IN (${stale.map(() => "?").join(",")})
+        AND NOT EXISTS (SELECT 1 FROM tasks WHERE instr(description, '/' || a.id || '/') > 0)`,
+      taskId,
+      ...stale,
+    ),
+  );
 }
