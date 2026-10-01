@@ -3,9 +3,9 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
-import { AlignLeft, Archive, ArchiveRestore, ArrowUpRight, ChevronRight, EllipsisVertical, GitBranch, MessagesSquare, OctagonAlert, Paperclip, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
+import { AlignLeft, Archive, ArchiveRestore, ArrowUpRight, ChevronRight, EllipsisVertical, GitBranch, GitPullRequestCreateArrow, MessagesSquare, OctagonAlert, Paperclip, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
 import type { Agent, Task, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
-import { MAX_TASK_TITLE_LENGTH } from "@godmode/shared";
+import { MAX_TASK_TITLE_LENGTH, githubBranchUrl } from "@godmode/shared";
 import { WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CopyButton } from "@/components/vault/copy-button";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { AttachmentChip, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, formatBytes, readAttachment, type PendingAttachment } from "@/components/chat/attachments";
 import { api } from "@/lib/api";
-import { modKey } from "@/lib/desktop";
+import { modKey, openExternal } from "@/lib/desktop";
 import { draftKeys, saveDraft, useDraft } from "@/lib/drafts";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -123,6 +124,7 @@ function TaskDetail({
   const reachable = agentsInReach(agents, task.workspaceId, task.agentId);
   const started = !!task.conversationId;
   const defaultRepo = workspaceRepos(workspace)[0];
+  const github = task.branch ? githubBranchUrl(task.repoUrl, task.branch) : null;
 
   const put = (next: (t: Task) => Task) =>
     qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((x) => (x.id === task.id ? next(x) : x)));
@@ -258,6 +260,7 @@ function TaskDetail({
                       <span className="truncate">{task.branch}</span>
                       <span className="shrink-0 text-muted-foreground">→ {task.baseBranch}</span>
                       <CopyButton value={task.branch} label="Copy branch name" size="icon-xs" />
+                      {github && <GitHubActions task={task} branchUrl={github} />}
                     </span>
                   ) : (
                     <BlurInput
@@ -311,6 +314,83 @@ function Prop({ label, children }: { label: string; children: ReactNode }) {
       <dt className="text-muted-foreground">{label}</dt>
       <dd className="min-w-0">{children}</dd>
     </>
+  );
+}
+
+/** The branch on GitHub, and a pull request for it. Godmode pushes the branch first when it hasn't yet. */
+function GitHubActions({ task, branchUrl }: { task: Task; branchUrl: string }) {
+  const qc = useQueryClient();
+  const put = (t: Task) => qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((x) => (x.id === t.id ? t : x)));
+  const push = useMutation({
+    mutationFn: () => api.tasks.push(task.id),
+    onSuccess: (t) => {
+      put(t);
+      void openExternal(branchUrl);
+    },
+    onError: (e) => toastApiError(e, "Couldn't push the branch", qc),
+  });
+  const create = useMutation({
+    mutationFn: () => api.tasks.openPullRequest(task.id),
+    onSuccess: (t) => {
+      put(t);
+      const pr = t.pullRequest;
+      if (pr?.number && pr.state === "open") toast.success(`Pull request #${pr.number} is open`, { action: { label: "View", onClick: () => void openExternal(pr.url) } });
+      else if (pr && !pr.number) void openExternal(pr.url);
+    },
+    onError: (e) => toastApiError(e, "Couldn't create the pull request", qc),
+  });
+  const pending = push.isPending || create.isPending;
+  const idle = pending || (task.status !== "in_progress" && !task.activity);
+  const pr = task.pullRequest;
+  const icon = "text-muted-foreground hover:text-foreground";
+
+  return (
+    <>
+      {pr?.state === "merged" ? null : task.branchPushed ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-xs" className={icon} asChild>
+              <a href={branchUrl} target="_blank" rel="noreferrer" aria-label="Open the branch on GitHub">
+                <GitHubMark />
+              </a>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Open on GitHub</TooltipContent>
+        </Tooltip>
+      ) : (
+        idle && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon-xs" className={icon} aria-label="Push the branch and open it on GitHub" disabled={pending} onClick={() => push.mutate()}>
+                {push.isPending ? <Spinner className="size-3" /> : <GitHubMark />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Push to GitHub and open</TooltipContent>
+          </Tooltip>
+        )
+      )}
+      {idle && (!pr || pr.state === "closed") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="outline" size="xs" className="ml-auto shrink-0 font-sans" disabled={pending} onClick={() => create.mutate()}>
+              {create.isPending ? <Spinner className="size-3" /> : <GitPullRequestCreateArrow />}
+              {create.isPending ? "Creating…" : "Create PR"}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Push {task.branchPushed ? "the latest changes" : "the branch"} and open a pull request into {task.baseBranch}
+          </TooltipContent>
+        </Tooltip>
+      )}
+    </>
+  );
+}
+
+function GitHubMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden className={className}>
+      <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
+    </svg>
   );
 }
 

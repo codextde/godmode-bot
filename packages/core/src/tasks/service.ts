@@ -7,7 +7,8 @@
  * agent works in the task's conversation (origin "task", archived so it stays off the chat list). Every run in that
  * conversation — the first one and the human's follow-ups — moves the task along when it ends: In review when it
  * succeeded (coding: after pushing the branch and opening the pull request), Blocked when it failed, was stopped, or
- * the agent reported it can't go on. Merged pull requests move their task to Done.
+ * the agent reported it can't go on. Merged pull requests move their task to Done. Any task's branch can also be pushed,
+ * and its pull request opened, from the board.
  *
  * Archived tasks are off the board and never start (a working one is stopped and parked first); moving one, or a
  * follow-up in its conversation, brings it back.
@@ -24,7 +25,7 @@ import { config } from "../config";
 import { all, get, getMeta, insert, run as sql, setMeta, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
-import { badRequest, conflict, newId, notFound, now, slugify } from "../util";
+import { HttpError, badRequest, conflict, newId, notFound, now, slugify } from "../util";
 import { containsSecret, redact } from "../vault/vault";
 import { getAgent } from "../agents/service";
 import { activeRunForConversation, cancelRun, getRun, waitForRun } from "../runner/runner";
@@ -128,6 +129,7 @@ function toModel(r: TaskRow): Task {
     repoPath: r.repo_path,
     baseBranch: r.base_branch,
     branch: r.branch,
+    branchPushed: !!r.pushed_sha,
     worktree: r.branch ? checkoutDir(r.id) : null,
     pullRequest: r.pr_url ? { url: r.pr_url, number: r.pr_number, state: r.pr_state } : null,
     summary: r.summary,
@@ -678,14 +680,16 @@ function onBusEvent(event: ServerEvent) {
   const task = get<TaskRow>("SELECT * FROM tasks WHERE conversation_id = ?", event.run.conversationId);
   if (!task) return;
   if (event.type === "run.started") {
-    // A follow-up (review feedback, a question) puts a delivered or blocked task back to work — and on the board.
-    if (event.run.status === "queued" && !busy.has(task.id) && transition(task.id, "in_progress", ["in_review", "blocked", "done", "cancelled", "backlog"])) {
-      sql("UPDATE tasks SET completed_at = NULL, archived_at = NULL WHERE id = ?", task.id);
-    }
+    if (event.run.status === "queued" && !busy.has(task.id)) backToWork(task.id);
     emit(task.id);
     return;
   }
   void finished(task.id, event.run).catch((err) => log.warn(`task ${task.id}: could not handle the end of run ${event.run.id}`, err));
+}
+
+/** A follow-up (review feedback, a question) puts a delivered or blocked task back to work — and on the board. */
+function backToWork(id: string) {
+  if (transition(id, "in_progress", ["in_review", "blocked", "done", "cancelled", "backlog"])) sql("UPDATE tasks SET completed_at = NULL, archived_at = NULL WHERE id = ?", id);
 }
 
 async function finished(id: string, run: Run): Promise<void> {
@@ -743,16 +747,27 @@ function resultFolders(task: TaskRow, conversationId: string): string[] {
   ];
 }
 
-/** A general or research task: what it changed in its worktree is committed on its branch (never pushed). */
+/** A general or research task: what it changed in its worktree is committed on its branch (pushed only when asked to). */
 async function keepWork(task: TaskRow, runId: string): Promise<void> {
   const link = `/tasks?task=${task.id}`;
   try {
-    const { skipped } = await commitWork({ dir: checkoutDir(task.id), message: `${redact(task.title)} (#${task.number})` });
-    if (skipped.length) notify("warning", `Task #${task.number}: files left out`, `Not committed because they look like secrets: ${skipped.join(", ")}`, link);
+    // Pushed from the board before: follow-ups keep the branch (and its pull request) up to date.
+    if (task.pushed_sha && task.repo_url) await pushWork(task);
+    else await commitLeftovers(task);
   } catch (err) {
-    log.warn(`task ${task.id}: could not commit its changes`, err);
+    log.warn(`task ${task.id}: could not commit or push its changes`, err);
+    if (task.pushed_sha) {
+      const reason = err instanceof SecretInBranch ? `${err.message}, then push it again from the task.` : err instanceof Error ? err.message : String(err);
+      notify("warning", `Task #${task.number}: ${task.branch} wasn't pushed`, redact(reason), link);
+    }
   }
   if (deliver(task.id, runId)) notify("success", `Task #${task.number} is ready for review`, task.title, link);
+}
+
+/** Commit what was left uncommitted in the task's worktree, except new files that look like secrets. */
+async function commitLeftovers(task: TaskRow): Promise<void> {
+  const { skipped } = await commitWork({ dir: checkoutDir(task.id), message: `${redact(task.title)} (#${task.number})` });
+  if (skipped.length) notify("warning", `Task #${task.number}: files left out`, `Not committed because they look like secrets: ${skipped.join(", ")}`, `/tasks?task=${task.id}`);
 }
 
 /** In review — unless a newer turn (a follow-up) started meanwhile; its end decides then. */
@@ -774,54 +789,77 @@ function prBody(task: TaskRow, summary: string | null): string {
   ].join("\n");
 }
 
+/** The branch carries a secret, so it isn't pushed. The message ends with where to remove it. */
+class SecretInBranch extends Error {}
+
 /**
- * Commit and push the task's branch and open its pull request (once; later pushes update it). Nothing is pushed when
- * the changes contain a secret from the vault; new env/key files are left out.
+ * Commit and push the task's branch — never when its changes contain a secret from the vault (new env/key files are
+ * left out of the commit). `false` when it has no commits on top of its base.
  */
+async function pushWork(task: TaskRow): Promise<boolean> {
+  const dir = checkoutDir(task.id);
+  await commitLeftovers(task);
+  const secretFiles = await secretFilesAdded(dir, task.base_branch);
+  if (secretFiles.length) {
+    throw new SecretInBranch(`The branch ${task.branch} adds files that look like secrets (${secretFiles.join(", ")}), so Godmode didn't push it. Remove them from the branch (the task's worktree is in ${dir})`);
+  }
+  if (containsSecret(await branchDiff(dir, task.base_branch))) {
+    throw new SecretInBranch(`The changes on ${task.branch} contain a secret saved in the vault, so Godmode didn't push them. Remove it from the branch (the task's worktree is in ${dir})`);
+  }
+  const { pushed, sha } = await pushBranch({ dir, base: task.base_branch, branch: task.branch!, lastPushed: task.pushed_sha });
+  if (pushed) sql("UPDATE tasks SET pushed_sha = ? WHERE id = ?", sha, task.id);
+  return pushed;
+}
+
+/** Open the pull request of the pushed branch, or — when that can't be done here — link to the page that opens one. */
+async function openTaskPullRequest(task: TaskRow, summary: string | null) {
+  setActivity(task.id, "Opening the pull request…");
+  const result = await openPullRequest({
+    dir: checkoutDir(task.id),
+    url: task.repo_url,
+    base: task.base_branch,
+    branch: task.branch!,
+    title: redact(task.title),
+    body: redact(prBody(task, summary)),
+  });
+  const pr = result.pullRequest;
+  if (pr) sql("UPDATE tasks SET pr_url = ?, pr_number = ?, pr_state = ? WHERE id = ?", pr.url, pr.number, pr.state, task.id);
+  return result;
+}
+
+/** Push a coding task's branch when its agent finished and open its pull request (once; later pushes update it). */
 async function publish(task: TaskRow, summary: string | null, runId: string): Promise<void> {
   const id = task.id;
-  const dir = checkoutDir(id);
   const link = `/tasks?task=${id}`;
   const title = redact(task.title);
   try {
-    setActivity(id, task.repo_url ? "Pushing the branch…" : "Committing the changes…");
-    const { skipped } = await commitWork({ dir, message: `${title} (#${task.number})` });
-    if (skipped.length) notify("warning", `Task #${task.number}: files left out`, `Not committed because they look like secrets: ${skipped.join(", ")}`, link);
     if (!task.repo_url) {
+      setActivity(id, "Committing the changes…");
+      await commitLeftovers(task);
       // A local repository without a remote: the work stays on the task's branch there.
-      const changed = (await commitsAhead(dir, task.base_branch)) > 0;
+      const changed = (await commitsAhead(checkoutDir(id), task.base_branch)) > 0;
       if (!deliver(id, runId)) return;
       if (changed) notify("success", `Task #${task.number}: the changes are on ${task.branch}`, `${task.repo_path} has no remote Godmode can push to — merge the branch there.`, link);
       else notify("info", `Task #${task.number}: no code changes`, "The agent finished without changing the code.", link);
       return;
     }
-    const secretFiles = await secretFilesAdded(dir, task.base_branch);
-    if (secretFiles.length) {
-      return block(id, `The branch ${task.branch} adds files that look like secrets (${secretFiles.join(", ")}), so Godmode didn't push it. Remove them from the branch (the task's worktree is in ${dir}), then move the task to Todo.`);
+    setActivity(id, "Pushing the branch…");
+    let pushed: boolean;
+    try {
+      pushed = await pushWork(task);
+    } catch (err) {
+      if (err instanceof SecretInBranch) return block(id, `${err.message}, then move the task to Todo.`);
+      throw err;
     }
-    if (containsSecret(await branchDiff(dir, task.base_branch))) {
-      return block(id, `The changes on ${task.branch} contain a secret saved in the vault, so Godmode didn't push them. Remove it from the branch (the task's worktree is in ${dir}), then move the task to Todo.`);
-    }
-    const { pushed, sha } = await pushBranch({ dir, base: task.base_branch, branch: task.branch!, lastPushed: task.pushed_sha });
     if (!pushed) {
       if (deliver(id, runId)) notify("info", `Task #${task.number}: no code changes`, "The agent finished without changing the code.", link);
       return;
     }
-    sql("UPDATE tasks SET pushed_sha = ? WHERE id = ?", sha, id);
     if (task.pr_url && task.pr_number && task.pr_state === "open") {
       if (deliver(id, runId)) notify("success", `Task #${task.number}: pull request updated`, title, link);
       return;
     }
-    setActivity(id, "Opening the pull request…");
-    const { pullRequest, problem } = await openPullRequest({
-      dir,
-      url: task.repo_url,
-      base: task.base_branch,
-      branch: task.branch!,
-      title,
-      body: redact(prBody(task, summary)),
-    });
-    if (pullRequest) sql("UPDATE tasks SET pr_url = ?, pr_number = ?, pr_state = ? WHERE id = ?", pullRequest.url, pullRequest.number, pullRequest.state, id);
+    const { pullRequest, problem } = await openTaskPullRequest(task, summary);
     if (!deliver(id, runId)) return;
     if (pullRequest?.number) notify("success", `Task #${task.number}: pull request #${pullRequest.number} is open`, title, link);
     else notify("warning", `Task #${task.number}: open the pull request`, `The branch ${task.branch} was pushed. ${problem ?? ""}`.trim(), link);
@@ -830,6 +868,45 @@ async function publish(task: TaskRow, summary: string | null, runId: string): Pr
     block(id, `Couldn't push the branch: ${message}`);
     notify("error", `Task #${task.number} is blocked`, message, link);
   }
+}
+
+/**
+ * Push the task's branch from the board (general and research tasks never push theirs by themselves) and, with
+ * `pullRequest`, open its pull request. What's left uncommitted in the worktree is committed first.
+ */
+export async function pushTaskBranch(id: string, opts: { pullRequest: boolean }): Promise<Task> {
+  const task = requireRow(id);
+  if (!task.branch) throw conflict("The task has no branch yet — start it first");
+  if (!existsSync(checkoutDir(id))) throw conflict("The task's worktree is gone — move the task to Todo to set it up again");
+  if (!task.repo_url) throw conflict(`${task.repo_path || "The repository"} has no remote Godmode can push to — merge ${task.branch} there.`);
+  if (busy.has(id)) throw conflict(`Godmode is ${activity.get(id)?.replace(/…$/, "").toLowerCase() ?? "preparing the task"} — try again in a moment`);
+  if (task.status === "in_progress" || (task.conversation_id && activeRunForConversation(task.conversation_id))) {
+    throw conflict("The task is in progress — push it once the agent is done");
+  }
+  const lastRun = task.conversation_id ? latestRunId(task.conversation_id) : null;
+  busy.add(id);
+  try {
+    setActivity(id, "Pushing the branch…");
+    if (!(await pushWork(task))) throw conflict(`${task.branch} has no changes on top of ${task.base_branch} yet.`);
+    const current = requireRow(id);
+    if (opts.pullRequest && !(current.pr_number && current.pr_state === "open")) {
+      const { pullRequest, problem } = await openTaskPullRequest(current, current.summary && withFileNames(current.summary));
+      if (!pullRequest) throw conflict(`${task.branch} was pushed. ${problem ?? ""}`.trim());
+      // Handed over for review: a task blocked on its push is unblocked, and moves to Done when it's merged.
+      transition(id, "in_review", ["blocked"]);
+    }
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    if (err instanceof SecretInBranch) throw conflict(`${err.message}, then try again.`);
+    throw new HttpError(502, redact(`Couldn't push ${task.branch}: ${err instanceof Error ? err.message : String(err)}`), "push_failed");
+  } finally {
+    activity.delete(id);
+    // A turn started from the chat meanwhile: the task goes back to work as it would have, and its end is handled once released.
+    if (task.conversation_id && latestRunId(task.conversation_id) !== lastRun) backToWork(id);
+    emit(id);
+    release(id);
+  }
+  return getTask(id);
 }
 
 /** Move tasks whose pull request was merged to Done (and note closed ones). */

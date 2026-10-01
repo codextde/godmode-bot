@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Agent, Task } from "@godmode/shared";
-import { taskAttachmentUrl } from "@godmode/shared";
+import { githubBranchUrl, hostedRepo, taskAttachmentUrl } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { startSmartGitServer, type SmartGitServer } from "./fixtures/smart-git-server";
 import { all, get, run as sql } from "../src/db";
@@ -11,20 +11,21 @@ import { getRun, activeRunForConversation } from "../src/runner/runner";
 import { createWorkspace, deleteWorkspace, updateWorkspace } from "../src/services/workspaces";
 import { workingDirectoryProblem } from "../src/services/folders";
 import {
+  archiveTasks,
   checkPullRequests,
   checkoutDir,
   createTask,
   deleteTask,
   getTask,
   listTasks,
-  archiveTasks,
+  pushTaskBranch,
   sendTaskMessage,
   startTasks,
   stopTasks,
   updateTask,
 } from "../src/tasks/service";
 import { getFollowup, scheduleFollowup } from "../src/services/followups";
-import { __setGhForTests, compareUrl, hostedRepo, openPullRequest, repoCacheDir } from "../src/tasks/git";
+import { __setGhForTests, compareUrl, openPullRequest, repoCacheDir } from "../src/tasks/git";
 import { HttpError } from "../src/util";
 import { rememberSecret } from "../src/vault/vault";
 import { updateSettings } from "../src/services/settings";
@@ -679,7 +680,10 @@ if [ "$1 $2" = "pr view" ]; then
   if [ -n "$FAKE_GH_STATE" ]; then echo "{\\"url\\":\\"https://github.com/acme/app/pull/7\\",\\"number\\":7,\\"state\\":\\"$FAKE_GH_STATE\\"}"; exit 0; fi
   echo "no pull requests found" >&2; exit 1
 fi
-if [ "$1 $2" = "pr create" ]; then echo "Creating pull request"; echo "https://github.com/acme/app/pull/7"; exit 0; fi
+if [ "$1 $2" = "pr create" ]; then
+  if [ -n "$FAKE_GH_CREATE_FAIL" ]; then echo "GraphQL: Resource not accessible by integration" >&2; exit 1; fi
+  echo "Creating pull request"; echo "https://github.com/acme/app/pull/7"; exit 0
+fi
 exit 1
 `,
     );
@@ -696,6 +700,19 @@ exit 1
       expect(gitlab.pullRequest?.url).toStartWith("https://gitlab.com/acme/app/-/merge_requests/new?");
       expect(gitlab.pullRequest?.number).toBeNull();
     } finally {
+      __setGhForTests(null);
+    }
+    // A closed pull request of the branch isn't taken for a new one when gh can't open it.
+    __setGhForTests(fakeGh());
+    process.env.FAKE_GH_STATE = "CLOSED";
+    process.env.FAKE_GH_CREATE_FAIL = "1";
+    try {
+      const failed = await openPullRequest({ dir: env.dataDir, url: "https://github.com/acme/app", base: "main", branch: "godmode/1-x", title: "X", body: "" });
+      expect(failed.pullRequest).toEqual({ url: "https://github.com/acme/app/compare/main...godmode%2F1-x?expand=1", number: null, state: null });
+      expect(failed.problem).toContain("Resource not accessible");
+    } finally {
+      delete process.env.FAKE_GH_STATE;
+      delete process.env.FAKE_GH_CREATE_FAIL;
       __setGhForTests(null);
     }
     const noGh = await openPullRequest({ dir: env.dataDir, url: "https://github.com/acme/app", base: "main", branch: "godmode/1-x", title: "X", body: "" });
@@ -720,12 +737,63 @@ exit 1
     expect(t.completedAt).not.toBeNull();
   });
 
+  test("the board pushes a task's branch and opens its pull request", async () => {
+    const { url, bare } = makeRemote("board-push");
+    const task = createTask({ title: "TASK_EDIT share from the board", repoUrl: url, agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+    const t = getTask(task.id);
+    expect(t.branchPushed).toBe(false);
+    expect(await git(["branch", "--list", t.branch!], bare)).toBe("");
+
+    const pushed = await pushTaskBranch(t.id, { pullRequest: false });
+    expect(pushed.branchPushed).toBe(true);
+    expect(pushed.activity).toBeNull();
+    expect(await git(["log", "-1", "--format=%s", t.branch!], bare)).toBe(`${t.title} (#${t.number})`);
+    expect((await catchHttp(() => pushTaskBranch(t.id, { pullRequest: true }))).message).toContain("GitHub repositories only");
+
+    // On GitHub, gh opens it (the push still goes to the task's origin), and a blocked task goes to review.
+    sql("UPDATE tasks SET repo_url = ?, status = 'blocked', blocked_reason = 'Push failed' WHERE id = ?", "https://github.com/acme/app.git", t.id);
+    __setGhForTests(fakeGh());
+    try {
+      const opened = await pushTaskBranch(t.id, { pullRequest: true });
+      expect(opened.pullRequest).toEqual({ url: "https://github.com/acme/app/pull/7", number: 7, state: "open" });
+      expect(opened.status).toBe("in_review");
+      expect(opened.blockedReason).toBeNull();
+    } finally {
+      __setGhForTests(null);
+    }
+    expect(readFileSync(join(env.dataDir, "gh-calls.log"), "utf8")).toContain(`--head ${t.branch}`);
+
+    // Once pushed, follow-ups keep the branch (and its pull request) up to date.
+    await sendTaskMessage(t.id, "TASK_EDIT once more");
+    await until(() => getTask(t.id).runId !== t.runId, 5_000, "follow-up run");
+    await settled(t.id, ["in_review"]);
+    expect(await git(["rev-list", "--count", `main..${t.branch}`], bare)).toBe("2");
+
+    sql("UPDATE tasks SET status = 'in_progress' WHERE id = ?", t.id);
+    expect((await catchHttp(() => pushTaskBranch(t.id, { pullRequest: false }))).message).toContain("in progress");
+    sql("UPDATE tasks SET status = 'in_review' WHERE id = ?", t.id);
+  });
+
+  test("pushing from the board needs a branch with changes", async () => {
+    const unstarted = createTask({ title: "Not started yet", status: "backlog" });
+    expect((await catchHttp(() => pushTaskBranch(unstarted.id, { pullRequest: true }))).message).toContain("no branch yet");
+    const { url } = makeRemote("board-nothing");
+    const task = createTask({ title: "Say hello without changes", repoUrl: url, agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+    const err = await catchHttp(() => pushTaskBranch(task.id, { pullRequest: false }));
+    expect(err.status).toBe(409);
+    expect(err.message).toContain("no changes");
+    expect(getTask(task.id).branchPushed).toBe(false);
+  });
+
   test("url helpers", () => {
     expect(hostedRepo("https://github.com/acme/app.git")).toEqual({ host: "github", path: "acme/app" });
     expect(hostedRepo("git@github.com:acme/app.git")).toEqual({ host: "github", path: "acme/app" });
     expect(hostedRepo("https://git.example.com/acme/app.git")).toBeNull();
     expect(compareUrl("https://example.com/x.git", "main", "b")).toBeNull();
-
+    expect(githubBranchUrl("git@github.com:acme/app.git", "godmode/6-make-it-yellow")).toBe("https://github.com/acme/app/tree/godmode/6-make-it-yellow");
+    expect(githubBranchUrl("https://gitlab.com/acme/app.git", "main")).toBeNull();
   });
 });
 
