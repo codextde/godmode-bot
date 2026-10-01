@@ -803,7 +803,7 @@ export async function navigate(profileId: string, url: string, conversationId?: 
     await page.navigate(parsed.href);
     return true;
   });
-  if (!done) await rb.client.send("Target.createTarget", { url: parsed.href });
+  if (!done) await rb.client.send("Target.createTarget", { url: parsed.href, newWindow: true, background: true });
 }
 
 /** What bot detection sees in the profile's browser; a browser started just for the check is stopped again. */

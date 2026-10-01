@@ -228,6 +228,16 @@ suite("parallel chats in one browser", () => {
     expect((await targetsOf(chats.b!)).some((t) => t.url.endsWith("/popup"))).toBe(false);
   });
 
+  test("switching tabs never brings the browser to the front", async () => {
+    const tabs = await targetsOf(chats.a!);
+    const [first, last] = [tabs[0]!, tabs.at(-1)!];
+    await expect(chats.a!.client.send("Target.activateTarget", { targetId: last.targetId })).resolves.toEqual({});
+    expect(rb().tabs.currentPage("cnv_a")?.targetId).toBe(last.targetId);
+    const { sessionId } = await chats.a!.client.send<{ sessionId: string }>("Target.attachToTarget", { targetId: first.targetId, flatten: true });
+    await expect(chats.a!.client.send("Page.bringToFront", {}, sessionId)).resolves.toEqual({});
+    expect(rb().tabs.currentPage("cnv_a")?.targetId).toBe(first.targetId);
+  });
+
   test("other chats' sessions and browser-wide commands are refused", async () => {
     const [page] = await targetsOf(chats.a!);
     const { sessionId } = await chats.a!.client.send<{ sessionId: string }>("Target.attachToTarget", { targetId: page!.targetId, flatten: true });

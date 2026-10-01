@@ -42,7 +42,13 @@ const FOCUS = new Set([
   "Input.dispatchMouseEvent",
   "Input.dispatchKeyEvent",
   "Input.insertText",
+  "Page.bringToFront",
 ]);
+/**
+ * Commands that would raise the browser window and take focus from whatever the human is doing. They are answered
+ * here instead: the agent's tab is the only one of its background window, and the live view follows it (`FOCUS`).
+ */
+const NO_FRONT = new Set(["Target.activateTarget", "Page.bringToFront"]);
 const BLOCKED = new Set(["Browser.close", "Browser.crash", "Browser.crashGpuProcess", "Target.attachToBrowserTarget"]);
 const NO_TARGET = { code: -32602, message: "No target with given id found" };
 const NO_SESSION = { code: -32001, message: "Session with given id not found." };
@@ -127,6 +133,7 @@ class ChatConnection {
     this.tabs?.touch(this.chat);
     if (sessionId && FOCUS.has(method)) this.tabs?.focus(this.chat, this.sessions.get(sessionId)!);
     else if (method === "Target.activateTarget") this.tabs?.focus(this.chat, params.targetId);
+    if (NO_FRONT.has(method)) return this.send(JSON.stringify({ id, result: {}, ...(sessionId ? { sessionId } : {}) }));
 
     switch (method) {
       case "Target.createTarget":
