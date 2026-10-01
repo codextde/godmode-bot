@@ -224,7 +224,7 @@ export function TaskDialog({
               value={description}
               onChange={setDescription}
               onBusyChange={setUploading}
-              placeholder="Add description… Markdown works. Paste or drop screenshots, PDFs and other files."
+              placeholder="Add a description… Paste or drop screenshots and files, type - for a list or [] for a checklist."
               minHeight={expanded ? 360 : 180}
               className="mt-3"
             />

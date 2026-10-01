@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
-import { ArrowUpRight, ChevronRight, EllipsisVertical, GitBranch, MessagesSquare, OctagonAlert, Paperclip, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
+import { AlignLeft, ArrowUpRight, ChevronRight, EllipsisVertical, GitBranch, MessagesSquare, OctagonAlert, Paperclip, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
 import type { Agent, Task, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
 import { MAX_TASK_TITLE_LENGTH } from "@godmode/shared";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -44,8 +44,17 @@ export function TaskSheet({
   onMove: (task: Task, status: TaskStatus) => void;
   onDelete: (task: Task) => void;
 }) {
+  /** A file is uploading into the description: closing now would lose it (as the new-task dialog). */
+  const uploading = useRef(false);
+  const close = () => {
+    if (uploading.current) {
+      toast("Wait for the upload to finish", { description: "The file is still on its way into the description." });
+      return;
+    }
+    onClose();
+  };
   return (
-    <Sheet open={!!task} onOpenChange={(open) => !open && onClose()}>
+    <Sheet open={!!task} onOpenChange={(open) => !open && close()}>
       <SheetContent
         side="right"
         className="w-full gap-0 p-0 outline-none sm:max-w-[40rem]"
@@ -60,14 +69,27 @@ export function TaskSheet({
           if (isTextField(document.activeElement)) e.preventDefault();
         }}
       >
-        {task && <TaskDetail key={task.id} task={task} agents={agents} workspaces={workspaces} onClose={onClose} onMove={onMove} onDelete={onDelete} />}
+        {task && <TaskDetail
+            key={task.id}
+            task={task}
+            agents={agents}
+            workspaces={workspaces}
+            onClose={close}
+            onUploading={(busy) => (uploading.current = busy)}
+            onMove={onMove}
+            onDelete={onDelete}
+          />}
       </SheetContent>
     </Sheet>
   );
 }
 
 function isTextField(el: Element | null): boolean {
-  return el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !["checkbox", "radio", "button", "submit"].includes(el.type));
+  return (
+    el instanceof HTMLTextAreaElement ||
+    (el instanceof HTMLInputElement && !["checkbox", "radio", "button", "submit"].includes(el.type)) ||
+    (el instanceof HTMLElement && el.isContentEditable)
+  );
 }
 
 /** Property values read as text and turn into a control on hover, as in Linear. */
@@ -78,6 +100,7 @@ function TaskDetail({
   agents,
   workspaces,
   onClose,
+  onUploading,
   onMove,
   onDelete,
 }: {
@@ -85,6 +108,7 @@ function TaskDetail({
   agents: Agent[];
   workspaces: Map<string, Workspace>;
   onClose: () => void;
+  onUploading: (uploading: boolean) => void;
   onMove: (task: Task, status: TaskStatus) => void;
   onDelete: (task: Task) => void;
 }) {
@@ -161,7 +185,12 @@ function TaskDetail({
               <EditableTitle value={task.title} onSave={(title) => save.mutate({ title })} />
             </SheetTitle>
             <SheetDescription className="sr-only">Task details</SheetDescription>
-            <EditableDescription taskId={task.id} value={task.description} onSave={(description) => save.mutateAsync({ description })} />
+            <EditableDescription
+              taskId={task.id}
+              value={task.description}
+              onSave={(description) => save.mutateAsync({ description })}
+              onUploading={onUploading}
+            />
           </div>
 
           <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 border-t pt-4 text-sm">
@@ -414,7 +443,17 @@ function EditableTitle({ value, onSave, ...rest }: { value: string; onSave: (v: 
 }
 
 /** Click to edit; leaving the editor saves. Files pasted, dropped or picked are uploaded and linked in the Markdown. */
-function EditableDescription({ taskId, value: stored, onSave }: { taskId: string; value: string; onSave: (v: string) => Promise<unknown> }) {
+function EditableDescription({
+  taskId,
+  value: stored,
+  onSave,
+  onUploading,
+}: {
+  taskId: string;
+  value: string;
+  onSave: (v: string) => Promise<unknown>;
+  onUploading: (uploading: boolean) => void;
+}) {
   const draftKey = `task:${taskId}:description`;
   const [editing, setEditing] = useState(() => draftKeys(draftKey).length > 0);
   /** Just saved: shown until the task has it, so leaving the editor never shows the old text for a frame. */
@@ -423,7 +462,6 @@ function EditableDescription({ taskId, value: stored, onSave }: { taskId: string
   const value = saved ?? stored;
   const [draft, setDraft, kept] = useDraft(editing ? draftKey : undefined, value);
   const editor = useRef<DescriptionEditorHandle>(null);
-  const box = useRef<HTMLDivElement>(null);
   /** The text's height when editing starts: the editor opens at least that tall, so nothing below jumps. */
   const [shownHeight, setShownHeight] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -434,7 +472,8 @@ function EditableDescription({ taskId, value: stored, onSave }: { taskId: string
   const finish = () => {
     // Still uploading (or picking a file): the edit finishes when that's done.
     if (editor.current?.busy()) {
-      finishLater.current = uploading;
+      // Uploading: done when the files are in. Just the file picker: its choice (or not) brings the focus back.
+      finishLater.current = editor.current.uploading();
       return;
     }
     finishLater.current = false;
@@ -456,6 +495,10 @@ function EditableDescription({ taskId, value: stored, onSave }: { taskId: string
   useEffect(() => {
     if (!uploading && finishLater.current) finishRef.current();
   }, [uploading]);
+  useEffect(() => {
+    onUploading(uploading);
+    return () => onUploading(false);
+  }, [uploading, onUploading]);
   const cancel = () => {
     kept.discard();
     setEditing(false);
@@ -485,60 +528,78 @@ function EditableDescription({ taskId, value: stored, onSave }: { taskId: string
             edit(e.currentTarget);
           }
         }}
-        className="-mx-2.5 block cursor-text rounded-lg px-2.5 py-2 text-left text-sm leading-relaxed transition-colors outline-none hover:bg-accent/50 focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        className="group/desc -mx-3 block min-h-11 cursor-text rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors outline-none hover:border-border/70 hover:bg-card/60 focus-visible:ring-[3px] focus-visible:ring-ring/40"
       >
-        {empty ? <span className="text-muted-foreground/80">Add a description…</span> : <Markdown breaks>{value}</Markdown>}
+        {empty ? (
+          <span className="flex items-center gap-2 text-[15px] text-muted-foreground/70">
+            <AlignLeft className="size-4 opacity-70" /> Add a description…
+            <span className="ml-auto text-xs opacity-0 transition-opacity group-hover/desc:opacity-100">Text, checklists, screenshots, files</span>
+          </span>
+        ) : (
+          <Markdown breaks className="text-[15px]">
+            {value}
+          </Markdown>
+        )}
       </div>
     );
   }
   return (
     <div
-      ref={box}
       onBlur={(e) => {
         // Switching to another app (to grab a screenshot, say) isn't leaving the editor: it's still there on return.
         if (!document.hasFocus()) return;
-        if (!box.current?.contains(e.relatedTarget as Node | null)) finish();
+        const to = e.relatedTarget as HTMLElement | null;
+        // Not a ref: WebKit blurs this box (it was the focused "Add a description" button a moment ago) when the text
+        // takes the focus on opening, before refs are set — that must not count as leaving the editor.
+        if (e.currentTarget.contains(to)) return;
+        // The link field opens in a popover (a portal): still editing.
+        if (to?.closest("[data-radix-popper-content-wrapper]")) return;
+        finish();
       }}
-      className="-mx-2.5 rounded-lg bg-card px-2.5 pt-2 pb-1.5 shadow-card ring-1 ring-border transition-shadow focus-within:ring-2 focus-within:ring-ring/50"
+      // A click on the padding or the border would focus the sheet (and end the edit): it stays in the text.
+      onMouseDown={(e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest(".ProseMirror, button, input, a, [role=button]")) return;
+        e.preventDefault();
+        if (!target.closest(".ProseMirror")) editor.current?.focus();
+      }}
+      // Here, not in the editor: Radix has already marked Esc as handled (see onEscapeKeyDown), and ProseMirror skips
+      // keys that are. Not from the link popover either (a portal: its Esc closes just the popover).
+      onKeyDown={(e) => {
+        if (!e.currentTarget.contains(e.target as Node)) return;
+        if (e.key === "Escape" && !e.nativeEvent.isComposing) {
+          e.preventDefault();
+          cancel();
+        } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          finish();
+        }
+      }}
+      className="-mx-3 rounded-xl border bg-card shadow-card transition-shadow focus-within:border-ring/60 focus-within:ring-[3px] focus-within:ring-ring/15"
     >
       <DescriptionEditor
         ref={editor}
         autoFocus
+        toolbar
         aria-label="Description"
         value={draft}
         onChange={setText}
         onBusyChange={setUploading}
-        // The text area alone (the toolbar comes on top): at least the text's former height, and room to write.
-        minHeight={Math.max(72, shownHeight - 16)}
-        placeholder="Details, acceptance criteria, links… Markdown works."
-        textClassName="text-sm leading-relaxed"
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            cancel();
-          } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            finish();
-          }
-        }}
+        // The text alone (the toolbar comes on top): at least the text's former height, and room to write.
+        minHeight={Math.max(120, shownHeight - 20)}
+        placeholder="Details, acceptance criteria, links… Type # for a heading, - for a list, [] for a checklist."
+        textClassName="text-[15px]"
+        className="px-3 pt-1.5 pb-3"
       />
       {/* Clicks here keep the focus in the text (WebKit doesn't focus buttons), so they don't end the edit. */}
-      <div className="mt-1.5 -mr-1 flex items-center gap-1 border-t pt-1.5" onMouseDown={(e) => e.preventDefault()}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="-ml-1.5 h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground"
-          title="Attach images, PDFs or other files — or paste or drop them into the text"
-          onClick={() => editor.current?.pickFiles()}
-        >
-          <Paperclip className="size-3.5" /> Attach
-        </Button>
-        <Button type="button" variant="ghost" size="sm" className="ml-auto h-7 px-2 text-xs text-muted-foreground" onClick={cancel}>
+      <div className="flex items-center gap-2 border-t bg-paper-2/60 px-3 py-2 rounded-b-xl" onMouseDown={(e) => e.preventDefault()}>
+        <span className="truncate text-xs text-muted-foreground">{uploading ? "Uploading…" : "Paste or drop screenshots and files anywhere in the text"}</span>
+        <Button type="button" variant="ghost" size="sm" className="ml-auto h-7 px-2.5 text-xs" onClick={cancel}>
           Cancel
         </Button>
-        <Button type="button" size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={finish} disabled={uploading}>
-          {uploading ? "Uploading…" : "Save"}
+        <Button type="button" size="sm" className="h-7 gap-1.5 px-3 text-xs" onClick={finish} disabled={uploading}>
+          {uploading ? <Spinner className="size-3" /> : null}
+          Save
           {!uploading && <kbd className="font-sans text-[10px] opacity-60">{modKey}↵</kbd>}
         </Button>
       </div>

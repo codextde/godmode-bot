@@ -523,6 +523,52 @@
 .prose-chat hr {
   @apply border-border;
 }
+.prose-chat li > p {
+  @apply m-0;
+}
+
+/* Rich text editor (task descriptions): reads like the rendered Markdown above */
+.gm-editor {
+  min-height: var(--gm-editor-min, 96px);
+  outline: none;
+  word-break: break-word;
+}
+.gm-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+.gm-editor ul[data-type="taskList"] {
+  @apply list-none pl-0.5;
+}
+.gm-editor ul[data-type="taskList"] li {
+  @apply flex items-start gap-2;
+}
+.gm-editor ul[data-type="taskList"] li > label {
+  @apply mt-[0.3em] flex shrink-0 select-none;
+}
+.gm-editor ul[data-type="taskList"] li > label input {
+  @apply size-3.5 cursor-pointer accent-[var(--primary)];
+}
+.gm-editor ul[data-type="taskList"] li > div {
+  @apply min-w-0 flex-1;
+}
+.gm-editor ul[data-type="taskList"] li[data-checked="true"] > div {
+  @apply text-muted-foreground line-through decoration-muted-foreground/50;
+}
+.gm-editor .ProseMirror-selectednode {
+  outline: none;
+}
+.gm-editor .ProseMirror-gapcursor:after {
+  border-top-color: var(--foreground);
+}
+/* Rendered checklists (task descriptions): a checkbox, not a bullet and a checkbox */
+.prose-chat ul.contains-task-list {
+  @apply list-none pl-0.5;
+}
 
 /* Agent characters in long lists: keep the face, drop the idle blinking and breathing. */
 .gm-still .gm-char *,
@@ -548,4 +594,11 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+.gm-editor .tableWrapper {
+  @apply overflow-x-auto;
+}
+.gm-editor td > p,
+.gm-editor th > p {
+  @apply m-0;
 }
