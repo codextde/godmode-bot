@@ -3,7 +3,6 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { Link } from "react-router";
-import { openExternal } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { CodeBlock as AicssCodeBlock } from "@/components/aicss/CodeBlock";
 import { CoreFileLink, CoreImage, isCoreFile } from "./core-file";
@@ -48,17 +47,7 @@ const components: Components = {
       return <Link to={href}>{children}</Link>;
     }
     return (
-      <a
-        {...rest}
-        href={href}
-        target="_blank"
-        rel="noreferrer noopener"
-        onClick={(e) => {
-          if (!href) return;
-          e.preventDefault();
-          void openExternal(href);
-        }}
-      >
+      <a {...rest} href={href} target="_blank" rel="noreferrer noopener">
         {children}
       </a>
     );
