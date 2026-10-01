@@ -641,14 +641,16 @@ function onBusEvent(event: ServerEvent) {
   const task = get<TaskRow>("SELECT * FROM tasks WHERE conversation_id = ?", event.run.conversationId);
   if (!task) return;
   if (event.type === "run.started") {
-    // A follow-up (review feedback, a question) puts a delivered or blocked task back to work.
-    if (event.run.status === "queued" && !busy.has(task.id) && transition(task.id, "in_progress", ["in_review", "blocked", "done", "cancelled", "backlog"])) {
-      sql("UPDATE tasks SET completed_at = NULL WHERE id = ?", task.id);
-    }
+    if (event.run.status === "queued" && !busy.has(task.id)) backToWork(task.id);
     emit(task.id);
     return;
   }
   void finished(task.id, event.run).catch((err) => log.warn(`task ${task.id}: could not handle the end of run ${event.run.id}`, err));
+}
+
+/** A follow-up (review feedback, a question) puts a delivered or blocked task back to work. */
+function backToWork(id: string) {
+  if (transition(id, "in_progress", ["in_review", "blocked", "done", "cancelled", "backlog"])) sql("UPDATE tasks SET completed_at = NULL WHERE id = ?", id);
 }
 
 async function finished(id: string, run: Run): Promise<void> {
@@ -687,12 +689,19 @@ async function finished(id: string, run: Run): Promise<void> {
 
 /** A general or research task: what it changed in its worktree is committed on its branch (pushed only when asked to). */
 async function keepWork(task: TaskRow, runId: string): Promise<void> {
+  const link = `/tasks?task=${task.id}`;
   try {
-    await commitLeftovers(task);
+    // Pushed from the board before: follow-ups keep the branch (and its pull request) up to date.
+    if (task.pushed_sha && task.repo_url) await pushWork(task);
+    else await commitLeftovers(task);
   } catch (err) {
-    log.warn(`task ${task.id}: could not commit its changes`, err);
+    log.warn(`task ${task.id}: could not commit or push its changes`, err);
+    if (task.pushed_sha) {
+      const reason = err instanceof SecretInBranch ? `${err.message}, then push it again from the task.` : err instanceof Error ? err.message : String(err);
+      notify("warning", `Task #${task.number}: ${task.branch} wasn't pushed`, redact(reason), link);
+    }
   }
-  if (deliver(task.id, runId)) notify("success", `Task #${task.number} is ready for review`, task.title, `/tasks?task=${task.id}`);
+  if (deliver(task.id, runId)) notify("success", `Task #${task.number} is ready for review`, task.title, link);
 }
 
 /** Commit what was left uncommitted in the task's worktree, except new files that look like secrets. */
@@ -811,7 +820,10 @@ export async function pushTaskBranch(id: string, opts: { pullRequest: boolean })
   if (!existsSync(checkoutDir(id))) throw conflict("The task's worktree is gone — move the task to Todo to set it up again");
   if (!task.repo_url) throw conflict(`${task.repo_path || "The repository"} has no remote Godmode can push to — merge ${task.branch} there.`);
   if (busy.has(id)) throw conflict(`Godmode is ${activity.get(id)?.replace(/…$/, "").toLowerCase() ?? "preparing the task"} — try again in a moment`);
-  if (task.conversation_id && activeRunForConversation(task.conversation_id)) throw conflict("The agent is still working on it — try again when it's done");
+  if (task.status === "in_progress" || (task.conversation_id && activeRunForConversation(task.conversation_id))) {
+    throw conflict("The task is in progress — push it once the agent is done");
+  }
+  const lastRun = task.conversation_id ? latestRunId(task.conversation_id) : null;
   busy.add(id);
   try {
     setActivity(id, "Pushing the branch…");
@@ -820,13 +832,17 @@ export async function pushTaskBranch(id: string, opts: { pullRequest: boolean })
     if (opts.pullRequest && !(current.pr_number && current.pr_state === "open")) {
       const { pullRequest, problem } = await openTaskPullRequest(current, current.summary);
       if (!pullRequest) throw conflict(`${task.branch} was pushed. ${problem ?? ""}`.trim());
+      // Handed over for review: a task blocked on its push is unblocked, and moves to Done when it's merged.
+      transition(id, "in_review", ["blocked"]);
     }
   } catch (err) {
     if (err instanceof HttpError) throw err;
     if (err instanceof SecretInBranch) throw conflict(`${err.message}, then try again.`);
-    throw new HttpError(502, `Couldn't push ${task.branch}: ${err instanceof Error ? err.message : String(err)}`, "push_failed");
+    throw new HttpError(502, redact(`Couldn't push ${task.branch}: ${err instanceof Error ? err.message : String(err)}`), "push_failed");
   } finally {
     activity.delete(id);
+    // A turn started from the chat meanwhile: the task goes back to work as it would have, and its end is handled once released.
+    if (task.conversation_id && latestRunId(task.conversation_id) !== lastRun) backToWork(id);
     emit(id);
     release(id);
   }

@@ -298,27 +298,33 @@ function Prop({ label, children }: { label: string; children: ReactNode }) {
 /** The branch on GitHub, and a pull request for it. Godmode pushes the branch first when it hasn't yet. */
 function GitHubActions({ task, branchUrl }: { task: Task; branchUrl: string }) {
   const qc = useQueryClient();
+  const put = (t: Task) => qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((x) => (x.id === t.id ? t : x)));
   const push = useMutation({
     mutationFn: () => api.tasks.push(task.id),
-    onSuccess: () => void openExternal(branchUrl),
+    onSuccess: (t) => {
+      put(t);
+      void openExternal(branchUrl);
+    },
     onError: (e) => toastApiError(e, "Couldn't push the branch", qc),
   });
   const create = useMutation({
     mutationFn: () => api.tasks.openPullRequest(task.id),
-    onSuccess: ({ pullRequest: pr }) => {
-      if (pr?.number) toast.success(`Pull request #${pr.number} is open`, { action: { label: "View", onClick: () => void openExternal(pr.url) } });
-      else if (pr) void openExternal(pr.url);
+    onSuccess: (t) => {
+      put(t);
+      const pr = t.pullRequest;
+      if (pr?.number && pr.state === "open") toast.success(`Pull request #${pr.number} is open`, { action: { label: "View", onClick: () => void openExternal(pr.url) } });
+      else if (pr && !pr.number) void openExternal(pr.url);
     },
     onError: (e) => toastApiError(e, "Couldn't create the pull request", qc),
   });
   const pending = push.isPending || create.isPending;
-  const idle = pending || (!isWorking(task) && !task.activity);
+  const idle = pending || (task.status !== "in_progress" && !task.activity);
   const pr = task.pullRequest;
   const icon = "text-muted-foreground hover:text-foreground";
 
   return (
     <>
-      {task.branchPushed ? (
+      {pr?.state === "merged" ? null : task.branchPushed ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon-xs" className={icon} asChild>

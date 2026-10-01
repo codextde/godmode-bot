@@ -558,7 +558,10 @@ if [ "$1 $2" = "pr view" ]; then
   if [ -n "$FAKE_GH_STATE" ]; then echo "{\\"url\\":\\"https://github.com/acme/app/pull/7\\",\\"number\\":7,\\"state\\":\\"$FAKE_GH_STATE\\"}"; exit 0; fi
   echo "no pull requests found" >&2; exit 1
 fi
-if [ "$1 $2" = "pr create" ]; then echo "Creating pull request"; echo "https://github.com/acme/app/pull/7"; exit 0; fi
+if [ "$1 $2" = "pr create" ]; then
+  if [ -n "$FAKE_GH_CREATE_FAIL" ]; then echo "GraphQL: Resource not accessible by integration" >&2; exit 1; fi
+  echo "Creating pull request"; echo "https://github.com/acme/app/pull/7"; exit 0
+fi
 exit 1
 `,
     );
@@ -575,6 +578,19 @@ exit 1
       expect(gitlab.pullRequest?.url).toStartWith("https://gitlab.com/acme/app/-/merge_requests/new?");
       expect(gitlab.pullRequest?.number).toBeNull();
     } finally {
+      __setGhForTests(null);
+    }
+    // A closed pull request of the branch isn't taken for a new one when gh can't open it.
+    __setGhForTests(fakeGh());
+    process.env.FAKE_GH_STATE = "CLOSED";
+    process.env.FAKE_GH_CREATE_FAIL = "1";
+    try {
+      const failed = await openPullRequest({ dir: env.dataDir, url: "https://github.com/acme/app", base: "main", branch: "godmode/1-x", title: "X", body: "" });
+      expect(failed.pullRequest).toEqual({ url: "https://github.com/acme/app/compare/main...godmode%2F1-x?expand=1", number: null, state: null });
+      expect(failed.problem).toContain("Resource not accessible");
+    } finally {
+      delete process.env.FAKE_GH_STATE;
+      delete process.env.FAKE_GH_CREATE_FAIL;
       __setGhForTests(null);
     }
     const noGh = await openPullRequest({ dir: env.dataDir, url: "https://github.com/acme/app", base: "main", branch: "godmode/1-x", title: "X", body: "" });
@@ -613,17 +629,28 @@ exit 1
     expect(await git(["log", "-1", "--format=%s", t.branch!], bare)).toBe(`${t.title} (#${t.number})`);
     expect((await catchHttp(() => pushTaskBranch(t.id, { pullRequest: true }))).message).toContain("GitHub repositories only");
 
-    // On GitHub, gh opens it; the push still goes to the task's origin.
-    sql("UPDATE tasks SET repo_url = ? WHERE id = ?", "https://github.com/acme/app.git", t.id);
+    // On GitHub, gh opens it (the push still goes to the task's origin), and a blocked task goes to review.
+    sql("UPDATE tasks SET repo_url = ?, status = 'blocked', blocked_reason = 'Push failed' WHERE id = ?", "https://github.com/acme/app.git", t.id);
     __setGhForTests(fakeGh());
     try {
       const opened = await pushTaskBranch(t.id, { pullRequest: true });
       expect(opened.pullRequest).toEqual({ url: "https://github.com/acme/app/pull/7", number: 7, state: "open" });
       expect(opened.status).toBe("in_review");
+      expect(opened.blockedReason).toBeNull();
     } finally {
       __setGhForTests(null);
     }
     expect(readFileSync(join(env.dataDir, "gh-calls.log"), "utf8")).toContain(`--head ${t.branch}`);
+
+    // Once pushed, follow-ups keep the branch (and its pull request) up to date.
+    await sendTaskMessage(t.id, "TASK_EDIT once more");
+    await until(() => getTask(t.id).runId !== t.runId, 5_000, "follow-up run");
+    await settled(t.id, ["in_review"]);
+    expect(await git(["rev-list", "--count", `main..${t.branch}`], bare)).toBe("2");
+
+    sql("UPDATE tasks SET status = 'in_progress' WHERE id = ?", t.id);
+    expect((await catchHttp(() => pushTaskBranch(t.id, { pullRequest: false }))).message).toContain("in progress");
+    sql("UPDATE tasks SET status = 'in_review' WHERE id = ?", t.id);
   });
 
   test("pushing from the board needs a branch with changes", async () => {

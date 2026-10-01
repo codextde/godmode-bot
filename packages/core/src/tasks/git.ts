@@ -419,7 +419,7 @@ export async function openPullRequest(opts: {
     );
     if (!res.ok) {
       const found = await viewPullRequest(opts.dir, opts.branch, repo);
-      return found ? { pullRequest: found, problem: null } : manual(`gh couldn't open the pull request: ${res.err || "unknown error"}`);
+      return found?.state === "open" ? { pullRequest: found, problem: null } : manual(`gh couldn't open the pull request: ${res.err || "unknown error"}`);
     }
     const prUrl = res.out.split("\n").map((l) => l.trim()).reverse().find((l) => /^https?:\/\//.test(l)) ?? "";
     const number = Number(/\/pull\/(\d+)/.exec(prUrl)?.[1]) || null;
