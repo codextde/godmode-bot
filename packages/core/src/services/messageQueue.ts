@@ -4,7 +4,8 @@
  * A message the human sends while the agent works in the chat doesn't become a run that waits for the whole task: it
  * waits here. The running agent gets the queue between two of its steps (`takeQueued`, asked for by Claude Code's
  * PostToolBatch hook) and decides how the message fits into what it is doing. Whatever still waits when the run ends by
- * itself starts the chat's next run as one turn (`startQueued`); after a stop it waits for the human.
+ * itself starts the chat's next run as one turn (`startQueued`); after a stop it waits for the human. While the chat's
+ * run is paused the queue belongs to it: the run takes the messages along when it continues.
  */
 import type { Agent, Attachment, Message, QueuedMessage, Run, SendMessageInput, SendMessageOutcome } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
@@ -14,6 +15,7 @@ import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { redact } from "../vault/vault";
 import { activeRunForConversation, cancelRun, listActiveRuns, startRun, waitForRun } from "../runner/runner";
 import { addMessage, emitConversationUpdated, messageTarget, promptWithFiles, saveAttachments, sendMessage, setConversationState } from "./conversations";
+import { continueConversation, pauseOf } from "./pauses";
 
 interface QueueRow {
   id: string;
@@ -98,11 +100,28 @@ function enqueue(conversationId: string, input: SendMessageInput): QueuedMessage
   return toQueued(row);
 }
 
-/** A message from the human: straight to the agent when the chat is idle, into the queue while the agent works. */
+/**
+ * A message from the human: straight to the agent when the chat is idle, into the queue while the agent works or its run
+ * is paused.
+ */
 export async function submitMessage(conversationId: string, input: SendMessageInput): Promise<SendMessageOutcome> {
   const busy = activeRunForConversation(conversationId) !== null;
-  if (!busy && !hasQueued(conversationId)) return sendMessage(conversationId, { ...input, trigger: "chat" });
+  const paused = pauseOf(conversationId);
+  if (!busy && !paused && !hasQueued(conversationId)) return sendMessage(conversationId, { ...input, trigger: "chat" });
   const queued = enqueue(conversationId, input);
+  // Also with runs waiting behind the pause: the paused run is the one that takes the queue.
+  if (paused) {
+    // Writing to a chat the human paused continues it with the message. While Claude's limit is reached there is
+    // nothing to continue with: the message waits and goes along when the run does.
+    if (paused.reason === "user") {
+      try {
+        continueConversation(conversationId);
+      } catch {
+        /* the message stays queued */
+      }
+    }
+    return { queued };
+  }
   if (busy) return { queued };
   // Messages left over from before (a stopped run, a restart) go first, in the same turn. When the run can't start, the
   // message stays queued.
@@ -150,7 +169,7 @@ export function takeQueued(conversationId: string, agent: Agent): { message: Que
 
 /** Start the chat's next run with the messages that wait in its queue. Null when the agent is busy or nothing waits. */
 export async function startQueued(conversationId: string): Promise<{ run: Run; messages: Message[]; taken: string[] } | null> {
-  if (activeRunForConversation(conversationId) !== null) return null;
+  if (activeRunForConversation(conversationId) !== null || pauseOf(conversationId)) return null;
   const taken = head(rows(conversationId));
   if (!taken.length) return null;
   const { conv, agent } = messageTarget(conversationId);
@@ -186,6 +205,11 @@ export async function sendQueuedNow(conversationId: string): Promise<void> {
   messageTarget(conversationId);
   if (!hasQueued(conversationId)) throw notFound("Queued message");
   const jobs = listActiveRuns().filter((r) => r.conversationId === conversationId);
+  if (!jobs.some((r) => r.status === "running") && pauseOf(conversationId)) {
+    // The paused run takes the queue along as it continues.
+    continueConversation(conversationId);
+    return;
+  }
   if (!jobs.length) {
     await startQueued(conversationId);
     return;

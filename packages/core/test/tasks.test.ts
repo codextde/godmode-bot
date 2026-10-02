@@ -25,6 +25,8 @@ import {
   updateTask,
 } from "../src/tasks/service";
 import { getFollowup, scheduleFollowup } from "../src/services/followups";
+import { pauseConversation } from "../src/services/pauses";
+import { sendMessage } from "../src/services/conversations";
 import { __setGhForTests, compareUrl, openPullRequest, repoCacheDir } from "../src/tasks/git";
 import { HttpError } from "../src/util";
 import { rememberSecret } from "../src/vault/vault";
@@ -170,6 +172,61 @@ describe("agents work on tasks", () => {
     await until(() => getTask(task.id).runStatus === "cancelled", 10_000, "run to be cancelled");
     expect(getTask(task.id).status).toBe("backlog");
     expect(activeRunForConversation(getTask(task.id).conversationId!)).toBeNull();
+  });
+
+  test("a paused task stays in progress and is delivered once it continues", async () => {
+    const task = createTask({ workspaceId, title: "SLEEP on it", agentId: wsAgent.id });
+    // Until Claude answers: the task's prompt is in its session.
+    const answered = () => (get<{ blocks: string }>("SELECT blocks FROM messages WHERE run_id = ? AND role = 'assistant'", getTask(task.id).runId)?.blocks ?? "[]") !== "[]";
+    await until(() => getTask(task.id).runStatus === "running" && answered(), 10_000, "run to answer");
+    const { conversationId, runId } = getTask(task.id);
+    await pauseConversation(conversationId!);
+    await until(() => getTask(task.id).runStatus === "paused", 10_000, "run to pause");
+    expect(getTask(task.id)).toMatchObject({ status: "in_progress", blockedReason: null, pause: { runId, reason: "user" } });
+
+    // Feedback from the board continues the same run with the message.
+    await sendTaskMessage(task.id, "Use the short version");
+    await settled(task.id, ["in_review"]);
+    expect(getTask(task.id)).toMatchObject({ runId, runStatus: "succeeded", pause: null });
+    expect(invocations(env).at(-1)!.prompt.endsWith("</godmode-continue>\n\nUse the short version")).toBe(true);
+  });
+
+  test("a restart leaves a paused task in progress", async () => {
+    const task = createTask({ workspaceId, title: "SLEEP across a restart", agentId: wsAgent.id });
+    await until(() => getTask(task.id).runStatus === "running", 10_000, "run to start");
+    await pauseConversation(getTask(task.id).conversationId!);
+    await until(() => getTask(task.id).runStatus === "paused", 10_000, "run to pause");
+    stopTasks();
+    startTasks();
+    expect(getTask(task.id)).toMatchObject({ status: "in_progress", blockedReason: null, pause: { reason: "user" } });
+    updateTask(task.id, { status: "backlog" });
+    await until(() => getTask(task.id).runStatus === "cancelled", 10_000, "run to end");
+  });
+
+  test("moving a task away ends its paused run and what waited behind it", async () => {
+    const task = createTask({ workspaceId, title: "SLEEP with a queue", agentId: wsAgent.id });
+    await until(() => getTask(task.id).runStatus === "running", 10_000, "run to start");
+    const { conversationId, runId } = getTask(task.id);
+    await pauseConversation(conversationId!);
+    await until(() => getTask(task.id).runStatus === "paused", 10_000, "run to pause");
+    const behind = await sendMessage(conversationId!, { content: "from an automation", trigger: "manual" });
+    expect(getRun(behind.run.id).status).toBe("queued");
+
+    updateTask(task.id, { status: "backlog" });
+    await until(() => getRun(runId!).status === "cancelled" && getRun(behind.run.id).status === "cancelled", 10_000, "both runs to end");
+    await Bun.sleep(150);
+    expect(getTask(task.id)).toMatchObject({ status: "backlog", pause: null });
+  });
+
+  test("moving a paused task away ends its run", async () => {
+    const task = createTask({ workspaceId, title: "SLEEP and leave", agentId: wsAgent.id });
+    await until(() => getTask(task.id).runStatus === "running", 10_000, "run to start");
+    await pauseConversation(getTask(task.id).conversationId!);
+    await until(() => getTask(task.id).runStatus === "paused", 10_000, "run to pause");
+    updateTask(task.id, { status: "backlog" });
+    await until(() => getTask(task.id).runStatus === "cancelled", 10_000, "run to end");
+    expect(getTask(task.id)).toMatchObject({ status: "backlog", pause: null });
+    expect(getRun(getTask(task.id).runId!).error).toBe("Stopped from the task board");
   });
 
   test("a follow-up puts a delivered task back to work", async () => {

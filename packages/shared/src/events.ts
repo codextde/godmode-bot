@@ -36,6 +36,8 @@ export type ServerEvent =
       textDelta?: string;
     }
   | { type: "run.activity"; runId: ID; agentId: ID; label: string }
+  /** The run stands still (`run.status` is "paused"); `run.started` follows when it continues. */
+  | { type: "run.paused"; run: Run }
   | { type: "run.finished"; run: Run }
   | { type: "message.created"; message: Message }
   | { type: "message.updated"; message: Message }

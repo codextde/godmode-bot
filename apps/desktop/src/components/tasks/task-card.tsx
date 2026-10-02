@@ -1,13 +1,13 @@
 import { forwardRef, type HTMLAttributes } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, OctagonAlert, Paperclip } from "lucide-react";
+import { GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, Hourglass, OctagonAlert, Paperclip, Pause } from "lucide-react";
 import type { Agent, Task, Workspace } from "@godmode/shared";
 import { taskAttachmentIds } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { LiveDot } from "@/components/aicss/Motion";
 import { useLive } from "@/stores/live";
 import { cn } from "@/lib/utils";
-import { TYPE_META, TypeIcon, isWorking } from "./task-meta";
+import { TYPE_META, TypeIcon, isWorking, pauseLabel } from "./task-meta";
 
 export function useTaskActivity(task: Task): string | null {
   const live = useLive((s) => (task.runId ? s.runs[task.runId] : undefined));
@@ -63,6 +63,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
 ) {
   const activity = useTaskActivity(task);
   const working = isWorking(task);
+  const paused = pauseLabel(task);
   const files = taskAttachmentIds(task.description).length;
   return (
     <div
@@ -99,6 +100,12 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
         <p className="mt-2 flex min-w-0 items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
           <LiveDot className="bg-amber-500" />
           <span className="truncate">{activity}</span>
+        </p>
+      )}
+      {paused && !activity && (
+        <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          {task.pause?.reason === "limit" ? <Hourglass className="size-3 shrink-0 text-warning" /> : <Pause className="size-3 shrink-0 fill-current" />}
+          <span className="truncate">{paused}</span>
         </p>
       )}
       {task.status === "blocked" && task.blockedReason && (

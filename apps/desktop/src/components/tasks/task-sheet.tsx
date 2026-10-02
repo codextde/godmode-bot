@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
-import { AlignLeft, Archive, ArchiveRestore, ArrowUpRight, ChevronRight, EllipsisVertical, GitBranch, GitPullRequestCreateArrow, MessagesSquare, OctagonAlert, Paperclip, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
+import { AlignLeft, Archive, ArchiveRestore, ArrowUpRight, ChevronRight, EllipsisVertical, GitBranch, GitPullRequestCreateArrow, Hourglass, MessagesSquare, OctagonAlert, Paperclip, Pause, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
 import type { Agent, Task, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
 import { MAX_TASK_TITLE_LENGTH, githubBranchUrl } from "@godmode/shared";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -28,7 +28,9 @@ import { cn } from "@/lib/utils";
 import { DescriptionEditor, withoutPlaceholders, type DescriptionEditorHandle, type TextUpdate } from "./description-editor";
 import { AgentSelect, StatusSelect, agentsInReach } from "./task-fields";
 import { PullRequestChip, useTaskActivity } from "./task-card";
-import { TYPE_META, TypeIcon, isWorking, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
+import { TYPE_META, TypeIcon, isWorking, pauseLabel, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
+import { followupWhen } from "@/components/chat/followup";
+import { usePauseActions } from "@/components/chat/pause";
 import { TASK_TYPES } from "@godmode/shared";
 
 export function TaskSheet({
@@ -401,6 +403,46 @@ function GitHubMark({ className }: { className?: string }) {
 function WorkPanel({ task, agent, onMove }: { task: Task; agent?: Agent; onMove: (task: Task, status: TaskStatus) => void }) {
   const activity = useTaskActivity(task);
   const working = isWorking(task);
+  const { resume } = usePauseActions(task.conversationId ?? "");
+
+  if (pauseLabel(task) && task.pause) {
+    const { pause } = task;
+    const who = agent?.name ?? "The agent";
+    return (
+      <Panel>
+        <div className="flex items-start gap-3">
+          {pause.reason === "limit" ? <Hourglass className="mt-0.5 size-4 shrink-0 text-warning" /> : <Pause className="mt-0.5 size-4 shrink-0 fill-current text-foreground/70" />}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{pause.reason === "limit" ? `Claude's ${pause.limit ?? "usage limit"} is reached` : "Paused"}</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              {pause.reason === "user"
+                ? `${who} picks the work up where it stopped.`
+                : pause.auto && pause.resumeAt
+                  ? `${who} continues by itself ${followupWhen(pause.resumeAt)}, where it stopped.`
+                  : pause.resumeAt
+                    ? `The limit resets ${followupWhen(pause.resumeAt)} — continue it then.`
+                    : "Continue it when the limit has reset."}
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" variant={pause.reason === "limit" ? "outline" : "default"} disabled={resume.isPending} onClick={() => resume.mutate()}>
+            {resume.isPending ? <Spinner /> : <Play className="fill-current" />} {pause.reason === "limit" ? "Continue now" : "Continue"}
+          </Button>
+          {task.conversationId && (
+            <Button size="sm" variant="outline" asChild>
+              <Link to={`/chat/${task.conversationId}`}>
+                <MessagesSquare /> Open chat
+              </Link>
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => onMove(task, "backlog")}>
+            <Square className="size-3.5" /> Stop
+          </Button>
+        </div>
+      </Panel>
+    );
+  }
 
   if (working) {
     return (

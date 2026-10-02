@@ -927,7 +927,7 @@ const TOOLS: ToolDef[] = [
       if (wait === false) {
         return `Delegated to ${target.name} (run ${run.id}, conversation ${conversation.id}). Check it later with delegation_status({ runId: "${run.id}" }).`;
       }
-      const finished = await waitForRun(run.id, (timeoutSeconds ?? 900) * 1000);
+      const finished = await waitForRun(run.id, (timeoutSeconds ?? 900) * 1000, { orPaused: true });
       return delegationReport(target.name, finished);
     },
   }),
@@ -944,7 +944,7 @@ const TOOLS: ToolDef[] = [
     run: async ({ runId, wait, timeoutSeconds }, { agent, ctx }) => {
       let r = getRun(runId);
       if (!isManager(agent) && !delegatedBy(r, agent, ctx)) return fail("That run was not delegated by you.");
-      if (wait && !TERMINAL.has(r.status)) r = await waitForRun(runId, (timeoutSeconds ?? 300) * 1000);
+      if (wait && !TERMINAL.has(r.status) && r.status !== "paused") r = await waitForRun(runId, (timeoutSeconds ?? 300) * 1000, { orPaused: true });
       let name = r.agentId;
       try {
         name = getAgent(r.agentId).name;
@@ -1296,7 +1296,7 @@ const TOOLS: ToolDef[] = [
       "Recent runs of all agents (or one agent) with status, result snippet and error — use it to check what every agent did and what failed.",
     schema: z.object({
       agentId: z.string().optional(),
-      status: z.enum(["queued", "running", "succeeded", "failed", "cancelled"]).optional(),
+      status: z.enum(["queued", "running", "paused", "succeeded", "failed", "cancelled"]).optional(),
       limit: z.number().int().min(1).max(100).optional(),
     }),
     when: isManager,
@@ -1495,6 +1495,7 @@ function delegationReport(agentName: string, r: Run): ToolOutput {
   if (r.status === "succeeded") return `${agentName} finished the task ${ids}:\n\n${r.result ?? "(no answer)"}`;
   if (r.status === "failed") return fail(`${agentName} failed ${ids}: ${r.error ?? "unknown error"}${r.result ? `\n\n${r.result}` : ""}`);
   if (r.status === "cancelled") return fail(`The task for ${agentName} was cancelled ${ids}.`);
+  if (r.status === "paused") return `${agentName}'s work on the task is paused ${ids} — by the human, or until Claude's usage limit resets. It continues where it stopped; don't hand the task over again. Check later with delegation_status({ runId: "${r.id}" }).`;
   return `${agentName} is still working (status: ${r.status}) ${ids}. Check again later with delegation_status({ runId: "${r.id}" }).`;
 }
 

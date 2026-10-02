@@ -19,7 +19,7 @@
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Agent, PullRequestState, Run, RunStatus, ServerEvent, Task, TaskInput, TaskMessageInput, TaskPatch, TaskStatus, TaskType } from "@godmode/shared";
+import type { Agent, PauseReason, PullRequestState, Run, RunStatus, ServerEvent, Task, TaskInput, TaskMessageInput, TaskPatch, TaskStatus, TaskType } from "@godmode/shared";
 import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES, isValidBranch, parseGitUrl } from "@godmode/shared";
 import { config } from "../config";
 import { all, get, getMeta, insert, run as sql, setMeta, tx, update } from "../db";
@@ -28,7 +28,9 @@ import { logger } from "../log";
 import { HttpError, badRequest, conflict, newId, notFound, now, slugify } from "../util";
 import { containsSecret, redact } from "../vault/vault";
 import { getAgent } from "../agents/service";
-import { activeRunForConversation, cancelRun, getRun, waitForRun } from "../runner/runner";
+import { activeRunForConversation, cancelRun, getRun, listActiveRuns, waitForRun } from "../runner/runner";
+import { pauseOf, toPause } from "../services/pauses";
+import { submitMessage } from "../services/messageQueue";
 import { conversationExists, createConversation, sendMessage } from "../services/conversations";
 import { cancelFollowup } from "../services/followups";
 import {
@@ -97,6 +99,12 @@ interface TaskRow {
   updated_at: string;
   run_id?: string | null;
   run_status?: RunStatus | null;
+  paused_run_id?: string | null;
+  paused_reason?: PauseReason | null;
+  paused_limit?: string | null;
+  paused_resume_at?: string | null;
+  paused_auto?: number | null;
+  paused_at?: string | null;
 }
 
 /** What Godmode is doing for a task right now (not persisted). */
@@ -108,8 +116,11 @@ const again = new Set<string>();
 let unsubscribe: (() => void) | null = null;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 
-const SELECT = `SELECT t.*, r.id AS run_id, r.status AS run_status FROM tasks t
-  LEFT JOIN runs r ON r.id = (SELECT id FROM runs WHERE conversation_id = t.conversation_id ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
+const SELECT = `SELECT t.*, r.id AS run_id, r.status AS run_status, p.run_id AS paused_run_id, p.reason AS paused_reason,
+    p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at
+  FROM tasks t
+  LEFT JOIN runs r ON r.id = (SELECT id FROM runs WHERE conversation_id = t.conversation_id ORDER BY created_at DESC, rowid DESC LIMIT 1)
+  LEFT JOIN paused_runs p ON p.conversation_id = t.conversation_id`;
 
 function toModel(r: TaskRow): Task {
   return {
@@ -125,6 +136,10 @@ function toModel(r: TaskRow): Task {
     conversationId: r.conversation_id,
     runId: r.run_id ?? null,
     runStatus: r.run_status ?? null,
+    pause:
+      r.paused_run_id && r.paused_reason && r.paused_at
+        ? toPause({ run_id: r.paused_run_id, reason: r.paused_reason, limit_name: r.paused_limit ?? null, resume_at: r.paused_resume_at ?? null, auto: r.paused_auto ?? 0, created_at: r.paused_at })
+        : null,
     repoUrl: r.repo_url,
     repoPath: r.repo_path,
     baseBranch: r.base_branch,
@@ -385,17 +400,30 @@ export function archiveTasks(ids: string[], archived: boolean): Task[] {
   return unique.map((id) => updated.get(id)!);
 }
 
+/** The runs of the task's conversation that haven't ended: working, waiting, and the one that stands still (paused). */
+function openRuns(conversationId: string | null): string[] {
+  if (!conversationId) return [];
+  const paused = pauseOf(conversationId)?.run_id;
+  const active = listActiveRuns().filter((r) => r.conversationId === conversationId);
+  // Waiting ones first: ending the run in front of them would start them.
+  const waiting = active.filter((r) => r.status === "queued").map((r) => r.runId);
+  const working = active.filter((r) => r.status === "running").map((r) => r.runId);
+  return [...waiting, ...working, ...(paused ? [paused] : [])];
+}
+
+/** End them all; a paused run that stayed would continue later and pull the task back to work. */
+async function stopRuns(runIds: string[], reason: string) {
+  for (const runId of runIds) {
+    await cancelRun(runId, reason).catch((err) => log.warn(`could not stop run ${runId}`, err));
+    await waitForRun(runId, 15_000).catch(() => {});
+  }
+}
+
 /** Cancel the run working on a task (the board moved it away from In progress). */
 async function stopWork(task: TaskRow) {
   // A restart that already owns the task shows its own progress.
   if (!busy.has(task.id)) activity.delete(task.id);
-  const active = task.conversation_id ? activeRunForConversation(task.conversation_id) : null;
-  if (!active) return;
-  try {
-    await cancelRun(active, "Stopped from the task board");
-  } catch (err) {
-    log.warn(`could not stop the run of task ${task.id}`, err);
-  }
+  await stopRuns(openRuns(task.conversation_id), "Stopped from the task board");
 }
 
 export async function deleteTask(id: string): Promise<void> {
@@ -403,11 +431,7 @@ export async function deleteTask(id: string): Promise<void> {
   sql("DELETE FROM tasks WHERE id = ?", id);
   activity.delete(id);
   bus.emit({ type: "task.deleted", id });
-  const active = task.conversation_id ? activeRunForConversation(task.conversation_id) : null;
-  if (active) {
-    await cancelRun(active, "The task was deleted").catch(() => {});
-    await waitForRun(active, 15_000).catch(() => {});
-  }
+  await stopRuns(openRuns(task.conversation_id), "The task was deleted");
   await removeCheckout(checkoutDir(id)).catch((err) => log.warn(`could not remove the worktree of task ${id}`, err));
   removeTaskAttachments(id);
 }
@@ -415,9 +439,7 @@ export async function deleteTask(id: string): Promise<void> {
 /** Stop and clean up every task of a workspace that is being deleted (its rows go with the workspace). */
 export async function removeWorkspaceTasks(workspaceId: string): Promise<void> {
   for (const t of all<TaskRow>("SELECT * FROM tasks WHERE workspace_id = ?", workspaceId)) {
-    const active = t.conversation_id ? activeRunForConversation(t.conversation_id) : null;
     await stopWork(t);
-    if (active) await waitForRun(active, 15_000).catch(() => {});
     await removeCheckout(checkoutDir(t.id)).catch((err) => log.warn(`could not remove the worktree of task ${t.id}`, err));
     removeTaskAttachments(t.id);
   }
@@ -431,7 +453,9 @@ export async function sendTaskMessage(id: string, content: string, attachments: 
   const owner = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", task.conversation_id)?.agent_id;
   if (!task.agent_id || owner !== task.agent_id) throw conflict("Move the task to Todo to hand it to its agent");
   if (busy.has(id)) throw conflict(`Godmode is ${activity.get(id)?.replace(/…$/, "").toLowerCase() ?? "preparing the task"} — send it again in a moment`);
-  await sendMessage(task.conversation_id, { content, attachments, trigger: "task" });
+  // A task that stands still takes the message along: it continues with it, or once Claude's limit has reset.
+  if (pauseOf(task.conversation_id)) await submitMessage(task.conversation_id, { content, attachments });
+  else await sendMessage(task.conversation_id, { content, attachments, trigger: "task" });
   return getTask(id);
 }
 
@@ -570,11 +594,8 @@ export async function dispatch(id: string): Promise<void> {
     }
     if (!agent.enabled) return block(id, `${agent.name} is disabled — turn it on or assign another agent.`, STARTABLE);
 
-    const previous = task.conversation_id ? activeRunForConversation(task.conversation_id) : null;
-    if (previous) {
-      await cancelRun(previous, "Restarted from the task board").catch(() => {});
-      await waitForRun(previous, 15_000).catch(() => {});
-    }
+    const previous = openRuns(task.conversation_id);
+    if (previous.length) await stopRuns(previous, "Restarted from the task board");
     // Archived while the previous run was stopping.
     if (row(id)?.archived_at || !transition(id, "in_progress", STARTABLE)) return;
     sql("UPDATE tasks SET started_at = ?, completed_at = NULL WHERE id = ?", now(), id);
@@ -676,11 +697,18 @@ function latestRunId(conversationId: string): string | null {
 }
 
 function onBusEvent(event: ServerEvent) {
-  if (event.type !== "run.started" && event.type !== "run.finished") return;
+  // The pause of a task's run changed (e.g. whether it continues by itself).
+  if (event.type === "conversation.updated" && event.conversation.paused) {
+    const id = get<{ id: string }>("SELECT id FROM tasks WHERE conversation_id = ?", event.conversation.id)?.id;
+    if (id) emit(id);
+    return;
+  }
+  if (event.type !== "run.started" && event.type !== "run.finished" && event.type !== "run.paused") return;
   const task = get<TaskRow>("SELECT * FROM tasks WHERE conversation_id = ?", event.run.conversationId);
   if (!task) return;
-  if (event.type === "run.started") {
-    if (event.run.status === "queued" && !busy.has(task.id)) backToWork(task.id);
+  // A paused run has not ended: the task stays where it is and shows that its work stands still.
+  if (event.type !== "run.finished") {
+    if (event.type === "run.started" && event.run.status === "queued" && !busy.has(task.id)) backToWork(task.id);
     emit(task.id);
     return;
   }
@@ -935,9 +963,9 @@ export function startTasks(): void {
   } catch (err) {
     log.warn("could not sweep task attachments", err);
   }
-  // Work that was going on when Godmode stopped: its runs were marked interrupted.
+  // Work that was going on when Godmode stopped: its runs were marked interrupted. A paused run is still there.
   for (const t of all<TaskRow>("SELECT * FROM tasks WHERE status = 'in_progress'")) {
-    if (!t.conversation_id || !activeRunForConversation(t.conversation_id)) {
+    if (!openRuns(t.conversation_id).length) {
       sql("UPDATE tasks SET status = 'blocked', blocked_reason = ?, updated_at = ? WHERE id = ?", "Interrupted (Godmode restarted).", now(), t.id);
     }
   }

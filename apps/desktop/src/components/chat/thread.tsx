@@ -23,11 +23,13 @@ export interface ThreadProps {
   inflight: { live: LiveRun | null; startedAt: number; runId: string | null } | null;
   onStop?: () => void;
   stopping?: boolean;
+  onPause?: () => void;
+  pausing?: boolean;
   /** Rendered when there are no messages and nothing in flight */
   empty?: ReactNode;
 }
 
-export function Thread({ messages, agent, inflight, onStop, stopping, empty }: ThreadProps) {
+export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty }: ThreadProps) {
   const { scrollRef, contentRef, atBottom, scrollToBottom } = useStickToBottom();
   // Messages present on first render don't animate in
   const initialIds = useRef<Set<string> | null>(null);
@@ -79,6 +81,8 @@ export function Thread({ messages, agent, inflight, onStop, stopping, empty }: T
               startedAt={inflight.startedAt}
               onStop={inflight.runId ? onStop : undefined}
               stopping={stopping}
+              onPause={inflight.runId ? onPause : undefined}
+              pausing={pausing}
             />
           )}
         </div>

@@ -20,11 +20,13 @@ import { Markdown } from "./markdown";
 import { UserBubble } from "./user-bubble";
 import { CopyButton } from "./copy-button";
 import { Lightbox } from "./lightbox";
+import { PauseMarker } from "./pause";
 import { describeTool, formatToolInput, hostOf, todoItems, type ToolContext, type ToolKind, type ToolMeta } from "./tool-meta";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
 type ThinkingBlock = Extract<MessageBlock, { type: "thinking" }>;
 type UserMessageBlock = Extract<MessageBlock, { type: "user_message" }>;
+type PauseBlock = Extract<MessageBlock, { type: "pause" }>;
 
 type Step = { type: "tool"; block: ToolUseBlock } | { type: "thought"; block: ThinkingBlock; key: string };
 
@@ -35,6 +37,7 @@ type Item =
   | { kind: "notice"; key: string; level: "info" | "warning" | "success"; text: string }
   | { kind: "command"; key: string; name: string; args: string; output: string }
   | { kind: "user-message"; key: string; block: UserMessageBlock }
+  | { kind: "pause"; key: string; block: PauseBlock }
   | { kind: "tools"; key: string; steps: Step[] }
   | { kind: "missing-login"; key: string; block: ToolUseBlock }
   | { kind: "delegate"; key: string; block: ToolUseBlock }
@@ -103,6 +106,7 @@ function buildItems(blocks: MessageBlock[]): Item[] {
     else if (b.type === "notice") items.push({ kind: "notice", key, level: b.level, text: b.text });
     else if (b.type === "command") items.push({ kind: "command", key, name: b.name, args: b.args, output: b.output });
     else if (b.type === "user_message") items.push({ kind: "user-message", key: b.id, block: b });
+    else if (b.type === "pause") items.push({ kind: "pause", key, block: b });
   });
   return items;
 }
@@ -165,6 +169,8 @@ export function MessageBlocks({ blocks, streaming = false, compact = false }: { 
             return <CommandOutput key={item.key} name={item.name} args={item.args} output={item.output} />;
           case "user-message":
             return <PickedUpMessage key={item.key} block={item.block} />;
+          case "pause":
+            return <PauseMarker key={item.key} block={item.block} />;
           case "tools":
             return <ToolGroup key={item.key} steps={item.steps} ctx={ctx} streaming={active} />;
           case "missing-login":

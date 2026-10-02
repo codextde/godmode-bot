@@ -673,4 +673,35 @@ CREATE TABLE IF NOT EXISTS queued_messages (
 CREATE INDEX IF NOT EXISTS idx_queued_messages_conversation ON queued_messages(conversation_id, created_at);
 `,
   },
+  {
+    id: 23,
+    name: "paused_runs",
+    sql: /* sql */ `
+-- A run that stands still: the human paused it, or Claude's usage limit was reached. The row holds what continuing
+-- needs and goes when the run continues or is stopped. resume_at: when the limit resets; auto = continue by itself
+-- then (choice: what the human set for this run, NULL = the setting decides); retries counts such tries that hit the
+-- limit again. delivered = 0: Claude never got what the run sent last, so
+-- continuing sends it again (redo: that text with saved secrets masked, for after a restart).
+CREATE TABLE IF NOT EXISTS paused_runs (
+  run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+  conversation_id TEXT NOT NULL UNIQUE REFERENCES conversations(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  user_message_id TEXT,
+  also_answers TEXT NOT NULL DEFAULT '[]',
+  reason TEXT NOT NULL,
+  limit_name TEXT,
+  resume_at TEXT,
+  auto INTEGER NOT NULL DEFAULT 0,
+  choice INTEGER,
+  delivered INTEGER NOT NULL DEFAULT 1,
+  redo TEXT,
+  retries INTEGER NOT NULL DEFAULT 0,
+  depth INTEGER NOT NULL DEFAULT 0,
+  voice INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_paused_runs_agent ON paused_runs(agent_id);
+`,
+  },
 ];

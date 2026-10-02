@@ -21,6 +21,7 @@ import { useArchiveChat } from "@/components/chat/chat-actions";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { useConversationMood } from "@/components/chat/conversation-mood";
 import { FollowupBar } from "@/components/chat/followup";
+import { PauseBar, usePauseActions } from "@/components/chat/pause";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { InstructionsChip } from "@/components/instructions/instructions";
@@ -102,13 +103,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
   const messages = useMemo(() => conv?.messages ?? [], [conv?.messages]);
   const queue = useMemo(() => conv?.queue ?? [], [conv?.queue]);
-  const mood = useConversationMood(conversationId, messages, live);
   const activeRunId = live?.runId ?? conv?.activeRunId ?? null;
+  // The chat's run stands still (one that continues is live again before the chat says so). Runs that came after it wait.
+  const paused = (conv?.paused && conv.paused.runId !== activeRunId && conv.paused) || null;
+  const liveMood = useConversationMood(conversationId, messages, live);
+  const mood = paused ? { mood: "idle" as const, label: paused.reason === "limit" ? "Waiting for the limit to reset" : "Paused" } : liveMood;
+  const { pause } = usePauseActions(conversationId);
+  const pausing = pause.isPending || live?.activity === "Pausing…";
   const busyRef = useRef(false);
   busyRef.current = !!activeRunId;
-  // While the agent works (or older messages still wait), a new message joins the queue.
+  // While the agent works, is paused or older messages still wait, a new message joins the queue.
   const queueingRef = useRef(false);
-  queueingRef.current = !!activeRunId || queue.length > 0;
+  queueingRef.current = !!activeRunId || !!paused || queue.length > 0;
 
   // Keep the last live turn on screen until the stored message replaces it (no flicker on finish).
   const [linger, setLinger] = useState<LiveRun | null>(null);
@@ -401,6 +407,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             inflight={inflight}
             onStop={() => activeRunId && cancel.mutate(activeRunId)}
             stopping={cancel.isPending}
+            onPause={conv.origin === "dream" || live?.trigger === "dream" || live?.trigger === "check" || paused ? undefined : () => pause.mutate()}
+            pausing={pausing}
             empty={
               <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
             }
@@ -435,6 +443,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     </div>
                   </motion.div>
                 )}
+                {paused && (
+                  <motion.div
+                    key="paused"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} queued={queue.length} />
+                  </motion.div>
+                )}
                 {conv.followup && (
                   <motion.div
                     key="followup"
@@ -444,7 +464,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                     className="overflow-hidden"
                   >
-                    <FollowupBar conversationId={conversationId} followup={conv.followup} agentName={agent?.name ?? "The agent"} running={!!activeRunId} />
+                    <FollowupBar conversationId={conversationId} followup={conv.followup} agentName={agent?.name ?? "The agent"} running={!!activeRunId || !!paused} />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -454,6 +474,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 queue={queue}
                 agentName={agent?.name ?? "The agent"}
                 running={!!activeRunId}
+                paused={paused?.reason ?? null}
                 onLost={(text) => composerRef.current?.insert(text)}
                 onDone={() => composerRef.current?.focus()}
               />
@@ -462,7 +483,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 draftKey={conversationId}
                 agentId={conv.agentId}
                 autoFocus
-                running={!!activeRunId}
+                running={!!activeRunId && !paused}
                 onRecall={() => queueRef.current?.editLast() ?? false}
                 leading={
                   <>
@@ -511,7 +532,16 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     />
                   </>
                 }
-                placeholder={agent ? `Message ${agent.name} — or type / for commands` : "Message…"}
+                sendHint={paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : undefined}
+                placeholder={
+                  !agent
+                    ? "Message…"
+                    : paused?.reason === "user"
+                      ? `Message ${agent.name} to continue with new instructions…`
+                      : paused
+                        ? `Message ${agent.name} — it goes along when the limit resets`
+                        : `Message ${agent.name} — or type / for commands`
+                }
                 trailing={
                   <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(patch) => choose.mutate(patch)} />
                 }

@@ -31,6 +31,7 @@ import { applyRuntimeSettings } from "../services/runtime";
 import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/settings";
 import { startScheduler, stopScheduler } from "../scheduler/scheduler";
 import { startFollowups, stopFollowups } from "../services/followups";
+import { startPauses, stopPauses } from "../services/pauses";
 import { startAutomationEvents, stopAutomationEvents } from "../automations/events";
 import { startAppTriggers, stopAppTriggers } from "../integrations/composioTriggers";
 import { startMessaging, stopMessaging } from "../messaging/service";
@@ -693,6 +694,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     stopScheduler();
     stopFollowups();
+    stopPauses();
     stopAppTriggers();
     stopAutomationEvents();
     await stopMessaging();
@@ -708,6 +710,8 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       recoverInterruptedRuns();
       exec("UPDATE automation_events SET status = 'skipped', note = 'Restored from a backup' WHERE status = 'pending'");
       exec("DELETE FROM followups WHERE due_at <= ?", new Date().toISOString());
+      // Paused runs come back paused; none continues by itself after a restore.
+      exec("UPDATE paused_runs SET auto = 0");
       // The restored vault has a different key: a key remembered on this device is obsolete.
       try {
         await vault.setRememberDevice(false);
@@ -736,6 +740,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
     } finally {
       startScheduler();
       startFollowups();
+      startPauses();
       startAutomationEvents();
       startAppTriggers();
       startMessaging();

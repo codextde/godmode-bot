@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { arch, platform } from "node:os";
 import { join } from "node:path";
-import type { Agent, ComputerTarget, Settings } from "@godmode/shared";
+import type { Agent, ComputerTarget, PauseReason, Settings } from "@godmode/shared";
 import { computerTargetLabel } from "@godmode/shared";
 import type { RunSource } from "../services/workspaceSources";
 import type { PromptSshServer } from "../ssh/service";
@@ -424,6 +424,27 @@ export function resumeContextPrefix(
     ? `\n\nYou scheduled a follow-up in this chat for ${describeNow(new Date(followup.dueAt))}: "${oneLine(followup.note, 300)}". If this message settles or changes that, move it with followup_schedule or remove it with followup_cancel.`
     : "";
   return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${tools}${machine}${remote}${update}${memory}${pending}</godmode-context>\n\n`;
+}
+
+/**
+ * What a paused run reads when it continues. Self-contained: the session knows nothing about the pause, and the step
+ * that was running may have been cut off. `messages`: what the human wrote while it stood still.
+ */
+export function continueContext(opts: { reason: PauseReason; userName: string; pausedAt: string; messages: string[] }): string {
+  const human = opts.userName.trim() || "the user";
+  const since = describeNow(new Date(opts.pausedAt));
+  const why =
+    opts.reason === "limit"
+      ? `This turn stood still since ${since} because Claude's usage limit was reached. The limit has reset and the turn continues now`
+      : `${human} paused this turn on ${since} and continues it now`;
+  const many = opts.messages.length > 1;
+  const said = opts.messages.length
+    ? ` ${human} wrote ${many ? "the messages" : "the message"} below while it was paused: ${many ? "they change or add" : "it changes or adds"} to what you are doing.`
+    : "";
+  return `<godmode-continue>
+${why} — this is not a new task.
+Pick the work up exactly where you stopped: don't start over and don't repeat what is already done. A step that was running at that moment may have been cut off, so check what it left behind before you run it again. Then finish the task and end with your answer for ${human}.${said}
+</godmode-continue>${opts.messages.length ? `\n\n${opts.messages.join("\n\n")}` : ""}`;
 }
 
 /**

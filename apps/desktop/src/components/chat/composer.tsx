@@ -55,6 +55,8 @@ interface ComposerProps {
   busy?: boolean;
   /** The agent is working — new messages get queued */
   running?: boolean;
+  /** What sending does right now, when it isn't a plain send (e.g. "Send and continue"). */
+  sendHint?: string;
   /** ↑ in the empty box: edit the newest queued message instead (true = taken). */
   onRecall?: () => boolean;
   /** Rendered in a context tray below the toolbar (e.g. agent picker, folder) */
@@ -84,6 +86,7 @@ export function Composer({
   autoFocus,
   busy,
   running,
+  sendHint,
   onRecall,
   leading,
   trailing,
@@ -527,14 +530,14 @@ export function Composer({
                 size="icon"
                 onClick={() => void submit()}
                 disabled={!canSend}
-                aria-label={running ? "Queue message" : "Send message"}
+                aria-label={sendHint ?? (running ? "Queue message" : "Send message")}
                 className="ml-0.5 size-8 rounded-lg transition-[background-color,transform] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-[18px]" strokeWidth={2.4} />}
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {running ? "Queue message" : "Send"} <Kbd>↵</Kbd>
+              {sendHint ?? (running ? "Queue message" : "Send")} <Kbd>↵</Kbd>
             </TooltipContent>
           </Tooltip>
         </div>

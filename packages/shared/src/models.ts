@@ -153,6 +153,8 @@ export interface Agent {
   sshServerIds: ID[];
   /** Absolute path of the agent's git repository. */
   repoPath: string;
+  /** Runs of the agent that stand still (paused, or waiting for Claude's usage limit to reset). */
+  pausedRuns?: number;
   lastRunAt: ISODate | null;
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -330,9 +332,27 @@ export interface Conversation {
   running?: boolean;
   /** When the agent continues this chat on its own (see Followup). */
   followup?: ConversationFollowup | null;
+  /** The chat's run stands still: paused by the human, or waiting for Claude's usage limit to reset. */
+  paused?: RunPause | null;
 }
 
 export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt">;
+
+/** `user`: the human paused the run · `limit`: Claude's usage limit was reached mid-run. */
+export type PauseReason = "user" | "limit";
+
+/** A run that stands still. Continuing it picks the work up where it stopped, in the same run and Claude session. */
+export interface RunPause {
+  runId: ID;
+  reason: PauseReason;
+  pausedAt: ISODate;
+  /** Limit pauses: Claude's name for the limit, e.g. "session limit". */
+  limit: string | null;
+  /** Limit pauses: when the limit resets. null = Claude didn't say. */
+  resumeAt: ISODate | null;
+  /** Limit pauses: the run continues by itself at `resumeAt`. */
+  auto: boolean;
+}
 
 /**
  * A time an agent set to continue a chat on its own — like a coworker who says "I'll check back tomorrow at 10" while
@@ -386,7 +406,9 @@ export type MessageBlock =
   /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
   | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason }
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
-  | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate };
+  | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
+  /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */
+  | { type: "pause"; reason: PauseReason; at: ISODate; limit?: string | null; resumeAt?: ISODate | null; resumedAt?: ISODate };
 
 /** Why a follow-up ran: it was due, it was overdue (Godmode was off or asleep), or the human said "continue now". */
 export type FollowupReason = "due" | "late" | "now";
@@ -430,7 +452,8 @@ export interface Message {
   createdAt: ISODate;
 }
 
-export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+/** `paused`: the run stands still and continues where it stopped (see RunPause); it has not ended. */
+export type RunStatus = "queued" | "running" | "paused" | "succeeded" | "failed" | "cancelled";
 /**
  * `routine`: an automation ran (schedule, app event, condition met, webhook) · `check`: an automation checked its condition ·
  * `dream`: the agent consolidated its memory in the background · `followup`: the agent continued a chat at the time it set ·
@@ -886,6 +909,8 @@ export interface RunnerSettings {
   maxConcurrentRuns: number;
   /** Timeout per run in minutes */
   runTimeoutMinutes: number;
+  /** A run that hit Claude's usage limit continues by itself once the limit has reset. */
+  autoContinueOnLimit: boolean;
   defaultMaxBudgetUsd: number | null;
   extraArgs: string[];
   /** Global instructions: included in every run of every agent. */

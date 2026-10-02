@@ -14,6 +14,7 @@ import type {
   Message,
   MessageBlock,
   MessageRole,
+  PauseReason,
   Run,
   RunTrigger,
 } from "@godmode/shared";
@@ -35,6 +36,7 @@ import { parseComputerTarget } from "../computer/targets";
 import { audit } from "./audit";
 import { getSettings } from "./settings";
 import { clearQueue, listQueue } from "./messageQueue";
+import { continueConversation, pauseOf } from "./pauses";
 
 const log = logger("chat");
 
@@ -67,6 +69,12 @@ interface ConversationRow {
   followup_note?: string | null;
   followup_due_at?: string | null;
   followup_created_at?: string | null;
+  paused_run_id?: string | null;
+  paused_reason?: PauseReason | null;
+  paused_limit?: string | null;
+  paused_resume_at?: string | null;
+  paused_auto?: number | null;
+  paused_at?: string | null;
 }
 
 interface MessageRow {
@@ -125,6 +133,10 @@ function toConversation(r: ConversationRow): Conversation {
     preview: previewOf(r.preview),
     running: activeRunForConversation(r.id) !== null,
     followup: r.followup_due_at ? { note: r.followup_note ?? "", dueAt: r.followup_due_at, createdAt: r.followup_created_at ?? r.followup_due_at } : null,
+    paused:
+      r.paused_run_id && r.paused_reason && r.paused_at
+        ? { runId: r.paused_run_id, reason: r.paused_reason, pausedAt: r.paused_at, limit: r.paused_limit ?? null, resumeAt: r.paused_resume_at ?? null, auto: bool(r.paused_auto) }
+        : null,
   };
 }
 
@@ -143,10 +155,12 @@ function toMessage(r: MessageRow): Message {
 
 const PREVIEW_SQL = `(SELECT m.content FROM messages m WHERE m.conversation_id = c.id AND m.content != '' ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1) AS preview`;
 const FOLLOWUP_SQL = "f.note AS followup_note, f.due_at AS followup_due_at, f.created_at AS followup_created_at";
-const FROM_SQL = "conversations c LEFT JOIN followups f ON f.conversation_id = c.id";
+const PAUSE_SQL =
+  "p.run_id AS paused_run_id, p.reason AS paused_reason, p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at";
+const FROM_SQL = "conversations c LEFT JOIN followups f ON f.conversation_id = c.id LEFT JOIN paused_runs p ON p.conversation_id = c.id";
 
 function conversationRow(id: string): ConversationRow | null {
-  return get<ConversationRow>(`SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL} FROM ${FROM_SQL} WHERE c.id = ?`, id);
+  return get<ConversationRow>(`SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL}, ${PAUSE_SQL} FROM ${FROM_SQL} WHERE c.id = ?`, id);
 }
 
 function requireConversationRow(id: string): ConversationRow {
@@ -281,7 +295,7 @@ export function listConversations(
   const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? 100)), 500);
   params.push(limit);
   const rows = all<ConversationRow>(
-    `SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL} FROM ${FROM_SQL} WHERE ${where.join(" AND ")}
+    `SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL}, ${PAUSE_SQL} FROM ${FROM_SQL} WHERE ${where.join(" AND ")}
      ORDER BY ${opts.archived ? "" : "c.pinned DESC, "}COALESCE(c.last_message_at, c.created_at) DESC LIMIT ?`,
     ...params,
   );
@@ -355,6 +369,9 @@ export async function deleteConversation(id: string): Promise<void> {
     await cancelRun(r.runId);
     await waitForRun(r.runId, 15_000);
   }
+  // A paused run ends with its chat.
+  const paused = get<{ run_id: string }>("SELECT run_id FROM paused_runs WHERE conversation_id = ?", id);
+  if (paused) await cancelRun(paused.run_id);
   sql("DELETE FROM messages WHERE conversation_id = ?", id);
   sql("DELETE FROM conversations WHERE id = ?", id);
   try {
@@ -545,6 +562,15 @@ export async function sendMessage(
     sql("DELETE FROM messages WHERE id = ?", message.id);
     emitConversationUpdated(conversationId);
     throw err;
+  }
+
+  // Someone writing to a chat the human paused continues it: the paused run goes on, this message is the turn after it.
+  if ((input.trigger ?? "chat") === "chat" && pauseOf(conversationId)?.reason === "user") {
+    try {
+      continueConversation(conversationId);
+    } catch (err) {
+      log.warn(`could not continue the paused run of conversation ${conversationId}`, err);
+    }
   }
 
   // Writing in an archived chat brings it back; routines and delegations keep it archived.

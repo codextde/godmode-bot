@@ -13,6 +13,7 @@ import {
   Cpu,
   Hash,
   MessageSquare,
+  Play,
   Repeat,
   ScrollText,
   Share2,
@@ -125,7 +126,16 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
   const { live, status, running, elapsed } = useRunLiveState(run);
   const cancel = useCancelRun();
   const [logOpen, setLogOpen] = useState(false);
-  const cancellable = running || status === "queued";
+  const cancellable = running || status === "queued" || status === "paused";
+  const qc = useQueryClient();
+  const resume = useMutation({
+    mutationFn: () => api.conversations.continue(run.conversationId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.run(run.id) });
+      qc.invalidateQueries({ queryKey: qk.runs });
+    },
+    onError: (err) => toast.error("Couldn't continue", { description: errorMessage(err) }),
+  });
   const when = run.startedAt ?? run.createdAt;
 
   return (
@@ -155,11 +165,16 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
               </Link>
             </Button>
           )}
+          {status === "paused" && (
+            <Button size="sm" className="ml-auto" onClick={() => resume.mutate()} disabled={resume.isPending}>
+              {resume.isPending ? <Spinner /> : <Play className="fill-current" />} Continue
+            </Button>
+          )}
           {cancellable && (
             <Button
               size="sm"
               variant="outline"
-              className="ml-auto border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              className={cn("border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive", status !== "paused" && "ml-auto")}
               onClick={() => cancel.mutate(run.id)}
               disabled={cancel.isPending}
             >

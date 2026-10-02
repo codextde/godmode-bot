@@ -204,6 +204,8 @@ export const api = {
     send: (id: string, content: string) => post<SendMessageResult>(`/api/conversations/${id}/messages`, { content }),
     update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean }) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
+    /** Continue the chat's paused run where it stopped. */
+    continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
   },
 
   chat: {

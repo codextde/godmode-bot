@@ -31,6 +31,7 @@ export function QueueTray({
   queue,
   agentName,
   running,
+  paused,
   onLost,
   onDone,
   ref,
@@ -40,6 +41,8 @@ export function QueueTray({
   agentName: string;
   /** The agent is working in this chat. */
   running: boolean;
+  /** The chat's run stands still: the queue goes along when it continues. */
+  paused?: "user" | "limit" | null;
   /** A rewording came too late — the agent has the message already: hand the new wording back. */
   onLost: (text: string) => void;
   /** Done with a row: the composer takes the focus again. */
@@ -121,11 +124,15 @@ export function QueueTray({
     ? running
       ? "Stopping the current step…"
       : "Sending…"
-    : !running
-      ? "Not sent yet"
-      : first && parseSlashCommand(first.content)
-        ? `Runs when ${agentName} is done`
-        : `${agentName} picks ${many ? "these" : "this"} up at its next step`;
+    : paused
+      ? paused === "limit"
+        ? `${many ? "Go" : "Goes"} along when the limit resets`
+        : `${many ? "Go" : "Goes"} along when you continue`
+      : !running
+        ? "Not sent yet"
+        : first && parseSlashCommand(first.content)
+          ? `Runs when ${agentName} is done`
+          : `${agentName} picks ${many ? "these" : "this"} up at its next step`;
 
   return (
     <AnimatePresence initial={false}>
@@ -148,16 +155,20 @@ export function QueueTray({
                 <TooltipTrigger asChild>
                   <Button
                     size="xs"
-                    variant={running ? "ghost" : "secondary"}
+                    variant={running || paused ? "ghost" : "secondary"}
                     disabled={sendNow.isPending || queue.every((m) => pendingQueued.has(m.id))}
                     onClick={() => sendNow.mutate()}
                   >
-                    {sendNow.isPending ? <Spinner className="size-3" /> : running ? <Zap /> : <ArrowUp />}
-                    {running ? "Send now" : "Send"}
+                    {sendNow.isPending ? <Spinner className="size-3" /> : running || paused ? <Zap /> : <ArrowUp />}
+                    {running || paused ? "Send now" : "Send"}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  {running ? `Stop what ${agentName} is doing and start on ${many ? "these" : "this"}` : `Send ${many ? "these messages" : "this message"} to ${agentName}`}
+                  {paused
+                    ? `Continue now with ${many ? "these messages" : "this message"}`
+                    : running
+                      ? `Stop what ${agentName} is doing and start on ${many ? "these" : "this"}`
+                      : `Send ${many ? "these messages" : "this message"} to ${agentName}`}
                 </TooltipContent>
               </Tooltip>
             </div>

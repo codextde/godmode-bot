@@ -7,7 +7,8 @@ import { parseSlashCommand, SLACK_COMMAND } from "@godmode/shared";
 import { getAgent } from "../agents/service";
 import { get } from "../db";
 import { logger } from "../log";
-import { activeRunForConversation, cancelRun, waitForRun } from "../runner/runner";
+import { cancelRun, listActiveRuns, waitForRun } from "../runner/runner";
+import { pauseOf } from "../services/pauses";
 import { conversationExists, createConversation, MAX_ATTACHMENT_BYTES, sendMessage } from "../services/conversations";
 import { notify } from "../services/notifications";
 import { getSettings } from "../services/settings";
@@ -314,12 +315,16 @@ async function runCommand(conn: ConnectionRow, adapter: MessagingAdapter, msg: I
       await say(adapter, msg, current ? `Fresh start with ${agentLabel(current)}. What's next?` : "Fresh start.");
       return;
     case "stop": {
-      const runId = chat.conversation_id ? activeRunForConversation(chat.conversation_id) : null;
-      if (!runId) {
+      // What waits or works in the chat, and what stands still there (paused): waiting runs first, so none starts.
+      const active = chat.conversation_id ? listActiveRuns().filter((r) => r.conversationId === chat.conversation_id) : [];
+      const paused = chat.conversation_id ? pauseOf(chat.conversation_id)?.run_id : null;
+      const open = [...active.filter((r) => r.status === "queued"), ...active.filter((r) => r.status === "running")].map((r) => r.runId);
+      if (paused) open.push(paused);
+      if (!open.length) {
         await say(adapter, msg, "Nothing is running.");
         return;
       }
-      await cancelRun(runId, `Stopped from ${providerLabel(conn.provider)}`);
+      for (const runId of open) await cancelRun(runId, `Stopped from ${providerLabel(conn.provider)}`);
       return;
     }
   }
@@ -417,7 +422,17 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
     return;
   }
   patchChat(chatId, { last_message_at: now() });
+  // The message waits behind a run that stands still.
+  if (run.status === "queued" && pauseOf(conversationId)) await say(adapter, msg, pausedNote(conversationId));
   void deliver(adapter, msg, run.id, stop);
+}
+
+/** Why the chat's run stands still, and when it goes on. */
+function pausedNote(conversationId: string): string {
+  const pause = pauseOf(conversationId);
+  if (pause?.reason !== "limit") return "This chat is paused in Godmode. I'll answer when it continues.";
+  const at = pause.resume_at ? new Date(pause.resume_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }) : null;
+  return `Claude's ${pause.limit_name ?? "usage limit"} is reached. ${pause.auto && at ? `I'll continue around ${at} and answer then.` : "I'll answer once it has reset."}`;
 }
 
 function answerOf(run: Run): string {
@@ -448,7 +463,13 @@ export async function deliverFollowup(conversationId: string, runId: string): Pr
 async function deliver(adapter: MessagingAdapter, msg: InboundMessage, runId: string, stop: () => Promise<void>) {
   let run: Run;
   try {
-    run = await waitForRun(runId);
+    run = await waitForRun(runId, undefined, { orPaused: true });
+    // It stands still, maybe for hours: say so, then wait for the answer.
+    if (run.status === "paused") {
+      await stop();
+      await say(adapter, msg, pausedNote(run.conversationId));
+      run = await waitForRun(runId);
+    }
   } catch (err) {
     await stop();
     log.warn(`run ${runId} vanished`, err);
