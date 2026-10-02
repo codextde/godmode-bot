@@ -7,6 +7,9 @@
  * dequeue) with strictly one active run per conversation (FIFO). Output is parsed by StreamAccumulator into
  * one assistant message, pushed live as `run.delta` events, persisted (redacted) to SQLite, the agent repo
  * transcript and a raw JSONL run log.
+ *
+ * Messages the human sends meanwhile wait in the chat's queue (services/messageQueue.ts): Claude Code asks for them
+ * between two steps of the run (`deliverQueued`), and what is left when the run ends by itself starts the next one.
  */
 import { existsSync, mkdirSync, readdirSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,13 +42,14 @@ import {
   titleFromContent,
   updateMessage,
 } from "../services/conversations";
+import { startQueued, takeQueued } from "../services/messageQueue";
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
 import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
-import { buildMcpConfig, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
+import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor } from "./models";
-import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, resumeContextPrefix, type PromptApiTool, type PromptVm } from "./prompt";
+import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, queuedMessagesContext, resumeContextPrefix, type PromptApiTool, type PromptVm } from "./prompt";
 import { apiToolEnv, apiToolEnvOwners, apiToolsForAgent } from "../integrations/apiTools";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
 import { attachVm, detachVm, type RunVm } from "../vm/service";
@@ -69,6 +73,8 @@ export interface StartRunInput {
   voice?: boolean;
   /** The stored user message this run answers. When omitted the runner stores one from `prompt`. */
   userMessageId?: string | null;
+  /** Further stored user messages answered in the same turn (the chat's queue). */
+  alsoAnswers?: string[];
   /** Id for the run (callers that must know it before the run can start or finish). Default: a new one. */
   runId?: string;
 }
@@ -211,6 +217,7 @@ interface Job {
   conversationId: string;
   messageId: string;
   userMessageId: string | null;
+  alsoAnswers: string[];
   /** Unredacted prompt — memory only. */
   prompt: string;
   trigger: RunTrigger;
@@ -221,6 +228,8 @@ interface Job {
   acc: StreamAccumulator;
   proc: Subprocess | null;
   cancelReason: string | null;
+  /** Stopped to make way for the chat's queue: it starts when this run is gone (other stops leave it waiting). */
+  thenQueue?: boolean;
   timedOut: boolean;
   lastLabel: string;
   lastDeltaAt: number;
@@ -316,6 +325,8 @@ export async function startRun(input: StartRunInput): Promise<Run> {
   let userMessageId = input.userMessageId ?? null;
   if (userMessageId) sql("UPDATE messages SET run_id = ? WHERE id = ?", runId, userMessageId);
   else userMessageId = addMessage({ conversationId: input.conversationId, role: "user", content: redact(input.prompt), runId }).id;
+  const alsoAnswers = input.alsoAnswers ?? [];
+  for (const id of alsoAnswers) sql("UPDATE messages SET run_id = ? WHERE id = ?", runId, id);
 
   insert("runs", {
     id: runId,
@@ -336,6 +347,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
     conversationId: input.conversationId,
     messageId: assistant.id,
     userMessageId,
+    alsoAnswers,
     prompt: input.prompt,
     trigger: input.trigger,
     parentRunId: input.parentRunId ?? null,
@@ -360,7 +372,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
   return getRun(runId);
 }
 
-export async function cancelRun(runId: string, reason = "Cancelled"): Promise<void> {
+export async function cancelRun(runId: string, reason = "Cancelled", opts: { thenQueue?: boolean } = {}): Promise<void> {
   const job = jobs.get(runId);
   if (!job) {
     const row = get<RunRow>("SELECT * FROM runs WHERE id = ?", runId);
@@ -378,6 +390,7 @@ export async function cancelRun(runId: string, reason = "Cancelled"): Promise<vo
     if (child.parentRunId === runId) await cancelRun(child.runId, "Cancelled (parent run was cancelled)");
   }
   job.cancelReason ??= reason;
+  job.thenQueue = opts.thenQueue ?? false;
   if (job.status === "queued") {
     const idx = queue.indexOf(runId);
     if (idx >= 0) queue.splice(idx, 1);
@@ -386,6 +399,23 @@ export async function cancelRun(runId: string, reason = "Cancelled"): Promise<vo
   }
   if (job.proc) killTree(job.proc);
   // A job still in setup (no process yet) checks cancelReason before spawning.
+}
+
+/**
+ * Claude Code asks between two steps of a run (PostToolBatch hook) whether the human wrote in the meantime: the messages
+ * waiting in the chat's queue join the run here. Returns what Claude gets to read, or null when nothing waits.
+ */
+export function deliverQueued(runId: string): string | null {
+  const job = jobs.get(runId);
+  if (!job || job.status !== "running" || job.cancelReason || job.timedOut) return null;
+  const taken = takeQueued(job.conversationId, getAgent(job.agentId));
+  if (!taken.length) return null;
+  for (const { message } of taken) job.acc.addUserMessage(message);
+  // Stored right away: the messages are out of the queue and live in this turn from now on.
+  job.lastPersistAt = 0;
+  emitDelta(job);
+  log.info("queued messages picked up", { runId, count: taken.length });
+  return queuedMessagesContext(getSettings().general.userName, taken.map((t) => t.prompt));
 }
 
 /** Resolve when the run reaches a terminal state, or with its current state after `timeoutMs`. */
@@ -857,7 +887,7 @@ async function spawnClaude(
 
 function recapPrefix(job: Job): string {
   const msgs = listMessages(job.conversationId)
-    .filter((m) => m.id !== job.messageId && m.id !== job.userMessageId && m.role !== "system" && m.content.trim())
+    .filter((m) => m.id !== job.messageId && m.id !== job.userMessageId && !job.alsoAnswers.includes(m.id) && m.role !== "system" && m.content.trim())
     .slice(-10);
   if (!msgs.length) return "";
   const lines = msgs.map((m) => {
@@ -1029,6 +1059,22 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
+  // Between two steps Claude Code asks for the messages waiting in the chat's queue. Dreams and condition checks run in
+  // chats nobody writes to.
+  const hooksPath =
+    dreaming || job.trigger === "check"
+      ? null
+      : writeTempFile(
+          res,
+          `godmode-settings-${job.runId}.json`,
+          JSON.stringify({
+            hooks: {
+              PostToolBatch: [
+                { hooks: [{ type: "http", url: `${gatewayUrl()}/hooks/post-tool-batch`, timeout: 10, headers: { Authorization: `Bearer ${res.token}` } }] },
+              ],
+            },
+          }),
+        );
   if (job.acc.blocks.length) scheduleDelta(job);
 
   const canDelegate = !dreaming && (agent.permissions.allowDelegation || agent.permissions.canManageAgents);
@@ -1105,6 +1151,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     baseArgs.push("--permission-mode", "acceptEdits", "--allowedTools", Object.keys(mcp.mcpServers).map((n) => `mcp__${n}`).join(","));
   }
   baseArgs.push("--mcp-config", mcpPath, "--strict-mcp-config");
+  if (hooksPath) baseArgs.push("--settings", hooksPath);
   if (dreaming) baseArgs.push("--tools", DREAM_TOOLS);
   const disallowed: string[] = [];
   // Hide browser-use tools that need their own LLM key when none is configured (they would only error). The key never
@@ -1368,9 +1415,14 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   if (wasRunning && finished && convAlive && job.trigger !== "check" && job.trigger !== "dream") {
     const done = finished;
     safely("append transcript", () => {
-      const user = job.userMessageId ? getMessage(job.userMessageId) : null;
-      appendTranscript(job.conversationId, done, user, assistant);
+      const users = [job.userMessageId, ...job.alsoAnswers].flatMap((id) => (id ? [getMessage(id)] : []));
+      appendTranscript(job.conversationId, done, users, assistant);
     });
+  }
+  // What the human wrote meanwhile and the agent didn't pick up becomes the next turn. A stopped run stops the chat:
+  // its queue waits until the human sends it.
+  if (convAlive && !shuttingDown && (outcome.status !== "cancelled" || job.thenQueue)) {
+    await startQueued(job.conversationId).catch((err) => log.warn(`could not start the queue of conversation ${job.conversationId}`, err));
   }
   // Start the next queued turn (e.g. a follow-up message in this conversation) right away.
   pump();

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { motion } from "motion/react";
 import type { Agent, Message, MessageBlock } from "@godmode/shared";
-import { Clock3, Coins, Cpu, Info, Loader2, Square, Timer, Volume2 } from "lucide-react";
+import { Coins, Cpu, Info, Loader2, Square, Timer, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
@@ -15,9 +15,8 @@ import { qk } from "@/lib/queryKeys";
 import type { LiveRun } from "@/stores/live";
 import { cn } from "@/lib/utils";
 import { MessageBlocks } from "./message-blocks";
-import { AttachmentChip } from "./attachments";
 import { CopyButton } from "./copy-button";
-import { CommandText } from "./slash-commands";
+import { UserBubble } from "./user-bubble";
 import { describeTool } from "./tool-meta";
 import { FollowupMarker, followupBlock } from "./followup";
 import { liveMood } from "./conversation-mood";
@@ -36,32 +35,11 @@ function timeOf(iso: string) {
 /* User                                                                 */
 /* ------------------------------------------------------------------ */
 
-export function UserMessage({ message, queued, pending }: { message: Message; queued?: boolean; pending?: boolean }) {
+export function UserMessage({ message, pending }: { message: Message; pending?: boolean }) {
   return (
     <div className="group/msg flex flex-col items-end">
-      {message.attachments.length > 0 && (
-        <div className="mb-1.5 flex max-w-[85%] flex-wrap justify-end gap-1.5">
-          {message.attachments.map((a, i) => (
-            <AttachmentChip key={`${a.name}-${i}`} name={a.name} mime={a.mime} size={a.size} />
-          ))}
-        </div>
-      )}
-      {message.content && (
-        <div
-          className={cn(
-            "max-w-[85%] rounded-2xl rounded-br-[6px] border border-foreground/[0.05] bg-secondary px-4 py-2.5 text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap",
-            pending && "opacity-70",
-          )}
-        >
-          <CommandText text={message.content} />
-        </div>
-      )}
+      <UserBubble content={message.content} attachments={message.attachments} dim={pending} />
       <div className="mt-1 flex h-6 items-center gap-1.5 pr-1 text-[11px] text-muted-foreground">
-        {queued && (
-          <span className="inline-flex items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 font-medium">
-            <Clock3 className="size-3" /> Queued · runs after the current task
-          </span>
-        )}
         {pending ? (
           <span className="inline-flex items-center gap-1">
             <Loader2 className="size-3 animate-spin" /> Sending…

@@ -409,13 +409,17 @@ export async function trashAgentRepo(agent: Pick<Agent, "slug" | "repoPath">): P
 
 /** Cancel queued/running runs of an agent and wait (bounded) for them to settle. */
 export async function stopAgentRuns(agentId: string): Promise<void> {
-  const active = all<{ id: string }>("SELECT id FROM runs WHERE agent_id = ? AND status IN ('queued', 'running')", agentId);
-  for (const { id } of active) {
-    try {
-      await cancelRun(id);
-      await waitForRun(id, 15_000);
-    } catch (err) {
-      log.warn(`could not stop run ${id} of agent ${agentId}`, err);
+  // Again when a run that ended by itself meanwhile handed over to its chat's queue.
+  for (let pass = 0; pass < 3; pass++) {
+    const active = all<{ id: string }>("SELECT id FROM runs WHERE agent_id = ? AND status IN ('queued', 'running')", agentId);
+    if (!active.length) return;
+    for (const { id } of active) {
+      try {
+        await cancelRun(id);
+        await waitForRun(id, 15_000);
+      } catch (err) {
+        log.warn(`could not stop run ${id} of agent ${agentId}`, err);
+      }
     }
   }
 }

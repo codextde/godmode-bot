@@ -1,7 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { browserView, type AutomationEvent, type BrowserProfile, type ClientEvent, type EntityName, type ServerEvent, type Task, type Vm } from "@godmode/shared";
+import { browserView, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type EntityName, type ServerEvent, type Task, type Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
+import { withPending } from "./pending-queue";
 import { qk } from "./queryKeys";
 
 type Listener = (event: ServerEvent) => void;
@@ -145,6 +146,13 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "message.updated":
       qc.invalidateQueries({ queryKey: qk.conversation(event.message.conversationId) });
       break;
+    case "queue.updated": {
+      const key = qk.conversation(event.conversationId);
+      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, queue: withPending(event.conversationId, event.queue) } : old));
+      // A fetch that started before this change must not bring the old queue back.
+      qc.invalidateQueries({ queryKey: key });
+      break;
+    }
     case "conversation.updated":
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });

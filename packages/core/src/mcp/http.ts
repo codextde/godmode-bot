@@ -10,6 +10,8 @@ import { excerpt, logger } from "../log";
 import { getAgent } from "../agents/service";
 import type { RunContext } from "../types";
 import { resolveRunToken } from "./tokens";
+import { deliverQueued } from "../runner/runner";
+import { hasQueued } from "../services/messageQueue";
 import { UnknownToolError, callTool, listToolsFor, toolErrorMessage } from "./tools";
 import { COMPUTER_INSTRUCTIONS, UnknownComputerToolError, callComputerTool, listComputerTools } from "../computer/tools";
 import { UnknownVmToolError, VM_INSTRUCTIONS, callVmTool, listVmTools } from "../vm/tools";
@@ -244,6 +246,19 @@ export function registerMcpRoutes(app: Hono): void {
   app.post("/mcp/computer", (c) => serve(c, COMPUTER_SERVER));
   app.post("/mcp/vm", (c) => serve(c, VM_SERVER));
   app.post("/mcp/ssh", (c) => serve(c, SSH_SERVER));
+
+  // Claude Code's PostToolBatch hook: between two steps of a run, hand over the messages waiting in the chat's queue.
+  app.post("/mcp/hooks/post-tool-batch", async (c) => {
+    const ctx = resolveRunToken(bearer(c));
+    if (!ctx) return c.body(null, 401);
+    if (!hasQueued(ctx.conversationId)) return c.body(null, 204);
+    const input: unknown = await c.req.json().catch(() => null);
+    // A subagent's steps: the message is for the agent itself, at its own next step.
+    if (isObj(input) && input.agent_id) return c.body(null, 204);
+    const additionalContext = deliverQueued(ctx.runId);
+    if (!additionalContext) return c.body(null, 204);
+    return c.json({ hookSpecificOutput: { hookEventName: "PostToolBatch", additionalContext } });
+  });
 
   // Stateless servers: no server-initiated SSE stream and no sessions to terminate.
   for (const path of ["/mcp", "/mcp/computer", "/mcp/vm", "/mcp/ssh"]) {

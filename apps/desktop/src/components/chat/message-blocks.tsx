@@ -1,9 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Credential, MessageBlock } from "@godmode/shared";
-import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, Info, Lock, ShieldAlert, SquareSlash, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Lock, ShieldAlert, SquareSlash, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentAvatar } from "@/components/common";
 import { ThinkingState } from "@/components/aicss/ThinkingState";
@@ -16,12 +17,14 @@ import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./markdown";
+import { UserBubble } from "./user-bubble";
 import { CopyButton } from "./copy-button";
 import { Lightbox } from "./lightbox";
 import { describeTool, formatToolInput, hostOf, todoItems, type ToolContext, type ToolKind, type ToolMeta } from "./tool-meta";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
 type ThinkingBlock = Extract<MessageBlock, { type: "thinking" }>;
+type UserMessageBlock = Extract<MessageBlock, { type: "user_message" }>;
 
 type Step = { type: "tool"; block: ToolUseBlock } | { type: "thought"; block: ThinkingBlock; key: string };
 
@@ -31,6 +34,7 @@ type Item =
   | { kind: "error"; key: string; text: string }
   | { kind: "notice"; key: string; level: "info" | "warning" | "success"; text: string }
   | { kind: "command"; key: string; name: string; args: string; output: string }
+  | { kind: "user-message"; key: string; block: UserMessageBlock }
   | { kind: "tools"; key: string; steps: Step[] }
   | { kind: "missing-login"; key: string; block: ToolUseBlock }
   | { kind: "delegate"; key: string; block: ToolUseBlock }
@@ -98,6 +102,7 @@ function buildItems(blocks: MessageBlock[]): Item[] {
     } else if (b.type === "error") items.push({ kind: "error", key, text: b.text });
     else if (b.type === "notice") items.push({ kind: "notice", key, level: b.level, text: b.text });
     else if (b.type === "command") items.push({ kind: "command", key, name: b.name, args: b.args, output: b.output });
+    else if (b.type === "user_message") items.push({ kind: "user-message", key: b.id, block: b });
   });
   return items;
 }
@@ -158,6 +163,8 @@ export function MessageBlocks({ blocks, streaming = false, compact = false }: { 
             return <NoticeItem key={item.key} level={item.level} text={item.text} />;
           case "command":
             return <CommandOutput key={item.key} name={item.name} args={item.args} output={item.output} />;
+          case "user-message":
+            return <PickedUpMessage key={item.key} block={item.block} />;
           case "tools":
             return <ToolGroup key={item.key} steps={item.steps} ctx={ctx} streaming={active} />;
           case "missing-login":
@@ -184,6 +191,25 @@ export function MessageBlocks({ blocks, streaming = false, compact = false }: { 
 function ThinkingItem({ text, active }: { text: string; active: boolean }) {
   if (active && !text.trim()) return <ThinkingState />;
   return <ThinkingReasoning text={text} active={active} />;
+}
+
+/** A message the human sent while the agent worked, where the agent picked it up. */
+function PickedUpMessage({ block }: { block: UserMessageBlock }) {
+  const sent = new Date(block.sentAt);
+  return (
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }} className="flex flex-col items-end py-1">
+      <UserBubble content={block.text} attachments={block.attachments} />
+      <span className="mt-1 inline-flex items-center gap-1 pr-1 text-[11px] text-muted-foreground">
+        <CornerDownRight className="size-3" aria-hidden />
+        Picked up mid-task
+        {!Number.isNaN(sent.getTime()) && (
+          <time dateTime={block.sentAt} className="tabular-nums">
+            · sent {format(sent, "p")}
+          </time>
+        )}
+      </span>
+    </motion.div>
+  );
 }
 
 function NoticeItem({ level, text }: { level: "info" | "warning" | "success"; text: string }) {

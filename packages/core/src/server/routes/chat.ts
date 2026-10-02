@@ -11,6 +11,7 @@ import {
   startChat,
   updateConversation,
 } from "../../services/conversations";
+import { editQueued, removeQueued, sendQueuedNow, submitMessage } from "../../services/messageQueue";
 import { cancelRun, findRunLog, getRun, listRuns } from "../../runner/runner";
 import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } from "../../services/followups";
 import { notFound } from "../../util";
@@ -50,6 +51,11 @@ const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
   attachments: z.array(attachmentSchema).max(20).optional(),
   voice: z.boolean().optional(),
+  queue: z.boolean().optional(),
+  queueId: z
+    .string()
+    .regex(/^qmsg_[A-Za-z0-9]{16}$/)
+    .optional(),
 });
 
 function num(v: string | undefined): number | undefined {
@@ -115,8 +121,26 @@ export function registerChatRoutes(app: Hono): void {
   app.post("/api/conversations/:id/messages", async (c) => {
     const id = c.req.param("id");
     getConversationSummary(id); // 404 early, before parsing a potentially large body
-    const input = await body(c, sendSchema);
-    return c.json(await sendMessage(id, { ...input, trigger: "chat" }), 201);
+    const { queue, queueId, ...input } = await body(c, sendSchema);
+    if (!queue) return c.json(await sendMessage(id, { ...input, trigger: "chat" }), 201);
+    const outcome = await submitMessage(id, { ...input, queueId });
+    return c.json(outcome, "queued" in outcome ? 202 : 201);
+  });
+
+  app.patch("/api/conversations/:id/queue/:messageId", async (c) => {
+    const { content } = await body(c, z.object({ content: z.string().max(200_000) }));
+    return c.json(editQueued(c.req.param("id"), c.req.param("messageId"), content));
+  });
+
+  app.delete("/api/conversations/:id/queue/:messageId", (c) => {
+    removeQueued(c.req.param("id"), c.req.param("messageId"));
+    return c.json({ ok: true as const });
+  });
+
+  // Stop what the agent is doing and start on the queue.
+  app.post("/api/conversations/:id/queue/send", async (c) => {
+    await sendQueuedNow(c.req.param("id"));
+    return c.json({ ok: true as const });
   });
 
   app.get("/api/followups", (c) => c.json(listFollowups({ agentId: c.req.query("agentId") || undefined })));

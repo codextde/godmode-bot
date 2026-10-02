@@ -12,6 +12,7 @@ import type {
   Message,
   MessageBlock,
   MissingLogin,
+  QueuedMessage,
   Routine,
   Run,
   VaultStatus,
@@ -38,6 +39,8 @@ export type ServerEvent =
   | { type: "run.finished"; run: Run }
   | { type: "message.created"; message: Message }
   | { type: "message.updated"; message: Message }
+  /** The messages waiting in a chat's queue changed (the whole queue, in order). */
+  | { type: "queue.updated"; conversationId: ID; queue: QueuedMessage[] }
   | { type: "conversation.updated"; conversation: Conversation }
   | { type: "conversation.deleted"; id: ID }
   | { type: "agent.updated"; agent: Agent }

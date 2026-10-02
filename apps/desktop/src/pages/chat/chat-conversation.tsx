@@ -16,6 +16,7 @@ import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { ComputerFocus, ComputerPanel, ComputerShareChip, ComputerToggle, type ComputerFocusMode } from "@/components/computer/computer-panel";
 import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
+import { QueueTray, type QueueTrayHandle } from "@/components/chat/queue-tray";
 import { useArchiveChat } from "@/components/chat/chat-actions";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { useConversationMood } from "@/components/chat/conversation-mood";
@@ -33,6 +34,7 @@ import { VoiceMode } from "@/components/chat/voice-mode";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useVoiceSettings } from "@/hooks/use-voice";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
+import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useConversation, useWorkspaces } from "@/lib/hooks";
 import { onServerEvent } from "@/lib/realtime";
@@ -60,7 +62,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const armVoice = useVoiceSession((s) => s.arm);
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
   const composerRef = useRef<ComposerHandle>(null);
-  const [queued, setQueued] = useState<Record<string, string>>({});
+  const queueRef = useRef<QueueTrayHandle>(null);
   const mountedAt = useRef(Date.now());
   // A profile picked mid-run applies from the next message: keep showing the browser the running agent drives.
   const [runProfile, setRunProfile] = useState<{ runId: string; profileId: string | null } | null>(null);
@@ -99,10 +101,14 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   }, [computerTarget]);
 
   const messages = useMemo(() => conv?.messages ?? [], [conv?.messages]);
+  const queue = useMemo(() => conv?.queue ?? [], [conv?.queue]);
   const mood = useConversationMood(conversationId, messages, live);
   const activeRunId = live?.runId ?? conv?.activeRunId ?? null;
   const busyRef = useRef(false);
   busyRef.current = !!activeRunId;
+  // While the agent works (or older messages still wait), a new message joins the queue.
+  const queueingRef = useRef(false);
+  queueingRef.current = !!activeRunId || queue.length > 0;
 
   // Keep the last live turn on screen until the stored message replaces it (no flicker on finish).
   const [linger, setLinger] = useState<LiveRun | null>(null);
@@ -125,15 +131,6 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     [messages, live],
   );
 
-  const queuedIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const [messageId, runId] of Object.entries(queued)) {
-      const started = live?.runId === runId || messages.some((m) => m.role === "assistant" && m.runId === runId);
-      if (!started) set.add(messageId);
-    }
-    return set;
-  }, [queued, live, messages]);
-
   const inflight = live
     ? { live, startedAt: live.startedAt, runId: live.runId }
     : shownLinger
@@ -146,38 +143,52 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     mutationFn: (input: SendMessageInput) => api.conversations.send(conversationId, input),
     onMutate: async (input) => {
       await qc.cancelQueries({ queryKey: key });
-      const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-      const optimistic: Message = {
-        id: tempId,
-        conversationId,
-        role: "user",
-        content: input.content,
-        blocks: [],
-        runId: null,
-        attachments: (input.attachments ?? []).map((a) => ({ name: a.name, mime: a.mime, path: "", size: Math.round((a.data.length * 3) / 4) })),
-        createdAt: new Date().toISOString(),
-      };
-      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, messages: [...old.messages, optimistic] } : old));
-      return { tempId, wasBusy: busyRef.current };
+      const id = input.queueId!;
+      const tempId = `pending-${id}`;
+      const attachments = (input.attachments ?? []).map((a) => ({ name: a.name, mime: a.mime, path: "", size: Math.round((a.data.length * 3) / 4) }));
+      const draft = { conversationId, content: input.content, attachments, createdAt: new Date().toISOString() };
+      const queueing = queueingRef.current;
+      if (queueing) pendingQueued.set(id, { ...draft, id });
+      qc.setQueryData<ConversationWithMessages>(key, (old) =>
+        !old
+          ? old
+          : queueing
+            ? { ...old, queue: withPending(conversationId, old.queue) }
+            : { ...old, messages: [...old.messages, { ...draft, id: tempId, role: "user", blocks: [], runId: null }] },
+      );
+      return { id, tempId };
     },
     onSuccess: (res, input, ctx) => {
-      qc.setQueryData<ConversationWithMessages>(key, (old) =>
-        old
-          ? {
-              ...old,
-              messages: old.messages.some((m) => m.id === res.message.id)
-                ? old.messages.filter((m) => m.id !== ctx.tempId)
-                : old.messages.map((m) => (m.id === ctx.tempId ? res.message : m)),
-              activeRunId: old.activeRunId ?? (res.run.status === "queued" || res.run.status === "running" ? res.run.id : null),
-            }
-          : old,
-      );
-      if (ctx.wasBusy || res.run.status === "queued") setQueued((q) => ({ ...q, [res.message.id]: res.run.id }));
-      if (input.voice) markVoiceRun(res.run.id);
+      pendingQueued.delete(ctx.id);
+      qc.setQueryData<ConversationWithMessages>(key, (old) => {
+        if (!old) return old;
+        const sent = old.messages.filter((m) => m.id !== ctx.tempId);
+        if ("queued" in res) {
+          const shown = old.queue.some((m) => m.id === ctx.id);
+          return { ...old, messages: sent, queue: shown ? old.queue.map((m) => (m.id === ctx.id ? res.queued : m)) : [...old.queue, res.queued] };
+        }
+        return {
+          ...old,
+          queue: old.queue.filter((m) => m.id !== ctx.id),
+          messages: sent.some((m) => m.id === res.message.id)
+            ? sent
+            : old.messages.some((m) => m.id === ctx.tempId)
+              ? old.messages.map((m) => (m.id === ctx.tempId ? res.message : m))
+              : [...sent, res.message],
+          activeRunId: old.activeRunId ?? (res.run.status === "queued" || res.run.status === "running" ? res.run.id : null),
+        };
+      });
+      if ("run" in res && input.voice) markVoiceRun(res.run.id);
+      // Also settles the queue when the agent took the message before this answer arrived.
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
     },
     onError: (err, _input, ctx) => {
-      if (ctx) qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, messages: old.messages.filter((m) => m.id !== ctx.tempId) } : old));
+      if (ctx) {
+        pendingQueued.delete(ctx.id);
+        qc.setQueryData<ConversationWithMessages>(key, (old) =>
+          old ? { ...old, messages: old.messages.filter((m) => m.id !== ctx.tempId), queue: old.queue.filter((m) => m.id !== ctx.id) } : old,
+        );
+      }
       toast.error("Message not sent", { description: errorMessage(err) });
     },
   });
@@ -388,7 +399,6 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             messages={visibleMessages}
             agent={agent}
             inflight={inflight}
-            queuedMessageIds={queuedIds}
             onStop={() => activeRunId && cancel.mutate(activeRunId)}
             stopping={cancel.isPending}
             empty={
@@ -438,12 +448,22 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                   </motion.div>
                 )}
               </AnimatePresence>
+              <QueueTray
+                ref={queueRef}
+                conversationId={conversationId}
+                queue={queue}
+                agentName={agent?.name ?? "The agent"}
+                running={!!activeRunId}
+                onLost={(text) => composerRef.current?.insert(text)}
+                onDone={() => composerRef.current?.focus()}
+              />
               <Composer
                 ref={composerRef}
                 draftKey={conversationId}
                 agentId={conv.agentId}
                 autoFocus
                 running={!!activeRunId}
+                onRecall={() => queueRef.current?.editLast() ?? false}
                 leading={
                   <>
                     <FolderChip
@@ -495,7 +515,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 trailing={
                   <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(patch) => choose.mutate(patch)} />
                 }
-                onSubmit={(input) => send.mutateAsync(input)}
+                onSubmit={(input) => send.mutateAsync({ ...input, queueId: newQueueId() })}
               />
               <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 @2xl:block">
                 Agents act for you with your saved logins — secrets are filled into the browser, never shown to the AI.
@@ -511,7 +531,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             activity={live ? liveActivityLabel(live) : null}
             lastMessage={lastMessage}
             onSend={async (text) => {
-              await send.mutateAsync({ content: text, voice: true });
+              await send.mutateAsync({ content: text, voice: true, queueId: newQueueId() });
             }}
             onStop={activeRunId ? () => cancel.mutate(activeRunId) : undefined}
           />

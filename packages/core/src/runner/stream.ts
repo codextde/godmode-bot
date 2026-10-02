@@ -12,7 +12,7 @@
  * Slash commands that Claude Code runs locally (`/context`, `/model sonnet`…) become `command` blocks;
  * `/clear` and `/compact` become notices.
  */
-import type { MessageBlock, RunUsage } from "@godmode/shared";
+import type { MessageBlock, QueuedMessage, RunUsage } from "@godmode/shared";
 
 /** Longest tool result text kept per tool_use block (UI + DB). */
 export const MAX_TOOL_RESULT_CHARS = 20_000;
@@ -201,6 +201,11 @@ export class StreamAccumulator {
   /** Append a Godmode-generated notice (e.g. "browser tools unavailable"). */
   addNotice(level: "info" | "warning" | "success", text: string) {
     this.blocks.push({ type: "notice", level, text });
+  }
+
+  /** A message from the chat's queue joins the turn at this point. */
+  addUserMessage(message: QueuedMessage) {
+    this.blocks.push({ type: "user_message", id: message.id, text: message.content, attachments: message.attachments, sentAt: message.createdAt });
   }
 
   addError(text: string) {
@@ -498,6 +503,7 @@ export function redactBlocks(blocks: MessageBlock[], redact: (s: string) => stri
       case "thinking":
       case "error":
       case "notice":
+      case "user_message":
         return { ...b, text: redact(b.text) };
       case "command":
         return { ...b, args: redact(b.args), output: redact(b.output) };

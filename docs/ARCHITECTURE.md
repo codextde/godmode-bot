@@ -170,6 +170,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
+       --settings <tmp json>                   (the message-queue hook, see below)
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key or in a VM; Bash in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
        [--add-dir <folder or clone> for each usable workspace folder and repository]
@@ -182,6 +183,33 @@ Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + re
 Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-conversation lock prevents
 two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
 works in its own tabs (see Browser).
+
+### Message queue
+
+A message the human sends while the agent works in the chat doesn't become a run that waits for the whole task. With
+`queue: true` on `POST /api/conversations/:id/messages` (the desktop app always sends it) it is stored in `queued_messages`
+and the answer is `{ queued }` (202) instead of `{ message, run }`; without the flag — the phone app, the messaging
+bridge, older clients — a message still gets a run of its own behind the running one. `services/messageQueue.ts`:
+
+* **Picked up mid-run.** Every run except dreams and condition checks gets a `--settings` file with a Claude Code
+  `PostToolBatch` HTTP hook pointing at `POST /mcp/hooks/post-tool-batch` (the run's bearer token). Claude Code calls it
+  after each batch of tool calls, before the next model call; when messages wait, the answer hands them over as
+  `additionalContext`, quoted in `<message-from-human>` tags, and the agent decides how they fit into what it is doing.
+  They leave the queue and appear in the running assistant message as `user_message` blocks at that point. Steps of a
+  subagent (`agent_id` in the hook input) take nothing.
+* **Started as the next turn.** What still waits when a run ends by itself (finished or failed) starts one run: every
+  message becomes its own user message, the prompt is all of them. A slash command only works at the start of a turn, so
+  it is never handed over mid-run and always starts a turn of its own; messages behind it wait for the turn after.
+* **Stop means stop.** A cancelled run (Stop, a deleted agent or task, shutdown) never hands over to the queue: the
+  messages stay, shown as not sent, and go first with the human's next message or with **Send**. The same holds after a
+  restart — the table survives it.
+* **Edited, removed, sent now.** `PATCH` / `DELETE /api/conversations/:id/queue/:messageId` (404 once the agent has the
+  message) and `POST /api/conversations/:id/queue/send`, which stops the running run and starts the queue (or just
+  starts it when nothing runs). Every change goes out as `queue.updated` with the whole queue;
+  `GET /api/conversations/:id` carries it as `queue`. A client may name the queued message itself (`queueId`), so its
+  row is the same before and after the answer.
+* The table keeps the redacted text; what the human typed stays in memory for the prompt. A message that contains a
+  saved secret can't be edited (the editor would only see the mask).
 
 ## Godmode MCP gateway tools (`/mcp`)
 

@@ -68,8 +68,9 @@ import type {
   Routine,
   RoutineInput,
   Run,
+  QueuedMessage,
   SendMessageInput,
-  SendMessageResult,
+  SendMessageOutcome,
   Settings,
   SetupInput,
   SlashCommand,
@@ -394,7 +395,14 @@ export const api = {
     create: (input: { agentId: string; title?: string; workspaceId?: string | null }) => post<Conversation>("/api/conversations", input),
     update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
-    send: (id: string, input: SendMessageInput) => post<SendMessageResult>(`/api/conversations/${id}/messages`, input),
+    /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
+    send: (id: string, input: SendMessageInput) => post<SendMessageOutcome>(`/api/conversations/${id}/messages`, { ...input, queue: true }),
+    queue: {
+      edit: (id: string, messageId: string, content: string) => patch<QueuedMessage>(`/api/conversations/${id}/queue/${messageId}`, { content }),
+      remove: (id: string, messageId: string) => del<{ ok: true }>(`/api/conversations/${id}/queue/${messageId}`),
+      /** Stop what the agent is doing and start on the queue. */
+      sendNow: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/queue/send`),
+    },
   },
 
   /** Times agents set to continue a chat on their own (one per chat, keyed by the conversation). */
