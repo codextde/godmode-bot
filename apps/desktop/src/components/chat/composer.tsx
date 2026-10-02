@@ -42,6 +42,8 @@ export interface ComposerSubmit {
 export interface ComposerHandle {
   focus: () => void;
   setText: (text: string) => void;
+  /** Add text below whatever is being written. */
+  insert: (text: string) => void;
   addFiles: (files: File[]) => void;
 }
 
@@ -53,6 +55,8 @@ interface ComposerProps {
   busy?: boolean;
   /** The agent is working — new messages get queued */
   running?: boolean;
+  /** ↑ in the empty box: edit the newest queued message instead (true = taken). */
+  onRecall?: () => boolean;
   /** Rendered in a context tray below the toolbar (e.g. agent picker, folder) */
   leading?: ReactNode;
   /** Rendered before the voice and send buttons (e.g. model picker) */
@@ -80,6 +84,7 @@ export function Composer({
   autoFocus,
   busy,
   running,
+  onRecall,
   leading,
   trailing,
   size = "md",
@@ -190,6 +195,10 @@ export function Composer({
           el.setSelectionRange(t.length, t.length);
         });
       },
+      insert: (t: string) => {
+        setText((cur) => (cur.trim() ? `${cur.trimEnd()}\n\n${t}` : t));
+        requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+      },
       addFiles: (files: File[]) => void addFiles(files),
     }),
     [addFiles],
@@ -290,6 +299,8 @@ export function Composer({
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void submit();
+    } else if (e.key === "ArrowUp" && !text && !attachments.length && onRecall?.()) {
+      e.preventDefault();
     } else if (e.key === "Escape" && dictation.active) {
       e.preventDefault();
       dictation.stop();

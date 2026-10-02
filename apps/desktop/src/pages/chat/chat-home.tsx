@@ -125,6 +125,7 @@ export default function ChatHome() {
         ...res.conversation,
         messages: [res.message],
         activeRunId: res.run.status === "queued" || res.run.status === "running" ? res.run.id : null,
+        queue: [],
       });
       if (input.voice) markVoiceRun(res.run.id);
       resetSetup();

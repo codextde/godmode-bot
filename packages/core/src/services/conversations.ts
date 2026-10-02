@@ -34,6 +34,7 @@ import { normalizeWorkingDirectory } from "./folders";
 import { parseComputerTarget } from "../computer/targets";
 import { audit } from "./audit";
 import { getSettings } from "./settings";
+import { clearQueue, listQueue } from "./messageQueue";
 
 const log = logger("chat");
 
@@ -252,7 +253,7 @@ export function createConversation(
 
 export function getConversation(id: string): ConversationWithMessages {
   const conversation = getConversationSummary(id);
-  return { ...conversation, messages: listMessages(id), activeRunId: activeRunForConversation(id) };
+  return { ...conversation, messages: listMessages(id), activeRunId: activeRunForConversation(id), queue: listQueue(id) };
 }
 
 /** `workspaceId`: chats of the workspace's agents, and global agents' chats started in it. */
@@ -347,6 +348,8 @@ export function setConversationState(
 /** Cancel any active run, then delete the conversation, its messages and its transcript file. */
 export async function deleteConversation(id: string): Promise<void> {
   const row = requireConversationRow(id);
+  // First, so the run that is cancelled below doesn't hand over to the queue.
+  clearQueue(id);
   const active = listActiveRuns().filter((r) => r.conversationId === id);
   for (const r of active) {
     await cancelRun(r.runId);
@@ -481,6 +484,23 @@ export function saveAttachments(agent: Agent, files: NonNullable<SendMessageInpu
 /* Chat entry points                                                   */
 /* ------------------------------------------------------------------ */
 
+/** The chat a message goes to and its agent; refuses chats that take no messages. */
+export function messageTarget(conversationId: string, trigger: RunTrigger = "chat"): { conv: ConversationRow; agent: Agent } {
+  const conv = requireConversationRow(conversationId);
+  const agent = getAgent(conv.agent_id);
+  if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
+  if (conv.origin === "dream" && trigger !== "dream") {
+    throw badRequest(`This is where ${agent.name} dreams (consolidates its memory). Start a new chat to talk to it.`);
+  }
+  return { conv, agent };
+}
+
+/** What Claude reads for a message with files. Absolute paths: the run's cwd is not the agent repo when the chat works in a folder. */
+export function promptWithFiles(prompt: string, agent: Agent, attachments: Attachment[]): string {
+  if (!attachments.length) return prompt;
+  return `${prompt}${prompt ? "\n\n" : ""}Attached files: ${attachments.map((a) => join(agent.repoPath, a.path)).join(", ")}`;
+}
+
 /** Store the user message (+attachments) and start a run for it. */
 export async function sendMessage(
   conversationId: string,
@@ -498,21 +518,14 @@ export async function sendMessage(
     files?: Attachment[];
   },
 ): Promise<SendMessageResult> {
-  const conv = requireConversationRow(conversationId);
-  const agent = getAgent(conv.agent_id);
-  if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
-  if (conv.origin === "dream" && input.trigger !== "dream") {
-    throw badRequest(`This is where ${agent.name} dreams (consolidates its memory). Start a new chat to talk to it.`);
-  }
+  const { conv, agent } = messageTarget(conversationId, input.trigger);
   const content = (input.content ?? "").trim();
   const files = input.attachments ?? [];
   if (!content && files.length === 0 && !input.files?.length) throw badRequest("Message is empty");
 
   const attachments = [...(input.files ?? []), ...(files.length ? saveAttachments(agent, files) : [])];
   const message = addMessage({ conversationId, role: input.marker ? "system" : "user", content: redact(content), blocks: input.marker, attachments });
-  // Absolute: the run's cwd is not the agent repo when the chat works in a folder.
-  let prompt = input.prompt ?? content;
-  if (attachments.length) prompt += `${prompt ? "\n\n" : ""}Attached files: ${attachments.map((a) => join(agent.repoPath, a.path)).join(", ")}`;
+  const prompt = promptWithFiles(input.prompt ?? content, agent, attachments);
 
   let started: Run;
   try {
@@ -630,7 +643,7 @@ function speaker(runTrigger: RunTrigger): string {
 }
 
 /** Append one finished exchange (user turn + assistant turn) to the human-readable transcript. */
-export function appendTranscript(conversationId: string, finishedRun: Run, userMessage: Message | null, assistant: Message | null) {
+export function appendTranscript(conversationId: string, finishedRun: Run, userMessages: Message[], assistant: Message | null) {
   const row = conversationRow(conversationId);
   if (!row) return;
   const agent = getAgent(row.agent_id);
@@ -640,9 +653,15 @@ export function appendTranscript(conversationId: string, finishedRun: Run, userM
   if (!existsSync(path)) {
     parts.push(`# ${row.title}\n\nConversation \`${conversationId}\` with ${agent.name} · ${row.origin} · started ${fmtTime(row.created_at)}\n`);
   }
-  if (userMessage) {
-    parts.push(`## ${speaker(finishedRun.trigger)} · ${fmtTime(userMessage.createdAt)}\n\n${userMessage.content || "_(no text)_"}`);
-    if (userMessage.attachments.length) parts.push(`Attachments: ${userMessage.attachments.map((a) => `\`${a.path}\``).join(", ")}`);
+  const files = (attachments: Attachment[]) => `Attachments: ${attachments.map((a) => `\`${a.path}\``).join(", ")}`;
+  for (const m of userMessages) {
+    parts.push(`## ${speaker(finishedRun.trigger)} · ${fmtTime(m.createdAt)}\n\n${m.content || "_(no text)_"}`);
+    if (m.attachments.length) parts.push(files(m.attachments));
+  }
+  for (const b of assistant?.blocks ?? []) {
+    if (b.type !== "user_message") continue;
+    parts.push(`## ${speaker("chat")} · ${fmtTime(b.sentAt)} · while ${agent.name} was working\n\n${b.text || "_(no text)_"}`);
+    if (b.attachments.length) parts.push(files(b.attachments));
   }
   const meta = [
     finishedRun.status,

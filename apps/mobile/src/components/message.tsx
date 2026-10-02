@@ -99,6 +99,21 @@ function Block({ block }: { block: MessageBlock }) {
           ) : null}
         </View>
       );
+    case "user_message":
+      return (
+        <View style={styles.userWrap}>
+          <View style={[styles.user, { backgroundColor: c.primary }]}>
+            <T variant="body" color={c.onPrimary} selectable>
+              {block.text}
+            </T>
+            {block.attachments.length > 0 && (
+              <T variant="caption" color={c.onPrimary} style={{ opacity: 0.7, marginTop: 4 }}>
+                {block.attachments.map((a) => a.name).join(", ")}
+              </T>
+            )}
+          </View>
+        </View>
+      );
     default:
       return null;
   }

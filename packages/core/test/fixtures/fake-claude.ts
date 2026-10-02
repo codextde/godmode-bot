@@ -24,6 +24,10 @@
  *   TASK_SHOTS:<dir>  answer with a summary naming the files in <dir> in every way an agent does (code, links, paths)
  *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
  *   CRASH       print to stderr and exit 3 without a result
+ *   WAIT_FOR_QUEUE  run a tool step, then — once the state dir has a `queue-ready` file — call the PostToolBatch hook
+ *              from --settings like Claude Code does between steps (first once as a subagent) until it hands over
+ *              context, write that context to `queue-context.txt` and answer "QUEUE {json}"
+ *   WAIT_TO_FINISH  answer "finished" once the state dir has a `finish` file
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
  *               and answers "DREAM {json}". Digest keywords: DREAM_SLEEP hangs and DREAM_CRASH exits 3 (both after
@@ -323,6 +327,39 @@ if (slash?.[1] === "clear") {
 } else if (prompt.includes("CRASH")) {
   process.stderr.write("fatal: something exploded\n");
   process.exit(3);
+} else if (prompt.includes("WAIT_FOR_QUEUE")) {
+  out(init);
+  const settings = JSON.parse(readFileSync(argValue("--settings")!, "utf8")) as {
+    hooks: { PostToolBatch: { hooks: { type: string; url: string; headers: Record<string, string> }[] }[] };
+  };
+  const hook = settings.hooks.PostToolBatch[0]!.hooks[0]!;
+  const step = async (extra: Record<string, unknown> = {}) => {
+    const res = await fetch(hook.url, {
+      method: "POST",
+      headers: { ...hook.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ hook_event_name: "PostToolBatch", session_id: sessionId, tool_calls: [], ...extra }),
+    });
+    const raw = await res.text();
+    return { status: res.status, context: raw ? ((JSON.parse(raw) as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput.additionalContext) : null };
+  };
+  out({ type: "assistant", message: { id: "msg_step", role: "assistant", content: [{ type: "tool_use", id: "toolu_step", name: "Bash", input: { command: "sleep 1" } }] }, parent_tool_use_id: null, session_id: sessionId });
+  out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_step", content: "ok", is_error: false }] }, parent_tool_use_id: null, session_id: sessionId });
+  let context: string | null = null;
+  let subagent: number | null = null;
+  for (let i = 0; i < 300 && !context; i++) {
+    await pause(50);
+    if (existsSync(join(stateDir, "queue-ready"))) subagent ??= (await step({ agent_id: "sub_1", agent_type: "general-purpose" })).status;
+    if (subagent !== null) context = (await step()).context;
+  }
+  writeFileSync(join(stateDir, "queue-context.txt"), context ?? "");
+  const text = `QUEUE ${JSON.stringify({ hookType: hook.type, subagent, context })}`;
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("WAIT_TO_FINISH")) {
+  out(init);
+  textTurn("Working on it");
+  for (let i = 0; i < 300 && !existsSync(join(stateDir, "finish")); i++) await pause(50);
+  result("finished");
 } else if (prompt.includes("SLEEP")) {
   out(init);
   textTurn("Working on it");

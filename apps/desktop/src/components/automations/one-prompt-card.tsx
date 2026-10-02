@@ -50,6 +50,7 @@ export function OnePromptCard({ compact = false }: { compact?: boolean }) {
         ...res.conversation,
         messages: [res.message],
         activeRunId: res.run.status === "queued" || res.run.status === "running" ? res.run.id : null,
+        queue: [],
       });
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${res.conversation.id}`);

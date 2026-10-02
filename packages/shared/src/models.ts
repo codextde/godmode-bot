@@ -384,7 +384,9 @@ export type MessageBlock =
   /** Output of a Claude Code slash command that ran locally (e.g. /context, /usage, /model). */
   | { type: "command"; name: string; args: string; output: string }
   /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
-  | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason };
+  | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason }
+  /** A message the human sent while the agent was working, at the point where the agent picked it up. */
+  | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate };
 
 /** Why a follow-up ran: it was due, it was overdue (Godmode was off or asleep), or the human said "continue now". */
 export type FollowupReason = "due" | "late" | "now";
@@ -405,6 +407,15 @@ export interface Attachment {
   /** Path inside the agent repo (attachments/…) */
   path: string;
   size: number;
+}
+
+/** A message sent while the agent was working: it waits in the chat's queue until the agent picks it up. */
+export interface QueuedMessage {
+  id: ID;
+  conversationId: ID;
+  content: string;
+  attachments: Attachment[];
+  createdAt: ISODate;
 }
 
 export interface Message {

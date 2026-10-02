@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { BUILTIN_MODELS, type ModelCatalog } from "@godmode/shared";
 import { api, type ScopeFilter } from "./api";
+import { withPending } from "./pending-queue";
 import { qk } from "./queryKeys";
 import { useUi } from "@/stores/ui";
 
@@ -55,7 +56,14 @@ export function useArchivedConversations(agentId?: string, search = "", { enable
 }
 
 export function useConversation(id: string | undefined) {
-  return useQuery({ queryKey: qk.conversation(id ?? ""), queryFn: () => api.conversations.get(id!), enabled: !!id });
+  return useQuery({
+    queryKey: qk.conversation(id ?? ""),
+    queryFn: async () => {
+      const conversation = await api.conversations.get(id!);
+      return { ...conversation, queue: withPending(conversation.id, conversation.queue) };
+    },
+    enabled: !!id,
+  });
 }
 
 const BUILTIN_CATALOG: ModelCatalog = { models: BUILTIN_MODELS, source: "builtin", claudeVersion: null, fetchedAt: "", error: null };

@@ -21,14 +21,13 @@ export interface ThreadProps {
   agent?: Agent;
   /** In-flight turn: live blocks (or null while waiting for the first delta) */
   inflight: { live: LiveRun | null; startedAt: number; runId: string | null } | null;
-  queuedMessageIds: Set<string>;
   onStop?: () => void;
   stopping?: boolean;
   /** Rendered when there are no messages and nothing in flight */
   empty?: ReactNode;
 }
 
-export function Thread({ messages, agent, inflight, queuedMessageIds, onStop, stopping, empty }: ThreadProps) {
+export function Thread({ messages, agent, inflight, onStop, stopping, empty }: ThreadProps) {
   const { scrollRef, contentRef, atBottom, scrollToBottom } = useStickToBottom();
   // Messages present on first render don't animate in
   const initialIds = useRef<Set<string> | null>(null);
@@ -62,7 +61,7 @@ export function Thread({ messages, agent, inflight, queuedMessageIds, onStop, st
                   transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
                 >
                   {m.role === "user" ? (
-                    <UserMessage message={m} queued={queuedMessageIds.has(m.id)} pending={m.id.startsWith("pending-")} />
+                    <UserMessage message={m} pending={m.id.startsWith("pending-")} />
                   ) : m.role === "assistant" ? (
                     <AssistantMessage message={m} agent={agent} />
                   ) : (

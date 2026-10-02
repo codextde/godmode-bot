@@ -12,6 +12,7 @@ import type {
   ISODate,
   Message,
   MissingLoginStatus,
+  QueuedMessage,
   Routine,
   RoutineTrigger,
   Run,
@@ -111,6 +112,8 @@ export interface TestEventInput {
 export interface ConversationWithMessages extends Conversation {
   messages: Message[];
   activeRunId: ID | null;
+  /** Messages waiting for the agent, oldest first. */
+  queue: QueuedMessage[];
 }
 
 export interface SendMessageInput {
@@ -119,12 +122,19 @@ export interface SendMessageInput {
   attachments?: { name: string; mime: string; data: string }[];
   /** Voice-originated message (auto speak reply) */
   voice?: boolean;
+  /** While the agent works in this chat, put the message in the chat's queue instead of starting a run of its own. */
+  queue?: boolean;
+  /** Id of the queued message, chosen by the client so the queue can show it before the answer arrives. */
+  queueId?: ID;
 }
 
 export interface SendMessageResult {
   message: Message;
   run: Run;
 }
+
+/** `queued`: the agent was working, so the message waits in the chat's queue. */
+export type SendMessageOutcome = SendMessageResult | { queued: QueuedMessage };
 
 export interface StartChatInput {
   agentId?: ID;
