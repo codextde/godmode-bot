@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View, type GestureResponderEvent } from "react-native";
+import { KeyboardStickyView, useKeyboardState } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { browserView, type ComputerInputEvent } from "@godmode/shared";
@@ -20,6 +21,9 @@ import { useStreamFrame, useVmFrame, type LiveScreen } from "@/lib/screens";
 
 const WHITE = "#FFFFFF";
 const DIM = "rgba(255,255,255,0.7)";
+
+/** The type box, key bar and buttons above the keyboard. */
+const TOOLS_HEIGHT = 184;
 
 type Key = { label: string; key: string; modifiers?: string[]; a11y: string };
 
@@ -66,6 +70,7 @@ export default function Live() {
   const fresh = !!frame && (params.kind === "browser" ? online : now - frame.at < 8000);
   const [control, setControl] = useState(false);
   const [typing, setTyping] = useState(false);
+  const keyboard = useKeyboardState((k) => (k.isVisible ? k.height : 0));
   const [text, setText] = useState("");
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number; secondary: boolean } | null>(null);
   const canControl = params.kind !== "vm" || vm?.state === "running";
@@ -98,7 +103,9 @@ export default function Live() {
     onError: (err) => Alert.alert("Couldn't start the browser", errorText(err)),
   });
 
-  const box = { width, height };
+  // With the keyboard up, the picture moves into the space between the title and the controls above the keyboard.
+  const top = keyboard ? insets.top + 60 : 0;
+  const box = { width, height: keyboard ? Math.max(120, height - keyboard - TOOLS_HEIGHT - top) : height };
   const fit = frame ? Math.min(box.width / frame.width, box.height / frame.height) : 1;
   const shown = frame ? { width: frame.width * fit, height: frame.height * fit } : box;
 
@@ -129,6 +136,14 @@ export default function Live() {
     input.mutate({ type: "text", text: value });
   };
 
+  // Text still in the box goes in first, then Return: what "Enter" means while typing.
+  const enter = async () => {
+    const value = text;
+    setText("");
+    if (value && !(await input.mutateAsync({ type: "text", text: value }).then(() => true, () => false))) return;
+    sendKey({ label: "Enter", key: "Enter", a11y: "Enter" });
+  };
+
   const subtitle =
     params.kind === "vm"
       ? vm
@@ -147,7 +162,7 @@ export default function Live() {
       <StatusBar hidden />
       <ScrollView
         style={StyleSheet.absoluteFill}
-        contentContainerStyle={{ width, height, alignItems: "center", justifyContent: "center" }}
+        contentContainerStyle={{ width, height: box.height + top, paddingTop: top, alignItems: "center", justifyContent: "center" }}
         maximumZoomScale={control ? 1 : 4}
         minimumZoomScale={1}
         centerContent
@@ -237,7 +252,7 @@ export default function Live() {
       </View>
 
       {canControl && uri ? (
-        <View style={[styles.bottom, { paddingBottom: insets.bottom + 14 }]}>
+        <KeyboardStickyView offset={{ opened: insets.bottom }} style={[styles.bottom, { paddingBottom: insets.bottom + 14 }]}>
           {typing && (
             <Animated.View entering={FadeIn} style={{ width: "100%", maxWidth: 520, gap: 8 }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.keys}>
@@ -256,6 +271,8 @@ export default function Live() {
               <Glass style={styles.typeBox} scheme="dark" fallback={SMOKE}>
                 <TextInput
                   autoFocus
+                  autoCapitalize="none"
+                  autoCorrect={false}
                   value={text}
                   onChangeText={setText}
                   onSubmitEditing={sendText}
@@ -264,7 +281,7 @@ export default function Live() {
                   returnKeyType="send"
                   style={styles.typeInput}
                 />
-                <Pressable onPress={() => sendKey({ label: "Enter", key: "Enter", a11y: "Enter" })} style={styles.enter}>
+                <Pressable onPress={enter} style={styles.enter}>
                   <T variant="caption" color={WHITE} style={{ fontWeight: "600" }}>
                     Enter
                   </T>
@@ -300,7 +317,7 @@ export default function Live() {
               {mac ? "Tap to click, hold to right-click" : "Tap the picture to click there"}
             </T>
           )}
-        </View>
+        </KeyboardStickyView>
       ) : null}
     </View>
   );
