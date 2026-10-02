@@ -31,6 +31,8 @@ export interface StreamFinal {
   sessionId: string | null;
   /** Error strings reported by the CLI (e.g. "No conversation found with session ID: …"). */
   errors: string[];
+  /** HTTP status of the API error that ended the run (429 when a limit was reached). */
+  apiErrorStatus: number | null;
 }
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
@@ -53,6 +55,17 @@ interface StreamState {
 }
 
 type Json = Record<string, unknown>;
+
+/** A usage limit Claude reported as reached (`rate_limit_event`). */
+export interface StreamLimit {
+  /** Claude's key for the limit window: "five_hour", "seven_day", … */
+  type: string | null;
+  /** Unix seconds; null when Claude didn't say. */
+  resetsAt: number | null;
+}
+
+/** What Claude Code answers when a usage limit ends the run: "You've hit your session limit · resets 3pm". */
+export const LIMIT_TEXT = /you['’]ve hit your [^\n]{0,80}|\busage limit reached\b/i;
 
 const TOOL_USE_TYPES = new Set(["tool_use", "server_tool_use", "mcp_tool_use"]);
 
@@ -115,14 +128,18 @@ export function mapUsage(u: unknown): RunUsage | null {
 }
 
 export class StreamAccumulator {
-  readonly blocks: MessageBlock[] = [];
+  readonly blocks: MessageBlock[];
   sessionId: string | null = null;
   model: string | null = null;
   final: StreamFinal | null = null;
   /** Raw names of every tool the run called (including subagents). */
   readonly toolsCalled = new Set<string>();
-  /** Set when the CLI reports a rejected rate limit (the CLI waits and retries by itself). */
-  rateLimited = false;
+  /** The usage limit Claude last reported as reached; null while requests go through. */
+  limit: StreamLimit | null = null;
+  /** Claude Code's own line saying a usage limit ended the run. */
+  limitLine: string | null = null;
+  /** The model answered: the prompt of this stretch of the run is in the Claude session. */
+  answered = false;
   /** A slash command Claude Code handled locally, without a model turn (e.g. `/model sonnet`). */
   localCommand: { name: string; args: string; output: string } | null = null;
   /** `/clear` replaced the Claude session with an empty one. */
@@ -134,6 +151,12 @@ export class StreamAccumulator {
   private streams = new Map<string, StreamState>();
   private messages = new Map<string, BlockRef[]>();
   private pendingTextDelta = "";
+
+  /** `blocks`: what the run already produced before it was paused. */
+  constructor(blocks: MessageBlock[] = []) {
+    this.blocks = blocks;
+    for (const b of blocks) if (b.type === "tool_use") this.toolsCalled.add(b.name);
+  }
 
   /** Consume one parsed stream-json event. Returns true when the visible blocks changed. */
   push(event: unknown): boolean {
@@ -156,10 +179,10 @@ export class StreamAccumulator {
         return true;
       case "rate_limit_event": {
         const info = isObj(event.rate_limit_info) ? event.rate_limit_info : null;
-        const limited = info?.status === "rejected";
-        const changed = limited !== this.rateLimited;
-        this.rateLimited = limited;
-        return changed;
+        const was = this.limit !== null;
+        // While usage credits pay for the requests, the limit of the plan stops nothing.
+        this.limit = info?.status === "rejected" && info.isUsingOverage !== true ? { type: str(info.rateLimitType), resetsAt: num(info.resetsAt) } : null;
+        return was !== (this.limit !== null);
       }
       default:
         return false;
@@ -176,7 +199,7 @@ export class StreamAccumulator {
   /** Short human label for what the run is doing right now. */
   activityLabel(): string {
     if (this.final) return this.final.isError ? "Failed" : "Done";
-    if (this.rateLimited) return "Waiting for rate limit…";
+    if (this.limit) return "Waiting for rate limit…";
     if (this.compacting) return "Compacting conversation…";
     const last = this.blocks[this.blocks.length - 1];
     if (!last) return "Starting…";
@@ -210,6 +233,21 @@ export class StreamAccumulator {
 
   addError(text: string) {
     this.blocks.push({ type: "error", text });
+  }
+
+  /**
+   * The run stands still from here. What the Claude session doesn't hold goes: text and tool calls the model was still
+   * writing (it writes them again when the run continues), and Claude Code's own line about the limit.
+   */
+  markPause(pause: Extract<MessageBlock, { type: "pause" }>) {
+    const partial = new Set<number>();
+    for (const refs of this.messages.values()) for (const r of refs) if (!r.confirmed) partial.add(r.blockIdx);
+    for (let i = this.blocks.length - 1; i >= 0; i--) if (partial.has(i)) this.blocks.splice(i, 1);
+    const last = this.blocks[this.blocks.length - 1];
+    if (pause.reason === "limit" && last?.type === "text" && !last.parentToolUseId && last.text.length < 300 && LIMIT_TEXT.test(last.text)) this.blocks.pop();
+    this.messages.clear();
+    this.streams.clear();
+    this.blocks.push(pause);
   }
 
   /* ---------------------------------------------------------------- */
@@ -270,6 +308,7 @@ export class StreamAccumulator {
     switch (ev.type) {
       case "message_start": {
         const msg = isObj(ev.message) ? ev.message : null;
+        this.answered = true;
         s.messageId = str(msg?.id) ?? null;
         s.indexMap.clear();
         s.jsonBuf.clear();
@@ -358,7 +397,14 @@ export class StreamAccumulator {
       this.blocks.push({ type: "command", ...this.localCommand });
       return true;
     }
-    if (str(msg.model)) this.model = str(msg.model);
+    // Claude Code's own lines (an API error, a reached limit) come as messages of a "<synthetic>" model.
+    const synthetic = str(msg.model) === "<synthetic>";
+    if (!synthetic) this.answered = true;
+    else {
+      const line = msg.content.map((c) => (isObj(c) && c.type === "text" ? (str(c.text) ?? "") : "")).join("\n");
+      if (LIMIT_TEXT.test(line)) this.limitLine = line.trim();
+    }
+    if (str(msg.model) && !synthetic) this.model = str(msg.model);
     let changed = false;
 
     for (const c of msg.content) {
@@ -453,6 +499,7 @@ export class StreamAccumulator {
       usage: mapUsage(e.usage),
       sessionId: this.sessionId,
       errors,
+      apiErrorStatus: num(e.api_error_status),
     };
   }
 
@@ -465,7 +512,7 @@ export class StreamAccumulator {
   }
 
   /** Top-level text blocks after the last top-level tool_use (i.e. the final turn's answer). */
-  private lastTurnText(): string {
+  lastTurnText(): string {
     const parts: string[] = [];
     for (let i = this.blocks.length - 1; i >= 0; i--) {
       const b = this.blocks[i]!;

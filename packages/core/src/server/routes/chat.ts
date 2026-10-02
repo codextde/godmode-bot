@@ -12,6 +12,7 @@ import {
   updateConversation,
 } from "../../services/conversations";
 import { editQueued, removeQueued, sendQueuedNow, submitMessage } from "../../services/messageQueue";
+import { continueConversation, pauseConversation, setAutoContinue } from "../../services/pauses";
 import { cancelRun, findRunLog, getRun, listRuns } from "../../runner/runner";
 import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } from "../../services/followups";
 import { notFound } from "../../util";
@@ -141,6 +142,20 @@ export function registerChatRoutes(app: Hono): void {
   app.post("/api/conversations/:id/queue/send", async (c) => {
     await sendQueuedNow(c.req.param("id"));
     return c.json({ ok: true as const });
+  });
+
+  // Make the chat's run stand still; it continues where it stopped.
+  app.post("/api/conversations/:id/pause", async (c) => {
+    await pauseConversation(c.req.param("id"));
+    return c.json({ ok: true as const });
+  });
+
+  app.post("/api/conversations/:id/continue", (c) => c.json(continueConversation(c.req.param("id")), 201));
+
+  // Whether a run that waits for Claude's usage limit continues by itself when the limit resets.
+  app.patch("/api/conversations/:id/pause", async (c) => {
+    const { auto } = await body(c, z.object({ auto: z.boolean() }));
+    return c.json(setAutoContinue(c.req.param("id"), auto));
   });
 
   app.get("/api/followups", (c) => c.json(listFollowups({ agentId: c.req.query("agentId") || undefined })));

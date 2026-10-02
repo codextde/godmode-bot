@@ -114,6 +114,19 @@ function Block({ block }: { block: MessageBlock }) {
           </View>
         </View>
       );
+    case "pause": {
+      const limit = block.reason === "limit";
+      const what = limit ? `${block.limit ?? "Usage limit"} reached` : "Paused";
+      return (
+        <View style={[styles.callout, { backgroundColor: limit ? c.warningSoft : c.sunken }]}>
+          <Icon name={limit ? "clock" : "pause"} size={14} color={limit ? c.warning : c.textMuted} />
+          <T variant="footnote" muted style={{ flex: 1 }}>
+            {what.charAt(0).toUpperCase() + what.slice(1)}
+            {block.resumedAt ? " · continued" : ""}
+          </T>
+        </View>
+      );
+    }
     default:
       return null;
   }

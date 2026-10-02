@@ -1,7 +1,7 @@
 import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
-import { AlarmClock, Archive, Pin, Trash2 } from "lucide-react";
+import { AlarmClock, Archive, Hourglass, Pause, Pin, Trash2 } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -69,8 +69,19 @@ export function RecentChats() {
                         {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
                       </span>
                       <span className="block truncate text-[11px] text-muted-foreground">
-                        {running ? (
+                        {running && !c.paused ? (
                           <span className="text-shimmer font-medium">Working…</span>
+                        ) : c.paused ? (
+                          <span className="flex items-center gap-1">
+                            {c.paused.reason === "limit" ? (
+                              <Hourglass className="size-3 shrink-0 text-warning" aria-hidden />
+                            ) : (
+                              <Pause className="size-3 shrink-0 fill-current" aria-hidden />
+                            )}
+                            <span className="truncate">
+                              {c.paused.reason === "user" ? "Paused" : c.paused.auto && c.paused.resumeAt ? `Continues ${followupWhen(c.paused.resumeAt)}` : "Waiting for the limit"}
+                            </span>
+                          </span>
                         ) : c.followup ? (
                           <span className="flex items-center gap-1" title={c.followup.note}>
                             <AlarmClock className="size-3 shrink-0 text-brand-strong" aria-hidden />

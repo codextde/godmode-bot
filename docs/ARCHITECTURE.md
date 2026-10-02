@@ -211,6 +211,44 @@ bridge, older clients — a message still gets a run of its own behind the runni
 * The table keeps the redacted text; what the human typed stays in memory for the prompt. A message that contains a
   saved secret can't be edited (the editor would only see the mask).
 
+### Pause and continue
+
+A run can stand still and continue later (`services/pauses.ts`, `runner.ts`). It has not ended: its status is `paused`,
+it keeps its row, its assistant message and its Claude session, and nothing that waits for its end (a task, an
+automation's events, a delegating agent, a platform chat) is told anything — there is no `run.finished`, only
+`run.paused`. Table `paused_runs` holds what continuing needs (one per chat); `Conversation.paused`, `Task.pause` and
+`Agent.pausedRuns` carry it to the UI.
+
+* **Pausing** (`POST /api/conversations/:id/pause`, `POST /api/agents/:id/pause` for everything an agent works on):
+  while a step runs, the `PostToolBatch` hook answers `{ "continue": false }` when Claude Code asks between two steps,
+  so the step finishes and the session ends cleanly. With no step running, or when the step takes longer than 8 s, the
+  process is stopped like a cancelled run; text and tool calls the model was still writing are dropped (they are not
+  in its session); a run that finishes in that moment is finished. Dreams and condition checks can't be paused. Work
+  the run delegated is stopped.
+* **Claude's usage limit.** A run that ends because a limit was reached — Claude Code's own "You've hit your … limit"
+  line, or refused requests (429) while Claude reports the limit — is paused instead of failed. The name of the limit
+  and its reset time come from `rate_limit_event` (status `rejected`), which alone proves nothing: requests still go
+  through on usage credits. With `settings.runner.autoContinueOnLimit` (default on, per run with
+  `PATCH /api/conversations/:id/pause { auto }`, which the run keeps) a timer continues it 30 s after the reset — also
+  after a restart. A limit that is still there adds a marker and waits for the next reset; after three such tries by
+  the timer in a row the run waits for the human. One notification per limit and reset. Checks, dreams and delegated
+  runs fail as before.
+* **Continuing** (`POST /api/conversations/:id/continue`, `POST /api/agents/:id/continue`): the run goes back into the
+  queue ahead of what waited behind it, with the blocks it had (`pause` blocks mark where it stood still), and the next
+  `claude -p --resume` gets a `<godmode-continue>` note to pick the work up where it stopped instead of the prompt.
+  Cost, time, turns and tokens add up over the stretches (the budget is what is left); the raw run log is appended to.
+  What never reached Claude (paused while queued or starting, a limit on the first request) is sent again — after a
+  restart with saved secrets masked. When the session is gone, the new one gets the recap with the run's own task.
+* **A paused chat is frozen.** Runs that come after the paused one wait for it (also its follow-up). Messages wait in
+  the queue: the run takes them along when it continues. Writing to a chat the human paused continues it — from the
+  desktop app with the message, from the phone or a platform chat with the message as the turn after; while a limit is
+  reached the message waits for the reset (*Send now* tries at once). A platform chat is told that the chat is paused
+  or waits for the limit, and gets the answer when the run has continued; a delegating agent that waits for a run is
+  told when it is paused.
+* **Stopping** a paused run (`POST /api/runs/:id/cancel`, deleting its chat, agent or task, moving its task off In
+  progress) ends it as `cancelled`, like a run stopped while it worked. Backups carry paused runs; after a restore none
+  continues by itself.
+
 ## Godmode MCP gateway tools (`/mcp`)
 
 | Tool | Purpose |

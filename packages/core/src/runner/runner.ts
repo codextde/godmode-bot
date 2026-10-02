@@ -10,13 +10,17 @@
  *
  * Messages the human sends meanwhile wait in the chat's queue (services/messageQueue.ts): Claude Code asks for them
  * between two steps of the run (`deliverQueued`), and what is left when the run ends by itself starts the next one.
+ *
+ * A run can stand still and continue later (services/pauses.ts): the human pauses it (`pauseRun`), or Claude's usage
+ * limit is reached. It keeps its row, its assistant message and its Claude session; `resumeRun` queues it again and the
+ * next `claude -p` process resumes the session with a note to pick the work up where it stopped.
  */
-import { existsSync, mkdirSync, readdirSync, writeFileSync, chmodSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { FileSink, Subprocess } from "bun";
-import type { Agent, BrowserProfile, ComputerTarget, Effort, Message, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
+import type { Subprocess } from "bun";
+import type { Agent, BrowserProfile, ComputerTarget, Effort, Message, PauseReason, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
 import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
@@ -43,13 +47,14 @@ import {
   updateMessage,
 } from "../services/conversations";
 import { startQueued, takeQueued } from "../services/messageQueue";
+import { MAX_RETRIES, dropPause, limitReached, pausedConversations, pausedRun, savePause, stopContinuing, type LimitPause, type PausedRow } from "../services/pauses";
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
 import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor } from "./models";
-import { buildDreamSystemPrompt, buildSystemPrompt, instructionsDigest, instructionsSection, queuedMessagesContext, resumeContextPrefix, type PromptApiTool, type PromptVm } from "./prompt";
+import { buildDreamSystemPrompt, buildSystemPrompt, continueContext, instructionsDigest, instructionsSection, queuedMessagesContext, resumeContextPrefix, type PromptApiTool, type PromptVm } from "./prompt";
 import { apiToolEnv, apiToolEnvOwners, apiToolsForAgent } from "../integrations/apiTools";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
 import { attachVm, detachVm, type RunVm } from "../vm/service";
@@ -87,6 +92,8 @@ const DELTA_INTERVAL_MS = 100;
 const DELTA_INTERVAL_HEAVY_MS = 1000;
 const PERSIST_INTERVAL_MS = 2000;
 const KILL_GRACE_MS = 5000;
+/** A pause lets the step in progress finish for this long before it cuts it off. */
+const PAUSE_GRACE_MS = 8000;
 const SESSION_MISSING = /no conversation found|session(?: id)? [^\n]{0,80}not found|could not find session|no such session/i;
 const AUTH_PROBLEM = /not logged in|please run \/login|invalid api key|authentication_error|oauth token (?:has )?expired|credit balance is too low/i;
 /** Built-in Claude Code tools of a dream run: reading and editing the memory files, nothing else. */
@@ -209,7 +216,17 @@ export function findRunLog(r: Run): string | null {
 /* In-memory state                                                     */
 /* ------------------------------------------------------------------ */
 
-type Outcome = { status: "succeeded" | "failed" | "cancelled"; error: string | null };
+type Outcome = { status: "succeeded" | "failed" | "cancelled" | "paused"; error: string | null };
+
+/** What the stretches of a run before a pause cost. */
+interface Spent {
+  costUsd: number | null;
+  durationMs: number | null;
+  numTurns: number | null;
+  usage: RunUsage | null;
+}
+
+const NOTHING_SPENT: Spent = { costUsd: null, durationMs: null, numTurns: null, usage: null };
 
 interface Job {
   runId: string;
@@ -230,6 +247,22 @@ interface Job {
   cancelReason: string | null;
   /** Stopped to make way for the chat's queue: it starts when this run is gone (other stops leave it waiting). */
   thenQueue?: boolean;
+  /**
+   * The run is to stand still. `applied` once Godmode stopped it for that: a run that ends by itself before simply ends.
+   */
+  pause?: { reason: PauseReason; applied: boolean; /** Claude Code was told to stop between two steps. */ atStep?: boolean } & Partial<LimitPause>;
+  pauseTimer?: ReturnType<typeof setTimeout> | null;
+  /**
+   * The run continues after a pause. `redo`: what Claude never got and is sent again; null = it has everything.
+   * `byTimer`: the limit had reset and Godmode continued it. `choice`: what the human set for this run with the Auto
+   * switch (null = the setting decides).
+   */
+  resumed?: { reason: PauseReason; pausedAt: string; redo: string | null; byTimer: boolean; choice: boolean | null; retries: number };
+  /** What this stretch of the run sends to Claude. */
+  body?: string;
+  /** Claude Code asks Godmode between two steps of this run (PostToolBatch hook). */
+  hooked?: boolean;
+  spent: Spent;
   timedOut: boolean;
   lastLabel: string;
   lastDeltaAt: number;
@@ -266,6 +299,8 @@ const STALE_DIGEST = "stale";
 
 const jobs = new Map<string, Job>();
 const queue: string[] = [];
+/** What paused runs sent last without an answer from Claude, before redaction — memory only. */
+const unanswered = new Map<string, string>();
 const missingLoginReported = new Set<string>();
 let shuttingDown = false;
 
@@ -285,13 +320,21 @@ export function activeRunForConversation(conversationId: string): string | null 
   return queued;
 }
 
-export function listActiveRuns(): { runId: string; agentId: string; conversationId: string; status: "queued" | "running"; parentRunId: string | null }[] {
+export function listActiveRuns(): {
+  runId: string;
+  agentId: string;
+  conversationId: string;
+  status: "queued" | "running";
+  parentRunId: string | null;
+  trigger: RunTrigger;
+}[] {
   return [...jobs.values()].map((j) => ({
     runId: j.runId,
     agentId: j.agentId,
     conversationId: j.conversationId,
     status: j.status,
     parentRunId: j.parentRunId,
+    trigger: j.trigger,
   }));
 }
 
@@ -357,6 +400,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
     acc: new StreamAccumulator(),
     proc: null,
     cancelReason: null,
+    spent: NOTHING_SPENT,
     timedOut: false,
     lastLabel: "",
     lastDeltaAt: 0,
@@ -377,6 +421,7 @@ export async function cancelRun(runId: string, reason = "Cancelled", opts: { the
   if (!job) {
     const row = get<RunRow>("SELECT * FROM runs WHERE id = ?", runId);
     if (!row) throw notFound("Run");
+    if (row.status === "paused") return closePaused(row, reason);
     if (!TERMINAL.has(row.status)) {
       // Stale row (no live job): close it.
       sql("UPDATE runs SET status = 'cancelled', error = ?, finished_at = ? WHERE id = ?", reason, now(), runId);
@@ -386,9 +431,7 @@ export async function cancelRun(runId: string, reason = "Cancelled", opts: { the
     return;
   }
   // Cancelling a run also cancels the work it delegated.
-  for (const child of [...jobs.values()]) {
-    if (child.parentRunId === runId) await cancelRun(child.runId, "Cancelled (parent run was cancelled)");
-  }
+  for (const child of delegatedBy(runId)) await cancelRun(child, "Cancelled (parent run was cancelled)");
   job.cancelReason ??= reason;
   job.thenQueue = opts.thenQueue ?? false;
   if (job.status === "queued") {
@@ -401,13 +444,182 @@ export async function cancelRun(runId: string, reason = "Cancelled", opts: { the
   // A job still in setup (no process yet) checks cancelReason before spawning.
 }
 
+/* ------------------------------------------------------------------ */
+/* Pause and continue                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Runs a run delegated that are working or stand still. */
+function delegatedBy(runId: string): string[] {
+  const working = [...jobs.values()].filter((j) => j.parentRunId === runId).map((j) => j.runId);
+  const paused = all<{ id: string }>("SELECT id FROM runs WHERE parent_run_id = ? AND status = 'paused'", runId).map((r) => r.id);
+  return [...working, ...paused];
+}
+
+/** A top-level step is running right now (cut-off steps of an earlier stretch don't count). */
+function stepRunning(job: Job): boolean {
+  for (let i = job.acc.blocks.length - 1; i >= 0; i--) {
+    const b = job.acc.blocks[i]!;
+    if (b.type === "pause") return false;
+    if (b.type === "tool_use" && !b.parentToolUseId && b.result === undefined) return true;
+  }
+  return false;
+}
+
+/**
+ * Make a run stand still so it can continue later. A step in progress gets a moment to finish — Claude Code then stops
+ * between two steps (`pauseAtStep`) and nothing is cut off; otherwise the run is stopped right away.
+ */
+export async function pauseRun(runId: string): Promise<void> {
+  const job = jobs.get(runId);
+  if (!job) throw conflict("That run isn't working right now");
+  if (job.trigger === "dream" || job.trigger === "check") throw badRequest("This kind of run can't be paused — stop it instead");
+  if (job.cancelReason || job.pause) return;
+  // A chat has one paused run; what waits behind it is frozen already.
+  if (pausedConversations().has(job.conversationId)) throw conflict("This chat is paused already");
+  job.pause = { reason: "user", applied: false };
+  // What it delegated would report back to a process that is gone: that work stops, and is handed over again later.
+  for (const child of delegatedBy(runId)) await cancelRun(child, "Stopped (the run that delegated this was paused)");
+  if (job.status === "queued") {
+    job.pause.applied = true;
+    await suspend(job, null, Date.now());
+    return;
+  }
+  emitActivity(job, "Pausing…");
+  if (job.proc && job.hooked && stepRunning(job)) job.pauseTimer = setTimeout(() => applyPause(job), PAUSE_GRACE_MS);
+  else applyPause(job);
+}
+
+function applyPause(job: Job) {
+  if (job.pauseTimer) clearTimeout(job.pauseTimer);
+  job.pauseTimer = null;
+  if (!job.pause || job.pause.applied) return;
+  job.pause.applied = true;
+  // A job still in setup (no process yet) checks `halted` before spawning.
+  if (job.proc) killTree(job.proc);
+}
+
+/** Claude Code asks between two steps of a run (PostToolBatch hook): true = stop here, the run is being paused. */
+export function pauseAtStep(runId: string): boolean {
+  const job = jobs.get(runId);
+  if (!job?.pause || job.cancelReason) return false;
+  // Already being stopped for the pause: it gets nothing more to do.
+  if (job.pause.applied) return true;
+  if (job.pauseTimer) clearTimeout(job.pauseTimer);
+  job.pause.applied = true;
+  job.pause.atStep = true;
+  // Claude Code ends by itself now; a process that doesn't is stopped.
+  job.pauseTimer = setTimeout(() => job.proc && killTree(job.proc), KILL_GRACE_MS);
+  return true;
+}
+
+/** Why the run must not go on: it was stopped, or it is to stand still. */
+function halted(job: Job): Outcome | null {
+  if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+  if (job.pause?.applied) return { status: "paused", error: null };
+  return null;
+}
+
+/**
+ * Continue a paused run where it stopped: it goes back into the queue, ahead of what waited behind it, with what it
+ * did so far. `by`: the human, or Godmode once the limit has reset.
+ */
+export function resumeRun(p: PausedRow, by: "user" | "auto" = "user"): Run {
+  if (shuttingDown) throw new HttpError(503, "Godmode is shutting down", "shutting_down");
+  const row = get<RunRow>("SELECT * FROM runs WHERE id = ?", p.run_id);
+  if (!row || row.status !== "paused") throw conflict("That run isn't paused anymore");
+  const agent = getAgent(row.agent_id);
+  if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
+  const ts = now();
+  const blocks = getMessage(p.message_id).blocks.map((b) => (b.type === "pause" && !b.resumedAt ? { ...b, resumedAt: ts } : b));
+  const kept = unanswered.get(row.id);
+  unanswered.delete(row.id);
+  const job: Job = {
+    runId: row.id,
+    agentId: row.agent_id,
+    conversationId: row.conversation_id,
+    messageId: p.message_id,
+    userMessageId: p.user_message_id,
+    alsoAnswers: parseJson<string[]>(p.also_answers, []),
+    prompt: row.prompt,
+    trigger: row.trigger,
+    parentRunId: row.parent_run_id,
+    depth: p.depth,
+    voice: p.voice === 1,
+    status: "queued",
+    acc: new StreamAccumulator(blocks),
+    proc: null,
+    cancelReason: null,
+    // What the human typed is gone after a restart: the stored text has saved secrets masked.
+    resumed: {
+      reason: p.reason,
+      pausedAt: p.created_at,
+      redo: p.delivered ? null : (kept ?? p.redo ?? row.prompt),
+      byTimer: by === "auto",
+      choice: p.choice === null ? null : p.choice === 1,
+      retries: p.reason === "limit" ? p.retries : 0,
+    },
+    spent: { costUsd: row.cost_usd, durationMs: row.duration_ms, numTurns: row.num_turns, usage: parseJson<RunUsage | null>(row.usage, null) },
+    timedOut: false,
+    lastLabel: "",
+    lastDeltaAt: 0,
+    lastPersistAt: 0,
+    deltaTimer: null,
+    done: null,
+  };
+  if (!p.delivered && kept === undefined && /•{4,}/.test(job.resumed!.redo ?? "")) {
+    job.acc.addNotice("warning", "Godmode restarted while this was paused, so the message is sent again with its saved secrets masked.");
+  }
+  sql("UPDATE runs SET status = 'queued' WHERE id = ?", row.id);
+  jobs.set(row.id, job);
+  queue.unshift(row.id);
+  dropPause(p);
+  bus.emit({ type: "run.started", run: getRun(row.id) });
+  // Right away: clients show the run with what it did before the pause.
+  emitDelta(job);
+  bus.changed("runs");
+  emitConversationUpdated(row.conversation_id);
+  log.info("run continues", { runId: row.id, by, reason: p.reason });
+  pump();
+  return getRun(row.id);
+}
+
+/** A paused run is stopped for good: it ends like a run that was stopped while it worked. */
+function closePaused(row: RunRow, reason: string): void {
+  const p = pausedRun(row.id);
+  const ts = now();
+  unanswered.delete(row.id);
+  sql("UPDATE runs SET status = 'cancelled', error = ?, finished_at = ? WHERE id = ?", reason, ts, row.id);
+  const convAlive = conversationExists(row.conversation_id);
+  let assistant: Message | null = null;
+  if (p && convAlive) {
+    safely("close the paused message", () => {
+      const message = getMessage(p.message_id);
+      assistant = updateMessage(p.message_id, { blocks: [...message.blocks, { type: "notice", level: "info", text: reason }] });
+    });
+  }
+  const run = getRun(row.id);
+  if (p && convAlive && row.started_at) {
+    safely("append transcript", () => {
+      const users = [p.user_message_id, ...parseJson<string[]>(p.also_answers, [])].flatMap((id) => (id ? [getMessage(id)] : []));
+      appendTranscript(row.conversation_id, run, users, assistant);
+    });
+  }
+  if (p) dropPause(p);
+  bus.emit({ type: "run.finished", run });
+  bus.changed("runs");
+  for (const child of delegatedBy(row.id)) void cancelRun(child, "Cancelled (parent run was cancelled)").catch((err) => log.warn(`could not cancel run ${child}`, err));
+  // Runs that waited behind the pause go on.
+  pump();
+}
+
 /**
  * Claude Code asks between two steps of a run (PostToolBatch hook) whether the human wrote in the meantime: the messages
  * waiting in the chat's queue join the run here. Returns what Claude gets to read, or null when nothing waits.
  */
 export function deliverQueued(runId: string): string | null {
   const job = jobs.get(runId);
-  if (!job || job.status !== "running" || job.cancelReason || job.timedOut) return null;
+  // A run that is ending (stopped, timed out, being paused) takes nothing: the message would go down with it.
+  if (!job || job.status !== "running" || job.cancelReason || job.timedOut || job.pause) return null;
   const taken = takeQueued(job.conversationId, getAgent(job.agentId));
   if (!taken.length) return null;
   for (const { message } of taken) job.acc.addUserMessage(message);
@@ -418,8 +630,11 @@ export function deliverQueued(runId: string): string | null {
   return queuedMessagesContext(getSettings().general.userName, taken.map((t) => t.prompt));
 }
 
-/** Resolve when the run reaches a terminal state, or with its current state after `timeoutMs`. */
-export function waitForRun(runId: string, timeoutMs?: number): Promise<Run> {
+/**
+ * Resolve when the run reaches a terminal state, or with its current state after `timeoutMs`. `orPaused`: also when
+ * it stands still — it may stay that way for hours.
+ */
+export function waitForRun(runId: string, timeoutMs?: number, opts: { orPaused?: boolean } = {}): Promise<Run> {
   return new Promise<Run>((resolve, reject) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let settled = false;
@@ -431,7 +646,7 @@ export function waitForRun(runId: string, timeoutMs?: number): Promise<Run> {
       fn();
     };
     const off = bus.on((e) => {
-      if (e.type === "run.finished" && e.run.id === runId) finish(() => resolve(e.run));
+      if ((e.type === "run.finished" || (opts.orPaused && e.type === "run.paused")) && e.run.id === runId) finish(() => resolve(e.run));
     });
     let current: Run;
     try {
@@ -440,7 +655,7 @@ export function waitForRun(runId: string, timeoutMs?: number): Promise<Run> {
       finish(() => reject(err));
       return;
     }
-    if (TERMINAL.has(current.status) && !jobs.has(runId)) {
+    if ((TERMINAL.has(current.status) || (opts.orPaused && current.status === "paused")) && !jobs.has(runId)) {
       finish(() => resolve(current));
       return;
     }
@@ -505,6 +720,7 @@ function pump() {
   // Dreams don't take run slots (there is at most one at a time), so they never hold up anyone's work.
   let running = [...jobs.values()].filter((j) => j.status === "running" && j.trigger !== "dream").length;
   const blocked = new Set<string>();
+  const frozen = queue.length ? pausedConversations() : null;
   for (const runId of [...queue]) {
     const job = jobs.get(runId);
     if (!job) {
@@ -513,6 +729,12 @@ function pump() {
     }
     const convBusy = [...jobs.values()].some((j) => j.status === "running" && j.conversationId === job.conversationId);
     if (convBusy || blocked.has(job.conversationId)) {
+      blocked.add(job.conversationId);
+      continue;
+    }
+    // A paused run keeps its place: what came after it waits until it continues or is stopped.
+    if (frozen?.has(job.conversationId)) {
+      emitActivity(job, "Waiting — this chat is paused");
       blocked.add(job.conversationId);
       continue;
     }
@@ -828,6 +1050,12 @@ async function readLines(stream: ReadableStream<Uint8Array>, onLine: (line: stri
   if (buf) onLine(buf);
 }
 
+/** The raw run log: a new file, or the same one again when the run continues after a pause. */
+interface RunLog {
+  write(line: string): unknown;
+  end(): unknown;
+}
+
 interface Attempt {
   exitCode: number | null;
   stderr: string;
@@ -842,7 +1070,7 @@ async function spawnClaude(
   prompt: string,
   cwd: string,
   env: Record<string, string | undefined>,
-  logSink: FileSink,
+  logSink: RunLog,
 ): Promise<Attempt> {
   const noise: string[] = [];
   const proc = Bun.spawn({
@@ -856,7 +1084,7 @@ async function spawnClaude(
     detached: process.platform !== "win32",
   });
   job.proc = proc;
-  if (job.cancelReason) killTree(proc);
+  if (halted(job)) killTree(proc);
   try {
     proc.stdin.write(prompt);
     await proc.stdin.end();
@@ -877,7 +1105,7 @@ async function spawnClaude(
       return;
     }
     if (job.acc.push(event)) scheduleDelta(job);
-    emitActivity(job, job.acc.activityLabel());
+    emitActivity(job, job.pause && !job.cancelReason ? "Pausing…" : job.acc.activityLabel());
   });
   const exitCode = await proc.exited;
   const stderr = await stderrP;
@@ -886,12 +1114,16 @@ async function spawnClaude(
 }
 
 function recapPrefix(job: Job): string {
+  // A run that continues after a pause sends a note instead of its prompt: its own task and answer so far belong to the recap.
+  const own = (id: string) => !job.resumed && (id === job.messageId || id === job.userMessageId || job.alsoAnswers.includes(id));
   const msgs = listMessages(job.conversationId)
-    .filter((m) => m.id !== job.messageId && m.id !== job.userMessageId && !job.alsoAnswers.includes(m.id) && m.role !== "system" && m.content.trim())
+    .filter((m) => !own(m.id) && m.role !== "system" && m.content.trim())
     .slice(-10);
   if (!msgs.length) return "";
   const lines = msgs.map((m) => {
-    const text = m.content.length > 1500 ? `${m.content.slice(0, 1499)}…` : m.content;
+    // The task a continued run works on must arrive whole.
+    const max = job.resumed && (m.id === job.userMessageId || job.alsoAnswers.includes(m.id)) ? 20_000 : 1500;
+    const text = m.content.length > max ? `${m.content.slice(0, max - 1)}…` : m.content;
     return `${m.role === "user" ? "User" : "Assistant"}: ${text}`;
   });
   return `<godmode-context>\nThe previous Claude session of this conversation could not be restored. Recap of the most recent messages:\n\n${lines.join("\n\n")}\n</godmode-context>\n\n`;
@@ -925,6 +1157,33 @@ function describeFailure(job: Job, attempt: Attempt): string {
     .join("\n");
   if (lastLines) return lastLines.length > 1000 ? lastLines.slice(-1000) : lastLines;
   return attempt.exitCode ? `Claude Code exited with code ${attempt.exitCode}` : "Claude Code exited without a result";
+}
+
+/**
+ * What this stretch of the run sends to Claude: the prompt, or — when the run continues after a pause — a note to pick
+ * the work up, with the messages that waited in the chat's queue meanwhile.
+ */
+function bodyOf(job: Job, agent: Agent): string {
+  const resumed = job.resumed;
+  if (!resumed) return job.prompt;
+  const taken = takeQueued(job.conversationId, agent);
+  for (const { message } of taken) job.acc.addUserMessage(message);
+  if (taken.length) scheduleDelta(job);
+  const messages = taken.map((t) => t.prompt);
+  if (resumed.redo !== null) return [resumed.redo, ...messages].join("\n\n");
+  return continueContext({ reason: resumed.reason, userName: getSettings().general.userName, pausedAt: resumed.pausedAt, messages });
+}
+
+/** The usage limit that ended the run, when that is why it failed and the run can wait for the reset. */
+function limitOf(job: Job, attempt: Attempt): LimitPause | null {
+  // Checks and dreams come round again by themselves; delegated work reports its failure to the run that waits for it.
+  if (job.trigger === "check" || job.trigger === "dream" || job.parentRunId) return null;
+  const { final, limit, limitLine } = job.acc;
+  if (final?.subtype === "error_max_turns" || final?.subtype === "error_max_budget_usd") return null;
+  // The answer itself only counts while Claude reports a limit as reached: the model may write about limits too.
+  const said = [limitLine ?? "", limit ? (final?.text ?? "") : "", final?.errors.join("\n") ?? "", attempt.stderr, attempt.noise.join("\n")].join("\n");
+  // Refused requests (429) while Claude reports a limit as reached are that limit, whatever the wording.
+  return limitReached(limit, final?.apiErrorStatus === 429 && limit ? `${said}\nusage limit reached` : said);
 }
 
 async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcome> {
@@ -983,23 +1242,24 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       return { status: "failed", error: "This work is set to run in a virtual machine, but virtual machines are turned off (Settings → Virtual machines). Turn them on, or remove the VM from the chat, agent or workspace." };
     }
     const cancelled = new AbortController();
-    const watch = setInterval(() => job.cancelReason && cancelled.abort(), 250);
+    const watch = setInterval(() => halted(job) && cancelled.abort(), 250);
     const onActivity = (label: string) => emitActivity(job, label);
     try {
       try {
         vm = await attachVm(job.runId, vmId, onActivity, cancelled.signal);
       } catch (err) {
-        if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
-        return { status: "failed", error: `The virtual machine can't be used: ${errorText(err)}` };
+        return halted(job) ?? { status: "failed", error: `The virtual machine can't be used: ${errorText(err)}` };
       }
-      if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+      const stop = halted(job);
+      if (stop) return stop;
       const browser = settings.browser.enabled && agent.browser.enabled;
       guest = await prepareGuest(vm.id, { browser, onActivity, signal: cancelled.signal }).catch((err: unknown) => ({
         browser: null,
         cua: null,
         problems: [`The VM's browser and computer-use tools are unavailable in this run: ${errorText(err)}`],
       }));
-      if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+      const stopped = halted(job);
+      if (stopped) return stopped;
       job.vmBrowser = !!guest.browser;
       for (const problem of guest.problems) job.acc.addNotice("warning", problem);
     } finally {
@@ -1029,7 +1289,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   let sources: RunSource[] = [];
   if (!dreaming && agent.workspaceId) {
     const cancelled = new AbortController();
-    const watch = setInterval(() => job.cancelReason && cancelled.abort(), 250);
+    const watch = setInterval(() => halted(job) && cancelled.abort(), 250);
     try {
       const prepared = await prepareSources(agent.workspaceId, { onActivity: (label) => emitActivity(job, label), signal: cancelled.signal });
       // A task works in its own worktree: the workspace's shared copy of that repository (the human's folder or the
@@ -1040,7 +1300,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     } finally {
       clearInterval(watch);
     }
-    if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+    const stop = halted(job);
+    if (stop) return stop;
   }
   // SSH servers of the chat and the agent. Uploads and downloads stay within the folders this run works with.
   const ssh = dreaming ? [] : promptServers(runSshServerIds(job.conversationId, agent.id));
@@ -1075,6 +1336,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
             },
           }),
         );
+  job.hooked = !!hooksPath;
   if (job.acc.blocks.length) scheduleDelta(job);
 
   const canDelegate = !dreaming && (agent.permissions.allowDelegation || agent.permissions.canManageAgents);
@@ -1182,7 +1444,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // The VM's shared folder: how files move between the VM and the host.
   if (vm) baseArgs.push("--add-dir", vm.hostSharedDir);
   for (const source of sources) baseArgs.push("--add-dir", source.path);
-  if (budget != null && budget > 0) baseArgs.push("--max-budget-usd", String(budget));
+  // A run that continues after a pause has what is left of its budget.
+  if (budget != null && budget > 0) baseArgs.push("--max-budget-usd", String(Math.max(0.01, budget - (job.spent.costUsd ?? 0))));
   if (agent.subagents.length && !dreaming) {
     const defs: Record<string, { description: string; prompt: string; model?: string }> = {};
     for (const s of agent.subagents) {
@@ -1209,7 +1472,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
   const logPath = runLogPath(agent, getRun(job.runId));
   mkdirSync(join(logPath, ".."), { recursive: true });
-  const logSink = Bun.file(logPath).writer();
+  const logSink: RunLog = job.resumed ? createWriteStream(logPath, { flags: "a" }) : Bun.file(logPath).writer();
 
   const timeoutMinutes = dreaming
     ? Math.min(settings.runner.runTimeoutMinutes || DREAM_TIMEOUT_MINUTES, DREAM_TIMEOUT_MINUTES)
@@ -1230,10 +1493,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest, memoryDigest: memoryNow });
     }
     job.memorySeen = memoryNow;
-    if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
+    const stop = halted(job);
+    if (stop) return stop;
     const sessionArgs = resuming ? ["--resume", sessionId] : ["--session-id", sessionId];
+    const body = (job.body = bodyOf(job, agent));
     // Claude Code only recognizes a slash command at the very start of the prompt.
-    const command = parseSlashCommand(job.prompt) !== null;
+    const command = parseSlashCommand(body) !== null;
     // A resumed session keeps the system prompt of its first turn: restate standing instructions that changed since.
     const restate = resuming && !command && (conv.instructions_digest ?? "") !== digest;
     if (restate) job.restatedDigest = digest;
@@ -1243,21 +1508,21 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const prompt =
       resuming && !command
         ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, apiTools, ssh }) +
-          job.prompt
-        : job.prompt;
+          body
+        : body;
+    // What the run did before a pause, and what the chat's queue added to this stretch.
+    const kept = job.acc.blocks.length;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 
     const lostSession =
       resuming &&
-      !job.cancelReason &&
+      !halted(job) &&
       !job.timedOut &&
       (!job.acc.final || job.acc.final.isError) &&
       SESSION_MISSING.test([job.acc.final?.errors.join("\n") ?? "", attempt.stderr, attempt.noise.join("\n")].join("\n"));
     if (lostSession) {
       log.info(`Claude session ${sessionId} of conversation ${job.conversationId} is gone; starting a new one with a recap`);
-      const notices = job.acc.blocks.filter((b) => b.type === "notice");
-      job.acc = new StreamAccumulator();
-      for (const n of notices) if (n.type === "notice") job.acc.addNotice(n.level, n.text);
+      job.acc = new StreamAccumulator(job.acc.blocks.filter((b, i) => i < kept || b.type === "notice"));
       if (command) job.keepSessionId = sessionId;
       sessionId = randomUUID();
       setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest, memoryDigest: memoryNow });
@@ -1265,17 +1530,30 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         job,
         cmd,
         [...baseArgs, "--session-id", sessionId, ...extraArgs],
-        command ? job.prompt : recapPrefix(job) + job.prompt,
+        command ? body : recapPrefix(job) + body,
         cwd,
         env,
         logSink,
       );
     }
 
-    if (job.cancelReason) return { status: "cancelled", error: job.cancelReason };
-    if (job.timedOut) return { status: "failed", error: `Timed out after ${timeoutMinutes} minutes` };
     const final = job.acc.final;
-    if (final && !final.isError) return { status: "succeeded", error: null };
+    const answer = !!final && !final.isError;
+    // Whatever Claude Code reports as the outcome, its own line about the limit as the answer is no answer.
+    const limited = !!job.acc.limitLine && (final?.text ?? "").includes(job.acc.limitLine);
+    const ended = halted(job);
+    // A run that finished while it was being stopped for a pause is finished (stopped between two steps, it never is).
+    if (ended && !(ended.status === "paused" && !job.pause?.atStep && answer && !limited)) return ended;
+    if (job.timedOut) return { status: "failed", error: `Timed out after ${timeoutMinutes} minutes` };
+    if (answer && !limited) return { status: "succeeded", error: null };
+    // Claude's usage limit ended the run: it stands still until the limit has reset.
+    const limit = limitOf(job, attempt);
+    if (limit) {
+      job.pause = { reason: "limit", applied: true, ...limit };
+      // As with a pause by hand: what it delegated would report back to a process that is gone.
+      for (const child of delegatedBy(job.runId)) await cancelRun(child, "Stopped (the run that delegated this waits for Claude's usage limit)").catch(() => {});
+      return { status: "paused", error: null };
+    }
     return { status: "failed", error: describeFailure(job, attempt) };
   } finally {
     try {
@@ -1288,7 +1566,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 
 async function execute(job: Job): Promise<void> {
   const startedMs = Date.now();
-  sql("UPDATE runs SET status = 'running', started_at = ? WHERE id = ?", now(), job.runId);
+  sql("UPDATE runs SET status = 'running', started_at = COALESCE(started_at, ?) WHERE id = ?", now(), job.runId);
   bus.emit({ type: "run.started", run: getRun(job.runId) });
   emitConversationUpdated(job.conversationId);
   emitActivity(job, "Starting…");
@@ -1313,10 +1591,158 @@ async function execute(job: Job): Promise<void> {
     detachVm(job.runId);
     detachSsh(job.runId);
   }
+  if (job.pauseTimer) clearTimeout(job.pauseTimer);
+  job.pauseTimer = null;
+  if (job.cancelReason && outcome.status !== "cancelled") outcome = { status: "cancelled", error: job.cancelReason };
+  if (outcome.status === "paused") return suspend(job, agent, startedMs);
   // Always push the final streamed state (a throttled delta may still be pending).
   if (job.status === "running") safely("emit final delta", () => emitDelta(job));
-  if (job.cancelReason && outcome.status !== "cancelled") outcome = { status: "cancelled", error: job.cancelReason };
   await finalize(job, outcome, agent, startedMs);
+}
+
+function sum(a: number | null | undefined, b: number | null | undefined): number | null {
+  return a == null && b == null ? null : (a ?? 0) + (b ?? 0);
+}
+
+/** Cost, time and turns of the run so far: the stretches before a pause plus the one that just ended. */
+function spentBy(job: Job, startedMs: number): Spent {
+  const { final } = job.acc;
+  const before = job.spent;
+  const usage = final?.usage ?? null;
+  return {
+    costUsd: sum(before.costUsd, final?.costUsd),
+    durationMs: sum(before.durationMs, final?.durationMs ?? (job.status === "running" ? Date.now() - startedMs : null)),
+    numTurns: sum(before.numTurns, final?.numTurns),
+    usage:
+      usage && before.usage
+        ? {
+            inputTokens: usage.inputTokens + before.usage.inputTokens,
+            outputTokens: usage.outputTokens + before.usage.outputTokens,
+            cacheReadTokens: usage.cacheReadTokens + before.usage.cacheReadTokens,
+            cacheWriteTokens: usage.cacheWriteTokens + before.usage.cacheWriteTokens,
+          }
+        : (usage ?? before.usage),
+  };
+}
+
+/** What the runner knows about the chat after a stretch of a run: its Claude session, title, instructions and memory. */
+function saveConversation(job: Job, agent: Agent | null, succeeded: boolean, ts: string) {
+  const acc = job.acc;
+  const row = get<{ title: string; instructions_digest: string | null }>("SELECT title, instructions_digest FROM conversations WHERE id = ?", job.conversationId);
+  const title = row?.title === DEFAULT_CONVERSATION_TITLE && job.userMessageId ? autoTitle(job.userMessageId) : undefined;
+  let digest = succeeded && job.restatedDigest !== undefined ? job.restatedDigest : (row?.instructions_digest ?? null);
+  // A restatement lives in the transcript, which compaction summarizes.
+  if (acc.compacted && digest) digest = STALE_DIGEST;
+  setConversationState(job.conversationId, {
+    // After /clear the next turn starts a brand-new session instead of resuming the old one.
+    ...(acc.contextCleared
+      ? { claudeSessionId: null }
+      : job.keepSessionId
+        ? { claudeSessionId: job.keepSessionId }
+        : acc.sessionId
+          ? { claudeSessionId: acc.sessionId }
+          : {}),
+    lastMessageAt: ts,
+    ...(digest !== null && digest !== row?.instructions_digest ? { instructionsDigest: digest } : {}),
+    // The session knows the memory as of its start plus its own edits; changes from elsewhere during the run are
+    // pointed out on the next turn (when unsure, a harmless extra hint beats a missed one).
+    ...(agent && job.memorySeen !== undefined && job.trigger !== "dream"
+      ? { memoryDigest: editedMemory(acc.blocks) ? memoryDigest(agent.repoPath) : job.memorySeen }
+      : {}),
+    ...(title && title !== DEFAULT_CONVERSATION_TITLE ? { title } : {}),
+    ...(succeeded ? commandOverrides(acc.localCommand) : {}),
+  });
+}
+
+/**
+ * The run stands still (paused by the human, or waiting for Claude's usage limit): what it did so far is kept with
+ * what continuing needs. It has not ended — no `run.finished`, nothing that waits for its end is told. Never throws.
+ */
+async function suspend(job: Job, agent: Agent | null, startedMs: number): Promise<void> {
+  const pause = job.pause!;
+  const acc = job.acc;
+  const ts = now();
+  const wasRunning = job.status === "running";
+  const answered = acc.answered;
+  const before = job.resumed;
+  // Tries by the timer that hit the limit again before Claude answered.
+  const retries = pause.reason === "limit" && !answered && before ? before.retries + (before.byTimer ? 1 : 0) : 0;
+  // What the human chose for this run stays; otherwise the setting decides.
+  const choice = before?.choice ?? null;
+  const wanted = choice ?? getSettings().runner.autoContinueOnLimit;
+  const delivered = answered || (!!before && before.redo === null && job.body === undefined);
+  const unsent = delivered ? null : (job.body ?? before?.redo ?? job.prompt);
+  const row: PausedRow = {
+    run_id: job.runId,
+    conversation_id: job.conversationId,
+    agent_id: job.agentId,
+    message_id: job.messageId,
+    user_message_id: job.userMessageId,
+    also_answers: JSON.stringify(job.alsoAnswers),
+    reason: pause.reason,
+    limit_name: pause.limit ?? null,
+    resume_at: pause.resumeAt ?? null,
+    auto: pause.reason === "limit" && !!pause.resumeAt && retries < MAX_RETRIES && wanted ? 1 : 0,
+    choice: choice === null ? null : choice ? 1 : 0,
+    delivered: delivered ? 1 : 0,
+    redo: unsent === null ? null : redact(unsent),
+    retries,
+    depth: job.depth,
+    voice: job.voice ? 1 : 0,
+    created_at: ts,
+  };
+  const spent = spentBy(job, startedMs);
+  acc.markPause({ type: "pause", reason: pause.reason, at: ts, ...(pause.reason === "limit" ? { limit: row.limit_name, resumeAt: row.resume_at } : {}) });
+  const text = redact(acc.lastTurnText());
+  const blocks = redactBlocks(acc.blocks, redact);
+  if (job.deltaTimer) clearTimeout(job.deltaTimer);
+  job.deltaTimer = null;
+  jobs.delete(job.runId);
+  const idx = queue.indexOf(job.runId);
+  if (idx >= 0) queue.splice(idx, 1);
+
+  try {
+    if (!conversationExists(job.conversationId)) throw new Error("Conversation was deleted");
+    sql(
+      "UPDATE runs SET status = 'paused', result = ?, error = NULL, cost_usd = ?, duration_ms = ?, num_turns = ?, usage = ?, model = ? WHERE id = ?",
+      text || null,
+      spent.costUsd,
+      spent.durationMs,
+      spent.numTurns,
+      spent.usage ? JSON.stringify(spent.usage) : null,
+      acc.model ?? job.model ?? null,
+      job.runId,
+    );
+    updateMessage(job.messageId, { content: text, blocks });
+    saveConversation(job, agent, false, ts);
+    // What Claude never got is sent again when the run continues.
+    if (unsent === null) unanswered.delete(job.runId);
+    else unanswered.set(job.runId, unsent);
+    savePause(row);
+  } catch (err) {
+    // A run that can't be kept must not look paused forever, and nothing may freeze its chat.
+    log.error(`run ${job.runId} could not be paused`, err);
+    safely("drop the pause", () => sql("DELETE FROM paused_runs WHERE run_id = ?", job.runId));
+    unanswered.delete(job.runId);
+    acc.blocks.pop();
+    jobs.set(job.runId, job);
+    return finalize(job, { status: "failed", error: `The run couldn't be paused: ${errorText(err)}` }, agent, startedMs);
+  }
+
+  if (wasRunning) {
+    const others = [...jobs.values()].some((j) => j.agentId === job.agentId && j.status === "running");
+    if (!others) safely("set agent status", () => setAgentStatus(job.agentId, "idle"));
+    safely("touch agent", () => touchAgentRun(job.agentId));
+  }
+  emitActivity(job, "Paused");
+  safely("emit run.paused", () => bus.emit({ type: "run.paused", run: getRun(job.runId) }));
+  bus.changed("runs");
+  log.info("run paused", { runId: job.runId, reason: pause.reason, ...(row.resume_at ? { resumeAt: row.resume_at, auto: !!row.auto } : {}) });
+  if (pause.reason === "limit" && retries >= MAX_RETRIES && wanted) {
+    safely("stop continuing", () => stopContinuing(row, `Claude still reports its ${row.limit_name ?? "usage limit"} after ${MAX_RETRIES} tries. Continue the chat when the limit has reset.`));
+  }
+  // The slot is free: other chats go on.
+  pump();
 }
 
 /** Persist the outcome, emit events, append the transcript, run post-run hooks. Never throws. */
@@ -1334,6 +1760,8 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   if (outcome.status === "cancelled") blocks.push({ type: "notice", level: "info", text: error ?? "Cancelled" });
   const ts = now();
   const wasRunning = job.status === "running";
+  const spent = spentBy(job, startedMs);
+  unanswered.delete(job.runId);
 
   safely("update run row", () =>
     sql(
@@ -1341,10 +1769,10 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
       outcome.status,
       text || null,
       error,
-      final?.costUsd ?? null,
-      final?.durationMs ?? (wasRunning ? Date.now() - startedMs : null),
-      final?.numTurns ?? null,
-      final?.usage ? JSON.stringify(final.usage) : null,
+      spent.costUsd,
+      spent.durationMs,
+      spent.numTurns,
+      spent.usage ? JSON.stringify(spent.usage) : null,
       acc.model ?? job.model ?? (agent ? agent.model || getSettings().runner.model || null : null),
       ts,
       job.runId,
@@ -1357,36 +1785,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
     safely("finalize assistant message", () => {
       assistant = updateMessage(job.messageId, { content: text, blocks });
     });
-    safely("update conversation", () => {
-      const row = get<{ title: string; instructions_digest: string | null }>(
-        "SELECT title, instructions_digest FROM conversations WHERE id = ?",
-        job.conversationId,
-      );
-      const title =
-        row?.title === DEFAULT_CONVERSATION_TITLE && job.userMessageId ? autoTitle(job.userMessageId) : undefined;
-      let digest = outcome.status === "succeeded" && job.restatedDigest !== undefined ? job.restatedDigest : (row?.instructions_digest ?? null);
-      // A restatement lives in the transcript, which compaction summarizes.
-      if (acc.compacted && digest) digest = STALE_DIGEST;
-      setConversationState(job.conversationId, {
-        // After /clear the next turn starts a brand-new session instead of resuming the old one.
-        ...(acc.contextCleared
-          ? { claudeSessionId: null }
-          : job.keepSessionId
-            ? { claudeSessionId: job.keepSessionId }
-            : acc.sessionId
-              ? { claudeSessionId: acc.sessionId }
-              : {}),
-        lastMessageAt: ts,
-        ...(digest !== null && digest !== row?.instructions_digest ? { instructionsDigest: digest } : {}),
-        // The session knows the memory as of its start plus its own edits; changes from elsewhere during the run are
-        // pointed out on the next turn (when unsure, a harmless extra hint beats a missed one).
-        ...(agent && job.memorySeen !== undefined && job.trigger !== "dream"
-          ? { memoryDigest: editedMemory(acc.blocks) ? memoryDigest(agent.repoPath) : job.memorySeen }
-          : {}),
-        ...(title && title !== DEFAULT_CONVERSATION_TITLE ? { title } : {}),
-        ...(outcome.status === "succeeded" ? commandOverrides(acc.localCommand) : {}),
-      });
-    });
+    safely("update conversation", () => saveConversation(job, agent, outcome.status === "succeeded", ts));
   }
 
   if (wasRunning) {

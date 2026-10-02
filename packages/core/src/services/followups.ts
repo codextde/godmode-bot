@@ -3,7 +3,7 @@
  * chat on its own, like a coworker who says "I'll check back tomorrow at 10". Then Godmode marks the spot in the chat
  * and resumes the same Claude session with the agent's note. One per chat: setting another one moves it. Follow-ups
  * that came due while Godmode was off or the computer slept run as soon as it is back; one that comes due while its
- * chat is busy waits for that turn to finish.
+ * chat is busy — or whose run is paused — waits for that turn to finish.
  */
 import type { Followup, FollowupReason, MessageBlock, Run } from "@godmode/shared";
 import { all, get, insert, run as exec } from "../db";
@@ -13,6 +13,7 @@ import { badRequest, conflict, notFound, now, parseJson } from "../util";
 import { redact } from "../vault/vault";
 import { describeNow } from "../runner/prompt";
 import { activeRunForConversation, waitForRun } from "../runner/runner";
+import { pauseOf } from "./pauses";
 import { deliverFollowup } from "../messaging/bridge";
 import { emitConversationUpdated, sendMessage } from "./conversations";
 import { notify } from "./notifications";
@@ -274,13 +275,18 @@ let started = false;
 let sweeping: Promise<void> | null = null;
 let offBus: (() => void) | null = null;
 
+/** A run works in the chat, or stands still there (paused): the follow-up comes after it. */
+function busy(conversationId: string): boolean {
+  return activeRunForConversation(conversationId) !== null || pauseOf(conversationId) !== null;
+}
+
 /** Wake up for the next follow-up whose chat is free; busy chats are picked up when their run finishes. */
 function arm() {
   if (timer) clearTimeout(timer);
   timer = null;
   if (!started) return;
   const next = all<{ conversation_id: string; due_at: string }>("SELECT conversation_id, due_at FROM followups ORDER BY due_at").find(
-    (f) => !activeRunForConversation(f.conversation_id),
+    (f) => !busy(f.conversation_id),
   );
   if (!next) return;
   const wait = Math.min(Math.max(0, Date.parse(next.due_at) - Date.now()), TICK_MS);
@@ -302,7 +308,7 @@ export function sweep(): Promise<void> {
 
 async function startDue() {
   for (const r of all<FollowupRow>(`${SELECT} WHERE f.due_at <= ? ORDER BY f.due_at`, now())) {
-    if (activeRunForConversation(r.conversation_id)) continue;
+    if (busy(r.conversation_id)) continue;
     const reason: FollowupReason = Date.now() - Date.parse(r.due_at) > LATE_MS ? "late" : "due";
     try {
       const run = await start(r, reason);

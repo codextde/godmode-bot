@@ -134,6 +134,13 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "run.activity":
       live.runActivity(event.runId, event.label);
       break;
+    case "run.paused":
+      live.runPaused(event.run);
+      qc.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
+      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries({ queryKey: qk.runs });
+      qc.invalidateQueries({ queryKey: qk.agents });
+      break;
     case "run.finished":
       live.runFinished(event.run);
       qc.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });

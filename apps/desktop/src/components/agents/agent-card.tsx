@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Cpu, Ellipsis, History, MessageSquare, Pencil, Play, Power, PowerOff, Trash2, Workflow } from "lucide-react";
+import { Cpu, Ellipsis, History, MessageSquare, Pause, Pencil, Play, Power, PowerOff, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { AgentAvatar, ScopeBadge } from "@/components/common";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { AgentStatus, useAgentLiveRun, useAgentMood, useStartAgentChat, useToggleAgent } from "./agent-actions";
+import { AgentStatus, useAgentLiveRun, useAgentMood, useAgentPause, useStartAgentChat, useToggleAgent } from "./agent-actions";
 
 export function AgentCard({
   agent,
@@ -31,10 +31,12 @@ export function AgentCard({
   const navigate = useNavigate();
   const modelLabel = useModelLabel();
   const live = useAgentLiveRun(agent.id);
-  const running = !!live;
+  const running = !!live || agent.status === "running";
   const mood = useAgentMood(agent);
   const chat = useStartAgentChat();
   const toggle = useToggleAgent();
+  const { pause, resume } = useAgentPause();
+  const paused = (agent.pausedRuns ?? 0) > 0;
   const chatting = chat.isPending && chat.variables === agent.id;
 
   return (
@@ -76,6 +78,16 @@ export function AgentCard({
             <DropdownMenuItem onClick={() => onRunTask(agent)} disabled={!agent.enabled}>
               <Play /> Run task…
             </DropdownMenuItem>
+            {running && (
+              <DropdownMenuItem onClick={() => pause.mutate(agent)}>
+                <Pause /> Pause
+              </DropdownMenuItem>
+            )}
+            {paused && (
+              <DropdownMenuItem onClick={() => resume.mutate(agent)} disabled={!agent.enabled}>
+                <StepForward /> Continue
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/routines`)}>
               <Workflow /> Automations
             </DropdownMenuItem>
@@ -117,9 +129,19 @@ export function AgentCard({
         <Button size="sm" variant="secondary" className="flex-1" onClick={() => chat.mutate(agent.id)} disabled={chatting}>
           {chatting ? <Spinner /> : <MessageSquare />} Chat
         </Button>
-        <Button size="sm" variant="outline" className="flex-1" onClick={() => onRunTask(agent)} disabled={!agent.enabled}>
-          <Play /> Run task
-        </Button>
+        {paused ? (
+          <Button size="sm" variant="outline" className="flex-1" onClick={() => resume.mutate(agent)} disabled={resume.isPending || !agent.enabled}>
+            {resume.isPending ? <Spinner /> : <StepForward />} Continue
+          </Button>
+        ) : running ? (
+          <Button size="sm" variant="outline" className="flex-1" onClick={() => pause.mutate(agent)} disabled={pause.isPending}>
+            {pause.isPending ? <Spinner /> : <Pause className="fill-current" />} Pause
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" className="flex-1" onClick={() => onRunTask(agent)} disabled={!agent.enabled}>
+            <Play /> Run task
+          </Button>
+        )}
       </div>
     </div>
   );

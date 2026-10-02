@@ -10,7 +10,7 @@ import { excerpt, logger } from "../log";
 import { getAgent } from "../agents/service";
 import type { RunContext } from "../types";
 import { resolveRunToken } from "./tokens";
-import { deliverQueued } from "../runner/runner";
+import { deliverQueued, pauseAtStep } from "../runner/runner";
 import { hasQueued } from "../services/messageQueue";
 import { UnknownToolError, callTool, listToolsFor, toolErrorMessage } from "./tools";
 import { COMPUTER_INSTRUCTIONS, UnknownComputerToolError, callComputerTool, listComputerTools } from "../computer/tools";
@@ -247,14 +247,16 @@ export function registerMcpRoutes(app: Hono): void {
   app.post("/mcp/vm", (c) => serve(c, VM_SERVER));
   app.post("/mcp/ssh", (c) => serve(c, SSH_SERVER));
 
-  // Claude Code's PostToolBatch hook: between two steps of a run, hand over the messages waiting in the chat's queue.
+  // Claude Code's PostToolBatch hook: between two steps of a run, stop it when it is being paused, else hand over the
+  // messages waiting in the chat's queue.
   app.post("/mcp/hooks/post-tool-batch", async (c) => {
     const ctx = resolveRunToken(bearer(c));
     if (!ctx) return c.body(null, 401);
-    if (!hasQueued(ctx.conversationId)) return c.body(null, 204);
     const input: unknown = await c.req.json().catch(() => null);
-    // A subagent's steps: the message is for the agent itself, at its own next step.
+    // A subagent's steps: the pause and the message are for the agent itself, at its own next step.
     if (isObj(input) && input.agent_id) return c.body(null, 204);
+    if (pauseAtStep(ctx.runId)) return c.json({ continue: false, stopReason: "Paused" });
+    if (!hasQueued(ctx.conversationId)) return c.body(null, 204);
     const additionalContext = deliverQueued(ctx.runId);
     if (!additionalContext) return c.body(null, 204);
     return c.json({ hookSpecificOutput: { hookEventName: "PostToolBatch", additionalContext } });

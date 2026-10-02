@@ -60,6 +60,7 @@ needs to be useful:
 | ⏰ **Follow-ups** | When a task needs waiting — a reply to an email, a delivery, a build, office hours — the agent sets itself a time and picks the chat up again on its own, with all the context, like a coworker who says “I'll check back tomorrow at 10”. You see when it comes back and can continue now, move it or cancel it. |
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
 | 📨 **Message queue** | Keep writing while an agent works: your messages wait in a queue above the message box, and the agent picks them up at its next step and works them into what it is doing — a correction lands right away, an extra request comes after the current step. Reword or remove a queued message until it is picked up, or hit *Send now* to interrupt. |
+| ⏸️ **Pause & continue** | Pause an agent or a single chat and continue later: it lets the step it is in finish, stands still, and picks the work up exactly where it stopped — same run, same message, same Claude session. When Claude's usage limit is reached mid-task, the work waits instead of failing and continues by itself once the limit has reset. |
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🌐 **Real browser** | browser-use drives a managed Chromium over CDP. Watch it live right next to the chat and *take control* for CAPTCHAs. |
 | 🗂️ **Parallel chats, own tabs** | Every chat gets its own tab (in its own background window) in the shared browser profile, so several chats and agents browse at the same time — signed in with the same logins, without ever touching each other's pages. |
@@ -143,6 +144,10 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/followup-waiting.png" alt="An agent waiting for a signed contract, set to continue tomorrow at 09:00" /><br /><sub><b>Follow-ups</b> — the agent sets itself a time to continue; move it, cancel it or continue now</sub></td>
     <td><img src="docs/screenshots/followup.png" alt="The agent picked the chat up again at the time it set and finished the task" /><br /><sub><b>Back on it</b> — at that time the agent picks the chat up again, with all the context</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/pause.png" alt="A paused chat with a Continue button above the message box" /><br /><sub><b>Pause & continue</b> — the agent finishes its step, stands still and picks the work up where it stopped</sub></td>
+    <td><img src="docs/screenshots/pause-limit.png" alt="A chat waiting for Claude's session limit to reset, set to continue by itself" /><br /><sub><b>Usage limit</b> — the work waits for the reset and continues by itself, with what you wrote meanwhile</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/bot-check.png" alt="Bot check of a hardened headless browser: 9 of 10 checks pass" /><br /><sub><b>Bot check</b> — what bot detection sees in the agents' browser</sub></td>

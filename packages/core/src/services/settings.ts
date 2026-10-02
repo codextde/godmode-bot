@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
     bypassPermissions: true,
     maxConcurrentRuns: 3,
     runTimeoutMinutes: 60,
+    autoContinueOnLimit: true,
     defaultMaxBudgetUsd: null,
     extraArgs: [],
     appendSystemPrompt: "",

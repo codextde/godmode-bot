@@ -22,6 +22,7 @@ import { formatCost, formatElapsed } from "@/components/runs/run-status";
 const STATUSES: { id: "all" | RunStatus; label: string }[] = [
   { id: "all", label: "All" },
   { id: "running", label: "Running" },
+  { id: "paused", label: "Paused" },
   { id: "succeeded", label: "Succeeded" },
   { id: "failed", label: "Failed" },
   { id: "cancelled", label: "Cancelled" },
@@ -121,7 +122,7 @@ export default function ActivityPage() {
       />
       <PageBody className="space-y-6">
         <AnimatePresence>
-          {liveList.length > 0 && statusFilter !== "succeeded" && statusFilter !== "failed" && statusFilter !== "cancelled" && (
+          {liveList.length > 0 && statusFilter !== "succeeded" && statusFilter !== "failed" && statusFilter !== "cancelled" && statusFilter !== "paused" && (
             <motion.section
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}

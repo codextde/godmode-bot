@@ -2,7 +2,7 @@ import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { characterGreeting, type Agent, type ConversationWithMessages, type Message, type MessageBlock } from "@godmode/shared";
@@ -11,7 +11,8 @@ import { Composer, ComposerDock } from "@/components/composer";
 import { HeaderActions } from "@/components/header-actions";
 import { LiveStrip } from "@/components/live-strip";
 import { AssistantMessage, UserMessage } from "@/components/message";
-import { EmptyState, T } from "@/components/ui";
+import { Icon } from "@/components/icon";
+import { EmptyState, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useConversationRun, useLive } from "@/lib/live";
@@ -75,6 +76,17 @@ export default function Chat() {
     if (run) void api.runs.cancel(run.run.id).catch((err) => Alert.alert("Couldn't stop", errorText(err)));
   };
 
+  // The chat's run stands still (paused on the computer, or waiting for Claude's usage limit).
+  const pause = conversation.data?.paused;
+  const paused = (pause && pause.runId !== run?.run.id && pause) || null;
+  const resume = () => {
+    tap();
+    api.conversations
+      .continue(id)
+      .then((continued) => useLive.getState().runStarted(continued))
+      .catch((err) => Alert.alert("Couldn't continue", errorText(err)));
+  };
+
   const title = conversation.data?.title || "Chat";
   const primary = screens[0];
 
@@ -105,6 +117,7 @@ export default function Chat() {
           getItemType={(item) => item.role}
         />
         {run && primary ? <LiveStrip screen={primary} activity={run.activity} /> : null}
+        {paused ? <PausedStrip limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null} auto={paused.auto} onContinue={resume} /> : null}
         <ComposerDock>
           <Composer
             onSend={send}
@@ -117,6 +130,24 @@ export default function Chat() {
         <View style={{ height: keyboardOpen ? space.sm : Math.max(insets.bottom, space.md) }} />
       </KeyboardAvoidingView>
     </>
+  );
+}
+
+/** Above the composer while the chat's run stands still. */
+function PausedStrip({ limit, auto, onContinue }: { limit: string | null; auto: boolean; onContinue: () => void }) {
+  const c = useColors();
+  return (
+    <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
+      <Icon name={limit ? "clock" : "pause"} size={15} color={limit ? c.warning : c.textMuted} />
+      <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
+        {limit ? `Claude's ${limit} is reached${auto ? " — continues by itself after the reset" : ""}` : "Paused — continues where it stopped"}
+      </T>
+      <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel="Continue">
+        <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
+          {limit ? "Try now" : "Continue"}
+        </T>
+      </Pressable>
+    </View>
   );
 }
 
@@ -154,6 +185,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.md,
     paddingBottom: space.xl,
+  },
+  paused: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: space.lg,
+    marginBottom: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: 10,
+    borderRadius: radius.lg,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
   },
   intro: {
     alignItems: "center",

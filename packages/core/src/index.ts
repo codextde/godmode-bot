@@ -23,6 +23,7 @@ import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
+import { startPauses, stopPauses } from "./services/pauses";
 import { startAutomationEvents, stopAutomationEvents } from "./automations/events";
 import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
 import { startMessaging, stopMessaging } from "./messaging/service";
@@ -125,6 +126,7 @@ async function serve(values: Record<string, unknown>) {
   recoverInterruptedRuns();
   startScheduler();
   startFollowups();
+  startPauses();
   startDreaming();
   startAutomationEvents();
   startAppTriggers();
@@ -208,6 +210,7 @@ async function serve(values: Record<string, unknown>) {
     stopDiagnostics();
     stopScheduler();
     stopFollowups();
+    stopPauses();
     stopDreaming();
     stopAppTriggers();
     stopAutomationEvents();

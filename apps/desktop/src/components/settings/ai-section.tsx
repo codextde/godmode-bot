@@ -222,6 +222,13 @@ export function AiSection({ settings }: { settings: Settings }) {
         <SettingRow label="Run timeout" htmlFor="timeout" description="A run is stopped after this long.">
           <NumberField id="timeout" min={1} max={1440} suffix="min" value={r.runTimeoutMinutes} onCommit={(v) => v !== null && patch({ runner: { runTimeoutMinutes: v } })} />
         </SettingRow>
+        <SettingRow
+          label="Continue after a usage limit"
+          htmlFor="auto-continue"
+          description="When Claude's usage limit stops a run, it waits and continues by itself once the limit has reset — where it stopped."
+        >
+          <Switch id="auto-continue" checked={r.autoContinueOnLimit ?? true} onCheckedChange={(autoContinueOnLimit) => patch({ runner: { autoContinueOnLimit } })} />
+        </SettingRow>
         <SettingRow label="Default budget per run" htmlFor="budget" description="Hard spending cap passed to Claude Code. Leave empty for unlimited.">
           <NumberField
             id="budget"

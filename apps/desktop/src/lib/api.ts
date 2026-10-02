@@ -68,6 +68,7 @@ import type {
   Routine,
   RoutineInput,
   Run,
+  RunPause,
   QueuedMessage,
   SendMessageInput,
   SendMessageOutcome,
@@ -357,6 +358,9 @@ export const api = {
     commits: (id: string) => get<GitCommit[]>(`/api/agents/${id}/commits`),
     /** Slash commands of the installed Claude Code CLI, as this agent's runs see them */
     commands: (id: string) => get<SlashCommand[]>(`/api/agents/${id}/commands`),
+    /** Pause everything the agent works on (409 when it isn't working); `continue` resumes all of it. */
+    pause: (id: string) => post<{ paused: number }>(`/api/agents/${id}/pause`),
+    continue: (id: string) => post<{ continued: number }>(`/api/agents/${id}/continue`),
   },
 
   dreams: {
@@ -403,6 +407,11 @@ export const api = {
       /** Stop what the agent is doing and start on the queue. */
       sendNow: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/queue/send`),
     },
+    /** Make the chat's run stand still (after the step it is in); `continue` picks the work up where it stopped. */
+    pause: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/pause`),
+    continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
+    /** Whether a run that waits for Claude's usage limit continues by itself when the limit resets. */
+    autoContinue: (id: string, auto: boolean) => patch<RunPause>(`/api/conversations/${id}/pause`, { auto }),
   },
 
   /** Times agents set to continue a chat on their own (one per chat, keyed by the conversation). */

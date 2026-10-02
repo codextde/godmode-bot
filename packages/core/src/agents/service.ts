@@ -170,6 +170,7 @@ function toModel(r: AgentRow): Agent {
     sshServerIds: parseServerIds(r.ssh_server_ids),
     // Derived from the slug so the data dir can move (backup restore, GODMODE_HOME change).
     repoPath: repoPathFor(r.slug),
+    pausedRuns: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ?", r.id)?.n ?? 0,
     lastRunAt: r.last_run_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -411,7 +412,7 @@ export async function trashAgentRepo(agent: Pick<Agent, "slug" | "repoPath">): P
 export async function stopAgentRuns(agentId: string): Promise<void> {
   // Again when a run that ended by itself meanwhile handed over to its chat's queue.
   for (let pass = 0; pass < 3; pass++) {
-    const active = all<{ id: string }>("SELECT id FROM runs WHERE agent_id = ? AND status IN ('queued', 'running')", agentId);
+    const active = all<{ id: string }>("SELECT id FROM runs WHERE agent_id = ? AND status IN ('queued', 'running', 'paused')", agentId);
     if (!active.length) return;
     for (const { id } of active) {
       try {

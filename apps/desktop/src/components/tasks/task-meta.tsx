@@ -83,7 +83,13 @@ export function TypeIcon({ type, className }: { type: TaskType; className?: stri
 
 /** The run is queued or running (the agent is on it). */
 export function isWorking(task: Task): boolean {
-  return task.status === "in_progress" && (task.runStatus === "queued" || task.runStatus === "running" || !!task.activity);
+  return task.status === "in_progress" && !task.pause && (task.runStatus === "queued" || task.runStatus === "running" || !!task.activity);
+}
+
+/** The agent's work stands still: "Paused", or what it waits for. */
+export function pauseLabel(task: Task): string | null {
+  if (task.status !== "in_progress" || !task.pause) return null;
+  return task.pause.reason === "limit" ? `Waiting — Claude's ${task.pause.limit ?? "usage limit"} is reached` : "Paused";
 }
 
 /** "owner/repo" of a clone URL (https, ssh or git@host:owner/repo), or its last path segment. */

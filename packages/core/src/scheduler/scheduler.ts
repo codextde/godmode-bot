@@ -217,12 +217,15 @@ export function reloadSchedules(): void {
   }
 }
 
-/** Routines left "queued"/"running" by a previous process take the status of their latest run (or failed). */
+/**
+ * Routines left "queued"/"running" by a previous process take the status of their latest run (or failed) — "paused"
+ * while that run still stands still.
+ */
 function repairStaleStatuses() {
   exec(
     `UPDATE routines SET last_status = COALESCE(
        (SELECT status FROM runs WHERE runs.routine_id = routines.id AND runs.trigger = 'routine' ORDER BY created_at DESC LIMIT 1), 'failed')
-     WHERE last_status IN ('queued', 'running')
+     WHERE last_status IN ('queued', 'running', 'paused')
        AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.routine_id = routines.id AND runs.trigger = 'routine' AND runs.status IN ('queued', 'running'))`,
   );
 }

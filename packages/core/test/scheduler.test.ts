@@ -253,6 +253,26 @@ describe("triggering", () => {
     finish(third);
   });
 
+  test("a paused run keeps its automation busy until it continues", async () => {
+    const routine = createRoutine({ agentId: agent.id, name: "Paused check", cron: "0 7 * * *", prompt: "Check" });
+    const run = await runRoutineNow(routine.id);
+    exec("UPDATE runs SET status = 'paused' WHERE id = ?", run.id);
+    bus.emit({ type: "run.paused", run: { ...run, status: "paused" } });
+    expect(getRoutine(routine.id).lastStatus).toBe("paused");
+    // Not over: the next tick is skipped, like while it runs.
+    expect((await catchHttp(triggerRoutine(routine.id, { scheduled: true }))).status).toBe(409);
+
+    // Continued: queued again, then running.
+    exec("UPDATE runs SET status = 'queued' WHERE id = ?", run.id);
+    bus.emit({ type: "run.started", run: { ...run, status: "queued" } });
+    expect(getRoutine(routine.id).lastStatus).toBe("queued");
+    exec("UPDATE runs SET status = 'running' WHERE id = ?", run.id);
+    bus.emit({ type: "run.started", run: { ...run, status: "running" } });
+    expect(getRoutine(routine.id).lastStatus).toBe("running");
+    finish(run);
+    expect(getRoutine(routine.id).lastStatus).toBe("succeeded");
+  });
+
   test("creates a dated conversation per run when reuse is off", async () => {
     const routine = createRoutine({
       agentId: agent.id,

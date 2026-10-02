@@ -8,6 +8,8 @@ export interface LiveRun {
   messageId: string | null;
   blocks: MessageBlock[];
   status: Run["status"];
+  /** Unknown for a run first seen through its stream. */
+  trigger?: Run["trigger"];
   activity: string | null;
   startedAt: number;
 }
@@ -64,6 +66,8 @@ interface LiveState {
   runDelta: (runId: string, conversationId: string, messageId: string, blocks: MessageBlock[]) => void;
   runActivity: (runId: string, label: string) => void;
   runFinished: (run: Run) => void;
+  /** The run stands still: nothing streams, and it has not ended. */
+  runPaused: (run: Run) => void;
   browserFrame: (view: string, frame: BrowserFrame) => void;
   dropBrowserFrame: (profileId: string) => void;
   computerFrame: (view: string, frame: ComputerFrame) => void;
@@ -81,21 +85,26 @@ export const useLive = create<LiveState>((set) => ({
   computerActions: {},
   setConnected: (connected) => set({ connected }),
   runStarted: (run) =>
-    set((s) => ({
-      runs: {
-        ...s.runs,
-        [run.id]: {
-          runId: run.id,
-          agentId: run.agentId,
-          conversationId: run.conversationId,
-          messageId: null,
-          blocks: [],
-          status: run.status,
-          activity: null,
-          startedAt: Date.now(),
+    set((s) => {
+      // Sent twice (queued, then running): what a run that continues after a pause already showed stays.
+      const known = s.runs[run.id];
+      return {
+        runs: {
+          ...s.runs,
+          [run.id]: {
+            runId: run.id,
+            agentId: run.agentId,
+            conversationId: run.conversationId,
+            messageId: known?.messageId ?? null,
+            blocks: known?.blocks ?? [],
+            status: run.status,
+            trigger: run.trigger,
+            activity: null,
+            startedAt: known?.startedAt ?? Date.now(),
+          },
         },
-      },
-    })),
+      };
+    }),
   runDelta: (runId, conversationId, messageId, blocks) =>
     set((s) => {
       const prev = s.runs[runId];
@@ -109,6 +118,7 @@ export const useLive = create<LiveState>((set) => ({
             messageId,
             blocks,
             status: "running",
+            trigger: prev?.trigger,
             activity: prev?.activity ?? null,
             startedAt: prev?.startedAt ?? Date.now(),
           },
@@ -125,6 +135,13 @@ export const useLive = create<LiveState>((set) => ({
         runs: next,
         finished: { ...s.finished, [run.conversationId]: { runId: run.id, status: run.status, at: Date.now() } },
       };
+    }),
+  runPaused: (run) =>
+    set((s) => {
+      if (!s.runs[run.id]) return s;
+      const next = { ...s.runs };
+      delete next[run.id];
+      return { runs: next };
     }),
   browserFrame: (view, frame) => set((s) => ({ frames: { ...s.frames, [view]: frame } })),
   /** Forget every frame of the profile (its browser stopped). */
@@ -159,8 +176,14 @@ export const useLive = create<LiveState>((set) => ({
 export function useConversationLiveRun(conversationId: string | undefined): LiveRun | null {
   return useLive((s) => {
     if (!conversationId) return null;
-    for (const r of Object.values(s.runs)) if (r.conversationId === conversationId) return r;
-    return null;
+    // The one that works; a run waiting behind it (or behind a paused one) only when nothing does.
+    let waiting: LiveRun | null = null;
+    for (const r of Object.values(s.runs)) {
+      if (r.conversationId !== conversationId) continue;
+      if (r.status !== "queued") return r;
+      waiting ??= r;
+    }
+    return waiting;
   });
 }
 

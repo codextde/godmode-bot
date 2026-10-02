@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { motion } from "motion/react";
 import type { Agent, Message, MessageBlock } from "@godmode/shared";
-import { Coins, Cpu, Info, Loader2, Square, Timer, Volume2 } from "lucide-react";
+import { Coins, Cpu, Info, Loader2, Pause, Square, Timer, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
@@ -215,12 +215,17 @@ export function LiveAssistantMessage({
   startedAt,
   onStop,
   stopping,
+  onPause,
+  pausing,
 }: {
   agent?: Agent;
   live: LiveRun | null;
   startedAt: number;
   onStop?: () => void;
   stopping?: boolean;
+  /** Make the run stand still so it can continue later. */
+  onPause?: () => void;
+  pausing?: boolean;
 }) {
   const now = useNow(1000);
   const label = liveActivityLabel(live);
@@ -235,18 +240,26 @@ export function LiveAssistantMessage({
             <span className="text-shimmer truncate font-medium">{label}</span>
             <span className="border-l pl-2 font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - since)}</span>
           </span>
-          {onStop && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={onStop}
-              disabled={stopping}
-              className="ml-auto gap-1.5 text-muted-foreground hover:text-destructive"
-            >
-              {stopping ? <Loader2 className="animate-spin" /> : <Square className="size-2.5 fill-current" />}
-              Stop
-            </Button>
+          {(onPause || onStop) && (
+            <span className="ml-auto flex shrink-0 items-center gap-0.5">
+              {onPause && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button type="button" variant="ghost" size="xs" onClick={onPause} disabled={pausing || stopping} className="gap-1.5 text-muted-foreground hover:text-foreground">
+                      {pausing ? <Loader2 className="animate-spin" /> : <Pause className="size-2.5 fill-current" />}
+                      {pausing ? "Pausing…" : "Pause"}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{pausing ? "Finishing the step it is in" : "Pause after the current step — continue anytime"}</TooltipContent>
+                </Tooltip>
+              )}
+              {onStop && (
+                <Button type="button" variant="ghost" size="xs" onClick={onStop} disabled={stopping} className="gap-1.5 text-muted-foreground hover:text-destructive">
+                  {stopping ? <Loader2 className="animate-spin" /> : <Square className="size-2.5 fill-current" />}
+                  Stop
+                </Button>
+              )}
+            </span>
           )}
         </AgentHeader>
         <MessageBlocks blocks={live?.blocks ?? []} streaming />

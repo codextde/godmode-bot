@@ -28,6 +28,12 @@
  *              from --settings like Claude Code does between steps (first once as a subagent) until it hands over
  *              context, write that context to `queue-context.txt` and answer "QUEUE {json}"
  *   WAIT_TO_FINISH  answer "finished" once the state dir has a `finish` file
+ *   LONG_STEP   start a tool step; once the state dir has a `step-done` file end it and call the PostToolBatch hook like
+ *              Claude Code does: told to stop (`continue: false`), write `stopped-by-hook` and end the turn without an
+ *              answer, else answer "step finished"
+ *   LIMIT_HIT   while the state dir has a `limit` file (its content: the reset time in unix seconds, may be empty) end
+ *              like Claude Code does when a usage limit is reached; afterwards answer "back after the limit"
+ *   OVERAGE_CRASH  report a reached limit like Claude Code does while requests still go through, then crash like CRASH
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
  *               and answers "DREAM {json}". Digest keywords: DREAM_SLEEP hangs and DREAM_CRASH exits 3 (both after
@@ -324,6 +330,12 @@ if (slash?.[1] === "clear") {
   const text = `BLOCKED ${JSON.stringify({ listed: tools.includes("task_report_blocked"), call: call.result.content[0].text })}`;
   textTurn(text);
   result(text);
+} else if (prompt.includes("OVERAGE_CRASH")) {
+  out(init);
+  out({ type: "rate_limit_event", rate_limit_info: { status: "rejected", rateLimitType: "five_hour", resetsAt: Math.floor(Date.now() / 1000) + 3600, isUsingOverage: true }, session_id: sessionId });
+  textTurn("Working on it");
+  process.stderr.write("fatal: something exploded\n");
+  process.exit(3);
 } else if (prompt.includes("CRASH")) {
   process.stderr.write("fatal: something exploded\n");
   process.exit(3);
@@ -355,6 +367,41 @@ if (slash?.[1] === "clear") {
   const text = `QUEUE ${JSON.stringify({ hookType: hook.type, subagent, context })}`;
   textTurn(text);
   result(text);
+} else if (prompt.includes("LONG_STEP")) {
+  out(init);
+  const settings = JSON.parse(readFileSync(argValue("--settings")!, "utf8")) as {
+    hooks: { PostToolBatch: { hooks: { url: string; headers: Record<string, string> }[] }[] };
+  };
+  const hook = settings.hooks.PostToolBatch[0]!.hooks[0]!;
+  out({ type: "assistant", message: { id: "msg_long", role: "assistant", content: [{ type: "tool_use", id: "toolu_long", name: "Bash", input: { command: "make build" } }] }, parent_tool_use_id: null, session_id: sessionId });
+  for (let i = 0; i < 600 && !existsSync(join(stateDir, "step-done")); i++) await pause(50);
+  out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_long", content: "built", is_error: false }] }, parent_tool_use_id: null, session_id: sessionId });
+  const res = await fetch(hook.url, {
+    method: "POST",
+    headers: { ...hook.headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ hook_event_name: "PostToolBatch", session_id: sessionId, tool_calls: [] }),
+  });
+  const raw = await res.text();
+  if (raw && (JSON.parse(raw) as { continue?: boolean }).continue === false) {
+    writeFileSync(join(stateDir, "stopped-by-hook"), raw);
+    result("", { stop_reason: "tool_use", terminal_reason: "hook_stopped" });
+  } else {
+    textTurn("step finished");
+    result("step finished");
+  }
+} else if (prompt.includes("LIMIT_HIT")) {
+  out(init);
+  const limitFile = join(stateDir, "limit");
+  if (existsSync(limitFile)) {
+    const resetsAt = Number(readFileSync(limitFile, "utf8").trim()) || undefined;
+    const text = "You've hit your session limit · resets 3pm (Europe/Berlin)";
+    out({ type: "rate_limit_event", rate_limit_info: { status: "rejected", rateLimitType: "five_hour", ...(resetsAt ? { resetsAt } : {}) }, session_id: sessionId });
+    out({ type: "assistant", message: { id: crypto.randomUUID(), model: "<synthetic>", role: "assistant", content: [{ type: "text", text }] }, parent_tool_use_id: null, session_id: sessionId });
+    out({ type: "result", subtype: "success", is_error: true, api_error_status: 429, result: text, session_id: sessionId, total_cost_usd: 0, duration_ms: 7, num_turns: 1 });
+    process.exit(1);
+  }
+  textTurn("back after the limit");
+  result("back after the limit");
 } else if (prompt.includes("WAIT_TO_FINISH")) {
   out(init);
   textTurn("Working on it");

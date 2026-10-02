@@ -210,7 +210,7 @@ let unsubscribe: (() => void) | null = null;
 export function activeMainRun(routineId: string): string | null {
   return (
     get<{ id: string }>(
-      "SELECT id FROM runs WHERE routine_id = ? AND trigger = 'routine' AND status IN ('queued', 'running') LIMIT 1",
+      "SELECT id FROM runs WHERE routine_id = ? AND trigger = 'routine' AND status IN ('queued', 'running', 'paused') LIMIT 1",
       routineId,
     )?.id ?? null
   );
@@ -503,6 +503,17 @@ export async function sendTestEvent(routineId: string, payload?: unknown): Promi
 /* ------------------------------------------------------------------ */
 
 function onBusEvent(event: ServerEvent) {
+  // A paused run has not ended: the automation shows it and stays busy until it continues or is stopped.
+  if ((event.type === "run.paused" || event.type === "run.started") && event.run.routineId && event.run.trigger === "routine") {
+    const { status, routineId } = event.run;
+    // A run that continues is queued, then running.
+    const shown =
+      event.type === "run.paused"
+        ? exec("UPDATE routines SET last_status = ? WHERE id = ?", status, routineId)
+        : exec("UPDATE routines SET last_status = ? WHERE id = ? AND last_status IN ('paused', 'queued') AND last_status != ?", status, routineId, status);
+    if (shown.changes) emitRoutine(routineId);
+    return;
+  }
   if (event.type !== "run.finished" || !event.run.routineId) return;
   const run = event.run;
   const routineId = run.routineId!;

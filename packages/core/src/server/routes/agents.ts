@@ -27,6 +27,7 @@ import { createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigg
 import { listEvents, sendTestEvent } from "../../automations/events";
 import { rotateWebhookToken } from "../../automations/webhooks";
 import { startChat } from "../../services/conversations";
+import { continueAgent, pauseAgent } from "../../services/pauses";
 import { dreamOverview, getDream, isDreaming, revertDream, startDream } from "../../memory/dreaming";
 import { isMemoryPath } from "../../memory/files";
 import { resolveRepoPath } from "../../agents/repo";
@@ -190,6 +191,21 @@ export function registerAgentRoutes(app: Hono): void {
     );
     if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
     return c.json(await startChat({ agentId: agent.id, content: prompt || DEFAULT_TASK_PROMPT, origin: "api", workspaceId }));
+  });
+
+  // Pause everything the agent is working on; it continues where it stopped.
+  app.post("/api/agents/:id/pause", async (c) => {
+    const agent = getAgent(c.req.param("id"));
+    const paused = await pauseAgent(agent.id);
+    if (!paused) throw conflict(`${agent.name} isn't working on anything right now`);
+    return c.json({ paused });
+  });
+
+  app.post("/api/agents/:id/continue", (c) => {
+    const agent = getAgent(c.req.param("id"));
+    const continued = continueAgent(agent.id);
+    if (!continued) throw conflict(`Nothing of ${agent.name} is paused`);
+    return c.json({ continued });
   });
 
   app.get("/api/agents/:id/commands", async (c) => c.json(await listSlashCommands(getAgent(c.req.param("id")))));

@@ -13,7 +13,7 @@
  * Archiving takes a task off the board without deleting it (`archivedAt`): it keeps its status and never starts.
  * Changing its status, or a follow-up, brings it back.
  */
-import type { ID, ISODate, RunStatus } from "./models";
+import type { ID, ISODate, RunPause, RunStatus } from "./models";
 
 export type TaskStatus = "backlog" | "todo" | "in_progress" | "in_review" | "blocked" | "done" | "cancelled";
 
@@ -99,6 +99,8 @@ export interface Task {
   /** Latest run in that conversation and its status. */
   runId: ID | null;
   runStatus: RunStatus | null;
+  /** The agent's work on the task stands still: paused by the human, or waiting for Claude's usage limit to reset. */
+  pause: RunPause | null;
   /** Git remote of the task's repository. "" = the workspace's repository (or a local one without a remote). */
   repoUrl: string;
   /** Workspace folder (a git repository) the task's worktree comes from. "" = the remote repository (`repoUrl`). */

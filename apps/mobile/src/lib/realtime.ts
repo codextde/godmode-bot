@@ -94,6 +94,13 @@ function handle(event: ServerEvent) {
     case "run.delta":
       live.delta(event.conversationId, { runId: event.runId, messageId: event.messageId, blocks: event.blocks });
       break;
+    case "run.paused":
+      // It stands still: nothing works in the chat until it continues.
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) }).then(() => live.runFinished(event.run));
+      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+      void queryClient.invalidateQueries({ queryKey: qk.runs });
+      void queryClient.invalidateQueries({ queryKey: qk.agents });
+      break;
     case "run.finished":
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) }).then(() => live.runFinished(event.run));
       void queryClient.invalidateQueries({ queryKey: qk.conversations });

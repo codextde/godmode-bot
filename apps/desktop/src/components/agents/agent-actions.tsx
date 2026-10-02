@@ -83,6 +83,36 @@ export function useToggleAgent() {
   });
 }
 
+/** Pause everything an agent is working on, and continue it where it stopped. */
+export function useAgentPause() {
+  const qc = useQueryClient();
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: qk.agents });
+    qc.invalidateQueries({ queryKey: qk.conversationsAll });
+    qc.invalidateQueries({ queryKey: qk.runs });
+  };
+  const pause = useMutation({
+    mutationFn: (agent: Agent) => api.agents.pause(agent.id),
+    onSuccess: ({ paused }, agent) => {
+      refresh();
+      toast(`${agent.name} is pausing`, { description: paused > 1 ? `${paused} chats stop after the step they are in.` : "It stops after the step it is in." });
+    },
+    onError: (err) => toast.error("Couldn't pause", { description: errorMessage(err) }),
+  });
+  const resume = useMutation({
+    mutationFn: (agent: Agent) => api.agents.continue(agent.id),
+    onSuccess: ({ continued }, agent) => {
+      refresh();
+      toast.success(`${agent.name} continues`, { description: continued > 1 ? `${continued} chats go on where they stopped.` : "It goes on where it stopped." });
+    },
+    onError: (err) => {
+      refresh();
+      toast.error("Couldn't continue", { description: errorMessage(err) });
+    },
+  });
+  return { pause, resume };
+}
+
 /** Holds on to the last non-null value so dialogs don't go blank while animating out. */
 function useLatest<T>(value: T | null): T | null {
   const [latest, setLatest] = useState(value);
@@ -245,15 +275,18 @@ export function AgentStatus({ agent, className, showActivity = true }: { agent: 
   const { data: missing = [] } = useMissingLogins("open");
   const running = !!live || agent.status === "running";
   const needsLogin = missing.some((m) => m.agentId === agent.id);
+  const paused = agent.pausedRuns ?? 0;
   const state = !agent.enabled
     ? "disabled"
     : running
       ? "running"
-      : needsLogin
-        ? "attention"
-        : agent.status === "error"
-          ? "error"
-          : "idle";
+      : paused
+        ? "paused"
+        : needsLogin
+          ? "attention"
+          : agent.status === "error"
+            ? "error"
+            : "idle";
   const label =
     state === "running"
       ? showActivity && live?.activity
@@ -261,11 +294,15 @@ export function AgentStatus({ agent, className, showActivity = true }: { agent: 
         : "Working…"
       : state === "disabled"
         ? "Disabled"
-        : state === "attention"
-          ? "Needs a login"
-          : state === "error"
-            ? "Last run failed"
-            : "Idle";
+        : state === "paused"
+          ? paused > 1
+            ? `Paused · ${paused} chats`
+            : "Paused"
+          : state === "attention"
+            ? "Needs a login"
+            : state === "error"
+              ? "Last run failed"
+              : "Idle";
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-xs", className)}>
       {state === "running" ? (
@@ -275,7 +312,7 @@ export function AgentStatus({ agent, className, showActivity = true }: { agent: 
           className={cn(
             "size-1.5 shrink-0 rounded-full",
             state === "idle" && "bg-success",
-            state === "attention" && "bg-warning",
+            (state === "attention" || state === "paused") && "bg-warning",
             state === "error" && "bg-destructive",
             state === "disabled" && "bg-muted-foreground/50",
           )}

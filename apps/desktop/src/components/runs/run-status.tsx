@@ -1,6 +1,6 @@
 import type { RunStatus, RunTrigger } from "@godmode/shared";
 import { findModel } from "@godmode/shared";
-import { AlarmClock, Ban, CheckCircle2, Clock3, Hand, MessageSquare, Moon, Plug, Radar, Share2, SquareKanban, Workflow, XCircle } from "lucide-react";
+import { AlarmClock, Ban, CheckCircle2, CirclePause, Clock3, Hand, MessageSquare, Moon, Plug, Radar, Share2, SquareKanban, Workflow, XCircle } from "lucide-react";
 import { Orb } from "@/components/aicss/Orb";
 import { useModelCatalog } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -50,6 +50,7 @@ export function useModelLabel(): (id: string | null | undefined) => string {
 const STATUS_META: Record<RunStatus, { label: string; className: string; dot: string }> = {
   queued: { label: "Queued", className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
   running: { label: "Running", className: "border-brand/25 bg-brand-soft text-brand-strong", dot: "bg-brand animate-live-dot" },
+  paused: { label: "Paused", className: "border-warning/30 bg-warning/[0.07] text-warning", dot: "bg-warning" },
   succeeded: { label: "Succeeded", className: "border-success/20 bg-success/[0.08] text-success", dot: "bg-success" },
   failed: { label: "Failed", className: "border-destructive/20 bg-destructive/[0.06] text-destructive", dot: "bg-destructive" },
   cancelled: { label: "Cancelled", className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
@@ -82,6 +83,8 @@ export function RunStatusIcon({ status, className }: { status: RunStatus; classN
       );
     case "queued":
       return <Clock3 className={cn(cls, "text-muted-foreground")} aria-label="Queued" />;
+    case "paused":
+      return <CirclePause className={cn(cls, "text-warning")} aria-label="Paused" />;
     case "succeeded":
       return <CheckCircle2 className={cn(cls, "text-success")} aria-label="Succeeded" />;
     case "failed":

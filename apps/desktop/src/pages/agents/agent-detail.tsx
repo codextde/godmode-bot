@@ -14,8 +14,10 @@ import {
   LayoutGrid,
   MessageSquare,
   MessagesSquare,
+  Pause,
   Play,
   Settings2,
+  StepForward,
   Trash2,
   Workflow,
 } from "lucide-react";
@@ -39,7 +41,9 @@ import {
   AgentStatus,
   DeleteAgentDialog,
   RunTaskDialog,
+  useAgentLiveRun,
   useAgentMood,
+  useAgentPause,
   useStartAgentChat,
   useToggleAgent,
 } from "@/components/agents/agent-actions";
@@ -127,6 +131,8 @@ function AgentHeader({ agent }: { agent: Agent }) {
   const chat = useStartAgentChat();
   const toggle = useToggleAgent();
   const mood = useAgentMood(agent);
+  const running = !!useAgentLiveRun(agent.id) || agent.status === "running";
+  const { pause, resume } = useAgentPause();
   const shortPath = useShortPath();
   const [runTask, setRunTask] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -181,6 +187,21 @@ function AgentHeader({ agent }: { agent: Agent }) {
               </TooltipTrigger>
               <TooltipContent>{agent.enabled ? "Disable: automations and delegations stop" : "Enable this agent"}</TooltipContent>
             </Tooltip>
+            {(agent.pausedRuns ?? 0) > 0 && (
+              <Button variant="outline" onClick={() => resume.mutate(agent)} disabled={resume.isPending || !agent.enabled}>
+                {resume.isPending ? <Spinner /> : <StepForward />} Continue
+              </Button>
+            )}
+            {running && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={() => pause.mutate(agent)} disabled={pause.isPending}>
+                    {pause.isPending ? <Spinner /> : <Pause className="fill-current" />} Pause
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Pause what it is working on — it continues where it stopped</TooltipContent>
+              </Tooltip>
+            )}
             <Button variant="outline" onClick={() => setRunTask(true)} disabled={!agent.enabled}>
               <Play /> Run task
             </Button>
