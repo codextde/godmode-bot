@@ -6,6 +6,7 @@ import { Composer } from "@/components/composer";
 import { T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
+import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
@@ -28,9 +29,10 @@ export default function Compose() {
     enabled[0];
   const [idea, setIdea] = useState("");
 
-  const start = async (content: string) => {
+  const start = async (content: string, files: PendingFile[]) => {
     try {
-      const result = await api.chat.start({ agentId: current?.id, content, workspaceId });
+      const attachments = await encodeFiles(files);
+      const result = await api.chat.start({ agentId: current?.id, content, attachments: attachments.length ? attachments : undefined, workspaceId });
       useLive.getState().runStarted(result.run);
       router.dismiss();
       router.push({ pathname: "/chat/[id]", params: { id: result.conversation.id } });
@@ -67,7 +69,7 @@ export default function Compose() {
         })}
       </View>
       <View style={{ paddingHorizontal: space.md }}>
-        <Composer key={idea} defaultValue={idea} onSend={start} autoFocus placeholder={current ? `What should ${current.name} do?` : "What should Godmode do?"} />
+        <Composer key={idea} defaultValue={idea} onSend={start} attachments autoFocus placeholder={current ? `What should ${current.name} do?` : "What should Godmode do?"} />
       </View>
       <View style={{ paddingHorizontal: space.xl, gap: space.sm }}>
         <T variant="eyebrow" muted>

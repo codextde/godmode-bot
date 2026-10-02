@@ -14,6 +14,7 @@ import { AssistantMessage, UserMessage } from "@/components/message";
 import { Icon } from "@/components/icon";
 import { EmptyState, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { useAgents } from "@/lib/hooks";
 import { useConversationRun, useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
@@ -58,9 +59,9 @@ export default function Chat() {
     return out;
   }, [conversation.data, draft, run]);
 
-  const send = async (content: string) => {
+  const send = async (content: string, files: PendingFile[]) => {
     try {
-      const result = await api.conversations.send(id, content);
+      const result = await api.conversations.send(id, content, await encodeFiles(files));
       queryClient.setQueryData<ConversationWithMessages>(qk.conversation(id), (old) =>
         old && !old.messages.some((m) => m.id === result.message.id) ? { ...old, messages: [...old.messages, result.message] } : old,
       );
@@ -122,6 +123,7 @@ export default function Chat() {
           <Composer
             onSend={send}
             onStop={stop}
+            attachments
             running={!!run}
             placeholder={agent ? `Message ${agent.name}` : "Message"}
             disabled={agent ? !agent.enabled : false}

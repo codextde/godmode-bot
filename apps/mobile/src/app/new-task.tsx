@@ -1,12 +1,15 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { MAX_TASK_TITLE_LENGTH, TASK_TYPES, type Agent, type TaskType } from "@godmode/shared";
+import { MAX_TASK_TITLE_LENGTH, TASK_TYPES, taskAttachmentMarkdown, type Agent, type TaskType } from "@godmode/shared";
+import { AttachmentTray } from "@/components/attachments";
 import { CharacterAvatar } from "@/components/character";
+import { Icon } from "@/components/icon";
 import { TYPE_META } from "@/components/task-row";
 import { Button, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
+import { usePendingFiles } from "@/lib/attachments";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
@@ -25,6 +28,7 @@ export default function NewTask() {
   const [description, setDescription] = useState("");
   const [type, setType] = useState<TaskType>("general");
   const [picked, setPicked] = useState<string | undefined>(agentId);
+  const { files, attach, remove } = usePendingFiles();
   const [saving, setSaving] = useState(false);
   const agent = picked === NONE ? undefined : (agents.find((a) => a.id === picked) ?? agents[0]);
 
@@ -33,7 +37,10 @@ export default function NewTask() {
     if (!name) return;
     setSaving(true);
     try {
-      const task = await api.tasks.create({ workspaceId, title: name, description: description.trim() || undefined, type, agentId: agent?.id ?? null });
+      const uploaded = [];
+      for (const f of files) uploaded.push(await api.tasks.upload(f));
+      const details = [description.trim(), ...uploaded.map(taskAttachmentMarkdown)].filter(Boolean).join("\n\n");
+      const task = await api.tasks.create({ workspaceId, title: name, description: details || undefined, type, agentId: agent?.id ?? null });
       void queryClient.invalidateQueries({ queryKey: qk.tasks });
       router.dismiss();
       router.push({ pathname: "/task/[id]", params: { id: task.id } });
@@ -79,6 +86,26 @@ export default function NewTask() {
           multiline
           style={[styles.description, { color: c.text }]}
         />
+        {files.length > 0 && <AttachmentTray files={files} busy={saving} onRemove={remove} />}
+        <Pressable
+          accessibilityRole="button"
+          disabled={saving}
+          onPress={() => {
+            tap();
+            void attach();
+          }}
+          style={({ pressed }) => [styles.attach, { borderTopColor: c.border, opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Icon name="attach" size={15} color={c.textMuted} />
+          <T variant="subhead" muted style={{ flex: 1 }}>
+            {files.length ? "Add more" : "Add photos or files"}
+          </T>
+          {files.length > 0 && (
+            <T variant="footnote" color={c.textFaint}>
+              {files.length === 1 ? "1 file" : `${files.length} files`}
+            </T>
+          )}
+        </Pressable>
       </View>
 
       <View style={{ gap: space.sm }}>
@@ -170,6 +197,15 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     textAlignVertical: "top",
+  },
+  attach: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+    paddingHorizontal: space.lg,
+    paddingVertical: 13,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   chips: {
     flexDirection: "row",

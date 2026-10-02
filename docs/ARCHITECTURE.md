@@ -747,7 +747,8 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   (`gmd_` + 32 random bytes); the row in `mobile_devices` keeps its SHA-256, name, model, last address and last use.
   Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
 * **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
-  allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents, conversations and messages, runs (cancel),
+  allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents, conversations and messages (with files),
+  tasks and their attachments (upload and read), runs (cancel),
   routines (run, enable), browser profiles (launch, input), computer input, VMs (list, screenshot, start/stop), notifications,
   missing logins and `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are
   restricted too: a phone can't set a chat's folder, VM, browser, shared screen or instructions, or change an
@@ -767,6 +768,11 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
 * **The app** keeps the token and URLs in the Keychain / Keystore (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`), tries the
   URL that answered last and falls back to the others, and treats 401 as "removed". It opens its WebSocket only in the
   foreground. An optional Face ID lock covers the app in the app switcher.
+* **Files.** The composer's paperclip adds photos (the system picker, HEIC handed over as JPEG), a new photo or any file
+  (`lib/attachments.ts`). They are read as base64 only when the message goes out and sent like the desktop's uploads
+  (`attachments` on messages, new chats and task feedback), at most 10 files, 25 MB each and 40 MB per message (the
+  phones' listener takes 64 MB a request). A new task uploads its files to `POST /api/tasks/attachments` and links them
+  in the description; task pictures load from the computer with the device token.
 
 A hosted gateway can later be added as another URL in the pairing link.
 
