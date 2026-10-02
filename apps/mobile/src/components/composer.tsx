@@ -112,7 +112,8 @@ export function Composer({
   const pickCommand = (command: SlashCommand) => {
     tap();
     setMenuForced(false);
-    setText(`/${command.name} ${typed ? typed.args : text.trim()}`);
+    const args = typed ? typed.args : slashToken !== null ? "" : text.trim();
+    setText(`/${command.name} ${args}`);
   };
 
   const toggleCommands = () => {
@@ -165,9 +166,9 @@ export function Composer({
     try {
       await onSend({ content, attachments: sent.map(({ name, mime, data }) => ({ name, mime, data })) });
     } catch {
-      // Nothing gets lost: the caller shows the error, the field gets its text and files back.
+      // Nothing gets lost: the caller shows the error, the field gets the text and files back next to anything new.
       const cur = useDrafts.getState().drafts[draftKey];
-      setDraft(draftKey, { text: cur?.text || content, files: cur?.files.length ? cur.files : sent });
+      setDraft(draftKey, { text: cur?.text ? `${content}\n\n${cur.text}` : content, files: [...sent, ...(cur?.files ?? [])] });
     } finally {
       setSending(false);
     }

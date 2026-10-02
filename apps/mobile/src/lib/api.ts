@@ -223,7 +223,7 @@ export const api = {
       edit: (id: string, messageId: string, content: string) => patch<QueuedMessage>(`/api/conversations/${id}/queue/${messageId}`, { content }),
       remove: (id: string, messageId: string) => del<{ ok: true }>(`/api/conversations/${id}/queue/${messageId}`),
       /** Stop what the agent is doing and start on the queue. */
-      sendNow: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/queue/send`),
+      sendNow: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/queue/send`, {}, 30_000),
     },
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     /** Continue the chat's paused run where it stopped. */

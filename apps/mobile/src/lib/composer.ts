@@ -3,8 +3,8 @@ import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { useQuery } from "@tanstack/react-query";
 import { create } from "zustand";
-import type { Agent, ClaudeModel, ConversationWithMessages, Effort, QueuedMessage, SlashCommand } from "@godmode/shared";
-import { DEFAULT_MODEL, EFFORT_OPTIONS, effortForModel, findModel } from "@godmode/shared";
+import type { Agent, ClaudeModel, ConversationWithMessages, Effort, ModelCatalog, QueuedMessage, SlashCommand } from "@godmode/shared";
+import { BUILTIN_MODELS, DEFAULT_MODEL, EFFORT_OPTIONS, effortForModel, findModel } from "@godmode/shared";
 import { api } from "./api";
 import { qk, queryClient } from "./query";
 
@@ -62,6 +62,18 @@ const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789
 /** Id for a message about to be queued, so its row keeps its identity until the agent picks it up. */
 export function newQueueId(): string {
   return `qmsg_${Array.from({ length: 16 }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join("")}`;
+}
+
+/** A chat as the computer has it, plus the queued messages this phone is still sending. */
+export function useConversation(id: string | undefined) {
+  return useQuery({
+    queryKey: qk.conversation(id ?? ""),
+    queryFn: async () => {
+      const conversation = await api.conversations.get(id!);
+      return { ...conversation, queue: withPending(conversation.id, conversation.queue) };
+    },
+    enabled: !!id,
+  });
 }
 
 export function setQueue(conversationId: string, fn: (queue: QueuedMessage[]) => QueuedMessage[]) {
@@ -232,8 +244,11 @@ function customModel(id: string): ClaudeModel {
   return { id, resolvedModel: id, label: id, description: "Custom model id", efforts: [...EFFORT_OPTIONS], latest: true };
 }
 
+const BUILTIN_CATALOG: ModelCatalog = { models: BUILTIN_MODELS, source: "builtin", claudeVersion: null, fetchedAt: "", error: null };
+
+/** Models offered by the installed Claude Code; the built-in list until it answers. */
 export function useModelCatalog() {
-  return useQuery({ queryKey: qk.models, queryFn: () => api.models(), staleTime: 30 * 60_000 });
+  return useQuery({ queryKey: qk.models, queryFn: () => api.models(), staleTime: 30 * 60_000, placeholderData: BUILTIN_CATALOG });
 }
 
 /** What a chat runs with: its override, else the agent's, else the computer's default. */

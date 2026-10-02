@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -6,7 +5,7 @@ import { EFFORT_LABELS, type ClaudeModel, type ConversationWithMessages, type Ef
 import { Icon } from "@/components/icon";
 import { Card, Hairline, T, tap } from "@/components/ui";
 import { api, errorText, type ModelChoicePatch } from "@/lib/api";
-import { NO_CHOICE, useEffectiveModel, useNewChatChoice, type ModelChoice } from "@/lib/composer";
+import { NO_CHOICE, useConversation, useEffectiveModel, useNewChatChoice, type ModelChoice } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
@@ -24,11 +23,7 @@ export default function ModelSheet() {
   const c = useColors();
   const { conversationId, agentId } = useLocalSearchParams<{ conversationId?: string; agentId?: string }>();
   const { byId } = useAgents();
-  const conversation = useQuery({
-    queryKey: qk.conversation(conversationId ?? ""),
-    queryFn: () => api.conversations.get(conversationId!),
-    enabled: !!conversationId,
-  });
+  const conversation = useConversation(conversationId);
   const newChoice = useNewChatChoice((s) => s.choice);
   const agent = byId.get(conversation.data?.agentId ?? agentId ?? "");
   const choice: ModelChoice = conversationId

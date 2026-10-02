@@ -1,5 +1,4 @@
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
@@ -16,7 +15,7 @@ import { ModelButton } from "@/components/model-button";
 import { QueueTray } from "@/components/queue-tray";
 import { EmptyState, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
-import { newQueueId, pendingQueued, setQueue, withPending } from "@/lib/composer";
+import { newQueueId, pendingQueued, setQueue, useConversation, withPending } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
 import { useConversationRun, useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
@@ -35,7 +34,7 @@ export default function Chat() {
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
   const list = useRef<FlashListRef<Item>>(null);
   const composer = useRef<ComposerHandle>(null);
-  const conversation = useQuery({ queryKey: qk.conversation(id), queryFn: () => api.conversations.get(id) });
+  const conversation = useConversation(id);
   const { byId } = useAgents();
   const agent = conversation.data ? byId.get(conversation.data.agentId) : undefined;
   const run = useConversationRun(id);
@@ -73,6 +72,7 @@ export default function Chat() {
     const key = qk.conversation(id);
     const queueId = newQueueId();
     const tempId = `pending-${queueId}`;
+    await queryClient.cancelQueries({ queryKey: key });
     const draft = {
       conversationId: id,
       content,
@@ -98,6 +98,8 @@ export default function Chat() {
           const shown = old.queue.some((m) => m.id === queueId);
           return { ...old, messages, queue: shown ? old.queue.map((m) => (m.id === queueId ? result.queued : m)) : [...old.queue, result.queued] };
         });
+        // Also settles the queue when the agent took the message before this answer arrived.
+        void queryClient.invalidateQueries({ queryKey: key });
         return;
       }
       queryClient.setQueryData<ConversationWithMessages>(key, (old) => {
@@ -110,6 +112,7 @@ export default function Chat() {
         };
       });
       useLive.getState().runStarted(result.run);
+      void queryClient.invalidateQueries({ queryKey: key });
       requestAnimationFrame(() => list.current?.scrollToEnd({ animated: true }));
     } catch (err) {
       pendingQueued.delete(queueId);
