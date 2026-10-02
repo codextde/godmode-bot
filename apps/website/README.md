@@ -47,12 +47,15 @@ Feature flags in `wrangler.jsonc` → `vars`:
 
 ## Going live with Stripe
 
-The site currently runs against a **Stripe sandbox** (no real payments). To take real money:
+The site runs live on the Codext GmbH Stripe account (restricted key "Godmode Website", webhook pinned to
+`2025-12-15.clover`). To set it up again, or on another account:
 
 1. `stripe login` with the account that should receive payouts.
-2. Create a restricted key (Products, Prices, Checkout Sessions, Customers, Billing portal, Webhook endpoints: write)
+2. Create a restricted key (write: Products, Prices, Checkout Sessions, Customers, Customer portal, Webhook endpoints;
+   read: Charges and Refunds, Subscriptions)
    and run `STRIPE_SECRET_KEY=rk_live_… SITE_URL=https://godmode.codext.de pnpm stripe:setup`.
-   It prints the new `STRIPE_WEBHOOK_SECRET`.
+   It prints the new `STRIPE_WEBHOOK_SECRET`. If Stripe answers "maximum of 3 unique versions of live webhook
+   endpoints", add `STRIPE_WEBHOOK_API_VERSION=<a version the account's other live webhooks already use>`.
 3. `pnpm wrangler secret put STRIPE_SECRET_KEY` and `… STRIPE_WEBHOOK_SECRET` with the live values.
 4. In the Stripe Dashboard: public business details, statement descriptor "GODMODE", payment methods, customer
    emails (successful payments + refunds), and — if you want — Stripe Tax, the Terms URL and promotional emails

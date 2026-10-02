@@ -7,6 +7,8 @@
 // Usage:
 //   STRIPE_SECRET_KEY=sk_test_… SITE_URL=https://godmode.codext.de node scripts/stripe-setup.mjs
 //   (use a live key for production; it's safe to run again)
+//   STRIPE_WEBHOOK_API_VERSION=… pins the webhook's payload version — needed when the account already has live
+//   webhooks on 3 other API versions (Stripe's limit); the handler only reads fields that are stable across versions.
 
 import Stripe from 'stripe';
 
@@ -18,6 +20,7 @@ if (!key) {
 }
 const stripe = new Stripe(key);
 const mode = key.includes('_live_') ? 'LIVE' : 'TEST';
+const webhookApiVersion = process.env.STRIPE_WEBHOOK_API_VERSION ?? '2026-09-30.endive';
 
 const PLANS = [
   {
@@ -76,7 +79,7 @@ if (hook) {
 } else {
   const created = await stripe.webhookEndpoints.create({
     url,
-    api_version: '2026-09-30.endive',
+    api_version: webhookApiVersion,
     enabled_events: WEBHOOK_EVENTS,
     description: 'Godmode website — orders, licenses, subscriptions',
   });
@@ -92,11 +95,12 @@ const portalFeatures = {
   subscription_cancel: { enabled: true, mode: 'at_period_end' },
 };
 if (portals.data[0]) {
-  await stripe.billingPortal.configurations.update(portals.data[0].id, {
-    features: portalFeatures,
-    default_return_url: site,
-  });
-  console.log(`✓ customer portal configured (${portals.data[0].id})`);
+  // The default portal is account-wide (other products on the account use it too), so never rewrite it — only
+  // check that what /api/portal relies on is on. Sessions pass their own return_url.
+  const p = portals.data[0];
+  const off = Object.keys(portalFeatures).filter((f) => !p.features[f]?.enabled);
+  if (off.length) console.warn(`! customer portal ${p.id} exists but has ${off.join(', ')} off — enable in the Dashboard`);
+  else console.log(`✓ customer portal exists: ${p.id}`);
 } else {
   const c = await stripe.billingPortal.configurations.create({
     features: portalFeatures,
