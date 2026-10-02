@@ -58,13 +58,13 @@ export default function Live() {
         ? { kind: "share", key: `computer:${params.id}`, view: params.id, title: params.title ?? "Shared screen", conversationId: "" }
         : null;
   const stream = useStreamFrame(screen);
-  const [control, setControl] = useState(false);
-  const shot = useVmFrame(vm, true, control ? 900 : 1500);
+  const shot = useVmFrame(vm, true, 1500);
   // A browser that stopped leaves its last frame behind; don't show it as live.
   const frame: Frame | undefined = params.kind === "vm" ? shot.data : profile?.running === false ? undefined : stream;
   const uri = frameUri(frame);
   const online = useLive((s) => s.status === "online");
   const fresh = !!frame && (params.kind === "browser" ? online : now - frame.at < 8000);
+  const [control, setControl] = useState(false);
   const [typing, setTyping] = useState(false);
   const [text, setText] = useState("");
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number; secondary: boolean } | null>(null);
@@ -161,7 +161,7 @@ export default function Live() {
             onLongPress={mac ? (e) => press(e, "right") : null}
             delayLongPress={380}
             disabled={!control}
-            accessibilityHint={control ? (mac ? "Tap to click, hold to right-click" : "Tap to click") : undefined}
+            accessibilityHint={mac ? "In control: tap to click, hold to right-click" : "In control: tap to click"}
             style={shown}
           >
             <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
