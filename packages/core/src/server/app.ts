@@ -15,6 +15,7 @@ import { registerIntegrationRoutes } from "./routes/integrations";
 import { registerBrowserRoutes } from "./routes/browser";
 import { registerBackupRoutes } from "./routes/backup";
 import { registerVoiceRoutes } from "./routes/voice";
+import { registerFileRoutes } from "./routes/files";
 import { registerFolderRoutes } from "./routes/folders";
 import { registerMcpRoutes } from "../mcp/http";
 import { registerComputerRoutes } from "./routes/computer";
@@ -150,6 +151,7 @@ export function createApp() {
   registerBackupRoutes(app);
   registerVoiceRoutes(app);
   registerFolderRoutes(app);
+  registerFileRoutes(app);
   registerLogRoutes(app);
   registerMobileRoutes(app);
 

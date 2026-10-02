@@ -28,6 +28,7 @@ import { SshChip } from "@/components/ssh/ssh-chip";
 import { VmChip } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { ChatDropZone, Thread } from "@/components/chat/thread";
+import { ChatFilesScope } from "@/components/chat/local-files";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -393,16 +394,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           }
         />
 
-        <Thread
-          messages={visibleMessages}
-          agent={agent}
-          inflight={inflight}
-          onStop={() => activeRunId && cancel.mutate(activeRunId)}
-          stopping={cancel.isPending}
-          empty={
-            <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
-          }
-        />
+        <ChatFilesScope conversationId={conversationId}>
+          <Thread
+            messages={visibleMessages}
+            agent={agent}
+            inflight={inflight}
+            onStop={() => activeRunId && cancel.mutate(activeRunId)}
+            stopping={cancel.isPending}
+            empty={
+              <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
+            }
+          />
+        </ChatFilesScope>
 
         {dreamLog ? (
           <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">

@@ -15,6 +15,7 @@ import type {
   Bootstrap,
   BotCheckReport,
   BrowserProfile,
+  ChatFiles,
   ChromeImportInput,
   ClientLogInput,
   ChromeImportResult,
@@ -494,6 +495,14 @@ export const api = {
     /** Subfolders on the machine running the core; no path = home. */
     list: (path?: string, hidden = false) => get<FolderListing>("/api/folders", { path, hidden: hidden ? 1 : undefined }),
     recent: () => get<string[]>("/api/folders/recent"),
+  },
+
+  /** Files and folders the messages of a chat name, on the machine running the core. */
+  files: {
+    /** Per message (the paths it names), the ones that exist. */
+    resolve: (conversationId: string, messages: string[][]) => post<ChatFiles>(`/api/conversations/${conversationId}/files`, { messages }),
+    /** Show a file or folder in the file manager; refused unless the app runs on the core's machine. */
+    reveal: (path: string) => post<{ ok: true }>("/api/files/reveal", { path }),
   },
 
   runs: {

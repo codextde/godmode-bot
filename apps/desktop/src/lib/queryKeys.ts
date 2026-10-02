@@ -86,4 +86,5 @@ export const qk = {
   folders: ["folders"] as unknown[],
   folderList: (path: string, hidden: boolean) => ["folders", "list", path, hidden],
   recentFolders: ["folders", "recent"] as unknown[],
+  chatFiles: (conversationId: string, refs: string) => ["chat-files", conversationId, refs],
 };
