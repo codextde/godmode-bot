@@ -1,6 +1,7 @@
 import { AppState, type AppStateStatus } from "react-native";
 import { browserView, type ClientEvent, type EntityName, type ServerEvent, type Vm } from "@godmode/shared";
 import { api, reachableBase } from "./api";
+import { setQueue, withPending } from "./composer";
 import { useLive } from "./live";
 import { qk, queryClient } from "./query";
 import { useSession } from "./session";
@@ -111,6 +112,11 @@ function handle(event: ServerEvent) {
     case "message.created":
     case "message.updated":
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.message.conversationId) });
+      break;
+    case "queue.updated":
+      setQueue(event.conversationId, () => withPending(event.conversationId, event.queue));
+      // A fetch that started before this change must not bring the old queue back.
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.conversationId) });
       break;
     case "conversation.updated":
       void queryClient.invalidateQueries({ queryKey: qk.conversations });

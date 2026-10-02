@@ -61,7 +61,7 @@ export default function TaskScreen() {
     ]);
   };
 
-  const followUp = async (content: string) => {
+  const followUp = async ({ content }: { content: string }) => {
     try {
       onDone(await api.tasks.message(id, content));
     } catch (err) {
@@ -182,7 +182,7 @@ export default function TaskScreen() {
       {canFollowUp && (
         <View>
           <SectionTitle title={t.status === "blocked" ? "Help it along" : "Ask for changes"} />
-          <Composer onSend={followUp} placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
+          <Composer draftKey={`task:${id}`} onSend={followUp} placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
         </View>
       )}
     </ScrollView>

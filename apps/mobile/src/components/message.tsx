@@ -32,11 +32,13 @@ export const UserMessage = memo(function UserMessage({ message }: { message: Mes
   return (
     <View style={styles.userWrap}>
       <Pressable onLongPress={() => copy(message.content)} style={[styles.user, { backgroundColor: c.primary }]}>
-        <T variant="body" color={c.onPrimary} selectable>
-          {message.content}
-        </T>
+        {message.content ? (
+          <T variant="body" color={c.onPrimary} selectable>
+            {message.content}
+          </T>
+        ) : null}
         {message.attachments.length > 0 && (
-          <T variant="caption" color={c.onPrimary} style={{ opacity: 0.7, marginTop: 4 }}>
+          <T variant="caption" color={c.onPrimary} style={{ opacity: 0.7, marginTop: message.content ? 4 : 0 }}>
             {message.attachments.map((a) => a.name).join(", ")}
           </T>
         )}

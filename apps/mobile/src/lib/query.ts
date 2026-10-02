@@ -17,6 +17,8 @@ export const qk = {
   workspaces: ["workspaces"],
   agents: ["agents"],
   agent: (id: string) => ["agents", id],
+  agentCommands: (id: string) => ["agent-commands", id],
+  models: ["models"],
   conversations: ["conversations"],
   conversationList: (search: string, workspaceId: string | null = null) => ["conversations", "list", search, workspaceId ?? "all"],
   conversation: (id: string) => ["conversations", "detail", id],

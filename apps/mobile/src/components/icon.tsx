@@ -60,6 +60,12 @@ const ICONS = {
   external: ["arrow.up.right", "open_in_new"],
   archive: ["archivebox", "archive"],
   unarchive: ["arrow.uturn.backward", "unarchive"],
+  attach: ["plus", "add"],
+  paperclip: ["paperclip", "attach_file"],
+  photo: ["photo.on.rectangle", "image"],
+  folder: ["folder", "folder"],
+  remove: ["xmark.circle.fill", "cancel"],
+  cpu: ["cpu", "memory"],
 } as const satisfies Record<string, readonly [SFSymbol, AndroidSymbol]>;
 
 export type IconName = keyof typeof ICONS;

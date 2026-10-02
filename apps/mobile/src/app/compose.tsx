@@ -1,11 +1,13 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { CharacterAvatar } from "@/components/character";
-import { Composer } from "@/components/composer";
+import { Composer, type ComposerHandle, type ComposerInput } from "@/components/composer";
+import { ModelButton } from "@/components/model-button";
 import { T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
+import { useNewChatChoice } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
@@ -26,11 +28,21 @@ export default function Compose() {
     (workspaceId ? enabled.find((a) => a.workspaceId === workspaceId) : undefined) ??
     enabled.find((a) => a.isDefault) ??
     enabled[0];
-  const [idea, setIdea] = useState("");
+  const composer = useRef<ComposerHandle>(null);
+  const choice = useNewChatChoice((s) => s.choice);
+  // The model belongs to the agent picked here: a new pick starts from that agent's default.
+  useEffect(() => useNewChatChoice.getState().reset(), [current?.id]);
 
-  const start = async (content: string) => {
+  const start = async ({ content, attachments }: ComposerInput) => {
     try {
-      const result = await api.chat.start({ agentId: current?.id, content, workspaceId });
+      const result = await api.chat.start({
+        agentId: current?.id,
+        content,
+        workspaceId,
+        ...(attachments.length ? { attachments } : {}),
+        ...(choice.model ? { model: choice.model } : {}),
+        ...(choice.effort ? { effort: choice.effort } : {}),
+      });
       useLive.getState().runStarted(result.run);
       router.dismiss();
       router.push({ pathname: "/chat/[id]", params: { id: result.conversation.id } });
@@ -67,17 +79,30 @@ export default function Compose() {
         })}
       </View>
       <View style={{ paddingHorizontal: space.md }}>
-        <Composer key={idea} defaultValue={idea} onSend={start} autoFocus placeholder={current ? `What should ${current.name} do?` : "What should Godmode do?"} />
+        <Composer
+          ref={composer}
+          draftKey="new-chat"
+          agentId={current?.id}
+          attachments
+          onSend={start}
+          autoFocus
+          placeholder={current ? `What should ${current.name} do?` : "What should Godmode do?"}
+          trailing={current ? <ModelButton agent={current} choice={choice} /> : null}
+        />
       </View>
       <View style={{ paddingHorizontal: space.xl, gap: space.sm }}>
         <T variant="eyebrow" muted>
           Try
         </T>
         {IDEAS.map((text) => (
-          <Pressable key={text} onPress={() => {
+          <Pressable
+            key={text}
+            onPress={() => {
               tap();
-              setIdea(text);
-            }} style={({ pressed }) => [styles.idea, { borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}>
+              composer.current?.setText(text);
+            }}
+            style={({ pressed }) => [styles.idea, { borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}
+          >
             <T variant="subhead" muted>
               {text}
             </T>

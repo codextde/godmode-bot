@@ -57,11 +57,20 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Godmode uses the camera to scan the pairing code on your computer.",
+          "cameraPermission": "Godmode uses the camera to scan the pairing code on your computer and to take photos you send to an agent.",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Godmode lets you pick photos to send to an agent.",
+          "cameraPermission": "Godmode uses the camera to scan the pairing code on your computer and to take photos you send to an agent.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-document-picker",
       "expo-secure-store",
       [
         "expo-local-authentication",

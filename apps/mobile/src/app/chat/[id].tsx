@@ -1,19 +1,22 @@
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { characterGreeting, type Agent, type ConversationWithMessages, type Message, type MessageBlock } from "@godmode/shared";
+import { characterGreeting, type Agent, type ConversationWithMessages, type Message, type MessageBlock, type QueuedMessage } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
-import { Composer, ComposerDock } from "@/components/composer";
+import { Composer, ComposerDock, type ComposerHandle, type ComposerInput } from "@/components/composer";
 import { HeaderActions } from "@/components/header-actions";
 import { LiveStrip } from "@/components/live-strip";
 import { AssistantMessage, UserMessage } from "@/components/message";
 import { Icon } from "@/components/icon";
+import { ModelButton } from "@/components/model-button";
+import { QueueTray } from "@/components/queue-tray";
 import { EmptyState, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { newQueueId, pendingQueued, setQueue, withPending } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
 import { useConversationRun, useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
@@ -31,6 +34,7 @@ export default function Chat() {
   const insets = useSafeAreaInsets();
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
   const list = useRef<FlashListRef<Item>>(null);
+  const composer = useRef<ComposerHandle>(null);
   const conversation = useQuery({ queryKey: qk.conversation(id), queryFn: () => api.conversations.get(id) });
   const { byId } = useAgents();
   const agent = conversation.data ? byId.get(conversation.data.agentId) : undefined;
@@ -58,27 +62,71 @@ export default function Chat() {
     return out;
   }, [conversation.data, draft, run]);
 
-  const send = async (content: string) => {
-    try {
-      const result = await api.conversations.send(id, content);
-      queryClient.setQueryData<ConversationWithMessages>(qk.conversation(id), (old) =>
-        old && !old.messages.some((m) => m.id === result.message.id) ? { ...old, messages: [...old.messages, result.message] } : old,
+  // The chat's run stands still (paused on the computer, or waiting for Claude's usage limit).
+  const pause = conversation.data?.paused;
+  const paused = (pause && pause.runId !== run?.run.id && pause) || null;
+  const queue = conversation.data?.queue ?? [];
+  // While the agent works, is paused or older messages still wait, a new message joins the queue.
+  const queueing = !!run || !!paused || queue.length > 0;
+
+  const send = async ({ content, attachments }: ComposerInput) => {
+    const key = qk.conversation(id);
+    const queueId = newQueueId();
+    const tempId = `pending-${queueId}`;
+    const draft = {
+      conversationId: id,
+      content,
+      attachments: attachments.map((a) => ({ name: a.name, mime: a.mime, path: "", size: Math.round((a.data.length * 3) / 4) })),
+      createdAt: new Date().toISOString(),
+    };
+    if (queueing) {
+      pendingQueued.set(queueId, { ...draft, id: queueId });
+      setQueue(id, (q) => withPending(id, q));
+    } else {
+      queryClient.setQueryData<ConversationWithMessages>(key, (old) =>
+        old ? { ...old, messages: [...old.messages, { ...draft, id: tempId, role: "user", blocks: [], runId: null }] } : old,
       );
+      requestAnimationFrame(() => list.current?.scrollToEnd({ animated: true }));
+    }
+    try {
+      const result = await api.conversations.send(id, { content, attachments, queueId });
+      pendingQueued.delete(queueId);
+      if ("queued" in result) {
+        queryClient.setQueryData<ConversationWithMessages>(key, (old) => {
+          if (!old) return old;
+          const messages = old.messages.filter((m) => m.id !== tempId);
+          const shown = old.queue.some((m) => m.id === queueId);
+          return { ...old, messages, queue: shown ? old.queue.map((m) => (m.id === queueId ? result.queued : m)) : [...old.queue, result.queued] };
+        });
+        return;
+      }
+      queryClient.setQueryData<ConversationWithMessages>(key, (old) => {
+        if (!old) return old;
+        const messages = old.messages.filter((m) => m.id !== tempId);
+        return {
+          ...old,
+          queue: old.queue.filter((m) => m.id !== queueId),
+          messages: messages.some((m) => m.id === result.message.id) ? messages : [...messages, result.message],
+        };
+      });
       useLive.getState().runStarted(result.run);
       requestAnimationFrame(() => list.current?.scrollToEnd({ animated: true }));
     } catch (err) {
-      Alert.alert("Couldn't send", errorText(err));
+      pendingQueued.delete(queueId);
+      queryClient.setQueryData<ConversationWithMessages>(key, (old) =>
+        old ? { ...old, messages: old.messages.filter((m) => m.id !== tempId), queue: old.queue.filter((m: QueuedMessage) => m.id !== queueId) } : old,
+      );
+      Alert.alert("Message not sent", errorText(err));
       throw err;
     }
   };
+
+  const onLost = useCallback((text: string) => composer.current?.insert(text), []);
 
   const stop = () => {
     if (run) void api.runs.cancel(run.run.id).catch((err) => Alert.alert("Couldn't stop", errorText(err)));
   };
 
-  // The chat's run stands still (paused on the computer, or waiting for Claude's usage limit).
-  const pause = conversation.data?.paused;
-  const paused = (pause && pause.runId !== run?.run.id && pause) || null;
   const resume = () => {
     tap();
     api.conversations
@@ -118,13 +166,41 @@ export default function Chat() {
         />
         {run && primary ? <LiveStrip screen={primary} activity={run.activity} /> : null}
         {paused ? <PausedStrip limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null} auto={paused.auto} onContinue={resume} /> : null}
+        <QueueTray
+          conversationId={id}
+          queue={queue}
+          agentName={agent?.name ?? "The agent"}
+          running={!!run && !paused}
+          paused={paused?.reason ?? null}
+          onLost={onLost}
+        />
         <ComposerDock>
           <Composer
+            ref={composer}
+            draftKey={id}
+            agentId={conversation.data?.agentId}
+            attachments
             onSend={send}
             onStop={stop}
-            running={!!run}
-            placeholder={agent ? `Message ${agent.name}` : "Message"}
+            running={!!run && !paused}
+            sendLabel={paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : queueing ? "Queue message" : undefined}
+            placeholder={
+              !agent
+                ? "Message"
+                : paused?.reason === "user"
+                  ? `Tell ${agent.name} how to go on`
+                  : paused
+                    ? `Message ${agent.name} — goes along after the reset`
+                    : run
+                      ? `Queue a message for ${agent.name}`
+                      : `Message ${agent.name}, or / for commands`
+            }
             disabled={agent ? !agent.enabled : false}
+            trailing={
+              conversation.data ? (
+                <ModelButton agent={agent} conversationId={id} choice={{ model: conversation.data.model ?? null, effort: conversation.data.effort ?? null }} />
+              ) : null
+            }
           />
         </ComposerDock>
         <View style={{ height: keyboardOpen ? space.sm : Math.max(insets.bottom, space.md) }} />

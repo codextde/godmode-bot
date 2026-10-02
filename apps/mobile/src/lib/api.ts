@@ -6,15 +6,20 @@ import type {
   Bootstrap,
   BrowserProfile,
   ComputerInputEvent,
+  Effort,
   Conversation,
   ConversationWithMessages,
   MissingLogin,
   MobilePairingPayload,
   MobilePairResult,
   MobileSession,
+  ModelCatalog,
+  QueuedMessage,
   Routine,
   Run,
-  SendMessageResult,
+  SendMessageInput,
+  SendMessageOutcome,
+  SlashCommand,
   StartChatResult,
   Task,
   TaskStatus,
@@ -105,7 +110,7 @@ function forget(base: string) {
  * Calls the paired computer. Reads fall through to its other addresses; writes are sent once, so a slow answer never
  * turns into a second message or run.
  */
-export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown, timeoutMs = TIMEOUT_MS): Promise<T> {
   const connection = useSession.getState().connection;
   if (!connection) throw new ApiError(401, "This phone isn't paired.", "not_paired");
   const headers: Record<string, string> = { authorization: `Bearer ${connection.token}`, accept: "application/json" };
@@ -115,7 +120,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
     if (!(await isInstance(base, connection.instance.id))) continue;
     let res: Response;
     try {
-      res = await send(base + path, { method, headers, body: payload });
+      res = await send(base + path, { method, headers, body: payload }, timeoutMs);
     } catch {
       forget(base);
       if (method === "GET") continue;
@@ -134,7 +139,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
 }
 
 const get = <T>(path: string, query?: Query) => request<T>("GET", path + qs(query));
-const post = <T>(path: string, body: unknown = {}) => request<T>("POST", path, body);
+const post = <T>(path: string, body: unknown = {}, timeoutMs?: number) => request<T>("POST", path, body, timeoutMs);
 const patch = <T>(path: string, body: unknown) => request<T>("PATCH", path, body);
 const del = <T>(path: string) => request<T>("DELETE", path);
 
@@ -180,6 +185,11 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
   throw new ApiError(0, offline ? "Can't reach your computer. Turn on Tailscale on this phone and sign in with the same account." : OFFLINE_MESSAGE, "offline");
 }
 
+/** Files take a while over a phone's connection. */
+const uploadTimeout = (input: { attachments?: unknown[] }) => (input.attachments?.length ? 120_000 : undefined);
+
+export type ModelChoicePatch = { model?: string | null; effort?: Effort | null };
+
 export type BrowserInput =
   | { type: "click"; x: number; y: number }
   | { type: "scroll"; x: number; y: number; deltaY: number }
@@ -195,14 +205,26 @@ export const api = {
   agents: {
     list: () => get<Agent[]>("/api/agents"),
     get: (id: string) => get<Agent>(`/api/agents/${id}`),
+    /** Slash commands of the installed Claude Code CLI, as this agent's runs see them */
+    commands: (id: string) => get<SlashCommand[]>(`/api/agents/${id}/commands`),
   },
+
+  models: (refresh = false) => get<ModelCatalog>("/api/models", { refresh: refresh ? 1 : undefined }),
 
   conversations: {
     /** With `workspaceId`: the workspace's chats. */
     list: (q: { search?: string; limit?: number; agentId?: string; workspaceId?: string | null } = {}) => get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
-    send: (id: string, content: string) => post<SendMessageResult>(`/api/conversations/${id}/messages`, { content }),
-    update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean }) => patch<Conversation>(`/api/conversations/${id}`, input),
+    /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
+    send: (id: string, input: Pick<SendMessageInput, "content" | "attachments" | "queueId">) =>
+      post<SendMessageOutcome>(`/api/conversations/${id}/messages`, { ...input, queue: true }, uploadTimeout(input)),
+    update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean } & ModelChoicePatch) => patch<Conversation>(`/api/conversations/${id}`, input),
+    queue: {
+      edit: (id: string, messageId: string, content: string) => patch<QueuedMessage>(`/api/conversations/${id}/queue/${messageId}`, { content }),
+      remove: (id: string, messageId: string) => del<{ ok: true }>(`/api/conversations/${id}/queue/${messageId}`),
+      /** Stop what the agent is doing and start on the queue. */
+      sendNow: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/queue/send`),
+    },
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     /** Continue the chat's paused run where it stopped. */
     continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
@@ -210,7 +232,8 @@ export const api = {
 
   chat: {
     /** With `workspaceId`: a global agent's chat belongs to that workspace. */
-    start: (input: { agentId?: string; content: string; workspaceId?: string | null }) => post<StartChatResult>("/api/chat", input),
+    start: (input: { agentId?: string; content: string; workspaceId?: string | null; attachments?: SendMessageInput["attachments"] } & ModelChoicePatch) =>
+      post<StartChatResult>("/api/chat", input, uploadTimeout(input)),
   },
 
   tasks: {
