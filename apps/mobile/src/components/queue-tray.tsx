@@ -6,7 +6,8 @@ import { parseSlashCommand } from "@godmode/shared";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
 import { api, ApiError, errorText } from "@/lib/api";
-import { pendingQueued, setQueue } from "@/lib/composer";
+import { setQueue } from "@/lib/composer";
+import { pendingQueued } from "@/lib/pending-queue";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, type, useColors } from "@/lib/theme";
 

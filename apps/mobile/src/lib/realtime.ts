@@ -1,7 +1,8 @@
 import { AppState, type AppStateStatus } from "react-native";
 import { browserView, type ClientEvent, type EntityName, type ServerEvent, type Vm } from "@godmode/shared";
 import { api, reachableBase } from "./api";
-import { setQueue, withPending } from "./composer";
+import { setQueue } from "./composer";
+import { withPending } from "./pending-queue";
 import { useLive } from "./live";
 import { qk, queryClient } from "./query";
 import { useSession } from "./session";

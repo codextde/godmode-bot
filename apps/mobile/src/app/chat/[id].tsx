@@ -1,4 +1,5 @@
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
@@ -15,7 +16,8 @@ import { ModelButton } from "@/components/model-button";
 import { QueueTray } from "@/components/queue-tray";
 import { EmptyState, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
-import { newQueueId, pendingQueued, setQueue, useConversation, withPending } from "@/lib/composer";
+import { setQueue } from "@/lib/composer";
+import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { useAgents } from "@/lib/hooks";
 import { useConversationRun, useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
@@ -33,13 +35,13 @@ export default function Chat() {
   const insets = useSafeAreaInsets();
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
   const list = useRef<FlashListRef<Item>>(null);
-  const composer = useRef<ComposerHandle>(null);
-  const conversation = useConversation(id);
+  const conversation = useQuery({ queryKey: qk.conversation(id), queryFn: () => api.conversations.get(id) });
   const { byId } = useAgents();
   const agent = conversation.data ? byId.get(conversation.data.agentId) : undefined;
   const run = useConversationRun(id);
   const draft = useLive((s) => s.drafts[id]);
   const screens = useChatScreens(conversation.data, agent);
+  const composer = useRef<ComposerHandle>(null);
 
   useEffect(() => subscribeConversation(id), [id]);
 
@@ -186,7 +188,7 @@ export default function Chat() {
             onSend={send}
             onStop={stop}
             running={!!run && !paused}
-            sendLabel={paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : queueing ? "Queue message" : undefined}
+            sendLabel={paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : queueing ? "Queue message" : null}
             placeholder={
               !agent
                 ? "Message"

@@ -20,7 +20,7 @@ export function EffortGlyph({ level, count, color }: { level: number; count: num
 }
 
 /** The model and effort a chat runs with, in the composer's toolbar; opens the picker. */
-export function ModelButton({ agent, choice, conversationId }: { agent: Agent | undefined; choice: ModelChoice; conversationId?: string }) {
+export function ModelButton({ agent, choice, conversationId }: { agent?: Agent; choice: ModelChoice; conversationId?: string }) {
   const c = useColors();
   const { current, effort } = useEffectiveModel(agent, choice);
   const summary = effort ? `${current.label}, ${EFFORT_LABELS[effort]} effort` : current.label;

@@ -28,6 +28,8 @@ export default function Compose() {
     (workspaceId ? enabled.find((a) => a.workspaceId === workspaceId) : undefined) ??
     enabled.find((a) => a.isDefault) ??
     enabled[0];
+  const [idea, setIdea] = useState("");
+
   const composer = useRef<ComposerHandle>(null);
   const choice = useNewChatChoice((s) => s.choice);
   // The model belongs to the agent picked here: a new pick starts from that agent's default.
@@ -99,9 +101,10 @@ export default function Compose() {
             key={text}
             onPress={() => {
               tap();
+              setIdea(text);
               composer.current?.setText(text);
             }}
-            style={({ pressed }) => [styles.idea, { borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}
+            style={({ pressed }) => [styles.idea, { borderColor: idea === text ? c.borderStrong : c.border, opacity: pressed ? 0.6 : 1 }]}
           >
             <T variant="subhead" muted>
               {text}

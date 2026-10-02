@@ -48,34 +48,6 @@ export function useDraft(key: string): Draft {
 
 /* Queue */
 
-/** Queued messages this phone is still sending: they stay in the queue until the computer answers. */
-export const pendingQueued = new Map<string, QueuedMessage>();
-
-/** The computer's queue of a chat plus what this phone is still sending to it. */
-export function withPending(conversationId: string, queue: QueuedMessage[]): QueuedMessage[] {
-  const sending = [...pendingQueued.values()].filter((m) => m.conversationId === conversationId && !queue.some((q) => q.id === m.id));
-  return sending.length ? [...queue, ...sending] : queue;
-}
-
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-/** Id for a message about to be queued, so its row keeps its identity until the agent picks it up. */
-export function newQueueId(): string {
-  return `qmsg_${Array.from({ length: 16 }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join("")}`;
-}
-
-/** A chat as the computer has it, plus the queued messages this phone is still sending. */
-export function useConversation(id: string | undefined) {
-  return useQuery({
-    queryKey: qk.conversation(id ?? ""),
-    queryFn: async () => {
-      const conversation = await api.conversations.get(id!);
-      return { ...conversation, queue: withPending(conversation.id, conversation.queue) };
-    },
-    enabled: !!id,
-  });
-}
-
 export function setQueue(conversationId: string, fn: (queue: QueuedMessage[]) => QueuedMessage[]) {
   queryClient.setQueryData<ConversationWithMessages>(qk.conversation(conversationId), (old) => (old ? { ...old, queue: fn(old.queue) } : old));
 }
@@ -105,7 +77,7 @@ function baseName(uri: string): string {
   return decodeURIComponent(uri.split("/").pop() ?? "file");
 }
 
-async function read(uri: string, name: string, mime: string | undefined, size: number | undefined): Promise<PendingAttachment> {
+async function read(uri: string, name: string, mime?: string, size?: number): Promise<PendingAttachment> {
   const file = new File(uri);
   const data = await file.base64();
   return {
@@ -189,7 +161,7 @@ export function formatBytes(n: number): string {
 
 /* Slash commands */
 
-export function useSlashCommands(agentId: string | undefined) {
+export function useSlashCommands(agentId?: string) {
   return useQuery({
     queryKey: qk.agentCommands(agentId ?? ""),
     queryFn: () => api.agents.commands(agentId!),
@@ -218,8 +190,8 @@ export function rankCommands(commands: SlashCommand[], query: string): SlashComm
     .map((x) => x.c);
 }
 
-export function findCommand(commands: SlashCommand[] | undefined, name: string): SlashCommand | undefined {
-  return commands?.find((c) => c.name === name || c.aliases.includes(name));
+export function findCommand(commands: SlashCommand[] = [], name: string): SlashCommand | null {
+  return commands.find((c) => c.name === name || c.aliases.includes(name)) ?? null;
 }
 
 /* Model and effort */
@@ -252,7 +224,7 @@ export function useModelCatalog() {
 }
 
 /** What a chat runs with: its override, else the agent's, else the computer's default. */
-export function useEffectiveModel(agent: Agent | undefined, choice: ModelChoice) {
+export function useEffectiveModel(agent: Agent | null | void, choice: ModelChoice) {
   const catalog = useModelCatalog();
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
   const models = catalog.data?.models ?? [];

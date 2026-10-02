@@ -70,7 +70,7 @@ export function Composer({
   /** In the toolbar, before the send button (e.g. the model). */
   trailing?: ReactNode;
   /** What sending does right now, e.g. "Queue message". */
-  sendLabel?: string;
+  sendLabel?: string | null;
   ref?: Ref<ComposerHandle>;
 }) {
   const c = useColors();
@@ -107,7 +107,7 @@ export function Composer({
   const menuItems = useMemo(() => (menuQuery === null ? [] : rankCommands(commands.data ?? [], menuQuery)), [menuQuery, commands.data]);
   const menuOpen = !!agentId && menuQuery !== null && focused && menuDismissed !== text;
   const typed = parseSlashCommand(text);
-  const hint = !menuOpen && slashToken === null && typed ? findCommand(commands.data, typed.name) : undefined;
+  const hint = !menuOpen && slashToken === null && typed ? findCommand(commands.data, typed.name) : null;
 
   const pickCommand = (command: SlashCommand) => {
     tap();
@@ -285,7 +285,7 @@ function AttachButton({ onPick, disabled }: { onPick: (source: AttachSource) => 
       disabled={disabled}
       onPress={() => {
         tap();
-        Alert.alert("Attach", undefined, [
+        Alert.alert("Attach", "Add photos or files to the message.", [
           { text: "Photos", onPress: () => onPick("photos") },
           { text: "Camera", onPress: () => onPick("camera") },
           { text: "Files", onPress: () => onPick("files") },

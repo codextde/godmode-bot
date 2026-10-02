@@ -28,6 +28,7 @@ import type {
   Workspace,
 } from "@godmode/shared";
 import { isPhoneUrlAllowed } from "@godmode/shared";
+import { withPending } from "./pending-queue";
 import { addressOrder, useSession, type Connection } from "./session";
 
 const TIMEOUT_MS = 12_000;
@@ -186,7 +187,7 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
 }
 
 /** Files take a while over a phone's connection. */
-const uploadTimeout = (input: { attachments?: unknown[] }) => (input.attachments?.length ? 120_000 : undefined);
+const uploadTimeout = (input: { attachments?: unknown[] }) => (input.attachments?.length ? 120_000 : TIMEOUT_MS);
 
 export type ModelChoicePatch = { model?: string | null; effort?: Effort | null };
 
@@ -209,12 +210,16 @@ export const api = {
     commands: (id: string) => get<SlashCommand[]>(`/api/agents/${id}/commands`),
   },
 
-  models: (refresh = false) => get<ModelCatalog>("/api/models", { refresh: refresh ? 1 : undefined }),
+  models: (refresh = false) => get<ModelCatalog>("/api/models", refresh ? { refresh: 1 } : {}),
 
   conversations: {
     /** With `workspaceId`: the workspace's chats. */
     list: (q: { search?: string; limit?: number; agentId?: string; workspaceId?: string | null } = {}) => get<Conversation[]>("/api/conversations", q),
-    get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
+    /** With the queued messages this phone is still sending, so a refetch never drops them. */
+    get: async (id: string) => {
+      const conversation = await get<ConversationWithMessages>(`/api/conversations/${id}`);
+      return { ...conversation, queue: withPending(id, conversation.queue) };
+    },
     /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
     send: (id: string, input: Pick<SendMessageInput, "content" | "attachments" | "queueId">) =>
       post<SendMessageOutcome>(`/api/conversations/${id}/messages`, { ...input, queue: true }, uploadTimeout(input)),
