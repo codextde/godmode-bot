@@ -3,10 +3,12 @@
  * ./vnc.ts). One shared connection per VM; screenshots are scaled for the model and remember the screen area they
  * show, so coordinates read off an image map back to the framebuffer (see computer/geometry.ts).
  */
+import type { ComputerInputEvent } from "@godmode/shared";
+import { SCROLL_PX_PER_NOTCH } from "../computer/engine";
 import { fitSize, type Rect, type Shot } from "../computer/geometry";
-import { parseKeySequence, type KeyCombo } from "../computer/keys";
+import { normalizeModifier, parseKeyCombo, parseKeySequence, type KeyCombo, type Modifier } from "../computer/keys";
 import { logger } from "../log";
-import { sleep } from "../util";
+import { badRequest, sleep } from "../util";
 import { fromBgrx, encodePng, scaleDown } from "./raster";
 import { ensureVmRunning, execInVm, execProgramInVm, onVmStopped, screenEndpoint } from "./service";
 import { MODIFIER_KEYSYMS, VncClient, VncError, keysymFor, needsShift } from "./vnc";
@@ -160,6 +162,44 @@ async function pressCombo(c: VncClient, combo: KeyCombo, holdMs = 0) {
 export async function pressKeys(vmId: string, keys: string, holdMs = 0): Promise<void> {
   const c = await client(vmId);
   for (const combo of parseKeySequence(keys)) await pressCombo(c, combo, holdMs);
+}
+
+/**
+ * Human takeover from a live view (the phone app): the event's coordinates are on a `frame`-sized picture of the
+ * whole screen. Never boots the VM.
+ */
+export async function dispatchVmInput(vmId: string, event: ComputerInputEvent, frame: { width: number; height: number }): Promise<void> {
+  const c = await client(vmId, false);
+  const point = (x: number, y: number) => {
+    const px = Math.round((x * c.width) / frame.width);
+    const py = Math.round((y * c.height) / frame.height);
+    if (px < 0 || py < 0 || px >= c.width || py >= c.height) throw badRequest("That point is outside the screen.");
+    return { x: px, y: py };
+  };
+  const notches = (px = 0) => (px ? Math.sign(px) * Math.max(1, Math.round(Math.abs(px) / SCROLL_PX_PER_NOTCH)) : 0);
+  switch (event.type) {
+    case "click": {
+      const p = point(event.x, event.y);
+      return click(vmId, p.x, p.y, { button: event.button, count: Math.min(3, Math.max(1, event.count ?? 1)) });
+    }
+    case "move": {
+      const p = point(event.x, event.y);
+      return move(vmId, p.x, p.y);
+    }
+    case "drag":
+      return drag(vmId, point(event.x, event.y), point(event.toX, event.toY));
+    case "scroll": {
+      const p = point(event.x, event.y);
+      return scroll(vmId, p.x, p.y, notches(event.deltaX), notches(event.deltaY));
+    }
+    case "key": {
+      const combo = parseKeyCombo(event.key);
+      const extra = (event.modifiers ?? []).map(normalizeModifier).filter((m): m is Modifier => !!m);
+      return pressCombo(c, { key: combo.key, modifiers: [...new Set([...combo.modifiers, ...extra])] });
+    }
+    case "text":
+      if (event.text) await typeText(vmId, event.text);
+  }
 }
 
 /** Characters a US keyboard types directly (the rest is pasted). */
