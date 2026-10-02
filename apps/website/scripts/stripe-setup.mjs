@@ -76,7 +76,7 @@ if (hook) {
 } else {
   const created = await stripe.webhookEndpoints.create({
     url,
-    api_version: '2026-08-26.dahlia',
+    api_version: '2026-09-30.endive',
     enabled_events: WEBHOOK_EVENTS,
     description: 'Godmode website — orders, licenses, subscriptions',
   });
