@@ -8,6 +8,7 @@ import type { Agent, Task, TaskPatch, TaskStatus, Workspace } from "@godmode/sha
 import { MAX_TASK_TITLE_LENGTH, githubBranchUrl } from "@godmode/shared";
 import { WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
+import { ChatFilesScope } from "@/components/chat/local-files";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -290,7 +291,9 @@ function TaskDetail({
                 {isWorking(task) ? "Previous result" : task.type === "research" ? "Report" : "Result"}
               </h3>
               <div className="rounded-xl border bg-card px-4 py-3 text-sm shadow-card">
-                <Markdown>{task.summary}</Markdown>
+                <ChatFilesScope conversationId={task.conversationId}>
+                  <Markdown>{task.summary}</Markdown>
+                </ChatFilesScope>
               </div>
             </section>
           )}

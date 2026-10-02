@@ -536,6 +536,29 @@
   @apply max-h-72;
 }
 
+/* Files and folders a message names: a click shows them in the file manager */
+.prose-chat .gm-file {
+  @apply cursor-pointer rounded-[5px] underline decoration-foreground/25 underline-offset-[3px] outline-none hover:decoration-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50;
+}
+.prose-chat .gm-file svg {
+  @apply mr-1 inline size-[0.95em] -translate-y-px text-muted-foreground;
+}
+.prose-chat .gm-file-chip {
+  @apply bg-secondary px-1.5 py-0.5 font-mono text-[0.85em] no-underline transition-colors hover:bg-foreground/10;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.prose-chat ul.gm-shots {
+  @apply grid gap-2.5;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+}
+.prose-chat ul.gm-shots .gm-shot {
+  @apply flex w-full min-w-0;
+}
+.prose-chat ul.gm-shots .gm-shot-image > * {
+  @apply h-32 max-h-none w-full object-cover object-top;
+}
+
 /* Rich text editor (task descriptions): reads like the rendered Markdown above */
 .gm-editor {
   min-height: var(--gm-editor-min, 96px);

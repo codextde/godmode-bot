@@ -11,3 +11,4 @@ export * from "./schedule";
 export * from "./tasks";
 export * from "./mobile";
 export * from "./character";
+export * from "./files";

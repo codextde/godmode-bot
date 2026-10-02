@@ -256,6 +256,13 @@ export function clientIp(c: Context): string {
   }
 }
 
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+
+/** The app or browser asking runs on this computer — not behind a proxy or a tunnel that only ends here. */
+export function isLocalRequest(c: Context): boolean {
+  return !isMobileChannel(c) && LOOPBACK.has(clientIp(c)) && !c.req.header("x-forwarded-for") && !c.req.header("forwarded");
+}
+
 /* Simple in-memory login rate limiter */
 const attempts = new Map<string, { count: number; first: number }>();
 const RATE_WINDOW_MS = 15 * 60_000;
