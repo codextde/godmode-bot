@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View, type GestureResponderEvent } from "react-native";
+import { KeyboardStickyView, useKeyboardState } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { browserView, type ComputerInputEvent } from "@godmode/shared";
@@ -20,6 +21,28 @@ import { useStreamFrame, useVmFrame, type LiveScreen } from "@/lib/screens";
 
 const WHITE = "#FFFFFF";
 const DIM = "rgba(255,255,255,0.7)";
+
+/** The type box, key bar and buttons above the keyboard. */
+const TOOLS_HEIGHT = 184;
+
+type Key = { label: string; key: string; modifiers?: string[]; a11y: string };
+
+const KEYS: Key[] = [
+  { label: "esc", key: "Escape", a11y: "Escape" },
+  { label: "tab", key: "Tab", a11y: "Tab" },
+  { label: "⌫", key: "Backspace", a11y: "Delete" },
+  { label: "←", key: "ArrowLeft", a11y: "Left arrow" },
+  { label: "↑", key: "ArrowUp", a11y: "Up arrow" },
+  { label: "↓", key: "ArrowDown", a11y: "Down arrow" },
+  { label: "→", key: "ArrowRight", a11y: "Right arrow" },
+];
+
+const MAC_KEYS: Key[] = [
+  { label: "⌘ space", key: "space", modifiers: ["cmd"], a11y: "Spotlight" },
+  { label: "⌘ tab", key: "Tab", modifiers: ["cmd"], a11y: "Switch apps" },
+  { label: "⌘ W", key: "w", modifiers: ["cmd"], a11y: "Close window" },
+  { label: "⌘ Q", key: "q", modifiers: ["cmd"], a11y: "Quit app" },
+];
 
 export default function Live() {
   const params = useLocalSearchParams<{ kind: LiveScreen["kind"]; id: string; title?: string; chat?: string }>();
@@ -47,15 +70,24 @@ export default function Live() {
   const fresh = !!frame && (params.kind === "browser" ? online : now - frame.at < 8000);
   const [control, setControl] = useState(false);
   const [typing, setTyping] = useState(false);
+  const keyboard = useKeyboardState((k) => (k.isVisible ? k.height : 0));
   const [text, setText] = useState("");
-  const [ripple, setRipple] = useState<{ x: number; y: number; id: number } | null>(null);
-  const canControl = params.kind !== "vm";
+  const [ripple, setRipple] = useState<{ x: number; y: number; id: number; secondary: boolean } | null>(null);
+  const canControl = params.kind !== "vm" || vm?.state === "running";
+  // Shared screens and VMs are whole Macs: they take right clicks and shortcuts; a browser tab doesn't.
+  const mac = params.kind !== "browser";
 
   const input = useMutation({
     mutationFn: async (event: BrowserInput & ComputerInputEvent) => {
       if (!frame) return;
+      const size = { width: frame.width, height: frame.height };
       if (params.kind === "browser") await api.browser.input(params.id, event, chat);
-      else await api.computer.input(params.id, event, { width: frame.width, height: frame.height });
+      else if (params.kind === "vm") await api.vms.input(params.id, event, size);
+      else await api.computer.input(params.id, event, size);
+    },
+    // VMs have no stream: show what the input did right away instead of at the next poll.
+    onSuccess: () => {
+      if (params.kind === "vm") setTimeout(() => queryClient.refetchQueries({ queryKey: qk.vmScreen(params.id) }), 250);
     },
     onError: (err) => Alert.alert("Couldn't reach the screen", errorText(err)),
   });
@@ -71,11 +103,13 @@ export default function Live() {
     onError: (err) => Alert.alert("Couldn't start the browser", errorText(err)),
   });
 
-  const box = { width, height };
+  // With the keyboard up, the picture moves into the space between the title and the controls above the keyboard.
+  const top = keyboard ? insets.top + 60 : 0;
+  const box = { width, height: keyboard ? Math.max(120, height - keyboard - TOOLS_HEIGHT - top) : height };
   const fit = frame ? Math.min(box.width / frame.width, box.height / frame.height) : 1;
   const shown = frame ? { width: frame.width * fit, height: frame.height * fit } : box;
 
-  const onTap = (e: GestureResponderEvent) => {
+  const press = (e: GestureResponderEvent, button: "left" | "right") => {
     if (!control || !frame) return;
     const { locationX, locationY } = e.nativeEvent;
     const x = Math.round(locationX / fit);
@@ -83,18 +117,31 @@ export default function Live() {
     if (x < 0 || y < 0 || x > frame.width || y > frame.height) return;
     tap();
     const id = Date.now();
-    setRipple({ x: locationX, y: locationY, id });
+    setRipple({ x: locationX, y: locationY, id, secondary: button === "right" });
     setTimeout(() => setRipple((r) => (r?.id === id ? null : r)), 450);
-    input.mutate({ type: "click", x, y });
+    input.mutate(button === "right" ? { type: "click", x, y, button } : { type: "click", x, y });
   };
 
   const scroll = (deltaY: number) => frame && input.mutate({ type: "scroll", x: Math.round(frame.width / 2), y: Math.round(frame.height / 2), deltaY });
+
+  const sendKey = (k: Key) => {
+    tap();
+    input.mutate(k.modifiers ? { type: "key", key: k.key, modifiers: k.modifiers } : { type: "key", key: k.key });
+  };
 
   const sendText = () => {
     const value = text;
     if (!value) return;
     setText("");
     input.mutate({ type: "text", text: value });
+  };
+
+  // Text still in the box goes in first, then Return: what "Enter" means while typing.
+  const enter = async () => {
+    const value = text;
+    setText("");
+    if (value && !(await input.mutateAsync({ type: "text", text: value }).then(() => true, () => false))) return;
+    sendKey({ label: "Enter", key: "Enter", a11y: "Enter" });
   };
 
   const subtitle =
@@ -115,7 +162,7 @@ export default function Live() {
       <StatusBar hidden />
       <ScrollView
         style={StyleSheet.absoluteFill}
-        contentContainerStyle={{ width, height, alignItems: "center", justifyContent: "center" }}
+        contentContainerStyle={{ width, height: box.height + top, paddingTop: top, alignItems: "center", justifyContent: "center" }}
         maximumZoomScale={control ? 1 : 4}
         minimumZoomScale={1}
         centerContent
@@ -124,9 +171,23 @@ export default function Live() {
         bouncesZoom
       >
         {uri ? (
-          <Pressable onPress={onTap} style={shown}>
+          <Pressable
+            onPress={(e) => press(e, "left")}
+            onLongPress={mac ? (e) => press(e, "right") : null}
+            delayLongPress={380}
+            disabled={!control}
+            accessibilityHint={mac ? "In control: tap to click, hold to right-click" : "In control: tap to click"}
+            style={shown}
+          >
             <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
-            {ripple && <Animated.View key={ripple.id} entering={ZoomIn.duration(220)} exiting={FadeOut} style={[styles.ripple, { left: ripple.x - 22, top: ripple.y - 22 }]} />}
+            {ripple && (
+              <Animated.View
+                key={ripple.id}
+                entering={ZoomIn.duration(220)}
+                exiting={FadeOut}
+                style={[styles.ripple, ripple.secondary && styles.rippleSecondary, { left: ripple.x - 22, top: ripple.y - 22 }]}
+              />
+            )}
           </Pressable>
         ) : (
           <View style={{ alignItems: "center", gap: 14, paddingHorizontal: 40 }}>
@@ -191,12 +252,27 @@ export default function Live() {
       </View>
 
       {canControl && uri ? (
-        <View style={[styles.bottom, { paddingBottom: insets.bottom + 14 }]}>
+        <KeyboardStickyView offset={{ opened: insets.bottom }} style={[styles.bottom, { paddingBottom: insets.bottom + 14 }]}>
           {typing && (
-            <Animated.View entering={FadeIn} style={{ width: "100%", maxWidth: 520 }}>
+            <Animated.View entering={FadeIn} style={{ width: "100%", maxWidth: 520, gap: 8 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.keys}>
+                {[...KEYS, ...(params.kind === "vm" ? MAC_KEYS : [])].map((k) => (
+                  <Pressable key={k.a11y} accessibilityRole="button" accessibilityLabel={k.a11y} onPress={() => sendKey(k)}>
+                    {({ pressed }) => (
+                      <Glass style={[styles.key, pressed && styles.keyPressed]} scheme="dark" fallback={SMOKE}>
+                        <T variant="footnote" color={WHITE} style={{ fontWeight: "600" }}>
+                          {k.label}
+                        </T>
+                      </Glass>
+                    )}
+                  </Pressable>
+                ))}
+              </ScrollView>
               <Glass style={styles.typeBox} scheme="dark" fallback={SMOKE}>
                 <TextInput
                   autoFocus
+                  autoCapitalize="none"
+                  autoCorrect={false}
                   value={text}
                   onChangeText={setText}
                   onSubmitEditing={sendText}
@@ -205,7 +281,7 @@ export default function Live() {
                   returnKeyType="send"
                   style={styles.typeInput}
                 />
-                <Pressable onPress={() => input.mutate({ type: "key", key: params.kind === "browser" ? "Enter" : "Return" })} style={styles.enter}>
+                <Pressable onPress={enter} style={styles.enter}>
                   <T variant="caption" color={WHITE} style={{ fontWeight: "600" }}>
                     Enter
                   </T>
@@ -231,16 +307,17 @@ export default function Live() {
             {control && (
               <>
                 <GlassIconButton icon="keyboard" label="Type" onPress={() => setTyping((v) => !v)} dark />
-                <GlassIconButton icon="scroll" label="Scroll down" onPress={() => scroll(500)} dark />
+                <GlassIconButton icon="up" label="Scroll up" onPress={() => scroll(-500)} dark />
+                <GlassIconButton icon="down" label="Scroll down" onPress={() => scroll(500)} dark />
               </>
             )}
           </GlassGroup>
           {control && !typing && (
             <T variant="caption" color={DIM}>
-              Tap the picture to click there
+              {mac ? "Tap to click, hold to right-click" : "Tap the picture to click there"}
             </T>
           )}
-        </View>
+        </KeyboardStickyView>
       ) : null}
     </View>
   );
@@ -311,6 +388,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.14)",
   },
+  keys: { gap: 8, paddingHorizontal: 2 },
+  key: {
+    minWidth: 44,
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  keyPressed: { opacity: 0.6 },
   ripple: {
     position: "absolute",
     width: 44,
@@ -320,4 +407,5 @@ const styles = StyleSheet.create({
     borderColor: "#2FD690",
     backgroundColor: "rgba(47,214,144,0.25)",
   },
+  rippleSecondary: { borderColor: "#7DB8FF", backgroundColor: "rgba(125,184,255,0.25)" },
 });

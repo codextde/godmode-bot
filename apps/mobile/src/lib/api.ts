@@ -256,6 +256,7 @@ export const api = {
     screenshot: (id: string, size = 960) => get<{ data: string; mime: string; width: number; height: number }>(`/api/vms/${id}/screenshot`, { size }),
     start: (id: string) => post<Vm>(`/api/vms/${id}/start`),
     stop: (id: string) => post<Vm>(`/api/vms/${id}/stop`),
+    input: (id: string, event: ComputerInputEvent, frame: { width: number; height: number }) => post<{ ok: true }>(`/api/vms/${id}/input`, { event, frame }),
   },
 
   notifications: {
