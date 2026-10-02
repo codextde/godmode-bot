@@ -1,11 +1,13 @@
-import { isValidElement, memo, type ReactElement, type ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import { isValidElement, memo, useMemo, type ReactElement, type ReactNode } from "react";
+import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 import { CodeBlock as AicssCodeBlock } from "@/components/aicss/CodeBlock";
 import { CoreFileLink, CoreImage, isCoreFile } from "./core-file";
+import { content, rehypeLocalFiles, type HastNode } from "./local-file-tree";
+import { FileLink, MessageFilesScope, Picture, useMessageFiles } from "./local-files";
 
 /** Fenced code in chat — aicss code block (line numbers + copy), height-capped for long snippets. */
 export function CodeBlock({ lang, code, className }: { lang: string; code: string; className?: string }) {
@@ -24,13 +26,11 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
-type HastNode = { type: string; tagName?: string; value?: string; children?: HastNode[] };
-
-const content = (n: HastNode) => (n.children ?? []).filter((c) => !(c.type === "text" && !c.value?.trim()));
-
-function onlyImage(n: HastNode): boolean {
+/** The image a list item consists of, if that is all there is. */
+function onlyImage(n: HastNode): HastNode | null {
   const [child, ...rest] = content(n);
-  return !!child && !rest.length && (child.tagName === "img" || (child.tagName === "p" && onlyImage(child)));
+  if (!child || rest.length) return null;
+  return child.tagName === "img" ? child : child.tagName === "p" ? onlyImage(child) : null;
 }
 
 const components: Components = {
@@ -41,7 +41,9 @@ const components: Components = {
     const code = textOf(isValidElement(child) ? child.props.children : children).replace(/\n$/, "");
     return <CodeBlock lang={lang} code={code} />;
   },
-  a({ href, children, ...rest }) {
+  a({ node, href, children, ...rest }) {
+    const local = (node as HastNode | undefined)?.data;
+    if (local?.gmFile) return <FileLink file={local.gmFile} chip={local.gmChip}>{children}</FileLink>;
     if (href && isCoreFile(href)) return <CoreFileLink href={href}>{children}</CoreFileLink>;
     if (href && href.startsWith("/") && !href.startsWith("//")) {
       return <Link to={href}>{children}</Link>;
@@ -54,9 +56,11 @@ const components: Components = {
   },
   ul({ node, className, children }) {
     // A list of pictures (the screenshots of a result) reads best side by side.
-    const items = node ? content(node) : [];
-    const gallery = items.length > 0 && items.every(onlyImage);
-    return <ul className={cn(className, gallery && "gm-gallery")}>{children}</ul>;
+    const images = node ? content(node as HastNode).map(onlyImage) : [];
+    const gallery = images.length > 0 && images.every(Boolean);
+    // Pictures from this computer sit in an even grid of tiles.
+    const tiles = gallery && images.every((image) => image?.data?.gmFile);
+    return <ul className={cn(className, gallery && "gm-gallery", tiles && "gm-shots")}>{children}</ul>;
   },
   table({ children }) {
     return (
@@ -65,7 +69,9 @@ const components: Components = {
       </div>
     );
   },
-  img({ src, alt }) {
+  img({ node, src, alt }) {
+    const local = (node as HastNode | undefined)?.data?.gmFile;
+    if (local) return <Picture file={local} />;
     if (!src || typeof src !== "string") return null;
     if (isCoreFile(src)) return <CoreImage src={src} alt={alt} />;
     return <img src={src} alt={alt ?? ""} loading="lazy" className="max-h-96 max-w-full rounded-lg border" />;
@@ -83,13 +89,20 @@ const remarkPlugins = [remarkGfm];
 /** Every line break is kept, as typed: for text people write by hand (task descriptions), not model output. */
 const remarkPluginsWithBreaks = [remarkGfm, remarkBreaks];
 
-/** GitHub-flavoured markdown with the chat prose styles, copyable code blocks and safe external links. */
+/**
+ * GitHub-flavoured markdown with the chat prose styles, copyable code blocks and safe external links. In a chat, the
+ * files and folders it names open in the file manager and its pictures are shown.
+ */
 export const Markdown = memo(function Markdown({ children, className, breaks }: { children: string; className?: string; breaks?: boolean }) {
+  const files = useMessageFiles(children);
+  const rehypePlugins = useMemo<Options["rehypePlugins"]>(() => (files ? [[rehypeLocalFiles, files.byRef]] : undefined), [files]);
   return (
-    <div className={cn("prose-chat min-w-0 break-words", className)}>
-      <ReactMarkdown remarkPlugins={breaks ? remarkPluginsWithBreaks : remarkPlugins} components={components}>
-        {children}
-      </ReactMarkdown>
-    </div>
+    <MessageFilesScope files={files}>
+      <div className={cn("prose-chat min-w-0 break-words", className)}>
+        <ReactMarkdown remarkPlugins={breaks ? remarkPluginsWithBreaks : remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+          {children}
+        </ReactMarkdown>
+      </div>
+    </MessageFilesScope>
   );
 });

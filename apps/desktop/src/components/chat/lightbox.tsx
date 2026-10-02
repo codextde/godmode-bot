@@ -12,7 +12,8 @@ export function Lightbox({
   onOpenChange,
   footer,
 }: {
-  src: string;
+  /** null while the picture loads */
+  src: string | null;
   alt: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -23,7 +24,11 @@ export function Lightbox({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent aria-describedby={undefined} className="w-max max-w-[92vw] gap-2 p-2 sm:max-w-[92vw]">
           <DialogTitle className="sr-only">{alt}</DialogTitle>
-          <img src={src} alt={alt} className="mx-auto max-h-[80vh] w-auto max-w-full rounded-lg object-contain" />
+          {src ? (
+            <img src={src} alt={alt} className="mx-auto max-h-[80vh] w-auto max-w-full rounded-lg object-contain" />
+          ) : (
+            <div className="h-[50vh] w-[60vw] max-w-full animate-pulse rounded-lg bg-muted" />
+          )}
           {footer}
         </DialogContent>
       </Dialog>

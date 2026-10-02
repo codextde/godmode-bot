@@ -27,12 +27,15 @@ function fileName(url: string): string {
   }
 }
 
-/** The file as an object url while mounted (the blob itself is cached per url). */
-export function useCoreFileUrl(url: string | undefined): { src: string | null; failed: boolean } {
+/**
+ * The file as an object url while mounted (the blob itself is cached per url). `trusted`: the url is the core's own
+ * answer, not something a message wrote.
+ */
+export function useCoreFileUrl(url: string | undefined, trusted = false): { src: string | null; failed: boolean } {
   const file = useQuery({
     queryKey: ["core-file", url],
     queryFn: () => fetchBlob(url as string),
-    enabled: isCoreFile(url),
+    enabled: trusted ? !!url : isCoreFile(url),
     staleTime: Infinity,
     gcTime: 10 * 60_000,
     retry: 1,

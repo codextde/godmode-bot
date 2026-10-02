@@ -192,7 +192,7 @@ export function withLocalPaths(description: string, paths: Map<string, string>):
 /* ------------------------------------------------------------------ */
 
 /** Images the board can show; other files stay paths. */
-const SHOWN_IMAGE = /^image\/(png|jpeg|gif|webp|avif|bmp)$/;
+export const SHOWN_IMAGE = /^image\/(png|jpeg|gif|webp|avif|bmp)$/;
 const MAX_RESULT_IMAGES = 20;
 
 const LOCAL_START = String.raw`(?:file:\/\/|~)?(?:[A-Za-z]:)?[\\/]`;
