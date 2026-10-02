@@ -77,6 +77,7 @@ describe("paths a message names", () => {
       "The screenshots are in `workspace/shots/`: `01-positions.png` and [the total](<workspace/shots/02 total.png>).",
       "See ![shot](workspace/shots/a%20b.png) and /tmp/out/report.pdf, also (~/Desktop/x.png).",
       "Run `npm run build` on https://example.com/a.png or `git status`; `MEMORY.md` has the rest, `src/app.ts:42` the bug.",
+      "Line `notes.txt:3`, [copy](/tmp/out/a(1).png), not /tmp/out/b(2).png, the `/tasks` route or `/`.",
       "```sh",
       "cat `secret.txt` /etc/hosts",
       "```",
@@ -91,13 +92,22 @@ describe("paths a message names", () => {
       "~/Desktop/x.png",
       "MEMORY.md",
       "src/app.ts:42",
+      "notes.txt:3",
+      "/tmp/out/a(1).png",
     ]);
   });
 
-  test("a huge line is skipped, and looked through quickly", () => {
+  test("text made to be slow is looked through quickly", () => {
     const started = Date.now();
-    expect(fileRefs(`${"[".repeat(200_000)} \`a.png\`\n\`b.png\` ${"[x](".repeat(900)}`)).toEqual(["b.png"]);
-    expect(Date.now() - started).toBeLessThan(1000);
+    expect(fileRefs(`${"[".repeat(100_000)} \`a.png\`\n\`b.png\` ${"[x](".repeat(900)}`)).toEqual(["b.png"]);
+    for (const piece of ["[", "![x](", "[x](<", "`", "/a/..."]) {
+      const line = piece.repeat(Math.floor(3900 / piece.length));
+      fileRefs(Array.from({ length: 300 }, () => line).join("\n"));
+      barePaths(Array.from({ length: 40 }, () => line).join(" "));
+    }
+    expect(barePaths(`/a/${".".repeat(150_000)}x`)).toHaveLength(1);
+    // Seconds before the repetitions were bounded; the margin is for a busy machine.
+    expect(Date.now() - started).toBeLessThan(5000);
   });
 
   test("a bare path ends before the punctuation of its sentence", () => {
@@ -107,14 +117,14 @@ describe("paths a message names", () => {
       ["~/x/y.txt", "~/x/y.txt"],
       ["C:\\Users\\me\\b.png", "C:\\Users\\me\\b.png"],
     ]);
-    expect(barePaths("/... and /.")).toEqual([]);
+    expect(barePaths("/... and /. and /tmp/a(1).png")).toEqual([]);
   });
 
   test("what can't be a path is never asked about", () => {
-    for (const ref of ["workspace/", "a.png", "~/x", "/tmp", "C:\\Users\\me\\a.png", "file:///tmp/a.png", "My Report.pdf", "src/app.ts:12:3"]) {
+    for (const ref of ["workspace/", "a.png", "~/x", "/tmp/out", "C:\\Users\\me\\a.png", "file:///tmp/a.png", "My Report.pdf", "src/app.ts:12:3", "notes.txt:3"]) {
       expect([ref, isPathLike(ref)]).toEqual([ref, true]);
     }
-    for (const ref of ["build", "npm run build", "https://example.com/a.png", "mailto:a@b.c", "//server/share", "#anchor", "a | b.txt", "*.png", "$HOME/a.png", ""]) {
+    for (const ref of ["build", "npm run build", "https://example.com/a.png", "mailto:a@b.c", "localhost:3000", "//server/share", "#anchor", "a | b.txt", "*.png", "$HOME/a.png", "/", "/tasks", "/etc/", ""]) {
       expect([ref, isPathLike(ref)]).toEqual([ref, false]);
     }
   });
@@ -184,7 +194,10 @@ describe("files of a chat", () => {
 
     const link = join(outside, "link.png");
     symlinkSync(join(shots, "notes.txt"), link);
-    for (const path of [join(shots, "notes.txt"), join(shots, "fake.png"), link, join(dataDir, "access-token"), shots, join(shots, "gone.png")]) {
+    // A named pipe must not make the core wait for its writer.
+    const pipe = join(outside, "pipe.png");
+    if (process.platform !== "win32") Bun.spawnSync(["mkfifo", pipe]);
+    for (const path of [join(shots, "notes.txt"), join(shots, "fake.png"), link, pipe, join(dataDir, "access-token"), shots, join(shots, "gone.png")]) {
       expect([path, (await call("GET", `/api/files/image?path=${encodeURIComponent(path)}`)).status]).toEqual([path, 404]);
     }
     expect((await call("GET", "/api/files/image?path=workspace/shots/01-positions.png")).status).toBe(400);
@@ -200,7 +213,19 @@ describe("showing a file in the file manager", () => {
     expect((await call<ChatFiles>("POST", `/api/conversations/${chat.id}/files`, { messages: [] }, "127.0.0.1")).data.local).toBe(true);
     expect((await call<ChatFiles>("POST", `/api/conversations/${chat.id}/files`, { messages: [] }, "::1", { "x-forwarded-for": "203.0.113.7" })).data.local).toBe(false);
 
-    for (const [from, headers] of [[undefined, {}], ["192.168.1.20", {}], ["127.0.0.1", { "x-forwarded-for": "203.0.113.7" }]] as const) {
+    for (const origin of ["tauri://localhost", "http://127.0.0.1:7777", "http://localhost:1420"]) {
+      expect([origin, (await call<ChatFiles>("POST", `/api/conversations/${chat.id}/files`, { messages: [] }, "127.0.0.1", { origin })).data.local]).toEqual([origin, true]);
+    }
+
+    const remote = [
+      [undefined, {}],
+      ["192.168.1.20", {}],
+      ["127.0.0.1", { "x-forwarded-for": "203.0.113.7" }],
+      ["127.0.0.1", { forwarded: "for=203.0.113.7" }],
+      // A reverse proxy on this computer that adds no header: the page still comes from elsewhere.
+      ["127.0.0.1", { origin: "https://godmode.example.com" }],
+    ] as const;
+    for (const [from, headers] of remote) {
       const refused = await call<{ code: string }>("POST", "/api/files/reveal", { path }, from, headers);
       expect([refused.status, refused.data.code]).toEqual([403, "not_local"]);
     }
@@ -209,6 +234,14 @@ describe("showing a file in the file manager", () => {
     expect((await call("POST", "/api/files/reveal", { path }, "127.0.0.1")).status).toBe(200);
     expect((await call("POST", "/api/files/reveal", { path: shots }, "::ffff:127.0.0.1")).status).toBe(200);
     expect(launched).toEqual([fileManagerCommand(path, "file"), fileManagerCommand(shots, "folder")]);
+  });
+
+  test("a link to a bundle is selected, not opened", async () => {
+    launched.length = 0;
+    mkdirSync(join(outside, "Tool.app"));
+    symlinkSync(join(outside, "Tool.app"), join(outside, "tool"));
+    expect((await call("POST", "/api/files/reveal", { path: join(outside, "tool") }, "127.0.0.1")).status).toBe(200);
+    expect(launched).toEqual([fileManagerCommand(join(outside, "tool"), "folder", process.platform, join(outside, "Tool.app"))]);
   });
 
   test("needs an absolute path that exists", async () => {
@@ -224,6 +257,8 @@ describe("showing a file in the file manager", () => {
     expect(fileManagerCommand("/a/shots", "folder", "darwin")).toEqual(["open", "/a/shots"]);
     expect(fileManagerCommand("/a/Evil.app", "folder", "darwin")).toEqual(["open", "-R", "/a/Evil.app"]);
     expect(fileManagerCommand("/a/run.command", "file", "darwin")).toEqual(["open", "-R", "/a/run.command"]);
+    // A link with a harmless name that leads to an app.
+    expect(fileManagerCommand("/a/shots", "folder", "darwin", "/Applications/Evil.app")).toEqual(["open", "-R", "/a/shots"]);
     expect(fileManagerCommand("C:\\a\\shot.png", "file", "win32")).toEqual(["explorer.exe", "/select,C:\\a\\shot.png"]);
     expect(fileManagerCommand("C:\\a\\shots", "folder", "win32")).toEqual(["explorer.exe", "C:\\a\\shots"]);
     expect(fileManagerCommand("/a/shot.png", "file", "linux")).toEqual(["xdg-open", "/a"]);

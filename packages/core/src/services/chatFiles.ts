@@ -3,7 +3,7 @@
  * Paths refer to the machine the core runs on. A relative one is looked up where the chat's agent works, and next to
  * the other files and folders the same message names ("the screenshots are in `workspace/shots/`: `01.png`, …").
  */
-import { closeSync, fstatSync, openSync, readFileSync, readSync, statSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readFileSync, readSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -78,9 +78,11 @@ function locate(path: string, folders: string[]): { path: string; kind: Kind } |
 
 /** A picture the chat can show, by its first bytes — never by its name alone. */
 function openImage(path: string, withData: boolean): { mime: string; version: number; data: Buffer | null } | null {
+  // Opening a named pipe would wait for its writer, and the whole core with it.
+  if (kindOf(path) !== "file") return null;
   let fd: number | null = null;
   try {
-    fd = openSync(path, "r");
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
     const stat = fstatSync(fd);
     if (!stat.isFile() || stat.size === 0 || stat.size > MAX_TASK_ATTACHMENT_BYTES) return null;
     const head = Buffer.alloc(32);
@@ -157,9 +159,12 @@ export function __setFileManagerForTests(fn: Launch | null): void {
   launch = fn ?? spawnDetached;
 }
 
-/** A file is selected in its folder, a folder is opened. Nothing is ever run: a folder that could be an app bundle is selected, too. */
-export function fileManagerCommand(path: string, kind: Kind, platform: NodeJS.Platform = process.platform): string[] {
-  const open = kind === "folder" && !extname(path);
+/**
+ * A file is selected in its folder, a folder is opened. Nothing is ever run: a folder that could be an app bundle — by
+ * its own name or the one a link leads to (`real`) — is selected, too.
+ */
+export function fileManagerCommand(path: string, kind: Kind, platform: NodeJS.Platform = process.platform, real = path): string[] {
+  const open = kind === "folder" && !extname(path) && !extname(real);
   if (platform === "darwin") return open ? ["open", path] : ["open", "-R", path];
   if (platform === "win32") return ["explorer.exe", open ? path : `/select,${path}`];
   return ["xdg-open", kind === "folder" ? path : dirname(path)];
@@ -171,7 +176,7 @@ export function revealInFileManager(input: string): void {
   const kind = kindOf(path);
   if (!kind) throw notFound("File");
   try {
-    launch(fileManagerCommand(path, kind));
+    launch(fileManagerCommand(path, kind, process.platform, realpathSync(path)));
   } catch {
     throw new HttpError(500, "Couldn't open the file manager", "file_manager");
   }

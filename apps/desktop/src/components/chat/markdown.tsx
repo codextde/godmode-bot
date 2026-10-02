@@ -6,7 +6,8 @@ import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 import { CodeBlock as AicssCodeBlock } from "@/components/aicss/CodeBlock";
 import { CoreFileLink, CoreImage, isCoreFile } from "./core-file";
-import { FileLink, MessageFilesScope, Picture, content, rehypeLocalFiles, useMessageFiles, type HastNode } from "./local-files";
+import { content, rehypeLocalFiles, type HastNode } from "./local-file-tree";
+import { FileLink, MessageFilesScope, Picture, useMessageFiles } from "./local-files";
 
 /** Fenced code in chat — aicss code block (line numbers + copy), height-capped for long snippets. */
 export function CodeBlock({ lang, code, className }: { lang: string; code: string; className?: string }) {

@@ -258,9 +258,20 @@ export function clientIp(c: Context): string {
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
+/** The page asking was loaded from this computer (or sent no origin, like the desktop shell's own requests). */
+function hasLocalOrigin(c: Context): boolean {
+  const origin = c.req.header("origin");
+  if (!origin || DESKTOP_ORIGINS.has(origin)) return true;
+  try {
+    return LOCAL_HOSTS.has(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
 /** The app or browser asking runs on this computer — not behind a proxy or a tunnel that only ends here. */
 export function isLocalRequest(c: Context): boolean {
-  return !isMobileChannel(c) && LOOPBACK.has(clientIp(c)) && !c.req.header("x-forwarded-for") && !c.req.header("forwarded");
+  return !isMobileChannel(c) && LOOPBACK.has(clientIp(c)) && !c.req.header("x-forwarded-for") && !c.req.header("forwarded") && hasLocalOrigin(c);
 }
 
 /* Simple in-memory login rate limiter */

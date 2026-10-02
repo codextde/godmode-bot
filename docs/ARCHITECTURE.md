@@ -109,21 +109,24 @@ system prompt, and a one-line restatement on resumed turns. Dreams don't get the
 
 A chat shows the pictures its messages name and links every other file or folder to the file manager — the message
 itself stays as the agent wrote it. The UI collects what could be a path (inline code, link and image targets, bare
-absolute paths; `fileRefs` in `@godmode/shared`) and asks `POST /api/conversations/:id/files {messages: string[][]}`
-which of them exist (`services/chatFiles.ts`), all messages of a chat in one request.
+absolute paths; `fileRefs` in `@godmode/shared`, which skips code blocks and lines over 4,000 characters) and asks
+`POST /api/conversations/:id/files {messages: string[][]}` which of them exist (`services/chatFiles.ts`); messages that
+ask within the same moment share a request.
 
 * **Lookup.** Absolute paths, `~/…` and `file://` urls are taken as they are. A relative one is tried in the chat's
   folder, the agent's repository, its `workspace/` and the workspace's folders, then next to the other paths of the same
   message — a bare name there first ("the screenshots are in `workspace/shots/`: `01.png`, …"). A trailing `:line` is
-  dropped; other urls and network paths (`//server/…`) are never followed.
-* **Pictures** (png, jpeg, gif, webp, avif, bmp up to 25 MB, told by their first bytes) come from
-  `GET /api/files/image?path=`, which serves nothing else. One that stands alone in a paragraph is shown in its place, a
-  list of nothing but pictures as a grid; one named within a sentence or a mixed list stays a link and is shown below
-  it. Each opens a preview that steps through the pictures of the message.
+  dropped; other urls, network paths (`//server/…`) and names right below the root (`/tasks` is a route) are never
+  followed.
+* **Pictures** (png, jpeg, gif, webp, avif, bmp up to 25 MB: named like one and told by their first bytes) come from
+  `GET /api/files/image?path=`, which serves nothing else and opens regular files only. One that stands alone in a
+  paragraph is shown in its place, a list of nothing but pictures as a grid; one named within a sentence or a mixed
+  list stays a link and is shown below it. Each opens a preview that steps through the pictures of the message.
 * **Show in Finder.** `POST /api/files/reveal {path}` selects a file in its folder and opens a folder (`open`,
-  `explorer.exe`, `xdg-open`, never through a shell). A folder with an extension is selected instead, so an app bundle is
-  never launched. It answers only requests from this computer (loopback, no forwarding header) — `local` in the lookup's
-  answer says so, and from anywhere else the UI copies the path instead. Phones reach none of the three routes.
+  `explorer.exe`, `xdg-open`, never through a shell). A folder with an extension (its own, or the one a link leads to) is
+  selected instead, so an app bundle is never launched. It answers only requests from this computer (loopback, no
+  forwarding header, a page loaded from this computer) — `local` in the lookup's answer says so, and from anywhere else
+  the UI copies the path instead. Phones reach none of the three routes.
 
 ## Security model
 
