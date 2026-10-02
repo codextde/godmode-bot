@@ -1,11 +1,13 @@
 # Godmode for iOS and Android
 
 The phone app for Godmode: hand over tasks, follow answers as they stream, stop runs, run automations, and watch an
-agent's browser, shared screen or VM live (tap to take control). It controls the Godmode running on your computer and
+agent's browser, shared screen or VM live (tap to take control). The chat input works like the desktop's: photos and
+files, Claude Code's slash commands, a queue for messages sent while the agent works, and the model and effort. It controls the Godmode running on your computer and
 nothing else.
 
 Built with [Expo](https://expo.dev) SDK 57 and Expo Router: native tabs and headers (Liquid Glass on iOS 26),
-`expo-glass-effect` for floating controls, `expo-camera` for pairing, `expo-secure-store` for the device key.
+`expo-glass-effect` for floating controls, `expo-camera` for pairing, `expo-secure-store` for the device key,
+`expo-image-picker` and `expo-document-picker` for attachments.
 
 ## Connecting
 

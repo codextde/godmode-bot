@@ -202,7 +202,10 @@ export function Composer({
           accessibilityLabel="Message"
         />
         <View style={styles.toolbar}>
-          {allowFiles ? <AttachButton onPick={(s) => void attach(s)} disabled={disabled || files.length >= MAX_ATTACHMENTS} /> : null}
+          {allowFiles ? (
+            // A new native menu when the strip above it opens or closes: SwiftUI hosts keep their old place otherwise.
+            <AttachButton key={files.length > 0 || reading ? "below-files" : "alone"} onPick={(s) => void attach(s)} disabled={disabled || files.length >= MAX_ATTACHMENTS} />
+          ) : null}
           {agentId ? (
             <Pressable
               accessibilityRole="button"
@@ -255,7 +258,7 @@ function AttachButton({ onPick, disabled }: { onPick: (source: AttachSource) => 
   if (process.env.EXPO_OS === "ios") {
     return (
       <View style={[styles.tool, disabled && { opacity: 0.4 }]} pointerEvents={disabled ? "none" : "auto"}>
-        <Host matchContents>
+        <Host style={styles.tool}>
           <Menu
             label={
               <SwiftImage

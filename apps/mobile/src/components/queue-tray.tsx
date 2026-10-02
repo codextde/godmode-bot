@@ -235,6 +235,7 @@ function Row({
 const styles = StyleSheet.create({
   tray: {
     marginHorizontal: space.lg,
+    marginTop: space.xs,
     marginBottom: space.sm,
     borderRadius: radius.lg,
     borderCurve: "continuous",

@@ -747,11 +747,13 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   (`gmd_` + 32 random bytes); the row in `mobile_devices` keeps its SHA-256, name, model, last address and last use.
   Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
 * **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
-  allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents, conversations and messages, runs (cancel),
+  allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents and their slash commands, the model catalog,
+  conversations, messages (with attachments) and the message queue (edit, remove, send now), runs (cancel),
   routines (run, enable), browser profiles (launch, input), computer input, VMs (list, screenshot, start/stop), notifications,
   missing logins and `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are
-  restricted too: a phone can't set a chat's folder, VM, browser, shared screen or instructions, or change an
-  automation beyond switching it on or off, and it only watches and controls screens that are shared in a chat
+  restricted too: a phone may pick a chat's model and effort but can't set its folder, VM, browser, shared screen or
+  instructions, or change an automation beyond switching it on or off, and it only watches and controls screens that
+  are shared in a chat
   (`computer.subscribe` and `/api/computer/input`). The listener checks the decoded path, so `/api/%61uth/…` is refused
   like `/api/auth/…`.
 * **Key hygiene.** The app only sends its key over plain HTTP to a Tailscale address (100.64.0.0/10 or `*.ts.net`;
