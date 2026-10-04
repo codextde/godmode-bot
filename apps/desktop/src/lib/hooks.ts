@@ -117,6 +117,13 @@ export function useTasks(workspaceId?: ScopeFilter) {
   return useQuery({ queryKey: qk.taskList(ws), queryFn: () => api.tasks.list({ workspaceId: ws }) });
 }
 
+/** Goals of the sidebar scope (a workspace sees its own and the global ones). */
+export function useGoals(workspaceId?: ScopeFilter) {
+  const scope = useUi((s) => s.workspace);
+  const ws = workspaceId ?? scope;
+  return useQuery({ queryKey: qk.goalList(ws), queryFn: () => api.goals.list({ workspaceId: ws }) });
+}
+
 /** A ticket's timeline, kept current by `task.event`. */
 export function useTaskEvents(taskId: string) {
   return useQuery({ queryKey: qk.taskEvents(taskId), queryFn: () => api.tasks.events(taskId) });

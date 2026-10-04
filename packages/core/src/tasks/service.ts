@@ -62,6 +62,7 @@ import { SECRET_PLACEHOLDER, redact, withoutSecrets } from "../vault/vault";
 import { getAgent } from "../agents/service";
 import { INTERRUPTED, activeRunForConversation, cancelRun, getRun, listActiveRuns, untilAsked, waitForRun } from "../runner/runner";
 import { stripNoteTags } from "../runner/prompt";
+import { checkGoal, goalBrief } from "./goals";
 import { answerByMessage, type Answerer } from "../services/questions";
 import { pauseOf, PAUSE_QUESTION_JOIN, PAUSE_QUESTION_SQL, toPause, type PauseQuestionCols } from "../services/pauses";
 import { submitMessage } from "../services/messageQueue";
@@ -154,6 +155,7 @@ interface TaskRow extends PauseQuestionCols {
   paused_at?: string | null;
   parent_id: string | null;
   parts_seen_at: string | null;
+  goal_id: string | null;
   parent_number?: number | null;
   sub_total?: number | null;
   sub_open?: number | null;
@@ -243,6 +245,7 @@ function toModel(r: TaskRow): Task {
     startedAt: r.started_at,
     completedAt: r.completed_at,
     archivedAt: r.archived_at,
+    goalId: r.goal_id ?? null,
     parentId: r.parent_id ?? null,
     parentNumber: r.parent_id ? (r.parent_number ?? null) : null,
     subtasks: r.sub_total ? { total: r.sub_total, open: r.sub_open ?? 0, blocked: r.sub_blocked ?? 0 } : null,
@@ -554,6 +557,8 @@ export function createTask(input: TaskInput, actor: TaskActor = "user"): Task {
   const parentId = checkParent(input.parentId);
   // A part belongs where its ticket is (its agents, repository and board).
   const workspaceId = parentId ? (get<{ workspace_id: string | null }>("SELECT workspace_id FROM tasks WHERE id = ?", parentId)?.workspace_id ?? null) : checkWorkspace(input.workspaceId);
+  // A part serves its ticket's goal.
+  const goalId = parentId ? (get<{ goal_id: string | null }>("SELECT goal_id FROM tasks WHERE id = ?", parentId)?.goal_id ?? null) : checkGoal(input.goalId, workspaceId);
   const agentId = checkAgent(input.agentId, workspaceId);
   const status = input.status ? cleanStatus(input.status) : agentId ? "todo" : "backlog";
   const ts = now();
@@ -583,6 +588,7 @@ export function createTask(input: TaskInput, actor: TaskActor = "user"): Task {
     labels: JSON.stringify(cleanLabels(input.labels)),
     created_by: actor,
     parent_id: parentId,
+    goal_id: goalId,
     completed_at: status === "done" || status === "cancelled" ? ts : null,
     created_at: ts,
     updated_at: ts,
@@ -633,7 +639,9 @@ export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "use
     // The old agent's report is void.
     blockedReason = null;
   }
+  const goalId = patch.goalId !== undefined ? checkGoal(patch.goalId, current.workspace_id) : undefined;
   update("tasks", id, {
+    goal_id: goalId,
     title: patch.title !== undefined ? cleanTitle(patch.title) : undefined,
     description,
     type: patch.type !== undefined ? cleanType(patch.type) : undefined,
@@ -998,6 +1006,7 @@ function taskPrompt(task: TaskRow, worktree: Worktree | null, restarted: boolean
     ...(labels.length ? [`Labels: ${labels.join(", ")}.`] : []),
     ...attachmentsBrief(staged),
     ...(worktree ? [worktreeBrief(task, worktree)] : []),
+    ...goalBrief(task.goal_id),
     ...partOfBrief(task),
     ...partsBrief(task),
     TYPE_BRIEF[task.type],

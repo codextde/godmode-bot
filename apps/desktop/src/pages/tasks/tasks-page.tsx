@@ -41,7 +41,8 @@ import { followupWhen } from "@/components/chat/followup";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
 import { api, errorMessage } from "@/lib/api";
-import { useAllAgents, useArchivedTasks, useTasks, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useArchivedTasks, useGoals, useTasks, useWorkspaces } from "@/lib/hooks";
+import { GoalsStrip } from "@/components/tasks/goals-strip";
 import { qk } from "@/lib/queryKeys";
 import { upsertTask } from "@/lib/realtime";
 import { useUi } from "@/stores/ui";
@@ -74,6 +75,7 @@ export default function TasksPage() {
   const [params, setParams] = useSearchParams();
   const tasksQ = useTasks();
   const archivedQ = useArchivedTasks();
+  const { data: goals = [] } = useGoals();
   const { setArchived } = useArchiveTasks();
   const { data: agents = [] } = useAllAgents();
   const { data: workspaceList = [] } = useWorkspaces();
@@ -83,6 +85,7 @@ export default function TasksPage() {
   const priorities = useMemo(() => new Set((params.get("priority") ?? "").split(",").filter(Boolean) as TaskPriority[]), [params]);
   const dueFilter = params.get("due") as "overdue" | "week" | "none" | null;
   const labelFilter = useMemo(() => new Set((params.get("label") ?? "").split(",").filter(Boolean)), [params]);
+  const goalFilter = params.get("goal");
   const setFilter = (key: string, value: string | null) => {
     const p = new URLSearchParams(params);
     if (value) p.set(key, value);
@@ -97,10 +100,10 @@ export default function TasksPage() {
     else next.add(value);
     setFilter(key, [...next].join(",") || null);
   };
-  const filtersOn = priorities.size + labelFilter.size + (dueFilter ? 1 : 0);
+  const filtersOn = priorities.size + labelFilter.size + (dueFilter ? 1 : 0) + (goalFilter ? 1 : 0);
   const clearFilters = () => {
     const p = new URLSearchParams(params);
-    for (const k of ["q", "agent", "priority", "due", "label"]) p.delete(k);
+    for (const k of ["q", "agent", "priority", "due", "label", "goal"]) p.delete(k);
     setParams(p, { replace: true });
   };
   const [creating, setCreating] = useState(false);
@@ -138,10 +141,11 @@ export default function TasksPage() {
       if (dueFilter === "week" && !(t.dueDate && t.dueDate >= today && t.dueDate <= week)) return false;
       if (dueFilter === "none" && t.dueDate) return false;
       if (labelFilter.size && !t.labels.some((l) => labelFilter.has(l))) return false;
+      if (goalFilter && t.goalId !== goalFilter) return false;
       if (!q) return true;
       return `#${t.number} ${t.title} ${t.description} ${t.labels.join(" ")} ${t.agentId ? (agentById.get(t.agentId)?.name ?? "") : ""}`.toLowerCase().includes(q);
     };
-  }, [search, agentFilter, agentById, priorities, dueFilter, labelFilter]);
+  }, [search, agentFilter, agentById, priorities, dueFilter, labelFilter, goalFilter]);
   const labelsInUse = useMemo(() => [...new Set(tasks.flatMap((t) => t.labels))].sort((a, b) => a.localeCompare(b)), [tasks]);
   const overdueCount = useMemo(() => tasks.filter((t) => isOverdue(t)).length, [tasks]);
   const visible = useMemo(() => tasks.filter(matches), [tasks, matches]);
@@ -393,6 +397,8 @@ export default function TasksPage() {
         )}
       </div>
 
+      {view !== ARCHIVED && <GoalsStrip goals={goals} selected={goalFilter} onSelect={(id) => setFilter("goal", id)} workspaceId={workspace?.id ?? null} />}
+
       <div className="min-h-0 flex-1">
         {view === ARCHIVED ? (
           archivedQ.isPending ? (
@@ -465,6 +471,7 @@ export default function TasksPage() {
         workspaces={workspaceList}
         agents={agents}
         defaultWorkspaceId={workspace?.id ?? null}
+        defaultGoalId={goalFilter}
       />
       <TaskSheet
         task={selected}

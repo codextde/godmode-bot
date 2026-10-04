@@ -27,6 +27,7 @@ import {
   RotateCcw,
   SendHorizontal,
   Square,
+  Target,
   Trash2,
 } from "lucide-react";
 import type { Agent, Task, TaskEvent, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
@@ -48,7 +49,7 @@ import { AttachmentChip, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, formatBytes, rea
 import { api } from "@/lib/api";
 import { modKey, openExternal } from "@/lib/desktop";
 import { draftKeys, saveDraft, useDraft } from "@/lib/drafts";
-import { useQuestions, useTasks } from "@/lib/hooks";
+import { useGoals, useQuestions, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { QuestionCard, viewOfQuestion } from "@/components/chat/question-card";
 import { cn } from "@/lib/utils";
@@ -339,6 +340,9 @@ function TaskDetail({
             <Prop label="Due date">
               <DueDateField value={task.dueDate} status={task.status} onChange={(dueDate) => save.mutate({ dueDate })} />
             </Prop>
+            <Prop label="Goal">
+              <GoalSelect task={task} onChange={(goalId) => save.mutate({ goalId })} className={PROP_CONTROL} />
+            </Prop>
             <Prop label="Labels">
               <LabelsInput value={task.labels} onChange={(labels) => save.mutate({ labels })} suggestions={labelsInUse} />
             </Prop>
@@ -433,6 +437,30 @@ function TaskDetail({
 
       {started && task.agentId && !task.archivedAt && <FollowUp task={task} agent={agent} />}
     </div>
+  );
+}
+
+/** The goal a ticket serves — active ones of its workspace and global ones (a part serves its ticket's). */
+function GoalSelect({ task, onChange, className }: { task: Task; onChange: (goalId: string | null) => void; className?: string }) {
+  const { data: goals = [] } = useGoals(task.workspaceId ?? "global");
+  const NONE = "none";
+  const choices = goals.filter((g) => g.status === "active" || g.id === task.goalId);
+  return (
+    <Select value={task.goalId ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)} disabled={!!task.parentId}>
+      <SelectTrigger aria-label="Goal" className={cn(className, "disabled:opacity-100 disabled:hover:bg-transparent")} title={task.parentId ? "A part serves its ticket's goal" : undefined}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper">
+        <SelectItem value={NONE}>
+          <span className="text-muted-foreground">No goal</span>
+        </SelectItem>
+        {choices.map((g) => (
+          <SelectItem key={g.id} value={g.id}>
+            <Target className="size-3.5 text-brand-strong" /> {g.title}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 

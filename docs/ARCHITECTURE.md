@@ -940,6 +940,13 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   an optional `blockedReason` only they can change). Starting a blocked task again opens the prompt with why: "Godmode
   restarted while you were working…" or "Your last run … failed: <reason>". Handing a blocked task to another agent
   turns `needs_input`, `failed`, `stopped` and `interrupted` into `manual` (the new agent starts again).
+* **Goals** (migration 62, table `goals`, `tasks.goal_id`; `tasks/goals.ts`; `GET/POST /api/goals`, `PATCH/DELETE
+  /api/goals/:id`, Cloud: allowed; phone: closed). A goal has a title, why it matters, a target day and a status (active,
+  achieved, dropped); global or a workspace's. A ticket serves one (`Task.goalId`, set on create or in the sheet; a part
+  serves its ticket's goal), and its brief says so with the why. A goal counts its tickets (archived left out: total,
+  done, open) and what their work cost. The board shows the goals above the columns (a click filters, `?goal=`), new
+  tickets there serve the filtered goal; managers read them with `goals_list` and file tickets under one
+  (`task_create { goalId }`). Deleting a goal leaves its tickets serving none.
 * **Ready-made teams** (`agents/teams.ts`, `GET /api/team-templates`, `POST /api/team-templates/:id/install
   { workspaceId?, automations? }`, Cloud: allowed; phone: closed). A team is a lead (its own template, with instructions
   for leading: split tickets with `task_split`, hand chat work over, review, report) and reports taken from the agent

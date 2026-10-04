@@ -75,6 +75,7 @@ import { getSettings } from "../services/settings";
 import { spendReport } from "../services/spend";
 import { budgetOverview, budgetSentence, exhaustedBudget } from "../services/budgets";
 import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun, runExempt } from "../runner/runner";
+import { listGoals } from "../tasks/goals";
 import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow } from "../runner/prompt";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
@@ -600,6 +601,7 @@ function taskSummary(t: Task, names: Map<string, string>, agentNames: Map<string
     ...(t.blockedKind ? { blockedKind: t.blockedKind } : {}),
     ...(isWaiting(t) && t.followup ? { waitingUntil: t.followup.dueAt } : {}),
     ...(waitsForAnswer(t) ? { waitingForHuman: true } : {}),
+    ...(t.goalId ? { goalId: t.goalId } : {}),
     ...(t.parentNumber ? { partOf: `#${t.parentNumber}` } : {}),
     ...(t.subtasks ? { parts: { total: t.subtasks.total, open: t.subtasks.open } } : {}),
     ...(waitsForSubtasks(t) ? { waitingForParts: true } : {}),
@@ -1417,6 +1419,20 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
+    name: "goals_list",
+    description:
+      "List the goals the work serves — what each is for, its target date, and how far it is (tickets done of all, what the work cost). File tickets under a goal with task_create's goalId, so their agents know why.",
+    schema: z.object({ all: z.boolean().optional().describe("Also achieved and dropped goals") }),
+    when: isManager,
+    run: ({ all: everything }) =>
+      json(
+        listGoals()
+          .filter((g) => everything || g.status === "active")
+          .map((g) => ({ id: g.id, title: g.title, why: g.why || undefined, status: g.status, targetDate: g.targetDate ?? undefined, tickets: g.tickets, costUsd: g.costUsd })),
+      ),
+  }),
+
+  defineTool({
     name: "task_create",
     description:
       "Add a task to the task board. type: general (do it and report), research (a written report) or coding (the agent changes the code and Godmode opens a pull request — the workspace needs a repository). In a workspace with a git repository every task works in its own git worktree on its own branch, so tasks never get in each other's way. With an agent and start=true (default) the agent starts right away (status todo); otherwise it waits in the backlog. Optional: priority (urgent, high, medium, low, none — queued tasks start in priority order and the agent is told), dueDate (YYYY-MM-DD) and labels.",
@@ -1431,6 +1447,7 @@ const TOOLS: ToolDef[] = [
       dueDate: z.string().max(10).nullable().optional().describe("YYYY-MM-DD"),
       labels: z.array(z.string().max(100)).max(10).optional(),
       parentTaskId: z.string().optional().describe('Make it a part of this ticket (id or "#12"): that ticket waits until its parts are done, then its agent continues with their results'),
+      goalId: z.string().optional().describe("The goal it serves (goals_list): its agent is told why"),
     }),
     when: managesSetup,
     run: ({ start, parentTaskId, ...input }, { agent, ctx }) => {
