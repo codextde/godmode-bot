@@ -20,7 +20,7 @@ import { InstructionsChip } from "@/components/instructions/instructions";
 import { VmChip } from "@/components/vms/vm-picker";
 import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { SshChip } from "@/components/ssh/ssh-chip";
-import { ChatDropZone } from "@/components/chat/thread";
+import { ChatDropZone } from "@/components/chat/drop-zone";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
@@ -31,6 +31,7 @@ import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
 import { useLive, type LiveRun } from "@/stores/live";
+import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = [
@@ -80,6 +81,7 @@ export default function ChatHome() {
   const { data: boot } = useBootstrap();
   const { data: agents = [], isLoading: agentsLoading } = useAllAgents();
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
+  const voiceMode = useUi((s) => s.voiceMode);
   const composerRef = useRef<ComposerHandle>(null);
   // The new chat's setup is part of the draft: coming back to it must not send the message to another agent.
   const [agentId, setAgentId, agentDraft] = useDraft<string | null>(`${SETUP_DRAFT}agent`, null);
@@ -141,7 +143,7 @@ export default function ChatHome() {
   const ready = available.length;
 
   return (
-    <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="relative min-h-full">
+    <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} disabled={voiceMode} className="relative min-h-full">
       <Backdrop />
 
       <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[8vh] pb-10 text-center @md:px-5 @xl:px-8 @2xl:pt-[12vh]">

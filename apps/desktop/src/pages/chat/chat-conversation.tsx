@@ -28,7 +28,8 @@ import { InstructionsChip } from "@/components/instructions/instructions";
 import { SshChip } from "@/components/ssh/ssh-chip";
 import { VmChip } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
-import { ChatDropZone, Thread } from "@/components/chat/thread";
+import { ChatDropZone } from "@/components/chat/drop-zone";
+import { Thread } from "@/components/chat/thread";
 import { ChatFilesScope } from "@/components/chat/local-files";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -59,6 +60,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const agentWorkspace = agent?.workspaceId ? workspaces.find((w) => w.id === agent.workspaceId) : undefined;
   const live = useConversationLiveRun(conversationId);
   const voiceSettings = useVoiceSettings();
+  const voiceMode = useUi((s) => s.voiceMode);
   const setVoiceMode = useUi((s) => s.setVoiceMode);
   const armVoice = useVoiceSession((s) => s.arm);
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
@@ -371,7 +373,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
   return (
     <div className="flex h-full min-h-0">
-      <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="@container flex h-full min-w-0 flex-1 flex-col">
+      <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} disabled={dreamLog || voiceMode} className="@container flex h-full min-w-0 flex-1 flex-col">
         <ConversationHeader
           conversation={conv}
           agent={agent}

@@ -6,13 +6,14 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { VaultGrantDialog } from "@/components/vault/grant";
-import { installExternalLinks } from "@/lib/desktop";
+import { installExternalLinks, installDropGuard } from "@/lib/desktop";
 import { installErrorReporting, reactRootErrorHandlers, reportRequestError } from "@/lib/diagnostics";
 import "./index.css";
 import { App } from "./App";
 
 installErrorReporting();
 installExternalLinks();
+installDropGuard();
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({ onError: (err, query) => reportRequestError(err, query.queryKey.slice(0, 2).join(".")) }),
