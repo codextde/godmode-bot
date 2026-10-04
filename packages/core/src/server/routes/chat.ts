@@ -21,6 +21,7 @@ import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } fro
 import { conflict, notFound } from "../../util";
 import { getAgent } from "../../agents/service";
 import { listAttention } from "../../services/attention";
+import { awaySummary } from "../../services/away";
 import { retryRun } from "../../services/retries";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
@@ -118,6 +119,9 @@ export function registerChatRoutes(app: Hono): void {
 
   // Everything that waits for the human, from live state.
   app.get("/api/attention", (c) => c.json(listAttention()));
+
+  // What the team did since the human was last here (Home's "while you were away").
+  app.get("/api/away", (c) => c.json(awaySummary(c.req.query("since") ?? "")));
 
   app.patch("/api/conversations/:id", async (c) => {
     const patch = await body(
