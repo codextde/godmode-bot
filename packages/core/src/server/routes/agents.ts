@@ -106,6 +106,7 @@ export const agentSchema = z.object({
   instructions: z.string().max(50_000).optional(),
   model: modelId,
   effort: z.enum(EFFORT_OPTIONS).nullable().optional(),
+  ultracode: z.boolean().nullable().optional(),
   enabled: z.boolean().optional(),
   permissions: permissionsSchema.optional(),
   browser: browserSchema.optional(),

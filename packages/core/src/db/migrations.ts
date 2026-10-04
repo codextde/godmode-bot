@@ -704,4 +704,14 @@ CREATE TABLE IF NOT EXISTS paused_runs (
 CREATE INDEX IF NOT EXISTS idx_paused_runs_agent ON paused_runs(agent_id);
 `,
   },
+  {
+    id: 40,
+    name: "ultracode",
+    sql: /* sql */ `
+-- Ultracode (Claude Code plans every task as a workflow of several agents). NULL = inherit: an agent the global
+-- default, a chat its agent's.
+ALTER TABLE agents ADD COLUMN ultracode INTEGER;
+ALTER TABLE conversations ADD COLUMN ultracode INTEGER;
+`,
+  },
 ];

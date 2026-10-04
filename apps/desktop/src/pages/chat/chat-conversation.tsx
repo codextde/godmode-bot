@@ -206,11 +206,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     onMutate: (patch) => {
       const old = qc.getQueryData<ConversationWithMessages>(key);
       qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...patch } : c));
-      return { prev: { model: old?.model ?? null, effort: old?.effort ?? null } };
+      return { prev: { model: old?.model ?? null, effort: old?.effort ?? null, ultracode: old?.ultracode ?? null } };
     },
-    onError: (err, _patch, ctx) => {
+    onError: (err, patch, ctx) => {
       if (ctx) qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...ctx.prev } : c));
-      toast.error("Couldn't switch the model", { description: errorMessage(err) });
+      toast.error(patch.ultracode !== undefined && patch.model === undefined ? "Couldn't switch Ultracode" : "Couldn't switch the model", { description: errorMessage(err) });
     },
   });
 
@@ -545,7 +545,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                         : `Message ${agent.name} — or type / for commands`
                 }
                 trailing={
-                  <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(patch) => choose.mutate(patch)} />
+                  <ModelPicker
+                    agent={agent}
+                    value={{ model: conv.model ?? null, effort: conv.effort ?? null, ultracode: conv.ultracode ?? null }}
+                    onChange={(patch) => choose.mutate(patch)}
+                  />
                 }
                 onSubmit={(input) => send.mutateAsync({ ...input, queueId: newQueueId() })}
               />

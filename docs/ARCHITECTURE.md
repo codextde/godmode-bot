@@ -170,7 +170,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
-       --settings <tmp json>                   (the message-queue hook, see below)
+       --settings <tmp json>                   (the message-queue hook, see below; `ultracode: true` with Ultracode)
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key or in a VM; Bash in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
        [--add-dir <folder or clone> for each usable workspace folder and repository]
@@ -183,6 +183,27 @@ Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + re
 Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-conversation lock prevents
 two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
 works in its own tabs (see Browser).
+
+### Ultracode
+
+Claude Code's Ultracode — dynamic workflows on every task, at any effort level — is a setting of the session, not a
+flag: the runner adds `ultracode: true` to the run's `--settings` file. Whether it is on: the chat
+(`conversations.ultracode`, from the model picker or `/effort ultracode [on|off]`), else the agent, else
+`settings.runner.ultracode`. Dreams and condition checks never get it.
+
+* **Availability.** The model catalog probe asks Claude Code (`get_settings` after `initialize`) whether the install has
+  dynamic workflows; a model has `ultracode` when it does and the model supports `xhigh` effort (Claude Code's rule).
+  The answer is about the probe session's model: when that one has no `xhigh`, the probe switches the session to a
+  model that has (`set_model`) and asks again. The UI offers the switch only for such models, and `ultracodeFor` drops
+  the setting for the others — an older CLI never sees the key.
+* **Without full bypass** the `Workflow` tool joins `--allowedTools`: print mode cannot ask, and Claude Code refuses a
+  workflow nobody reviewed.
+* **Progress.** A workflow runs in the background of its `Workflow` tool call. Claude Code reports it as `system`
+  events (`task_started`, `task_progress`, `task_updated`, `task_notification`); the stream accumulator keeps them as
+  `task` on that `tool_use` block (status, current activity, its agents with their state), which the chat shows as a
+  card. The process stays until the workflow is done and then sends one `result` per turn; the last one is the answer,
+  their usage adds up (the tokens of the workflow's agents are on the `task`, not in the run's usage). A pause ends
+  the process and with it the workflow: its `task` is `stopped`, and the continued run starts it again if it needs it.
 
 ### Message queue
 

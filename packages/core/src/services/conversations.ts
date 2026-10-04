@@ -53,6 +53,7 @@ interface ConversationRow {
   claude_session_id: string | null;
   model: string | null;
   effort: Effort | null;
+  ultracode: number | null;
   working_directory: string | null;
   computer_target: string | null;
   vm_id: string | null;
@@ -118,6 +119,7 @@ function toConversation(r: ConversationRow): Conversation {
     claudeSessionId: r.claude_session_id,
     model: r.model || null,
     effort: r.effort || null,
+    ultracode: r.ultracode == null ? null : bool(r.ultracode),
     workingDirectory: r.working_directory,
     computerTarget: parseComputerTarget(parseJson<unknown>(r.computer_target, null)),
     vmId: r.vm_id ?? null,
@@ -216,6 +218,8 @@ export interface ModelChoice {
   /** `claude --model` value; null/empty = the agent's model. */
   model?: string | null;
   effort?: Effort | null;
+  /** Ultracode for this chat; null = the agent's. */
+  ultracode?: boolean | null;
 }
 
 export function createConversation(
@@ -247,6 +251,7 @@ export function createConversation(
     claude_session_id: null,
     model: input.model?.trim() || null,
     effort: input.effort ?? null,
+    ultracode: input.ultracode == null ? null : int(input.ultracode)!,
     working_directory: workingDirectory,
     vm_id: vmId,
     browser_profile_id: browserProfileId,
@@ -312,6 +317,7 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     archived: int(patch.archived),
     model: patch.model === undefined ? undefined : patch.model?.trim() || null,
     effort: patch.effort,
+    ultracode: patch.ultracode === null ? null : int(patch.ultracode),
     working_directory: patch.workingDirectory === undefined ? undefined : normalizeWorkingDirectory(patch.workingDirectory),
     computer_target: patch.computerTarget === undefined ? undefined : patch.computerTarget ? JSON.stringify(parseComputerTarget(patch.computerTarget)) : null,
     vm_id: normalizeVmId(patch.vmId),
@@ -343,6 +349,7 @@ export function setConversationState(
     title?: string;
     model?: string | null;
     effort?: Effort | null;
+    ultracode?: boolean | null;
     archived?: boolean;
   },
 ) {
@@ -353,6 +360,7 @@ export function setConversationState(
     archived: int(patch.archived),
     model: patch.model,
     effort: patch.effort,
+    ultracode: patch.ultracode === null ? null : int(patch.ultracode),
     last_message_at: patch.lastMessageAt,
     title: patch.title,
     updated_at: now(),
@@ -622,6 +630,7 @@ export async function startChat(
     instructions: input.instructions,
     model: input.model,
     effort: input.effort,
+    ultracode: input.ultracode,
   });
   if (input.computerTarget) {
     update("conversations", conversation.id, { computer_target: JSON.stringify(parseComputerTarget(input.computerTarget)) });

@@ -67,6 +67,7 @@ function makeAgent(workspaceId: string | null, permissions: Partial<AgentPermiss
     instructions: "",
     model: "",
     effort: null,
+    ultracode: null,
     isDefault: false,
     enabled: true,
     status: "idle",

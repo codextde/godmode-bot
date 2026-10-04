@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Subprocess } from "bun";
 import type { Agent, BrowserProfile, ComputerTarget, Effort, Message, PauseReason, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
-import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
+import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, WORKFLOW_TOOL, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { setWelcomeEvents } from "../server/ws";
@@ -53,7 +53,7 @@ import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memor
 import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
-import { effortFor } from "./models";
+import { effortFor, ultracodeFor } from "./models";
 import { buildDreamSystemPrompt, buildSystemPrompt, continueContext, instructionsDigest, instructionsSection, queuedMessagesContext, resumeContextPrefix, type PromptApiTool, type PromptVm } from "./prompt";
 import { apiToolEnv, apiToolEnvOwners, apiToolsForAgent } from "../integrations/apiTools";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
@@ -964,7 +964,9 @@ setWelcomeEvents(() =>
     .map((j) => ({ type: "run.activity" as const, runId: j.runId, agentId: j.agentId, label: j.lastLabel })),
 );
 
-function emitActivity(job: Job, label: string) {
+function emitActivity(job: Job, text: string) {
+  // A workflow's label quotes what the model wrote, like the blocks do.
+  const label = redact(text);
   if (label === job.lastLabel) return;
   job.lastLabel = label;
   bus.emit({ type: "run.activity", runId: job.runId, agentId: job.agentId, label });
@@ -1198,11 +1200,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     working_directory: string | null;
     model: string | null;
     effort: Effort | null;
+    ultracode: number | null;
     instructions: string | null;
     instructions_digest: string | null;
     memory_digest: string | null;
   }>(
-    "SELECT claude_session_id, working_directory, model, effort, instructions, instructions_digest, memory_digest FROM conversations WHERE id = ?",
+    "SELECT claude_session_id, working_directory, model, effort, ultracode, instructions, instructions_digest, memory_digest FROM conversations WHERE id = ?",
     job.conversationId,
   );
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
@@ -1322,6 +1325,11 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
+  const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
+  // Ultracode: the chat's choice, else the agent's, else the setting — with a model this Claude Code has it for. Dreams
+  // and condition checks are small jobs with a fixed shape: never.
+  const wantsUltracode = (conv.ultracode === null ? null : conv.ultracode === 1) ?? agent.ultracode ?? settings.runner.ultracode;
+  const ultracode = !dreaming && job.trigger !== "check" && ultracodeFor(model, wantsUltracode === true);
   // Between two steps Claude Code asks for the messages waiting in the chat's queue. Dreams and condition checks run in
   // chats nobody writes to.
   const hooksPath =
@@ -1336,6 +1344,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
                 { hooks: [{ type: "http", url: `${gatewayUrl()}/hooks/post-tool-batch`, timeout: 10, headers: { Authorization: `Bearer ${res.token}` } }] },
               ],
             },
+            // Claude Code honours one --settings value: the session's Ultracode goes with the hooks.
+            ...(ultracode ? { ultracode: true } : {}),
           }),
         );
   job.hooked = !!hooksPath;
@@ -1392,7 +1402,6 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       });
   const memoryNow = memoryDigest(agent.repoPath);
 
-  const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
   const effort = effortFor(model, conv.effort || agent.effort || settings.runner.effort || null);
   job.model = model;
   if (!isModelId(model)) return { status: "failed", error: `Invalid model id "${model}"` };
@@ -1411,8 +1420,11 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     baseArgs.push("--permission-mode", "default", "--allowedTools", ...DREAM_ALLOWED);
   } else if (settings.runner.bypassPermissions && !hostLocked) baseArgs.push("--dangerously-skip-permissions");
   else {
-    // Non-bypass mode: allow Godmode-provided MCP tools without prompts (print mode cannot ask).
-    baseArgs.push("--permission-mode", "acceptEdits", "--allowedTools", Object.keys(mcp.mcpServers).map((n) => `mcp__${n}`).join(","));
+    // Non-bypass mode: allow Godmode-provided MCP tools without prompts (print mode cannot ask). Ultracode runs on
+    // workflows, which Claude Code wants reviewed before each one runs: allowed too, or it would refuse them all.
+    const allowed = Object.keys(mcp.mcpServers).map((n) => `mcp__${n}`);
+    if (ultracode) allowed.push(WORKFLOW_TOOL);
+    baseArgs.push("--permission-mode", "acceptEdits", "--allowedTools", allowed.join(","));
   }
   baseArgs.push("--mcp-config", mcpPath, "--strict-mcp-config");
   if (hooksPath) baseArgs.push("--settings", hooksPath);
@@ -1611,9 +1623,12 @@ function spentBy(job: Job, startedMs: number): Spent {
   const { final } = job.acc;
   const before = job.spent;
   const usage = final?.usage ?? null;
+  // Claude Code times each result's own turn. With several (a workflow outlived its turn) the wait for the workflow
+  // between them is in none: the clock counts then.
+  const ownMs = job.acc.results > 1 ? null : final?.durationMs;
   return {
     costUsd: sum(before.costUsd, final?.costUsd),
-    durationMs: sum(before.durationMs, final?.durationMs ?? (job.status === "running" ? Date.now() - startedMs : null)),
+    durationMs: sum(before.durationMs, ownMs ?? (job.status === "running" ? Date.now() - startedMs : null)),
     numTurns: sum(before.numTurns, final?.numTurns),
     usage:
       usage && before.usage
@@ -1878,11 +1893,11 @@ function editedMemory(blocks: StreamAccumulator["blocks"]): boolean {
 }
 
 /**
- * Session settings from local slash commands. Claude Code keeps `/model` and `/effort` for its process only,
- * but every Godmode turn is a new process — so they are stored on the conversation. `/rename` renames the chat.
- * Only what Claude Code confirmed is stored: a rejected model would break every later turn of the chat.
+ * Session settings from local slash commands. Claude Code keeps `/model` and `/effort` (with `/effort ultracode`) for
+ * its process only, but every Godmode turn is a new process — so they are stored on the conversation. `/rename` renames
+ * the chat. Only what Claude Code confirmed is stored: a rejected model would break every later turn of the chat.
  */
-function commandOverrides(cmd: StreamAccumulator["localCommand"]): { model?: string | null; effort?: Effort | null; title?: string } {
+function commandOverrides(cmd: StreamAccumulator["localCommand"]): { model?: string | null; effort?: Effort | null; ultracode?: boolean; title?: string } {
   const arg = cmd?.args.trim();
   if (!cmd || !arg) return {};
   switch (cmd.name) {
@@ -1890,9 +1905,12 @@ function commandOverrides(cmd: StreamAccumulator["localCommand"]): { model?: str
       if (!/^Set model to /.test(cmd.output)) return {};
       return { model: arg.toLowerCase() === "default" ? null : arg };
     case "effort": {
+      // "Ultracode on (this session only): …", "Ultracode off. Effort stays high." — and a new level ends it: "… · Ultracode off".
+      const switched = /(?:^| · )Ultracode (on|off)\b/.exec(cmd.output)?.[1];
+      const ultracode = switched ? { ultracode: switched === "on" } : {};
       const level = /effort level (?:set )?to (\w+)/i.exec(cmd.output)?.[1]?.toLowerCase();
-      if (level === "auto") return { effort: null };
-      return level && (EFFORT_OPTIONS as readonly string[]).includes(level) ? { effort: level as Effort } : {};
+      if (level === "auto") return { effort: null, ...ultracode };
+      return level && (EFFORT_OPTIONS as readonly string[]).includes(level) ? { effort: level as Effort, ...ultracode } : ultracode;
     }
     case "rename":
       return { title: redact(arg).slice(0, 200) };

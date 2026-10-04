@@ -67,6 +67,7 @@ interface AgentRow {
   instructions: string;
   model: string;
   effort: string | null;
+  ultracode: number | null;
   is_default: number;
   enabled: number;
   status: string;
@@ -156,6 +157,7 @@ function toModel(r: AgentRow): Agent {
     instructions: r.instructions,
     model: r.model,
     effort: (EFFORT_OPTIONS as readonly string[]).includes(r.effort ?? "") ? (r.effort as Effort) : null,
+    ultracode: r.ultracode == null ? null : bool(r.ultracode),
     isDefault: bool(r.is_default),
     enabled,
     status: enabled ? (r.status as AgentStatus) : "disabled",
@@ -191,6 +193,7 @@ function toRow(a: Agent): Record<string, string | number | null> {
     instructions: a.instructions,
     model: a.model,
     effort: a.effort,
+    ultracode: a.ultracode === null ? null : int(a.ultracode)!,
     is_default: int(a.isDefault)!,
     enabled: int(a.enabled)!,
     status: a.status,
@@ -510,6 +513,7 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     instructions: input.instructions?.trim() ?? "",
     model: input.model?.trim() ?? "",
     effort: validateEffort(input.effort),
+    ultracode: input.ultracode ?? null,
     isDefault,
     enabled,
     status: enabled ? "idle" : "disabled",
@@ -577,6 +581,7 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   if (patch.instructions !== undefined) next.instructions = patch.instructions.trim();
   if (patch.model !== undefined) next.model = patch.model.trim();
   if (patch.effort !== undefined) next.effort = validateEffort(patch.effort);
+  if (patch.ultracode !== undefined) next.ultracode = patch.ultracode;
   if (patch.enabled !== undefined) {
     if (current.isDefault && !patch.enabled) throw badRequest("The default agent cannot be disabled");
     next.enabled = patch.enabled;

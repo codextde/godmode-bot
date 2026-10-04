@@ -6,6 +6,7 @@
  * Behaviour is chosen by keywords in the prompt:
  *   (default)   replay stream-partial.jsonl       → "Hello, nice to meet you!"
  *   USE_TOOL    replay stream-tooluse.jsonl       → Bash tool + "DONE"
+ *   USE_WORKFLOW  replay stream-workflow.jsonl    → a workflow of two agents in the background, two results
  *   SLEEP       emit init, then hang (cancel / timeout tests)
  *   LOGIN_FAIL  answer with a login-failure sentence
  *   CALL_MCP    call the Godmode MCP gateway from --mcp-config (initialize, tools/list, report_missing_login)
@@ -38,10 +39,18 @@
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
  *               and answers "DREAM {json}". Digest keywords: DREAM_SLEEP hangs and DREAM_CRASH exits 3 (both after
  *               writing the memory), DREAM_NO_REPORT skips the report.
- *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected)
+ *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected,
+ *               `/effort ultracode [on|off]` switches Ultracode, and a new effort level ends an Ultracode that the
+ *               --settings file turned on)
  *
- * With `--input-format stream-json` it answers the `initialize` control request with a command and model catalog.
- * Env: FAKE_CLAUDE_STATE — directory for known sessions + an invocation log (invocations.jsonl).
+ * With `--input-format stream-json` it answers the `initialize` control request with a command and model catalog,
+ * `get_settings` with what applies to the session, and `set_model` (every request goes to control-requests.jsonl).
+ * Env: FAKE_CLAUDE_STATE — directory for known sessions + an invocation log (invocations.jsonl, with the content of the
+ * --settings file). FAKE_CLAUDE_ULTRACODE — =off: no dynamic workflows; a Claude Code from before Ultracode: =error
+ * rejects `get_settings`, =silent never answers it, =unknown answers without the Ultracode fields; =exit: it exits
+ * on `get_settings` instead of answering.
+ * FAKE_CLAUDE_SESSION_MODEL — the model of the probe's session until `set_model` names another (default opus);
+ * FAKE_CLAUDE_SET_MODEL — =error rejects `set_model`, =silent never answers it.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,8 +70,10 @@ if (args.includes("--version")) {
   process.exit(0);
 }
 
+const ultracodeMode = process.env.FAKE_CLAUDE_ULTRACODE ?? "";
+
 /**
- * Catalog probe (`initialize` over stream-json), logged to invocations.jsonl and probes.jsonl.
+ * Catalog probe (`initialize`, then `get_settings` over stream-json), logged to invocations.jsonl and probes.jsonl.
  * FAKE_CLAUDE_MODELS=error answers with an error, =silent exits without answering, =hang never answers and keeps a
  * child holding stdout (its pid goes to hang.pid).
  */
@@ -98,6 +109,9 @@ if (argValue("--input-format") === "stream-json") {
     { name: "hello", description: "Say hello to someone (project)", argumentHint: "<name>" },
     { name: "clear", description: "A project command shadowed by the built-in (project)", argumentHint: "" },
   ];
+  // Ultracode is available with dynamic workflows and a session model that has the xhigh level.
+  let sessionModel = process.env.FAKE_CLAUDE_SESSION_MODEL ?? "opus";
+  const setModelMode = process.env.FAKE_CLAUDE_SET_MODEL ?? "";
   const decoder = new TextDecoder();
   const reader = Bun.stdin.stream().getReader();
   let buf = "";
@@ -107,8 +121,25 @@ if (argValue("--input-format") === "stream-json") {
     buf += decoder.decode(value, { stream: true });
     let nl: number;
     while ((nl = buf.indexOf("\n")) >= 0) {
-      const msg = JSON.parse(buf.slice(0, nl)) as { type: string; request_id: string; request: { subtype: string } };
+      const msg = JSON.parse(buf.slice(0, nl)) as { type: string; request_id: string; request: { subtype: string; model?: string } };
       buf = buf.slice(nl + 1);
+      if (msg.type === "control_request") appendFileSync(join(stateDir, "control-requests.jsonl"), JSON.stringify(msg.request) + "\n");
+      if (msg.type === "control_request" && msg.request.subtype === "set_model" && setModelMode !== "silent") {
+        if (setModelMode !== "error") sessionModel = msg.request.model ?? sessionModel;
+        const response = setModelMode === "error" ? { subtype: "error", request_id: msg.request_id, error: "Could not switch the model" } : { subtype: "success", request_id: msg.request_id };
+        process.stdout.write(JSON.stringify({ type: "control_response", response }) + "\n");
+      }
+      if (msg.type === "control_request" && msg.request.subtype === "get_settings" && ultracodeMode === "exit") process.exit(0);
+      if (msg.type === "control_request" && msg.request.subtype === "get_settings" && ultracodeMode !== "silent") {
+        const session = models.find((m) => m.value === sessionModel || m.resolvedModel === sessionModel);
+        const available = ultracodeMode !== "off" && !!session && "supportedEffortLevels" in session && session.supportedEffortLevels.includes("xhigh");
+        const applied = { model: session?.resolvedModel ?? sessionModel, effort: "high", ...(ultracodeMode === "unknown" ? {} : { ultracode: false, ultracodeRequested: false, ultracodeAvailable: available }) };
+        const response =
+          ultracodeMode === "error"
+            ? { subtype: "error", request_id: msg.request_id, error: "Unsupported control request subtype: get_settings" }
+            : { subtype: "success", request_id: msg.request_id, response: { effective: {}, sources: [], applied } };
+        process.stdout.write(JSON.stringify({ type: "control_response", response }) + "\n");
+      }
       if (msg.type !== "control_request" || msg.request.subtype !== "initialize") continue;
       process.stdout.write(JSON.stringify({ type: "system", subtype: "hook_started" }) + "\n");
       const response =
@@ -124,6 +155,9 @@ if (argValue("--input-format") === "stream-json") {
 const prompt = await new Response(Bun.stdin.stream()).text();
 const resume = argValue("--resume");
 const sessionId = resume ?? argValue("--session-id") ?? crypto.randomUUID();
+// The run's settings file is gone once the run has ended: its content is kept for the tests.
+const settingsFile = argValue("--settings");
+const sessionSettings = settingsFile && existsSync(settingsFile) ? (JSON.parse(readFileSync(settingsFile, "utf8")) as { ultracode?: boolean }) : null;
 
 appendFileSync(
   join(stateDir, "invocations.jsonl"),
@@ -131,6 +165,7 @@ appendFileSync(
     args,
     prompt,
     cwd: process.cwd(),
+    settings: sessionSettings,
     env: {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? null,
       GODMODE_TOKEN: process.env.GODMODE_TOKEN ?? null,
@@ -193,6 +228,10 @@ if (slash?.[1] === "clear") {
   out(init);
   if (name === "compact") out({ type: "system", subtype: "compact_boundary", compact_metadata: { trigger: "manual", pre_tokens: 900, post_tokens: 100 } });
   const effort = args.toLowerCase();
+  const valid = "Valid options are: low, medium, high, xhigh, max, auto, ultracode";
+  const stays = `Effort stays ${argValue("--effort") ?? "high"}.`;
+  // A new effort level ends the session's Ultracode.
+  const ends = sessionSettings?.ultracode === true ? " · Ultracode off" : "";
   const text =
     name === "model"
       ? args === "bogus"
@@ -200,10 +239,18 @@ if (slash?.[1] === "clear") {
         : `Set model to \`${args}\` for this session only`
       : name === "effort"
         ? effort === "auto"
-          ? "Effort level set to auto (this session only)"
+          ? `Effort level set to auto (this session only)${ends}`
           : ["low", "medium", "high", "xhigh", "max"].includes(effort)
-            ? `Set effort level to ${effort} (this session only)`
-            : `Invalid argument: ${args}. Valid options are: low, medium, high, xhigh, max, auto`
+            ? `Set effort level to ${effort} (this session only)${ends}`
+            : /^ultracode( on| off)?$/.test(effort)
+              ? ultracodeMode
+                ? `Ultracode needs dynamic workflows enabled (see /config). ${valid}`
+                : argValue("--model") === "haiku"
+                  ? `Ultracode isn't available on Haiku 9. ${valid}`
+                  : effort.endsWith(" off")
+                    ? `Ultracode off. ${stays}`
+                    : `Ultracode on (this session only): Claude plans every task as a workflow of several agents. ${stays}`
+              : `Invalid argument: ${args}. ${valid}`
         : `Ran /${name} ${args}`.trim();
   out({
     type: "assistant",
@@ -613,6 +660,8 @@ if (slash?.[1] === "clear") {
   const text = `GUEST ${JSON.stringify(summary)}`;
   textTurn(text);
   result(text);
+} else if (prompt.includes("USE_WORKFLOW")) {
+  await replay("stream-workflow.jsonl");
 } else if (prompt.includes("USE_TOOL")) {
   await replay("stream-tooluse.jsonl");
 } else {

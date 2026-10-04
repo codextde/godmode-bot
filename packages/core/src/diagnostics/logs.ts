@@ -273,7 +273,7 @@ function environment(): string[] {
   return [
     `- Godmode ${cfg.version} · ${cfg.mode === "server" ? "web dashboard (godmode serve)" : "desktop app"} · ${cfg.platform} ${release()} (${cfg.arch}) · Bun ${Bun.version}`,
     `- ${cpu.length} × ${cpu[0]?.model.trim() ?? "CPU"} · ${bytes(totalmem())} RAM · core up ${duration(process.uptime() * 1000)}, using ${bytes(process.memoryUsage().rss)}`,
-    `- Settings: model ${s.runner.model}, effort ${s.runner.effort}, up to ${s.runner.maxConcurrentRuns} runs at once, run timeout ${s.runner.runTimeoutMinutes ? `${s.runner.runTimeoutMinutes} min` : "none"} · browser ${on(s.browser.enabled)}${s.browser.headless ? " (headless)" : ""} · computer use ${on(s.computer.enabled)} · VMs ${on(s.vm.enabled)} · memory ${s.memory.backend}, dreaming ${on(s.memory.dreaming.enabled)} · detailed logging ${on(s.diagnostics.verbose)}`,
+    `- Settings: model ${s.runner.model}, effort ${s.runner.effort}${s.runner.ultracode ? ", Ultracode on" : ""}, up to ${s.runner.maxConcurrentRuns} runs at once, run timeout ${s.runner.runTimeoutMinutes ? `${s.runner.runTimeoutMinutes} min` : "none"} · browser ${on(s.browser.enabled)}${s.browser.headless ? " (headless)" : ""} · computer use ${on(s.computer.enabled)} · VMs ${on(s.vm.enabled)} · memory ${s.memory.backend}, dreaming ${on(s.memory.dreaming.enabled)} · detailed logging ${on(s.diagnostics.verbose)}`,
     `- ${count("agents", "agent")}, ${count("routines", "routine")}, ${count("workspaces", "workspace")} · now ${active.filter((r) => r.status === "running").length} running and ${active.filter((r) => r.status === "queued").length} queued runs`,
   ];
 }
