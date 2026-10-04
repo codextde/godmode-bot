@@ -1,6 +1,6 @@
 import { AppState, type AppStateStatus } from "react-native";
 import { browserView, type ClientEvent, type EntityName, type ServerEvent, type Vm } from "@godmode/shared";
-import { api, reachableBase } from "./api";
+import { api, forget, reachableBase } from "./api";
 import { useLive } from "./live";
 import { qk, queryClient } from "./query";
 import { useSession } from "./session";
@@ -76,6 +76,9 @@ async function catchUp() {
     const [runs, me] = await Promise.all([api.runs.list({ status: "queued,running", limit: 50 }), api.me()]);
     useLive.getState().seedRuns(runs);
     useSession.getState().setInstance(me.instance);
+    // Older Godmodes don't list their addresses; the ones from pairing stay then.
+    const { urls } = me as typeof me & { urls?: unknown };
+    if (Array.isArray(urls)) useSession.getState().setUrls(urls);
   } catch {
     /* the next reconnect tries again */
   }
@@ -217,8 +220,8 @@ async function connect() {
   if (!running || socket) return;
   // Paired again while this attempt looked for the computer: the new pairing's attempt was skipped, so make it now.
   if (useSession.getState().connection?.token !== connection.token) return void connect();
-  if (!base) {
-    useLive.getState().setStatus("offline");
+  if (typeof base !== "string") {
+    useLive.getState().setStatus("offline", base?.message);
     scheduleReconnect();
     return;
   }
@@ -248,6 +251,8 @@ async function connect() {
     if (socket !== ws) return;
     socket = null;
     clearTimers();
+    // Ask again before reconnecting: the gateway may have lost the computer while Tailscale still reaches it.
+    forget(base);
     useLive.getState().setStatus("offline");
     if (e.code === 4003) {
       void useSession.getState().disconnect("removed");

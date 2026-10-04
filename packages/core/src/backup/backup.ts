@@ -56,12 +56,22 @@ const FILE_PREFIX = "godmode-backup-";
 const EXCLUDED_TABLES = new Set(["sessions", "mobile_devices", "runners", "link_controllers", "runner_memory", "_migrations"]);
 /** Vault key material travels in vault.json, not db.json. */
 const VAULT_META_KEYS = new Set(["vault.kdf", "vault.wrapped_dek", "vault.canary"]);
-/** Settings sections that belong to this machine (bind address, remote access, allowed origins, phone access). */
-const DEVICE_SETTINGS = new Set(["server", "mobile"]);
+/** Settings sections that belong to this machine (bind address, remote access, allowed origins, phone and cloud access). */
+const DEVICE_SETTINGS = new Set(["server", "mobile", "cloud"]);
 
-/** Meta keys that stay with the machine: dashboard auth, remembered vault key, cached Composio sessions, phone and runner pairing. */
+/**
+ * Meta keys that stay with the machine: dashboard auth, remembered vault key, cached Composio sessions, phone and
+ * runner pairing, the Godmode Cloud link (restoring it elsewhere would clone this computer's identity in the cloud).
+ */
 function isDeviceMetaKey(key: string): boolean {
-  return key.startsWith("auth.") || key.startsWith("vault.remember_") || key.startsWith("composio.session.") || key.startsWith("mobile.") || key.startsWith("link.");
+  return (
+    key.startsWith("auth.") ||
+    key.startsWith("vault.remember_") ||
+    key.startsWith("composio.session.") ||
+    key.startsWith("mobile.") ||
+    key.startsWith("link.") ||
+    key.startsWith("cloud.")
+  );
 }
 
 /** Chromium profile content that is cache or lock files — never worth backing up. */

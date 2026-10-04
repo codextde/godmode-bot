@@ -63,6 +63,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   mobile: [qk.mobile],
   // A runner was paired, removed, or its chats changed.
   runners: [qk.runners],
+  // Cloud link state, plan or billing changed (linking approved, link up or down, notice from the cloud).
+  cloud: [qk.cloud, qk.cloudBilling],
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
   followups: [qk.followups],

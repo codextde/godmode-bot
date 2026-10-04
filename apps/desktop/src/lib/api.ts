@@ -24,6 +24,9 @@ import type {
   ClaudeUpdateResult,
   ClaudeUpdateStatus,
   ClientLogInput,
+  CloudBilling,
+  CloudSettings,
+  CloudStatus,
   ComposioConnectInput,
   ComposioConnection,
   ComposioConnectResult,
@@ -117,6 +120,7 @@ import type {
   TotpImportResult,
   TotpInput,
   UpdateReport,
+  UsageSummary,
   VaultStatus,
   Vm,
   VmAssignInput,
@@ -129,7 +133,8 @@ import type {
   WorkspaceInput,
   WorkspaceSource,
 } from "@godmode/shared";
-import { getCoreInfo } from "./core";
+import { CloudErrorCode } from "@godmode/shared";
+import { cloudContext, getCoreInfo, goToCloudLogin } from "./core";
 
 export class ApiRequestError extends Error {
   constructor(
@@ -140,6 +145,21 @@ export class ApiRequestError extends Error {
   ) {
     super(message);
   }
+}
+
+const CLOUD_ERROR_CODES: readonly string[] = Object.values(CloudErrorCode);
+
+/** Cloud mode: an error the cloud answered itself (offline computer, plan limit, signed out…), not the computer. */
+export function isCloudError(err: unknown): err is ApiRequestError {
+  return !!cloudContext && err instanceof ApiRequestError && !!err.code && CLOUD_ERROR_CODES.includes(err.code);
+}
+
+/** What stops the whole dashboard in cloud mode; App shows a full page for it. */
+export type CloudIssue = { kind: "offline" } | { kind: "plan"; message: string };
+
+let onCloudIssue: ((issue: CloudIssue) => void) | null = null;
+export function setCloudIssueHandler(fn: (issue: CloudIssue) => void) {
+  onCloudIssue = fn;
 }
 
 type Query = Record<string, string | number | boolean | null | undefined>;
@@ -194,6 +214,11 @@ export async function request<T>(method: string, path: string, body?: unknown, i
       err = await res.json();
     } catch {
       /* not json */
+    }
+    if (cloudContext) {
+      if (res.status === 401 && err.code === CloudErrorCode.CloudUnauthorized) goToCloudLogin();
+      else if (err.code === CloudErrorCode.DeviceOffline || err.code === CloudErrorCode.LinkLost) onCloudIssue?.({ kind: "offline" });
+      else if (res.status === 402 && err.code === CloudErrorCode.PlanLimit) onCloudIssue?.({ kind: "plan", message: err.error });
     }
     if (res.status === 401 && !path.startsWith("/api/auth/")) onUnauthorized?.();
     if (res.status === 403 && err.code === "grant_required" && headers.has(GRANT_HEADER)) onGrantRejected?.();
@@ -549,6 +574,23 @@ export const api = {
     /** Any API call answered by the runner instead of this computer: `path` is the route without `/api`, e.g. "/computer/sources". */
     proxy: <T>(id: string, method: string, path: string, body?: unknown) => request<T>(method, `/api/runners/${id}/proxy${path}`, body),
   },
+
+  /** Godmode Cloud link of this computer. Answered only on the computer itself, never through the cloud. */
+  cloud: {
+    status: () => get<CloudStatus>("/api/cloud"),
+    update: (input: Partial<CloudSettings>) => put<CloudStatus>("/api/cloud", input),
+    /** Starts linking: the answer carries `pending` (code and approval page). */
+    link: (url: string) => post<CloudStatus>("/api/cloud/link", { url }),
+    /** Cancels a pending link, or unlinks. */
+    unlink: () => del<CloudStatus>("/api/cloud/link"),
+    /** 409 `not_linked` while unlinked; 502 with a sentence when the cloud can't be reached. */
+    billing: () => get<CloudBilling>("/api/cloud/billing"),
+    cancel: () => post<CloudBilling>("/api/cloud/billing/cancel"),
+    resume: () => post<CloudBilling>("/api/cloud/billing/resume"),
+  },
+
+  /** What the agents on this computer used over the last `days` days (from its run history). */
+  usage: (days: number) => get<UsageSummary>("/api/usage", { days }),
 
   chat: {
     /** Create a conversation and send the first message in one call. */

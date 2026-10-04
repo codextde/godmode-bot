@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Lock, RefreshCw, ShieldAlert } from "lucide-react";
 import type { Routine } from "@godmode/shared";
 import { api } from "@/lib/api";
-import { coreUrl } from "@/lib/core";
+import { cloudContext, coreUrl } from "@/lib/core";
 import { qk } from "@/lib/queryKeys";
 import { CopyButton } from "@/components/chat/copy-button";
 import { ConfirmDialog } from "@/components/integrations/confirm-dialog";
@@ -84,14 +84,16 @@ export function WebhookPanel({ routine }: { routine: Routine }) {
     );
   }
 
-  const url = coreUrl(path);
+  // Through Godmode Cloud the page's address is the cloud's, which doesn't receive webhooks: show only the path.
+  const remote = !!cloudContext;
+  const url = remote ? path : coreUrl(path);
   const curl = `curl -X POST '${url}' \\\n  -H 'content-type: application/json' \\\n  -d '${SAMPLE_BODY}'`;
 
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
         <Label htmlFor="webhook-url" className="text-xs font-normal text-muted-foreground">
-          Secret URL — POST anything (JSON or text, up to 256 KB)
+          {remote ? "Secret path" : "Secret URL"} — POST anything (JSON or text, up to 256 KB)
         </Label>
         <div className="flex items-center gap-1.5">
           <Input
@@ -102,19 +104,22 @@ export function WebhookPanel({ routine }: { routine: Routine }) {
             onFocus={(e) => e.currentTarget.select()}
             className="h-9 font-mono text-xs"
           />
-          <CopyButton text={url} label="Copy webhook URL" size="icon-sm" className="shrink-0" />
+          {!remote && <CopyButton text={url} label="Copy webhook URL" size="icon-sm" className="shrink-0" />}
         </div>
+        {remote && <p className="text-xs text-muted-foreground">Webhooks are received by the computer itself; copy the full address in Godmode on that computer.</p>}
       </div>
 
-      <div className="rounded-lg border bg-card shadow-card">
-        <div className="flex items-center justify-between border-b px-3 py-1.5">
-          <span className="eyebrow">Try it</span>
-          <CopyButton text={curl} label="Copy curl command" />
+      {!remote && (
+        <div className="rounded-lg border bg-card shadow-card">
+          <div className="flex items-center justify-between border-b px-3 py-1.5">
+            <span className="eyebrow">Try it</span>
+            <CopyButton text={curl} label="Copy curl command" />
+          </div>
+          <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[11px] leading-relaxed text-foreground/85">{curl}</pre>
         </div>
-        <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[11px] leading-relaxed text-foreground/85">{curl}</pre>
-      </div>
+      )}
 
-      {isLocalUrl(url) && (
+      {!remote && isLocalUrl(url) && (
         <p className="text-xs text-muted-foreground">
           This address only works on this computer. To receive calls from other services, reach Godmode through a tunnel or reverse proxy and
           use the same path.

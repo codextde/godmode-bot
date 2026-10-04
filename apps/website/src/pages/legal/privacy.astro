@@ -7,7 +7,7 @@ import { LEGAL } from '@/config/site';
   <p>
     This policy explains what personal data we process when you visit this website or buy Godmode, why, and what rights
     you have. The Godmode apps themselves, on your computer and on your phone, run on your devices, have no telemetry and
-    send nothing to us; section 10 explains the phone app.
+    send nothing to us unless you link Godmode to Godmode Cloud; section 10 explains the phone app.
   </p>
 
   <h2>1. Controller</h2>
@@ -89,7 +89,8 @@ import { LEGAL } from '@/config/site';
   <h2>10. The Godmode phone app (iOS and Android)</h2>
   <p>
     The Godmode app for iPhone, iPad and Android is a remote control for Godmode on your own computer. It connects only to
-    that computer, over your private Tailscale network, and sends nothing to us: no account, no analytics, no crash
+    that computer, over your private Tailscale network or, if you link Godmode to Godmode Cloud, through that cloud’s
+    gateway, and unless you link Godmode to Godmode Cloud it sends nothing to us: no account, no analytics, no crash
     reports, no ads. We don’t collect personal data through the app. The camera is used only to scan the pairing QR code
     and no images leave the phone. On Android, the QR scanner is Google’s ML Kit (part of Google Play services), which
     sends Google technical usage data about the scanner, such as device and app information, performance metrics and

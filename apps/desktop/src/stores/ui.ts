@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { storageKey } from "@/lib/core";
 
 interface UiState {
   /** Workspace scope selected in the sidebar: "all" | "global" | workspace id */
@@ -59,7 +60,8 @@ export const useUi = create<UiState>()(
       setAgentsView: (agentsView) => set({ agentsView }),
     }),
     {
-      name: "godmode-ui",
+      // Per computer in cloud mode: the selected workspace id belongs to one computer.
+      name: storageKey("godmode-ui"),
       partialize: (s) => ({
         workspace: s.workspace,
         sidebarCollapsed: s.sidebarCollapsed,

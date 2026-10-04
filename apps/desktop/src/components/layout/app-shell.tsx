@@ -4,6 +4,7 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  ArrowLeft,
   Bot,
   Box,
   Globe,
@@ -25,6 +26,7 @@ import {
   ShieldCheck,
   SquareKanban,
   Workflow,
+  X,
 } from "lucide-react";
 import {
   Sidebar,
@@ -53,12 +55,13 @@ import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
 import { PageScrollContext } from "@/components/layout/page-scroll";
+import { Callout } from "@/components/settings/settings-kit";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useBootstrap } from "@/lib/hooks";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { isMac, modKey } from "@/lib/desktop";
-import { isTauri } from "@/lib/core";
+import { cloudContext, isTauri, storageKey } from "@/lib/core";
 import { useLive, useRunningCount } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
@@ -192,6 +195,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarFooter className="px-3 pb-3">
           <ClaudeUpdateButton />
           <UpdateButton />
+          {cloudContext && <CloudComputerLink />}
           <FooterBar />
         </SidebarFooter>
         <SidebarRail />
@@ -200,6 +204,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SidebarInset className="relative h-svh min-h-0 min-w-0 overflow-hidden bg-background">
         <MobileBar attention={inboxCount > 0} />
         <DesktopDragStrip />
+        {cloudContext && boot && <CloudVersionNote coreVersion={boot.version} uiVersion={cloudContext.uiVersion} />}
         <div ref={setScrollEl} className="@container min-h-0 flex-1 overflow-y-auto">
           <PageScrollContext value={scrollEl}>{children}</PageScrollContext>
         </div>
@@ -270,9 +275,9 @@ function MobileBar({ attention }: { attention: boolean }) {
         <PanelLeft className="size-[18px]" />
         {attention && <span className="absolute top-2 right-2 size-1.5 rounded-full bg-brand ring-2 ring-background" />}
       </Button>
-      <Link to="/" className="no-drag flex items-center gap-2 rounded-md px-1 py-1" aria-label="Godmode home">
+      <Link to="/" className="no-drag flex min-w-0 items-center gap-2 rounded-md px-1 py-1" aria-label="Godmode home">
         <Logo className="size-6" />
-        <span className="text-[15px] font-medium tracking-[-0.02em]">Godmode</span>
+        <span className="truncate text-[15px] font-medium tracking-[-0.02em]">{cloudContext?.deviceName ?? "Godmode"}</span>
       </Link>
       <div className="ml-auto flex items-center gap-1">
         <Button variant="ghost" size="icon" aria-label="Search and commands" aria-keyshortcuts={isMac ? "Meta+K" : "Control+K"} onClick={() => setCommandOpen(true)}>
@@ -315,6 +320,63 @@ function NavMenuItem({ item }: { item: NavItem }) {
   );
 }
 
+/** Cloud mode: which computer this is, and the way back to the cloud's list of computers (a page outside this app). */
+function CloudComputerLink() {
+  const cloud = cloudContext!;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <a
+          href={cloud.home}
+          className="flex items-center gap-2.5 rounded-lg border bg-card p-1 pr-2 shadow-card outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:pr-1"
+        >
+          <span className="grid size-8 shrink-0 place-items-center text-muted-foreground">
+            <ArrowLeft className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1 leading-tight group-data-[collapsible=icon]:hidden">
+            <span className="block text-[11px] text-muted-foreground">All computers</span>
+            <span className="block truncate text-[13px] font-medium text-foreground">{cloud.deviceName}</span>
+          </span>
+        </a>
+      </TooltipTrigger>
+      <TooltipContent side="right">All computers in Godmode Cloud</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Cloud mode: the cloud serves its own build of this dashboard, which can be older or newer than Godmode on the computer. */
+function CloudVersionNote({ coreVersion, uiVersion }: { coreVersion: string; uiVersion: string }) {
+  const key = storageKey("gm:version-note");
+  const pair = `${coreVersion}|${uiVersion}`;
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(key) === pair;
+    } catch {
+      return false;
+    }
+  });
+  if (dismissed || coreVersion === uiVersion || uiVersion === "unknown") return null;
+  const dismiss = () => {
+    setDismissed(true);
+    try {
+      localStorage.setItem(key, pair);
+    } catch {
+      /* ignore */
+    }
+  };
+  return (
+    <div className="relative shrink-0 px-3 pt-3">
+      <Callout className="pr-10">
+        This computer runs Godmode {coreVersion}; this cloud shows the dashboard of {uiVersion}. If something looks wrong, update Godmode or ask the
+        cloud's administrator to update.
+      </Callout>
+      <Button variant="ghost" size="icon-xs" className="absolute top-5 right-5 text-muted-foreground" aria-label="Dismiss" onClick={dismiss}>
+        <X />
+      </Button>
+    </div>
+  );
+}
+
 function FooterBar() {
   const connected = useLive((s) => s.connected);
   const qc = useQueryClient();
@@ -332,7 +394,15 @@ function FooterBar() {
             {connected ? "Online" : "Reconnecting…"}
           </div>
         </TooltipTrigger>
-        <TooltipContent>{connected ? "Connected to Godmode core" : "Connection to core lost — retrying"}</TooltipContent>
+        <TooltipContent>
+          {cloudContext
+            ? connected
+              ? `Connected to ${cloudContext.deviceName} through Godmode Cloud`
+              : `Connection to ${cloudContext.deviceName} lost — retrying`
+            : connected
+              ? "Connected to Godmode core"
+              : "Connection to core lost — retrying"}
+        </TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>

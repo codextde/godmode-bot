@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import type { FolderListing } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { useBootstrap } from "@/lib/hooks";
-import { isTauri } from "@/lib/core";
+import { isTauri, storageKey } from "@/lib/core";
 import { isMac, modKey } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -42,7 +42,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { copyText } from "./copy-button";
 
-const LAST_FOLDER_KEY = "gm:last-folder";
+const LAST_FOLDER_KEY = storageKey("gm:last-folder");
 
 export function folderName(path: string): string {
   return path.split(/[\\/]+/).filter(Boolean).at(-1) ?? path;

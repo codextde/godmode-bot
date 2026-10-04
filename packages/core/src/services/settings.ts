@@ -1,5 +1,5 @@
 import type { Settings } from "@godmode/shared";
-import { DEFAULT_MODEL, DEFAULT_PORT, MOBILE_DEFAULT_PORT } from "@godmode/shared";
+import { DEFAULT_CLOUD_SETTINGS, DEFAULT_MODEL, DEFAULT_PORT, MOBILE_DEFAULT_PORT } from "@godmode/shared";
 import { all, run } from "../db";
 import { bus } from "../events/bus";
 import { parseJson } from "../util";
@@ -107,6 +107,7 @@ export const DEFAULT_SETTINGS: Settings = {
     enabled: false,
     port: MOBILE_DEFAULT_PORT,
   },
+  cloud: { ...DEFAULT_CLOUD_SETTINGS },
   onboardingComplete: false,
 };
 

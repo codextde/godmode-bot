@@ -29,6 +29,7 @@ Godmode Bot is an AI coworker that runs on your machine. It drives **Claude Code
 | `packages/core` | The daemon (Bun + Hono + bun:sqlite). HTTP API under `/api`, WebSocket at `/api/ws`, MCP gateway at `/mcp`. |
 | `apps/desktop` | React UI (also served by the core as the web dashboard) + `src-tauri` desktop shell. |
 | `apps/mobile` | Phone app (Expo, iOS + Android). Own toolchain (bun), outside the pnpm workspace; imports `@godmode/shared` from source. |
+| `apps/cloud` | Godmode Cloud, optional and self-hosted (Next.js + a custom Node server, PostgreSQL): accounts, admin, Stripe billing and the relay to linked computers. See [Godmode Cloud](#godmode-cloud). |
 | `docs/` | Docs, logo, screenshots. |
 
 ## Data directory (`~/.godmode`, override with `GODMODE_HOME`)
@@ -152,7 +153,8 @@ ask within the same moment share a request.
 * **Audit log**: every secret access (`credential.fill`, `credential.reveal`, `totp.fill`, …) is recorded.
 * **API auth**: bearer token (desktop shell / `godmode token`) or HttpOnly SameSite=Strict session cookie
   (dashboard password). Loopback-only by default with Host-header DNS-rebinding protection, CSRF origin check,
-  login rate limiting, strict CSP for the dashboard.
+  login rate limiting, strict CSP for the dashboard. Requests relayed by a linked Godmode Cloud never use these
+  credentials; see [Godmode Cloud](#godmode-cloud).
 * **MCP gateway**: each run gets a random bearer token scoped to that run/agent; expires when the run ends.
   Management tools cannot grant reveal access, move agents between workspaces or attach out-of-scope profiles/MCP
   servers; fill-only agents cannot delegate to reveal-mode agents.
@@ -962,7 +964,7 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   it). The listener checks the decoded path, so `/api/%61uth/…` is refused
   like `/api/auth/…`.
 * **Key hygiene.** The app only sends its key over plain HTTP to a Tailscale address (100.64.0.0/10 or `*.ts.net`;
-  https anywhere, for a future gateway — `isPhoneUrlAllowed`), and first asks the address's `/api/health`, which on
+  https anywhere, which is how the Godmode Cloud gateway is reached — `isPhoneUrlAllowed`), and first asks the address's `/api/health`, which on
   the phones' listener returns the instance id; an address that answers as another instance never gets the key.
   Writes are sent once (no retry on another address), so a slow network never duplicates a message or a run.
 * **Realtime.** Phone sockets get every event except `run.delta`, which only goes to conversations they subscribed to
@@ -975,7 +977,106 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   URL that answered last and falls back to the others, and treats 401 as "removed". It opens its WebSocket only in the
   foreground. An optional Face ID lock covers the app in the app switcher.
 
-A hosted gateway can later be added as another URL in the pairing link.
+* **Through Godmode Cloud.** When the computer is linked to a cloud with an https address and both phone switches are
+  on (`settings.mobile.enabled`, `settings.cloud.phoneAccess`), the pairing link and `GET /api/mobile/me` also carry
+  the gateway URL `https://<cloud>/gw/<deviceId>`, last; the app tries it after the Tailscale addresses. Those requests
+  arrive through the cloud link on channel `mobile` and pass the same device-token and scope checks as on the
+  phones' listener. See [Godmode Cloud](#godmode-cloud).
+
+## Godmode Cloud
+
+An optional, self-hosted service (`apps/cloud`; deployment and operation in
+[apps/cloud/README.md](../apps/cloud/README.md)). It gives people accounts, lets them open a linked computer's
+dashboard in any browser and reach it from the phone app without Tailscale, and bills plans through Stripe. A Godmode
+that was never linked never talks to a cloud; nothing leaves the computer unless it is linked.
+
+### Components
+
+* **The cloud** (`apps/cloud`): one Node.js process. A custom HTTP server (`server/main.ts`, bundled with esbuild to
+  `dist/server.mjs`) answers `/api/health`, serves the dashboard build under `/ui`, owns the relay paths
+  (`/relay/v1/connect`, `/d/<deviceId>/…`, `/gw/<deviceId>/…`) and hands everything else to Next.js (App Router):
+  sign-in, the setup wizard, the user and admin pages, the link and device APIs and the Stripe webhook. Data lives in
+  PostgreSQL (Drizzle; migrations run at start). Configuration is the domain only; everything else is a setting in the
+  admin dashboard. Docker Compose with `init` (generates the database password and app secret), `db` and `cloud`.
+* **The cloud link in the core** (`packages/core/src/cloud`): linking (`link.ts`), the outbound socket (`client.ts`),
+  running relayed requests and sockets through the core's own Hono app (`dispatch.ts`), the classification of every
+  route for relayed requests (`scope.ts`), the link state (`state.ts`), and `/api/cloud*` for the desktop.
+* **The dashboard in cloud mode** (`apps/desktop`): Settings → Cloud and Billing on the computer. The same UI, built
+  with `--base=/ui/` (`build:cloud`), is served by the cloud for `/d/<deviceId>/*` with a
+  `<meta name="godmode-cloud">` tag (`CloudUiContext`); with it the UI sends its API calls and WebSocket to
+  `/d/<deviceId>/api/…`. The cloud serves its own copy of the build from the same commit, never files from a computer.
+* **The phone app** (`apps/mobile`): treats the gateway URL as one more address of the computer.
+* **The contract** (`packages/shared/src/cloud.ts`): settings, link and device API payloads, the frame codec, header
+  lists, close codes and error codes.
+
+### Link protocol (summary)
+
+1. **Linking.** The computer makes a link secret (`gml_…`) and sends `POST /api/link/v1/start` with its instance id,
+   name, platform, version and the secret's SHA-256. The cloud returns a request id, a short user code and
+   `verifyUrl` (`<cloud>/link?code=…`), which Godmode opens in the browser. A signed-in person approves there (within
+   the plan's computer limit; audited and e-mailed to the account). Meanwhile the computer polls
+   `POST /api/link/v1/poll` with the secret as bearer and receives its `deviceId` and the account. The cloud only ever
+   stores the hash.
+2. **Connection.** The computer keeps one WebSocket to `/relay/v1/connect` with
+   `Authorization: Bearer <deviceId>.<secret>`. Its first frame is Hello (protocol version, app version, instance id,
+   name, platform, the browser and phone switches); the cloud answers Welcome (device id, account, plan, public URL,
+   limits). One live link per computer: a newer one replaces the older.
+3. **Frames.** Every message is binary: one byte frame type, a 32-bit stream id, the payload. The cloud opens streams:
+   an HTTP request is ReqHead, ReqBody…, ReqEnd, answered by ResHead, ResBody… and exactly one ResEnd; a WebSocket is
+   WsOpen, WsAccept or WsReject, then WsText / WsBinary both ways and WsClose; Abort ends a stream from either side.
+   Bodies travel in 64 KiB chunks under a 1 MiB window per stream, and the reader grants more (Window) only after it
+   handed bytes on, so a slow browser or computer slows the sender instead of filling memory. A Ping goes out after
+   20 s of silence; 60 s without any frame ends the link.
+4. **Channels.** `/d/<deviceId>/api/*` is for signed-in cloud users: the cloud checks the session, the person's role
+   on that computer and the plan, drops cookies and `authorization`, and sends `channel: "cloud"` with the user's id,
+   e-mail, name and role. `/gw/<deviceId>/api/*` is for phones: no cloud session, the phone's own `Authorization`
+   passes through, `channel: "mobile"`. On the computer the channel alone decides the kind of caller (`cloud` or
+   `device`); access tokens and dashboard cookies are never looked at on relayed requests.
+5. **Close codes** tell the computer what to show: 4401 revoked (stop), 4402 plan required and 4403 turned off (retry
+   slowly), 4409 replaced by another connection, 4429 rate limited, 4400 protocol or version mismatch.
+6. **Device API** (`/api/device/v1/*`, same bearer): the computer's account and plan, the owner's billing overview,
+   cancel or resume at the end of the period, and unlink. Checkout, payment methods and sign-in happen only in the
+   browser.
+
+### Trust model: what the cloud can see
+
+* The cloud terminates TLS, so everything relayed passes through it in the clear: the dashboard's requests and
+  responses (chats, files, agent output, screenshots and live views), WebSocket messages and phones' requests. It
+  stores none of it; it counts bytes and requests per computer and day (`usage_daily`).
+* The admin area has no way to open someone else's computer. Whoever operates the cloud (server, database, sign-in
+  e-mail) is trusted and technically can.
+* A computer can be opened by its owner and by the people the owner shared it with (operator: everything; viewer:
+  read only). Admins see metadata: names, versions, online state, traffic.
+* The computer decides what the cloud may do: `settings.cloud.browserAccess`, `phoneAccess` and `allowSecrets`
+  (unlocking the vault, revealing passwords and keys, backups; off by default). Some routes are never served to a
+  relayed request (dashboard sign-in, phone pairing management, cloud link management, vault setup, revealing a file
+  or opening a VM on the computer's own screen, computer permissions); `scope.ts` classifies every route and refuses
+  new ones until someone decides. The first use
+  per person and day is audited and shown as a notification on the computer.
+* Browser side: the cloud session cookie is never forwarded to a computer; a computer's responses pass through a
+  header allow-list and always get `content-security-policy: default-src 'none'; sandbox` and `nosniff`, so they can
+  never set cookies or run as a page on the cloud's origin; unsafe methods and sockets on `/d` need the cloud's own
+  Origin. Redirects from a computer are refused (502).
+* Phones: the cloud is a gateway. The phone's `gmd_` key is checked by the computer, and the cloud never answers 401 on
+  `/gw` itself (the app forgets its pairing on a 401).
+
+### Where state lives
+
+* **Cloud, PostgreSQL** (`apps/cloud/src/server/db/schema.ts`): people, roles, invites, sessions and sign-in tokens
+  (hashes only), settings (the SMTP password and Stripe keys encrypted with the app secret), computers (hash of the
+  link secret, switches, last seen), shares, pending link requests, daily usage, plans, prices and subscriptions
+  mirrored from Stripe, processed Stripe events, and the audit log.
+* **Cloud, volumes:** `secrets` (database password and app secret, written once by `init`) and `/data`
+  (`setup-code.txt` until the instance is claimed).
+* **Cloud, memory:** the live links (the relay hub), rate-limit buckets and the settings cache. One process per
+  database; replicas would not see each other's links.
+* **Computer:** meta keys `cloud.url`, `cloud.device_id`, `cloud.account`, `cloud.linked_at` (plus `cloud.revoked`,
+  `cloud.plan`) in `godmode.db`, kept out of backups, and the link secret in `<dataDir>/cloud-link` (0600): not in
+  Settings, which paired phones can read, and not in the vault, because the link must come up while the vault is
+  locked. The switches are `settings.cloud`.
+* **Browser:** the cloud session cookie (`__Host-gmc_session` on https, HttpOnly, SameSite=Lax, 365 days by default,
+  renewed while used). **Phone:** its device token and the computer's addresses, including the gateway URL, in the
+  Keychain / Keystore.
 
 ## Remote runners
 

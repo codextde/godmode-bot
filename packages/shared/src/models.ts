@@ -9,6 +9,7 @@ import type { AgentCharacter } from "./character";
  *    pinned to a single agent via `agentId`.
  */
 import type { AgentComputerConfig, ComputerTarget } from "./computer";
+import type { CloudSettings } from "./cloud";
 
 export type ID = string;
 export type ISODate = string;
@@ -1232,6 +1233,8 @@ export interface Settings {
   diagnostics: DiagnosticsSettings;
   maintenance: MaintenanceSettings;
   mobile: MobileSettings;
+  /** Godmode Cloud (see cloud.ts). The link secret is never part of the settings. */
+  cloud: CloudSettings;
   onboardingComplete: boolean;
 }
 

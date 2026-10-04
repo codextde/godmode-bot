@@ -4,6 +4,7 @@ node_modules/
 
 # builds
 dist/
+dist-cloud/
 build/
 *.tsbuildinfo
 apps/desktop/src-tauri/target/

@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
-import type { MobileInstance } from "@godmode/shared";
+import { CLOUD_GATEWAY_PREFIX, isPhoneUrlAllowed, type MobileInstance } from "@godmode/shared";
 
 /** A pairing with one Godmode computer. Kept in the Keychain / Android Keystore, never backed up to other devices. */
 export interface Connection {
@@ -27,6 +27,8 @@ interface SessionState {
   load: () => Promise<void>;
   connect: (connection: Connection) => Promise<void>;
   setActiveUrl: (url: string) => void;
+  /** Keep the addresses current: the computer lists them again, e.g. with its Godmode Cloud gateway once linked. */
+  setUrls: (urls: string[]) => void;
   /** Keep the computer's name and version current (they can change after pairing). */
   setInstance: (instance: MobileInstance) => void;
   disconnect: (reason?: "removed") => Promise<void>;
@@ -66,6 +68,16 @@ export const useSession = create<SessionState>((set, get) => ({
     void SecureStore.setItemAsync(CONNECTION_KEY, JSON.stringify(connection), STORE_OPTIONS);
   },
 
+  setUrls: (urls) => {
+    const current = get().connection;
+    const next = [...new Set(urls.filter((u) => typeof u === "string" && isPhoneUrlAllowed(u)).map(baseUrl))];
+    // An empty list never strands the phone; the address that worked last stays first either way.
+    if (!current || !next.length || JSON.stringify(current.urls) === JSON.stringify(next)) return;
+    const connection = { ...current, urls: next };
+    set({ connection });
+    void SecureStore.setItemAsync(CONNECTION_KEY, JSON.stringify(connection), STORE_OPTIONS);
+  },
+
   setInstance: (instance) => {
     const current = get().connection;
     if (!current || JSON.stringify(current.instance) === JSON.stringify(instance)) return;
@@ -85,7 +97,19 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 }));
 
+/** An address without trailing slashes, so `${base}/api/…` also works for a gateway address with a path. */
+export function baseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "");
+}
+
 /** Addresses in the order to try them: the one that worked last, then the others. */
 export function addressOrder(connection: Connection): string[] {
-  return [connection.activeUrl, ...connection.urls.filter((u) => u !== connection.activeUrl)];
+  return [...new Set([connection.activeUrl, ...connection.urls].map(baseUrl))];
+}
+
+const GATEWAY_PATH = new RegExp(`^https://[^?#]+${CLOUD_GATEWAY_PREFIX}/[^/?#]+$`, "i");
+
+/** A Godmode Cloud gateway address (`https://<cloud>/gw/<id>`) rather than a Tailscale one. */
+export function isGatewayUrl(url: string | undefined): boolean {
+  return !!url && GATEWAY_PATH.test(baseUrl(url));
 }

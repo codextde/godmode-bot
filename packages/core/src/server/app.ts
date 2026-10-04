@@ -32,6 +32,7 @@ import { registerMobileRoutes } from "./routes/mobile";
 import { registerRunnerRoutes } from "./routes/runners";
 import { registerLinkRoutes } from "./routes/link";
 import { remoteRouting } from "../remote/routing";
+import { registerCloudRoutes } from "./routes/cloud";
 
 const log = logger("http");
 const SLOW_REQUEST_MS = 1000;
@@ -164,6 +165,7 @@ export function createApp() {
   registerMobileRoutes(app);
   registerRunnerRoutes(app);
   registerLinkRoutes(app);
+  registerCloudRoutes(app);
 
   app.all("/api/*", (c) => {
     if (!isPublicPath(c.req.path)) logRejection("warn", "unknown API route", { method: c.req.method, path: c.req.path.slice(0, 200) });

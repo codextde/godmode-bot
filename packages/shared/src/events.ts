@@ -154,7 +154,9 @@ export type EntityName =
   | "followups"
   | "mobile"
   | "system"
-  | "runners";
+  | "runners"
+  /** The cloud link: state, account, plan or billing changed. */
+  | "cloud";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =

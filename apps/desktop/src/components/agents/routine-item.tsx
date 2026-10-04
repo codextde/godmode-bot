@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import type { Agent, Routine } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
-import { coreUrl } from "@/lib/core";
+import { cloudContext, coreUrl } from "@/lib/core";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/common";
@@ -275,9 +275,12 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
               {type === "webhook" && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={copyWebhook} disabled={!routine.webhookPath}>
-                    <Copy /> {routine.webhookPath ? "Copy webhook URL" : "Unlock the vault to copy the URL"}
-                  </DropdownMenuItem>
+                  {/* Through Godmode Cloud the page's address isn't one webhooks can reach; the URL is copied on the computer. */}
+                  {!cloudContext && (
+                    <DropdownMenuItem onClick={copyWebhook} disabled={!routine.webhookPath}>
+                      <Copy /> {routine.webhookPath ? "Copy webhook URL" : "Unlock the vault to copy the URL"}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => setConfirmRotate(true)} disabled={rotate.isPending}>
                     <RefreshCw /> Rotate webhook URL
                   </DropdownMenuItem>

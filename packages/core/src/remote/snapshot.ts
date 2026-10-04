@@ -82,7 +82,7 @@ const TABLES: TableSpec[] = [
 
 /** Settings that describe the computer they are on (how it is reached, what it logs, whether it was set up). */
 // maintenance: how this computer keeps its own tools fixed and up to date — a runner, alone most of the time, keeps its own.
-const LOCAL_SETTINGS = new Set(["server", "mobile", "diagnostics", "maintenance", "onboardingComplete"]);
+const LOCAL_SETTINGS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "onboardingComplete"]);
 /** A runner's vault is opened by a sync, not by a human with the passphrase: it must not lock itself in between. */
 const RUNNER_SETTINGS: Record<string, string[]> = { security: ["autoLockMinutes"] };
 /** VM ids become Tart VM names and folder names. */

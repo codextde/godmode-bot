@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { storageKey } from "./core";
 
 /**
  * Unsent input (chat messages, new agents, dialogs) outlives the component that shows it, so leaving a page,
  * switching a tab or clicking outside a dialog never throws work away. A draft only exists while it differs from
  * where the input started, and lives for the app session.
  */
-const PREFIX = "gm-draft:";
+const PREFIX = `${storageKey("gm-draft")}:`;
 
 interface Stored {
   /** What the input started from: fields still equal to it follow the latest data when the draft comes back. */

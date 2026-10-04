@@ -13,7 +13,7 @@ import { SystemStep } from "@/components/onboarding/system-step";
 import { VaultStep } from "@/components/onboarding/vault-step";
 import { WelcomeStep } from "@/components/onboarding/welcome-step";
 import { api } from "@/lib/api";
-import { isTauri } from "@/lib/core";
+import { isTauri, storageKey } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ const STEP_META: Record<StepId, Omit<StepMeta, "id">> = {
   done: { title: "Done", hint: "Start working", icon: <PartyPopper /> },
 };
 
-const SESSION_KEY = "godmode-onboarding";
+const SESSION_KEY = storageKey("godmode-onboarding");
 
 function loadSession(): { step?: StepId; userName?: string } {
   try {

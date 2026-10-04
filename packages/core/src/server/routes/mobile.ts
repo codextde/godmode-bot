@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import type { MobileSession } from "@godmode/shared";
+import { isCloudOnline, phoneGatewayUrl } from "../../cloud/state";
 import { mobileStatus, mobileUrls, refreshMobileAccess } from "../../mobile/access";
 import { cancelPairingOffer, claimPairing, createPairingOffer, instanceInfo, renameDevice, revokeDevice } from "../../mobile/devices";
 import { getSettings, updateSettings } from "../../services/settings";
@@ -47,12 +48,18 @@ export function registerMobileRoutes(app: Hono) {
     return c.json(await mobileStatus());
   });
 
-  /** A QR code for pairing a phone. Turns phone access on; needs Tailscale to be connected. */
+  /** A QR code for pairing a phone. Turns phone access on; needs Tailscale, or the cloud link online with its phone gateway. */
   app.post("/api/mobile/pairing", async (c) => {
     onlyComputer(c);
     if (!getSettings().mobile.enabled) updateSettings({ mobile: { enabled: true } });
     const status = await mobileStatus(true);
-    if (!status.urls.length) throw conflict(status.error ?? "Phones can't reach Godmode yet.");
+    const gateway = phoneGatewayUrl();
+    const tailscale = status.urls.filter((url) => url !== gateway);
+    if (!tailscale.length && !(gateway && isCloudOnline())) {
+      throw conflict(
+        gateway ? "Godmode Cloud can't be reached right now and Tailscale isn't connected, so phones can't reach Godmode yet." : (status.error ?? "Phones can't reach Godmode yet."),
+      );
+    }
     return c.json(createPairingOffer(mobileUrls()), 201);
   });
 
@@ -78,7 +85,7 @@ export function registerMobileRoutes(app: Hono) {
   app.get("/api/mobile/me", (c) => {
     const device = requestDevice(c);
     if (!device) throw new HttpError(400, "Only for the phone app", "not_a_phone");
-    return c.json({ device, instance: instanceInfo() } satisfies MobileSession);
+    return c.json({ device, instance: instanceInfo(), urls: mobileUrls() } satisfies MobileSession);
   });
 
   /** The phone unpairs itself. */

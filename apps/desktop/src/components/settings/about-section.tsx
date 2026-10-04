@@ -12,7 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { openExternal } from "@/lib/desktop";
 import { checkForUpdates, useUpdater } from "@/stores/updater";
 
-const SITE = "https://godmode.codext.de";
+export const SITE = "https://godmode.codext.de";
 
 const CREDITS: { name: string; description: string; url: string; icon: ReactNode }[] = [
   { name: "Claude Code", description: "The agentic brain behind every coworker.", url: "https://docs.anthropic.com/en/docs/claude-code", icon: <Bot /> },
