@@ -157,7 +157,7 @@ export const devices = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    /** The computer's own stable id (`gm_…`). Linking the same computer again reuses its row. */
+    /** The computer's own stable id (`gm_…`). Linking the same computer again replaces its row with a new one. */
     instanceId: text("instance_id").notNull(),
     platform: text("platform").notNull().default(""),
     appVersion: text("app_version").notNull().default(""),

@@ -66,7 +66,7 @@ export default async function LinkPage({ searchParams }: { searchParams: Promise
 
   const mayLink = can(ctx, "devices.link");
   const [mine, allowance] = await Promise.all([listDevicesFor(ctx.user.id), deviceAllowance(ctx.user.id)]);
-  // Linking the same computer again reuses its row: the old link stops working.
+  // Linking the same computer again makes a new computer: the old record and its link go away.
   const existing = mine.find((row) => row.role === "owner" && row.device.instanceId === request.instanceId)?.device ?? null;
   const existingOnline = existing ? relayHub().isOnline(existing.id) : false;
   const overLimit = !existing && allowance.limit !== null && allowance.used >= allowance.limit;
@@ -124,9 +124,9 @@ export default async function LinkPage({ searchParams }: { searchParams: Promise
                 </Callout>
               )}
               {existing && !existingOnline && (
-                <Callout tone="info" title={`This replaces the existing link of ${existing.name}`}>
-                  The computer is already linked to your account. Approving gives it a new link; the old one stops working. People you shared it
-                  with keep their access.
+                <Callout tone="info" title={`This links ${existing.name} again as a new computer`}>
+                  The computer is already linked to your account. Approving links it as a new computer, and the old link stops working. People
+                  you shared it with lose their access until you share it again.
                 </Callout>
               )}
               {overLimit && (
