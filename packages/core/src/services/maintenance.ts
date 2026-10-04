@@ -1,16 +1,17 @@
 /**
- * Upkeep of the tools Godmode relies on: "Fix all" (repair permissions, install what is missing) and installing
- * updates — on request, and on its own in the background (settings.maintenance).
+ * Upkeep of the tools Godmode relies on: "Fix all" (repair permissions, install what is missing), installing
+ * updates and cleaning up — on request, and on its own in the background (settings.maintenance).
  *
  * Only what Godmode can do by itself happens here. System dialogs (macOS privacy) are never opened unasked, a tool is
  * only replaced while nothing runs from it (updates wait until no agent is working), and what failed unasked is left
  * alone for a day instead of being tried again every few hours.
  */
-import type { DependencyId, FixReport, FixResult, MaintenanceStatus, ToolId, ToolUpdateResult, ToolUpdateStatus } from "@godmode/shared";
+import type { CleanupId, CleanupRun, DependencyId, FixReport, FixResult, MaintenanceStatus, ToolId, ToolUpdateResult, ToolUpdateStatus } from "@godmode/shared";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { listActiveRuns } from "../runner/runner";
 import { now } from "../util";
+import { RECOMMENDED, lastCleanup, runCleanup } from "./cleanup";
 import { installDependency, runDoctor } from "./doctor";
 import { checkPermissions, fixPermission } from "./permissions";
 import { onSettingsApplied } from "./runtime";
@@ -27,6 +28,8 @@ const DELAYS = {
   settingChanged: 5_000,
   /** What failed unasked isn't tried again unasked for this long. */
   giveUp: 24 * 60 * 60_000,
+  /** The automatic cleanup runs at most this often. */
+  cleanup: 24 * 60 * 60_000,
 };
 let delays = { ...DELAYS };
 
@@ -172,6 +175,27 @@ async function installDue(due: ToolUpdateStatus[]): Promise<{ updates: ToolUpdat
 }
 
 /* ------------------------------------------------------------------ */
+/* Cleanup                                                              */
+/* ------------------------------------------------------------------ */
+
+/** Clean up the given items (Settings → Cleanup); takes its turn with repairs and updates. */
+export function cleanUp(ids: readonly CleanupId[]): Promise<CleanupRun> {
+  return inTurn(async () => {
+    const run = await runCleanup(ids);
+    bus.changed("system");
+    return run;
+  });
+}
+
+/** The recommended items, once a day, while nothing works. */
+async function cleanUpUnasked(): Promise<void> {
+  const last = lastCleanup();
+  if (last && Date.now() - Date.parse(last.finishedAt) < delays.cleanup) return;
+  if (busyCheck()) return;
+  await runCleanup(RECOMMENDED, { automatic: true });
+}
+
+/* ------------------------------------------------------------------ */
 /* Background                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -219,11 +243,11 @@ function scheduleNext() {
 export function runMaintenance(): Promise<MaintenanceStatus> {
   return inTurn(async () => {
     const settings = getSettings();
-    const { autoFix, autoUpdate } = settings.maintenance;
+    const { autoFix, autoUpdate, autoCleanup } = settings.maintenance;
     nextPassAt = Date.now() + delays.pass;
     waiting = [];
     // Until onboarding is done the human installs things step by step, with their own clicks.
-    if (!settings.onboardingComplete || (!autoFix && !autoUpdate)) {
+    if (!settings.onboardingComplete || (!autoFix && !autoUpdate && !autoCleanup)) {
       status = { ...status, running: false, postponed: null };
       scheduleNext();
       return status;
@@ -238,6 +262,7 @@ export function runMaintenance(): Promise<MaintenanceStatus> {
         const due = dueUpdates(await checkUpdates(true)).filter((t) => !leftToHuman(t.id) && !tired(`update:${t.id}:${t.latest}`));
         ({ updates, postponed, left: waiting } = await installDue(due));
       }
+      if (autoCleanup) await cleanUpUnasked().catch((err) => log.warn("automatic cleanup failed", err));
     } finally {
       status = { running: false, lastRunAt: now(), nextRunAt: status.nextRunAt, postponed, fixes, updates };
       scheduleNext();
@@ -264,7 +289,7 @@ export function retryPostponedUpdates(): Promise<MaintenanceStatus> {
   });
 }
 
-let applied = { autoFix: false, autoUpdate: false };
+let applied = { autoFix: false, autoUpdate: false, autoCleanup: false };
 
 export function startMaintenance() {
   if (started) return;
@@ -283,7 +308,7 @@ export function stopMaintenance() {
 // Turning the upkeep on shouldn't take hours to show: run a pass shortly after.
 onSettingsApplied((settings) => {
   const next = settings.maintenance;
-  const turnedOn = (next.autoFix && !applied.autoFix) || (next.autoUpdate && !applied.autoUpdate);
+  const turnedOn = (next.autoFix && !applied.autoFix) || (next.autoUpdate && !applied.autoUpdate) || (next.autoCleanup && !applied.autoCleanup);
   applied = { ...next };
   if (started && turnedOn) schedule(delays.settingChanged, runMaintenance);
 });

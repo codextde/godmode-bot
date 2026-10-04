@@ -7,9 +7,11 @@
  *   godmode password <pw>    set the web dashboard password
  *   godmode doctor           check dependencies (claude, uv, chrome) and permissions; --fix repairs what it can
  *   godmode update           update the installed tools
+ *   godmode cleanup          show what takes up space; --fix removes what is safe to remove
  *   godmode version
  */
 import { parseArgs } from "node:util";
+import { formatBytes } from "@godmode/shared";
 import { loadConfig, config, VERSION, isLoopbackHost } from "./config";
 import { logger, setLogDir } from "./log";
 import { openDb, closeDb } from "./db";
@@ -36,7 +38,8 @@ import { closeGuestTunnels } from "./vm/guest";
 import { startTasks, stopTasks } from "./tasks/service";
 import { runDoctor } from "./services/doctor";
 import { checkPermissions } from "./services/permissions";
-import { fixAll, installUpdates, startMaintenance, stopMaintenance } from "./services/maintenance";
+import { cleanUp, fixAll, installUpdates, startMaintenance, stopMaintenance } from "./services/maintenance";
+import { RECOMMENDED, scanCleanup } from "./services/cleanup";
 import { checkUpdates } from "./services/updates";
 import { resourceSnapshot, startDiagnostics, stopDiagnostics } from "./diagnostics/monitor";
 import { getModelCatalog } from "./runner/models";
@@ -255,6 +258,7 @@ Usage:
   godmode password <new>     Set the web dashboard password
   godmode doctor [--fix]     Check dependencies and permissions (--fix repairs what it can)
   godmode update             Update the installed tools
+  godmode cleanup [--fix]    Show what takes up space (--fix removes what is safe to remove)
   godmode version`);
     return;
   }
@@ -307,6 +311,23 @@ Usage:
       else if (!results.length) console.log("Everything is up to date.");
       for (const r of results) console.log(`${r.ok ? "✅" : "❌"} ${r.name.padEnd(22)} ${!r.ok ? r.output.split("\n").pop() : r.upToDate ? "already up to date" : `${r.previous ?? "?"} → ${r.version ?? "?"}`}`);
       process.exit(results.every((r) => r.ok) ? 0 : 1);
+    }
+    case "cleanup": {
+      const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
+      openDb(cfg.dbPath);
+      if (values.fix) {
+        const run = await cleanUp(RECOMMENDED);
+        for (const r of run.results) console.log(`${r.ok ? "🧹" : "✋"} ${r.name.padEnd(30)} ${r.ok ? formatBytes(r.freedBytes) : r.output.split("\n")[0]}`);
+        console.log(`Freed ${formatBytes(run.freedBytes)}.`);
+      }
+      const report = await scanCleanup();
+      for (const s of report.storage) console.log(`   ${s.name.padEnd(30)} ${formatBytes(s.bytes)}`);
+      for (const i of report.items.filter((i) => i.count)) {
+        console.log(`${i.recommended ? "🧹" : "🔎"} ${i.name.padEnd(30)} ${i.upTo ? "up to " : ""}${formatBytes(i.bytes)}${i.blocked ? ` — ${i.blocked}` : ""}`);
+      }
+      for (const c of report.checks) console.log(`${c.status === "ok" ? "✅" : c.status === "warn" ? "⚠️ " : "❌"} ${c.name.padEnd(30)} ${c.detail}`);
+      if (!values.fix && report.items.some((i) => i.recommended && i.count)) console.log("Run `godmode cleanup --fix` to remove what is marked 🧹.");
+      process.exit(report.checks.some((c) => c.status === "error") ? 1 : 0);
     }
     default:
       console.error(`Unknown command: ${cmd}`);

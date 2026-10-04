@@ -304,6 +304,30 @@ numbers), `GET /api/logs/entries?level=&search=&limit=` and `GET /api/logs/repor
 the environment, recurring problems, a run summary, slow spots, the tail of `desktop.log` and the newest entries that fit
 in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
 
+## Cleanup
+
+Settings → Cleanup (`services/cleanup.ts`, `GET /api/cleanup`, `POST /api/cleanup { ids }`, `godmode cleanup [--fix]`)
+walks the data directory once per look: what each area takes on disk (written blocks, so sparse VM disks count what they
+use), a self check (database `quick_check`, free disk space, task worktrees left over from deleted tasks) and what can go.
+The UI adds the system check, permissions and updates of Settings → System to the self check.
+
+| Item | What goes | Stays |
+|---|---|---|
+| Leftovers (recommended) | Run temp files (`godmode-mcp-<run>`…), imports and PR bodies in the system temp folder untouched for a day; browser-use run folders; folders of deleted profiles and agents; interrupted clones (`*.cloning-*`) a day old; computer helpers of older builds | Anything of a running run |
+| Browser caches (recommended) | `Cache`, `Code Cache`, `GPUCache`, Dawn and shader caches of every profile | Cookies, logins, site data; profiles whose Chromium runs (registered, or a live `SingletonLock`) |
+| Worktrees of finished tasks (recommended) | Worktrees of tasks done or cancelled a day ago (a week for the automatic cleanup), and of deleted tasks — removed and pruned; branches stay | Uncommitted changes, full clones with commits never pushed, tasks whose chat works or is paused |
+| Clones no task uses (recommended) | Bare clones in `repos/.tasks` no task names | One a task folder still uses or with commits never pushed |
+| Agent histories (recommended) | `git repack -a -d` of agent repositories with 1 MB+ of loose objects, under the repository lock (refs stay as isomorphic-git wrote them) | Agents that are working |
+| Database (recommended) | `VACUUM` + `wal_checkpoint(TRUNCATE)` once 1 MB+ is free | Waits while agents work, a backup runs, or the disk can't hold a copy |
+| Old logs (recommended) | Replaced logs a week old, logs of deleted VMs | The current logs |
+| Unfinished VM downloads, Trash, macOS images | Only when picked: layers kept to resume a download, `agents/.trash`, `repos/.trash`, `browser/.trash`, image templates (`removeImage`) | Images while a download runs |
+
+Cleaning looks at each item again first and takes its turn with repairs and updates (`inTurn`). Runs count as working
+when the runner has them or the `runs` table says so, so `godmode cleanup --fix` next to a running core waits for its
+work too. With
+`settings.maintenance.autoCleanup` (default on) the background upkeep cleans the recommended items at most once a day
+while no agent works. The last run is kept in `meta` (`cleanup.lastRun`).
+
 ## WebSocket (`/api/ws`)
 
 Server → UI events are defined in `packages/shared/src/events.ts`. The UI keeps React Query caches in sync

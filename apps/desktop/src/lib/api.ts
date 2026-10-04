@@ -21,6 +21,9 @@ import type {
   ChromeImportResult,
   ClaudeUpdateResult,
   ClaudeUpdateStatus,
+  CleanupId,
+  CleanupReport,
+  CleanupRun,
   ComposioConnectInput,
   ComposioConnectResult,
   ComposioConnection,
@@ -279,6 +282,12 @@ export const api = {
     /** Update one tool, or (without an id) every tool that has an update. */
     update: (id?: ToolId) => post<ToolUpdateResult[]>("/api/doctor/updates", { id }),
     maintenance: () => get<MaintenanceStatus>("/api/doctor/maintenance"),
+  },
+
+  cleanup: {
+    /** What takes up space, what can go, and a check of the data folder (walks it, so it takes a moment). */
+    report: () => get<CleanupReport>("/api/cleanup"),
+    run: (ids: CleanupId[]) => post<CleanupRun>("/api/cleanup", { ids }),
   },
 
   vault: {

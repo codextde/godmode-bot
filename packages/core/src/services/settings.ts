@@ -101,6 +101,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maintenance: {
     autoFix: true,
     autoUpdate: true,
+    autoCleanup: true,
   },
   mobile: {
     enabled: false,
