@@ -3,7 +3,8 @@ import { marked, type Token, type Tokens } from "marked";
 import { memo, useMemo, useState, type ReactNode } from "react";
 import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 import { TASK_ATTACHMENT_PATH } from "@godmode/shared";
-import { useSession } from "@/lib/session";
+import { Icon } from "./icon";
+import { addressOrder, useSession } from "@/lib/session";
 import { radius, space, type, useColors, type Colors } from "@/lib/theme";
 
 /** Agent answers: Markdown rendered with native text (paragraphs, lists, code, quotes, tables, links, task pictures). */
@@ -168,16 +169,29 @@ function isTaskPicture(t: Token): t is Tokens.Image {
   return t.type === "image" && (t as Tokens.Image).href.startsWith(TASK_ATTACHMENT_PATH) && !(t as Tokens.Image).href.includes("..");
 }
 
-/** A picture attached to a task: served by the computer, so it is loaded with this phone's key. */
+/** A picture attached to a task: served by the computer, so it is loaded with this phone's key, from each address in turn. */
 function TaskPicture({ path, alt }: { path: string; alt: string }) {
   const c = useColors();
   const connection = useSession((s) => s.connection);
   const [ratio, setRatio] = useState(4 / 3);
+  const [attempt, setAttempt] = useState(0);
   if (!connection) return null;
+  const bases = addressOrder(connection);
+  if (attempt >= bases.length) {
+    return (
+      <View style={[styles.missing, { backgroundColor: c.sunken }]}>
+        <Icon name="photo" size={15} color={c.textFaint} />
+        <Text style={[type.footnote, { color: c.textMuted, flexShrink: 1 }]} numberOfLines={1}>
+          {alt || "Picture"} couldn't load
+        </Text>
+      </View>
+    );
+  }
   return (
     <Image
-      source={{ uri: connection.activeUrl + path, headers: { authorization: `Bearer ${connection.token}` } }}
+      source={{ uri: bases[attempt] + path, headers: { authorization: `Bearer ${connection.token}` } }}
       onLoad={(e) => e.source.width && e.source.height && setRatio(Math.max(0.5, e.source.width / e.source.height))}
+      onError={() => setAttempt((a) => a + 1)}
       accessibilityLabel={alt}
       contentFit="contain"
       transition={150}
@@ -199,6 +213,14 @@ const styles = StyleSheet.create({
   picture: {
     width: "100%",
     maxHeight: 420,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+  },
+  missing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: space.md,
     borderRadius: radius.sm,
     borderCurve: "continuous",
   },

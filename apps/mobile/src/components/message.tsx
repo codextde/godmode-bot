@@ -3,7 +3,8 @@ import { Image } from "expo-image";
 import { memo, useEffect, useState } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
-import type { Message, MessageBlock } from "@godmode/shared";
+import type { Attachment, Message, MessageBlock } from "@godmode/shared";
+import { FileChip } from "./attachments";
 import { Icon } from "./icon";
 import { Markdown } from "./markdown";
 import { Row, T, tap } from "./ui";
@@ -32,14 +33,12 @@ export const UserMessage = memo(function UserMessage({ message }: { message: Mes
   return (
     <View style={styles.userWrap}>
       <Pressable onLongPress={() => copy(message.content)} style={[styles.user, { backgroundColor: c.primary }]}>
-        <T variant="body" color={c.onPrimary} selectable>
-          {message.content}
-        </T>
-        {message.attachments.length > 0 && (
-          <T variant="caption" color={c.onPrimary} style={{ opacity: 0.7, marginTop: 4 }}>
-            {message.attachments.map((a) => a.name).join(", ")}
+        <Files attachments={message.attachments} spaced={!!message.content} />
+        {message.content ? (
+          <T variant="body" color={c.onPrimary} selectable>
+            {message.content}
           </T>
-        )}
+        ) : null}
       </Pressable>
     </View>
   );
@@ -56,6 +55,18 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
     </Pressable>
   );
 });
+
+function Files({ attachments, spaced }: { attachments: Attachment[]; spaced: boolean }) {
+  const c = useColors();
+  if (!attachments.length) return null;
+  return (
+    <View style={[styles.files, spaced && { marginBottom: 8 }]}>
+      {attachments.map((a, i) => (
+        <FileChip key={`${a.path}-${i}`} name={a.name} mime={a.mime} size={a.size} color={c.onPrimary} />
+      ))}
+    </View>
+  );
+}
 
 function copy(text: string) {
   if (!text) return;
@@ -103,14 +114,12 @@ function Block({ block }: { block: MessageBlock }) {
       return (
         <View style={styles.userWrap}>
           <View style={[styles.user, { backgroundColor: c.primary }]}>
-            <T variant="body" color={c.onPrimary} selectable>
-              {block.text}
-            </T>
-            {block.attachments.length > 0 && (
-              <T variant="caption" color={c.onPrimary} style={{ opacity: 0.7, marginTop: 4 }}>
-                {block.attachments.map((a) => a.name).join(", ")}
+            <Files attachments={block.attachments} spaced={!!block.text} />
+            {block.text ? (
+              <T variant="body" color={c.onPrimary} selectable>
+                {block.text}
               </T>
-            )}
+            ) : null}
           </View>
         </View>
       );
@@ -265,6 +274,11 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     paddingHorizontal: 15,
     paddingVertical: 10,
+  },
+  files: {
+    gap: 6,
+    marginHorizontal: -7,
+    marginTop: -2,
   },
   assistant: {
     gap: 12,

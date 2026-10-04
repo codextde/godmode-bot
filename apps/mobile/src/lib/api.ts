@@ -1,5 +1,6 @@
 import * as Device from "expo-device";
 import Constants from "expo-constants";
+import { File } from "expo-file-system";
 import type {
   Agent,
   AppNotification,
@@ -240,7 +241,8 @@ export const api = {
     /** A file for a description; link it there with its `url`. */
     upload: (file: PendingFile) => {
       const form = new FormData();
-      form.append("file", { uri: file.uri, name: file.name, type: file.mime } as unknown as Blob);
+      // expo/fetch (the global fetch) takes parts that read their own bytes, not React Native's `{ uri }` parts.
+      form.append("file", { name: file.name, type: file.mime, bytes: () => new File(file.uri).bytes() } as unknown as Blob);
       return post<TaskAttachment>("/api/tasks/attachments", form);
     },
   },

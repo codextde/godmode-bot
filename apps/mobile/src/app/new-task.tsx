@@ -1,7 +1,15 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { MAX_TASK_TITLE_LENGTH, TASK_TYPES, taskAttachmentMarkdown, type Agent, type TaskType } from "@godmode/shared";
+import {
+  MAX_TASK_DESCRIPTION_LENGTH,
+  MAX_TASK_TITLE_LENGTH,
+  TASK_TYPES,
+  taskAttachmentMarkdown,
+  type Agent,
+  type TaskAttachment,
+  type TaskType,
+} from "@godmode/shared";
 import { AttachmentTray } from "@/components/attachments";
 import { CharacterAvatar } from "@/components/character";
 import { Icon } from "@/components/icon";
@@ -30,16 +38,28 @@ export default function NewTask() {
   const [picked, setPicked] = useState<string | undefined>(agentId);
   const { files, attach, remove } = usePendingFiles();
   const [saving, setSaving] = useState(false);
+  const uploads = useRef(new Map<string, TaskAttachment>());
   const agent = picked === NONE ? undefined : (agents.find((a) => a.id === picked) ?? agents[0]);
 
   const create = async () => {
     const name = title.trim();
     if (!name) return;
+    // Every link takes its name twice plus the url; checked before anything is uploaded.
+    const links = files.reduce((sum, f) => sum + f.name.length * 3 + 64, 0);
+    if (description.trim().length + links > MAX_TASK_DESCRIPTION_LENGTH) {
+      Alert.alert("The details are too long", "Shorten the text or attach fewer files.");
+      return;
+    }
     setSaving(true);
     try {
-      const uploaded = [];
-      for (const f of files) uploaded.push(await api.tasks.upload(f));
-      const details = [description.trim(), ...uploaded.map(taskAttachmentMarkdown)].filter(Boolean).join("\n\n");
+      const attachments = [];
+      for (const f of files) {
+        // A retry after a failed create doesn't upload the same file again.
+        const done = uploads.current.get(f.id) ?? (await api.tasks.upload(f));
+        uploads.current.set(f.id, done);
+        attachments.push(done);
+      }
+      const details = [description.trim(), ...attachments.map(taskAttachmentMarkdown)].filter(Boolean).join("\n\n");
       const task = await api.tasks.create({ workspaceId, title: name, description: details || undefined, type, agentId: agent?.id ?? null });
       void queryClient.invalidateQueries({ queryKey: qk.tasks });
       router.dismiss();
@@ -89,6 +109,7 @@ export default function NewTask() {
         {files.length > 0 && <AttachmentTray files={files} busy={saving} onRemove={remove} />}
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={files.length ? `Add more files, ${files.length} added` : "Add photos or files"}
           disabled={saving}
           onPress={() => {
             tap();
