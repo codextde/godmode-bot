@@ -696,14 +696,36 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   without one when it can't be created (with a notification). Deleting a task removes its worktree and prunes it from
   the repository; its branch stays (while the worktree exists, the branch can't be checked out elsewhere — merge it).
 * **Coding tasks** publish their branch: when a run succeeds, Godmode commits what the agent left uncommitted (new
-  `.env`/key files are left out), refuses to push when the branch adds such files or its diff contains a secret from
-  the vault, merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks the task),
+  `.env`/key files are left out), takes secrets out of the commits the remote doesn't have yet (see the next point),
+  merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks the task),
   and pushes with an explicit lease on what it saw — so nothing pushed meanwhile is overwritten. It then opens a pull
-  request with `gh pr create` (body: the agent's summary, redacted); without `gh`, or for GitLab, the task links to the
+  request with `gh pr create` (body: the agent's summary, redacted — saved secrets are taken out of the title and body
+  even with redaction off); without `gh`, or for GitLab, the task links to the
   page that opens one. A branch without commits on top of its base goes to review without a pull request; a local
   repository without a remote keeps the commits on the task's branch. Restarting fast-forwards the worktree to the
   remote branch first; only the task's branch is fetched and pushed (nothing is written to the repository's config).
   When a `general` or `research` task's run ends, what it changed is committed on its branch, which isn't pushed.
+* **Secrets never stop a push and never go along**: before a task's branch is pushed (when a run ends, or from the
+  board), Godmode checks the commits that are neither on the base nor on the remote yet, and only what they add: files
+  that look like secrets (`.env`, keys), and secrets saved in the vault in an added line, a file name, any version of
+  a binary file those commits add (read whole, up to 20 MB) or a commit message. Lines a change removes or merely surrounds don't
+  count, a moved file adds only what changed, and what the remote already has isn't checked again. A value counts
+  when it is stored as a secret (passwords, 2FA secrets, API keys, tokens; of a custom MCP server's env variables and
+  headers the ones whose name says so, like `API_KEY`, `signingKey`, `SENTRY_DSN`, `SLACK_WEBHOOK_URL` or
+  `Authorization` — not public keys like `STRIPE_PUBLISHABLE_KEY`, nor a snake_case identifier under a key's name like
+  `SORT_KEY=created_at` —, plus bearer tokens and passwords inside URLs) and isn't a single plain word or number — a
+  server's other settings (`NODE_ENV=production`, URLs) are only masked in
+  transcripts. When something is found, Godmode fixes the branch instead of blocking the task: such files are left out
+  (they stay in the worktree; one the branch already had keeps the version the remote has), the secret is replaced
+  with `GODMODE_REMOVED_SECRET` in text files (a file that can't be rewritten safely — binary, not UTF-8, a link, not
+  writable — is left out too), and the unpushed commits become one commit on top of what the remote has (the branch's
+  own last commit as its first parent), so no pushed commit or commit message carries the secret and nothing on the
+  remote is rewritten. Exactly the commit that was checked is pushed: when a turn that started meanwhile stages or
+  commits something during the fix (or before a merge with someone else's push), nothing is pushed now and that
+  turn's end pushes the branch. The branch as the agent left it stays in the worktree as
+  `refs/worktree/godmode/with-secrets/<commit>` (never pushed; its reflog keeps the commits for git's 90 days even
+  when the repository is cleaned up from another checkout), a notification names the files, and the agent's brief
+  tells it to read secrets from the environment. With a locked vault only the file names are checked.
 * **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
   `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
   `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
