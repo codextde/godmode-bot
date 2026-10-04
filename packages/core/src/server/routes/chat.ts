@@ -121,7 +121,7 @@ export function registerChatRoutes(app: Hono): void {
   app.get("/api/attention", (c) => c.json(listAttention()));
 
   // What the team did since the human was last here (Home's "while you were away").
-  app.get("/api/away", (c) => c.json(awaySummary(c.req.query("since") ?? "")));
+  app.get("/api/away", (c) => c.json(awaySummary(c.req.query("since") ?? "", c.req.query("until") || undefined)));
 
   app.patch("/api/conversations/:id", async (c) => {
     const patch = await body(

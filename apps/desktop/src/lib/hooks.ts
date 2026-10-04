@@ -88,9 +88,14 @@ export function useAttention() {
   return useQuery({ queryKey: qk.attention, queryFn: api.attention, staleTime: 2_000 });
 }
 
-/** What the team did since `since` (null = not asked). */
-export function useAway(since: string | null) {
-  return useQuery({ queryKey: qk.away(since ?? ""), queryFn: () => api.away(since!), enabled: !!since, staleTime: 60_000 });
+/** What the team did while the human was away (null = not asked). */
+export function useAway(away: { since: string; until: string } | null) {
+  return useQuery({
+    queryKey: qk.away(away?.since ?? "", away?.until ?? ""),
+    queryFn: () => api.away(away!.since, away!.until),
+    enabled: !!away,
+    staleTime: 60_000,
+  });
 }
 
 export function useBudgets() {

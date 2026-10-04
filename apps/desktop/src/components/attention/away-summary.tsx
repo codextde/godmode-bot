@@ -22,10 +22,10 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  */
 export function AwaySummaryCard({ agents }: { agents: Agent[] }) {
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
-  const since = useUi((s) => s.awaySince);
-  const setAwaySince = useUi((s) => s.setAwaySince);
-  const { data } = useAway(since);
-  if (!since || !data || (data.finished === 0 && data.delivered === 0)) return null;
+  const away = useUi((s) => s.away);
+  const setAway = useUi((s) => s.setAway);
+  const { data } = useAway(away);
+  if (!away || !data || (data.finished === 0 && data.delivered === 0)) return null;
   const facts = [
     plural(data.finished, "run") + " finished",
     data.failed ? plural(data.failed, "problem") : null,
@@ -42,9 +42,9 @@ export function AwaySummaryCard({ agents }: { agents: Agent[] }) {
     >
       <div className="mb-3 flex items-center gap-2">
         <h2 id="away-title" className="eyebrow">
-          While you were away · {formatDistanceStrict(new Date(since), new Date())}
+          While you were away · {formatDistanceStrict(new Date(away.since), new Date(away.until))}
         </h2>
-        <Button variant="ghost" size="icon-xs" className="ml-auto text-muted-foreground" aria-label="Close the summary" onClick={() => setAwaySince(null)}>
+        <Button variant="ghost" size="icon-xs" className="ml-auto text-muted-foreground" aria-label="Close the summary" onClick={() => setAway(null)}>
           <X />
         </Button>
       </div>

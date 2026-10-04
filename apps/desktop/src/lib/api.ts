@@ -412,7 +412,7 @@ export const api = {
   /** Everything that waits for the human ("Needs you"), from live state. */
   attention: () => get<AttentionItem[]>("/api/attention"),
   /** What the team did since the human was last here. */
-  away: (since: string) => get<AwaySummary>("/api/away", { since }),
+  away: (since: string, until: string) => get<AwaySummary>("/api/away", { since, until }),
 
   budgets: {
     get: () => get<BudgetOverview>("/api/budgets"),

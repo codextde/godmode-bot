@@ -369,11 +369,13 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
   socket); showing it, or `POST /api/conversations/read` (`ids` or `"all"`),
   reads it — and reading a chat whose run failed clears the agent's "Last run failed". Automation, task, delegation and
   platform chats are never unread.
-* **While you were away** (`services/away.ts`, `GET /api/away?since=<ISO>`, Cloud: allowed; phone: closed). After at
-  least two hours without the human's input (pointer, keys, wheel in a focused window; the last time is kept per computer
-  in `localStorage`, `lib/presence.ts`), Home shows what the team did since: runs that ended (checks left out) and how
-  many failed, tickets delivered, what the work cost (the spend ledger), who worked, and up to six things worth a look —
-  delivered tickets, problems (chats and automations), then replies — one line per chat or automation. Closed with ×.
+* **While you were away** (`services/away.ts`, `GET /api/away?since=<ISO>&until=<ISO>`, Cloud: allowed; phone: closed).
+  After at least two hours without the human's input (released pointer or key, wheel, in a focused window; the last time
+  is kept per computer in `localStorage`, `lib/presence.ts`), Home shows what the team did from then until they came
+  back (at most 31 days): runs that ended (checks left out) and how many failed, tickets delivered (by whom), what the
+  work cost (the spend ledger), who worked, and up to six things worth a look — delivered tickets, problems (chats still
+  unread, and automations), then replies in chats still unread — one line per chat or automation. Runs are found
+  through `idx_runs_finished` (migration 58). Closed with ×.
 * **Notices** (`services/runNotices.ts`). Such a run that nobody watched notifies once — "Mia replied in “Q4 plan”" /
   "Mia ran into a problem in “…”" — unless the agent called `notify_user` itself (the tool call, not the word) or the
   run reported a missing login (that has its own notice). Only the computer the human uses tells: a runner's runs

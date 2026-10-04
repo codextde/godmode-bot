@@ -1021,4 +1021,13 @@ ALTER TABLE tasks ADD COLUMN parent_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id) WHERE parent_id IS NOT NULL;
 `,
   },
+  {
+    id: 58,
+    name: "away_indexes",
+    sql: /* sql */ `
+-- "While you were away" reads what ended, and what was delivered, in a window of time.
+CREATE INDEX IF NOT EXISTS idx_runs_finished ON runs(finished_at) WHERE finished_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_task_events_kind ON task_events(kind, created_at);
+`,
+  },
 ];
