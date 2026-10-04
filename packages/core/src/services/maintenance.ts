@@ -11,7 +11,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { listActiveRuns } from "../runner/runner";
 import { now } from "../util";
-import { RECOMMENDED, lastCleanup, runCleanup } from "./cleanup";
+import { RECOMMENDED, lastAutomaticCleanup, runCleanup } from "./cleanup";
 import { installDependency, runDoctor } from "./doctor";
 import { checkPermissions, fixPermission } from "./permissions";
 import { onSettingsApplied } from "./runtime";
@@ -180,17 +180,12 @@ async function installDue(due: ToolUpdateStatus[]): Promise<{ updates: ToolUpdat
 
 /** Clean up the given items (Settings → Cleanup); takes its turn with repairs and updates. */
 export function cleanUp(ids: readonly CleanupId[]): Promise<CleanupRun> {
-  return inTurn(async () => {
-    const run = await runCleanup(ids);
-    bus.changed("system");
-    return run;
-  });
+  return inTurn(() => runCleanup(ids));
 }
 
 /** The recommended items, once a day, while nothing works. */
 async function cleanUpUnasked(): Promise<void> {
-  const last = lastCleanup();
-  if (last && Date.now() - Date.parse(last.finishedAt) < delays.cleanup) return;
+  if (Date.now() - lastAutomaticCleanup() < delays.cleanup) return;
   if (busyCheck()) return;
   await runCleanup(RECOMMENDED, { automatic: true });
 }

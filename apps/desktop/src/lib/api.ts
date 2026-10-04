@@ -285,8 +285,8 @@ export const api = {
   },
 
   cleanup: {
-    /** What takes up space, what can go, and a check of the data folder (walks it, so it takes a moment). */
-    report: () => get<CleanupReport>("/api/cleanup"),
+    /** What takes up space, what can go, and a check of the data folder; `refresh` checks the database again too. */
+    report: (refresh = false) => get<CleanupReport>("/api/cleanup", { refresh: refresh ? 1 : undefined }),
     run: (ids: CleanupId[]) => post<CleanupRun>("/api/cleanup", { ids }),
   },
 

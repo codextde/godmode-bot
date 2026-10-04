@@ -14,7 +14,6 @@ import {
   GitBranch,
   GitFork,
   Globe,
-  History,
   Lock,
   ScrollText,
   Trash2,
@@ -47,15 +46,12 @@ const ICONS: Record<CleanupId, ComponentType<{ className?: string }>> = {
   "browser-cache": Globe,
   "task-worktrees": GitBranch,
   "task-clones": GitFork,
-  "agent-history": History,
   database: Database,
   "old-logs": ScrollText,
   "vm-downloads": CloudDownload,
   trash: Trash2,
   "vm-images": Disc3,
 };
-
-const size = (bytes: number, upTo: boolean) => `${upTo ? "up to " : ""}${formatBytes(bytes)}`;
 
 const cleanable = (i: CleanupItem) => i.count > 0 && !i.blocked;
 
@@ -75,19 +71,20 @@ function toastRun(run: CleanupRun) {
 }
 
 /** What can go, picked by the human: recommended items are preselected, the rest needs a look first. */
-export function CleanupItems({ report }: { report: CleanupReport }) {
+export function CleanupItems({ report, refreshing }: { report: CleanupReport; refreshing: boolean }) {
   const qc = useQueryClient();
   // null = the recommended selection, which follows the report until the human changes it.
   const [picked, setPicked] = useState<Set<CleanupId> | null>(null);
   const [open, setOpen] = useState<CleanupId | null>(null);
   const [confirming, setConfirming] = useState(false);
 
-  const items = report.items.filter((i) => i.count > 0 || i.blocked);
-  const clean = report.items.filter((i) => i.count === 0 && !i.blocked);
+  // An item whose entries all stay still says why they stay.
+  const listed = (i: CleanupItem) => i.count > 0 || i.entries.some((e) => e.kept);
+  const items = report.items.filter(listed);
+  const clean = report.items.filter((i) => !listed(i));
   const selected = new Set([...(picked ?? defaults(report.items))].filter((id) => report.items.some((i) => i.id === id && cleanable(i))));
   const chosen = items.filter((i) => selected.has(i.id));
   const total = chosen.reduce((n, i) => n + i.bytes, 0);
-  const upTo = chosen.some((i) => i.upTo);
   const forGood = chosen.filter((i) => !i.recommended);
 
   const run = useMutation({
@@ -116,9 +113,9 @@ export function CleanupItems({ report }: { report: CleanupReport }) {
       bodyClassName="py-1"
       actions={
         items.length > 0 && (
-          <Button size="sm" onClick={start} disabled={!selected.size || run.isPending}>
+          <Button size="sm" onClick={start} disabled={!selected.size || run.isPending || refreshing}>
             {run.isPending ? <Spinner /> : <BroomSparkles />}
-            {run.isPending ? "Cleaning…" : total ? `Free ${size(total, upTo)}` : "Clean up"}
+            {run.isPending ? "Cleaning…" : total ? `Free ${formatBytes(total)}` : "Clean up"}
           </Button>
         )
       }
@@ -162,13 +159,13 @@ export function CleanupItems({ report }: { report: CleanupReport }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove for good?</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-3">
+              <div className="w-full space-y-3">
                 <p>These can't be brought back once they are gone:</p>
                 <ul className="space-y-1.5">
                   {forGood.map((i) => (
                     <li key={i.id} className="flex items-center justify-between gap-4 rounded-md bg-secondary/70 px-3 py-2 text-foreground">
                       <span>{i.name}</span>
-                      <span className="text-muted-foreground tabular-nums">{size(i.bytes, i.upTo)}</span>
+                      <span className="text-muted-foreground tabular-nums">{formatBytes(i.bytes)}</span>
                     </li>
                   ))}
                 </ul>
@@ -238,10 +235,9 @@ function ItemRow({
           className="group flex shrink-0 items-center gap-2 rounded-md py-1 pr-1 pl-2 text-right outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <span>
-            <span className="block text-sm font-medium tabular-nums">{size(item.bytes, item.upTo)}</span>
+            <span className="block text-sm font-medium tabular-nums">{item.count ? formatBytes(item.bytes) : "Nothing to remove"}</span>
             <span className="block text-[11px] text-muted-foreground tabular-nums">
-              {item.count} {item.count === 1 ? "item" : "items"}
-              {kept > 0 && ` · ${kept} kept`}
+              {[item.count > 0 && `${item.count} ${item.count === 1 ? "item" : "items"}`, kept > 0 && `${kept} kept`].filter(Boolean).join(" · ")}
             </span>
           </span>
           <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", expanded && "rotate-180")} />

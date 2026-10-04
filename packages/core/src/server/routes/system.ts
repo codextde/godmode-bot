@@ -187,7 +187,7 @@ export function registerSystemRoutes(app: Hono) {
   /** What takes up space, what can go, and a check of the data folder. */
   app.get("/api/cleanup", async (c) => {
     disableIdleTimeout(c);
-    return c.json(await scanCleanup());
+    return c.json(await scanCleanup({ fresh: c.req.query("refresh") === "1" }));
   });
   app.post("/api/cleanup", async (c) => {
     const { ids } = await body(c, z.object({ ids: z.array(z.enum(CLEANUP_IDS)).min(1) }));

@@ -13,7 +13,7 @@ import { getAccessToken } from "../src/server/auth";
 import { __setTempDirForTests, lastCleanup, runCleanup, scanCleanup } from "../src/services/cleanup";
 import { __resetMaintenanceForTests, runMaintenance, stopMaintenance } from "../src/services/maintenance";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
-import { repoCacheDir } from "../src/tasks/git";
+import { removeCheckoutUnless, repoCacheDir } from "../src/tasks/git";
 import { setVmSupportForTests } from "../src/vm/tart";
 
 const suite = process.platform !== "win32" ? describe : describe.skip;
@@ -160,19 +160,18 @@ suite("leftovers of interrupted work", () => {
     file(join(clone, "HEAD"), 128);
     age(clone, 2 * DAY);
 
-    const bin = join(dataDir, "bin");
-    const oldHelper = file(join(bin, "godmode-computer-aaaaaaaaaaaa"), 4096, 10 * DAY);
-    const currentHelper = file(join(bin, "godmode-computer-bbbbbbbbbbbb"), 4096, 9 * DAY);
+    // The computer helper is found by its name: none of its builds is touched.
+    const helper = file(join(dataDir, "bin", "godmode-computer-aaaaaaaaaaaa"), 4096, 10 * DAY);
 
     const leftovers = item(await scanCleanup(), "temp-files");
     expect(leftovers.recommended).toBe(true);
-    expect(paths(leftovers).sort()).toEqual([stale, importDir, oldRun, goneProfile, clone, oldHelper].sort());
+    expect(paths(leftovers).sort()).toEqual([stale, importDir, oldRun, goneProfile, clone].sort());
 
     const result = await runCleanup(["temp-files"]);
-    expect(result.results).toMatchObject([{ id: "temp-files", ok: true, removed: 6 }]);
+    expect(result.results).toMatchObject([{ id: "temp-files", ok: true, removed: 5 }]);
     expect(result.freedBytes).toBeGreaterThan(0);
-    for (const gone of [stale, importDir, oldRun, goneProfile, clone, oldHelper]) expect(existsSync(gone)).toBe(false);
-    for (const kept of [fresh, sameDay, recentImport, foreign, newRun, currentHelper]) expect(existsSync(kept)).toBe(true);
+    for (const gone of [stale, importDir, oldRun, goneProfile, clone]) expect(existsSync(gone)).toBe(false);
+    for (const kept of [fresh, sameDay, recentImport, foreign, newRun, helper]) expect(existsSync(kept)).toBe(true);
   });
 });
 
@@ -210,34 +209,84 @@ suite("task worktrees and clones", () => {
     main = await makeRepo("app");
   });
 
+  const worktree = async (id: string, branch: string) => {
+    const dir = join(config().tasksDir, id);
+    await git(["worktree", "add", "-q", "-b", `godmode/${branch}`, dir], main);
+    return dir;
+  };
+  const twoDaysAgo = () => new Date(Date.now() - 2 * DAY).toISOString();
+
   test("worktrees of tasks finished a while ago go, unless they hold changes", async () => {
-    const twoDaysAgo = new Date(Date.now() - 2 * DAY).toISOString();
-    const done = task({ status: "done", completedAt: twoDaysAgo });
-    const dirty = task({ status: "cancelled", completedAt: twoDaysAgo });
-    const justDone = task({ status: "done", completedAt: new Date().toISOString() });
-    const working = task({ status: "in_progress" });
-    for (const [id, branch] of [[done, "t1"], [dirty, "t2"], [justDone, "t3"], [working, "t4"]] as const) {
-      await git(["worktree", "add", "-q", "-b", `godmode/${branch}`, join(config().tasksDir, id)], main);
-    }
-    writeFileSync(join(config().tasksDir, dirty, "notes.txt"), "work in progress\n");
-    const orphan = join(config().tasksDir, "tsk_deleted");
-    file(join(orphan, "half-created.txt"), 1024);
+    const done = await worktree(task({ status: "done", completedAt: twoDaysAgo() }), "t1");
+    const dirty = await worktree(task({ status: "cancelled", completedAt: twoDaysAgo() }), "t2");
+    const justDone = await worktree(task({ status: "done", completedAt: new Date().toISOString() }), "t3");
+    const working = await worktree(task({ status: "in_progress" }), "t4");
+    writeFileSync(join(dirty, "notes.txt"), "work in progress\n");
+    // Its task is gone, what it held is on its branch.
+    const orphan = await worktree("tsk_deleted", "t5");
+    // Not a checkout: nobody can tell what it holds.
+    const stray = join(config().tasksDir, "tsk_stray");
+    file(join(stray, "half-created.txt"), 1024);
 
     const report = await scanCleanup();
     const worktrees = item(report, "task-worktrees");
-    expect(paths(worktrees).sort()).toEqual([join(config().tasksDir, done), orphan].sort());
-    expect(worktrees.entries.find((e) => e.path === join(config().tasksDir, dirty))?.kept).toMatch(/uncommitted/);
-    expect(worktrees.entries.find((e) => e.path === join(config().tasksDir, done))?.name).toMatch(/^#\d+ Task/);
+    expect(paths(worktrees).sort()).toEqual([done, orphan].sort());
+    const kept = Object.fromEntries(worktrees.entries.filter((e) => e.kept).map((e) => [e.path, e.kept]));
+    expect(kept[dirty]).toMatch(/uncommitted/);
+    expect(kept[stray]).toMatch(/Not a git checkout/);
+    expect(worktrees.entries.map((e) => e.path)).not.toContain(justDone);
+    expect(worktrees.entries.map((e) => e.path)).not.toContain(working);
+    // What stays is listed first.
+    expect(worktrees.entries.slice(0, 2).every((e) => e.kept)).toBe(true);
+    expect(worktrees.entries.find((e) => e.path === done)?.name).toMatch(/^#\d+ Task/);
     expect(report.checks.find((c) => c.id === "worktrees")).toMatchObject({ status: "warn" });
 
     const result = await runCleanup(["task-worktrees"]);
-    expect(result.results[0]).toMatchObject({ ok: true, removed: 2, kept: 1 });
-    expect(existsSync(join(config().tasksDir, done))).toBe(false);
-    expect(existsSync(join(config().tasksDir, dirty))).toBe(true);
+    expect(result.results[0]).toMatchObject({ ok: true, removed: 2, kept: 2 });
+    expect([done, orphan].map(existsSync)).toEqual([false, false]);
+    expect([dirty, stray, justDone, working].map(existsSync)).toEqual([true, true, true, true]);
     // Unregistered from the repository; the branch (and its commits) stays.
     expect(await git(["worktree", "list"], main)).not.toContain(done);
     expect(await git(["branch", "--list", "godmode/t1"], main)).toContain("godmode/t1");
+    rmSync(stray, { recursive: true });
     expect((await scanCleanup()).checks.find((c) => c.id === "worktrees")).toMatchObject({ status: "ok" });
+  });
+
+  test("work git doesn't show at first sight keeps a worktree", async () => {
+    // New files, with git told not to list them.
+    const hidden = await worktree(task({ status: "done", completedAt: twoDaysAgo() }), "h1");
+    await git(["config", "status.showUntrackedFiles", "no"], main);
+    writeFileSync(join(hidden, "report.md"), "the result\n");
+    // Commits on no branch.
+    const detached = await worktree(task({ status: "done", completedAt: twoDaysAgo() }), "h2");
+    await git(["checkout", "-q", "--detach"], detached);
+    writeFileSync(join(detached, "fix.txt"), "a fix\n");
+    await git(["add", "-A"], detached);
+    await git(["commit", "-q", "-m", "fix on no branch"], detached);
+    // A merge that stopped half-way, with nothing left to commit.
+    const merging = await worktree(task({ status: "done", completedAt: twoDaysAgo() }), "h3");
+    writeFileSync(join(main, ".git", "worktrees", merging.split("/").pop()!, "MERGE_HEAD"), `${await git(["rev-parse", "HEAD"], main)}\n`);
+
+    try {
+      const worktrees = item(await scanCleanup(), "task-worktrees");
+      const kept = Object.fromEntries(worktrees.entries.map((e) => [e.path, e.kept]));
+      expect(kept[hidden]).toMatch(/uncommitted/);
+      expect(kept[detached]).toMatch(/on no branch/);
+      expect(kept[merging]).toMatch(/rebase or merge/);
+      expect((await runCleanup(["task-worktrees"])).results[0]).toMatchObject({ removed: 0 });
+      expect([hidden, detached, merging].map(existsSync)).toEqual([true, true, true]);
+    } finally {
+      await git(["config", "--unset", "status.showUntrackedFiles"], main);
+    }
+  });
+
+  test("a worktree is asked about once more before it goes", async () => {
+    const dir = await worktree(task({ status: "done", completedAt: twoDaysAgo() }), "r1");
+    expect(await removeCheckoutUnless(dir, async () => "Its task is being worked on again.")).toBe("Its task is being worked on again.");
+    expect(existsSync(dir)).toBe(true);
+    expect(await removeCheckoutUnless(dir, async () => null)).toBeNull();
+    expect(existsSync(dir)).toBe(false);
+    expect(await git(["worktree", "list"], main)).not.toContain(dir);
   });
 
   test("clones no task uses go, unless they hold commits that were never pushed", async () => {
@@ -269,45 +318,21 @@ suite("task worktrees and clones", () => {
   });
 });
 
-suite("agent histories and the database", () => {
-  test("loose git objects are packed", async () => {
-    const work = join(agent.repoPath, "workspace", "notes");
-    mkdirSync(work, { recursive: true });
-    for (let i = 0; i < 400; i++) writeFileSync(join(work, `note-${i}.md`), `note ${i}\n`.repeat(20));
-    await git(["add", "-A"], agent.repoPath);
-    await git(["commit", "-q", "-m", "notes"], agent.repoPath);
-
-    const history = item(await scanCleanup(), "agent-history");
-    expect(history.upTo).toBe(true);
-    expect(history.entries.map((e) => e.name)).toEqual(["Cleaner"]);
-    const result = await runCleanup(["agent-history"]);
-    expect(result.results[0]).toMatchObject({ ok: true, removed: 1 });
-    expect(result.freedBytes).toBeGreaterThan(512 * 1024);
-    const objects = readdirSync(join(agent.repoPath, ".git", "objects"));
-    expect(objects.filter((n) => /^[0-9a-f]{2}$/.test(n))).toEqual([]);
-    expect(readdirSync(join(agent.repoPath, ".git", "objects", "pack")).some((n) => n.endsWith(".pack"))).toBe(true);
-    expect(await git(["log", "--oneline", "-1"], agent.repoPath)).toContain("notes");
-  });
-
-  test("waits for runs another Godmode process is working on", async () => {
-    insert("runs", { id: "run_elsewhere0001", agent_id: agent.id, conversation_id: "cnv_elsewhere", trigger: "manual", status: "running", prompt: "x", created_at: new Date().toISOString() });
-    try {
-      const report = await scanCleanup();
-      expect(item(report, "database").blocked).toMatch(/Agents are working/);
-      const stale = file(join(tempDir, "godmode-mcp-run_elsewhere0001.json"), 1024, 3 * DAY);
-      expect(paths(item(await scanCleanup(), "temp-files"))).not.toContain(stale);
-    } finally {
-      sql("DELETE FROM runs WHERE id = 'run_elsewhere0001'");
-    }
-  });
-
-  test("free pages go back to the disk", async () => {
+suite("the database", () => {
+  const bloat = () => {
     const db = getDb();
     db.run("CREATE TABLE scratch (data BLOB)");
     for (let i = 0; i < 40; i++) db.query("INSERT INTO scratch (data) VALUES (?)").run(Buffer.alloc(100 * 1024, i));
     db.run("DROP TABLE scratch");
     db.run("PRAGMA wal_checkpoint(TRUNCATE)");
+    return db;
+  };
 
+  test("free pages go back to the disk", async () => {
+    // A little free room isn't worth rewriting the database.
+    expect(item(await scanCleanup(), "database")).toMatchObject({ count: 0, blocked: null });
+
+    const db = bloat();
     const database = item(await scanCleanup(), "database");
     expect(database.bytes).toBeGreaterThanOrEqual(3 * 1024 * 1024);
     const result = await runCleanup(["database"]);
@@ -315,6 +340,22 @@ suite("agent histories and the database", () => {
     expect(result.freedBytes).toBeGreaterThanOrEqual(3 * 1024 * 1024);
     expect((db.query("PRAGMA freelist_count").get() as { freelist_count: number }).freelist_count).toBe(0);
     expect(item(await scanCleanup(), "database").count).toBe(0);
+    expect((await scanCleanup({ fresh: true })).checks.find((c) => c.id === "database")).toMatchObject({ status: "ok" });
+  });
+
+  test("waits for runs another Godmode process is working on", async () => {
+    const db = bloat();
+    insert("runs", { id: "run_elsewhere0001", agent_id: agent.id, conversation_id: "cnv_elsewhere", trigger: "manual", status: "running", prompt: "x", created_at: new Date().toISOString() });
+    try {
+      expect(item(await scanCleanup(), "database").blocked).toMatch(/Agents are working/);
+      expect((await runCleanup(["database"])).results[0]).toMatchObject({ ok: false, removed: 0 });
+      expect((db.query("PRAGMA freelist_count").get() as { freelist_count: number }).freelist_count).toBeGreaterThan(0);
+      const stale = file(join(tempDir, "godmode-mcp-run_elsewhere0001.json"), 1024, 3 * DAY);
+      expect(paths(item(await scanCleanup(), "temp-files"))).not.toContain(stale);
+    } finally {
+      sql("DELETE FROM runs WHERE id = 'run_elsewhere0001'");
+    }
+    expect((await runCleanup(["database"])).results[0]).toMatchObject({ ok: true, removed: 1 });
   });
 });
 
@@ -359,7 +400,7 @@ suite("automatic cleanup", () => {
 
   beforeEach(() => {
     busy = false;
-    sql("DELETE FROM meta WHERE key = 'cleanup.lastRun'");
+    sql("DELETE FROM meta WHERE key LIKE 'cleanup.%'");
     updateSettings({ onboardingComplete: true, maintenance: { autoFix: false, autoUpdate: false, autoCleanup: true } });
     __resetMaintenanceForTests({ busy: () => busy });
   });
@@ -379,15 +420,29 @@ suite("automatic cleanup", () => {
     expect(existsSync(next)).toBe(true);
   });
 
+  test("isn't put off by a cleanup by hand", async () => {
+    await runCleanup(["trash"]);
+    const leftover = file(join(tempDir, "godmode-settings-run_iiiiiiiiiiiiiiii.json"), 1024, 2 * DAY);
+    await runMaintenance();
+    expect(existsSync(leftover)).toBe(false);
+  });
+
   test("leaves worktrees of tasks finished this week alone", async () => {
     const main = await makeRepo("auto");
     const lastWeek = task({ status: "done", completedAt: new Date(Date.now() - 3 * DAY).toISOString() });
     const longAgo = task({ status: "done", completedAt: new Date(Date.now() - 9 * DAY).toISOString() });
     await git(["worktree", "add", "-q", "-b", "godmode/a1", join(config().tasksDir, lastWeek)], main);
     await git(["worktree", "add", "-q", "-b", "godmode/a2", join(config().tasksDir, longAgo)], main);
+    // Without a task (deleted, or an older backup was restored): only once nothing touched them for a week.
+    const fresh = join(config().tasksDir, "tsk_restored1");
+    const stale = join(config().tasksDir, "tsk_restored2");
+    await git(["worktree", "add", "-q", "-b", "godmode/a3", fresh], main);
+    await git(["worktree", "add", "-q", "-b", "godmode/a4", stale], main);
+    age(stale, 9 * DAY);
     await runMaintenance();
     expect(existsSync(join(config().tasksDir, lastWeek))).toBe(true);
     expect(existsSync(join(config().tasksDir, longAgo))).toBe(false);
+    expect([fresh, stale].map(existsSync)).toEqual([true, false]);
   });
 
   test("waits while agents work, and stays off when switched off", async () => {

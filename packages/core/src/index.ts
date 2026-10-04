@@ -11,6 +11,7 @@
  *   godmode version
  */
 import { parseArgs } from "node:util";
+import type { CleanupRun } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { loadConfig, config, BUILD, VERSION, isLoopbackHost } from "./config";
 import { logger, setLogDir } from "./log";
@@ -247,6 +248,25 @@ async function serve(values: Record<string, unknown>) {
   }
 }
 
+/**
+ * `godmode cleanup --fix`: a core that is running cleans itself — only it knows which browsers are open and holds
+ * the locks its agents and tasks take. Without one, this process does.
+ */
+async function cleanUpFromCli(): Promise<CleanupRun> {
+  const url = `http://127.0.0.1:${Number(process.env.GODMODE_PORT || getSettings().server.port)}`;
+  const health = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2_000) })
+    .then((res) => res.json() as Promise<{ name?: string }>)
+    .catch(() => null);
+  if (health?.name !== "godmode-bot") return cleanUp(RECOMMENDED);
+  const res = await fetch(`${url}/api/cleanup`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${getAccessToken()}`, "content-type": "application/json" },
+    body: JSON.stringify({ ids: RECOMMENDED }),
+  });
+  if (!res.ok) throw new Error("Godmode is running — clean up from Settings → Cleanup, or quit Godmode first.");
+  return (await res.json()) as CleanupRun;
+}
+
 async function main() {
   const { values, positionals } = parseCli();
   const cmd = positionals[0] ?? "serve";
@@ -317,14 +337,14 @@ Usage:
       const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
       openDb(cfg.dbPath);
       if (values.fix) {
-        const run = await cleanUp(RECOMMENDED);
+        const run = await cleanUpFromCli();
         for (const r of run.results) console.log(`${r.ok ? "🧹" : "✋"} ${r.name.padEnd(30)} ${r.ok ? formatBytes(r.freedBytes) : r.output.split("\n")[0]}`);
         console.log(`Freed ${formatBytes(run.freedBytes)}.`);
       }
       const report = await scanCleanup();
       for (const s of report.storage) console.log(`   ${s.name.padEnd(30)} ${formatBytes(s.bytes)}`);
       for (const i of report.items.filter((i) => i.count)) {
-        console.log(`${i.recommended ? "🧹" : "🔎"} ${i.name.padEnd(30)} ${i.upTo ? "up to " : ""}${formatBytes(i.bytes)}${i.blocked ? ` — ${i.blocked}` : ""}`);
+        console.log(`${i.recommended ? "🧹" : "🔎"} ${i.name.padEnd(30)} ${formatBytes(i.bytes)}${i.blocked ? ` — ${i.blocked}` : ""}`);
       }
       for (const c of report.checks) console.log(`${c.status === "ok" ? "✅" : c.status === "warn" ? "⚠️ " : "❌"} ${c.name.padEnd(30)} ${c.detail}`);
       if (!values.fix && report.items.some((i) => i.recommended && i.count)) console.log("Run `godmode cleanup --fix` to remove what is marked 🧹.");

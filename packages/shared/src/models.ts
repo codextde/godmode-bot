@@ -1300,7 +1300,6 @@ export type CleanupId =
   | "browser-cache"
   | "task-worktrees"
   | "task-clones"
-  | "agent-history"
   | "database"
   | "old-logs"
   | "vm-downloads"
@@ -1325,8 +1324,6 @@ export interface CleanupItem {
   count: number;
   /** Safe to clean without looking: selected by default and cleaned by the automatic cleanup. */
   recommended: boolean;
-  /** Only part of `bytes` is freed (the tool decides what it still needs). */
-  upTo: boolean;
   /** Why it can't be cleaned right now; null = it can. */
   blocked: string | null;
   entries: CleanupEntry[];

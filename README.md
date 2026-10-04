@@ -81,7 +81,7 @@ needs to be useful:
 | 🧬 **Workspace folders & repos** | Attach project folders and git repositories to a workspace — paste `https://github.com/you/app` and Godmode clones it with your git sign-in, keeps it up to date and hands it to every agent in the workspace. |
 | 🎙️ **Voice mode** | Dictate and hear replies; hands-free conversation loop (Web Speech, OpenAI or ElevenLabs). |
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
-| 🧹 **Cleanup** | Settings → Cleanup shows what Godmode's data folder holds, checks tools, permissions, updates, the database and disk space in one go, and frees what piles up: browser caches, worktrees of finished tasks, unused clones, leftovers of interrupted runs, unpacked agent histories and the database's free pages — once a day on its own, or with one click. Anything that may still hold work stays. |
+| 🧹 **Cleanup** | Settings → Cleanup shows what Godmode's data folder holds, checks tools, permissions, updates, the database and disk space in one go, and frees what piles up: browser caches, worktrees of finished tasks, unused clones, leftovers of interrupted runs, old logs and the database's free pages — once a day on its own, or with one click. Anything that may still hold work stays. |
 | 🩺 **Diagnostic log** | Errors, slow spots and how every run went, with secrets masked. Settings → Logs groups recurring problems and copies an AI-ready report — paste it into Claude to find bugs and speed things up. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
 | 📱 **Phone app** | Control Godmode from your iPhone or Android phone: hand over tasks, follow answers as they're written, stop runs, run automations and watch an agent's browser, shared screen or VM live — tap to take control. Pair once by scanning a QR code; the phone talks to your computer over [Tailscale](https://tailscale.com), never the open internet. Liquid Glass on iOS 26. |
@@ -165,7 +165,7 @@ needs to be useful:
   </tr>
   <tr>
     <td><img src="docs/screenshots/cleanup.png" alt="Settings → Cleanup: storage by area, a self check of tools, permissions, updates, database, disk and worktrees" /><br /><sub><b>Cleanup</b> — what the data folder holds, and a self check of everything Godmode relies on</sub></td>
-    <td><img src="docs/screenshots/cleanup-items.png" alt="What can go: leftovers, browser caches, worktrees of finished tasks, unused clones, agent histories, database, logs, trash" /><br /><sub><b>Free up space</b> — safe items are picked for you; whatever may still hold work stays</sub></td>
+    <td><img src="docs/screenshots/cleanup-items.png" alt="What can go: leftovers, browser caches, worktrees of finished tasks, unused clones, database, logs, trash" /><br /><sub><b>Free up space</b> — safe items are picked for you; whatever may still hold work stays</sub></td>
   </tr>
 </table>
 

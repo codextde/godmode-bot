@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type UseMutationResult } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { motion } from "motion/react";
 import { ArrowDown, ArrowUpRight, BroomSparkles, CalendarClock, CircleAlert, CircleArrowDown, CircleCheck, CircleX, HardDrive, RefreshCw, Stethoscope } from "lucide-react";
 import { Link } from "react-router";
+import { toast } from "sonner";
 import type { CleanupReport, HealthCheck, Settings, StorageArea } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -31,12 +32,20 @@ const AREA_COLOR: Record<StorageArea, string> = {
 };
 
 export function useCleanupReport() {
-  return useQuery({ queryKey: qk.cleanup, queryFn: api.cleanup.report, staleTime: 60_000 });
+  return useQuery({ queryKey: qk.cleanup, queryFn: () => api.cleanup.report(), staleTime: 60_000 });
 }
 
 /** Renders without the settings document too (see STANDALONE in the settings page): only the automatic cleanup needs it. */
 export function CleanupSection({ settings }: { settings: Settings | undefined }) {
+  const qc = useQueryClient();
   const report = useCleanupReport();
+  // Asked for by hand: the database is checked again too, not only the folders.
+  const rescan = useMutation({
+    mutationFn: () => api.cleanup.report(true),
+    onSuccess: (fresh) => qc.setQueryData(qk.cleanup, fresh),
+    onError: (e) => toast.error("Couldn't look at the data folder", { description: errorMessage(e) }),
+  });
+  const scanning = report.isFetching || rescan.isPending;
   return (
     <div className="space-y-5">
       <SectionHeading title="Cleanup" description="A self check of Godmode's data folder, and what can go to give the space back." />
@@ -49,10 +58,10 @@ export function CleanupSection({ settings }: { settings: Settings | undefined })
           </Button>
         </div>
       ) : (
-        <StorageCard report={report.data} scanning={report.isFetching} onScan={() => report.refetch()} />
+        <StorageCard report={report.data} scanning={scanning} onScan={() => rescan.mutate()} />
       )}
-      <SelfCheck report={report.data} />
-      {report.data ? <CleanupItems report={report.data} /> : !report.isError && <ItemsSkeleton />}
+      <SelfCheck report={report.data} failed={report.isError} rescan={rescan} />
+      {report.data ? <CleanupItems report={report.data} refreshing={scanning} /> : !report.isError && <ItemsSkeleton />}
       {settings && <AutoCleanup settings={settings} />}
     </div>
   );
@@ -185,56 +194,59 @@ const openSystem = (
   </Button>
 );
 
-function SelfCheck({ report }: { report: CleanupReport | undefined }) {
+const unknown = (id: string, name: string): Check => ({ id, name, tone: "warn", detail: "Couldn't be checked" });
+
+function SelfCheck({
+  report,
+  failed,
+  rescan,
+}: {
+  report: CleanupReport | undefined;
+  /** The report couldn't be loaded: its checks are left out (the error is shown above). */
+  failed: boolean;
+  rescan: UseMutationResult<CleanupReport, Error, void>;
+}) {
   const doctor = useDoctor();
   const permissions = usePermissions();
   const updates = useToolUpdates();
 
-  const checks: (Check | null)[] = [];
-  if (doctor.data) {
+  // null = still being checked.
+  const tools = (): Check | null => {
+    if (!doctor.data) return doctor.isError ? unknown("tools", "Tools") : null;
     const broken = doctor.data.dependencies.filter((d) => d.required && !d.ok);
-    const working = doctor.data.dependencies.filter((d) => d.ok).length;
-    checks.push(
-      broken.length
-        ? { id: "tools", name: "Tools", tone: "error", detail: `${broken.map((d) => d.name).join(", ")} ${broken.length === 1 ? "doesn't" : "don't"} work`, action: openSystem }
-        : { id: "tools", name: "Tools", tone: "ok", detail: `${working} tools ready` },
-    );
-  } else checks.push(null);
-  if (permissions.data) {
+    if (!broken.length) return { id: "tools", name: "Tools", tone: "ok", detail: `${doctor.data.dependencies.filter((d) => d.ok).length} tools ready` };
+    return { id: "tools", name: "Tools", tone: "error", detail: `${broken.map((d) => d.name).join(", ")} ${broken.length === 1 ? "doesn't" : "don't"} work`, action: openSystem };
+  };
+  const allowed = (): Check | null => {
+    if (!permissions.data) return permissions.isError ? unknown("permissions", "Permissions") : null;
     const missing = permissions.data.permissions.filter((p) => !p.ok);
-    const required = missing.some((p) => p.required);
-    checks.push(
-      missing.length
-        ? {
-            id: "permissions",
-            name: "Permissions",
-            tone: required ? "error" : "warn",
-            detail: `${missing.length} ${missing.length === 1 ? "needs" : "need"} attention`,
-            action: openSystem,
-          }
-        : { id: "permissions", name: "Permissions", tone: "ok", detail: "Everything is allowed" },
-    );
-  } else checks.push(null);
-  if (updates.data) {
-    const due = updates.due;
+    if (!missing.length) return { id: "permissions", name: "Permissions", tone: "ok", detail: "Everything is allowed" };
+    return {
+      id: "permissions",
+      name: "Permissions",
+      tone: missing.some((p) => p.required) ? "error" : "warn",
+      detail: `${missing.length} ${missing.length === 1 ? "needs" : "need"} attention`,
+      action: openSystem,
+    };
+  };
+  const upToDate = (): Check | null => {
+    if (!updates.data) return updates.isError ? unknown("updates", "Updates") : null;
+    if (!updates.due.length) return { id: "updates", name: "Updates", tone: "ok", detail: "Everything is up to date" };
     const updating = updates.update.isPending && updates.update.variables === undefined;
-    checks.push(
-      due.length
-        ? {
-            id: "updates",
-            name: "Updates",
-            tone: "update",
-            detail: due.map((t) => `${t.name} ${t.latest ?? ""}`.trim()).join(", "),
-            action: (
-              <Button size="xs" onClick={() => updates.update.mutate(undefined)} disabled={updates.update.isPending}>
-                {updating ? <Spinner className="size-3" /> : <ArrowDown />} {updating ? "Updating…" : "Update"}
-              </Button>
-            ),
-          }
-        : { id: "updates", name: "Updates", tone: "ok", detail: "Everything is up to date" },
-    );
-  } else checks.push(null);
-  for (const c of report?.checks ?? [null, null, null]) checks.push(c && { id: c.id, name: c.name, tone: c.status, detail: c.detail });
+    return {
+      id: "updates",
+      name: "Updates",
+      tone: "update",
+      detail: updates.due.map((t) => `${t.name} ${t.latest ?? ""}`.trim()).join(", "),
+      action: (
+        <Button size="xs" onClick={() => updates.update.mutate(undefined)} disabled={updates.update.isPending}>
+          {updating ? <Spinner className="size-3" /> : <ArrowDown />} {updating ? "Updating…" : "Update"}
+        </Button>
+      ),
+    };
+  };
+  const folder: (Check | null)[] = report ? report.checks.map((c) => ({ id: c.id, name: c.name, tone: c.status, detail: c.detail })) : failed ? [] : [null, null, null];
+  const checks = [tools(), allowed(), upToDate(), ...folder];
 
   const known = checks.filter((c): c is Check => !!c);
   const problems = known.filter((c) => c.tone === "warn" || c.tone === "error").length;
@@ -242,8 +254,9 @@ function SelfCheck({ report }: { report: CleanupReport | undefined }) {
     doctor.refresh.mutate();
     void permissions.refetch();
     updates.check.mutate();
+    rescan.mutate();
   };
-  const busy = doctor.refresh.isPending || permissions.isFetching || updates.check.isPending;
+  const busy = doctor.refresh.isPending || permissions.isFetching || updates.check.isPending || rescan.isPending;
 
   return (
     <SettingsGroup

@@ -300,6 +300,29 @@ export async function removeCheckout(dir: string): Promise<void> {
   if (common) await serialized(common, () => gitOk(["--git-dir", common, "worktree", "prune"], tmpdir()));
 }
 
+/**
+ * Remove a task's checkout unless `keep()` names a reason to keep it — asked inside the repository's lock, where no
+ * task can be setting the checkout up meanwhile. Returns that reason, or null once the checkout is gone.
+ */
+export async function removeCheckoutUnless(dir: string, keep: () => Promise<string | null>): Promise<string | null> {
+  if (!existsSync(dir)) return null;
+  const worktree = existsSync(join(dir, ".git")) && !isDir(join(dir, ".git"));
+  const key = existsSync(join(dir, ".git")) ? await repoKey(dir).catch(() => null) : null;
+  const work = async () => {
+    const reason = await keep();
+    if (reason) return reason;
+    rmSync(dir, { recursive: true, force: true });
+    if (key && worktree) await gitOk(["--git-dir", key, "worktree", "prune"], tmpdir());
+    return null;
+  };
+  return key ? serialized(key, work) : work();
+}
+
+/** Run `work` while no task fetches into, pushes from or makes worktrees of Godmode's clone at `dir`. */
+export function whileCloneIdle<T>(dir: string, work: () => Promise<T>): Promise<T> {
+  return serialized(canonical(dir), work);
+}
+
 /** Commit what the agent left uncommitted, except new files that look like secrets. Returns the files left out. */
 export async function commitWork(opts: { dir: string; message: string }): Promise<{ skipped: string[] }> {
   const { dir } = opts;

@@ -1,25 +1,25 @@
 /**
  * Cleanup (Settings → Cleanup): a self check of Godmode's data folder and what piles up in it over time — leftovers of
- * interrupted runs, browser caches, worktrees of finished tasks, clones nothing uses, loose git objects, free database
- * pages, unfinished VM downloads and the trash.
+ * interrupted runs, browser caches, worktrees of finished tasks, clones nothing uses, free database pages, old logs,
+ * unfinished VM downloads and the trash.
  *
- * Only Godmode's own files are removed (uv prunes its own cache). Whatever may hold work stays: checkouts with
- * uncommitted changes, clones with commits that were never pushed, and anything an agent or a browser uses right now.
+ * Only Godmode's own files are removed. Whatever may hold work stays: checkouts with uncommitted changes or commits no
+ * branch holds, clones with commits that were never pushed, and anything an agent or a browser uses right now. What is
+ * removed is looked at twice: for the report, and again right before it goes.
  */
-import { readlinkSync, statfsSync, statSync } from "node:fs";
+import { existsSync, readlinkSync, statfsSync, statSync } from "node:fs";
 import { lstat, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, relative, sep } from "node:path";
-import type { CleanupEntry, CleanupId, CleanupReport, CleanupResult, CleanupRun, HealthCheck, StorageArea, StorageUsage } from "@godmode/shared";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import type { CleanupEntry, CleanupId, CleanupItem, CleanupReport, CleanupResult, CleanupRun, HealthCheck, StorageArea, StorageUsage } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
-import { withRepoLock } from "../agents/repo";
 import { backupInProgress } from "../backup/backup";
 import { getRegistered } from "../browser/state";
 import { config } from "../config";
-import { all, getDb, getMeta, setMeta } from "../db";
+import { all, get, getDb, getMeta, setMeta } from "../db";
 import { logger } from "../log";
 import { listActiveRuns } from "../runner/runner";
-import { removeCheckout, repoCacheDir } from "../tasks/git";
+import { removeCheckoutUnless, repoCacheDir, whileCloneIdle } from "../tasks/git";
 import { imageDownloadInProgress, removeImage, vmStatus } from "../vm/service";
 import { vmRoot, vmSupport } from "../vm/tart";
 import { now, parseJson } from "../util";
@@ -28,28 +28,33 @@ import { reposDir, runGit } from "./workspaceSources";
 
 const log = logger("cleanup");
 
-export const CLEANUP_IDS = [
-  "temp-files",
-  "browser-cache",
-  "task-worktrees",
-  "task-clones",
-  "agent-history",
-  "database",
-  "old-logs",
-  "vm-downloads",
-  "trash",
-  "vm-images",
-] as const satisfies readonly CleanupId[];
+const NAMES = {
+  "temp-files": "Leftovers of interrupted work",
+  "browser-cache": "Browser caches",
+  "task-worktrees": "Worktrees of finished tasks",
+  "task-clones": "Clones no task uses",
+  database: "Database",
+  "old-logs": "Old logs",
+  "vm-downloads": "Unfinished VM downloads",
+  trash: "Trash",
+  "vm-images": "Downloaded macOS images",
+} as const satisfies Record<CleanupId, string>;
+
+export const CLEANUP_IDS = Object.keys(NAMES) as [CleanupId, ...CleanupId[]];
+
+/** Safe without a look: what "Free …" preselects, and what the automatic cleanup and `godmode cleanup --fix` take. */
+export const RECOMMENDED: CleanupId[] = ["temp-files", "browser-cache", "task-worktrees", "task-clones", "database", "old-logs"];
 
 const HOUR = 60 * 60_000;
 const DAY = 24 * HOUR;
 /** A finished task keeps its worktree this long: time for a last look or a follow-up (longer when nobody asked). */
-const FINISHED_GRACE = { asked: DAY, automatic: 7 * DAY };
+const GRACE = { asked: DAY, automatic: 7 * DAY };
 const ENTRY_LIMIT = 50;
-/** Smaller savings aren't worth a VACUUM or a git gc. */
+/** Less free room in the database isn't worth rewriting it. */
 const WORTH_IT = 1024 * 1024;
 const BUSY = "Agents are working — this is cleaned once they are done.";
 const LAST_RUN = "cleanup.lastRun";
+const LAST_AUTOMATIC = "cleanup.lastAutomatic";
 
 let tempDir = tmpdir;
 
@@ -99,11 +104,7 @@ class Sizes {
   private io = limiter(64);
 
   of(path: string): Promise<Size> {
-    const known = this.dirs.get(path);
-    if (known) return known;
-    const size = this.walk(path);
-    this.dirs.set(path, size);
-    return size;
+    return this.dirs.get(path) ?? this.walk(path);
   }
 
   private async walk(path: string): Promise<Size> {
@@ -111,8 +112,12 @@ class Sizes {
     if (!st) return ZERO;
     const own = { bytes: onDisk(st), modified: st.mtimeMs };
     if (!st.isDirectory()) return own;
-    const children = await this.io(() => readdir(path, { withFileTypes: true })).catch(() => []);
-    return sum(await Promise.all(children.map((d) => this.of(join(path, d.name)))), own);
+    const size = this.io(() => readdir(path)).then(
+      async (children) => sum(await Promise.all(children.map((name) => this.of(join(path, name)))), own),
+      () => own,
+    );
+    this.dirs.set(path, size);
+    return size;
   }
 }
 
@@ -141,22 +146,31 @@ function remove(path: string): Promise<void> {
   return rm(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
 }
 
+function diskSpace(): { freeBytes: number; totalBytes: number } | null {
+  try {
+    const fs = statfsSync(config().dataDir);
+    return { freeBytes: fs.bavail * fs.bsize, totalBytes: fs.blocks * fs.bsize };
+  } catch {
+    return null;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Categories                                                           */
 /* ------------------------------------------------------------------ */
 
+/** A clean step found, on its last look, a reason to leave its target alone. */
+class Kept extends Error {}
+
 interface Target {
   entry: CleanupEntry;
-  /** Removes it (null while it is kept); returns the bytes freed when they differ from the entry's. */
+  /** Removes it (null while it is kept); returns the bytes freed when they differ from the entry's. Throws `Kept`. */
   clean: (() => Promise<number | void>) | null;
 }
 
 interface Category {
   id: CleanupId;
-  name: string;
   detail: string;
-  recommended: boolean;
-  upTo?: boolean;
   blocked?: string | null;
   targets: Target[];
 }
@@ -203,7 +217,6 @@ async function target(scan: Scan, path: string, name: string, opts: { kept?: str
 const RUN_FILE = /^godmode-(?:mcp|prompt|agents|settings)-(run_[A-Za-z0-9]+)\.(?:json|md)$/;
 const SCRATCH = /^godmode-(?:pr|claude-mem|ua|import)-/;
 const CLONING = /\.cloning-[a-z0-9]+$/;
-const HELPER_BUILD = /^(?:godmode-computer|computer)-[0-9a-f]{12}$/;
 
 async function tempFiles(scan: Scan): Promise<Category> {
   const targets: Target[] = [];
@@ -250,31 +263,19 @@ async function tempFiles(scan: Scan): Promise<Category> {
       targets.push(await target(scan, path, `Interrupted clone ${name.replace(CLONING, "")}`));
     }
   }
-
-  // Every Godmode build unpacks its computer helper once; the newest is the one in use.
-  const bin = join(config().dataDir, "bin");
-  const helpers = await Promise.all(
-    (await names(bin)).filter((n) => HELPER_BUILD.test(n)).map(async (n) => ({ path: join(bin, n), size: await scan.sizes.of(join(bin, n)) })),
-  );
-  helpers.sort((a, b) => b.size.modified - a.size.modified);
-  for (const h of helpers.slice(1)) {
-    if (scan.at - h.size.modified > 7 * DAY) targets.push(await target(scan, h.path, "Computer helper of an older Godmode version"));
-  }
-  return {
-    id: "temp-files",
-    name: "Leftovers of interrupted work",
-    detail: "Temporary files of runs, clones and imports that were cut off — when Godmode quit in the middle of them.",
-    recommended: true,
-    targets,
-  };
+  return { id: "temp-files", detail: "Temporary files of runs, clones and imports that were cut off — when Godmode quit in the middle of them.", targets };
 }
 
 /** Caches Chromium rebuilds by itself; cookies, logins and site data stay. */
 const PROFILE_CACHES = ["Cache", "Code Cache", "GPUCache", "DawnGraphiteCache", "DawnWebGPUCache"];
 const BROWSER_CACHES = ["GrShaderCache", "GraphiteDawnCache", "ShaderCache"];
 
-/** Chromium holds `SingletonLock` (→ "<host>-<pid>") while it runs; one left by a crash names a process that is gone. */
+/**
+ * Chromium holds `SingletonLock` (→ "<host>-<pid>") while it runs; one left by a crash names a process that is gone.
+ * On Windows it holds `lockfile`, which a crash may leave behind — then the cache waits for the next clean exit.
+ */
 function chromiumRunning(userDataDir: string): boolean {
+  if (process.platform === "win32") return existsSync(join(userDataDir, "lockfile"));
   let lock: string;
   try {
     lock = readlinkSync(join(userDataDir, "SingletonLock"));
@@ -310,33 +311,46 @@ async function browserCaches(scan: Scan): Promise<Category> {
       clean: kept
         ? null
         : async () => {
-            if (open()) throw new Error("The browser was opened in the meantime.");
-            for (const cache of caches) await remove(cache);
+            for (const cache of caches) {
+              if (open()) throw new Kept("The browser was opened in the meantime.");
+              await remove(cache);
+            }
           },
     });
   }
-  return {
-    id: "browser-cache",
-    name: "Browser caches",
-    detail: "Pictures, scripts and shaders Chromium keeps from visited pages. Sign-ins, cookies and site data stay.",
-    recommended: true,
-    targets,
-  };
+  return { id: "browser-cache", detail: "Pictures, scripts and shaders Chromium keeps from visited pages. Sign-ins, cookies and site data stay.", targets };
+}
+
+const UNREADABLE = "Git can't read this folder — have a look at it before removing it.";
+/** What git leaves in its folder while a rebase, merge, cherry-pick, revert or bisect is under way. */
+const UNDER_WAY = ["rebase-merge", "rebase-apply", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "BISECT_LOG"];
+
+async function gitLines(args: string[], cwd: string): Promise<string[] | null> {
+  const res = await runGit(args, { cwd, timeoutMs: 60_000 }).catch(() => null);
+  return res?.ok ? res.stdout.split("\n").map((l) => l.trim()).filter(Boolean) : null;
 }
 
 /** Why a checkout can't go without losing work; null = everything in it is safe in its repository. */
 async function unsavedWork(dir: string): Promise<string | null> {
   const gitPath = await lstat(join(dir, ".git")).catch(() => null);
-  // No checkout at all: a worktree whose creation was cut off.
-  if (!gitPath) return null;
-  const status = await runGit(["status", "--porcelain"], { cwd: dir, timeoutMs: 60_000 }).catch(() => null);
-  if (!status?.ok) return "Git can't read this folder — have a look at it before removing it.";
-  if (status.stdout.trim()) return "Has uncommitted changes.";
-  // A full clone (tasks from before worktrees) holds its own commits; a worktree's live in its repository.
+  if (!gitPath) return "Not a git checkout — have a look at it before removing it.";
+  // Said outright: the human's git settings may hide new files (status.showUntrackedFiles) or submodule changes.
+  const changes = await gitLines(["status", "--porcelain", "--untracked-files=all", "--ignore-submodules=none"], dir);
+  if (!changes) return UNREADABLE;
+  if (changes.length) return "Has uncommitted changes.";
+  const marks = await gitLines(["rev-parse", ...UNDER_WAY.flatMap((f) => ["--git-path", f])], dir);
+  if (!marks) return UNREADABLE;
+  if (marks.some((path) => existsSync(resolve(dir, path)))) return "A rebase or merge is under way.";
+  // Commits only this checkout's HEAD reaches (detached, or left by a rebase) would go with it.
+  const adrift = await gitLines(["rev-list", "-n", "1", "HEAD", "--not", "--branches", "--remotes"], dir);
+  if (!adrift) return UNREADABLE;
+  if (adrift.length) return "Has commits that are on no branch.";
+  // A full clone (tasks from before worktrees) holds its own commits and stashes; a worktree's live in its repository.
   if (gitPath.isDirectory()) {
-    const unpushed = await runGit(["rev-list", "-n", "1", "--branches", "--not", "--remotes"], { cwd: dir, timeoutMs: 60_000 }).catch(() => null);
-    if (!unpushed?.ok) return "Git can't read this folder — have a look at it before removing it.";
-    if (unpushed.stdout.trim()) return "Has commits that were never pushed.";
+    const unpushed = await gitLines(["rev-list", "-n", "1", "--branches", "--not", "--remotes"], dir);
+    if (!unpushed) return UNREADABLE;
+    if (unpushed.length) return "Has commits that were never pushed.";
+    if (await gitLines(["rev-parse", "--quiet", "--verify", "refs/stash"], dir)) return "Has stashed changes.";
   }
   return null;
 }
@@ -351,99 +365,79 @@ interface TaskRow {
   updated_at: string;
 }
 
+const TASK_COLUMNS = "id, number, title, status, conversation_id, completed_at, updated_at";
+
+/** Done or cancelled for long enough, with nothing working in its chat. */
+function finished(task: TaskRow, scan: Scan): boolean {
+  if (task.status !== "done" && task.status !== "cancelled") return false;
+  if (scan.at - Date.parse(task.completed_at ?? task.updated_at) < (scan.automatic ? GRACE.automatic : GRACE.asked)) return false;
+  return !(task.conversation_id && scan.busyChats.has(task.conversation_id));
+}
+
 async function taskWorktrees(scan: Scan): Promise<Category> {
   const root = config().tasksDir;
-  const tasks = new Map(all<TaskRow>("SELECT id, number, title, status, conversation_id, completed_at, updated_at FROM tasks").map((t) => [t.id, t]));
+  const tasks = new Map(all<TaskRow>(`SELECT ${TASK_COLUMNS} FROM tasks`).map((t) => [t.id, t]));
   const targets: Target[] = [];
   for (const name of await names(root)) {
     const dir = join(root, name);
     if (!(await isDir(dir))) continue;
     const task = tasks.get(name);
-    if (task) {
-      const finished = task.status === "done" || task.status === "cancelled";
-      const grace = scan.automatic ? FINISHED_GRACE.automatic : FINISHED_GRACE.asked;
-      if (!finished || scan.at - Date.parse(task.completed_at ?? task.updated_at) < grace) continue;
-      if (task.conversation_id && scan.busyChats.has(task.conversation_id)) continue;
-    }
-    const label = task ? `#${task.number} ${task.title}` : "Folder of a deleted task";
-    targets.push(await target(scan, dir, label, { kept: await unsavedWork(dir), clean: () => removeCheckout(dir) }));
+    if (task && !finished(task, scan)) continue;
+    // Folders without a task (it was deleted, or an older backup was restored): unasked, only once they stood still.
+    if (!task && scan.automatic && scan.at - (await scan.sizes.of(dir)).modified < GRACE.automatic) continue;
+    const clean = async () => {
+      // Asked again inside the repository's lock: the task may have been reopened, the agent may be at work.
+      const reason = await removeCheckoutUnless(dir, async () => {
+        const current = get<TaskRow>(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`, name);
+        if (current && !finished(current, newScan(scan.automatic))) return "Its task is being worked on again.";
+        return unsavedWork(dir);
+      });
+      if (reason) throw new Kept(reason);
+    };
+    targets.push(await target(scan, dir, task ? `#${task.number} ${task.title}` : "Folder of a deleted task", { kept: await unsavedWork(dir), clean }));
   }
   return {
     id: "task-worktrees",
-    name: "Worktrees of finished tasks",
     detail: "Checkouts of tasks that are done or cancelled, and of deleted ones. Their branches stay — moving a task back to Todo checks it out again.",
-    recommended: true,
     targets,
   };
+}
+
+function usedClones(): Set<string> {
+  return new Set(all<{ repo_url: string }>("SELECT DISTINCT repo_url FROM tasks WHERE repo_url != ''").map((t) => basename(repoCacheDir(t.repo_url))));
+}
+
+async function cloneInUse(dir: string): Promise<string | null> {
+  const worktrees = await gitLines(["worktree", "list", "--porcelain"], dir);
+  if (!worktrees) return UNREADABLE;
+  const checkouts = worktrees
+    .filter((l) => l.startsWith("worktree "))
+    .map((l) => l.slice("worktree ".length))
+    .filter((p) => !p.endsWith(".git"));
+  for (const path of checkouts) if (await isDir(path)) return "A task folder still uses it.";
+  const unpushed = await gitLines(["rev-list", "-n", "1", "--branches", "--not", "--remotes"], dir);
+  if (!unpushed) return UNREADABLE;
+  return unpushed.length ? "Holds commits that were never pushed." : null;
 }
 
 async function taskClones(scan: Scan): Promise<Category | null> {
   const root = join(reposDir(), ".tasks");
   const clones = (await names(root)).filter((n) => n.endsWith(".git"));
   if (!clones.length || !resolveGit()) return null;
-  const used = new Set(all<{ repo_url: string }>("SELECT DISTINCT repo_url FROM tasks WHERE repo_url != ''").map((t) => basename(repoCacheDir(t.repo_url))));
+  const used = usedClones();
   const targets: Target[] = [];
   for (const name of clones) {
     if (used.has(name)) continue;
     const dir = join(root, name);
-    const label = name.replace(/-[0-9a-f]{12}\.git$/, "");
-    targets.push(await target(scan, dir, label, { kept: await cloneInUse(dir) }));
+    const clean = () =>
+      whileCloneIdle(dir, async () => {
+        const reason = usedClones().has(name) ? "A task uses it again." : await cloneInUse(dir);
+        if (reason) throw new Kept(reason);
+        await remove(dir);
+      });
+    targets.push(await target(scan, dir, name.replace(/-[0-9a-f]{12}\.git$/, ""), { kept: await cloneInUse(dir), clean }));
   }
-  return {
-    id: "task-clones",
-    name: "Clones no task uses",
-    detail: "Godmode's copies of repositories whose tasks are all gone. One that holds commits never pushed stays.",
-    recommended: true,
-    targets,
-  };
-}
-
-async function cloneInUse(dir: string): Promise<string | null> {
-  const worktrees = await runGit(["worktree", "list", "--porcelain"], { cwd: dir, timeoutMs: 60_000 }).catch(() => null);
-  if (!worktrees?.ok) return "Git can't read this clone — have a look at it before removing it.";
-  const checkouts = worktrees.stdout
-    .split("\n")
-    .filter((l) => l.startsWith("worktree "))
-    .map((l) => l.slice("worktree ".length))
-    .filter((p) => p !== dir && !p.endsWith(".git"));
-  for (const path of checkouts) if (await isDir(path)) return "A task folder still uses it.";
-  const unpushed = await runGit(["rev-list", "-n", "1", "--branches", "--not", "--remotes"], { cwd: dir, timeoutMs: 60_000 }).catch(() => null);
-  if (!unpushed?.ok) return "Git can't read this clone — have a look at it before removing it.";
-  return unpushed.stdout.trim() ? "Holds commits that were never pushed." : null;
-}
-
-async function agentHistory(scan: Scan): Promise<Category | null> {
-  if (!resolveGit()) return null;
-  const targets: Target[] = [];
-  for (const agent of all<{ id: string; name: string; repo_path: string }>("SELECT id, name, repo_path FROM agents ORDER BY name")) {
-    const objects = join(agent.repo_path, ".git", "objects");
-    const loose = (await names(objects)).filter((n) => /^[0-9a-f]{2}$/.test(n)).map((n) => join(objects, n));
-    const size = sum(await Promise.all(loose.map((d) => scan.sizes.of(d))));
-    if (size.bytes < WORTH_IT) continue;
-    const kept = scan.busyAgents.has(agent.id) ? "Working right now." : null;
-    targets.push({
-      entry: { name: agent.name, path: agent.repo_path, bytes: size.bytes, modifiedAt: iso(size.modified), kept },
-      clean: kept
-        ? null
-        : () =>
-            withRepoLock(agent.repo_path, async () => {
-              const git = join(agent.repo_path, ".git");
-              const before = (await new Sizes().of(git)).bytes;
-              // Objects only: refs and reflogs stay as isomorphic-git wrote them.
-              const res = await runGit(["repack", "-a", "-d", "-q"], { cwd: agent.repo_path, timeoutMs: 10 * 60_000 });
-              if (!res.ok) throw new Error(res.stderr.trim().split("\n").pop() || "git repack failed");
-              return Math.max(0, before - (await new Sizes().of(git)).bytes);
-            }),
-    });
-  }
-  return {
-    id: "agent-history",
-    name: "Agent histories",
-    detail: "Every run lands in its agent's git history as loose files. Packing them keeps every version in a fraction of the space.",
-    recommended: true,
-    upTo: true,
-    targets,
-  };
+  return { id: "task-clones", detail: "Godmode's copies of repositories whose tasks are all gone. One that holds commits never pushed stays.", targets };
 }
 
 function pragma(name: string): number {
@@ -451,31 +445,31 @@ function pragma(name: string): number {
   return Number(row?.[name] ?? 0);
 }
 
+const freePages = () => pragma("freelist_count") * pragma("page_size");
+
 function database(scan: Scan): Category {
   const path = config().dbPath;
-  const free = pragma("freelist_count") * pragma("page_size");
-  const wal = fileSize(`${path}-wal`);
+  const free = freePages();
+  const size = () => fileSize(path) + fileSize(`${path}-wal`);
   const targets: Target[] = [];
-  if (free + wal >= WORTH_IT) {
+  if (free >= WORTH_IT) {
     targets.push({
-      entry: { name: "godmode.db", path, bytes: free + wal, modifiedAt: null, kept: null },
+      entry: { name: basename(path), path, bytes: free, modifiedAt: null, kept: null },
       clean: async () => {
-        const before = fileSize(path) + fileSize(`${path}-wal`);
+        const before = size();
         const db = getDb();
         // In WAL mode VACUUM writes the compacted pages to the WAL; only the checkpoint after it shrinks the file.
-        if (pragma("freelist_count") > 0) db.run("VACUUM");
+        db.run("VACUUM");
         db.run("PRAGMA wal_checkpoint(TRUNCATE)");
         db.run("PRAGMA optimize");
-        return Math.max(0, before - fileSize(path) - fileSize(`${path}-wal`));
+        return Math.max(0, before - size());
       },
     });
   }
   return {
     id: "database",
-    name: "Database",
     detail: "Room left in Godmode's database by deleted chats, runs and notifications, given back to the disk.",
-    recommended: true,
-    blocked: databaseBlocked(scan, path),
+    blocked: targets.length ? databaseBlocked(scan, path) : null,
     targets,
   };
 }
@@ -483,8 +477,8 @@ function database(scan: Scan): Category {
 function databaseBlocked(scan: Scan, path: string): string | null {
   if (scan.busyAgents.size) return BUSY;
   if (backupInProgress()) return "A backup is being made or restored.";
-  // VACUUM writes a compacted copy before it replaces the original.
-  if ((diskSpace()?.freeBytes ?? Infinity) < fileSize(path) * 1.2) return "Not enough free disk space to compact the database.";
+  // VACUUM writes a compacted copy, through the WAL, before it replaces the original.
+  if ((diskSpace()?.freeBytes ?? Infinity) < fileSize(path) * 2) return "Not enough free disk space to compact the database.";
   return null;
 }
 
@@ -506,21 +500,24 @@ async function oldLogs(scan: Scan): Promise<Category> {
     if (!name.endsWith(".log") || vms.has(name.slice(0, -4))) continue;
     targets.push(await target(scan, join(vmLogs, name), `Log of a deleted VM (${name.slice(0, -4)})`));
   }
-  return { id: "old-logs", name: "Old logs", detail: "Logs that were replaced by newer ones more than a week ago, and logs of deleted VMs.", recommended: true, targets };
+  return { id: "old-logs", detail: "Logs that were replaced by newer ones more than a week ago, and logs of deleted VMs.", targets };
 }
+
+const DOWNLOADING = "An image is downloading right now.";
 
 async function vmDownloads(scan: Scan): Promise<Category | null> {
   if (!vmSupport().supported) return null;
   const dir = join(vmRoot(), "downloads");
   const layers = await names(dir);
-  const targets = layers.length ? [await target(scan, dir, `${layers.length} partly downloaded ${layers.length === 1 ? "layer" : "layers"}`, { clean: async () => { for (const l of layers) await remove(join(dir, l)); } })] : [];
+  const clean = async () => {
+    if (imageDownloadInProgress()) throw new Kept(DOWNLOADING);
+    for (const layer of layers) await remove(join(dir, layer));
+  };
   return {
     id: "vm-downloads",
-    name: "Unfinished VM downloads",
     detail: "Parts of macOS images whose download stopped. Downloading the image again continues from them.",
-    recommended: false,
-    blocked: imageDownloadInProgress() ? "An image is downloading right now." : null,
-    targets,
+    blocked: imageDownloadInProgress() ? DOWNLOADING : null,
+    targets: layers.length ? [await target(scan, dir, `${layers.length} partly downloaded ${layers.length === 1 ? "layer" : "layers"}`, { clean })] : [],
   };
 }
 
@@ -550,13 +547,7 @@ async function trash(scan: Scan): Promise<Category> {
       targets.push(t);
     }
   }
-  return {
-    id: "trash",
-    name: "Trash",
-    detail: "Deleted agents, removed repositories and what a backup restore replaced — kept instead of deleted, in case they held work.",
-    recommended: false,
-    targets,
-  };
+  return { id: "trash", detail: "Deleted agents, removed repositories and what a backup restore replaced — kept instead of deleted, in case they held work.", targets };
 }
 
 async function vmImages(): Promise<Category | null> {
@@ -568,18 +559,9 @@ async function vmImages(): Promise<Category | null> {
     .filter((i) => i.downloaded)
     .map((i) => {
       const kept = downloading.has(i.image) ? "Downloading right now." : null;
-      return {
-        entry: { name: i.name, path: null, bytes: i.sizeBytes ?? 0, modifiedAt: null, kept },
-        clean: kept ? null : () => removeImage(i.image),
-      };
+      return { entry: { name: i.name, path: null, bytes: i.sizeBytes ?? 0, modifiedAt: null, kept }, clean: kept ? null : () => removeImage(i.image) };
     });
-  return {
-    id: "vm-images",
-    name: "Downloaded macOS images",
-    detail: "What new VMs and resets start from. VMs made from an image keep working; it is downloaded again when needed.",
-    recommended: false,
-    targets,
-  };
+  return { id: "vm-images", detail: "What new VMs and resets start from. VMs made from an image keep working; it is downloaded again when needed.", targets };
 }
 
 const SCANNERS: Record<CleanupId, (scan: Scan) => Promise<Category | null> | Category> = {
@@ -587,7 +569,6 @@ const SCANNERS: Record<CleanupId, (scan: Scan) => Promise<Category | null> | Cat
   "browser-cache": browserCaches,
   "task-worktrees": taskWorktrees,
   "task-clones": taskClones,
-  "agent-history": agentHistory,
   database,
   "old-logs": oldLogs,
   "vm-downloads": vmDownloads,
@@ -595,34 +576,22 @@ const SCANNERS: Record<CleanupId, (scan: Scan) => Promise<Category | null> | Cat
   "vm-images": vmImages,
 };
 
-async function category(id: CleanupId, scan: Scan): Promise<Category | null> {
-  try {
-    return await SCANNERS[id](scan);
-  } catch (err) {
-    log.warn(`could not look at ${id}`, err);
-    return null;
-  }
-}
-
 /* ------------------------------------------------------------------ */
 /* Self check                                                           */
 /* ------------------------------------------------------------------ */
 
-function diskSpace(): { freeBytes: number; totalBytes: number } | null {
-  try {
-    const fs = statfsSync(config().dataDir);
-    return { freeBytes: fs.bavail * fs.bsize, totalBytes: fs.blocks * fs.bsize };
-  } catch {
-    return null;
-  }
-}
+/** `quick_check` reads the whole database while everything else waits, so its answer is kept for an hour. */
+let integrity: { at: number; problems: string[] } | null = null;
 
-function databaseCheck(): HealthCheck {
+function databaseCheck(fresh: boolean): HealthCheck {
   const base = { id: "database", name: "Database" } as const;
   try {
-    const problems = (getDb().query("PRAGMA quick_check").all() as Record<string, string>[]).map((r) => Object.values(r)[0]);
-    if (problems.length === 1 && problems[0] === "ok") return { ...base, status: "ok", detail: `Intact · ${formatBytes(fileSize(config().dbPath))}` };
-    return { ...base, status: "error", detail: `Damaged (${problems[0]}). Restore a backup from Settings → Backup.` };
+    if (fresh || !integrity || Date.now() - integrity.at > HOUR) {
+      const rows = getDb().query("PRAGMA quick_check").all() as Record<string, string>[];
+      integrity = { at: Date.now(), problems: rows.map((r) => String(Object.values(r)[0])).filter((p) => p !== "ok") };
+    }
+    if (!integrity.problems.length) return { ...base, status: "ok", detail: `Intact · ${formatBytes(fileSize(config().dbPath))}` };
+    return { ...base, status: "error", detail: `Damaged (${integrity.problems[0]}). Restore a backup from Settings → Backup.` };
   } catch (err) {
     return { ...base, status: "error", detail: `Couldn't be checked: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -654,7 +623,6 @@ async function worktreeCheck(): Promise<HealthCheck> {
 
 async function storage(scan: Scan): Promise<StorageUsage[]> {
   const cfg = config();
-  const db = basename(cfg.dbPath);
   const areas: [StorageArea, string, string[]][] = [
     ["agents", "Agents", [cfg.agentsDir]],
     ["browser", "Browser", [cfg.browserDir, join(cfg.dataDir, "browser-use")]],
@@ -663,7 +631,7 @@ async function storage(scan: Scan): Promise<StorageUsage[]> {
     ["database", "Database & logs", [cfg.dbPath, `${cfg.dbPath}-wal`, `${cfg.dbPath}-shm`, cfg.logsDir]],
   ];
   const known = new Set(areas.flatMap(([, , paths]) => paths));
-  const rest = (await names(cfg.dataDir)).map((n) => join(cfg.dataDir, n)).filter((p) => !known.has(p) && basename(p) !== db);
+  const rest = (await names(cfg.dataDir)).map((n) => join(cfg.dataDir, n)).filter((p) => !known.has(p));
   const usage = await Promise.all(
     [...areas, ["other", "Everything else", rest] as [StorageArea, string, string[]]].map(async ([area, name, paths]) => ({
       area,
@@ -682,46 +650,62 @@ export function lastCleanup(): CleanupRun | null {
   return parseJson<CleanupRun | null>(getMeta(LAST_RUN), null);
 }
 
-export async function scanCleanup(): Promise<CleanupReport> {
-  const scan = newScan();
+/** When the automatic cleanup last ran (0 = never). Cleaning by hand doesn't postpone it. */
+export function lastAutomaticCleanup(): number {
+  return Date.parse(getMeta(LAST_AUTOMATIC) ?? "") || 0;
+}
+
+function toItem(c: Category): CleanupItem {
+  const cleanable = c.targets.filter((t) => !t.entry.kept);
+  return {
+    id: c.id,
+    name: NAMES[c.id],
+    detail: c.detail,
+    bytes: cleanable.reduce((n, t) => n + t.entry.bytes, 0),
+    count: cleanable.length,
+    recommended: RECOMMENDED.includes(c.id),
+    blocked: c.blocked ?? null,
+    // What stays comes first: its reason is what the human needs to read.
+    entries: c.targets
+      .map((t) => t.entry)
+      .sort((a, b) => Number(!!b.kept) - Number(!!a.kept) || b.bytes - a.bytes)
+      .slice(0, ENTRY_LIMIT),
+  };
+}
+
+async function report(fresh: boolean): Promise<CleanupReport> {
+  const look = newScan();
   const disk = diskSpace();
-  const [usage, categories, worktrees] = await Promise.all([
-    storage(scan),
-    Promise.all(CLEANUP_IDS.map((id) => category(id, scan))),
-    worktreeCheck(),
-  ]);
-  const items = categories
-    .filter((c): c is Category => !!c)
-    .map((c) => {
-      const cleanable = c.targets.filter((t) => !t.entry.kept);
-      return {
-        id: c.id,
-        name: c.name,
-        detail: c.detail,
-        bytes: cleanable.reduce((n, t) => n + t.entry.bytes, 0),
-        count: cleanable.length,
-        recommended: c.recommended,
-        upTo: !!c.upTo,
-        blocked: c.blocked ?? null,
-        entries: c.targets
-          .map((t) => t.entry)
-          .sort((a, b) => Number(!!a.kept) - Number(!!b.kept) || b.bytes - a.bytes)
-          .slice(0, ENTRY_LIMIT),
-      };
-    });
+  const categories = Promise.all(
+    CLEANUP_IDS.map((id) =>
+      Promise.resolve(look)
+        .then(SCANNERS[id])
+        .catch((err) => {
+          log.warn(`could not look at ${id}`, err);
+          return null;
+        }),
+    ),
+  );
+  const [usage, found, worktrees] = await Promise.all([storage(look), categories, worktreeCheck()]);
   return {
     checkedAt: now(),
     dataDir: config().dataDir,
     disk,
     storage: usage,
-    checks: [databaseCheck(), diskCheck(disk), worktrees],
-    items,
+    checks: [databaseCheck(fresh), diskCheck(disk), worktrees],
+    items: found.filter((c): c is Category => !!c).map(toItem),
     lastRun: lastCleanup(),
   };
 }
 
-/** The recommended items: what the automatic cleanup and `godmode cleanup --fix` take care of. */
-export const RECOMMENDED: CleanupId[] = ["temp-files", "browser-cache", "task-worktrees", "task-clones", "agent-history", "database", "old-logs"];
+let scanning: Promise<CleanupReport> | null = null;
+
+/** What takes up space, what can go, and the self check. Looks at the same moment share one walk; `fresh` checks the database again too. */
+export function scanCleanup(opts: { fresh?: boolean } = {}): Promise<CleanupReport> {
+  if (opts.fresh) return report(true);
+  scanning ??= report(false).finally(() => (scanning = null));
+  return scanning;
+}
 
 /**
  * Clean the given items. Each is looked at again first — between the report and the click, a browser may have opened
@@ -731,10 +715,16 @@ export async function runCleanup(ids: readonly CleanupId[], opts: { automatic?: 
   const startedAt = now();
   const results: CleanupResult[] = [];
   for (const id of CLEANUP_IDS.filter((i) => ids.includes(i))) {
-    const scan = newScan(!!opts.automatic);
-    const c = await category(id, scan);
+    const result: CleanupResult = { id, name: NAMES[id], ok: true, freedBytes: 0, removed: 0, kept: 0, output: "" };
+    let c: Category | null;
+    try {
+      c = await SCANNERS[id](newScan(!!opts.automatic));
+    } catch (err) {
+      log.warn(`could not look at ${id}`, err);
+      results.push({ ...result, ok: false, output: err instanceof Error ? err.message : String(err) });
+      continue;
+    }
     if (!c) continue;
-    const result: CleanupResult = { id, name: c.name, ok: true, freedBytes: 0, removed: 0, kept: 0, output: "" };
     if (c.blocked) {
       results.push({ ...result, ok: false, kept: c.targets.length, output: c.blocked });
       continue;
@@ -750,7 +740,8 @@ export async function runCleanup(ids: readonly CleanupId[], opts: { automatic?: 
         result.freedBytes += typeof freed === "number" ? freed : t.entry.bytes;
         result.removed++;
       } catch (err) {
-        errors.push(`${t.entry.name}: ${err instanceof Error ? err.message : String(err)}`);
+        if (err instanceof Kept) result.kept++;
+        else errors.push(`${t.entry.name}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
     result.ok = !errors.length;
@@ -763,5 +754,6 @@ export async function runCleanup(ids: readonly CleanupId[], opts: { automatic?: 
     log.info(`${run.automatic ? "automatic cleanup" : "cleanup"} freed ${formatBytes(run.freedBytes)} (${results.map((r) => `${r.id} ${r.removed}`).join(", ")})`);
   }
   setMeta(LAST_RUN, JSON.stringify(run));
+  if (run.automatic) setMeta(LAST_AUTOMATIC, run.finishedAt);
   return run;
 }
