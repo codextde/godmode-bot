@@ -160,7 +160,7 @@ describe("StreamAccumulator — workflow fixture (a workflow that outlives its t
     }
     expect(labels).toEqual([
       "Starting…",
-      "Using Workflow",
+      "Starting a workflow…",
       "Running workflow · Count words in a.txt and b.txt with two agents",
       "Running workflow · Count: a.txt",
       "Running workflow · Count: b.txt",
@@ -195,7 +195,7 @@ describe("StreamAccumulator — synthetic cases", () => {
       type: "stream_event",
       event: { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "t1", name: "mcp__browser__browser_navigate", input: {} } },
     });
-    expect(acc.activityLabel()).toBe("Using browser_navigate");
+    expect(acc.activityLabel()).toBe("Opening a page…");
     acc.push({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"url":"https://exa' } } });
     acc.push({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: 'mple.com"}' } } });
     acc.push({ type: "stream_event", event: { type: "content_block_stop", index: 0 } });
@@ -324,14 +324,14 @@ describe("StreamAccumulator — synthetic cases", () => {
     const acc = new StreamAccumulator();
     acc.push({ type: "assistant", message: { id: "m1", content: [{ type: "tool_use", id: "w1", name: "Workflow", input: {} }] } });
     acc.push({ type: "system", subtype: "task_started", task_id: "wf", tool_use_id: "w1", description: "Review the changes", task_type: "local_workflow" });
-    expect(acc.activityLabel()).toBe("Using Workflow");
+    expect(acc.activityLabel()).toBe("Starting a workflow…");
     acc.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "w1", content: "launched" }] } });
     expect(acc.activityLabel()).toBe("Running workflow · Review the changes");
     // A subagent's open tool call doesn't count, the run's own does.
     acc.push({ type: "assistant", parent_tool_use_id: "w1", message: { id: "s1", content: [{ type: "tool_use", id: "b0", name: "Read", input: {} }] } });
     expect(acc.activityLabel()).toBe("Running workflow · Review the changes");
     acc.push({ type: "assistant", message: { id: "m2", content: [{ type: "tool_use", id: "b1", name: "Bash", input: {} }] } });
-    expect(acc.activityLabel()).toBe("Using Bash");
+    expect(acc.activityLabel()).toBe("Running a command…");
     acc.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "b1", content: "ok" }] } });
     acc.push({ type: "system", subtype: "task_progress", task_id: "wf", tool_use_id: "w1", description: "Review: bugs", usage: { total_tokens: 1, tool_uses: 0, duration_ms: 1 } });
     expect(acc.activityLabel()).toBe("Running workflow · Review: bugs");

@@ -1,3 +1,4 @@
+import { toolActivity, type ActivityNames } from "@godmode/shared";
 /**
  * Pure parser for Claude Code `--output-format stream-json` events.
  *
@@ -242,7 +243,8 @@ export class StreamAccumulator {
   }
 
   /** Short human label for what the run is doing right now. */
-  activityLabel(): string {
+  /** What the run is doing right now, in plain words (`names` resolves agent and login ids, and masks secrets). */
+  activityLabel(names?: ActivityNames): string {
     if (this.final) return this.final.isError ? "Failed" : "Done";
     if (this.limit) return "Waiting for rate limit…";
     if (this.compacting) return "Compacting conversation…";
@@ -252,7 +254,7 @@ export class StreamAccumulator {
     if (workflow) return `Running workflow · ${workflow.activity || workflow.description}`;
     switch (last.type) {
       case "tool_use":
-        return last.result === undefined ? `Using ${displayToolName(last.name)}` : "Thinking…";
+        return last.result === undefined ? toolActivity(last.name, last.input, names) : "Thinking…";
       case "thinking":
         return "Thinking…";
       case "text":

@@ -28,9 +28,11 @@ export interface ThreadProps {
   empty?: ReactNode;
   /** A handed-over chat: who asked (names the opening message). */
   delegatedFrom?: Conversation["delegatedFrom"];
+  /** Under the last message while nothing is in flight (what to do about a turn that ended early). */
+  after?: ReactNode;
 }
 
-export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom }: ThreadProps) {
+export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after }: ThreadProps) {
   const { scrollRef, contentRef, atBottom, scrollToBottom } = useStickToBottom();
   // Messages present on first render don't animate in
   const initialIds = useRef<Set<string> | null>(null);
@@ -76,6 +78,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
               </Fragment>
             );
           })}
+          {!inflight && after}
           {inflight && (
             <LiveAssistantMessage
               key={inflight.runId ?? "pending"}

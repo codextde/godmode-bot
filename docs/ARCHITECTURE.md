@@ -184,6 +184,9 @@ cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <a
 
 Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + result) and pushed as
 `run.delta` WS events; the final assistant message is stored in SQLite and in the agent repo.
+What the run does right now goes out as `run.activity` in plain words (`toolActivity` in `@godmode/shared`): "Opening
+github.com…", "Filling in the password for github.com…", "Handing this to Lena…" — names from Godmode (agents, the
+login's site), never raw tool ids, values masked before they are shortened.
 A long run has hundreds of blocks and megabytes of tool output and screenshots, and all but the last few never change
 again: each block is masked and serialized once and made again only when it changed (or when the vault learned or
 forgot a secret). A delta carries what changed (`patch`, see WebSocket); the row saved every few seconds while the run
@@ -282,6 +285,24 @@ only an answer continues it); `Conversation.paused`, `Task.pause` and `Agent.pau
 * **Stopping** a paused run (`POST /api/runs/:id/cancel`, deleting its chat, agent or task, moving its task off In
   progress) ends it as `cancelled`, like a run stopped while it worked. Backups carry paused runs; after a restore none
   continues by itself.
+
+### Picking up a turn that ended early
+
+A chat's latest turn that failed or was cancelled — timed out, out of turns, stopped by the human, cut off by a restart,
+any error — can be picked up with one click (`POST /api/conversations/:id/retry { runId }`, `services/retries.ts`; the
+desktop shows it under the turn, the phone above the message box). It is a new `chat` run in the same chat, so it is
+queued, budgeted and reported like a message from the human:
+
+* **Continue** when the turn holds text, thinking or a tool step (Claude got the prompt) and the chat still has its
+  Claude session: `--resume` with a `<godmode-continue>` note that says why it stopped and asks to finish without
+  starting over. **Try again** otherwise: the run's own prompt is sent again (saved secrets stay masked; the marker
+  says so). A turn an automation, follow-up or another agent started is answered to the human in this chat.
+* The chat gets a `retry` marker (a system message, `content` "Continue where you stopped" / "Try again").
+* Refused: a run that isn't the chat's latest (`stale`), one that didn't end early, a chat that works, stands still or
+  belongs to a ticket (`task_chat` — continued from the ticket) or a chat platform (`platform_chat` — the person asks
+  there), dreams and condition checks, and a chat too long to go on (`context`). Godmode's own end-of-turn sentences
+  live in `@godmode/shared` (`runEndOf`); for a sign-in, CLI, VM, folder or model error the desktop links to the fix
+  and offers *Try again* next to it.
 
 ### Questions and approvals
 
