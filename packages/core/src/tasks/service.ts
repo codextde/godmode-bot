@@ -50,6 +50,7 @@ import {
   cleanTaskLabel,
   isValidBranch,
   parseGitUrl,
+  runEndOf,
   ticketList,
 } from "@godmode/shared";
 import { config } from "../config";
@@ -1216,7 +1217,14 @@ function onBusEvent(event: ServerEvent) {
           record(task.id, "feedback", "user", { body: event.run.prompt, data: { on: before, files: [] } });
         } else if (busy.has(task.id) || event.run.trigger !== "task") {
           const again = !!get<{ id: string }>("SELECT id FROM task_events WHERE task_id = ? AND kind = 'started' LIMIT 1", task.id);
-          record(task.id, "started", agentActor(event.run.agentId), { runId: event.run.id, data: { trigger: event.run.trigger, again } });
+          // A try on its own after a failure says so, with why.
+          const retry = retrying.get(task.id);
+          retrying.delete(task.id);
+          record(task.id, "started", agentActor(event.run.agentId), {
+            runId: event.run.id,
+            body: retry?.reason ?? "",
+            data: { trigger: event.run.trigger, again, ...(retry ? { retry: retry.n } : {}) },
+          });
         }
       }
     }
@@ -1258,8 +1266,15 @@ async function finished(id: string, run: Run): Promise<void> {
   const agent = agentActor(run.agentId);
   if (run.status === "cancelled") return block(id, "Stopped before it finished.", { kind: "stopped", runId: run.id, actor: "user" });
   if (run.status === "failed") {
-    block(id, run.error || "The run failed.", { kind: run.error === INTERRUPTED ? "interrupted" : "failed", runId: run.id });
-    notify("error", `Task #${task.number} is blocked`, run.error ?? "", link);
+    // A failure a new try may get past (an API hiccup, a crash, a restart, the time or turn limit): it tries again by itself.
+    if (retryLater(id, run.error || "The run failed.", run.conversationId)) return;
+    const tries = retriesSoFar(id);
+    const reason = run.error || "The run failed.";
+    block(id, tries ? `${reason} (still failing after ${tries === 1 ? "one more try" : `${tries} more tries`})` : reason, {
+      kind: run.error === INTERRUPTED ? "interrupted" : "failed",
+      runId: run.id,
+    });
+    notify("error", `Task #${task.number} is blocked`, reason, link);
     return;
   }
   const summary = run.result ? run.result.slice(0, SUMMARY_MAX) : null;
@@ -1332,6 +1347,69 @@ async function finished(id: string, run: Run): Promise<void> {
     return;
   }
   if (deliver(id, run.id)) notify("success", `Task #${task.number} is ready for review`, task.title, link);
+}
+
+/* ------------------------------------------------------------------ */
+/* Trying again                                                        */
+/* ------------------------------------------------------------------ */
+
+/** A ticket whose run failed tries again by itself this often in a row, after these pauses. */
+const MAX_AUTO_RETRIES = 2;
+let RETRY_DELAYS_MS = [30_000, 120_000];
+
+/** Tests: shorter pauses (null = the real ones), and nothing left waiting when a test ends. */
+export function __setTaskRetryDelaysForTests(ms: number[] | null): void {
+  RETRY_DELAYS_MS = ms ?? [30_000, 120_000];
+  for (const r of retrying.values()) if (r.timer) clearTimeout(r.timer);
+  retrying.clear();
+}
+/** Waiting to try again: the run that failed, and why (the start of the next try carries it to the timeline). */
+const retrying = new Map<string, { runId: string | null; reason: string; n: number; timer: ReturnType<typeof setTimeout> | null }>();
+
+/** Tries on its own since the ticket was last delivered, or the human last acted on it. */
+function retriesSoFar(id: string): number {
+  const since =
+    get<{ at: string | null }>("SELECT MAX(created_at) AS at FROM task_events WHERE task_id = ? AND kind IN ('delivered', 'feedback', 'status', 'answered', 'assigned')", id)?.at ?? "";
+  return get<{ n: number }>("SELECT COUNT(*) AS n FROM task_events WHERE task_id = ? AND kind = 'started' AND json_extract(data, '$.retry') IS NOT NULL AND created_at > ?", id, since)?.n ?? 0;
+}
+
+/**
+ * Schedule another try when one may help — not for what only the human can fix (sign-in, Claude Code itself, a folder,
+ * the VM, the model, a chat too long, the cost limit) or a run they stopped — and the tries aren't used up. The ticket
+ * stays In progress meanwhile; the try never cuts across anything newer (a message, a move on the board).
+ */
+function retryLater(id: string, reason: string, conversationId: string | null, delayMs?: number): boolean {
+  const end = runEndOf(reason);
+  if (end && !["interrupted", "timeout", "turns"].includes(end.kind)) return false;
+  const n = retriesSoFar(id) + 1;
+  if (n > MAX_AUTO_RETRIES || retrying.has(id)) return false;
+  const runId = conversationId ? latestRunId(conversationId) : null;
+  const wait = delayMs ?? RETRY_DELAYS_MS[n - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
+  const entry: { runId: string | null; reason: string; n: number; timer: ReturnType<typeof setTimeout> | null } = { runId, reason, n, timer: null };
+  retrying.set(id, entry);
+  entry.timer = setTimeout(() => {
+    entry.timer = null;
+    try {
+      const t = row(id);
+      const latest = t?.conversation_id ? latestRunId(t.conversation_id) : null;
+      if (!t || t.status !== "in_progress" || t.archived_at || busy.has(id) || latest !== runId || (t.conversation_id && openRuns(t.conversation_id).length)) {
+        retrying.delete(id);
+        if (t?.id) setActivity(id, null);
+        return;
+      }
+      // A try that couldn't start (setup problems block the ticket) leaves nothing waiting behind.
+      void dispatch(id, { kind: end?.kind === "interrupted" ? "interrupted" : "failed", reason }).finally(() => {
+        if (retrying.get(id) === entry) retrying.delete(id);
+      });
+    } catch (err) {
+      retrying.delete(id);
+      log.warn(`task ${id}: could not try again`, err);
+    }
+  }, wait);
+  entry.timer.unref?.();
+  setActivity(id, `Trying again ${wait < 60_000 ? "shortly" : `in ${Math.round(wait / 60_000)} minutes`}…`);
+  log.info(`task ${id}: run failed (${reason.slice(0, 120)}) — trying again in ${Math.round(wait / 1000)} s (${n} of ${MAX_AUTO_RETRIES})`);
+  return true;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1832,7 +1910,7 @@ export function startTasks(): void {
   } catch (err) {
     log.warn("could not sweep task attachments", err);
   }
-  reconcileTasks("Interrupted (Godmode restarted).");
+  reconcileTasks("Interrupted (Godmode restarted).", { retry: true });
   // The most urgent first, then the earliest due.
   for (const t of all<{ id: string }>(
     `SELECT id FROM tasks WHERE status = 'todo' AND agent_id IS NOT NULL AND archived_at IS NULL
@@ -1857,7 +1935,7 @@ export function startTasks(): void {
  * Work that was going on when Godmode stopped (or in a restored backup): its runs were marked interrupted. A paused run
  * is still there, and a ticket that waits for its follow-up keeps waiting; the others are blocked, to be continued.
  */
-export function reconcileTasks(reason: string): void {
+export function reconcileTasks(reason: string, opts: { retry?: boolean } = {}): void {
   for (const t of all<TaskRow>("SELECT * FROM tasks WHERE status = 'in_progress'")) {
     if (openRuns(t.conversation_id).length || (t.conversation_id && getFollowup(t.conversation_id))) continue;
     // It waits for its parts: it keeps waiting, or continues when they were finished meanwhile.
@@ -1865,6 +1943,8 @@ export function reconcileTasks(reason: string): void {
       if (!openParts(t.id).length) partClosed(t.id);
       continue;
     }
+    // Cut off by a restart: it picks the work up again by itself (a restored backup leaves that to the human).
+    if (opts.retry && t.agent_id && retryLater(t.id, reason, t.conversation_id, 5_000)) continue;
     block(t.id, reason, { kind: "interrupted", from: ["in_progress"] });
   }
 }
@@ -1872,6 +1952,8 @@ export function reconcileTasks(reason: string): void {
 export function stopTasks(): void {
   unsubscribe?.();
   unsubscribe = null;
+  for (const r of retrying.values()) if (r.timer) clearTimeout(r.timer);
+  retrying.clear();
   if (watchTimer) clearInterval(watchTimer);
   watchTimer = null;
 }

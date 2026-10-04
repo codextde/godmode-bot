@@ -161,6 +161,20 @@ describe("agents work on tasks", () => {
     expect(getTask(task.id).blockedReason).toBeNull();
   });
 
+  test("a run that fails once is tried again on its own and delivered; one that keeps failing is blocked after two tries", async () => {
+    const flaky = createTask({ workspaceId, title: "CRASH_ONCE then fine", agentId: wsAgent.id });
+    await settled(flaky.id, ["in_review"]);
+    const events = listTaskEvents(flaky.id);
+    const retry = events.find((e) => e.kind === "started" && e.data.retry);
+    expect(retry?.body).toContain("exploded");
+    expect(events.some((e) => e.kind === "blocked")).toBe(false);
+
+    const broken = createTask({ workspaceId, title: "CRASH every time", agentId: wsAgent.id });
+    await settled(broken.id, ["blocked"]);
+    expect(listTaskEvents(broken.id).filter((e) => e.kind === "started" && e.data.retry).map((e) => e.kind === "started" && e.data.retry)).toEqual([1, 2]);
+    expect(getTask(broken.id).blockedReason).toContain("still failing after 2 more tries");
+  }, 60_000);
+
   test("the agent can report that it's blocked", async () => {
     const task = createTask({ workspaceId, title: "TASK_BLOCKED billing export", agentId: wsAgent.id });
     await settled(task.id, ["blocked"]);

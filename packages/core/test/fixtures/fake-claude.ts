@@ -34,6 +34,7 @@
  *   DELEGATE_TO:<agent id>  hand "Say hello" to that agent with agent_delegate (wait: false) as a tool step and answer
  *              "DELEGATED <tool result>"
  *   CRASH       print to stderr and exit 3 without a result
+ *   CRASH_ONCE  like CRASH the first time (per state dir), then answers as usual
  *   WAIT_FOR_QUEUE  run a tool step, then — once the state dir has a `queue-ready` file — call the PostToolBatch hook
  *              from --settings like Claude Code does between steps (first once as a subagent) until it hands over
  *              context, write that context to `queue-context.txt` and answer "QUEUE {json}"
@@ -574,7 +575,12 @@ if (slash?.[1] === "clear") {
   textTurn("Working on it");
   process.stderr.write("fatal: something exploded\n");
   process.exit(3);
-} else if (prompt.includes("CRASH")) {
+} else if (prompt.includes("CRASH_ONCE") && !existsSync(join(stateDir, "crashed-once"))) {
+  // The first run crashes, every later one works (a passing hiccup).
+  writeFileSync(join(stateDir, "crashed-once"), "");
+  process.stderr.write("fatal: something exploded\n");
+  process.exit(3);
+} else if (prompt.includes("CRASH") && !prompt.includes("CRASH_ONCE")) {
   process.stderr.write("fatal: something exploded\n");
   process.exit(3);
 } else if (prompt.includes("WAIT_FOR_QUEUE")) {

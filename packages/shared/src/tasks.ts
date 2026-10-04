@@ -79,7 +79,8 @@ export interface TaskEventData {
   assigned: { from: ID | null; to: ID | null; fromName: string; toName: string };
   archived: { archived: boolean };
   /** again: not the ticket's first start. */
-  started: { trigger: RunTrigger; again: boolean; subtasks?: number[] };
+  /** retry: tried again on its own after a failure (1, 2, …); body: why the run before failed. */
+  started: { trigger: RunTrigger; again: boolean; subtasks?: number[]; retry?: number };
   /** body: what the agent said when it ended its turn. Waits for a follow-up (dueAt, note) or for sub-tickets. */
   waiting: { dueAt?: ISODate; note?: string; subtasks?: number[] };
   /** body: the full result. */
@@ -362,6 +363,7 @@ export function taskEventText(e: TaskEvent, o: { you: string; youObject: string;
       return e.data.archived ? `${a} archived it` : `${a} put it back on the board`;
     case "started":
       if (e.data.subtasks?.length) return `${a} picked it up again — ${ticketList(e.data.subtasks)} ${e.data.subtasks.length === 1 ? "is" : "are"} done`;
+      if (e.data.retry) return e.data.retry > 1 ? `${a} tried once more on its own` : `${a} tried again on its own after the run failed`;
       if (!e.data.again) return `${a} started working`;
       if (e.data.trigger === "followup") return `${a} continued as planned`;
       if (e.data.trigger === "task") return `${a} started over`;
