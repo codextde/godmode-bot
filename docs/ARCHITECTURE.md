@@ -953,6 +953,12 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   templates. Installing creates the lead (reporting to the built-in agent, delegation on), then each report under it,
   and — when asked — the reports' scheduled automations from their templates. Offered on *New agent* and, while only the
   built-in agent exists, on the Agents page; afterwards the org chart opens.
+* **Waiting for other tickets** (migration 63, table `task_dependencies`; `Task.waitsFor`, `waitsForTickets()`). A
+  ticket may wait for up to 10 others (`waitsFor` on create and patch, the sheet's *Waits for*, `task_create {
+  waitsFor }`); loops and itself are refused. In Todo it doesn't start while one of them isn't finished (delivered,
+  done, cancelled or archived) — the card says *Waits for #3*, the sheet offers *Start without waiting* — and starts by
+  itself when the last one finishes (or is deleted). Its brief lists what they delivered (`<godmode-depends-on>`, quoted
+  as data, 1,500 characters each).
 * **Sub-tickets** (migration 57, `tasks.parent_id`; `Task.parentId`, `parentNumber`, `subtasks { total, open, blocked }`).
   A lead on a ticket splits it with `task_split({ parts })` — managers to anyone they may give tasks, other agents to
   their reports (by id or name), no agent = backlog for the human; every part is checked (enabled, workspace, 20 at

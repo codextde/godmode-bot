@@ -1,8 +1,8 @@
 import { forwardRef, type HTMLAttributes } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { AlarmClock, CalendarDays, CornerDownRight, GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, Hourglass, ListTree, MessageCircleQuestion, OctagonAlert, Paperclip, Pause } from "lucide-react";
+import { AlarmClock, CalendarDays, CornerDownRight, Link2, GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, Hourglass, ListTree, MessageCircleQuestion, OctagonAlert, Paperclip, Pause } from "lucide-react";
 import type { Agent, Task, Workspace } from "@godmode/shared";
-import { isOverdue, taskAttachmentIds } from "@godmode/shared";
+import { isOverdue, taskAttachmentIds, waitsForTickets } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { LiveDot } from "@/components/aicss/Motion";
 import { useLive } from "@/stores/live";
@@ -78,6 +78,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
     task.dueDate ? `due ${dueLabel(task.dueDate)}` : null,
     overdue ? "overdue" : null,
     task.parentNumber ? `part of #${task.parentNumber}` : null,
+    waitsForTickets(task) ? `waits for ${task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")}` : null,
     task.subtasks ? `${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} parts finished` : null,
     waiting,
   ]
@@ -129,6 +130,12 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
           <LiveDot className="bg-amber-500" />
           <span className="truncate">{activity}</span>
           {task.runStatus === "running" && task.runStartedAt && <CardElapsed since={task.runStartedAt} />}
+        </p>
+      )}
+      {waitsForTickets(task) && (
+        <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number} ${w.title}`).join("\n")}>
+          <Link2 className="size-3 shrink-0" />
+          <span className="truncate">Waits for {task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")}</span>
         </p>
       )}
       {waiting && !activity && !paused && (
