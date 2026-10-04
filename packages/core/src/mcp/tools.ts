@@ -63,6 +63,8 @@ import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, ha
 import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
 import { listSources } from "../services/workspaceSources";
 import { get } from "../db";
+import { config } from "../config";
+import { fixRunner, runnerExec, runnerHealth } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
 import { createConversation, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
@@ -114,6 +116,14 @@ function defineTool<S extends z.ZodType>(def: {
 export class UnknownToolError extends Error {}
 
 const isManager = (a: Agent) => a.permissions.canManageAgents;
+/**
+ * Changes to the setup, the automations and the board. Not on a runner: its setup is a copy of its controller's and is
+ * replaced with the next sync — what an agent changed there would be lost, and the human never sees it.
+ */
+const managesSetup = (a: Agent) => isManager(a) && config().role !== "runner";
+/** The runner a "fix with Claude" chat may run commands on. */
+const toolsRunner = (ctx: RunContext): string | null =>
+  get<{ runner_tools_id: string | null }>("SELECT runner_tools_id FROM conversations WHERE id = ?", ctx.conversationId)?.runner_tools_id ?? null;
 const canDelegate = (a: Agent) => a.permissions.allowDelegation || a.permissions.canManageAgents;
 const canReveal = (a: Agent) => a.permissions.secretAccess === "reveal";
 
@@ -1096,7 +1106,7 @@ const TOOLS: ToolDef[] = [
       ...agentFields,
       routine: z.object({ name: z.string().min(1), cron: routineFields.cron, prompt: z.string().min(1), timezone: z.string().optional() }).optional(),
     }),
-    when: isManager,
+    when: managesSetup,
     run: async ({ routine, ...input }, { agent, ctx }) => {
       assertAgentPatchAllowed(null, input);
       // Secret access, management rights and login allow-lists stay human-only (enforced by createAgent for agent actors).
@@ -1117,7 +1127,7 @@ const TOOLS: ToolDef[] = [
     description:
       "Update an agent's name, role, who it reports to, look (emoji, colour, character), personality, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope) or subagents. Workspace, browser profile, secret access and login permissions can only be changed by the human in Settings.",
     schema: z.object({ agentId: z.string(), name: z.string().min(1).max(100).optional(), ...agentFields }),
-    when: isManager,
+    when: managesSetup,
     run: async ({ agentId, ...patch }, { agent, ctx }) => {
       const target = getAgent(agentId);
       const refusal = offHostRefusal(ctx, target, "change its settings") ?? (target.id === agent.id ? null : revealTargetRefusal(agent, target, "change its settings"));
@@ -1133,7 +1143,7 @@ const TOOLS: ToolDef[] = [
     name: "agent_delete",
     description: "Delete an agent and its routines. Only do this when the human explicitly asked for it.",
     schema: z.object({ agentId: z.string() }),
-    when: isManager,
+    when: managesSetup,
     run: async ({ agentId }, { agent, ctx }) => {
       if (agentId === agent.id) return fail("You cannot delete yourself.");
       const target = getAgent(agentId);
@@ -1216,7 +1226,7 @@ const TOOLS: ToolDef[] = [
     description:
       "Create an automation for an agent: when the trigger fires, the agent runs the prompt. Triggers: schedule (cron), app (an event in a connected app — see automation_triggers_list), condition (checked on a cron schedule) or webhook (a secret URL the human copies from the app).",
     schema: z.object({ agentId: z.string(), ...routineFields }),
-    when: isManager,
+    when: managesSetup,
     run: async ({ timezone, trigger, ...input }, { agent, ctx }) => {
       const target = getAgent(input.agentId);
       const refusal = offHostRefusal(ctx, target, "schedule its tasks") ?? revealTargetRefusal(agent, target, "schedule its tasks");
@@ -1242,7 +1252,7 @@ const TOOLS: ToolDef[] = [
       enabled: routineFields.enabled,
       reuseConversation: routineFields.reuseConversation,
     }),
-    when: isManager,
+    when: managesSetup,
     run: async ({ routineId, trigger, ...patch }, { agent, ctx }) => {
       const current = getRoutine(routineId);
       const target = getAgent(current.agentId);
@@ -1260,7 +1270,7 @@ const TOOLS: ToolDef[] = [
     description:
       "Try an automation now: a schedule runs its prompt, a condition is checked, app and webhook automations get a test event (the agent does a dry run). Returns the run to follow with runs_list.",
     schema: z.object({ routineId: z.string() }),
-    when: isManager,
+    when: managesSetup,
     run: async ({ routineId }, { agent, ctx }) => {
       const target = getAgent(getRoutine(routineId).agentId);
       const refusal = offHostRefusal(ctx, target, "run its tasks") ?? revealTargetRefusal(agent, target, "run its tasks");
@@ -1275,7 +1285,7 @@ const TOOLS: ToolDef[] = [
     name: "routine_delete",
     description: "Delete an automation.",
     schema: z.object({ routineId: z.string() }),
-    when: isManager,
+    when: managesSetup,
     run: ({ routineId }, { agent, ctx }) => {
       const offHost = offHostRefusal(ctx, getAgent(getRoutine(routineId).agentId), "delete its automations");
       if (offHost) return fail(offHost);
@@ -1370,7 +1380,7 @@ const TOOLS: ToolDef[] = [
       dueDate: z.string().max(10).nullable().optional().describe("YYYY-MM-DD"),
       labels: z.array(z.string().max(100)).max(10).optional(),
     }),
-    when: isManager,
+    when: managesSetup,
     run: ({ start, ...input }, { agent, ctx }) => {
       const refusal = taskAssignRefusal(agent, ctx, input.agentId);
       if (refusal) return fail(refusal);
@@ -1403,7 +1413,7 @@ const TOOLS: ToolDef[] = [
       labels: z.array(z.string().max(100)).max(10).optional(),
       blockedReason: z.string().max(2000).optional(),
     }),
-    when: isManager,
+    when: managesSetup,
     run: ({ taskId: ref, ...patch }, { agent, ctx }) => {
       const taskId = findTask(ref).id;
       const refusal = taskAssignRefusal(agent, ctx, patch.agentId ?? (patch.status || patch.archived === false ? getTask(taskId).agentId : null));
@@ -1457,7 +1467,7 @@ const TOOLS: ToolDef[] = [
       taskId: z.string().describe('Task id, or its number like "#12"'),
       content: z.string().min(1).max(20_000),
     }),
-    when: isManager,
+    when: managesSetup,
     run: async ({ taskId, content }, { agent, ctx }) => {
       const t = findTask(taskId);
       if (t.conversationId && t.conversationId === ctx.conversationId) return fail("That is the task you are working on — do the work, or leave a note with task_note.");
@@ -1628,7 +1638,7 @@ const TOOLS: ToolDef[] = [
       memoryGb: z.number().int().min(2).max(1024).optional(),
       start: z.boolean().optional().describe("Start it once it's ready"),
     }),
-    when: isManager,
+    when: managesSetup,
     run: async ({ memoryGb, ...input }, { agent }) => {
       const vm = await createVm({ ...input, memoryMb: memoryGb ? memoryGb * 1024 : undefined }, `agent:${agent.id}`);
       return json(vmSummary(vm));
@@ -1645,7 +1655,7 @@ const TOOLS: ToolDef[] = [
       target: z.enum(["agent", "workspace", "this_chat"]),
       id: z.string().optional().describe("Agent or workspace id (not needed for this_chat)"),
     }),
-    when: isManager,
+    when: managesSetup,
     run: async ({ vmId, target, id }, { agent, ctx }) => {
       if (target !== "this_chat" && !id) return fail(`Pass the ${target}'s id.`);
       if (target === "agent") {
@@ -1662,7 +1672,7 @@ const TOOLS: ToolDef[] = [
     name: "vm_power",
     description: "Start, stop or suspend a VM. Runs that use a VM start it on their own; starting takes about a minute. macOS runs at most two VMs at once.",
     schema: z.object({ vmId: z.string(), action: z.enum(["start", "stop", "suspend"]) }),
-    when: isManager,
+    when: managesSetup,
     run: async ({ vmId, action }, { agent }) => {
       if (action === "start") {
         await startVm(vmId);
@@ -1685,6 +1695,47 @@ const TOOLS: ToolDef[] = [
     run: ({ status }) => {
       const items = listMissingLogins(status === "all" ? {} : { status: status ?? "open" });
       return items.length ? json(items) : "No missing logins.";
+    },
+  }),
+
+  defineTool({
+    name: "runner_health",
+    description:
+      "The runner's checks (software, macOS permissions, access, system) as it sees them right now: what passes, what fails, and how each failure can be fixed.",
+    schema: z.object({}),
+    when: (_agent, ctx) => !!toolsRunner(ctx),
+    run: async (_args, { ctx }) => json(await runnerHealth(toolsRunner(ctx)!, true)),
+  }),
+
+  defineTool({
+    name: "runner_fix",
+    description:
+      "Use the one-click fix of one of the runner's checks (installs a missing program, asks macOS for a permission on the runner's screen, copies the setup again…). Returns what happened and the checks afterwards.",
+    schema: z.object({ checkId: z.string().min(1).max(64).describe('The check\'s id from runner_health, e.g. "claude" or "accessibility"') }),
+    when: (_agent, ctx) => !!toolsRunner(ctx),
+    run: async ({ checkId }, { ctx }) => {
+      const runnerId = toolsRunner(ctx)!;
+      audit(`run:${ctx.runId}`, "runner.fix", runnerId, { check: checkId });
+      const result = await fixRunner(runnerId, checkId);
+      return { text: json(result), isError: !result.ok };
+    },
+  }),
+
+  defineTool({
+    name: "runner_exec",
+    description:
+      "Run a shell command on the runner (a login shell in the runner's data folder, as the user the runner runs as; its log is logs/godmode.jsonl). Look before you change anything. Returns the exit code, stdout and stderr.",
+    schema: z.object({
+      command: z.string().min(1).max(20_000),
+      timeoutSec: z.number().int().positive().max(900).optional().describe("Default 120"),
+    }),
+    when: (_agent, ctx) => !!toolsRunner(ctx),
+    run: async ({ command, timeoutSec }, { ctx }) => {
+      const runnerId = toolsRunner(ctx)!;
+      audit(`run:${ctx.runId}`, "runner.exec", runnerId, { command: command.slice(0, 500) });
+      const res = await runnerExec(runnerId, command, timeoutSec);
+      const out = [`exit code: ${res.timedOut ? "timed out" : res.code}`, res.stdout ? `stdout:\n${redact(res.stdout)}` : "", res.stderr ? `stderr:\n${redact(res.stderr)}` : ""].filter(Boolean).join("\n\n");
+      return { text: out, isError: res.code !== 0 };
     },
   }),
 ];

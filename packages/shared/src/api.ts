@@ -192,6 +192,8 @@ export interface StartChatInput {
   /** SSH servers the chat may use, in addition to the agent's. */
   sshServerIds?: ID[];
   instructions?: string;
+  /** Work on this runner instead of this computer. */
+  runnerId?: ID | null;
 }
 
 /** Move a chat's follow-up to another time. */

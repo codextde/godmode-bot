@@ -9,6 +9,7 @@ import type {
   Agent,
   Attachment,
   Conversation,
+  ConversationFollowup,
   ConversationOrigin,
   Effort,
   Message,
@@ -17,6 +18,7 @@ import type {
   MessageSource,
   PauseReason,
   Run,
+  RunPause,
   RunTrigger,
 } from "@godmode/shared";
 import type { ComputerTarget, ConversationPatch, ConversationWithMessages, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
@@ -30,6 +32,7 @@ import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
 import { redact } from "../vault/vault";
 import { getAgent, getDefaultAgentId } from "../agents/service";
 import { activeRunForConversation, cancelRun, listActiveRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
+import { remoteRunForConversation } from "../remote/activeRuns";
 import { closeChatTabs } from "../browser/manager";
 import { displayToolName } from "../runner/stream";
 import { normalizeWorkingDirectory } from "./folders";
@@ -62,6 +65,9 @@ interface ConversationRow extends PauseQuestionCols {
   workspace_id: string | null;
   ssh_server_ids: string | null;
   instructions: string;
+  runner_id: string | null;
+  runner_state: string | null;
+  runner_tools_id: string | null;
   pinned: number;
   archived: number;
   last_message_at: string | null;
@@ -117,7 +123,16 @@ function previewOf(text: string | null | undefined): string {
   return t.length > PREVIEW_MAX ? `${t.slice(0, PREVIEW_MAX - 1)}…` : t;
 }
 
+/** What a runner last said about a chat that works there (`runner_state`, written by remote/mirror.ts). */
+export interface RunnerChatState {
+  running: boolean;
+  paused: RunPause | null;
+  followup: ConversationFollowup | null;
+}
+
 function toConversation(r: ConversationRow): Conversation {
+  // A chat on a runner has its runs, its pause and its follow-up there: the local tables hold nothing about them.
+  const remote = r.runner_id ? (parseJson<Partial<RunnerChatState> | null>(r.runner_state, null) ?? {}) : null;
   return {
     id: r.id,
     agentId: r.agent_id,
@@ -134,16 +149,23 @@ function toConversation(r: ConversationRow): Conversation {
     workspaceId: r.workspace_id ?? null,
     sshServerIds: parseServerIds(r.ssh_server_ids),
     instructions: r.instructions,
+    runnerId: r.runner_id ?? null,
+    runnerToolsId: r.runner_tools_id ?? null,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
     lastMessageAt: r.last_message_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     preview: previewOf(r.preview),
-    running: activeRunForConversation(r.id) !== null,
-    followup: r.followup_due_at ? { note: r.followup_note ?? "", dueAt: r.followup_due_at, createdAt: r.followup_created_at ?? r.followup_due_at } : null,
-    paused:
-      r.paused_run_id && r.paused_reason && r.paused_at
+    running: remote ? remoteRunForConversation(r.id) !== null || remote.running === true : activeRunForConversation(r.id) !== null,
+    followup: remote
+      ? (remote.followup ?? null)
+      : r.followup_due_at
+        ? { note: r.followup_note ?? "", dueAt: r.followup_due_at, createdAt: r.followup_created_at ?? r.followup_due_at }
+        : null,
+    paused: remote
+      ? (remote.paused ?? null)
+      : r.paused_run_id && r.paused_reason && r.paused_at
         ? toPause(
             { run_id: r.paused_run_id, reason: r.paused_reason, created_at: r.paused_at, limit_name: r.paused_limit ?? null, resume_at: r.paused_resume_at ?? null, auto: r.paused_auto ?? 0 },
             r,
@@ -292,7 +314,8 @@ export function createConversation(
 
 export function getConversation(id: string): ConversationWithMessages {
   const conversation = getConversationSummary(id);
-  return { ...conversation, messages: listMessages(id), activeRunId: activeRunForConversation(id), queue: listQueue(id) };
+  const activeRunId = conversation.runnerId ? remoteRunForConversation(id) : activeRunForConversation(id);
+  return { ...conversation, messages: listMessages(id), activeRunId, queue: listQueue(id) };
 }
 
 /** `workspaceId`: chats of the workspace's agents, and global agents' chats started in it. */

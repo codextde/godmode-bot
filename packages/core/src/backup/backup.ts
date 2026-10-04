@@ -52,16 +52,16 @@ export const BACKUP_EXTENSION = ".godmode-backup";
 export const MAX_BACKUP_BYTES = 2 * 1024 ** 3;
 const FILE_PREFIX = "godmode-backup-";
 
-/** Never exported: login sessions, paired phones and the migration ledger. */
-const EXCLUDED_TABLES = new Set(["sessions", "mobile_devices", "_migrations"]);
+/** Never exported: login sessions, paired phones, paired runners and controllers, and the migration ledger. */
+const EXCLUDED_TABLES = new Set(["sessions", "mobile_devices", "runners", "link_controllers", "runner_memory", "_migrations"]);
 /** Vault key material travels in vault.json, not db.json. */
 const VAULT_META_KEYS = new Set(["vault.kdf", "vault.wrapped_dek", "vault.canary"]);
 /** Settings sections that belong to this machine (bind address, remote access, allowed origins, phone access). */
 const DEVICE_SETTINGS = new Set(["server", "mobile"]);
 
-/** Meta keys that stay with the machine: dashboard auth, remembered vault key, cached Composio sessions, phone pairing. */
+/** Meta keys that stay with the machine: dashboard auth, remembered vault key, cached Composio sessions, phone and runner pairing. */
 function isDeviceMetaKey(key: string): boolean {
-  return key.startsWith("auth.") || key.startsWith("vault.remember_") || key.startsWith("composio.session.") || key.startsWith("mobile.");
+  return key.startsWith("auth.") || key.startsWith("vault.remember_") || key.startsWith("composio.session.") || key.startsWith("mobile.") || key.startsWith("link.");
 }
 
 /** Chromium profile content that is cache or lock files — never worth backing up. */
@@ -104,10 +104,10 @@ const ALL_ENTITIES: EntityName[] = [
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
 /** Agent slugs and browser profile ids become directory names: restored ones must match this. */
-const SAFE_ID = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
+export const SAFE_ID = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
 
 /** Settings that point at programs or endpoints; a backup must not be able to set them. */
-const EXECUTABLE_SETTINGS: Record<string, string[]> = {
+export const EXECUTABLE_SETTINGS: Record<string, string[]> = {
   runner: ["extraArgs", "claudePath"],
   browser: ["chromePath", "browserUseCommand"],
   computer: ["cuaDriverCommand"],
@@ -137,7 +137,7 @@ interface ColumnInfo {
   pk: number;
 }
 
-type DumpValue = string | number | null | { $b64: string };
+export type DumpValue = string | number | null | { $b64: string };
 interface DbDump {
   tables: Record<string, Record<string, DumpValue>[]>;
 }
@@ -159,7 +159,7 @@ function tableInfo(table: string): ColumnInfo[] {
 
 const q = (ident: string) => `"${ident.replace(/"/g, '""')}"`;
 
-function encodeValue(v: unknown): DumpValue {
+export function encodeValue(v: unknown): DumpValue {
   if (v === null || v === undefined) return null;
   if (v instanceof Uint8Array) return { $b64: Buffer.from(v).toString("base64") };
   if (typeof v === "bigint") return Number(v);
@@ -168,7 +168,7 @@ function encodeValue(v: unknown): DumpValue {
   return JSON.stringify(v);
 }
 
-function decodeValue(v: unknown): string | number | null | Uint8Array {
+export function decodeValue(v: unknown): string | number | null | Uint8Array {
   if (v === null || v === undefined) return null;
   if (typeof v === "string" || typeof v === "number") return v;
   if (typeof v === "boolean") return v ? 1 : 0;
@@ -429,6 +429,12 @@ function sanitizeDump(dump: DbDump): string[] {
   // Computer use: shared windows/screens belong to the machine they were shared on, and unattended control of this
   // computer is something the human turns on here, not something a backup grants.
   for (const row of rowsOf("conversations")) if (row.computer_target != null) row.computer_target = null;
+  // Runners are paired with the machine, not the backup: their chats come back as chats of this computer.
+  for (const row of rowsOf("conversations")) {
+    row.runner_id = null;
+    row.runner_state = null;
+    row.runner_tools_id = null;
+  }
   let computerAgents = 0;
   for (const row of rowsOf("agents")) {
     let enabled = false;

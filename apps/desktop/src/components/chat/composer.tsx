@@ -54,6 +54,8 @@ interface ComposerProps {
   busy?: boolean;
   /** The agent is working — new messages get queued */
   running?: boolean;
+  /** Nothing can be written or sent right now (the computer the chat works on is away); a draft that is there stays. */
+  disabled?: boolean;
   /** What sending does right now, when it isn't a plain send (e.g. "Send and continue"). */
   sendHint?: string;
   /** Sending isn't possible right now; says why (typing and the draft keep working). */
@@ -87,6 +89,7 @@ export function Composer({
   autoFocus,
   busy,
   running,
+  disabled,
   sendHint,
   blocked,
   onRecall,
@@ -126,6 +129,8 @@ export function Composer({
   // Revoke thumbnails on unmount, unless they stay in the draft
   const attachmentsRef = useRef(attachments);
   attachmentsRef.current = attachments;
+  const disabledRef = useRef(disabled);
+  disabledRef.current = disabled;
   const keepsFiles = !!filesKey;
   useEffect(() => () => {
     if (!keepsFiles) attachmentsRef.current.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
@@ -165,7 +170,7 @@ export function Composer({
   });
 
   const addFiles = useCallback(async (files: File[]) => {
-    if (files.length === 0) return;
+    if (files.length === 0 || disabledRef.current) return;
     const room = MAX_ATTACHMENTS - attachmentsRef.current.length;
     if (room <= 0) {
       toast.warning(`You can attach up to ${MAX_ATTACHMENTS} files.`);
@@ -208,7 +213,7 @@ export function Composer({
     [addFiles],
   );
 
-  const canSend = (text.trim().length > 0 || attachments.length > 0) && !busy && !blocked;
+  const canSend = (text.trim().length > 0 || attachments.length > 0) && !busy && !blocked && !disabled;
 
   // Slash commands: the menu lists matches while only the command name is typed; afterwards a hint shows its arguments.
   const slashToken = /^\/([\w:.-]*)$/.exec(text)?.[1] ?? null;
@@ -357,7 +362,8 @@ export function Composer({
       className={cn(
         "@container/composer relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200",
         focused && "border-foreground/20 ring-4 ring-foreground/[0.035] dark:border-foreground/25 dark:ring-foreground/[0.05]",
-        working && "glow-border",
+        working && !disabled && "glow-border",
+        disabled && "shadow-card",
         className,
       )}
     >
@@ -427,8 +433,9 @@ export function Composer({
         onBlur={() => setFocused(false)}
         placeholder={listening ? "Listening…" : placeholder}
         rows={1}
+        disabled={disabled}
         className={cn(
-          "block w-full resize-none bg-transparent px-4 leading-relaxed outline-none placeholder:text-muted-foreground/80",
+          "block w-full resize-none bg-transparent px-4 leading-relaxed outline-none placeholder:text-muted-foreground/80 disabled:cursor-not-allowed disabled:text-muted-foreground",
           size === "lg" ? "min-h-[84px] pt-4 pb-2 text-[15.5px]" : "min-h-[52px] pt-3.5 pb-1.5 text-[15px]",
         )}
       />
@@ -444,12 +451,12 @@ export function Composer({
             e.target.value = "";
           }}
         />
-        <ToolbarButton label="Attach files" onClick={() => fileInputRef.current?.click()}>
+        <ToolbarButton label="Attach files" onClick={() => fileInputRef.current?.click()} disabled={disabled}>
           <Paperclip />
         </ToolbarButton>
 
         {agentId && (
-          <ToolbarButton label="Slash commands" onClick={toggleCommands} active={menuOpen} keepFocus className={cn("@max-md/composer:hidden", menuOpen && "bg-accent text-foreground")}>
+          <ToolbarButton label="Slash commands" onClick={toggleCommands} active={menuOpen} keepFocus disabled={disabled} className={cn("@max-md/composer:hidden", menuOpen && "bg-accent text-foreground")}>
             <SquareSlash />
           </ToolbarButton>
         )}
@@ -458,6 +465,7 @@ export function Composer({
           label={!voiceEnabled ? "Voice is off — enable it in Settings" : dictation.active ? "Stop dictation (Esc)" : "Dictate"}
           onClick={toggleDictation}
           active={dictation.active}
+          disabled={disabled && !dictation.active}
           className={cn(dictation.active && "bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive")}
         >
           {transcribing ? <Loader2 className="animate-spin" /> : listening ? <LevelBars levelRef={dictation.levelRef} /> : <Mic />}
@@ -477,7 +485,7 @@ export function Composer({
 
         <div className="ml-auto flex min-w-0 items-center gap-1.5">
           <AnimatePresence>
-            {(running || transcribing) && (
+            {((running && !disabled) || transcribing) && (
               <motion.span
                 initial={{ opacity: 0, x: 6 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -503,7 +511,7 @@ export function Composer({
 
           {trailing}
 
-          <ToolbarButton label={voiceEnabled ? "Voice mode" : "Voice is off — enable it in Settings"} onClick={openVoiceMode}>
+          <ToolbarButton label={voiceEnabled ? "Voice mode" : "Voice is off — enable it in Settings"} onClick={openVoiceMode} disabled={disabled}>
             <AudioLines />
           </ToolbarButton>
 
@@ -547,12 +555,14 @@ function ToolbarButton({
   children,
   active,
   keepFocus,
+  disabled,
   className,
 }: {
   label: string;
   onClick: () => void;
   children: ReactNode;
   active?: boolean;
+  disabled?: boolean;
   /** Don't take focus from the textarea */
   keepFocus?: boolean;
   className?: string;
@@ -566,6 +576,7 @@ function ToolbarButton({
           size="icon"
           onClick={onClick}
           onMouseDown={keepFocus ? (e) => e.preventDefault() : undefined}
+          disabled={disabled}
           aria-label={label}
           aria-pressed={active}
           className={cn("size-8 rounded-lg text-muted-foreground hover:text-foreground [&_svg:not([class*='size-'])]:size-[17px]", className)}

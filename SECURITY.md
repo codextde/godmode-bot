@@ -54,6 +54,18 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
   it — saving a sudo password is best effort, like typing logins into a VM. Give agents an account with only the rights
   the work needs, and prefer narrow `NOPASSWD` sudo rules to a saved sudo password.
 
+- **Runners are paired, not discovered**: a runner (another computer that works for your Godmode) only accepts a
+  computer that completed a pairing handshake with its one-time code (10 minutes, single use) and whose key it pinned
+  then; Godmode only talks to the runner key it pinned. The link is end-to-end encrypted and authenticated on its own
+  (X25519 with ephemeral and static keys, HKDF-SHA256, AES-256-GCM per direction, numbered frames), so it is safe on a
+  LAN or over Tailscale without TLS. The runner's own API stays on loopback; from the network it answers only the link.
+  The pairing code that an install command delivers is sealed with a token that exists only in that command line.
+- **What a paired Godmode can do on a runner**: everything its owner can — it copies your setup there, including the
+  vault's data key (so logins and 2FA codes work there; they stay encrypted at rest and are filled like here), starts
+  chats, and its "Fix with Claude" chat runs shell commands on the runner (audited as `runner.exec`). Treat a runner like
+  your own computer: pair only machines you control, and remove a runner (Runners → Remove) to make it forget this
+  computer. Agents on a runner can't change its setup, automations or the task board — those are copies.
+
 ## Important caveats
 
 - Agents run Claude Code in **bypass-permissions mode** by default so they can work without interruption. They can run

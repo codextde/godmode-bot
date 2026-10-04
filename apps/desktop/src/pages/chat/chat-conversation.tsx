@@ -27,7 +27,8 @@ import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { InstructionsChip } from "@/components/instructions/instructions";
 import { SshChip } from "@/components/ssh/ssh-chip";
-import { VmChip } from "@/components/vms/vm-picker";
+import { RunnerOfflineBar, RunnerPill } from "@/components/runners/runner-chip";
+import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { Thread } from "@/components/chat/thread";
@@ -39,11 +40,13 @@ import { useVoiceSettings } from "@/hooks/use-voice";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useConversation, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces } from "@/lib/hooks";
 import { onServerEvent } from "@/lib/realtime";
 import { speak, useVoicePrefs, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
+
+const NO_INHERITED_VMS: InheritedVm[] = [];
 
 export default function ChatConversation() {
   const { conversationId = "" } = useParams();
@@ -72,7 +75,13 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const [runProfile, setRunProfile] = useState<{ runId: string; profileId: string | null } | null>(null);
   if ((live?.runId ?? null) !== (runProfile?.runId ?? null)) setRunProfile(live ? { runId: live.runId, profileId: conv?.browserProfileId ?? null } : null);
   const chatProfileId = runProfile ? runProfile.profileId : (conv?.browserProfileId ?? null);
-  const browser = useChatBrowser(agent, chatProfileId, conv?.workspaceId ?? null);
+  const chatBrowser = useChatBrowser(agent, chatProfileId, conv?.workspaceId ?? null);
+  // A runner's chat browses in the runner's copy of this profile: its frames come over the link, and whether that
+  // browser runs is the runner's business — the panels show what arrives.
+  const browser = useMemo(
+    () => (conv?.runnerId && chatBrowser ? { ...chatBrowser, running: true, chats: [] } : chatBrowser),
+    [conv?.runnerId, chatBrowser],
+  );
   // The panel appears once the agent opens this chat's own tab (other chats browse in theirs).
   const chatTab = useChatTab(browser, conversationId);
   const browserPanel = useUi((s) => s.browserPanel);
@@ -82,7 +91,13 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const wide = useMediaQuery("(min-width: 1024px)");
   const [browserFocus, setBrowserFocus] = useState<BrowserFocusMode | null>(null);
   const { setArchived } = useArchiveChat();
-  const computerTarget = conv?.computerTarget ?? null;
+  // A chat that lives on a runner does its work there: this computer's folders, shared screens and VMs aren't part of
+  // it, and nothing can be sent while the runner is away.
+  const onRunner = !!conv?.runnerId;
+  const { data: runners } = useRunners();
+  const runner = conv?.runnerId ? (runners?.find((r) => r.id === conv.runnerId) ?? null) : null;
+  const runnerAway = !!runner && runner.state !== "online";
+  const computerTarget = onRunner ? null : (conv?.computerTarget ?? null);
   const computerPanel = useUi((s) => s.computerPanel);
   const setComputerPanel = useUi((s) => s.setComputerPanel);
   const [computerFocus, setComputerFocus] = useState<ComputerFocusMode | null>(null);
@@ -91,14 +106,16 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     agentWorkspace?.vmId ? { vmId: agentWorkspace.vmId, from: `the ${agentWorkspace.name} workspace` } : null,
   ];
   // A chat that works in a VM does everything there: its panel shows the VM, not this Mac's browser or screen.
-  const chatVm = useChatVm(conv?.vmId ?? null, vmInherited);
+  const chatVm = useChatVm(onRunner ? null : (conv?.vmId ?? null), onRunner ? NO_INHERITED_VMS : vmInherited);
   const vmPanel = useUi((s) => s.vmPanel);
   const setVmPanel = useUi((s) => s.setVmPanel);
   const [vmFocus, setVmFocus] = useState(false);
   const showVmPanel = !!chatVm && !!agent && wide && vmPanel;
   // Something shared takes the side panel; the browser stays one click away in the header.
   const showComputerPanel = !chatVm && !!computerTarget && !!agent && wide && computerPanel;
-  const showBrowserPanel = !chatVm && !!browser && !!agent && wide && !showComputerPanel && (browserOpened || (!!chatTab && browserPanel));
+  // On a runner this computer can't see the chat's tab before frames come: the panel shows while the agent works there.
+  const browserActive = !!chatTab || (onRunner && !!live);
+  const showBrowserPanel = !chatVm && !!browser && !!agent && wide && !showComputerPanel && (browserOpened || (browserActive && browserPanel));
   useEffect(() => setBrowserFocus(null), [browser?.id]);
   useEffect(() => {
     if (!computerTarget) setComputerFocus(null);
@@ -416,7 +433,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           }
         />
 
-        <ChatFilesScope conversationId={conversationId}>
+        <ChatFilesScope conversationId={conversationId} runnerId={conv.runnerId}>
           <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? "The agent", openId: waiting?.question?.id ?? null }}>
             <Thread
               messages={visibleMessages}
@@ -486,6 +503,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} queued={queue.length} />
                   </motion.div>
                 )}
+                {runnerAway && (
+                  <motion.div
+                    key="runner-away"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <RunnerOfflineBar runner={runner} />
+                  </motion.div>
+                )}
                 {conv.followup && (
                   <motion.div
                     key="followup"
@@ -516,16 +545,21 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 autoFocus
                 running={!!activeRunId && !paused}
                 blocked={agent && !agent.enabled ? `Switch ${agent.name} on to send` : undefined}
+                disabled={runnerAway}
                 onRecall={() => queueRef.current?.editLast() ?? false}
                 leading={
                   <>
-                    <FolderChip
-                      chatFolder={conv.workingDirectory}
-                      agentFolder={agent?.workingDirectory ?? null}
-                      agentName={agent?.name}
-                      onChange={(path) => setFolder.mutate(path)}
-                      busy={setFolder.isPending}
-                    />
+                    {onRunner ? (
+                      <RunnerPill runner={runner} />
+                    ) : (
+                      <FolderChip
+                        chatFolder={conv.workingDirectory}
+                        agentFolder={agent?.workingDirectory ?? null}
+                        agentName={agent?.name}
+                        onChange={(path) => setFolder.mutate(path)}
+                        busy={setFolder.isPending}
+                      />
+                    )}
                     {!chatVm && (
                       <>
                         <BrowserProfileChip
@@ -535,13 +569,15 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                           onChange={(id) => setBrowserProfile.mutateAsync(id).catch(() => undefined)}
                           busy={setBrowserProfile.isPending}
                         />
-                        <ComputerShareChip
-                          target={computerTarget}
-                          agentName={agent?.name}
-                          onShare={(t) => share.mutateAsync(t)}
-                          onWatch={() => setComputerFocus("watch")}
-                          busy={share.isPending}
-                        />
+                        {!onRunner && (
+                          <ComputerShareChip
+                            target={computerTarget}
+                            agentName={agent?.name}
+                            onShare={(t) => share.mutateAsync(t)}
+                            onWatch={() => setComputerFocus("watch")}
+                            busy={share.isPending}
+                          />
+                        )}
                       </>
                     )}
                     <SshChip
@@ -550,12 +586,14 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                       onChange={(ids) => setSshServers.mutateAsync(ids).catch(() => undefined)}
                       busy={setSshServers.isPending}
                     />
-                    <VmChip
-                      value={conv.vmId ?? null}
-                      inherited={vmInherited}
-                      onChange={(vmId) => setVm.mutateAsync(vmId).catch(() => undefined)}
-                      busy={setVm.isPending}
-                    />
+                    {!onRunner && (
+                      <VmChip
+                        value={conv.vmId ?? null}
+                        inherited={vmInherited}
+                        onChange={(vmId) => setVm.mutateAsync(vmId).catch(() => undefined)}
+                        busy={setVm.isPending}
+                      />
+                    )}
                     <InstructionsChip
                       value={conv.instructions ?? ""}
                       agent={agent}
@@ -566,7 +604,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 }
                 sendHint={waiting ? "Send answer" : paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : undefined}
                 placeholder={
-                  !agent
+                  runnerAway
+                    ? runner.state === "connecting"
+                      ? `Connecting to ${runner.name}…`
+                      : `${runner.name} ${runner.state === "offline" ? "is offline" : "needs an update"}`
+                    : !agent
                     ? "Message…"
                     : !agent.enabled
                       ? `${agent.name} is switched off — your message waits here as a draft`

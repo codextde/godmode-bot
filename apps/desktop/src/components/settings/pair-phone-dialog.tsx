@@ -172,7 +172,8 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-function ExpiryRing({ seconds, total }: { seconds: number; total: number }) {
+/** A ring that empties as a pairing offer runs out (also used when pairing a runner). */
+export function ExpiryRing({ seconds, total }: { seconds: number; total: number }) {
   const r = 6;
   const c = 2 * Math.PI * r;
   return (

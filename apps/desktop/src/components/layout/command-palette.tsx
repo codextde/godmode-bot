@@ -12,6 +12,7 @@ import {
   Lock,
   MessageCircle,
   MessageSquarePlus,
+  MonitorSmartphone,
   MonitorUp,
   Moon,
   Plug,
@@ -138,6 +139,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem value="ssh servers remote linux" onSelect={() => go("/ssh")}>
             <Server /> SSH servers
+          </CommandItem>
+          <CommandItem value="runners remote computer mac mini" onSelect={() => go("/runners")}>
+            <MonitorSmartphone /> Runners
           </CommandItem>
           <CommandItem onSelect={() => go("/workspaces")}>
             <Layers /> Workspaces

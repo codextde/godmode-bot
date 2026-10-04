@@ -441,8 +441,10 @@ export async function startRun(input: StartRunInput): Promise<Run> {
   if (shuttingDown) throw new HttpError(503, "Godmode is shutting down", "shutting_down");
   const agent = getAgent(input.agentId);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
-  const conv = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", input.conversationId);
+  const conv = get<{ agent_id: string; runner_id: string | null }>("SELECT agent_id, runner_id FROM conversations WHERE id = ?", input.conversationId);
   if (!conv) throw notFound("Conversation");
+  // Its runs happen on the runner; the request should have been forwarded there.
+  if (conv.runner_id) throw conflict("This chat works on a runner");
   if (conv.agent_id !== agent.id) throw badRequest("The conversation belongs to another agent");
   if (!input.prompt.trim()) throw badRequest("Prompt is empty");
 
@@ -503,6 +505,10 @@ export async function cancelRun(runId: string, reason = "Cancelled", opts: { the
   if (!job) {
     const row = get<RunRow>("SELECT * FROM runs WHERE id = ?", runId);
     if (!row) throw notFound("Run");
+    // A run of a chat on a runner is the runner's to end: closing the copy here would only make it look stopped.
+    if (!TERMINAL.has(row.status) && get<{ id: string }>("SELECT id FROM conversations WHERE id = ? AND runner_id IS NOT NULL", row.conversation_id)) {
+      throw new HttpError(409, "The runner this chat works on is offline", "runner_offline");
+    }
     if (row.status === "paused") return closePaused(row, reason);
     if (!TERMINAL.has(row.status)) {
       // Stale row (no live job): close it.
@@ -801,9 +807,15 @@ export function waitForRun(runId: string, timeoutMs?: number, opts: { orPaused?:
   });
 }
 
-/** Mark runs left in queued/running state by a previous process as failed. */
+/**
+ * Mark runs left in queued/running state by a previous process as failed. Runs of chats on a runner are copies of the
+ * runner's: a restart of this computer did not interrupt them.
+ */
 export function recoverInterruptedRuns(): void {
-  const stale = all<RunRow>("SELECT * FROM runs WHERE status IN ('queued', 'running')").filter((r) => !jobs.has(r.id));
+  const stale = all<RunRow>(
+    `SELECT r.* FROM runs r WHERE r.status IN ('queued', 'running')
+     AND NOT EXISTS (SELECT 1 FROM conversations c WHERE c.id = r.conversation_id AND c.runner_id IS NOT NULL)`,
+  ).filter((r) => !jobs.has(r.id));
   if (!stale.length) return;
   const ts = now();
   const agentIds = new Set<string>();

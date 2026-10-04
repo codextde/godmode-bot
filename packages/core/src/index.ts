@@ -7,12 +7,14 @@
  *   godmode password <pw>    set the web dashboard password
  *   godmode doctor           check dependencies (claude, uv, chrome) and permissions; --fix repairs what it can
  *   godmode update           update the installed tools
+ *   godmode runner <install|pair|serve|status|uninstall>   work for a Godmode on another computer (see remote/cli.ts)
  *   godmode version
  */
+import { rmSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { loadConfig, config, BUILD, VERSION, isLoopbackHost } from "./config";
-import { logger, setLogDir } from "./log";
-import { openDb, closeDb } from "./db";
+import { loadConfig, config, BUILD, VERSION, isLoopbackHost, type CoreConfig } from "./config";
+import { logger, setLogDir, setLogLevel } from "./log";
+import { openDb, closeDb, setMeta } from "./db";
 import { createApp } from "./server/app";
 import { websocketHandler, type WsData } from "./server/ws";
 import { authenticateRequest, getAccessToken, isAllowedOrigin, setDashboardPassword } from "./server/auth";
@@ -41,6 +43,11 @@ import { checkUpdates } from "./services/updates";
 import { resourceSnapshot, startDiagnostics, stopDiagnostics } from "./diagnostics/monitor";
 import { getModelCatalog } from "./runner/models";
 import { refreshMobileAccess, startMobileAccess, stopMobileAccess } from "./mobile/access";
+import { answerHealth, HEALTH_PATH, runnerFile, runningRunner, runRunnerCli, servingRunner, USAGE as RUNNER_USAGE, type RunnerProcess } from "./remote/cli";
+import { startLinkServer, stopLinkServer } from "./remote/linkServer";
+import { startRunners, stopRunners } from "./remote/runners";
+import { bootstrapDependencies } from "./remote/health";
+import { startKeepAwake, stopKeepAwake } from "./remote/keepAwake";
 import { newId } from "./util";
 
 const log = logger("core");
@@ -101,14 +108,28 @@ function readTokenFromStdin(timeoutMs = TOKEN_STDIN_TIMEOUT_MS): Promise<string>
   });
 }
 
-async function serve(values: Record<string, unknown>) {
+/**
+ * `role`: given by `godmode runner serve`; `godmode serve` takes it from GODMODE_ROLE. A runner is the same core without
+ * what only the human's own Godmode does (schedules, dreaming, automations, messaging, the task board, phones): it
+ * works on what a controller sends over the link, stays on loopback and keeps its computer awake.
+ */
+async function serve(values: Record<string, unknown>, role?: CoreConfig["role"]) {
   const stdinToken = values["token-stdin"] ? await readTokenFromStdin() : null;
   const cfg = loadConfig({
+    ...(role ? { role } : {}),
     ...(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {}),
     ...(values.ui ? { uiDir: String(values.ui) } : {}),
     ...(values.mode ? { mode: values.mode as "desktop" | "server" } : {}),
     ...(stdinToken ? { token: stdinToken } : {}),
   });
+  const runner = cfg.role === "runner";
+  if (runner) {
+    cfg.mode = "server";
+    // Before the database is opened: a second runner on the same data dir would take the first one's runs for
+    // interrupted ones and mark them as failed, and nothing else stops it (the API port is a random one).
+    const other = await servingRunner(cfg.dataDir);
+    if (other) throw new Error(`A runner is already serving from ${cfg.dataDir} (pid ${other.pid}).`);
+  }
   // The token now lives in the config; don't let any child process (agents, MCP servers, installers) inherit it.
   delete process.env.GODMODE_TOKEN;
   setLogDir(cfg.logsDir);
@@ -119,6 +140,12 @@ async function serve(values: Record<string, unknown>) {
   // CLI flags > env > settings
   cfg.host = (values.host as string) || process.env.GODMODE_HOST || settings.server.host || cfg.host;
   cfg.port = Number(values.port || process.env.GODMODE_PORT || settings.server.port || cfg.port);
+  if (runner) {
+    // The link is the only way in from outside. The API is for the runner's own runs (the MCP gateway): loopback, and
+    // a random port unless one is asked for, so a Godmode app on the same computer keeps its 7777.
+    cfg.host = "127.0.0.1";
+    cfg.port = Number(values.port ?? 0);
+  }
   if (!isLoopbackHost(cfg.host) && !settings.server.remoteAccess) {
     log.warn(`binding to ${cfg.host} enables remote dashboard access`);
     updateSettings({ server: { remoteAccess: true } });
@@ -129,14 +156,18 @@ async function serve(values: Record<string, unknown>) {
   ensureDefaultProfile();
   await ensureDefaultAgent();
   recoverInterruptedRuns();
-  startScheduler();
+  // Before anything can start a run: the runner keeps the display on while runs work, and counts them from the start.
+  if (runner) startKeepAwake();
+  else startScheduler();
   startFollowups();
   startPauses();
-  startDreaming();
-  startAutomationEvents();
-  startAppTriggers();
-  startMessaging();
-  startTasks();
+  if (!runner) {
+    startDreaming();
+    startAutomationEvents();
+    startAppTriggers();
+    startMessaging();
+    startTasks();
+  }
   // Adopt VMs that kept running while Godmode was closed.
   startVms().catch((err) => log.warn("could not check VMs", err));
 
@@ -170,6 +201,8 @@ async function serve(values: Record<string, unknown>) {
         const ok = server.upgrade(req, { data: { id: newId("ws"), subscriptions: new Set<string>(), auth: auth.kind, deviceId: auth.device?.id } });
         return ok ? undefined : new Response("Upgrade failed", { status: 400 });
       }
+      // `godmode runner status` asks the runner itself: permissions and the session are this process's, not the asking terminal's.
+      if (runner && req.method === "GET" && url.pathname === HEALTH_PATH) return answerHealth(req);
       return app.fetch(req, { server });
     },
     websocket: websocketHandler,
@@ -187,8 +220,25 @@ async function serve(values: Record<string, unknown>) {
     }
   }
   cfg.port = server.port ?? cfg.port;
-  startMobileAccess({ app, websocket: websocketHandler });
-  onSettingsApplied(() => void refreshMobileAccess());
+  if (runner) {
+    // The way in for the computers it works for: encrypted, on every interface, at the port they were paired with.
+    if (typeof values["link-port"] === "number") setMeta("link.port", String(values["link-port"]));
+    const linkPort = startLinkServer({ app, websocket: websocketHandler });
+    // Tells `godmode runner install` and `status` that this runner is up; gone again when it stops.
+    const info: RunnerProcess = {
+      pid: process.pid,
+      apiPort: cfg.port,
+      linkPort,
+      startedAt: new Date().toISOString(),
+      version: VERSION,
+    };
+    writeFileSync(runnerFile(cfg.dataDir), JSON.stringify(info, null, 2) + "\n", { mode: 0o600 });
+  } else {
+    startMobileAccess({ app, websocket: websocketHandler });
+    onSettingsApplied(() => void refreshMobileAccess());
+    // Connect to the runners this Godmode works with.
+    startRunners();
+  }
 
   const displayHost = isLoopbackHost(cfg.host) ? "127.0.0.1" : cfg.host;
   const url = `http://${displayHost}:${cfg.port}`;
@@ -200,7 +250,7 @@ async function serve(values: Record<string, unknown>) {
     bun: Bun.version,
     startupMs: Math.round(performance.now()),
   });
-  if (cfg.mode === "server") {
+  if (cfg.mode === "server" && !runner) {
     log.info(`Dashboard: ${url}  — run \`godmode token\` to print the access token`);
   }
 
@@ -208,6 +258,9 @@ async function serve(values: Record<string, unknown>) {
   runDoctor(true).catch((err) => log.warn("doctor failed", err));
   getModelCatalog().catch((err) => log.warn("model catalog failed", err));
   startMaintenance();
+  // Nobody sits in front of a runner to click "Install": it fetches what it needs by itself. GODMODE_RUNNER_BOOTSTRAP=0
+  // leaves the machine's software alone (tests, machines that are managed otherwise).
+  if (runner && process.env.GODMODE_RUNNER_BOOTSTRAP !== "0") void bootstrapDependencies();
 
   let stopping = false;
   const shutdown = async (signal: string) => {
@@ -216,15 +269,23 @@ async function serve(values: Record<string, unknown>) {
     log.info(`received ${signal}, shutting down`, resourceSnapshot());
     stopDiagnostics();
     stopMaintenance();
-    stopScheduler();
+    if (!runner) stopScheduler();
     stopFollowups();
     stopPauses();
-    stopDreaming();
-    stopAppTriggers();
-    stopAutomationEvents();
-    stopMobileAccess();
-    await stopMessaging();
-    stopTasks();
+    if (runner) {
+      stopLinkServer();
+      stopKeepAwake();
+      // Only its own: a runner.json that names another process is that runner's way of saying it serves.
+      if (runningRunner(cfg.dataDir)?.pid === process.pid) rmSync(runnerFile(cfg.dataDir), { force: true });
+    } else {
+      stopDreaming();
+      stopAppTriggers();
+      stopAutomationEvents();
+      stopMobileAccess();
+      stopRunners();
+      await stopMessaging();
+      stopTasks();
+    }
     await shutdownRunner();
     await shutdownBrowsers();
     await shutdownComputer();
@@ -256,7 +317,10 @@ Usage:
   godmode password <new>     Set the web dashboard password
   godmode doctor [--fix]     Check dependencies and permissions (--fix repairs what it can)
   godmode update             Update the installed tools
-  godmode version`);
+  godmode version
+
+Runner (this computer works for a Godmode on another one):
+${RUNNER_USAGE.replace(/^Usage:\n/, "")}`);
     return;
   }
   switch (cmd) {
@@ -266,6 +330,15 @@ Usage:
     case "version":
       console.log(VERSION);
       return;
+    case "runner": {
+      const serving = positionals[1] === "serve";
+      // Keep the answer readable: no database and probe chatter between the lines of a one-shot command.
+      if (!serving && !process.env.GODMODE_LOG_LEVEL) setLogLevel("warn");
+      const code = await runRunnerCli(Bun.argv.slice(Bun.argv.indexOf("runner", 2) + 1), { serve: (v) => serve(v, "runner") });
+      // `runner serve` returned because it listens now and keeps running; every other command is done.
+      if (code !== 0 || !serving) process.exit(code);
+      return;
+    }
     case "token": {
       const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
       openDb(cfg.dbPath);

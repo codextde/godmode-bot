@@ -165,12 +165,16 @@ export async function setRememberDevice(remember: boolean) {
     if (!dek) throw locked();
     const value = dek.toString("base64");
     let stored = false;
-    try {
-      await Bun.secrets.set({ service: KEYCHAIN_SERVICE, name: keychainName(), value });
-      stored = true;
-      setMeta("vault.remember_method", "keychain");
-    } catch (err) {
-      log.warn("OS keychain unavailable, falling back to protected key file", err);
+    // GODMODE_KEYCHAIN=0: the key file only. For tests and throwaway installations, which must not leave items in the
+    // keychain of the person running them.
+    if (process.env.GODMODE_KEYCHAIN !== "0") {
+      try {
+        await Bun.secrets.set({ service: KEYCHAIN_SERVICE, name: keychainName(), value });
+        stored = true;
+        setMeta("vault.remember_method", "keychain");
+      } catch (err) {
+        log.warn("OS keychain unavailable, falling back to protected key file", err);
+      }
     }
     if (!stored) {
       writeFileSync(keyFilePath(), value, { mode: 0o600 });
@@ -269,6 +273,39 @@ export function importVaultMeta(meta: { kdf: string; wrappedDek: string; canary:
   if (meta.canary) setMeta("vault.canary", meta.canary);
   else deleteMeta("vault.canary");
   lock();
+}
+
+/**
+ * Take over the vault of the Godmode this runner works for: its data key arrives over the encrypted link, so the rows
+ * copied from there (sealed with that key) open here. The key is remembered on this device — nobody sits in front of a
+ * runner to type the passphrase after a restart.
+ */
+export async function adoptKey(dekBase64: string, meta: { kdf: string; wrappedDek: string; canary: string | null }): Promise<void> {
+  const key = Buffer.from(dekBase64, "base64");
+  if (key.length !== 32) throw badRequest("The vault key doesn't match");
+  if (meta.canary) {
+    try {
+      decrypt(key, meta.canary, "vault.canary");
+    } catch {
+      throw badRequest("The vault key doesn't match");
+    }
+  }
+  // Same key, already remembered: a repeated sync must not write to the keychain every time.
+  const remembered = dek !== null && dek.equals(key) && getMeta("vault.remember_device") === "1";
+  tx(() => {
+    setMeta("vault.kdf", meta.kdf);
+    setMeta("vault.wrapped_dek", meta.wrappedDek);
+    // A canary of the previous key would make the remembered key look invalid at the next start.
+    setMeta("vault.canary", meta.canary ?? encrypt(key, "ok", "vault.canary"));
+  });
+  if (dek && !dek.equals(key)) {
+    dek.fill(0);
+    knownSecrets.clear();
+  }
+  dek = key;
+  touch();
+  loadKnownSecrets();
+  if (!remembered) await setRememberDevice(true);
 }
 
 export function vaultMetaForBackup() {

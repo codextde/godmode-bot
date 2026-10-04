@@ -196,6 +196,11 @@ export function useSshServers() {
   return useQuery({ queryKey: qk.sshServers, queryFn: api.ssh.list });
 }
 
+/** Runners: other computers that work for this one. Kept live by `runner.updated` events in realtime.ts. */
+export function useRunners() {
+  return useQuery({ queryKey: qk.runners, queryFn: api.runners.list });
+}
+
 export function useAgentTemplates() {
   return useQuery({ queryKey: qk.agentTemplates, queryFn: api.agents.templates, staleTime: 5 * 60_000 });
 }
