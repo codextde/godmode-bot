@@ -160,8 +160,8 @@ const DOING: [RegExp, string][] = [
 /** The core says "Using browser_navigate"; people read "Opening a page". */
 export function activityText(label: string | null | undefined): string {
   if (!label) return "Thinking";
-  // An older core sends "Using <tool id>"; a current one sends plain words ("Using Linear…" among them).
+  // An older core sends "Using <tool id>" (no "…"); a current one sends plain words ending in "…" ("Using Linear…").
   const tool = /^Using ([\w.-]+)$/.exec(label)?.[1];
-  if (!tool || !/[_.]/.test(tool)) return label.replace(/…$/, "");
+  if (!tool) return label.replace(/…$/, "");
   return DOING.find(([re]) => re.test(tool))?.[1] ?? "Working";
 }

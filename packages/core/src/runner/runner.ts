@@ -49,6 +49,7 @@ import {
   RUN_INTERRUPTED,
   RUN_MAX_TURNS,
   RUN_SHUT_DOWN,
+  RUN_STOPPED_BY_USER,
   TASK_PRIORITY_RANK,
   WORKFLOW_TOOL,
   isModelId,
@@ -787,7 +788,7 @@ function closePaused(row: RunRow, reason: string, byHuman = false): void {
   if (p && convAlive) {
     safely("close the paused message", () => {
       const message = getMessage(p.message_id);
-      const blocks = p.reason === "question" ? withdrawOpenBlocks(message.blocks, reason === "Cancelled" || reason === "Cancelled by user" ? null : reason) : message.blocks;
+      const blocks = p.reason === "question" ? withdrawOpenBlocks(message.blocks, reason === "Cancelled" || reason === RUN_STOPPED_BY_USER ? null : reason) : message.blocks;
       assistant = updateMessage(p.message_id, { blocks: [...blocks, { type: "notice", level: "info", text: reason }] });
     });
   }

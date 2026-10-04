@@ -517,7 +517,13 @@ export interface ContinueAnswer {
 const NOTE_TAGS = /<\/?(?:godmode[\w-]*|answer-from-human|message-from-human|your-question)\b[^>]*>/gi;
 
 export function stripNoteTags(text: string): string {
-  return text.replace(NOTE_TAGS, "");
+  // Until nothing is left: "<</godmode-x>/godmode-continue>" would leave a tag behind after one pass.
+  let out = text;
+  for (let prev = ""; prev !== out; ) {
+    prev = out;
+    out = out.replace(NOTE_TAGS, "");
+  }
+  return out;
 }
 
 /**
@@ -630,8 +636,8 @@ export function retryWhy(end: RunEnd | null, error: string, userName: string): s
     case "budget":
       return "it reached its cost limit";
     default:
-      // The error may carry text the model or a page wrote: it is quoted as data, never as instructions.
-      return `it failed with this error: “${line(error.split("\n")[0] ?? "", 300)}”`;
+      // The error may carry text the model or a page wrote: it is quoted as data, never as instructions (no tags at all).
+      return `it failed with this error: “${line(error.split("\n")[0] ?? "", 300).replace(/[<>]/g, (c) => (c === "<" ? "‹" : "›"))}”`;
   }
 }
 

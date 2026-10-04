@@ -298,9 +298,11 @@ queued, budgeted and reported like a message from the human:
   starting over. **Try again** otherwise: the run's own prompt is sent again (saved secrets stay masked; the marker
   says so). A turn an automation, follow-up or another agent started is answered to the human in this chat.
 * The chat gets a `retry` marker (a system message, `content` "Continue where you stopped" / "Try again").
-* Refused: a run that isn't the chat's latest (`stale`), one that didn't end early, a chat that works, stands still or
-  belongs to a ticket (`task_chat` — continued from the ticket) or a chat platform (`platform_chat` — the person asks
-  there), dreams and condition checks, and a chat too long to go on (`context`). Godmode's own end-of-turn sentences
+* Refused: a run that isn't the chat's latest (`stale`), one that didn't end early, a chat that works, stands still,
+  has messages waiting (`queued` — they would go along unasked) or belongs to a ticket (`task_chat` — continued from the
+  ticket) or a chat platform (`platform_chat` — the person asks there), an automation's run (`automation` — the desktop
+  offers the automation's *Run now*, so its busy check, events and "Needs you" follow), dreams and condition checks, and
+  a chat too long to go on (`context`). A chat on a runner is picked up there (the request is forwarded). Godmode's own end-of-turn sentences
   live in `@godmode/shared` (`runEndOf`); for a sign-in, CLI, VM, folder or model error the desktop links to the fix
   and offers *Try again* next to it.
 

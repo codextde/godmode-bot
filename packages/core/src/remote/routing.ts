@@ -22,7 +22,7 @@ const RUN = /^\/api\/runs\/([A-Za-z0-9_-]{1,100})(\/cancel|\/log)?$/;
 const BROWSER = /^\/api\/browser\/profiles\/[A-Za-z0-9_-]{1,100}\/(input|navigate)$/;
 const PROXY = /^\/api\/runners\/([A-Za-z0-9_-]{1,100})\/proxy(\/.*)$/;
 /** Chat sub-routes the runner answers. `files` resolves the paths in its messages on its own disk. */
-const FORWARDED = /^\/(messages|queue\/send|queue\/[A-Za-z0-9_-]{1,100}|pause|continue|followup|followup\/run|files)$/;
+const FORWARDED = /^\/(messages|queue\/send|queue\/[A-Za-z0-9_-]{1,100}|pause|continue|retry|followup|followup\/run|files)$/;
 const MAX_BODY = 64 * 1024 * 1024;
 
 function runnerOfRun(runId: string): string | null {
@@ -133,7 +133,8 @@ async function conversationRequest(c: Context, runnerId: string, id: string, res
     return null;
   }
   if (!FORWARDED.test(rest)) return null;
-  if (rest === "/messages" && method === "POST") await prepareRemoteMessage(id);
+  // Both start a run there: the runner gets what it needs for it first.
+  if ((rest === "/messages" || rest === "/retry") && method === "POST") await prepareRemoteMessage(id);
   return forward(c, runnerId, pathAndQuery(c));
 }
 
