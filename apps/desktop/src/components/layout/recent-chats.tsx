@@ -51,6 +51,15 @@ export function RecentChats() {
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel className="eyebrow text-[10.5px]">Recent</SidebarGroupLabel>
+      {items.some((c) => c.unread) && (
+        <button
+          type="button"
+          onClick={() => void api.conversations.read("all").catch(() => undefined)}
+          className="absolute top-3.5 right-3 text-[11px] text-muted-foreground transition hover:text-foreground"
+        >
+          Mark all read
+        </button>
+      )}
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((c) => {
@@ -68,7 +77,14 @@ export function RecentChats() {
                     <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-mt-0.5 size-5" />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1">
-                        <span className="truncate text-[13px]">{c.title || "New chat"}</span>
+                        <span className={cn("truncate text-[13px]", c.unread && conversationId !== c.id && "font-semibold text-foreground")}>{c.title || "New chat"}</span>
+                        {c.unread && conversationId !== c.id && (
+                          <span
+                            className={cn("size-1.5 shrink-0 rounded-full", c.unread.failed ? "bg-destructive" : "bg-brand-strong")}
+                            role="img"
+                            aria-label={c.unread.failed ? "Something went wrong here" : "New reply"}
+                          />
+                        )}
                         {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
                       </span>
                       <span className="block truncate text-[11px] text-muted-foreground">
@@ -92,7 +108,13 @@ export function RecentChats() {
                               <Pause className="size-3 shrink-0 fill-current" aria-hidden />
                             )}
                             <span className="truncate">
-                              {c.paused.reason === "user" ? "Paused" : c.paused.auto && c.paused.resumeAt ? `Continues ${followupWhen(c.paused.resumeAt)}` : "Waiting for the limit"}
+                              {c.paused.reason === "user"
+                                ? "Paused"
+                                : c.paused.reason === "budget"
+                                  ? "Held — budget used up"
+                                  : c.paused.auto && c.paused.resumeAt
+                                    ? `Continues ${followupWhen(c.paused.resumeAt)}`
+                                    : "Waiting for the limit"}
                             </span>
                           </span>
                         ) : c.followup ? (

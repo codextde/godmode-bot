@@ -146,6 +146,8 @@ interface TaskRow extends PauseQuestionCols {
   paused_limit?: string | null;
   paused_resume_at?: string | null;
   paused_auto?: number | null;
+  paused_budget_scope?: "agent" | "team" | null;
+  paused_budget_usd?: number | null;
   paused_at?: string | null;
 }
 
@@ -161,6 +163,7 @@ let watchTimer: ReturnType<typeof setInterval> | null = null;
 const SELECT = `SELECT t.*, r.id AS run_id, r.status AS run_status, r.started_at AS run_started_at,
     p.run_id AS paused_run_id, p.reason AS paused_reason,
     p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at, ${PAUSE_QUESTION_SQL},
+    p.budget_scope AS paused_budget_scope, p.budget_usd AS paused_budget_usd,
     f.due_at AS followup_due_at, f.note AS followup_note, f.created_at AS followup_set_at
   FROM tasks t
   LEFT JOIN runs r ON r.id = (SELECT id FROM runs WHERE conversation_id = t.conversation_id ORDER BY created_at DESC, rowid DESC LIMIT 1)
@@ -184,7 +187,19 @@ function toModel(r: TaskRow): Task {
     runStatus: r.run_status ?? null,
     pause:
       r.paused_run_id && r.paused_reason && r.paused_at
-        ? toPause({ run_id: r.paused_run_id, reason: r.paused_reason, limit_name: r.paused_limit ?? null, resume_at: r.paused_resume_at ?? null, auto: r.paused_auto ?? 0, created_at: r.paused_at }, r)
+        ? toPause(
+            {
+              run_id: r.paused_run_id,
+              reason: r.paused_reason,
+              limit_name: r.paused_limit ?? null,
+              resume_at: r.paused_resume_at ?? null,
+              auto: r.paused_auto ?? 0,
+              created_at: r.paused_at,
+              budget_scope: r.paused_budget_scope ?? null,
+              budget_usd: r.paused_budget_usd ?? null,
+            },
+            r,
+          )
         : null,
     repoUrl: r.repo_url,
     repoPath: r.repo_path,

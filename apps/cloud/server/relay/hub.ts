@@ -139,8 +139,13 @@ export class RelayHub implements RelayHubApi {
     await touchDevice(link.deviceId, devicePatch(link, hello));
     const [entitlements, relay] = await Promise.all([getEntitlements(link.userId), getSettings("relay")]);
     if (link.closed) return;
-    link.markWelcomed();
     const previous = this.links.get(link.deviceId);
+    // A slow welcome of an older socket must not push out the newer link that got in first.
+    if (previous && previous !== link && !previous.closed && previous.connectedAt.getTime() > link.connectedAt.getTime()) {
+      link.close(CloudClose.Replaced, "This computer connected again.");
+      return;
+    }
+    link.markWelcomed();
     this.links.set(link.deviceId, link);
     if (previous && previous !== link) previous.close(CloudClose.Replaced, "This computer connected again.");
     const welcome: CloudWelcome = {

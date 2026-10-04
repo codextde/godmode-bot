@@ -123,7 +123,24 @@ export function App() {
       if (event.type === "notification") {
         const n = event.notification;
         const fn = n.kind === "error" ? toast.error : n.kind === "warning" || n.kind === "missing_login" ? toast.warning : n.kind === "success" ? toast.success : toast;
-        fn(n.title, { description: n.body || undefined });
+        const here = !!n.link && `${window.location.pathname}${window.location.search}` === n.link && document.hasFocus();
+        // Already on screen: nothing to pop up, it's read.
+        if (here) {
+          void api.notifications.read([n.id]).catch(() => undefined);
+          return;
+        }
+        fn(n.title, {
+          description: n.body || undefined,
+          action: n.link
+            ? {
+                label: "Open",
+                onClick: () => {
+                  navigate(n.link!);
+                  void api.notifications.read([n.id]).catch(() => undefined);
+                },
+              }
+            : undefined,
+        });
         const desktopOn = qc.getQueryData<{ settings?: { general?: { desktopNotifications?: boolean } } }>(qk.bootstrap)?.settings?.general
           ?.desktopNotifications;
         if (desktopOn !== false && !document.hasFocus()) void notifyDesktop(n.title, n.body);

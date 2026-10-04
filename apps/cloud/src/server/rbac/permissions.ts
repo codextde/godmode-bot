@@ -34,7 +34,9 @@ export function isPermission(value: string): value is Permission {
 export const OWNER_ROLE_KEY = "owner";
 export const OWNER_ROLE_ID = "role_owner";
 
-const PERSONAL: Permission[] = ["devices.link", "devices.share", "billing.self"];
+/** What a person may do with their own account. The role open sign-ups get may hold nothing else. */
+export const PERSONAL_PERMISSIONS: Permission[] = ["devices.link", "devices.share", "billing.self"];
+const PERSONAL = PERSONAL_PERMISSIONS;
 
 /** Seeded by `ensureSystemRoles()`. The owner's list is ignored: owners may do everything. */
 export const SYSTEM_ROLES: { id: string; key: string; name: string; description: string; permissions: Permission[] }[] = [

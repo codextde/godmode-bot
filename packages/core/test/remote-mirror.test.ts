@@ -463,6 +463,7 @@ describe("the chat the API returns", () => {
       followup: null,
       paused: null,
       delegatedFrom: null,
+      unread: null,
       messages: [],
       activeRunId: null,
       queue: [],

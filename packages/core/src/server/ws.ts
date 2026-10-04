@@ -24,6 +24,21 @@ export interface WsData {
   conversations?: Set<string>;
   /** The client applies `run.delta` patches (it said `deltas.patch`); the others get the whole block list. */
   patches?: boolean;
+  /** The chat this client shows right now in a visible, focused window (`conversation.view`). */
+  viewing?: string | null;
+}
+
+/** Chats someone has open right now: they read what happens there, so it isn't unread and doesn't notify. */
+export function isConversationViewed(conversationId: string): boolean {
+  for (const ws of clients) if (ws.data.viewing === conversationId) return true;
+  return false;
+}
+
+let onView: ((conversationId: string) => void) | null = null;
+
+/** Called when a client starts showing a chat (it is read then). */
+export function setConversationViewHandler(fn: (conversationId: string) => void) {
+  onView = fn;
 }
 
 /**
@@ -367,6 +382,18 @@ export const websocketHandler = {
       case "conversation.unsubscribe":
         if (typeof msg.conversationId === "string") ws.data.conversations?.delete(msg.conversationId);
         break;
+      case "conversation.view": {
+        const id = typeof msg.conversationId === "string" && msg.conversationId.length <= 100 ? msg.conversationId : null;
+        ws.data.viewing = id;
+        if (id) {
+          try {
+            onView?.(id);
+          } catch (err) {
+            log.warn("could not mark the chat read", err);
+          }
+        }
+        break;
+      }
       case "deltas.patch":
         ws.data.patches = true;
         break;

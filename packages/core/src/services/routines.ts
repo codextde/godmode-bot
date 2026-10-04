@@ -34,6 +34,7 @@ export interface RoutineRow {
   filter: string;
   enabled: number;
   reuse_conversation: number;
+  notify?: string | null;
   conversation_id: string | null;
   last_run_at: string | null;
   next_run_at: string | null;
@@ -143,6 +144,7 @@ function toModel(r: RoutineRow, pending = 0): Routine {
     filter: r.filter,
     enabled: bool(r.enabled),
     reuseConversation: bool(r.reuse_conversation),
+    notify: r.notify === "always" || r.notify === "never" ? r.notify : "failures",
     conversationId: r.conversation_id,
     lastRunAt: r.last_run_at,
     nextRunAt: r.next_run_at,
@@ -414,6 +416,7 @@ function syncRoutinesFile(agentId: string): void {
         filter: r.filter,
         enabled: r.enabled,
         reuseConversation: r.reuseConversation,
+        notify: r.notify,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       }));
@@ -518,6 +521,7 @@ export function createRoutine(input: RoutineInput): Routine {
     enabled: int(enabled)!,
     // Event runs get a conversation each by default: untrusted event data doesn't pile up in one long session.
     reuse_conversation: int(input.reuseConversation ?? usesCron(trigger))!,
+    notify: input.notify ?? "failures",
     conversation_id: null,
     last_run_at: null,
     next_run_at: enabled && agent.enabled && next ? next.toISOString() : null,
@@ -566,6 +570,7 @@ export function updateRoutine(id: string, patch: Partial<RoutineInput>): Routine
     filter,
     enabled: int(enabled),
     reuse_conversation: int(reuse),
+    notify: patch.notify,
     updated_at: now(),
     next_run_at: enabled && agent.enabled && next ? next.toISOString() : null,
     webhook_token_hash: webhook?.hash,
@@ -618,18 +623,19 @@ export function deleteRoutine(id: string): void {
  * Run an automation now: a schedule runs its prompt, a condition is checked, app and webhook automations get a
  * test event. Throws 409 when it is already running.
  */
-export async function runRoutineNow(id: string): Promise<Run> {
+/** `byHuman`: the human clicked Run now (a scheduled automation then runs although a monthly budget is used up). */
+export async function runRoutineNow(id: string, opts: { byHuman?: boolean } = {}): Promise<Run> {
   const routine = getRoutine(id);
   switch (routine.trigger.type) {
     case "condition":
       return runConditionCheck(id, { manual: true });
     case "app":
     case "webhook": {
-      const { run: started } = await sendTestEvent(id);
+      const { run: started } = await sendTestEvent(id, undefined, { byHuman: opts.byHuman });
       if (!started) throw conflict(`"${routine.name}" is busy — the test event will run after the current run`);
       return started;
     }
     default:
-      return triggerRoutine(id);
+      return triggerRoutine(id, { byHuman: opts.byHuman });
   }
 }

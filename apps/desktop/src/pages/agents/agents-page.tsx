@@ -320,7 +320,7 @@ export default function AgentsPage() {
 function Crew({ agents }: { agents: Agent[] }) {
   const shown = agents.slice(0, 8);
   return (
-    <div aria-label="Your crew" className="ml-auto hidden items-end @3xl:flex">
+    <div aria-label="Your crew" className="ml-auto hidden items-end @7xl:flex">
       {shown.map((a, i) => (
         <Tooltip key={a.id}>
           <TooltipTrigger asChild>

@@ -14,6 +14,9 @@ interface Limits {
 
 const limits = () => shared<Limits>("rateLimits", () => ({ buckets: new Map(), sweptAt: Date.now() }));
 
+/** Keys kept at most: many addresses at once must not grow the map without bound. */
+export const RATE_LIMIT_KEYS_MAX = 50_000;
+
 /** Counts one hit for `key`. `ok` is false once more than `limit` hits fell into the current window. */
 export function rateLimit(key: string, limit: number, windowMs: number): { ok: boolean; retryAfterMs: number } {
   const state = limits();
@@ -26,7 +29,17 @@ export function rateLimit(key: string, limit: number, windowMs: number): { ok: b
   let bucket = state.buckets.get(key);
   if (!bucket || bucket.resetAt <= now) {
     bucket = { count: 0, resetAt: now + windowMs };
+    // Inserted anew, so the map stays in the order windows started and the oldest go first when it is full.
+    state.buckets.delete(key);
     state.buckets.set(key, bucket);
+    if (state.buckets.size > RATE_LIMIT_KEYS_MAX) {
+      for (const [k, b] of state.buckets) if (b.resetAt <= now) state.buckets.delete(k);
+      state.sweptAt = now;
+      for (const k of state.buckets.keys()) {
+        if (state.buckets.size <= RATE_LIMIT_KEYS_MAX) break;
+        state.buckets.delete(k);
+      }
+    }
   }
   bucket.count++;
   if (bucket.count > limit) return { ok: false, retryAfterMs: bucket.resetAt - now };

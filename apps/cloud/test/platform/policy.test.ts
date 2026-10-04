@@ -69,6 +69,10 @@ describe("safeNext", () => {
     "/\r/evil.com",
     "//evil.com",
     "///evil.com/x",
+    // Same origin, but the path normalises to "//evil.com".
+    "/.//evil.com",
+    "/..//x",
+    "/%2e//x",
     "https://evil.com/",
     "http://localhost:3211/",
     "https://localhost:3210/",

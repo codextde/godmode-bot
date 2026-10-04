@@ -574,7 +574,9 @@ ${quoted}${opts.messages.map((m) => `\n\n<message-from-human>\n${m}\n</message-f
   const why =
     opts.reason === "limit"
       ? `This turn stood still since ${since} because Claude's usage limit was reached. The limit has reset and the turn continues now`
-      : `${human} paused this turn on ${since} and continues it now`;
+      : opts.reason === "budget"
+        ? `This turn was held since ${since} because a monthly budget was used up. It continues now`
+        : `${human} paused this turn on ${since} and continues it now`;
   const said = opts.messages.length
     ? ` ${human} wrote ${many ? "the messages" : "the message"} below while it was paused: ${many ? "they change or add" : "it changes or adds"} to what you are doing.`
     : "";

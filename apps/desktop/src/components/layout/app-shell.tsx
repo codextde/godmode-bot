@@ -89,7 +89,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const compact = useMediaQuery("(width >= 768px) and (width < 1024px)");
   const [peek, setPeek] = useState(false);
   useEffect(() => setPeek(false), [compact, location.key]);
-  const inboxCount = (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.unreadNotifications ?? 0);
+  // What waits for the human; only when nothing does, the updates they haven't read.
+  const attention = boot?.counts.attention;
+  const waiting = attention?.total ?? (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0);
+  const inboxCount = waiting || (boot?.counts.unreadNotifications ?? 0);
   const { data: mods = [] } = useMods();
   // Mods that wait for the human: an agent's draft to review, or code the check refuses.
   const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m))).length;
@@ -114,9 +117,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [navigate, setCommandOpen]);
 
   const workNav: NavItem[] = [
-    { to: "/tasks", label: "Tasks", icon: <SquareKanban /> },
+    { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
-    { to: "/automations", label: "Automations", icon: <Workflow /> },
+    { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/mods", label: "Mods", icon: <Puzzle />, badge: modsWaiting || undefined },
     { to: "/activity", label: "Activity", icon: <Activity /> },
     { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },

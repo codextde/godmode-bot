@@ -30,7 +30,7 @@ import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
 import { redact } from "../vault/vault";
-import { getAgent, getDefaultAgentId } from "../agents/service";
+import { getAgent, getDefaultAgentId, setAgentFailedRun } from "../agents/service";
 import { activeRunForConversation, cancelRun, listActiveRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
 import { remoteRunForConversation } from "../remote/activeRuns";
 import { closeChatTabs } from "../browser/manager";
@@ -79,6 +79,10 @@ interface ConversationRow extends PauseQuestionCols {
   followup_created_at?: string | null;
   paused_run_id?: string | null;
   paused_reason?: PauseReason | null;
+  paused_budget_scope?: "agent" | "team" | null;
+  unread_run_id?: string | null;
+  unread_status?: string | null;
+  paused_budget_usd?: number | null;
   paused_limit?: string | null;
   paused_resume_at?: string | null;
   paused_auto?: number | null;
@@ -167,11 +171,21 @@ function toConversation(r: ConversationRow): Conversation {
       ? (remote.paused ?? null)
       : r.paused_run_id && r.paused_reason && r.paused_at
         ? toPause(
-            { run_id: r.paused_run_id, reason: r.paused_reason, created_at: r.paused_at, limit_name: r.paused_limit ?? null, resume_at: r.paused_resume_at ?? null, auto: r.paused_auto ?? 0 },
+            {
+              run_id: r.paused_run_id,
+              reason: r.paused_reason,
+              created_at: r.paused_at,
+              limit_name: r.paused_limit ?? null,
+              resume_at: r.paused_resume_at ?? null,
+              auto: r.paused_auto ?? 0,
+              budget_scope: r.paused_budget_scope ?? null,
+              budget_usd: r.paused_budget_usd ?? null,
+            },
             r,
           )
         : null,
     delegatedFrom: r.from_run_id && r.from_agent_id ? { agentId: r.from_agent_id, conversationId: r.from_conversation_id ?? null, runId: r.from_run_id } : null,
+    unread: r.unread_run_id ? { runId: r.unread_run_id, failed: r.unread_status === "failed" } : null,
   };
 }
 
@@ -194,10 +208,12 @@ const PREVIEW_SQL = `(SELECT m.content FROM messages m WHERE m.conversation_id =
 const FOLLOWUP_SQL = "f.note AS followup_note, f.due_at AS followup_due_at, f.created_at AS followup_created_at";
 const PAUSE_SQL =
   "p.run_id AS paused_run_id, p.reason AS paused_reason, p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at, " +
+  "p.budget_scope AS paused_budget_scope, p.budget_usd AS paused_budget_usd, " +
   PAUSE_QUESTION_SQL;
 // A handed-over chat links back to the run (and through it the chat and agent) that asked. Derived, not stored: when
 // the asking agent or its chat is deleted the link goes null by itself.
-const DELEGATED_SQL = "pr.id AS from_run_id, pr.agent_id AS from_agent_id, pc.id AS from_conversation_id";
+const DELEGATED_SQL =
+  "pr.id AS from_run_id, pr.agent_id AS from_agent_id, pc.id AS from_conversation_id, (SELECT ur.status FROM runs ur WHERE ur.id = c.unread_run_id) AS unread_status";
 const DELEGATED_JOIN =
   "LEFT JOIN runs pr ON c.origin = 'delegation' AND pr.id = (SELECT r.parent_run_id FROM runs r WHERE r.conversation_id = c.id AND r.parent_run_id IS NOT NULL ORDER BY r.created_at, r.rowid LIMIT 1) " +
   "LEFT JOIN conversations pc ON pc.id = pr.conversation_id";
@@ -414,6 +430,28 @@ export function setConversationState(
 }
 
 /** Cancel any active run, then delete the conversation, its messages and its transcript file. */
+/**
+ * The human has seen these chats (opened them, or "Mark all read"): nothing is new there anymore, and a failure in them
+ * stops showing as "Last run failed" on the agent once its chat was read.
+ */
+export function markConversationsRead(ids: string[] | "all"): number {
+  const rows =
+    ids === "all"
+      ? all<{ id: string; unread_run_id: string }>("SELECT id, unread_run_id FROM conversations WHERE unread_run_id IS NOT NULL")
+      : ids.flatMap((id) => {
+          const r = get<{ id: string; unread_run_id: string | null }>("SELECT id, unread_run_id FROM conversations WHERE id = ?", id);
+          return r?.unread_run_id ? [{ id: r.id, unread_run_id: r.unread_run_id }] : [];
+        });
+  for (const r of rows) {
+    sql("UPDATE conversations SET unread_run_id = NULL WHERE id = ? AND unread_run_id = ?", r.id, r.unread_run_id);
+    // Seen: the agent stops saying "Last run failed" for it.
+    const failed = get<{ id: string }>("SELECT id FROM agents WHERE failed_run_id = ?", r.unread_run_id);
+    if (failed) setAgentFailedRun(failed.id, null);
+    emitConversationUpdated(r.id);
+  }
+  return rows.length;
+}
+
 export async function deleteConversation(id: string): Promise<void> {
   const row = requireConversationRow(id);
   // First, so the run that is cancelled below doesn't hand over to the queue.
@@ -595,6 +633,8 @@ export async function sendMessage(
     files?: Attachment[];
     /** Who wrote it when it wasn't the human: an automation, an agent handing work over, the task board. */
     source?: MessageSource;
+    /** The human started it by hand (Run now): a used-up monthly budget doesn't hold it. */
+    byHuman?: boolean;
   },
 ): Promise<SendMessageResult> {
   const { conv, agent } = messageTarget(conversationId, input.trigger);
@@ -619,6 +659,7 @@ export async function sendMessage(
       voice: input.voice ?? false,
       userMessageId: message.id,
       runId: input.runId,
+      byHuman: input.byHuman,
     });
   } catch (err) {
     sql("DELETE FROM messages WHERE id = ?", message.id);

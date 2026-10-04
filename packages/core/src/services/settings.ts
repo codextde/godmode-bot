@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
     runTimeoutMinutes: 60,
     autoContinueOnLimit: true,
     defaultMaxBudgetUsd: null,
+    monthlyBudgetUsd: null,
     extraArgs: [],
     appendSystemPrompt: "",
   },
