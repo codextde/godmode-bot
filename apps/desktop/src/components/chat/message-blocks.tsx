@@ -734,8 +734,12 @@ function useAgentById(id: string | undefined): Agent | undefined {
   return id ? agents.find((a) => a.id === id) : undefined;
 }
 
-/** The run a handoff started: one of the runs the parent handed over, to that agent, with that task. */
-function useHandedOverRun(parentRunId: string | undefined, agentId: string | undefined, task: string | undefined, refused: boolean) {
+/**
+ * The run a handoff started: one of the runs the parent handed over to that agent. The id in the card's result decides
+ * (only this parent's own runs are candidates, so nothing an agent writes can point it elsewhere); before the result is
+ * there, the newest run with that task — the one being handed over right now.
+ */
+function useHandedOverRun(parentRunId: string | undefined, agentId: string | undefined, task: string | undefined, result: string, refused: boolean) {
   const children = useQuery({
     queryKey: qk.runChildren(parentRunId ?? ""),
     queryFn: () => api.runs.list({ parentRunId, limit: 100 }),
@@ -744,7 +748,11 @@ function useHandedOverRun(parentRunId: string | undefined, agentId: string | und
   });
   const mine = (children.data ?? []).filter((r) => r.agentId === agentId);
   const wanted = task?.trim();
-  const run = (wanted ? mine.find((r) => r.prompt.trimEnd().endsWith(wanted)) : undefined) ?? (mine.length === 1 ? mine[0] : undefined);
+  const named = result ? mine.find((r) => result.includes(`(run ${r.id},`)) : undefined;
+  const run =
+    named ??
+    (result ? undefined : wanted ? mine.find((r) => r.prompt.trimEnd().endsWith(wanted)) : undefined) ??
+    (mine.length === 1 ? mine[0] : undefined);
   const live = useLive((s) => (run ? s.runs[run.id] : undefined));
   return { run, live, loading: children.isLoading };
 }
@@ -758,7 +766,7 @@ function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; 
   const result = block.result ?? "";
   // A refused handoff (not a peer, switched off, too deep…) never started a run.
   const refused = !!block.isError && !/\(run run_/.test(result);
-  const { run: child, live } = useHandedOverRun(parentRunId, input.agentId, input.task, refused);
+  const { run: child, live } = useHandedOverRun(parentRunId, input.agentId, input.task, result, refused);
   const status = live?.status ?? child?.status;
   const working = status === "running" || status === "queued";
   const stop = useMutation({

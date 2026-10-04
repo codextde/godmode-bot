@@ -143,7 +143,8 @@ export const useLive = create<LiveState>((set, get) => ({
             blocks: next.blocks,
             seq: next.seq,
             stream: next.stream,
-            status: "running",
+            // A run that continues after a pause streams what it had while it still waits for a slot.
+            status: prev?.status ?? "running",
             trigger: prev?.trigger,
             parentRunId: prev?.parentRunId,
             activity: prev?.activity ?? null,

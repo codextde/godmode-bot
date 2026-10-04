@@ -7,7 +7,7 @@ import { parseSlashCommand, SLACK_COMMAND } from "@godmode/shared";
 import { getAgent } from "../agents/service";
 import { get } from "../db";
 import { logger } from "../log";
-import { cancelRun, listActiveRuns, waitForRun } from "../runner/runner";
+import { cancelRun, listActiveRuns, untilAsked, waitForRun } from "../runner/runner";
 import { pauseOf } from "../services/pauses";
 import { answerByMessage, getQuestion, openQuestionOf } from "../services/questions";
 import { conversationExists, createConversation, MAX_ATTACHMENT_BYTES, sendMessage } from "../services/conversations";
@@ -326,7 +326,7 @@ async function runCommand(conn: ConnectionRow, adapter: MessagingAdapter, msg: I
         await say(adapter, msg, "Nothing is running.");
         return;
       }
-      for (const runId of open) await cancelRun(runId, `Stopped from ${providerLabel(conn.provider)}`);
+      for (const runId of open) await cancelRun(runId, `Stopped from ${providerLabel(conn.provider)}`, { byHuman: true });
       return;
     }
   }
@@ -408,6 +408,7 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
   const conversationId = conversationFor(conn, msg, chat, agent);
   // The chat's run waits for the owner's answer, and this is the owner: the message is the answer (their own words —
   // not prefixed with their name — and the files they sent).
+  if (from.owner) await untilAsked(conversationId);
   if (from.owner && openQuestionOf(conversationId)) {
     let answered: ReturnType<typeof answerByMessage> = null;
     try {
@@ -526,14 +527,19 @@ export async function deliverFollowup(conversationId: string, runId: string): Pr
   if (!chat) return false;
   const target = parseJson<ChatTarget | null>(chat.reply, null);
   if (!target?.chatId) return true;
-  const run = await waitForRun(runId).catch(() => null);
-  const adapter = runtimeOf(chat.connection_id);
-  if (!run || run.status === "cancelled" || !adapter) return true;
+  // One delivery per run: when the run asks the owner something, answering follows it too (followAnsweredRun).
+  if (followed.has(runId)) return true;
+  followed.add(runId);
   try {
+    const run = await waitForRun(runId).catch(() => null);
+    const adapter = runtimeOf(chat.connection_id);
+    if (!run || run.status === "cancelled" || !adapter) return true;
     await adapter.send(target, answerOf(run));
     patchChat(chat.id, { last_message_at: now() });
   } catch (err) {
     log.warn(`could not deliver the follow-up of run ${runId}`, err instanceof Error ? err.message : err);
+  } finally {
+    followed.delete(runId);
   }
   return true;
 }

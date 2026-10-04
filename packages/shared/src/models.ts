@@ -633,6 +633,8 @@ export interface Run {
   startedAt: ISODate | null;
   finishedAt: ISODate | null;
   createdAt: ISODate;
+  /** In run lists: why a paused run stands still (and until when). */
+  pause?: RunPause | null;
 }
 
 /* ------------------------------------------------------------------ */

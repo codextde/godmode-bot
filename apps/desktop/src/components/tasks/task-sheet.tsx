@@ -1130,7 +1130,12 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
       qc.setQueryData<TaskEvent[]>(qk.taskEvents(task.id), (list) => (Array.isArray(list) ? [...list, pending] : list));
       return { pending };
     },
-    onSuccess: (_t, msg) => msg.files.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl)),
+    onSuccess: (_t, msg, ctx) => {
+      msg.files.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+      // The real row may read differently (an answer, a masked secret): drop the placeholder and load what was recorded.
+      if (ctx) qc.setQueryData<TaskEvent[]>(qk.taskEvents(task.id), (list) => list?.filter((x) => x.id !== ctx.pending.id));
+      qc.invalidateQueries({ queryKey: qk.taskEvents(task.id) });
+    },
     onError: (e, msg, ctx) => {
       if (ctx) qc.setQueryData<TaskEvent[]>(qk.taskEvents(task.id), (list) => list?.filter((x) => x.id !== ctx.pending.id));
       setText(msg.text);

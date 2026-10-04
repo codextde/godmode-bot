@@ -24,7 +24,7 @@ import { isValidBranch, parseGitUrl } from "@godmode/shared";
 import { config, VERSION } from "../config";
 import { all, get, getDb, run as exec } from "../db";
 import { recoverInterruptedRuns } from "../runner/runner";
-import { TEAM_BACKFILL_SQL } from "../db/migrations";
+import { TEAM_BACKFILL_SQL, TICKET_FACTS_SQL } from "../db/migrations";
 import { repairReportingLines } from "../agents/service";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -44,7 +44,7 @@ import { isSafeCloneDir } from "../services/workspaceSources";
 import * as vault from "../vault/vault";
 import { assertSafeKdf, openWithPassphrase, sealWithPassphrase } from "../vault/crypto";
 import { badRequest, conflict, HttpError, slugify } from "../util";
-import { reconcileTasks } from "../tasks/service";
+import { reconcileTasks, recomputeTicketTotals } from "../tasks/service";
 
 const log = logger("backup");
 
@@ -717,6 +717,9 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       // lines an edited or partial backup may have broken.
       getDb().run(TEAM_BACKFILL_SQL);
       repairReportingLines();
+      // A backup from before the ticket package: who filed each ticket, why it is blocked, what it cost.
+      getDb().run(TICKET_FACTS_SQL);
+      recomputeTicketTotals();
       exec("UPDATE automation_events SET status = 'skipped', note = 'Restored from a backup' WHERE status = 'pending'");
       exec("DELETE FROM followups WHERE due_at <= ?", new Date().toISOString());
       // Paused runs come back paused; none continues by itself after a restore.

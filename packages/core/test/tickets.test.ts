@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent, Task } from "@godmode/shared";
 import { taskEventText } from "@godmode/shared";
-import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { get, insert, run as sql } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { deviceMayCall } from "../src/mobile/scope";
@@ -19,6 +19,7 @@ import {
   getTask,
   listTaskEvents,
   reconcileTasks,
+  recomputeTicketTotals,
   sendTaskMessage,
   startTasks,
   stopTasks,
@@ -196,6 +197,10 @@ describe("waiting for a follow-up", () => {
     reconcileTasks("Interrupted (Godmode restarted).");
     expect(getTask(t.id).status).toBe("in_progress");
 
+    // A manager leaves a note from its own chat meanwhile: the ticket still waits for its own run's follow-up.
+    addTaskNote(t.id, "Asked the vendor too", `agent:${manager.id}`, managerCtx().runId);
+    expect(listTaskEvents(t.id).at(-1)).toMatchObject({ kind: "note", runId: null });
+
     // The human cancels the follow-up: the ticket goes to review, without a notification.
     cancelFollowup(waiting.conversationId!);
     await settled(t.id, ["in_review"]);
@@ -212,8 +217,12 @@ describe("waiting for a follow-up", () => {
     const b = createTask({ title: "TASK_FOLLOWUP once more", agentId: agent.id });
     await until(() => !!getTask(b.id).followup && kinds(b.id).includes("waiting"), 15_000, "waiting");
     const conv = getTask(b.id).conversationId!;
+    const seen = captureEvents();
     await deleteTask(b.id);
+    seen.stop();
     expect(getFollowup(conv)).toBeNull();
+    // Deleted, not delivered on the way out.
+    expect(seen.events.some((e) => e.type === "task.event" && e.event.kind === "delivered")).toBe(false);
 
     const sleepy = await makeAgent({ name: "Sleepy Ticket Bot" });
     const c = createTask({ title: "TASK_FOLLOWUP while on", agentId: sleepy.id });
@@ -223,6 +232,23 @@ describe("waiting for a follow-up", () => {
     await settled(c.id, ["blocked"]);
     expect(getTask(c.id).blockedKind).toBe("setup");
   }, 30_000);
+});
+
+describe("what a ticket cost", () => {
+  test("runs from before the session-cost fix count only what they added to their chat's session", async () => {
+    const t = createTask({ title: "Old ticket" });
+    const conv = newId("cnv");
+    insert("conversations", { id: conv, agent_id: agent.id, title: "Old", origin: "task", created_at: now(), updated_at: now() });
+    sql("UPDATE tasks SET conversation_id = ? WHERE id = ?", conv, t.id);
+    const before = "2000-01-01T00:00:00.000Z";
+    // Three rounds of one Claude session, stored as its running total: $0.50, $0.80, $1.00.
+    for (const [i, cost] of [0.5, 0.8, 1.0].entries()) {
+      insert("runs", { id: newId("run"), agent_id: agent.id, conversation_id: conv, trigger: "task", status: "succeeded", prompt: "x", cost_usd: cost, duration_ms: 1000, created_at: `2000-01-0${i + 1}T00:00:00.000Z` });
+    }
+    expect(before < (get<{ applied_at: string }>("SELECT applied_at FROM _migrations WHERE id = 30")?.applied_at ?? "")).toBe(true);
+    recomputeTicketTotals();
+    expect(getTask(t.id)).toMatchObject({ costUsd: 1, workMs: 3000, runCount: 3 });
+  });
 });
 
 describe("start order", () => {

@@ -15,7 +15,7 @@ import { editQueued, removeQueued, sendQueuedNow, submitMessage } from "../../se
 import { answerByMessage } from "../../services/questions";
 import { answererOf } from "./questions";
 import { continueConversation, pauseConversation, setAutoContinue } from "../../services/pauses";
-import { cancelRun, findRunLog, getRun, listRuns } from "../../runner/runner";
+import { cancelRun, findRunLog, getRun, listRuns, untilAsked } from "../../runner/runner";
 import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } from "../../services/followups";
 import { conflict, notFound } from "../../util";
 import { getAgent } from "../../agents/service";
@@ -131,6 +131,7 @@ export function registerChatRoutes(app: Hono): void {
     getConversationSummary(id); // 404 early, before parsing a potentially large body
     const { queue, queueId, ...input } = await body(c, sendSchema);
     // The chat waits for the human's answer: this message is that answer, and the run that asked continues with it.
+    await untilAsked(id);
     const answered = answerByMessage(id, input, answererOf(c));
     if (answered) return c.json(answered, 201);
     if (!queue) return c.json(await sendMessage(id, { ...input, trigger: "chat" }), 201);
@@ -220,7 +221,7 @@ export function registerChatRoutes(app: Hono): void {
   });
 
   app.post("/api/runs/:id/cancel", async (c) => {
-    await cancelRun(c.req.param("id"), "Cancelled by user");
+    await cancelRun(c.req.param("id"), "Cancelled by user", { byHuman: true });
     return c.json({ ok: true as const });
   });
 

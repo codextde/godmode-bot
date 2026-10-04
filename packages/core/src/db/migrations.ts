@@ -15,6 +15,25 @@ UPDATE conversations SET origin = 'chat' WHERE origin = 'api';
 `;
 
 /**
+ * Who filed a ticket and why it is blocked, for tickets from before migration 51. Idempotent (only rows without the
+ * facts); run after a restore, because a backup from before migration 51 brings tickets back without them.
+ */
+export const TICKET_FACTS_SQL = /* sql */ `
+UPDATE tasks SET created_by = COALESCE(
+  (SELECT actor FROM audit_log WHERE action = 'task.create' AND target = tasks.id AND actor LIKE 'agent:%' ORDER BY ts LIMIT 1), 'user')
+  WHERE created_by = 'user';
+UPDATE tasks SET blocked_kind = CASE
+    WHEN blocked_reason IS NULL OR blocked_reason = '' THEN 'manual'
+    WHEN blocked_reason LIKE 'Interrupted%' THEN 'interrupted'
+    WHEN blocked_reason = 'Stopped before it finished.' THEN 'stopped'
+    WHEN blocked_reason LIKE 'Couldn''t push%' THEN 'publish'
+    WHEN blocked_reason LIKE 'Couldn''t create the task''s worktree%' OR blocked_reason LIKE 'Coding tasks need a git repository%'
+      OR blocked_reason LIKE '% is disabled — %' OR blocked_reason LIKE 'The assigned agent doesn''t exist%' THEN 'setup'
+    ELSE NULL END
+  WHERE status = 'blocked' AND blocked_kind IS NULL;
+`;
+
+/**
  * Ordered, append-only SQL migrations. Never edit a shipped migration — add a new one.
  * JSON columns are stored as TEXT. Encrypted columns end with `_enc` and hold vault ciphertext.
  */

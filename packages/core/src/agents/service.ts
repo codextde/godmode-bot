@@ -883,7 +883,7 @@ export function repairReportingLines(): number {
     // Loops: an agent whose chain comes back to itself reports to the built-in agent again (one per loop is enough).
     const agents = listAgents();
     for (const a of agents) {
-      const chain = chainOf(a, agents);
+      const chain = chainOf(a, agents, Infinity);
       const last = chain[chain.length - 1];
       if (!last || last.isDefault || leadOf(last, agents)?.id !== a.id) continue;
       changed += run("UPDATE agents SET reports_to = NULL WHERE id = ?", a.id).changes;
