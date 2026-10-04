@@ -10,7 +10,19 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
 
 ## Security model (summary)
 
-- **Local-first**: everything runs on your device; the core API binds to `127.0.0.1` by default.
+- **Local-first**: everything runs on your device; the core API binds to `127.0.0.1` by default. Nothing leaves your
+  computer unless you link it to a cloud (Godmode Cloud, below).
+- **Godmode Cloud (optional)**: a computer linked to a Godmode Cloud account keeps one outbound WebSocket to it, and
+  the cloud relays signed-in browsers (`/d/<computer>/`) and paired phones (`/gw/<computer>/`) through it. The cloud
+  terminates HTTPS, so it can see everything relayed. The admin area has no way to open someone else's computer.
+  Whoever operates the cloud (server, database, sign-in e-mail) is trusted and technically can. Only the owner of a
+  computer and the people the owner shares it with can open it. The computer stores only its link secret (file, mode
+  0600); the cloud stores its hash. The computer decides what the cloud may do (browser access, phone access, and
+  unlocking the vault, revealing secrets and backups, which is off by default); dashboard sign-in, phone pairing,
+  cloud link management and vault setup are never served to a relayed request, and every route is classified, so new
+  ones are refused until someone decides. Relayed responses can't set cookies or run as pages on the cloud's origin,
+  the cloud never forwards its own session cookie, and phones keep authenticating with their own key, checked by the
+  computer. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#godmode-cloud).
 - **Vault encryption**: your passphrase is stretched with scrypt (N=2^17) into a key-encryption key that wraps a random
   256-bit data key. Every secret is encrypted with AES-256-GCM and bound to its database row (AAD).
 - **Remember this device** stores the data key in the OS keychain (macOS Keychain, Windows Credential Manager,

@@ -9,7 +9,9 @@ Built with [Expo](https://expo.dev) SDK 57 and Expo Router: native tabs and head
 
 ## Connecting
 
-1. Tailscale on the computer and the phone, same account.
+1. Tailscale on the computer and the phone, same account, or the computer linked to Godmode Cloud (Settings → Cloud)
+   with phone access on. The app tries every address the computer lists and learns new ones (such as the gateway
+   `https://<cloud>/gw/<id>`) from `GET /api/mobile/me`.
 2. On the computer: Godmode → **Settings → Phone → Connect a phone**.
 3. In the app: **Scan QR code**. The camera app works too (`godmode://pair?d=…` opens the app).
 

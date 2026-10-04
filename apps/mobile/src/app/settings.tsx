@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { hostOf } from "@/lib/format";
 import { useLive } from "@/lib/live";
 import { qk } from "@/lib/query";
-import { useSession } from "@/lib/session";
+import { isGatewayUrl, useSession } from "@/lib/session";
 import { space, useColors } from "@/lib/theme";
 
 const PLATFORM: Record<string, string> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
@@ -71,7 +71,7 @@ export default function Settings() {
       <View>
         <SectionTitle title="Connection" />
         <Card>
-          <Info icon="network" label="Tailscale" value={hostOf(connection.activeUrl)} />
+          <Info icon="network" label={isGatewayUrl(connection.activeUrl) ? "Godmode Cloud" : "Tailscale"} value={hostOf(connection.activeUrl)} />
           <Hairline inset={48} />
           <Info icon="phone" label="This phone" value={me.data?.device.name ?? connection.deviceName} />
           <Hairline inset={48} />

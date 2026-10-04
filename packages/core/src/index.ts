@@ -48,6 +48,7 @@ import { startLinkServer, stopLinkServer } from "./remote/linkServer";
 import { startRunners, stopRunners } from "./remote/runners";
 import { bootstrapDependencies } from "./remote/health";
 import { startKeepAwake, stopKeepAwake } from "./remote/keepAwake";
+import { startCloudLink, stopCloudLink } from "./cloud/link";
 import { newId } from "./util";
 
 const log = logger("core");
@@ -238,6 +239,9 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     onSettingsApplied(() => void refreshMobileAccess());
     // Connect to the runners this Godmode works with.
     startRunners();
+    // Only a linked computer dials its cloud; it follows settings changes by itself. A runner never does: it works
+    // for another computer, which is the one people reach.
+    startCloudLink({ app, websocket: websocketHandler });
   }
 
   const displayHost = isLoopbackHost(cfg.host) ? "127.0.0.1" : cfg.host;
@@ -283,6 +287,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       stopAutomationEvents();
       stopMobileAccess();
       stopRunners();
+      stopCloudLink();
       await stopMessaging();
       stopTasks();
     }

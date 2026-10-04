@@ -26,6 +26,7 @@ export default function Home() {
   const c = useColors();
   const computer = useSession((s) => s.connection?.instance.name ?? "Your computer");
   const status = useLive((s) => s.status);
+  const offlineReason = useLive((s) => s.offlineReason);
   const runs = useLive((s) => s.runs);
   const { byId: agents } = useAgents();
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
@@ -100,7 +101,7 @@ export default function Home() {
               Can't reach {computer}
             </T>
             <T variant="footnote" muted>
-              Make sure it's awake and Tailscale is on, here and there. Tap to retry.
+              {offlineReason ?? "Make sure it's awake and connected to Tailscale or Godmode Cloud."} Tap to retry.
             </T>
           </View>
         </Card>

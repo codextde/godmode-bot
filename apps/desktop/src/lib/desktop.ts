@@ -12,7 +12,7 @@ export async function notifyDesktop(title: string, body?: string) {
     }
     if (typeof Notification === "undefined") return;
     if (Notification.permission === "default") await Notification.requestPermission();
-    if (Notification.permission === "granted") new Notification(title, { body, icon: "/logo.svg" });
+    if (Notification.permission === "granted") new Notification(title, { body, icon: `${import.meta.env.BASE_URL}logo.svg` });
   } catch {
     /* ignore */
   }

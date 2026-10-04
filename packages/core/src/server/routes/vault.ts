@@ -13,7 +13,7 @@ import { createTotp, currentCodes, deleteTotp, importTotpUris, listTotp, updateT
 import { importPasswords, MAX_IMPORT_BYTES, previewPasswordImport } from "../../vault/passwordImport";
 import { audit } from "../../services/audit";
 import { updateSettings } from "../../services/settings";
-import { rateLimitLogin, resetLoginAttempts, setDashboardPassword } from "../auth";
+import { clientIp as relayedClientIp, isRelayed, rateLimitLogin, resetLoginAttempts, setDashboardPassword, type CloudRelayEnv } from "../auth";
 import { issueGrant, requireGrant, verifyVaultPassphrase } from "../grants";
 import { body, z } from "../validate";
 import { badRequest, HttpError } from "../../util";
@@ -25,13 +25,20 @@ const SECRET_KEY = /^[a-z0-9_]{2,64}$/;
 /**
  * Peer address of the connection, used to key passphrase rate limiting. Deliberately ignores X-Forwarded-For,
  * which any client can set to get a fresh rate-limit bucket per request. In-process requests have no peer.
+ * Requests relayed by Godmode Cloud report the cloud's idea of the address (for the audit log only).
  */
 function clientIp(c: Context): string {
+  if (isRelayed(c)) return relayedClientIp(c);
   try {
     return getConnInfo(c).remote.address ?? "local";
   } catch {
     return "local";
   }
+}
+
+/** Passphrase attempts relayed by Godmode Cloud share one bucket per channel: the cloud chooses the address it reports. */
+function limitKey(c: Context): string {
+  return isRelayed(c) ? `vault:${(c.env as CloudRelayEnv).channel}` : `vault:${clientIp(c)}`;
 }
 
 /** `workspaceId` query param: "all" (default) | "global" | <workspace id>. */
@@ -129,15 +136,15 @@ export function registerVaultRoutes(app: Hono): void {
 
   app.post("/api/vault/unlock", async (c) => {
     const ip = clientIp(c);
-    const limitKey = `vault:${ip}`;
-    rateLimitLogin(limitKey);
+    const key = limitKey(c);
+    rateLimitLogin(key);
     const { passphrase } = await body(c, z.object({ passphrase: z.string().min(1).max(1024) }));
     if (!vault.isInitialized()) throw badRequest("Vault not initialized");
     const status = await vault.unlock(passphrase).catch((err: unknown) => {
       audit("user", "vault.unlock_failed", null, { ip });
       throw err;
     });
-    resetLoginAttempts(limitKey);
+    resetLoginAttempts(key);
     audit("user", "vault.unlock", null, { ip });
     return c.json(status);
   });
@@ -150,8 +157,8 @@ export function registerVaultRoutes(app: Hono): void {
 
   app.post("/api/vault/passphrase", async (c) => {
     const ip = clientIp(c);
-    const limitKey = `vault:${ip}`;
-    rateLimitLogin(limitKey);
+    const key = limitKey(c);
+    rateLimitLogin(key);
     const { current, next } = await body(c, z.object({ current: z.string().min(1).max(1024), next: z.string().min(8).max(1024) }));
     if (!vault.isInitialized()) throw badRequest("Vault not initialized");
     const wasUnlocked = vault.isUnlocked();
@@ -159,7 +166,7 @@ export function registerVaultRoutes(app: Hono): void {
       audit("user", "vault.passphrase_change_failed", null, { ip });
       throw err;
     });
-    resetLoginAttempts(limitKey);
+    resetLoginAttempts(key);
     // Refresh the device key so auto-unlock keeps working with the new passphrase.
     if (vault.status().rememberDevice) await vault.setRememberDevice(true);
     // changePassphrase leaves the data key in memory; a vault that was locked stays locked.
@@ -171,15 +178,15 @@ export function registerVaultRoutes(app: Hono): void {
   /** Re-enter the vault passphrase → short-lived grant for revealing secrets (does not change the lock state). */
   app.post("/api/vault/grant", async (c) => {
     const ip = clientIp(c);
-    const limitKey = `vault:${ip}`;
-    rateLimitLogin(limitKey);
+    const key = limitKey(c);
+    rateLimitLogin(key);
     const { passphrase } = await body(c, z.object({ passphrase: z.string().min(1).max(1024) }));
     if (!vault.isInitialized()) throw badRequest("Vault not initialized");
     if (!verifyVaultPassphrase(passphrase)) {
       audit("user", "vault.grant_failed", null, { ip });
       throw badRequest("Wrong passphrase");
     }
-    resetLoginAttempts(limitKey);
+    resetLoginAttempts(key);
     audit("user", "vault.grant", null, { ip });
     return c.json(issueGrant());
   });

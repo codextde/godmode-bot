@@ -3,8 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Archive,
+  ArrowLeft,
   Bot,
   Box,
+  Cloud,
+  CreditCard,
   Globe,
   Inbox,
   KeyRound,
@@ -40,6 +43,7 @@ import { useUi } from "@/stores/ui";
 import { useTheme } from "@/components/theme-provider";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { cloudContext } from "@/lib/core";
 import { modKey } from "@/lib/desktop";
 import { AgentAvatar } from "@/components/common";
 
@@ -92,6 +96,11 @@ export function CommandPalette() {
           >
             {resolved === "dark" ? <Sun /> : <Moon />} Toggle theme
           </CommandItem>
+          {cloudContext && (
+            <CommandItem value="all computers godmode cloud devices" onSelect={() => window.location.assign(cloudContext!.home)}>
+              <ArrowLeft /> All computers
+            </CommandItem>
+          )}
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Navigate">
@@ -148,6 +157,12 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem value="instructions rules agent context" onSelect={() => go("/settings/instructions")}>
             <ScrollText /> Instructions
+          </CommandItem>
+          <CommandItem value="godmode cloud link browser remote access" onSelect={() => go("/settings/cloud")}>
+            <Cloud /> Godmode Cloud
+          </CommandItem>
+          <CommandItem value="billing plan subscription invoices usage cost tokens" onSelect={() => go("/settings/billing")}>
+            <CreditCard /> Billing and usage
           </CommandItem>
           <CommandItem onSelect={() => go("/settings/general")}>
             <Settings /> Settings <CommandShortcut>{modKey},</CommandShortcut>

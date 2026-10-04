@@ -17,7 +17,18 @@ import { QrCode } from "./qr-code";
 
 export const TAILSCALE_DOWNLOAD = "https://tailscale.com/download";
 
-export function PairPhoneDialog({ open, onOpenChange, tailnet }: { open: boolean; onOpenChange: (open: boolean) => void; tailnet: string | null }) {
+export function PairPhoneDialog({
+  open,
+  onOpenChange,
+  tailnet,
+  gateway,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tailnet: string | null;
+  /** This computer is linked to Godmode Cloud and lets phones through its gateway. */
+  gateway: boolean;
+}) {
   const qc = useQueryClient();
   const [offer, setOffer] = useState<MobilePairingOffer | null>(null);
   const [paired, setPaired] = useState<MobileDevice | null>(null);
@@ -115,9 +126,18 @@ export function PairPhoneDialog({ open, onOpenChange, tailnet }: { open: boolean
 
               <div className="flex min-w-0 flex-col">
                 <ol className="space-y-4">
-                  <Step n={1} title="Get Tailscale on your phone">
-                    Sign in with the same account as this computer{tailnet ? <> ({tailnet})</> : null}. Your phone reaches Godmode through it, never
-                    over the internet.{" "}
+                  <Step n={1} title={gateway ? "Get Tailscale, or use Godmode Cloud" : "Get Tailscale on your phone"}>
+                    {gateway ? (
+                      <>
+                        With Tailscale signed in to the same account as this computer{tailnet ? <> ({tailnet})</> : null}, your phone reaches Godmode
+                        directly. Without it, the phone goes through Godmode Cloud, which this computer is linked to.{" "}
+                      </>
+                    ) : (
+                      <>
+                        Sign in with the same account as this computer{tailnet ? <> ({tailnet})</> : null}. Your phone reaches Godmode through it, never
+                        over the internet.{" "}
+                      </>
+                    )}
                     <button type="button" className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-2 hover:underline" onClick={() => void openExternal(TAILSCALE_DOWNLOAD)}>
                       Download <ExternalLink className="size-3" />
                     </button>
@@ -160,7 +180,7 @@ export function PairPhoneDialog({ open, onOpenChange, tailnet }: { open: boolean
   );
 }
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+export function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <li className="flex gap-3">
       <span className="grid size-6 shrink-0 place-items-center rounded-full border bg-card text-xs font-medium tabular-nums shadow-card">{n}</span>
@@ -172,7 +192,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-/** A ring that empties as a pairing offer runs out (also used when pairing a runner). */
+/** A ring that empties as a pairing offer runs out (also used when linking to a cloud and pairing a runner). */
 export function ExpiryRing({ seconds, total }: { seconds: number; total: number }) {
   const r = 6;
   const c = 2 * Math.PI * r;

@@ -86,7 +86,8 @@ needs to be useful:
 | 🩺 **Diagnostic log** | Errors, slow spots and how every run went, with secrets masked. Settings → Logs groups recurring problems and copies an AI-ready report — paste it into Claude to find bugs and speed things up. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
 | 🖥️ **Runners** | Keep working with the lid closed: put Godmode on another Mac — a Mac mini, an old laptop — with one install command, and pick it under **Run on** when you start a chat. Godmode copies your agents, logins, 2FA codes and browser sessions there, the work happens there, and you watch it here live like any other chat. Install, pairing and Claude Code set themselves up; a health view shows what's missing (software, macOS permissions, the vault) with one-click fixes, or hand it to **Fix with Claude**. Encrypted end to end. |
-| 📱 **Phone app** | Control Godmode from your iPhone or Android phone: hand over tasks, follow answers as they're written, stop runs, run automations and watch an agent's browser, shared screen or VM live — tap to take control. Pair once by scanning a QR code; the phone talks to your computer over [Tailscale](https://tailscale.com), never the open internet. Liquid Glass on iOS 26. |
+| 📱 **Phone app** | Control Godmode from your iPhone or Android phone: hand over tasks, follow answers as they're written, stop runs, run automations and watch an agent's browser, shared screen or VM live — tap to take control. Pair once by scanning a QR code; the phone talks to your computer over [Tailscale](https://tailscale.com), or through the gateway of a Godmode Cloud you link it to. Liquid Glass on iOS 26. |
+| ☁️ **Godmode Cloud** (optional) | A self-hosted account service: open your computer's dashboard in any browser and reach it from your phone without Tailscale, with accounts, invites, roles, an admin dashboard and Stripe plans. Godmode works fully without it; nothing leaves your computer unless you link it to a cloud. See [apps/cloud](apps/cloud/README.md). |
 
 <img src="docs/screenshots/phone.png" alt="The Godmode phone app: what agents are doing now, a chat with a live browser strip, taking control of the agent's browser, and a finished answer" width="100%" />
 
@@ -218,8 +219,17 @@ docker compose up -d   # dashboard on http://localhost:7777
 3. Open the Godmode app and tap **Scan QR code** (or point the camera app at the code).
 
 The code works once and for five minutes; the phone gets its own key, and you can remove it anytime in the same place.
-Godmode only listens for phones on the computer's Tailscale address. The app lives in [`apps/mobile`](apps/mobile)
-(Expo) — build it with `bun run ios` / `bun run android` or EAS until it's in the stores.
+Godmode only listens for phones on the computer's Tailscale address. Without Tailscale, link the computer to a
+[Godmode Cloud](apps/cloud/README.md) with phone access on: the phone then also reaches it through the cloud's gateway.
+The app lives in [`apps/mobile`](apps/mobile) (Expo) — build it with `bun run ios` / `bun run android` or EAS until
+it's in the stores.
+
+### Godmode Cloud (optional)
+
+Open a computer's dashboard from any browser and reach it from your phone without Tailscale: deploy
+[`apps/cloud`](apps/cloud/README.md) (Coolify or Docker Compose; the only setting is its address), then link Godmode in
+**Settings → Cloud**. The computer keeps one outbound connection to the cloud; there is no port to open. The cloud
+relays, and can see, everything done through it, so link only to a cloud you trust.
 
 ### Runners — another Mac that works while yours sleeps
 
@@ -370,14 +380,21 @@ Every run is committed, so you can see exactly what an agent learned and did —
 - **Re-auth for sensitive actions**: revealing a password or granting an agent reveal access needs your vault passphrase.
 - **Redaction** of known secrets in transcripts, logs and the UI · **audit log** of every secret access.
 - **Local-first**: API on `127.0.0.1`, per-run MCP tokens, DNS-rebinding & CSRF protection, strict CSP,
-  rate-limited logins, HttpOnly/SameSite cookies for the dashboard.
+  rate-limited logins, HttpOnly/SameSite cookies for the dashboard. Nothing leaves your computer unless you link it to
+  a cloud.
+- **Godmode Cloud is opt-in per computer**: a linked computer dials out to the cloud, which relays browsers and
+  phones to it. The cloud terminates HTTPS, so it can see what passes through. The admin area has no way to open
+  someone else's computer. Whoever operates the cloud (server, database, sign-in e-mail) is trusted and technically
+  can. The computer decides what the cloud may do: browser access, phone access, and whether the vault and saved
+  passwords may be used through it (off by default). Some actions are never possible through the cloud.
 - **Remember this device** keeps the data key in the OS keychain so routines run unattended — disable it to require
   your passphrase after every restart.
 - **Phones** pair with a one-time, five-minute QR code and get their own key (stored hashed on the computer, in the
-  Keychain / Keystore on the phone). Their key only works on the computer's Tailscale address, is only sent to an
-  address that proves it's your Godmode, and opens a fixed set of routes: no logins, 2FA codes, backups, integrations,
-  settings or folders, and only screens shared in a chat can be controlled. A paired phone can still ask agents to act
-  on your computer — remove a lost phone in Settings → Phone, and turn on *Require Face ID* in the app.
+  Keychain / Keystore on the phone). Their key only works on the computer's Tailscale address (and through the gateway
+  of a cloud the computer is linked to), is only sent to an address that proves it's your Godmode, and opens a fixed
+  set of routes: no logins, 2FA codes, backups, integrations, settings or folders, and only screens shared in a chat
+  can be controlled. A paired phone can still ask agents to act on your computer — remove a lost phone in
+  Settings → Phone, and turn on *Require Face ID* in the app.
 
 - **Runners** pair with a one-time code and pin each other's keys; the link is end-to-end encrypted (X25519, AES-256-GCM)
   and the runner's API never listens beyond its own loopback. A paired Godmode gets your vault key on the runner so
@@ -398,7 +415,8 @@ pnpm build:app    # desktop bundles
 ```
 
 Monorepo: `packages/shared` (types) · `packages/core` (daemon) · `apps/desktop` (UI + Tauri) · `apps/mobile` (phone
-app, Expo — its own toolchain, see [apps/mobile/README.md](apps/mobile/README.md)).
+app, Expo — its own toolchain, see [apps/mobile/README.md](apps/mobile/README.md)) · `apps/cloud` (Godmode Cloud,
+Next.js, see [apps/cloud/README.md](apps/cloud/README.md)).
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 🗺️ Roadmap
@@ -417,7 +435,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Phone app (iOS / Android): chats, runs, automations, live browser, screen and VM views, paired over Tailscale
 - [x] Runners: another Mac does the work of a chat while this one sleeps — one install command, encrypted link, setup copied, live view
 - [ ] Runners on Windows and Linux, tasks of the board on a runner, VMs copied to a runner
-- [ ] Push notifications and a hosted gateway for phones without Tailscale
+- [x] Godmode Cloud (optional, self-hosted): your computer in any browser, phones without Tailscale, accounts and plans
+- [ ] Push notifications
 - [ ] Team mode: shared workspaces and approvals
 
 ## 🙏 Credits

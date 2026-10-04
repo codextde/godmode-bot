@@ -7,7 +7,7 @@ import { get } from "../../db";
 import * as vault from "../../vault/vault";
 import { getSettings, updateSettings } from "../../services/settings";
 import { listNotifications, markRead, clearNotifications, unreadCount } from "../../services/notifications";
-import { listAudit } from "../../services/audit";
+import { audit, listAudit } from "../../services/audit";
 import { runDoctor, installDependency } from "../../services/doctor";
 import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
 import { PERMISSION_IDS, checkPermissions, fixPermission } from "../../services/permissions";
@@ -23,6 +23,8 @@ import { body, z } from "../validate";
 import { badRequest } from "../../util";
 import { isValidDreamSchedule } from "../../memory/dreaming";
 import { pendingRequestCount } from "../../messaging/service";
+
+const CLOUD_SWITCHES = ["enabled", "browserAccess", "phoneAccess", "allowSecrets"];
 
 function count(sql: string): number {
   return get<{ c: number }>(sql)?.c ?? 0;
@@ -129,8 +131,17 @@ export function registerSystemRoutes(app: Hono) {
         throw badRequest("The phone port must be a whole number between 1024 and 65535");
       }
     }
+    const cloud = patch.cloud as Record<string, unknown> | undefined;
+    if (cloud !== undefined) {
+      if (typeof cloud !== "object" || cloud === null || Array.isArray(cloud)) throw badRequest("Invalid cloud settings");
+      for (const [key, value] of Object.entries(cloud)) {
+        if (!CLOUD_SWITCHES.includes(key)) throw badRequest(`Unknown cloud setting: ${key.slice(0, 50)}`);
+        if (typeof value !== "boolean") throw badRequest(`cloud.${key} must be true or false`);
+      }
+    }
     const next = updateSettings(patch as never);
     applyRuntimeSettings(next);
+    if (cloud) audit("user", "cloud.settings", null, cloud);
     return c.json(next);
   });
 

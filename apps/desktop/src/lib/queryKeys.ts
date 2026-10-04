@@ -95,6 +95,11 @@ export const qk = {
   /** Not under ["runners"]: refreshing the list must not re-run a runner's checks. */
   runnerHealth: (id: string) => ["runner-health", id],
   runnerSources: (id: string) => ["runner-sources", id],
+  /** Godmode Cloud link status; billing sits under it, so invalidating `cloud` refreshes both. */
+  cloud: ["cloud"] as unknown[],
+  cloudBilling: ["cloud", "billing"] as unknown[],
+  /** What agents used on this computer over the last `days` days. */
+  usage: (days: number) => ["usage", days],
   chromeProfiles: ["chrome-profiles"] as unknown[],
   folders: ["folders"] as unknown[],
   folderList: (path: string, hidden: boolean) => ["folders", "list", path, hidden],
