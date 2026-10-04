@@ -17,6 +17,9 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", /^\/api\/workspaces$/],
   ["GET", /^\/api\/notifications$/],
   ["GET", /^\/api\/missing-logins$/],
+  // Questions and approvals agents wait for: listed and answered (no files from the phone).
+  ["GET", /^\/api\/questions$/],
+  ["POST", new RegExp(`^/api/questions/${ID}/answer$`)],
 
   ["GET", /^\/api\/agents$/],
   ["GET", new RegExp(`^/api/agents/${ID}$`)],
@@ -33,6 +36,7 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["POST", /^\/api\/tasks\/attachments$/],
   ["GET", new RegExp(`^/api/tasks/attachments/${ID}/${ID}$`)],
   ["GET", new RegExp(`^/api/tasks/${ID}$`)],
+  ["GET", new RegExp(`^/api/tasks/${ID}/events$`)],
   ["POST", /^\/api\/tasks$/],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`)],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`)],
@@ -64,6 +68,7 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`), ["title", "description", "status", "agentId", "archived"]],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content", "attachments"]],
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
+  ["POST", new RegExp(`^/api/questions/${ID}/answer$`), ["optionId", "decision", "note", "text"]],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],
   ["POST", /^\/api\/computer\/input$/, ["view", "event", "frame"]],
   ["POST", new RegExp(`^/api/vms/${ID}/input$`), ["event", "frame"]],

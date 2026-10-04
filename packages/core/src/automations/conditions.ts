@@ -104,7 +104,7 @@ export async function runConditionCheck(routineId: string, opts: { scheduled?: b
     // A fresh session per check: the last observation is in the prompt, so no context piles up across checks.
     setConversationState(conversationId, { claudeSessionId: null, model: trigger.checkModel });
     pruneCheckMessages(conversationId);
-    const { run } = await sendMessage(conversationId, { content: buildCheckPrompt(routine, state), trigger: "check", routineId });
+    const { run } = await sendMessage(conversationId, { content: buildCheckPrompt(routine, state), trigger: "check", routineId, source: "automation" });
     patchTriggerState(routineId, { checkRunId: run.id, lastCheckAt: now() });
     emitRoutine(routineId);
     return run;

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { storageKey } from "@/lib/core";
 
 interface UiState {
   /** Workspace scope selected in the sidebar: "all" | "global" | workspace id */
@@ -17,6 +18,8 @@ interface UiState {
   skippedClaudeVersion: string | null;
   /** Task board columns folded to a narrow strip. */
   collapsedColumns: string[];
+  /** The Agents page shows cards or the org chart. */
+  agentsView: "grid" | "chart";
   setWorkspace: (id: string) => void;
   setCommandOpen: (open: boolean) => void;
   setVoiceMode: (on: boolean) => void;
@@ -26,6 +29,7 @@ interface UiState {
   setVmPanel: (v: boolean) => void;
   skipClaudeVersion: (version: string | null) => void;
   toggleColumn: (status: string) => void;
+  setAgentsView: (v: "grid" | "chart") => void;
 }
 
 export const useUi = create<UiState>()(
@@ -40,6 +44,7 @@ export const useUi = create<UiState>()(
       vmPanel: true,
       skippedClaudeVersion: null,
       collapsedColumns: ["cancelled"],
+      agentsView: "grid",
       setWorkspace: (workspace) => set({ workspace }),
       setCommandOpen: (commandOpen) => set({ commandOpen }),
       setVoiceMode: (voiceMode) => set({ voiceMode }),
@@ -52,9 +57,11 @@ export const useUi = create<UiState>()(
         set((s) => ({
           collapsedColumns: s.collapsedColumns.includes(status) ? s.collapsedColumns.filter((c) => c !== status) : [...s.collapsedColumns, status],
         })),
+      setAgentsView: (agentsView) => set({ agentsView }),
     }),
     {
-      name: "godmode-ui",
+      // Per computer in cloud mode: the selected workspace id belongs to one computer.
+      name: storageKey("godmode-ui"),
       partialize: (s) => ({
         workspace: s.workspace,
         sidebarCollapsed: s.sidebarCollapsed,
@@ -64,6 +71,7 @@ export const useUi = create<UiState>()(
         vmPanel: s.vmPanel,
         skippedClaudeVersion: s.skippedClaudeVersion,
         collapsedColumns: s.collapsedColumns,
+        agentsView: s.agentsView,
       }),
     },
   ),

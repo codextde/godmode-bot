@@ -3,6 +3,8 @@ import { unzipSync, strFromU8 } from "fflate";
 import type { Agent } from "@godmode/shared";
 import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { all, get } from "../src/db";
+import { getRun, waitForRun } from "../src/runner/runner";
+import { openQuestionOf, listQuestions } from "../src/services/questions";
 import * as vault from "../src/vault/vault";
 import { issueGrant } from "../src/server/grants";
 import { createApp } from "../src/server/app";
@@ -13,6 +15,7 @@ import {
   listChats,
   listConnections,
   listUsers,
+  setUserOwner,
   setUserStatus,
   startMessaging,
   stopMessaging,
@@ -257,6 +260,50 @@ describe("Telegram bot", () => {
     expect(listChats(connectionId)[0]!.conversationId).toBe(conversationId);
     expect(get<{ c: number }>("SELECT COUNT(*) AS c FROM runs WHERE conversation_id = ?", conversationId!)?.c).toBe(2);
   });
+
+  test("only the owner answers what an agent asks; everyone else hears it is being checked", async () => {
+    const conversationId = listChats(connectionId)[0]!.conversationId!;
+    const alicesId = listUsers(connectionId).find((u) => u.name === "Alice")!.id;
+    expect(listUsers(connectionId).find((u) => u.id === alicesId)!.isOwner).toBe(false);
+
+    let before = sentTexts().length;
+    tgMessage(alice, "ASK_HUMAN about the header");
+    await until(() => openQuestionOf(conversationId) !== null && sentTexts().length > before, 15_000, "the question to be asked");
+    const question = openQuestionOf(conversationId)!;
+    expect(sentTexts().at(-1)).toContain("I need to check something with the owner first");
+    expect(sentTexts().join("\n")).not.toContain("Which color should the header be?");
+
+    // An approved person who isn't the owner can't answer: the message waits behind the question.
+    before = sentTexts().length;
+    tgMessage(alice, "2");
+    await until(() => sentTexts().length > before, 10_000, "the waiting note");
+    expect(openQuestionOf(conversationId)?.id).toBe(question.id);
+
+    const owner = await setUserOwner(connectionId, alicesId, true);
+    expect(owner).toMatchObject({ isOwner: true, status: "approved" });
+    expect(all("SELECT id FROM audit_log WHERE action = 'messaging.user.owner'")).toHaveLength(1);
+
+    tgMessage(alice, "2");
+    await until(() => listQuestions({ status: "answered" }).some((q) => q.id === question.id), 10_000, "the owner's answer");
+    expect(listQuestions({ status: "answered" }).find((q) => q.id === question.id)!.answer).toMatchObject({ optionId: "2", text: "Blue", via: "telegram" });
+    await waitForRun(question.runId, 20_000);
+    await until(() => sentTexts().includes("CONTINUED"), 10_000, "the continued answer");
+    expect(getRun(question.runId).status).toBe("succeeded");
+
+    // Now the owner gets the question itself, with how to answer.
+    before = sentTexts().length;
+    tgMessage(alice, "ASK_APPROVAL for the reminder");
+    await until(() => sentTexts().slice(before).some((t) => t.includes("needs an OK")), 15_000, "the approval request");
+    const posted = sentTexts().slice(before).find((t) => t.includes("needs an OK"))!;
+    expect(posted).toContain("Send the payment reminder to billing@acme.com");
+    expect(posted).toContain("approve");
+    const approval = openQuestionOf(conversationId)!;
+    tgMessage(alice, "approve");
+    await until(() => listQuestions({ status: "approved" }).some((q) => q.id === approval.id), 10_000, "the approval");
+    await waitForRun(approval.runId, 20_000);
+    await setUserOwner(connectionId, alicesId, false);
+    await until(() => !all<{ id: string }>("SELECT id FROM runs WHERE status IN ('queued', 'running', 'paused')").length, 20_000, "the chat to settle");
+  }, 60_000);
 
   test("/agents lists the bot's agents and /agent switches", async () => {
     let before = sentTexts().length;

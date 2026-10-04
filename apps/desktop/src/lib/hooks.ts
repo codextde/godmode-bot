@@ -78,6 +78,11 @@ export function useVaultStatus() {
   return useQuery({ queryKey: qk.vaultStatus, queryFn: api.vault.status });
 }
 
+/** What agents asked the human; "open" ones keep a run standing still until they are answered. */
+export function useQuestions(status = "open") {
+  return useQuery({ queryKey: [...qk.questions, status], queryFn: () => api.questions.list({ status }) });
+}
+
 export function useMissingLogins(status = "open") {
   return useQuery({ queryKey: [...qk.missingLogins, status], queryFn: () => api.missingLogins.list({ status }) });
 }
@@ -87,6 +92,11 @@ export function useTasks(workspaceId?: ScopeFilter) {
   const scope = useUi((s) => s.workspace);
   const ws = workspaceId ?? scope;
   return useQuery({ queryKey: qk.taskList(ws), queryFn: () => api.tasks.list({ workspaceId: ws }) });
+}
+
+/** A ticket's timeline, kept current by `task.event`. */
+export function useTaskEvents(taskId: string) {
+  return useQuery({ queryKey: qk.taskEvents(taskId), queryFn: () => api.tasks.events(taskId) });
 }
 
 export function useArchivedTasks(workspaceId?: ScopeFilter) {
@@ -184,6 +194,11 @@ export function useVmChoices() {
 /** SSH servers agents and chats can use (kept current by `entity.changed` "ssh-servers"). */
 export function useSshServers() {
   return useQuery({ queryKey: qk.sshServers, queryFn: api.ssh.list });
+}
+
+/** Runners: other computers that work for this one. Kept live by `runner.updated` events in realtime.ts. */
+export function useRunners() {
+  return useQuery({ queryKey: qk.runners, queryFn: api.runners.list });
 }
 
 export function useAgentTemplates() {

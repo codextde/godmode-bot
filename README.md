@@ -52,14 +52,16 @@ needs to be useful:
 |---|---|
 | 💬 **Chat first** | Start with one conversation with *Godmode*, your main AI coworker. It can answer, act, and create other agents for you. |
 | 🤖 **Persistent agents** | Bots with their own instructions, conversations, memory (`MEMORY.md`), routines and history — each in its own git repo. |
-| 🫧 **Characters & personality** | Every agent is a little creature with a face: pick its body, eyes, mouth, hat, glasses or bow tie and colour (or hit *Surprise me*), give it a name and a personality — Buddy, Sunny, Calm, Witty, Straight shooter, Curious, Butler, Hype or your own words — and it greets you and reports back in that voice. Its face shows what it's doing: it thinks, looks busy while it works, waves when it needs you, hops when the job is done and naps while paused. Godmode itself is the mint mochi with the lightning bolt. |
+| 🫧 **Characters & personality** | Every agent is a little creature with a face: pick its body, eyes, mouth, hat, glasses or bow tie and colour (or hit *Surprise me*), give it a name and a personality — Buddy, Sunny, Calm, Witty, Straight shooter, Curious, Butler, Hype or your own words — and it greets you and reports back in that voice. Its face shows what it's doing: it thinks, looks busy while it works, waves when it needs you, hops when the job is done and naps while switched off. Godmode itself is the mint mochi with the lightning bolt. |
 | 🌙 **Dreaming** | While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned (even if nobody said "remember this"), merge duplicates, fix contradictions and update dates ("is going to Singapore in July" → "went to Singapore in July"). Memory loads into every new chat; every dream can be reviewed as a diff and undone. |
 | 📁 **Working folders** | Optionally point a chat or an agent at any folder on your machine — it works on the files there and keeps its memory in its own repo. |
-| 📋 **Task board** | A Trello-style Kanban board per workspace: create tickets, assign them to agents, drag them across *Backlog → Todo → In progress → In review → Done*. A ticket that lands in *Todo* starts its agent. Every ticket works in its own git worktree of the workspace's repository (a cloned URL or a local folder), on its own branch, so agents running side by side never get in each other's way. When the agent on a **Coding** ticket is done, Godmode pushes its branch and opens a pull request — merged pull requests close their ticket. Reply to a ticket to ask for changes; the pull request updates. Archive finished tickets (one by one, or a whole *Done* column) to keep the board focused — they keep everything and come back in one click. |
+| 📋 **Task board** | A Trello-style Kanban board per workspace: create tickets, assign them to agents, drag them across *Backlog → Todo → In progress → In review → Done*. A ticket that lands in *Todo* starts its agent. Every ticket works in its own git worktree of the workspace's repository (a cloned URL or a local folder), on its own branch, so agents running side by side never get in each other's way. When the agent on a **Coding** ticket is done, Godmode pushes its branch and opens a pull request — merged pull requests close their ticket. Reply to a ticket to ask for changes; the pull request updates. Archive finished tickets (one by one, or a whole *Done* column) to keep the board focused — they keep everything and come back in one click. Tickets carry a **priority**, a **due date** and **labels** (filter by them; urgent ones start first and the agent is told the deadline). Every ticket keeps a **timeline** — each delivery with its full result, your feedback, the agent's notes, blocks and pull requests — and shows what it **cost** and how long the agent worked. Review in one click (**Approve** / **Request changes** / **Reopen**); *Blocked* says why — the agent needs something, the run failed, a restart cut it off — and offers the matching way on. A ticket whose agent set itself a follow-up shows *Waiting — continues tomorrow at 10:00* instead of landing in review. |
 | ⚡ **Automations** | Work starts when it happens: on a schedule (“weekdays at 08:00”), when something happens in a connected app (a new email, a Slack message, a calendar event, a Notion update), when a condition you describe comes true (“competitor pricing changes”), or when a webhook is called. Describe it in one sentence and Godmode sets it up. |
 | ⏰ **Follow-ups** | When a task needs waiting — a reply to an email, a delivery, a build, office hours — the agent sets itself a time and picks the chat up again on its own, with all the context, like a coworker who says “I'll check back tomorrow at 10”. You see when it comes back and can continue now, move it or cancel it. |
-| 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. |
+| 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. Follow a handoff both ways: open the teammate's chat from the handoff card, and jump back to the chat that asked from there. |
+| 🏢 **Team & org chart** | Give every agent a role (*Bookkeeper*, *Research analyst*) and a lead; agents are told who does what and who they report to, so work goes to the right one. The **org chart** shows the whole team with what each is doing right now. Status tells the truth — *Working in 2 chats*, *Queued*, *Needs your answer*, *Last run failed* (one click opens the run) — and each agent's page shows **what's on its plate**: live work, waiting chats, board tickets, follow-ups and its next automations. Duplicate an agent in one click; messages from automations, the board or other agents are labelled as such, never shown as yours. |
 | 📨 **Message queue** | Keep writing while an agent works: your messages wait in a queue above the message box, and the agent picks them up at its next step and works them into what it is doing — a correction lands right away, an extra request comes after the current step. Reword or remove a queued message until it is picked up, or hit *Send now* to interrupt. |
+| 🙋 **Questions & approvals** | When a decision is yours — or before a step that sends, pays or deletes something you didn't ask for — the agent asks: a question with suggested answers, or *Approve / Decline* for exactly that step. The work stands still (it doesn't pretend to be done), you're notified, and you answer with one click in the chat, the inbox, the task, from your phone or by replying in Slack, Telegram or Teams; the agent continues right where it stopped. Stop the run and the question is withdrawn. |
 | ⏸️ **Pause & continue** | Pause an agent or a single chat and continue later: it lets the step it is in finish, stands still, and picks the work up exactly where it stopped — same run, same message, same Claude session. When Claude's usage limit is reached mid-task, the work waits instead of failing and continues by itself once the limit has reset. |
 | ⌨️ **Slash commands** | Type `/` for every Claude Code command — `/compact`, `/model`, `/effort`, `/clear`… — with argument hints and tab completion. |
 | 🧩 **Ultracode** | Switch on Claude Code's dynamic workflows — for one chat (model picker or `/effort ultracode`), an agent, or everything: Claude plans the task and runs several agents on it at once. Thorough, but slower and far more tokens. A card in the chat shows every workflow's agents while they work. |
@@ -83,7 +85,9 @@ needs to be useful:
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
 | 🩺 **Diagnostic log** | Errors, slow spots and how every run went, with secrets masked. Settings → Logs groups recurring problems and copies an AI-ready report — paste it into Claude to find bugs and speed things up. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
-| 📱 **Phone app** | Control Godmode from your iPhone or Android phone: hand over tasks, follow answers as they're written, stop runs, run automations and watch an agent's browser, shared screen or VM live — tap to take control. Pair once by scanning a QR code; the phone talks to your computer over [Tailscale](https://tailscale.com), never the open internet. Liquid Glass on iOS 26. |
+| 🖥️ **Runners** | Keep working with the lid closed: put Godmode on another Mac — a Mac mini, an old laptop — with one install command, and pick it under **Run on** when you start a chat. Godmode copies your agents, logins, 2FA codes and browser sessions there, the work happens there, and you watch it here live like any other chat. Install, pairing and Claude Code set themselves up; a health view shows what's missing (software, macOS permissions, the vault) with one-click fixes, or hand it to **Fix with Claude**. Encrypted end to end. |
+| 📱 **Phone app** | Control Godmode from your iPhone or Android phone: hand over tasks, follow answers as they're written, stop runs, run automations and watch an agent's browser, shared screen or VM live — tap to take control. Pair once by scanning a QR code; the phone talks to your computer over [Tailscale](https://tailscale.com), or through the gateway of a Godmode Cloud you link it to. Liquid Glass on iOS 26. |
+| ☁️ **Godmode Cloud** (optional) | A self-hosted account service: open your computer's dashboard in any browser and reach it from your phone without Tailscale, with accounts, invites, roles, an admin dashboard and Stripe plans. Godmode works fully without it; nothing leaves your computer unless you link it to a cloud. See [apps/cloud](apps/cloud/README.md). |
 
 <img src="docs/screenshots/phone.png" alt="The Godmode phone app: what agents are doing now, a chat with a live browser strip, taking control of the agent's browser, and a finished answer" width="100%" />
 
@@ -215,8 +219,30 @@ docker compose up -d   # dashboard on http://localhost:7777
 3. Open the Godmode app and tap **Scan QR code** (or point the camera app at the code).
 
 The code works once and for five minutes; the phone gets its own key, and you can remove it anytime in the same place.
-Godmode only listens for phones on the computer's Tailscale address. The app lives in [`apps/mobile`](apps/mobile)
-(Expo) — build it with `bun run ios` / `bun run android` or EAS until it's in the stores.
+Godmode only listens for phones on the computer's Tailscale address. Without Tailscale, link the computer to a
+[Godmode Cloud](apps/cloud/README.md) with phone access on: the phone then also reaches it through the cloud's gateway.
+The app lives in [`apps/mobile`](apps/mobile) (Expo) — build it with `bun run ios` / `bun run android` or EAS until
+it's in the stores.
+
+### Godmode Cloud (optional)
+
+Open a computer's dashboard from any browser and reach it from your phone without Tailscale: deploy
+[`apps/cloud`](apps/cloud/README.md) (Coolify or Docker Compose; the only setting is its address), then link Godmode in
+**Settings → Cloud**. The computer keeps one outbound connection to the cloud; there is no port to open. The cloud
+relays, and can see, everything done through it, so link only to a cloud you trust.
+
+### Runners — another Mac that works while yours sleeps
+
+1. In Godmode open **Runners → Add runner** and copy the command.
+2. Run it in Terminal on the other Mac (a Mac mini, a laptop that stays plugged in — on the same network or in your
+   Tailscale). It installs Godmode as a runner that starts whenever you log in there, installs Claude Code and a
+   browser, and pairs itself with your Godmode.
+3. Start a chat and pick the runner under **Run on** in the message box.
+
+The runner keeps its Mac awake while it serves. Sign in to Claude Code on it once (`claude`), and grant Accessibility
+and Screen Recording on its screen if agents should use apps there — the runner's health view says what's left. On the
+runner: `godmode runner status`, `godmode runner pair` (a new pairing code to paste under **Add runner → Enter a
+pairing code**), `godmode runner uninstall`.
 
 ## ⚡ Quick start
 
@@ -354,14 +380,25 @@ Every run is committed, so you can see exactly what an agent learned and did —
 - **Re-auth for sensitive actions**: revealing a password or granting an agent reveal access needs your vault passphrase.
 - **Redaction** of known secrets in transcripts, logs and the UI · **audit log** of every secret access.
 - **Local-first**: API on `127.0.0.1`, per-run MCP tokens, DNS-rebinding & CSRF protection, strict CSP,
-  rate-limited logins, HttpOnly/SameSite cookies for the dashboard.
+  rate-limited logins, HttpOnly/SameSite cookies for the dashboard. Nothing leaves your computer unless you link it to
+  a cloud.
+- **Godmode Cloud is opt-in per computer**: a linked computer dials out to the cloud, which relays browsers and
+  phones to it. The cloud terminates HTTPS, so it can see what passes through. The admin area has no way to open
+  someone else's computer. Whoever operates the cloud (server, database, sign-in e-mail) is trusted and technically
+  can. The computer decides what the cloud may do: browser access, phone access, and whether the vault and saved
+  passwords may be used through it (off by default). Some actions are never possible through the cloud.
 - **Remember this device** keeps the data key in the OS keychain so routines run unattended — disable it to require
   your passphrase after every restart.
 - **Phones** pair with a one-time, five-minute QR code and get their own key (stored hashed on the computer, in the
-  Keychain / Keystore on the phone). Their key only works on the computer's Tailscale address, is only sent to an
-  address that proves it's your Godmode, and opens a fixed set of routes: no logins, 2FA codes, backups, integrations,
-  settings or folders, and only screens shared in a chat can be controlled. A paired phone can still ask agents to act
-  on your computer — remove a lost phone in Settings → Phone, and turn on *Require Face ID* in the app.
+  Keychain / Keystore on the phone). Their key only works on the computer's Tailscale address (and through the gateway
+  of a cloud the computer is linked to), is only sent to an address that proves it's your Godmode, and opens a fixed
+  set of routes: no logins, 2FA codes, backups, integrations, settings or folders, and only screens shared in a chat
+  can be controlled. A paired phone can still ask agents to act on your computer — remove a lost phone in
+  Settings → Phone, and turn on *Require Face ID* in the app.
+
+- **Runners** pair with a one-time code and pin each other's keys; the link is end-to-end encrypted (X25519, AES-256-GCM)
+  and the runner's API never listens beyond its own loopback. A paired Godmode gets your vault key on the runner so
+  logins work there — pair only computers you control.
 
 > ⚠️ Agents run Claude Code with **bypass permissions** by default. Treat them like a trusted coworker with access to
 > your machine; for sensitive work give the agent its own **macOS VM** (see above), or run Godmode in a VM or
@@ -378,7 +415,8 @@ pnpm build:app    # desktop bundles
 ```
 
 Monorepo: `packages/shared` (types) · `packages/core` (daemon) · `apps/desktop` (UI + Tauri) · `apps/mobile` (phone
-app, Expo — its own toolchain, see [apps/mobile/README.md](apps/mobile/README.md)).
+app, Expo — its own toolchain, see [apps/mobile/README.md](apps/mobile/README.md)) · `apps/cloud` (Godmode Cloud,
+Next.js, see [apps/cloud/README.md](apps/cloud/README.md)).
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 🗺️ Roadmap
@@ -395,7 +433,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] SSH servers: agents run commands, edit files and copy files on remote machines — password or key, sudo, pinned host keys
 - [ ] Windows / Linux VMs
 - [x] Phone app (iOS / Android): chats, runs, automations, live browser, screen and VM views, paired over Tailscale
-- [ ] Push notifications and a hosted gateway for phones without Tailscale
+- [x] Runners: another Mac does the work of a chat while this one sleeps — one install command, encrypted link, setup copied, live view
+- [ ] Runners on Windows and Linux, tasks of the board on a runner, VMs copied to a runner
+- [x] Godmode Cloud (optional, self-hosted): your computer in any browser, phones without Tailscale, accounts and plans
+- [ ] Push notifications
 - [ ] Team mode: shared workspaces and approvals
 
 ## 🙏 Credits

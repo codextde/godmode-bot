@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "cp ../../scripts/install.sh public/install.sh && astro build",
+    "build": "cp ../../scripts/install.sh public/install.sh && cp ../../scripts/runner.sh public/runner.sh && astro build",
     "preview": "pnpm build && wrangler dev",
     "typecheck": "astro check",
     "deploy": "pnpm build && wrangler deploy",

@@ -1,0 +1,96 @@
+# Godmode Cloud: accounts, billing, the admin dashboard and the relay, with its own PostgreSQL.
+#
+# Coolify: new resource from this Git repository, Build Pack "Docker Compose", Base Directory "/apps/cloud",
+#          Docker Compose Location "/docker-compose.yaml". Put your address with https:// into "Domains for cloud"
+#          (https://cloud.example.com) and leave the DOMAIN variable empty. Deploy. Nothing else to configure.
+# Plain:   cd apps/cloud && cp .env.example .env (set DOMAIN) && docker compose up -d --build
+#          docker-compose.override.yaml, loaded automatically, publishes port 3000. Coolify ignores that file.
+# Step by step, e-mail, Stripe, backups and upgrades: README.md next to this file.
+#
+# There are no passwords to set: `init` writes them once into the `secrets` volume. Back that volume up together
+# with `pgdata`. Without it the database password and the key to the stored SMTP and Stripe secrets are gone.
+
+services:
+  # Runs once per deploy and exits. `restart: "no"` must stay explicit and quoted: without it Coolify adds
+  # "unless-stopped" and starts this one-shot job again forever (it also keeps it out of Coolify's health status).
+  init:
+    image: busybox:1.37
+    restart: "no"
+    volumes:
+      - secrets:/secrets
+    command:
+      - sh
+      - -ec
+      - |
+        cd /secrets
+        umask 022
+        [ -s postgres_password ] || { head -c 32 /dev/urandom | od -An -v -tx1 | tr -d ' \n' > .postgres_password.new; mv .postgres_password.new postgres_password; }
+        [ -s app_secret ] || { head -c 48 /dev/urandom | od -An -v -tx1 | tr -d ' \n' > .app_secret.new; mv .app_secret.new app_secret; }
+        chmod 0444 postgres_password app_secret
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_USER: godmode
+      POSTGRES_DB: godmode
+      POSTGRES_PASSWORD_FILE: /run/godmode-secrets/postgres_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - secrets:/run/godmode-secrets:ro
+    healthcheck:
+      # -h 127.0.0.1: "ready" only once the real server listens on TCP, not during the first-run initialisation.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U godmode -d godmode"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  cloud:
+    build:
+      # The repository root. Coolify runs compose with the Base Directory (/apps/cloud) as project directory, and
+      # plain compose uses this file's folder, so both resolve ../.. to the root.
+      context: ../..
+      dockerfile: apps/cloud/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    # No `ports:` here: Coolify's proxy reaches the container on its own network, and `expose` names the port.
+    expose:
+      - "3000"
+    environment:
+      # Coolify: gives this service a generated address routed to port 3000 until you enter your own domain, and
+      # then passes your domain as SERVICE_URL_CLOUD. Elsewhere this stays unset.
+      SERVICE_URL_CLOUD_3000:
+      # The public address. Leave it empty on Coolify (the domain field is used); set it in .env for plain compose.
+      DOMAIN: ${DOMAIN:-}
+      # The healthcheck and the proxy expect 3000, whatever else the environment holds.
+      PORT: "3000"
+      DATABASE_HOST: db
+      DATABASE_USER: godmode
+      DATABASE_NAME: godmode
+      DATABASE_PASSWORD_FILE: /run/godmode-secrets/postgres_password
+      APP_SECRET_FILE: /run/godmode-secrets/app_secret
+    volumes:
+      - data:/data
+      - secrets:/run/godmode-secrets:ro
+    # The proxy only sends traffic to a healthy container; /api/health answers without the database.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+    # Time to close computer links and write the last usage counters.
+    stop_grace_period: 30s
+
+volumes:
+  pgdata:
+  secrets:
+  data:

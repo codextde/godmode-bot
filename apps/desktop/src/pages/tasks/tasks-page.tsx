@@ -1,10 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Archive, FolderGit2, Plus, Search, SquareKanban } from "lucide-react";
+import { Archive, FolderGit2, ListFilter, Plus, Search, SquareKanban } from "lucide-react";
 import { toast } from "sonner";
-import type { Task, TaskStatus, Workspace } from "@godmode/shared";
-import { AgentAvatar, PageHeader } from "@/components/common";
+import type { Task, TaskPriority, TaskStatus, Workspace } from "@godmode/shared";
+import { TASK_PRIORITIES, isOverdue, localDay } from "@godmode/shared";
+import { AgentAvatar, EmptyState, PageHeader } from "@/components/common";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LabelChip } from "@/components/tasks/task-fields";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,10 +36,11 @@ import { useArchiveTasks } from "@/components/tasks/task-actions";
 import { TaskBoard } from "@/components/tasks/task-board";
 import { TaskDialog } from "@/components/tasks/task-dialog";
 import { TaskSheet } from "@/components/tasks/task-sheet";
-import { STATUS_META, isWorking, workspaceRepos } from "@/components/tasks/task-meta";
+import { PRIORITY_META, PriorityIcon, STATUS_META, isWorking, needsConfirm, workspaceRepos } from "@/components/tasks/task-meta";
+import { followupWhen } from "@/components/chat/followup";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { useAllAgents, useArchivedTasks, useTasks, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { upsertTask } from "@/lib/realtime";
@@ -62,11 +74,36 @@ export default function TasksPage() {
   const { setArchived } = useArchiveTasks();
   const { data: agents = [] } = useAllAgents();
   const { data: workspaceList = [] } = useWorkspaces();
-  const [search, setSearch] = useState("");
-  const [agentFilter, setAgentFilter] = useState(ALL);
+  // Filters live in the address: they survive opening a ticket's chat and coming back.
+  const search = params.get("q") ?? "";
+  const agentFilter = params.get("agent") ?? ALL;
+  const priorities = useMemo(() => new Set((params.get("priority") ?? "").split(",").filter(Boolean) as TaskPriority[]), [params]);
+  const dueFilter = params.get("due") as "overdue" | "week" | "none" | null;
+  const labelFilter = useMemo(() => new Set((params.get("label") ?? "").split(",").filter(Boolean)), [params]);
+  const setFilter = (key: string, value: string | null) => {
+    const p = new URLSearchParams(params);
+    if (value) p.set(key, value);
+    else p.delete(key);
+    setParams(p, { replace: true });
+  };
+  const setSearch = (q: string) => setFilter("q", q || null);
+  const setAgentFilter = (a: string) => setFilter("agent", a === ALL ? null : a);
+  const toggleIn = (key: "priority" | "label", set: Set<string>, value: string) => {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    setFilter(key, [...next].join(",") || null);
+  };
+  const filtersOn = priorities.size + labelFilter.size + (dueFilter ? 1 : 0);
+  const clearFilters = () => {
+    const p = new URLSearchParams(params);
+    for (const k of ["q", "agent", "priority", "due", "label"]) p.delete(k);
+    setParams(p, { replace: true });
+  };
   const [creating, setCreating] = useState(false);
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null);
-  const [stopping, setStopping] = useState<{ task: Task; status: TaskStatus; beforeId: string | null; archive?: boolean } | null>(null);
+  /** A move, an archive or a new agent that would end something: asked first. `reassignTo` set = a new agent. */
+  const [stopping, setStopping] = useState<{ task: Task; status: TaskStatus; beforeId: string | null; archive?: boolean; reassignTo?: string | null } | null>(null);
   const [deleting, setDeleting] = useState<Task | null>(null);
 
   const workspace = workspaceList.find((w) => w.id === scope) ?? null;
@@ -89,12 +126,21 @@ export default function TasksPage() {
 
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const today = localDay();
+    const week = localDay(new Date(Date.now() + 7 * 86_400_000));
     return (t: Task) => {
       if (agentFilter === UNASSIGNED ? t.agentId : agentFilter !== ALL && t.agentId !== agentFilter) return false;
+      if (priorities.size && !priorities.has(t.priority)) return false;
+      if (dueFilter === "overdue" && !isOverdue(t, today)) return false;
+      if (dueFilter === "week" && !(t.dueDate && t.dueDate >= today && t.dueDate <= week)) return false;
+      if (dueFilter === "none" && t.dueDate) return false;
+      if (labelFilter.size && !t.labels.some((l) => labelFilter.has(l))) return false;
       if (!q) return true;
-      return `#${t.number} ${t.title} ${t.description} ${t.agentId ? (agentById.get(t.agentId)?.name ?? "") : ""}`.toLowerCase().includes(q);
+      return `#${t.number} ${t.title} ${t.description} ${t.labels.join(" ")} ${t.agentId ? (agentById.get(t.agentId)?.name ?? "") : ""}`.toLowerCase().includes(q);
     };
-  }, [search, agentFilter, agentById]);
+  }, [search, agentFilter, agentById, priorities, dueFilter, labelFilter]);
+  const labelsInUse = useMemo(() => [...new Set(tasks.flatMap((t) => t.labels))].sort((a, b) => a.localeCompare(b)), [tasks]);
+  const overdueCount = useMemo(() => tasks.filter((t) => isOverdue(t)).length, [tasks]);
   const visible = useMemo(() => tasks.filter(matches), [tasks, matches]);
   const visibleArchived = useMemo(() => archived.filter(matches), [archived, matches]);
 
@@ -140,10 +186,13 @@ export default function TasksPage() {
         list?.map((t) => (t.id === task.id ? { ...t, status, position: optimisticPosition(list, task, status, beforeId) } : t)),
       );
     },
-    onSuccess: (t, { status }) => {
+    onSuccess: (t, { status, task }) => {
       upsertTask(qc, t);
       if ((status === "todo" || status === "in_progress") && !t.agentId) {
         toast("Assign an agent to start it", { action: { label: "Assign", onClick: () => openTask(t) } });
+      }
+      if (status === "blocked" && task.status !== "blocked") {
+        toast(`#${t.number} moved to Blocked`, { action: { label: "Add a reason", onClick: () => openTask(t) } });
       }
     },
     onError: (e) => {
@@ -153,14 +202,30 @@ export default function TasksPage() {
   });
 
   const requestMove = (task: Task, status: TaskStatus, beforeId: string | null = null) => {
-    if (isWorking(task) && status !== "in_progress") setStopping({ task, status, beforeId });
+    if (needsConfirm(task) && status !== "in_progress") setStopping({ task, status, beforeId });
     else move.mutate({ task, status, beforeId });
   };
 
   const archive = (list: Task[]) => {
-    const working = list.find(isWorking);
+    const working = list.find(needsConfirm);
     if (working && list.length === 1) setStopping({ task: working, status: "backlog", beforeId: null, archive: true });
     else setArchived(list, true);
+  };
+
+  const reassign = useMutation({
+    mutationFn: ({ task, agentId }: { task: Task; agentId: string | null }) => api.tasks.update(task.id, { agentId }),
+    onMutate: ({ task, agentId }) =>
+      qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((t) => (t.id === task.id ? { ...t, agentId } : t))),
+    onSuccess: (t) => upsertTask(qc, t),
+    onError: (e) => {
+      void qc.invalidateQueries({ queryKey: qk.tasks });
+      toastApiError(e, "Could not change the agent", qc);
+    },
+  });
+  const requestReassign = (task: Task, agentId: string | null) => {
+    if (agentId === task.agentId) return;
+    if (needsConfirm(task)) setStopping({ task, status: task.status, beforeId: null, reassignTo: agentId });
+    else reassign.mutate({ task, agentId });
   };
 
   const quickAdd = useMutation({
@@ -180,6 +245,7 @@ export default function TasksPage() {
     onError: (e) => toastApiError(e, "Could not delete the task", qc),
   });
 
+  const stopCopyOf = stopping ? stopCopy(stopping, (id) => (id ? (agentById.get(id)?.name ?? "The agent") : "The agent")) : null;
   const running = tasks.filter(isWorking).length;
   const review = tasks.filter((t) => t.status === "in_review").length;
   const blocked = tasks.filter((t) => t.status === "blocked").length;
@@ -254,12 +320,67 @@ export default function TasksPage() {
             ))}
           </SelectContent>
         </Select>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 font-normal">
+              <ListFilter className="text-muted-foreground" /> Filter
+              {filtersOn > 0 && <span className="rounded-[4px] bg-primary px-1.5 font-mono text-[10px] text-primary-foreground tabular-nums">{filtersOn}</span>}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuLabel>Priority</DropdownMenuLabel>
+            {TASK_PRIORITIES.map((p) => (
+              <DropdownMenuCheckboxItem key={p} checked={priorities.has(p)} onSelect={(e) => e.preventDefault()} onCheckedChange={() => toggleIn("priority", priorities as Set<string>, p)}>
+                <PriorityIcon priority={p} /> {PRIORITY_META[p].label}
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Due</DropdownMenuLabel>
+            {(
+              [
+                ["overdue", "Overdue"],
+                ["week", "Due in 7 days"],
+                ["none", "No due date"],
+              ] as const
+            ).map(([v, label]) => (
+              <DropdownMenuCheckboxItem key={v} checked={dueFilter === v} onSelect={(e) => e.preventDefault()} onCheckedChange={(on) => setFilter("due", on ? v : null)}>
+                {label}
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Labels</DropdownMenuLabel>
+            {labelsInUse.length === 0 ? (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">No labels yet</p>
+            ) : (
+              labelsInUse.map((l) => (
+                <DropdownMenuCheckboxItem key={l} checked={labelFilter.has(l)} onSelect={(e) => e.preventDefault()} onCheckedChange={() => toggleIn("label", labelFilter, l)}>
+                  <LabelChip label={l} />
+                </DropdownMenuCheckboxItem>
+              ))
+            )}
+            {filtersOn > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={clearFilters}>Clear filters</DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
         {view === ARCHIVED ? (
           <p className="ml-auto text-xs text-muted-foreground">
             <span className="font-mono tabular-nums">{archived.length}</span> archived · restoring puts a task back on top of its column
           </p>
         ) : (
           <p className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+            {(filtersOn > 0 || !!search.trim() || agentFilter !== ALL) && (
+              <span>
+                Showing <span className="font-mono tabular-nums">{visible.length}</span> of <span className="font-mono tabular-nums">{tasks.length}</span> ·{" "}
+                <button type="button" className="underline-offset-2 hover:underline" onClick={clearFilters}>
+                  Clear filters
+                </button>
+              </span>
+            )}
+            {overdueCount > 0 && <span className="font-medium text-rose-600 dark:text-rose-400">{overdueCount} overdue</span>}
             {running > 0 && <span className="text-amber-700 dark:text-amber-300">{running} running</span>}
             {review > 0 && <span>{review} {STATUS_META.in_review.label.toLowerCase()}</span>}
             {blocked > 0 && <span className="text-rose-600 dark:text-rose-400">{blocked} blocked</span>}
@@ -281,11 +402,8 @@ export default function TasksPage() {
               tasks={visibleArchived}
               agents={agentById}
               workspaces={workspace ? undefined : workspaces}
-              filtered={archived.length > 0 && (!!search.trim() || agentFilter !== ALL)}
-              onClearFilters={() => {
-                setSearch("");
-                setAgentFilter(ALL);
-              }}
+              filtered={archived.length > 0 && (!!search.trim() || agentFilter !== ALL || filtersOn > 0)}
+              onClearFilters={clearFilters}
               onOpen={openTask}
               onRestore={(t) => setArchived(t, false)}
               onDelete={setDeleting}
@@ -296,6 +414,32 @@ export default function TasksPage() {
             {Array.from({ length: 5 }, (_, i) => (
               <Skeleton key={i} className="h-full w-[272px] shrink-0 rounded-xl" />
             ))}
+          </div>
+        ) : tasksQ.isError ? (
+          <div className="px-5 @2xl:px-8">
+            <EmptyState
+              icon={<SquareKanban />}
+              title="Couldn't load the board"
+              description={errorMessage(tasksQ.error)}
+              action={
+                <Button variant="outline" onClick={() => tasksQ.refetch()}>
+                  Try again
+                </Button>
+              }
+            />
+          </div>
+        ) : tasks.length > 0 && visible.length === 0 ? (
+          <div className="px-5 @2xl:px-8">
+            <EmptyState
+              icon={<ListFilter />}
+              title="No tasks match"
+              description="Nothing on this board fits the filters."
+              action={
+                <Button variant="outline" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              }
+            />
           </div>
         ) : (
           <TaskBoard
@@ -326,6 +470,7 @@ export default function TasksPage() {
         onMove={(task, status) => requestMove(task, status)}
         onArchive={(task, value) => (value ? archive([task]) : setArchived(task, false))}
         onDelete={setDeleting}
+        onReassign={requestReassign}
       />
       {editingWorkspace && (
         <WorkspaceDialog open onOpenChange={(open) => !open && setEditingWorkspace(null)} workspace={editingWorkspace} focus="sources" />
@@ -333,25 +478,28 @@ export default function TasksPage() {
 
       <AlertDialog open={!!stopping} onOpenChange={(open) => !open && setStopping(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Stop the agent?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {stopping &&
-                `${stopping.task.agentId ? (agentById.get(stopping.task.agentId)?.name ?? "The agent") : "The agent"} is still working on #${stopping.task.number}. ${stopping.archive ? "Archiving it stops the run and parks the task in the Backlog." : `Moving it to ${STATUS_META[stopping.status].label} stops the run.`}`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep working</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (stopping?.archive) setArchived(stopping.task, true);
-                else if (stopping) move.mutate(stopping);
-                setStopping(null);
-              }}
-            >
-              {stopping?.archive ? "Stop and archive" : "Stop and move"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          {stopCopyOf && (
+            <>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{stopCopyOf.title}</AlertDialogTitle>
+                <AlertDialogDescription>{stopCopyOf.text}</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel autoFocus>{stopCopyOf.keep}</AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  onClick={() => {
+                    if (stopping?.reassignTo !== undefined) reassign.mutate({ task: stopping.task, agentId: stopping.reassignTo });
+                    else if (stopping?.archive) setArchived(stopping.task, true);
+                    else if (stopping) move.mutate(stopping);
+                    setStopping(null);
+                  }}
+                >
+                  {stopCopyOf.confirm}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
         </AlertDialogContent>
       </AlertDialog>
 
@@ -390,4 +538,53 @@ export default function TasksPage() {
       </AlertDialog>
     </div>
   );
+}
+
+type Stopping = { task: Task; status: TaskStatus; beforeId: string | null; archive?: boolean; reassignTo?: string | null };
+
+/** What the confirm dialog says: what would end (a run working, standing still, waiting for an answer, a follow-up). */
+function stopCopy(s: Stopping, agentName: (id: string | null) => string): { title: string; text: string; keep: string; confirm: string } {
+  const t = s.task;
+  const who = agentName(t.agentId);
+  const what = s.archive ? "Archiving it" : `Moving it to ${STATUS_META[s.status].label}`;
+  const state = isWorking(t) ? "working" : t.pause?.reason === "question" ? "question" : t.pause?.reason === "limit" ? "limit" : t.pause ? "paused" : "waiting";
+  if (s.reassignTo !== undefined) {
+    if (s.reassignTo === null) return { title: `Take ${who} off #${t.number}?`, text: "The run stops and the task is parked in the Backlog.", keep: `Keep ${who}`, confirm: "Take off" };
+    const next = agentName(s.reassignTo);
+    const ends = state === "working" ? `${who}'s run stops` : state === "waiting" ? `${who}'s follow-up is cancelled` : `${who}'s run ends`;
+    return { title: `Hand #${t.number} to ${next}?`, text: `${who} is still on it. ${ends} and ${next} starts over.`, keep: `Keep ${who}`, confirm: "Hand over" };
+  }
+  const parked = s.archive ? " and parks the task in the Backlog" : "";
+  switch (state) {
+    case "working":
+      return { title: "Stop the agent?", text: `${who} is still working on #${t.number}. ${what} stops the run${parked}.`, keep: "Keep working", confirm: s.archive ? "Stop and archive" : "Stop and move" };
+    case "question":
+      return {
+        title: "Drop the question?",
+        text: `${who} is waiting for your answer on #${t.number}. ${what} ends the run${parked} — it can't be continued afterwards.`,
+        keep: "Keep waiting",
+        confirm: s.archive ? "End and archive" : "End and move",
+      };
+    case "limit":
+      return {
+        title: "End the waiting run?",
+        text: `#${t.number} waits for Claude's ${t.pause?.limit ?? "usage limit"} to reset. ${what} ends the run${parked} — it can't be continued afterwards.`,
+        keep: "Keep waiting",
+        confirm: s.archive ? "End and archive" : "End and move",
+      };
+    case "paused":
+      return {
+        title: "End the paused run?",
+        text: `#${t.number} is paused. ${what} ends the run${parked} — it can't be continued afterwards.`,
+        keep: "Keep it paused",
+        confirm: s.archive ? "End and archive" : "End and move",
+      };
+    default:
+      return {
+        title: "Cancel the follow-up?",
+        text: `${who} plans to continue #${t.number}${t.followup ? ` ${followupWhen(t.followup.dueAt)}` : ""}. ${what} cancels that${parked}.`,
+        keep: "Keep waiting",
+        confirm: s.archive ? "Cancel and archive" : "Cancel and move",
+      };
+  }
 }

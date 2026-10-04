@@ -150,6 +150,8 @@ describe("triggering", () => {
         workspaceId: null,
         sshServerIds: [],
         instructions: "",
+        runnerId: null,
+        runnerToolsId: null,
         pinned: false,
         archived: false,
         lastMessageAt: null,

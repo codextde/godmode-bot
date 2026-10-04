@@ -70,7 +70,7 @@ export function instanceInfo(): MobileInstance {
 let name: string | null = null;
 
 /** "Daniel's MacBook Pro" rather than the host name "Daniels-MacBook-Pro.local" where the system knows it. */
-function computerName(): string {
+export function computerName(): string {
   if (name) return name;
   if (process.platform === "darwin") {
     const proc = Bun.spawnSync(["/usr/sbin/scutil", "--get", "ComputerName"], { stdout: "pipe", stderr: "ignore" });

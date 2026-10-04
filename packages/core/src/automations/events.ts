@@ -16,6 +16,8 @@ import { notify } from "../services/notifications";
 import { redact } from "../vault/vault";
 import { INTERRUPTED } from "../runner/runner";
 import { automationConversation } from "./conversation";
+import { pausedRun } from "../services/pauses";
+import { remindWaitingAutomation } from "../services/questions";
 import { onCheckRunFinished } from "./conditions";
 import { HttpError, badRequest, conflict, newId, now, parseJson, truncate } from "../util";
 
@@ -340,7 +342,12 @@ export async function dispatch(routineId: string): Promise<Run | null> {
   } catch {
     return null; // deleted meanwhile
   }
-  if (activeMainRun(routineId)) return null;
+  const active = activeMainRun(routineId);
+  if (active) {
+    // Events keep waiting while the last run waits for the human's answer: remind them now and then.
+    if (pausedRun(active)?.reason === "question") remindWaitingAutomation(routineId);
+    return null;
+  }
   const waiting = all<EventRow>(
     "SELECT * FROM automation_events WHERE routine_id = ? AND status = 'pending' ORDER BY created_at ASC, rowid ASC LIMIT ?",
     routineId,
@@ -368,6 +375,7 @@ export async function dispatch(routineId: string): Promise<Run | null> {
       content: buildEventPrompt(routine, pending.map(toModel)),
       trigger: "routine",
       routineId,
+      source: "automation",
     });
     setEventStatus(ids, "running", null, run.id);
     // A run that failed right away finished before its events were linked to it (and before run.finished could

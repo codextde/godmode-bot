@@ -16,7 +16,7 @@ import { PasswordInput } from "@/components/vault/password-input";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { isVaultLocked, toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
-import { coreUrl } from "@/lib/core";
+import { cloudContext, coreUrl } from "@/lib/core";
 import { openExternal } from "@/lib/desktop";
 import { useAllAgents } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
@@ -390,7 +390,9 @@ function SetupGuide({ provider }: { provider: MessagingProvider }) {
       </GuideStep>
       <GuideStep n={4}>
         Teams delivers messages over https, so Godmode needs a public address — a tunnel like <Mono>cloudflared</Mono> or <Mono>ngrok</Mono> pointing at{" "}
-        <Mono>{new URL(coreUrl("/")).host}</Mono>, or a server. You'll get the messaging endpoint for Azure after connecting.
+        {/* Through Godmode Cloud this page's host is the cloud's, never the computer's. */}
+        {cloudContext ? "Godmode on that computer" : <Mono>{new URL(coreUrl("/")).host}</Mono>}, or a server. You'll get the messaging endpoint for Azure
+        after connecting.
       </GuideStep>
     </ol>
   );

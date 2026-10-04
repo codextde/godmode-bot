@@ -1,5 +1,4 @@
-import type { ServerWebSocket } from "bun";
-import { browserView, type ClientEvent, type RunDelta, type ServerEvent } from "@godmode/shared";
+import { CLOUD_WS_WINDOW, browserView, type ClientEvent, type RunDelta, type ServerEvent } from "@godmode/shared";
 import { timedSync } from "../diagnostics/slow";
 import { bus } from "../events/bus";
 import { VERSION } from "../config";
@@ -14,8 +13,11 @@ export interface WsData {
   subscriptions: Set<string>;
   /** Subscriptions that only watch — they don't keep an idle browser running. */
   passive?: Set<string>;
-  /** How the socket authenticated; cookie sessions are closed when sessions are revoked, phones when removed. */
-  auth?: "token" | "session" | "device";
+  /**
+   * How the socket authenticated; cookie sessions are closed when sessions are revoked, phones when removed. "cloud":
+   * a signed-in cloud user's browser, relayed through the Godmode Cloud link.
+   */
+  auth?: "token" | "session" | "device" | "cloud";
   /** The paired phone (auth "device"). */
   deviceId?: string;
   /** Phones: conversations whose streaming replies (`run.delta`) they want. */
@@ -24,7 +26,18 @@ export interface WsData {
   patches?: boolean;
 }
 
-const clients = new Set<ServerWebSocket<WsData>>();
+/**
+ * What the hub uses of a socket: Bun's ServerWebSocket, or a socket relayed through the Godmode Cloud link
+ * (cloud/dispatch.ts), whose buffered amount counts the bytes the cloud has not acknowledged yet.
+ */
+export interface HubSocket {
+  data: WsData;
+  send(message: string): unknown;
+  close(code?: number, reason?: string): void;
+  getBufferedAmount(): number;
+}
+
+const clients = new Set<HubSocket>();
 /** Live view subscribers per view (`browserView`: a profile's active tab, or one chat's tab). */
 const browserSubscribers = new Map<string, number>();
 const browserWatchers = new Map<string, number>();
@@ -39,6 +52,8 @@ const computerSubscribers = new Map<string, number>();
 
 /** Events a newly connected UI needs to catch up on (e.g. what running agents are doing right now). */
 let welcomeEvents: () => ServerEvent[] = () => [];
+/** More of them from elsewhere (what runs on runners are doing). */
+const moreWelcomeEvents: (() => ServerEvent[])[] = [];
 
 export function setWelcomeEvents(fn: () => ServerEvent[]) {
   welcomeEvents = fn;
@@ -49,6 +64,25 @@ let runSnapshots: (want: { runId?: string; conversationId?: string }) => RunDelt
 
 export function setRunSnapshots(fn: typeof runSnapshots) {
   runSnapshots = fn;
+}
+
+export function addWelcomeEvents(fn: () => ServerEvent[]) {
+  moreWelcomeEvents.push(fn);
+}
+
+/**
+ * Live views that are a runner's, not this computer's: a runner chat's browser tab and `runner:` screen views. Each
+ * handler answers whether the view was a remote one (and took care of it); otherwise the local live view starts.
+ */
+let remoteBrowser: ((view: BrowserViewRef, subscribed: boolean, passive: boolean) => boolean) | null = null;
+let remoteComputer: ((view: string, subscribed: boolean) => void) | null = null;
+
+export function setRemoteViewHandlers(handlers: {
+  browser: (view: BrowserViewRef, subscribed: boolean, passive: boolean) => boolean;
+  computer: (view: string, subscribed: boolean) => void;
+}) {
+  remoteBrowser = handlers.browser;
+  remoteComputer = handlers.computer;
 }
 
 /** Hooks invoked when the first/last UI subscribes to a browser live view. */
@@ -101,7 +135,7 @@ function bump(counts: Map<string, number>, key: string, by: number): number {
   return next;
 }
 
-function send(ws: ServerWebSocket<WsData>, event: ServerEvent) {
+function send(ws: HubSocket, event: ServerEvent) {
   try {
     ws.send(JSON.stringify(event));
   } catch {
@@ -109,16 +143,26 @@ function send(ws: ServerWebSocket<WsData>, event: ServerEvent) {
   }
 }
 
+/** A live view frame would only pile up behind the ones the client hasn't received yet: skip it. */
+function congested(ws: HubSocket): boolean {
+  try {
+    return ws.getBufferedAmount() > CLOUD_WS_WINDOW;
+  } catch {
+    return false;
+  }
+}
+
 bus.on((event) => {
   if (event.type === "browser.frame") {
     const key = `browser:${browserView(event.profileId, event.conversationId)}`;
-    for (const ws of clients) if (ws.data.subscriptions.has(key)) send(ws, event);
+    for (const ws of clients) if (ws.data.subscriptions.has(key) && !congested(ws)) send(ws, event);
     return;
   }
   if (event.type === "computer.frame" || event.type === "computer.action") {
     const payload = JSON.stringify(event);
     for (const ws of clients) {
       if (!ws.data.subscriptions.has(`computer:${event.view}`)) continue;
+      if (event.type === "computer.frame" && congested(ws)) continue;
       try {
         ws.send(payload);
       } catch {
@@ -140,7 +184,7 @@ bus.on((event) => {
 });
 
 /** Streaming replies are frequent; phones only get them for the chats they have open. */
-function wantsDeltas(ws: ServerWebSocket<WsData>, conversationId: string): boolean {
+function wantsDeltas(ws: HubSocket, conversationId: string): boolean {
   return ws.data.auth !== "device" || !!ws.data.conversations?.has(conversationId);
 }
 
@@ -230,7 +274,7 @@ setDeviceSocketHooks({
 
 const ID = /^[\w-]{1,100}$/;
 
-function changeSubscription(ws: ServerWebSocket<WsData>, ref: BrowserViewRef, subscribe: boolean, passive = false) {
+function changeSubscription(ws: HubSocket, ref: BrowserViewRef, subscribe: boolean, passive = false) {
   if (!ID.test(ref.profileId) || (ref.conversationId !== null && !ID.test(ref.conversationId))) return;
   const view = browserView(ref.profileId, ref.conversationId);
   const key = `browser:${view}`;
@@ -247,35 +291,51 @@ function changeSubscription(ws: ServerWebSocket<WsData>, ref: BrowserViewRef, su
   else ws.data.subscriptions.delete(key);
   const count = bump(browserSubscribers, view, subscribe ? 1 : -1);
   if (!count && !browserWatchers.has(view)) browserViews.delete(view);
-  if ((subscribe && count === 1) || (!subscribe && count === 0)) onBrowserSubscribe?.(ref, subscribe);
+  if ((subscribe && count === 1) || (!subscribe && count === 0)) {
+    if (!remoteBrowser?.(ref, subscribe, passive)) onBrowserSubscribe?.(ref, subscribe);
+  }
 }
 
-/** Views are "display:<id>", "window:<pid>:<id>" or "tab:<profile>:<target>" — keep keys bounded. */
+/** Views are "display:<id>", "window:<pid>:<id>" or "tab:<profile>:<target>", a runner's prefixed with "runner:<id>:" — keep keys bounded. */
 function validView(view: unknown): view is string {
-  return typeof view === "string" && view.length > 0 && view.length <= 300 && /^(display|window|tab):/.test(view);
+  return typeof view === "string" && view.length > 0 && view.length <= 300 && /^(runner:[A-Za-z0-9_-]{1,100}:)?(display|window|tab):/.test(view);
 }
 
-function changeComputerSubscription(ws: ServerWebSocket<WsData>, view: string, subscribe: boolean) {
+function changeComputerSubscription(ws: HubSocket, view: string, subscribe: boolean) {
   const key = `computer:${view}`;
   const has = ws.data.subscriptions.has(key);
   if (subscribe === has) return;
   if (subscribe) ws.data.subscriptions.add(key);
   else ws.data.subscriptions.delete(key);
   const count = bump(computerSubscribers, view, subscribe ? 1 : -1);
-  if ((subscribe && count === 1) || (!subscribe && count === 0)) onComputerSubscribe?.(view, subscribe);
+  if ((subscribe && count === 1) || (!subscribe && count === 0)) {
+    // A runner's screen is never this computer's to capture, whether or not a runner handles it.
+    if (view.startsWith("runner:")) remoteComputer?.(view, subscribe);
+    else onComputerSubscribe?.(view, subscribe);
+  }
 }
 
 export const websocketHandler = {
-  open(ws: ServerWebSocket<WsData>) {
+  open(ws: HubSocket) {
     const wasOnline = ws.data.deviceId ? deviceOnline(ws.data.deviceId) : true;
     clients.add(ws);
-    send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString() });
-    for (const event of welcomeEvents()) send(ws, event);
+    const welcome = welcomeEvents();
+    // The runs active right now: the app drops whatever else it still shows as live (they ended while it was away).
+    const activeRunIds = welcome.flatMap((e) => (e.type === "run.started" ? [e.run.id] : []));
+    send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString(), activeRunIds });
+    for (const event of welcome) send(ws, event);
     // What runs have written so far: the stored message lags behind, and later deltas only say what changed.
     if (ws.data.auth !== "device") for (const event of runSnapshots({})) send(ws, event);
+    for (const more of moreWelcomeEvents) {
+      try {
+        for (const event of more()) send(ws, event);
+      } catch (err) {
+        log.warn("welcome events failed", err);
+      }
+    }
     if (!wasOnline) bus.changed("mobile");
   },
-  message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
+  message(ws: HubSocket, raw: string | Buffer) {
     let msg: ClientEvent;
     try {
       msg = JSON.parse(typeof raw === "string" ? raw : raw.toString("utf8"));
@@ -316,7 +376,7 @@ export const websocketHandler = {
         break;
     }
   },
-  close(ws: ServerWebSocket<WsData>) {
+  close(ws: HubSocket) {
     for (const key of [...ws.data.subscriptions]) {
       const view = key.startsWith("browser:") ? browserViews.get(key.slice(8)) : undefined;
       if (view) changeSubscription(ws, view, false);
@@ -325,7 +385,7 @@ export const websocketHandler = {
     clients.delete(ws);
     if (ws.data.deviceId && !deviceOnline(ws.data.deviceId)) bus.changed("mobile");
   },
-  error(_ws: ServerWebSocket<WsData>, err: Error) {
+  error(_ws: HubSocket, err: Error) {
     log.warn("websocket error", err);
   },
 };

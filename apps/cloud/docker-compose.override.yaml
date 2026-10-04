@@ -1,0 +1,9 @@
+# Plain `docker compose up` loads this file next to docker-compose.yaml; Coolify does not (it passes -f).
+# It publishes the app on the host (PORT in .env changes the host port) and, without DOMAIN, uses localhost on that
+# port as the public address. Anything beyond a test on this machine needs DOMAIN and an HTTPS reverse proxy.
+services:
+  cloud:
+    environment:
+      DOMAIN: ${DOMAIN:-localhost:${PORT:-3000}}
+    ports:
+      - "${PORT:-3000}:3000"

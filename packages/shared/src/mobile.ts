@@ -101,6 +101,11 @@ export interface MobilePairResult {
 export interface MobileSession {
   device: MobileDevice;
   instance: MobileInstance;
+  /**
+   * Where phones reach this computer now, best first: Tailscale addresses, then the Godmode Cloud gateway
+   * (`https://<cloud>/gw/<deviceId>`) while the computer is linked with phone access on. Older cores omit it.
+   */
+  urls: string[];
 }
 
 export const MOBILE_DEFAULT_PORT = 7787;

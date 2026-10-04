@@ -173,6 +173,7 @@ export function renderAgentState(agent: Agent): string {
     personality: agent.personality,
     description: agent.description,
     instructions: agent.instructions,
+    role: agent.role,
     model: agent.model,
     effort: agent.effort,
     ultracode: agent.ultracode,

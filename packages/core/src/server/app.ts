@@ -11,6 +11,7 @@ import { registerWorkspaceRoutes } from "./routes/workspaces";
 import { registerAgentRoutes } from "./routes/agents";
 import { registerChatRoutes } from "./routes/chat";
 import { registerMissingLoginRoutes } from "./routes/missingLogins";
+import { registerQuestionRoutes } from "./routes/questions";
 import { registerIntegrationRoutes } from "./routes/integrations";
 import { registerBrowserRoutes } from "./routes/browser";
 import { registerBackupRoutes } from "./routes/backup";
@@ -28,6 +29,10 @@ import { handleWebhook } from "../automations/webhooks";
 import { registerMessagingRoutes } from "./routes/messaging";
 import { handleMessagingHook } from "../messaging/service";
 import { registerMobileRoutes } from "./routes/mobile";
+import { registerRunnerRoutes } from "./routes/runners";
+import { registerLinkRoutes } from "./routes/link";
+import { remoteRouting } from "../remote/routing";
+import { registerCloudRoutes } from "./routes/cloud";
 
 const log = logger("http");
 const SLOW_REQUEST_MS = 1000;
@@ -135,6 +140,8 @@ export function createApp() {
     if (path === "/api/health" || path.startsWith("/api/auth/") || path === "/api/mobile/pair") return next();
     return requireAuth(c, next);
   });
+  // Requests about a chat that works on a runner (and the runner's screen) are answered by the runner.
+  app.use("/api/*", remoteRouting);
 
   registerSystemRoutes(app);
   registerVaultRoutes(app);
@@ -142,6 +149,7 @@ export function createApp() {
   registerAgentRoutes(app);
   registerChatRoutes(app);
   registerMissingLoginRoutes(app);
+  registerQuestionRoutes(app);
   registerIntegrationRoutes(app);
   registerMessagingRoutes(app);
   registerBrowserRoutes(app);
@@ -155,6 +163,9 @@ export function createApp() {
   registerFileRoutes(app);
   registerLogRoutes(app);
   registerMobileRoutes(app);
+  registerRunnerRoutes(app);
+  registerLinkRoutes(app);
+  registerCloudRoutes(app);
 
   app.all("/api/*", (c) => {
     if (!isPublicPath(c.req.path)) logRejection("warn", "unknown API route", { method: c.req.method, path: c.req.path.slice(0, 200) });

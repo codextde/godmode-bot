@@ -3,9 +3,32 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
-import { AlignLeft, Archive, ArchiveRestore, ArrowUpRight, ChevronRight, EllipsisVertical, GitBranch, GitPullRequestCreateArrow, Hourglass, MessagesSquare, OctagonAlert, Paperclip, Pause, Play, RotateCcw, SendHorizontal, Square, Trash2 } from "lucide-react";
-import type { Agent, Task, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
-import { MAX_TASK_TITLE_LENGTH, githubBranchUrl } from "@godmode/shared";
+import {
+  AlarmClock,
+  AlarmClockOff,
+  AlignLeft,
+  Archive,
+  ArchiveRestore,
+  ArrowUpRight,
+  Check,
+  ChevronRight,
+  EllipsisVertical,
+  GitBranch,
+  GitPullRequestCreateArrow,
+  Hourglass,
+  MessageSquareReply,
+  MessagesSquare,
+  OctagonAlert,
+  Paperclip,
+  Pause,
+  Play,
+  RotateCcw,
+  SendHorizontal,
+  Square,
+  Trash2,
+} from "lucide-react";
+import type { Agent, Task, TaskEvent, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
+import { MAX_TASK_TITLE_LENGTH, githubBranchUrl, isWaiting, reopenStatus } from "@godmode/shared";
 import { WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { ChatFilesScope } from "@/components/chat/local-files";
@@ -23,13 +46,17 @@ import { AttachmentChip, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, formatBytes, rea
 import { api } from "@/lib/api";
 import { modKey, openExternal } from "@/lib/desktop";
 import { draftKeys, saveDraft, useDraft } from "@/lib/drafts";
+import { useQuestions, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
+import { QuestionCard, viewOfQuestion } from "@/components/chat/question-card";
 import { cn } from "@/lib/utils";
 import { DescriptionEditor, withoutPlaceholders, type DescriptionEditorHandle, type TextUpdate } from "./description-editor";
-import { AgentSelect, StatusSelect, agentsInReach } from "./task-fields";
+import { AgentSelect, DueDateField, LabelsInput, PrioritySelect, StatusSelect, agentsInReach } from "./task-fields";
+import { TaskTimeline } from "./task-timeline";
 import { PullRequestChip, useTaskActivity } from "./task-card";
-import { TYPE_META, TypeIcon, isWorking, pauseLabel, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
-import { followupWhen } from "@/components/chat/followup";
+import { BLOCKED_META, StatusIcon, TYPE_META, TypeIcon, formatCost, formatWork, isWorking, pauseLabel, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
+import { followupWhen, useFollowupActions } from "@/components/chat/followup";
+import { useNow } from "@/components/vault/use-now";
 import { usePauseActions } from "@/components/chat/pause";
 import { TASK_TYPES } from "@godmode/shared";
 
@@ -41,6 +68,7 @@ export function TaskSheet({
   onMove,
   onArchive,
   onDelete,
+  onReassign,
 }: {
   task: Task | null;
   agents: Agent[];
@@ -49,6 +77,7 @@ export function TaskSheet({
   onMove: (task: Task, status: TaskStatus) => void;
   onArchive: (task: Task, archived: boolean) => void;
   onDelete: (task: Task) => void;
+  onReassign: (task: Task, agentId: string | null) => void;
 }) {
   /** A file is uploading into the description: closing now would lose it (as the new-task dialog). */
   const uploading = useRef(false);
@@ -85,6 +114,7 @@ export function TaskSheet({
             onMove={onMove}
             onArchive={onArchive}
             onDelete={onDelete}
+            onReassign={onReassign}
           />}
       </SheetContent>
     </Sheet>
@@ -111,6 +141,7 @@ function TaskDetail({
   onMove,
   onArchive,
   onDelete,
+  onReassign,
 }: {
   task: Task;
   agents: Agent[];
@@ -120,8 +151,11 @@ function TaskDetail({
   onMove: (task: Task, status: TaskStatus) => void;
   onArchive: (task: Task, archived: boolean) => void;
   onDelete: (task: Task) => void;
+  onReassign: (task: Task, agentId: string | null) => void;
 }) {
   const qc = useQueryClient();
+  const { data: board = [] } = useTasks("all");
+  const labelsInUse = [...new Set(board.flatMap((t) => t.labels))].sort((a, b) => a.localeCompare(b));
   const workspace = task.workspaceId ? (workspaces.get(task.workspaceId) ?? null) : null;
   const agent = agents.find((a) => a.id === task.agentId);
   const reachable = agentsInReach(agents, task.workspaceId, task.agentId);
@@ -173,7 +207,7 @@ function TaskDetail({
               {task.conversationId && (
                 <DropdownMenuItem asChild>
                   <Link to={`/chat/${task.conversationId}`}>
-                    <MessagesSquare /> Open conversation
+                    <MessagesSquare /> Open chat
                   </Link>
                 </DropdownMenuItem>
               )}
@@ -225,7 +259,16 @@ function TaskDetail({
               <StatusSelect value={task.status} onChange={(s) => onMove(task, s)} className={PROP_CONTROL} />
             </Prop>
             <Prop label="Agent">
-              <AgentSelect agents={reachable} value={task.agentId} onChange={(agentId) => save.mutate({ agentId })} className={PROP_CONTROL} />
+              <AgentSelect agents={reachable} value={task.agentId} onChange={(agentId) => onReassign(task, agentId)} className={PROP_CONTROL} />
+            </Prop>
+            <Prop label="Priority">
+              <PrioritySelect value={task.priority} onChange={(priority) => save.mutate({ priority })} className={PROP_CONTROL} />
+            </Prop>
+            <Prop label="Due date">
+              <DueDateField value={task.dueDate} status={task.status} onChange={(dueDate) => save.mutate({ dueDate })} />
+            </Prop>
+            <Prop label="Labels">
+              <LabelsInput value={task.labels} onChange={(labels) => save.mutate({ labels })} suggestions={labelsInUse} />
             </Prop>
             <Prop label="Type">
               <Select value={task.type} onValueChange={(type) => save.mutate({ type: type as Task["type"] })} disabled={started}>
@@ -285,7 +328,7 @@ function TaskDetail({
             )}
           </dl>
 
-          <WorkPanel task={task} agent={agent} onMove={onMove} />
+          <WorkPanel task={task} agent={agent} onMove={onMove} onReason={(blockedReason) => save.mutate({ blockedReason })} />
 
           {task.summary && (
             <section className="space-y-2">
@@ -300,9 +343,15 @@ function TaskDetail({
             </section>
           )}
 
+          <TaskTimeline task={task} agents={agents} />
+
           <p className="text-xs text-muted-foreground">
-            Created {format(new Date(task.createdAt), "d MMM yyyy, HH:mm")}
-            {task.startedAt && ` · started ${formatDistanceToNowStrict(new Date(task.startedAt), { addSuffix: true })}`}
+            Filed by {task.createdBy === "user" ? "you" : (agents.find((a) => `agent:${a.id}` === task.createdBy)?.name ?? "an agent")} on{" "}
+            {format(new Date(task.createdAt), "d MMM yyyy, HH:mm")}
+            {task.runCount > 0 &&
+              ` · ${agent?.name ?? "The agent"} worked ${formatWork(task.workMs)} in ${task.runCount} run${task.runCount === 1 ? "" : "s"} · ${formatCost(task.costUsd)}${
+                isWorking(task) ? " so far" : ""
+              }`}
             {task.completedAt && ` · closed ${formatDistanceToNowStrict(new Date(task.completedAt), { addSuffix: true })}`}
           </p>
         </div>
@@ -400,10 +449,63 @@ function GitHubMark({ className }: { className?: string }) {
 }
 
 /** What the agent is doing, or what the human can do next. */
-function WorkPanel({ task, agent, onMove }: { task: Task; agent?: Agent; onMove: (task: Task, status: TaskStatus) => void }) {
+function WorkPanel({
+  task,
+  agent,
+  onMove,
+  onReason,
+}: {
+  task: Task;
+  agent?: Agent;
+  onMove: (task: Task, status: TaskStatus) => void;
+  onReason: (reason: string) => void;
+}) {
+  const qc = useQueryClient();
   const activity = useTaskActivity(task);
   const working = isWorking(task);
   const { resume } = usePauseActions(task.conversationId ?? "");
+  const followups = useFollowupActions();
+  const { data: open = [] } = useQuestions("open");
+  const who = agent?.name ?? "The agent";
+  const publish = useMutation({
+    mutationFn: () => api.tasks.openPullRequest(task.id),
+    onSuccess: (t) => qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((x) => (x.id === t.id ? t : x))),
+    onError: (e) => toastApiError(e, "Couldn't publish", qc),
+  });
+  const approve = (t: Task) => {
+    onMove(t, "done");
+    toast.success(`#${t.number} approved`, { action: { label: "Undo", onClick: () => onMove(t, "in_review") } });
+  };
+  const reopen = (t: Task) => {
+    const back = reopenStatus(t);
+    onMove(t, back);
+    toast(`#${t.number} reopened`, { action: { label: "Undo", onClick: () => onMove(t, t.status) } });
+  };
+
+  if (task.pause?.reason === "question" && task.status === "in_progress") {
+    const question = open.find((q) => q.id === task.pause!.question?.id);
+    return (
+      <Panel>
+        {question ? (
+          <QuestionCard question={viewOfQuestion(question)} agentName={agent?.name} answerable inline conversationId={task.conversationId ?? undefined} className="shadow-none" />
+        ) : (
+          <p className="text-sm font-medium">{task.pause.question?.kind === "approval" ? `${agent?.name ?? "The agent"} needs your OK` : `${agent?.name ?? "The agent"} is waiting for your answer`}</p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {task.conversationId && (
+            <Button size="sm" variant="outline" asChild>
+              <Link to={`/chat/${task.conversationId}`}>
+                <MessagesSquare /> Open chat
+              </Link>
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => onMove(task, "backlog")}>
+            <Square className="size-3.5" /> Stop
+          </Button>
+        </div>
+      </Panel>
+    );
+  }
 
   if (pauseLabel(task) && task.pause) {
     const { pause } = task;
@@ -450,7 +552,10 @@ function WorkPanel({ task, agent, onMove }: { task: Task; agent?: Agent; onMove:
         <div className="flex items-start gap-3">
           <WorkingTicks className="mt-1.5 text-amber-500" count={10} />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{agent ? `${agent.name} is working on it` : "Working on it"}</p>
+            <p className="flex items-baseline justify-between gap-2 text-sm font-medium" aria-live="polite">
+              <span>{agent ? `${agent.name} is working on it` : "Working on it"}</span>
+              {task.runStartedAt && task.runStatus === "running" && <Elapsed since={task.runStartedAt} className="text-xs font-normal text-muted-foreground" />}
+            </p>
             <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{activity}</p>
           </div>
         </div>
@@ -470,21 +575,200 @@ function WorkPanel({ task, agent, onMove }: { task: Task; agent?: Agent; onMove:
     );
   }
 
+  if (isWaiting(task) && task.followup) {
+    const f = task.followup;
+    return (
+      <Panel>
+        <div className="flex items-start gap-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-brand/25 bg-brand-soft text-brand-strong">
+            <AlarmClock className="size-4" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium" aria-live="polite">
+              Waiting — continues {followupWhen(f.dueAt)}
+            </p>
+            {f.note && (
+              <p className="mt-0.5 line-clamp-2 text-[13px] text-muted-foreground" title={f.note}>
+                {who}'s plan: {f.note}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" disabled={followups.runNow.isPending} onClick={() => task.conversationId && followups.runNow.mutate(task.conversationId)}>
+            {followups.runNow.isPending ? <Spinner /> : <Play className="fill-current" />} Continue now
+          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" variant="outline" disabled={followups.cancel.isPending} onClick={() => task.conversationId && followups.cancel.mutate(task.conversationId)}>
+                <AlarmClockOff /> Cancel follow-up
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{who} won't continue on its own — the task goes to In review</TooltipContent>
+          </Tooltip>
+          {task.conversationId && (
+            <Button size="sm" variant="ghost" asChild>
+              <Link to={`/chat/${task.conversationId}`}>
+                <MessagesSquare /> Open chat
+              </Link>
+            </Button>
+          )}
+        </div>
+      </Panel>
+    );
+  }
+
   if (task.status === "blocked") {
+    const kind = task.blockedKind;
+    const meta = kind ? BLOCKED_META[kind] : null;
+    const reason = task.blockedReason || (kind === "manual" ? "" : "Something needs your attention.");
+    const advice =
+      kind === "failed" && /timed out/i.test(reason)
+        ? "It hit the run's time limit. Try again, or split the task into smaller ones."
+        : kind === "failed" && /cost budget/i.test(reason)
+          ? `It reached its cost budget. Raise ${who}'s budget, then try again.`
+          : null;
+    const restart = (label: string, icon = <RotateCcw />) =>
+      task.agentId ? (
+        <Button size="sm" onClick={() => onMove(task, "todo")}>
+          {icon} {label}
+        </Button>
+      ) : null;
+    const chat = task.conversationId ? (
+      <Button size="sm" variant="outline" asChild>
+        <Link to={`/chat/${task.conversationId}`}>
+          <MessagesSquare /> Open chat
+        </Link>
+      </Button>
+    ) : null;
     return (
       <Panel tone="blocked">
         <div className="flex gap-2.5">
           <OctagonAlert className="mt-0.5 size-4 shrink-0 text-rose-500" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">Blocked</p>
-            <p className="mt-0.5 text-[13px] whitespace-pre-wrap text-muted-foreground">{task.blockedReason || "Something needs your attention."}</p>
+            <p className="text-sm font-medium" aria-live="polite">
+              {meta ? meta.title(who) : "Blocked"}
+            </p>
+            {kind === "interrupted" ? (
+              <p className="mt-0.5 text-[13px] text-muted-foreground">Godmode restarted while {who} was working. It continues in the same chat, with what it did so far.</p>
+            ) : kind === "manual" ? (
+              <BlockedReason task={task} onSave={onReason} />
+            ) : (
+              reason && <p className="mt-0.5 text-[13px] whitespace-pre-wrap text-muted-foreground">{reason}</p>
+            )}
+            {advice && <p className="mt-1 text-[13px]">{advice}</p>}
+            {!task.agentId && <p className="mt-1 text-[13px] text-muted-foreground">Assign an agent to go on.</p>}
           </div>
         </div>
-        {task.agentId && (
-          <Button size="sm" className="mt-3" onClick={() => onMove(task, "todo")}>
-            <RotateCcw /> Retry
-          </Button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {kind === "needs_input" ? (
+            <>
+              {task.agentId && (
+                <Button size="sm" onClick={() => focusReply(task.id)}>
+                  <MessageSquareReply /> Answer
+                </Button>
+              )}
+              {chat}
+            </>
+          ) : kind === "failed" ? (
+            <>
+              {restart("Try again")}
+              {chat}
+            </>
+          ) : kind === "stopped" ? (
+            <>
+              {restart("Start again", <Play />)}
+              {chat}
+            </>
+          ) : kind === "interrupted" ? (
+            <>
+              {restart("Continue", <Play className="fill-current" />)}
+              {chat}
+            </>
+          ) : kind === "publish" ? (
+            <>
+              {task.branch && (
+                <Button size="sm" disabled={publish.isPending} onClick={() => publish.mutate()}>
+                  {publish.isPending ? <Spinner /> : <GitPullRequestCreateArrow />} {publish.isPending ? "Publishing…" : "Publish again"}
+                </Button>
+              )}
+              {task.agentId && (
+                <Button size="sm" variant="outline" onClick={() => onMove(task, "todo")}>
+                  <RotateCcw /> Start again
+                </Button>
+              )}
+              {chat}
+            </>
+          ) : kind === "setup" ? (
+            restart("Try again")
+          ) : kind === "manual" ? (
+            restart(task.startedAt ? "Start again" : "Start", <Play />)
+          ) : (
+            <>
+              {restart("Try again")}
+              {chat}
+            </>
+          )}
+        </div>
+      </Panel>
+    );
+  }
+
+  if (task.status === "in_review") {
+    const pr = task.pullRequest;
+    return (
+      <Panel tone="review">
+        <p className="text-sm font-medium" aria-live="polite">
+          Delivered — ready for your review
+        </p>
+        {pr && (
+          <div className="mt-2 flex items-center gap-2">
+            <PullRequestChip task={task} className="h-6 text-xs" />
+            <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
+              {pr.number ? repoLabel(pr.url.replace(/\/pull\/\d+$/, "")) : `Branch pushed — open the pull request on ${new URL(pr.url).hostname}`}
+            </span>
+            <Button size="sm" variant="ghost" asChild>
+              <a href={pr.url} target="_blank" rel="noreferrer">
+                {pr.number ? "Review" : "Open pull request"} <ArrowUpRight />
+              </a>
+            </Button>
+          </div>
         )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button size="sm" onClick={() => approve(task)}>
+            <Check /> Approve
+          </Button>
+          {task.agentId && task.conversationId && (
+            <Button size="sm" variant="outline" onClick={() => focusReply(task.id)}>
+              <MessageSquareReply /> Request changes
+            </Button>
+          )}
+        </div>
+        {pr?.number && pr.state === "open" && (
+          <p className="mt-2.5 text-xs text-muted-foreground">
+            Approve marks it done here — merging stays on {new URL(pr.url).hostname}. A merged pull request also moves it to Done.
+          </p>
+        )}
+      </Panel>
+    );
+  }
+
+  if (task.status === "done" || task.status === "cancelled") {
+    return (
+      <Panel>
+        <div className="flex items-center gap-3">
+          <StatusIcon status={task.status} className="size-4" />
+          <p className="min-w-0 flex-1 text-sm font-medium">
+            {task.status === "done" ? "Done" : "Cancelled"}
+            {task.completedAt && (
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">closed {formatDistanceToNowStrict(new Date(task.completedAt), { addSuffix: true })}</span>
+            )}
+          </p>
+          {task.pullRequest && <PullRequestChip task={task} className="h-6 text-xs" />}
+          <Button size="sm" variant="outline" onClick={() => reopen(task)}>
+            <RotateCcw /> Reopen
+          </Button>
+        </div>
       </Panel>
     );
   }
@@ -504,9 +788,6 @@ function WorkPanel({ task, agent, onMove }: { task: Task; agent?: Agent; onMove:
             </a>
           </Button>
         </div>
-        {task.status === "in_review" && pr.state === "open" && (
-          <p className="mt-2.5 text-xs text-muted-foreground">Moves to Done by itself when the pull request is merged.</p>
-        )}
       </Panel>
     );
   }
@@ -534,13 +815,53 @@ function WorkPanel({ task, agent, onMove }: { task: Task; agent?: Agent; onMove:
   return null;
 }
 
-function Panel({ children, tone }: { children: ReactNode; tone?: "working" | "blocked" }) {
+/** Put the cursor in the ticket's reply box (Answer, Request changes). */
+export function focusReply(taskId: string) {
+  const box = document.getElementById(`task-reply-${taskId}`) as HTMLTextAreaElement | null;
+  box?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  box?.focus();
+}
+
+/** A reason the human set when they moved the ticket to Blocked: shown, and editable in place. */
+function BlockedReason({ task, onSave }: { task: Task; onSave: (reason: string) => void }) {
+  const [value, setValue] = useState(task.blockedReason ?? "");
+  useEffect(() => setValue(task.blockedReason ?? ""), [task.blockedReason]);
+  return (
+    <Input
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => value.trim() !== (task.blockedReason ?? "") && onSave(value.trim())}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        else if (e.key === "Escape") {
+          setValue(task.blockedReason ?? "");
+          e.currentTarget.blur();
+        }
+      }}
+      placeholder="Add a reason…"
+      aria-label="Why it is blocked"
+      maxLength={2000}
+      className="mt-1 h-8 border-transparent bg-transparent px-1.5 text-[13px] shadow-none hover:bg-accent/60"
+    />
+  );
+}
+
+/** "4m 12s", ticking. */
+function Elapsed({ since, className }: { since: string; className?: string }) {
+  const now = useNow(1000);
+  const s = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
+  const text = s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`;
+  return <span className={cn("tabular-nums", className)}>{text}</span>;
+}
+
+function Panel({ children, tone }: { children: ReactNode; tone?: "working" | "blocked" | "review" }) {
   return (
     <section
       className={cn(
         "rounded-xl border bg-card p-4 shadow-card",
         tone === "working" && "border-amber-500/30 bg-amber-500/[0.04]",
         tone === "blocked" && "border-rose-500/30 bg-rose-500/[0.04]",
+        tone === "review" && "border-emerald-500/30 bg-emerald-500/[0.04]",
       )}
     >
       {children}
@@ -780,24 +1101,47 @@ function BlurInput({ value, placeholder, onSave }: { value: string; placeholder:
 /** Review feedback or an answer for the agent (with files, like a chat); it picks the task up again in the same conversation. */
 function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
   const qc = useQueryClient();
-  const [text, setText] = useState("");
-  const [files, setFiles] = useState<PendingAttachment[]>([]);
+  // Kept when the sheet closes or the page changes: a half-written review isn't lost.
+  const [text, setText, { discard }] = useDraft(`task:${task.id}:reply`, "");
+  const [files, setFiles] = useDraft<PendingAttachment[]>(`task:${task.id}:reply-files`, [], { persist: false });
   const input = useRef<HTMLInputElement>(null);
   const send = useMutation({
-    mutationFn: () =>
+    mutationFn: (msg: { text: string; files: PendingAttachment[] }) =>
       api.tasks.message(
         task.id,
-        text.trim(),
-        files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
+        msg.text,
+        msg.files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })),
       ),
-    onSuccess: () => {
-      setText("");
-      setFiles((list) => {
-        list.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
-        return [];
-      });
+    // The box empties at once and the message shows in Activity; on failure it comes back.
+    onMutate: (msg) => {
+      discard();
+      setFiles([]);
+      const pending: TaskEvent = {
+        id: `pending-${Date.now()}`,
+        taskId: task.id,
+        kind: "feedback",
+        actor: "user",
+        actorName: "",
+        body: msg.text,
+        data: { on: task.status, files: msg.files.map((f) => f.name) },
+        runId: null,
+        createdAt: new Date().toISOString(),
+      };
+      qc.setQueryData<TaskEvent[]>(qk.taskEvents(task.id), (list) => (Array.isArray(list) ? [...list, pending] : list));
+      return { pending };
     },
-    onError: (e) => toastApiError(e, "Could not send", qc),
+    onSuccess: (_t, msg, ctx) => {
+      msg.files.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+      // The real row may read differently (an answer, a masked secret): drop the placeholder and load what was recorded.
+      if (ctx) qc.setQueryData<TaskEvent[]>(qk.taskEvents(task.id), (list) => list?.filter((x) => x.id !== ctx.pending.id));
+      qc.invalidateQueries({ queryKey: qk.taskEvents(task.id) });
+    },
+    onError: (e, msg, ctx) => {
+      if (ctx) qc.setQueryData<TaskEvent[]>(qk.taskEvents(task.id), (list) => list?.filter((x) => x.id !== ctx.pending.id));
+      setText(msg.text);
+      setFiles(msg.files);
+      toastApiError(e, "Could not send", qc);
+    },
   });
   const add = async (picked: File[]) => {
     const fitting = picked.filter((f) => {
@@ -822,7 +1166,8 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
     setFiles((list) => list.filter((x) => x.id !== f.id));
   };
   const ready = (!!text.trim() || files.length > 0) && !send.isPending;
-  const submit = () => ready && send.mutate();
+  const submit = () => ready && send.mutate({ text: text.trim(), files });
+  const name = agent?.name ?? "the agent";
   return (
     <div className="shrink-0 border-t bg-paper-2 p-3">
       <div className="rounded-xl border bg-card p-1.5 shadow-card focus-within:ring-[3px] focus-within:ring-ring/40">
@@ -855,6 +1200,7 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
             }}
           />
           <Textarea
+            id={`task-reply-${task.id}`}
             rows={1}
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -870,7 +1216,23 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
                 submit();
               } else if (e.key === "Escape") e.currentTarget.blur();
             }}
-            placeholder={task.type === "coding" ? `Ask ${agent?.name ?? "the agent"} for changes — the pull request updates` : `Reply to ${agent?.name ?? "the agent"}…`}
+            placeholder={
+              task.pause?.reason === "question" || (task.status === "blocked" && task.blockedKind === "needs_input")
+                ? `Answer ${name}…`
+                : task.status === "in_review"
+                  ? task.pullRequest?.state === "open"
+                    ? `What should ${name} change? The pull request updates.`
+                    : `What should ${name} change?`
+                  : task.status === "blocked"
+                    ? `Tell ${name} how to go on…`
+                    : isWaiting(task)
+                      ? `Message ${name} — it continues right away`
+                      : isWorking(task)
+                        ? `Message ${name} — it reads it when this run is done`
+                        : task.status === "done" || task.status === "cancelled"
+                          ? `Something still missing? Tell ${name} — the task reopens.`
+                          : `Message ${name}…`
+            }
             className="max-h-40 min-h-9 resize-none border-0 px-2 py-2 text-sm shadow-none focus-visible:ring-0"
           />
           <Button size="icon" className="size-8 shrink-0" aria-label="Send" disabled={!ready} onClick={submit}>

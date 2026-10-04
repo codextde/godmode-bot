@@ -21,7 +21,7 @@ export function useNow(active: boolean, interval = 1000): number {
 /** Live-aware status + elapsed time of a run. */
 export function useRunLiveState(run: Run) {
   const live = useLive((s) => s.runs[run.id] ?? null);
-  const status = live ? "running" : run.status;
+  const status = live?.status ?? run.status;
   const running = status === "running";
   const now = useNow(running);
   const startedMs = run.startedAt ? new Date(run.startedAt).getTime() : live?.startedAt;
