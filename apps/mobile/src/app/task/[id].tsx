@@ -11,6 +11,7 @@ import { openChat } from "@/components/rows";
 import { STATUS_META, TaskStatusBadge, TYPE_META } from "@/components/task-row";
 import { Avatar, Badge, Button, Card, Row, SectionTitle, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { activityText } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
@@ -71,9 +72,9 @@ export default function TaskScreen() {
     ]);
   };
 
-  const followUp = async (content: string) => {
+  const followUp = async (content: string, files: PendingFile[]) => {
     try {
-      onDone(await api.tasks.message(id, content));
+      onDone(await api.tasks.message(id, content, await encodeFiles(files)));
     } catch (err) {
       Alert.alert("Couldn't send it", errorText(err));
       throw err;
@@ -223,7 +224,7 @@ export default function TaskScreen() {
       {canFollowUp && (
         <View>
           <SectionTitle title={t.status === "blocked" ? "Help it along" : "Ask for changes"} />
-          <Composer onSend={followUp} placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
+          <Composer onSend={followUp} attachments placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
         </View>
       )}
     </ScrollView>

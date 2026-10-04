@@ -1,7 +1,8 @@
 /**
  * What a paired phone may call. The app controls Godmode — chats, tasks, runs, automations and the screens agents work
- * on — but never reaches secrets, backups, settings, integrations or this computer's files, can't change what a chat, a
- * task or an automation is allowed to do, and only controls screens the human shared in a chat and Godmode's VMs.
+ * on — but never reaches secrets, backups, settings, integrations or this computer's files (only the ones attached to
+ * tasks, and what it uploads itself), can't change what a chat, a task or an automation is allowed to do, and only
+ * controls screens the human shared in a chat and Godmode's VMs.
  */
 import { computerView, type ComputerTarget } from "@godmode/shared";
 import { all } from "../db";
@@ -32,6 +33,8 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["POST", /^\/api\/chat$/],
 
   ["GET", /^\/api\/tasks$/],
+  ["POST", /^\/api\/tasks\/attachments$/],
+  ["GET", new RegExp(`^/api/tasks/attachments/${ID}/${ID}$`)],
   ["GET", new RegExp(`^/api/tasks/${ID}$`)],
   ["GET", new RegExp(`^/api/tasks/${ID}/events$`)],
   ["POST", /^\/api\/tasks$/],
@@ -58,12 +61,12 @@ const ROUTES: [method: string, path: RegExp][] = [
 /** Requests whose JSON body may only carry these fields when a phone sends them. */
 const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["PATCH", new RegExp(`^/api/conversations/${ID}$`), ["title", "pinned", "archived"]],
-  ["POST", new RegExp(`^/api/conversations/${ID}/messages$`), ["content"]],
-  ["POST", /^\/api\/chat$/, ["agentId", "content", "workspaceId"]],
+  ["POST", new RegExp(`^/api/conversations/${ID}/messages$`), ["content", "attachments"]],
+  ["POST", /^\/api\/chat$/, ["agentId", "content", "attachments", "workspaceId"]],
   // A task's repository and branch are picked on the computer: the phone never points an agent at another repository.
   ["POST", /^\/api\/tasks$/, ["workspaceId", "title", "description", "type", "status", "agentId"]],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`), ["title", "description", "status", "agentId", "archived"]],
-  ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content"]],
+  ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content", "attachments"]],
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
   ["POST", new RegExp(`^/api/questions/${ID}/answer$`), ["optionId", "decision", "note", "text"]],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],
