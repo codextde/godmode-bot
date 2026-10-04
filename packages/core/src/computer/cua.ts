@@ -25,7 +25,7 @@ import { LineProcess } from "./lineProcess";
 
 const log = logger("computer");
 
-export const CUA_DRIVER_VERSION = "0.30.4";
+export const CUA_DRIVER_VERSION = "0.33.1";
 export const CUA_DRIVER_SPEC = `cua-driver==${CUA_DRIVER_VERSION}`;
 const PROTOCOL_VERSION = "2025-06-18";
 /** Stop the driver after this long without calls (it is restarted on demand). */
@@ -294,6 +294,9 @@ export class CuaDriverClient {
     const image = r.content.find((c) => c.type === "image" && c.data);
     const width = num(s.screenshot_width);
     const height = num(s.screenshot_height);
+    // Every read replaces the window's snapshot: without a usable screenshot in this one, the driver refuses pixels
+    // (screenshot_context_missing) until it has a screenshot again.
+    this.shots.delete(windowId);
     if (image && width && height) this.recordShot(windowId, s);
     const b = s.window_bounds as CuaWindowState["bounds"] | undefined;
     return {
@@ -367,25 +370,41 @@ export class CuaDriverClient {
     return { x: (local.x * shot.width) / shot.bounds.width, y: (local.y * shot.height) / shot.bounds.height };
   }
 
+  /**
+   * Run an action that sends pixels (`act` gets them from `pixelFor`). The driver drops a window's screenshot on its
+   * own — its session ends after 5 minutes without calls, and it keeps 8 windows per app — and then refuses pixels:
+   * forget the recorded screenshot and run `act` once more, which captures again. Call inside `exclusive`.
+   */
+  private async withPixels(windowId: number, act: () => Promise<CuaResult>): Promise<CuaResult> {
+    try {
+      return await act();
+    } catch (err) {
+      if (!(err instanceof CuaError) || err.code !== "screenshot_context_missing") throw err;
+      this.shots.delete(windowId);
+      return act();
+    }
+  }
+
   /** Pointer action at a window-local point (points). */
   pointer(
-    kind: "click" | "double_click" | "right_click" | "move",
+    kind: "click" | "move",
     target: { pid: number; windowId: number },
     local: { x: number; y: number },
     opts: { button?: "left" | "right" | "middle"; count?: number; modifiers?: string[]; delivery?: Delivery; maxDimension: number; size?: { width: number; height: number } },
   ): Promise<CuaResult> {
-    return this.exclusive(async () => {
-      const px = await this.pixelFor(target.pid, target.windowId, local, opts.maxDimension, opts.size);
-      const base = { target: { kind: "window", pid: target.pid, window_id: target.windowId }, x: px.x, y: px.y };
-      if (kind === "move") return this.call("move_cursor", base);
-      const args: Record<string, unknown> = { ...base, ...(opts.delivery ? { delivery_mode: opts.delivery } : {}) };
-      if (opts.modifiers?.length) args.modifier = opts.modifiers;
-      if (kind === "click") {
+    return this.exclusive(() =>
+      this.withPixels(target.windowId, async () => {
+        const px = await this.pixelFor(target.pid, target.windowId, local, opts.maxDimension, opts.size);
+        const base = { target: { kind: "window", pid: target.pid, window_id: target.windowId }, x: px.x, y: px.y };
+        if (kind === "move") return this.call("move_cursor", base);
+        const args: Record<string, unknown> = { ...base, ...(opts.delivery ? { delivery_mode: opts.delivery } : {}) };
+        if (opts.modifiers?.length) args.modifier = opts.modifiers;
+        // Double and right clicks are `click` with a count / button: double_click and right_click take no `target`.
         if (opts.button && opts.button !== "left") args.button = opts.button;
         if (opts.count && opts.count > 1) args.count = opts.count;
-      }
-      return this.call(kind, args);
-    });
+        return this.call("click", args);
+      }),
+    );
   }
 
   /** Click an element from the last `windowState` of the window (accessibility path — works in the background). */
@@ -431,13 +450,15 @@ export class CuaDriverClient {
     amount: number,
     opts: { element?: string; delivery?: Delivery; maxDimension: number; size?: { width: number; height: number } },
   ): Promise<CuaResult> {
-    return this.exclusive(async () => {
-      const args: Record<string, unknown> = { pid: target.pid, window_id: target.windowId, direction, amount };
-      if (opts.element) args.element_token = opts.element;
-      else if (local) Object.assign(args, await this.pixelFor(target.pid, target.windowId, local, opts.maxDimension, opts.size));
-      if (opts.delivery) args.delivery_mode = opts.delivery;
-      return this.call("scroll", args);
-    });
+    return this.exclusive(() =>
+      this.withPixels(target.windowId, async () => {
+        const args: Record<string, unknown> = { pid: target.pid, window_id: target.windowId, direction, amount };
+        if (opts.element) args.element_token = opts.element;
+        else if (local) Object.assign(args, await this.pixelFor(target.pid, target.windowId, local, opts.maxDimension, opts.size));
+        if (opts.delivery) args.delivery_mode = opts.delivery;
+        return this.call("scroll", args);
+      }),
+    );
   }
 
   drag(
@@ -446,21 +467,23 @@ export class CuaDriverClient {
     to: { x: number; y: number },
     opts: { button?: "left" | "right" | "middle"; modifiers?: string[]; delivery?: Delivery; maxDimension: number; size?: { width: number; height: number } },
   ): Promise<CuaResult> {
-    return this.exclusive(async () => {
-      const a = await this.pixelFor(target.pid, target.windowId, from, opts.maxDimension, opts.size);
-      const b = await this.pixelFor(target.pid, target.windowId, to, opts.maxDimension, opts.size);
-      return this.call("drag", {
-        pid: target.pid,
-        window_id: target.windowId,
-        from_x: a.x,
-        from_y: a.y,
-        to_x: b.x,
-        to_y: b.y,
-        ...(opts.button && opts.button !== "left" ? { button: opts.button } : {}),
-        ...(opts.modifiers?.length ? { modifier: opts.modifiers } : {}),
-        ...(opts.delivery ? { delivery_mode: opts.delivery } : {}),
-      });
-    });
+    return this.exclusive(() =>
+      this.withPixels(target.windowId, async () => {
+        const a = await this.pixelFor(target.pid, target.windowId, from, opts.maxDimension, opts.size);
+        const b = await this.pixelFor(target.pid, target.windowId, to, opts.maxDimension, opts.size);
+        return this.call("drag", {
+          pid: target.pid,
+          window_id: target.windowId,
+          from_x: a.x,
+          from_y: a.y,
+          to_x: b.x,
+          to_y: b.y,
+          ...(opts.button && opts.button !== "left" ? { button: opts.button } : {}),
+          ...(opts.modifiers?.length ? { modifier: opts.modifiers } : {}),
+          ...(opts.delivery ? { delivery_mode: opts.delivery } : {}),
+        });
+      }),
+    );
   }
 
   permissions(): Promise<{ accessibility: boolean | null; screenRecording: boolean | null }> {

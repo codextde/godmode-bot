@@ -7,11 +7,13 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setupEnv, type TestEnv } from "./fixtures/runner-harness";
+import { stopCuaDriver } from "../src/computer/cua";
 import { stopHelper } from "../src/computer/helper";
 import { windowEngine } from "../src/computer/engines/window";
 import { updateSettings } from "../src/services/settings";
 
 const suite = process.platform === "darwin" ? describe : describe.skip;
+const FAKE_CUA_DRIVER = join(import.meta.dir, "fixtures", "fake-cua-driver.ts");
 
 interface Scenario {
   /** What a background click did: "ax", "ax-focus" or "event". */
@@ -127,6 +129,34 @@ suite("window shares (macOS helper)", () => {
     scenario({ pointer: "event", chromium: false, webField: false, pointerError: "permission_accessibility" });
     const engine = windowEngine(target, { agent: true });
     await expect(engine.click("window:70:7", { x: 1, y: 1 }, { button: "left", count: 1, modifiers: [] })).rejects.toThrow("Accessibility permission is missing");
+  });
+
+  test("foreground clicks are Cua Driver's: a double or right click is its click with a count / button", async () => {
+    const state = mkdtempSync(join(tmpdir(), "godmode-fake-cua-"));
+    updateSettings({ computer: { useCuaDriver: true, allowForeground: true, cuaDriverCommand: `'${process.execPath}' '${FAKE_CUA_DRIVER}' '${state}'` } });
+    try {
+      const engine = windowEngine(target);
+      const double = await engine.click("window:70:7", { x: 100, y: 50 }, { button: "left", count: 2, modifiers: [], foreground: true });
+      const right = await engine.click("window:70:7", { x: 100, y: 50 }, { button: "right", count: 1, modifiers: [], foreground: true });
+      expect([double.detail, right.detail]).toEqual(["Double-clicked", "Right-clicked"]);
+      const driverCalls = readFileSync(join(state, "calls.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l) as Record<string, unknown>)
+        .filter((c) => c.name !== "set_agent_cursor_enabled");
+      const window = { kind: "window", pid: 70, window_id: 7 };
+      expect(driverCalls).toEqual([
+        { name: "get_window_state", pid: 70, window_id: 7, include_accessibility_tree: false, max_image_dimension: 1280 },
+        { name: "click", target: window, x: 200, y: 100, delivery_mode: "foreground", count: 2 },
+        { name: "click", target: window, x: 200, y: 100, delivery_mode: "foreground", button: "right" },
+      ]);
+      // The driver did it: nothing went to the helper as a click.
+      expect(calls().filter((c) => c.cmd === "pointer")).toEqual([]);
+    } finally {
+      await stopCuaDriver();
+      updateSettings({ computer: { useCuaDriver: false, allowForeground: false, cuaDriverCommand: "" } });
+      rmSync(state, { recursive: true, force: true });
+    }
   });
 
   test("the human's input (takeover) doesn't draw the agent cursor", async () => {

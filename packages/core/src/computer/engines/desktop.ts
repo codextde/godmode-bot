@@ -364,13 +364,13 @@ export class CuaDesktopEngine implements ComputerEngine {
   }
 
   async click(_view: string, p: Point, opts: PointerOptions): Promise<Outcome> {
-    const tool = opts.count === 2 ? "double_click" : opts.button === "right" ? "right_click" : "click";
-    await this.act(tool, {
+    // Double and right clicks are `click` with a count / button: double_click and right_click take no `target`.
+    await this.act("click", {
       target: DESKTOP,
       x: p.x,
       y: p.y,
-      ...(tool === "click" && opts.button !== "left" ? { button: opts.button } : {}),
-      ...(tool === "click" && opts.count > 2 ? { count: opts.count } : {}),
+      ...(opts.button !== "left" ? { button: opts.button } : {}),
+      ...(opts.count > 1 ? { count: opts.count } : {}),
       ...(opts.modifiers.length ? { modifier: opts.modifiers.map(cuaModifier) } : {}),
     });
     return { detail: "Clicked" };

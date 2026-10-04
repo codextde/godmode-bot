@@ -328,8 +328,7 @@ export class WindowEngine implements ComputerEngine {
     };
     const viaCua = async (cua: CuaDriverClient) => {
       await this.pointAt(p, true);
-      const kind = opts.count === 2 && opts.button === "left" ? "double_click" : opts.button === "right" && opts.count === 1 ? "right_click" : "click";
-      const r = await cua.pointer(kind, this.ref, p, {
+      const r = await cua.pointer("click", this.ref, p, {
         button: opts.button,
         count: opts.count,
         modifiers: opts.modifiers.map(cuaModifier),

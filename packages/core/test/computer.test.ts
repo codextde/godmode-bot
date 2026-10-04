@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Agent, ComputerTarget, ServerEvent } from "@godmode/shared";
 import { computerTargetLabel, computerView, sameComputerTarget } from "@godmode/shared";
 import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
@@ -10,7 +13,8 @@ import { attachComputer, computerLockKey, detachAgentComputer, detachComputer, i
 import { config } from "../src/config";
 import { isGodmodeAppName } from "../src/computer/self";
 import { callTool } from "../src/mcp/tools";
-import { cuaKeyName, scrubSummary } from "../src/computer/cua";
+import { cuaKeyName, getCuaDriver, scrubSummary, stopCuaDriver } from "../src/computer/cua";
+import { CuaDesktopEngine } from "../src/computer/engines/desktop";
 import { cdpCommands, cdpKey, cdpModifiers } from "../src/computer/engines/tab";
 import { keysym, parseMonitors, pointerArgs } from "../src/computer/helpers/x11Helper";
 import { WINDOWS_HELPER_CS, WINDOWS_HELPER_PS1 } from "../src/computer/helpers/windowsHelper";
@@ -297,6 +301,88 @@ const DISPLAYS: ViewInfo[] = [
   { view: "display:1", label: "Built-in Retina Display", frame: { x: 0, y: 0, width: 1512, height: 982 }, displayId: "1", primary: true },
   { view: "display:5", label: "Studio Display", frame: { x: -508, y: -1440, width: 2560, height: 1440 }, displayId: "5" },
 ];
+
+const FAKE_CUA_DRIVER = join(import.meta.dir, "fixtures", "fake-cua-driver.ts");
+
+describe("Cua Driver calls", () => {
+  let state: string;
+  const calls = () =>
+    readFileSync(join(state, "calls.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l) as Record<string, unknown>)
+      .filter((c) => c.name !== "set_agent_cursor_enabled");
+  const win = { pid: 70, windowId: 7 };
+  const target = { kind: "window", pid: 70, window_id: 7 };
+
+  beforeEach(() => {
+    state = mkdtempSync(join(tmpdir(), "godmode-fake-cua-"));
+    updateSettings({ computer: { cuaDriverCommand: `'${process.execPath}' '${FAKE_CUA_DRIVER}' '${state}'` } });
+  });
+
+  afterEach(async () => {
+    await stopCuaDriver();
+    updateSettings({ computer: { cuaDriverCommand: "" } });
+    rmSync(state, { recursive: true, force: true });
+  });
+
+  test("double and right clicks are click with a count / button; pixels follow the driver's last screenshot", async () => {
+    const cua = await getCuaDriver();
+    await cua.pointer("click", win, { x: 100, y: 50 }, { button: "left", count: 2, maxDimension: 1280 });
+    await cua.pointer("click", win, { x: 100, y: 50 }, { button: "right", count: 1, maxDimension: 1280 });
+    expect(calls()).toEqual([
+      { name: "get_window_state", pid: 70, window_id: 7, include_accessibility_tree: false, max_image_dimension: 1280 },
+      { name: "click", target, x: 200, y: 100, count: 2 },
+      { name: "click", target, x: 200, y: 100, button: "right" },
+    ]);
+
+    // Reading the elements replaces the driver's snapshot of the window: pixels need a new screenshot first.
+    await cua.windowState(70, 7, { screenshot: false, maxDimension: 0 });
+    await cua.pointer("click", win, { x: 10, y: 10 }, { maxDimension: 1280 });
+    expect(calls().slice(3)).toMatchObject([
+      { name: "get_window_state", include_screenshot: false },
+      { name: "get_window_state", include_accessibility_tree: false },
+      { name: "click", target, x: 20, y: 20 },
+    ]);
+
+    const desktop = new CuaDesktopEngine({ kind: "desktop" });
+    await desktop.click("display:primary", { x: 5, y: 6 }, { button: "left", count: 2, modifiers: [] });
+    await desktop.click("display:primary", { x: 5, y: 6 }, { button: "right", count: 1, modifiers: [] });
+    expect(calls().slice(-2)).toEqual([
+      { name: "click", target: { kind: "desktop", display_id: "primary" }, x: 5, y: 6, count: 2 },
+      { name: "click", target: { kind: "desktop", display_id: "primary" }, x: 5, y: 6, button: "right" },
+    ]);
+  });
+
+  test("pixels the driver refuses for lack of a screenshot are sent once more, after a new screenshot", async () => {
+    const cua = await getCuaDriver();
+    await cua.windowShot(70, 7, 1280);
+    /** The driver drops its screenshot of the window: it refuses the next `n` actions at pixels. */
+    const refuse = (n: number) => writeFileSync(join(state, "refuse-pixels"), String(n));
+    let seen = calls().length;
+    const sent = () => {
+      const names = calls().slice(seen).map((c) => c.name);
+      seen += names.length;
+      return names;
+    };
+
+    refuse(1);
+    await cua.pointer("click", win, { x: 100, y: 50 }, { maxDimension: 1280 });
+    expect(sent()).toEqual(["click", "get_window_state", "click"]);
+    refuse(1);
+    await cua.scroll(win, { x: 100, y: 50 }, "down", 3, { maxDimension: 1280 });
+    expect(sent()).toEqual(["scroll", "get_window_state", "scroll"]);
+    refuse(1);
+    await cua.drag(win, { x: 10, y: 10 }, { x: 20, y: 20 }, { maxDimension: 1280 });
+    expect(sent()).toEqual(["drag", "get_window_state", "drag"]);
+
+    // Refused again after the new screenshot: the refusal is passed on, the action isn't sent a third time.
+    refuse(2);
+    await expect(cua.pointer("click", win, { x: 100, y: 50 }, { maxDimension: 1280 })).rejects.toMatchObject({ code: "screenshot_context_missing" });
+    expect(sent()).toEqual(["click", "get_window_state", "click"]);
+    expect(readFileSync(join(state, "refuse-pixels"), "utf8")).toBe("0");
+  });
+});
 
 describe("computer MCP server", () => {
   test("rejects runs without a share and bad tokens", async () => {
