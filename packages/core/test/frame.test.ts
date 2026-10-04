@@ -114,6 +114,10 @@ describe("a turn that ended early", () => {
     const lastRun = getConversation(conv).messages.findLast((m) => m.runId)!.runId!;
     const refused = await retryRun(conv, lastRun).catch((e: HttpError) => e);
     expect((refused as HttpError).code).toBe("task_chat");
+    // The ticket tries again on its own (and is blocked after that): those runs end before the database closes.
+    const { getTask } = await import("../src/tasks/service");
+    const { listActiveRuns } = await import("../src/runner/runner");
+    await until(() => getTask(t.id).status === "blocked" && listActiveRuns().length === 0, 20_000, "the ticket to settle");
   }, 60_000);
 
   test("an automation's run goes again from the automation; held messages are sent or removed first", async () => {

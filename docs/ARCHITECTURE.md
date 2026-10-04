@@ -917,8 +917,17 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   `refs/worktree/godmode/with-secrets/<commit>` (never pushed; its reflog keeps the commits for git's 90 days even
   when the repository is cleaned up from another checkout), a notification names the files, and the agent's brief
   tells it to read secrets from the environment. With a locked vault only the file names are checked.
+* **Trying again on its own.** A ticket run that fails where a new try may help — a plain error (an API hiccup, a
+  crash), a restart that cut it off, the time or turn limit — is started again by itself, In progress all along (card:
+  "Trying again shortly…"), twice in a row at most (after 30 s, then 2 min; after a restart in 5 s): the agent's
+  opening line says the last run failed and why, the timeline says "tried again on its own" with that reason. What only
+  the human can fix (sign-in, Claude Code, a folder, the VM, the model, a chat too long, the cost limit) or a run they
+  stopped is blocked at once; after the last try it is blocked "still failing after 2 more tries" and the human is told.
+  The count starts over when the ticket is delivered or the human acts on it; a try never cuts across a newer run or a
+  move on the board. A restored backup leaves interrupted tickets to the human.
 * **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
-  `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
+  `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason (after trying again
+  on its own, above), and a
   `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
   blocked task back to `in_progress`; for coding tasks the next push updates the open pull request. The run's answer
   becomes the task's result: images it names by path in the agent's folders or the temp folder (checked by their
