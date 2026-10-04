@@ -17,3 +17,5 @@ i also want to sell godmode so implement in the settings some Billing Page (with
 - the user can be logged into multiple devices at the same time
 - only invited people allowed with domain check (for example only invited people from @solakon.de)
 - everything configurable in the admin panel
+
+also make it possible the you can create a account and then the server part will sync with godmode and you can use it as gateways without tailscale and also have the ui in the browser to fully control godmode from the browser i think you can use the same ui
