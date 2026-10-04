@@ -32,6 +32,7 @@ import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
 import { AttentionList } from "@/components/attention/attention-list";
+import { AwaySummaryCard } from "@/components/attention/away-summary";
 import { useLive, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
@@ -281,6 +282,7 @@ export default function ChatHome() {
       </div>
 
       <div className="relative mx-auto w-full max-w-5xl space-y-10 px-4 pb-16 @md:px-5 @xl:px-8">
+        <AwaySummaryCard agents={agents} />
         <NeedsYou agents={agents} />
         <RunningNow agents={agents} />
         <RecentChats agents={agents} />

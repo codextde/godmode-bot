@@ -376,6 +376,9 @@ export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt"
  */
 export type PauseReason = "user" | "limit" | "question" | "budget";
 
+/** How a turn that ended early is picked up: `continue` where it stopped, or `again` from its prompt. */
+export type RetryMode = "continue" | "again";
+
 /** Whose monthly budget holds a run: the agent's own, or the whole team's. */
 export interface PauseBudget {
   scope: "agent" | "team";
@@ -527,6 +530,8 @@ export type MessageBlock =
   | { type: "command"; name: string; args: string; output: string }
   /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
   | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason }
+  /** The human picked up a turn that ended early: `continue` where it stopped, or `again` from its prompt. */
+  | { type: "retry"; mode: RetryMode; runId: ID; at: ISODate; masked?: boolean }
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */

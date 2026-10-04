@@ -187,6 +187,9 @@ cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <a
 
 Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + result) and pushed as
 `run.delta` WS events; the final assistant message is stored in SQLite and in the agent repo.
+What the run does right now goes out as `run.activity` in plain words (`toolActivity` in `@godmode/shared`): "Opening
+github.com…", "Filling in the password for github.com…", "Handing this to Lena…" — names from Godmode (agents, the
+login's site), never raw tool ids, values masked before they are shortened.
 A long run has hundreds of blocks and megabytes of tool output and screenshots, and all but the last few never change
 again: each block is masked and serialized once and made again only when it changed (or when the vault learned or
 forgot a secret). A delta carries what changed (`patch`, see WebSocket); the row saved every few seconds while the run
@@ -286,6 +289,26 @@ only an answer continues it); `Conversation.paused`, `Task.pause` and `Agent.pau
   progress) ends it as `cancelled`, like a run stopped while it worked. Backups carry paused runs; after a restore none
   continues by itself.
 
+### Picking up a turn that ended early
+
+A chat's latest turn that failed or was cancelled — timed out, out of turns, stopped by the human, cut off by a restart,
+any error — can be picked up with one click (`POST /api/conversations/:id/retry { runId }`, `services/retries.ts`; the
+desktop shows it under the turn, the phone above the message box). It is a new `chat` run in the same chat, so it is
+queued, budgeted and reported like a message from the human:
+
+* **Continue** when the turn holds text, thinking or a tool step (Claude got the prompt) and the chat still has its
+  Claude session: `--resume` with a `<godmode-continue>` note that says why it stopped and asks to finish without
+  starting over. **Try again** otherwise: the run's own prompt is sent again (saved secrets stay masked; the marker
+  says so). A turn an automation, follow-up or another agent started is answered to the human in this chat.
+* The chat gets a `retry` marker (a system message, `content` "Continue where you stopped" / "Try again").
+* Refused: a run that isn't the chat's latest (`stale`), one that didn't end early, a chat that works, stands still,
+  has messages waiting (`queued` — they would go along unasked) or belongs to a ticket (`task_chat` — continued from the
+  ticket) or a chat platform (`platform_chat` — the person asks there), an automation's run (`automation` — the desktop
+  offers the automation's *Run now*, so its busy check, events and "Needs you" follow), dreams and condition checks, and
+  a chat too long to go on (`context`). A chat on a runner is picked up there (the request is forwarded). Godmode's own end-of-turn sentences
+  live in `@godmode/shared` (`runEndOf`); for a sign-in, CLI, VM, folder or model error the desktop links to the fix
+  and offers *Try again* next to it.
+
 ### Questions and approvals
 
 An agent that needs the human asks and waits, instead of ending its turn with a question in prose
@@ -336,20 +359,28 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
 * **The list.** `GET /api/attention` (`services/attention.ts`) computes everything that waits for the human from live
   state on every read — never from notifications, so an item leaves the moment the thing is handled anywhere: open
   questions and approvals, open missing logins (linked to the chat or ticket of the run that reported them), tickets
-  to review and blocked ones, chats paused by the human or past a usage limit with nothing continuing them, budget
-  holds (one row per budget), chats whose latest run failed while nobody looked, automations whose own last run failed
-  or whose own trigger is broken (not the shared app-event connection), and people asking a bot for access. Each item
+  to review and blocked ones, chats paused by the human or past a usage limit with nothing continuing them (on a runner:
+  from what it last said, `runner_state`), budget holds (one row per budget), chats whose latest run failed while
+  nobody looked, automations whose own last run failed or that couldn't start (`last_status`), or whose own trigger is
+  broken (not the shared app-event connection), and people asking a bot for access. Each item
   has a stable id (`<kind>:<id>`), who, what, since when, a link and its one action. Bootstrap carries
   `counts.attention` (per kind and total) and `counts.unreadChats`; the Inbox badge counts what waits (updates only when
   nothing does), Tasks counts review + blocked, Automations the failing ones. Cloud: allowed; phone: closed.
 * **Unread.** `conversations.unread_run_id` (migration 54) marks a chat the human talks in (origin chat/api) whose
   chat, manual, api or follow-up run ended while no window showed it. A window says which chat it shows while visible
-  and focused (`conversation.view` on the socket); showing it, or `POST /api/conversations/read` (`ids` or `"all"`),
+  and focused, the phone while the chat is its screen in front and the app is active (`conversation.view` on the
+  socket); showing it, or `POST /api/conversations/read` (`ids` or `"all"`),
   reads it — and reading a chat whose run failed clears the agent's "Last run failed". Automation, task, delegation and
   platform chats are never unread.
+* **While you were away** (`services/away.ts`, `GET /api/away?since=<ISO>`, Cloud: allowed; phone: closed). After at
+  least two hours without the human's input (pointer, keys, wheel in a focused window; the last time is kept per computer
+  in `localStorage`, `lib/presence.ts`), Home shows what the team did since: runs that ended (checks left out) and how
+  many failed, tickets delivered, what the work cost (the spend ledger), who worked, and up to six things worth a look —
+  delivered tickets, problems (chats and automations), then replies — one line per chat or automation. Closed with ×.
 * **Notices** (`services/runNotices.ts`). Such a run that nobody watched notifies once — "Mia replied in “Q4 plan”" /
-  "Mia ran into a problem in “…”" — unless the agent called `notify_user` itself or the run reported a missing login
-  (that has its own notice). Automations follow `routines.notify`: `failures` (default; a failure is told once until a
+  "Mia ran into a problem in “…”" — unless the agent called `notify_user` itself (the tool call, not the word) or the
+  run reported a missing login (that has its own notice). Only the computer the human uses tells: a runner's runs
+  arrive there as its own. Automations follow `routines.notify`: `failures` (default; a failure is told once until a
   run succeeds again), `always`, or `never`; nothing when its chat is on screen. Toasts carry *Open* to the thing, and a
   notification about what is already on screen is marked read instead of popping up.
 
@@ -1085,12 +1116,13 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   (`gmd_` + 32 random bytes); the row in `mobile_devices` keeps its SHA-256, name, model, last address and last use.
   Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
 * **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
-  allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents, conversations and messages, questions (list,
-  answer without files), runs (cancel),
-  routines (run, enable), browser profiles (launch, input), computer input, VMs (list, screenshot, start/stop, input), notifications,
-  missing logins and `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are
-  restricted too: a phone can't set a chat's folder, VM, browser, shared screen or instructions, or change an
-  automation beyond switching it on or off, and it only watches and controls screens that are shared in a chat
+  allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents and their slash commands, the model catalog,
+  conversations, messages (with files) and the message queue (edit, remove, send now), questions (list, answer without
+  files), tasks and their attachments (upload and read), runs (cancel), routines (run, enable), browser profiles (launch,
+  input), computer input, VMs (list, screenshot, start/stop, input), notifications, missing logins and
+  `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are restricted too: a phone may
+  pick a chat's model, effort and Ultracode but can't set its folder, VM, browser, shared screen or instructions, or
+  change an automation beyond switching it on or off, and it only watches and controls screens that are shared in a chat
   (`computer.subscribe` and `/api/computer/input`); Godmode's VMs it may always take over (`POST /api/vms/:id/input`,
   the computer input events on a picture of the whole screen, sent over the VM's Screen Sharing and never booting
   it). The listener checks the decoded path, so `/api/%61uth/…` is refused
@@ -1108,6 +1140,11 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
 * **The app** keeps the token and URLs in the Keychain / Keystore (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`), tries the
   URL that answered last and falls back to the others, and treats 401 as "removed". It opens its WebSocket only in the
   foreground. An optional Face ID lock covers the app in the app switcher.
+* **Files.** The composer's paperclip adds photos (the system picker, HEIC handed over as JPEG), a new photo or any file
+  (`lib/attachments.ts`). They are read as base64 only when the message goes out and sent like the desktop's uploads
+  (`attachments` on messages, new chats and task feedback), at most 10 files, 25 MB each and 40 MB per message (the
+  phones' listener takes 64 MB a request). A new task uploads its files to `POST /api/tasks/attachments` and links them
+  in the description; task pictures load from the computer with the device token.
 
 * **Through Godmode Cloud.** When the computer is linked to a cloud with an https address and both phone switches are
   on (`settings.mobile.enabled`, `settings.cloud.phoneAccess`), the pairing link and `GET /api/mobile/me` also carry

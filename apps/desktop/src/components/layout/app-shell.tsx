@@ -67,6 +67,7 @@ import { cloudContext, isTauri, storageKey } from "@/lib/core";
 import { useLive, useRunningCount } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { startPresence } from "@/lib/presence";
 
 interface NavItem {
   to: string;
@@ -96,6 +97,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data: mods = [] } = useMods();
   // Mods that wait for the human: an agent's draft to review, or code the check refuses.
   const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m))).length;
+
+  // Notices when the human comes back after a while (Home then sums up what happened).
+  useEffect(() => startPresence(), []);
 
   // Global shortcuts
   useEffect(() => {

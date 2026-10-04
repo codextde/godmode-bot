@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { arch, platform } from "node:os";
 import { join } from "node:path";
-import type { Agent, ComputerTarget, PauseReason, QuestionKind, Settings } from "@godmode/shared";
+import type { Agent, ComputerTarget, PauseReason, QuestionKind, Settings, RunEnd, RunTrigger } from "@godmode/shared";
 import { computerTargetLabel, withinReach } from "@godmode/shared";
 import type { RunSource } from "../services/workspaceSources";
 import type { PromptSshServer } from "../ssh/service";
@@ -524,7 +524,13 @@ export interface ContinueAnswer {
 const NOTE_TAGS = /<\/?(?:godmode[\w-]*|answer-from-human|message-from-human|your-question)\b[^>]*>/gi;
 
 export function stripNoteTags(text: string): string {
-  return text.replace(NOTE_TAGS, "");
+  // Until nothing is left: "<</godmode-x>/godmode-continue>" would leave a tag behind after one pass.
+  let out = text;
+  for (let prev = ""; prev !== out; ) {
+    prev = out;
+    out = out.replace(NOTE_TAGS, "");
+  }
+  return out;
 }
 
 /**
@@ -616,4 +622,55 @@ export function queuedMessagesContext(userName: string, prompts: string[]): stri
 ${quoted}
 
 Take ${prompts.length > 1 ? "them" : "it"} into account now: a correction or an addition changes what you are doing right away; something unrelated comes after the step you are in the middle of, in this same turn. Cover ${prompts.length > 1 ? "them" : "it"} in your final answer.`;
+}
+
+/** Why the last turn ended, as a clause for the agent ("Godmode restarted while you were working"). */
+export function retryWhy(end: RunEnd | null, error: string, userName: string): string {
+  const human = userName.trim() || "the user";
+  const line = (t: string, max: number) => {
+    const one = stripNoteTags(t).replace(/\s+/g, " ").trim();
+    return one.length > max ? `${one.slice(0, max - 1)}…` : one;
+  };
+  switch (end?.kind) {
+    case "interrupted":
+      return "Godmode restarted while you were working";
+    case "stopped":
+      return end.byUser ? `${human} stopped it` : `it was stopped (${line(error, 200)})`;
+    case "timeout":
+      return `it reached the time limit of ${end.minutes ?? "some"} minutes for one turn`;
+    case "turns":
+      return "it reached the maximum number of turns";
+    case "budget":
+      return "it reached its cost limit";
+    default:
+      // The error may carry text the model or a page wrote: it is quoted as data, never as instructions (no tags at all).
+      return `it failed with this error: “${line(error.split("\n")[0] ?? "", 300).replace(/[<>]/g, (c) => (c === "<" ? "‹" : "›"))}”`;
+  }
+}
+
+const STARTED_BY: Partial<Record<RunTrigger, string>> = { routine: "an automation", followup: "your own follow-up", delegation: "another agent" };
+
+function startedBySentence(startedBy: RunTrigger, human: string): string {
+  const who = STARTED_BY[startedBy];
+  return who ? ` That turn was started by ${who}; your answer now goes to ${human} here in this chat.` : "";
+}
+
+/** The note a `continue` retry sends instead of a prompt. */
+export function retryContext(opts: { userName: string; why: string; endedAt: string; startedBy: RunTrigger }): string {
+  const human = opts.userName.trim() || "the user";
+  return `<godmode-continue>
+Your last turn in this chat ended before it was done, on ${describeNow(new Date(opts.endedAt))}: ${opts.why}. ${human} asks you to continue — this is not a new task.${startedBySentence(opts.startedBy, human)}
+Pick the work up exactly where you stopped: don't start over and don't repeat what is already done. A step that was running at that moment may have been cut off, so check what it left behind before you run it again. Then finish the task and end with your answer for ${human}.
+</godmode-continue>`;
+}
+
+/** Put in front of the re-sent prompt of an `again` retry when the turn wasn't started by the human. */
+export function retryAgainNote(opts: { userName: string; why: string; startedBy: RunTrigger }): string {
+  if (opts.startedBy === "chat" || opts.startedBy === "manual" || opts.startedBy === "api") return "";
+  const human = opts.userName.trim() || "the user";
+  return `<godmode-context>
+${human} asks you to try this again: the last attempt ended before you got it (${opts.why}).${startedBySentence(opts.startedBy, human)}
+</godmode-context>
+
+`;
 }

@@ -1,4 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { CircleAlert, Clock, Plus, Search, Workflow, Zap } from "lucide-react";
@@ -37,6 +38,22 @@ export default function AutomationsPage() {
   const [triggerFilter, setTriggerFilter] = useState<TriggerFilter>("all");
   const [agentFilter, setAgentFilter] = useState("all");
   const [dialog, setDialog] = useState<{ key: string; open: boolean; routine: Routine | null } | null>(null);
+  // `?edit=<id>` (from search and links elsewhere) opens that automation.
+  const [params, setParams] = useSearchParams();
+  const editId = params.get("edit");
+  useEffect(() => {
+    if (!editId || !routinesQ.data) return;
+    const routine = routinesQ.data.find((r) => r.id === editId);
+    if (routine) setDialog({ key: `${routine.id}-${Date.now()}`, open: true, routine });
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("edit");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [editId, routinesQ.data, setParams]);
 
   const agentById = useMemo(() => new Map(allAgents.map((a) => [a.id, a])), [allAgents]);
   const inScope = useMemo(() => new Set(scopedAgents.map((a) => a.id)), [scopedAgents]);

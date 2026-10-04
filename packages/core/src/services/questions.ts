@@ -24,7 +24,7 @@ import type {
   Run,
   SendMessageInput,
 } from "@godmode/shared";
-import { parseSlashCommand } from "@godmode/shared";
+import { RUN_STOPPED_BY_USER, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -520,7 +520,7 @@ export function withdrawOpenBlocks(blocks: MessageBlock[], reason: string | null
 }
 
 /** Cancel reasons that only say "it was stopped": the card says that itself. */
-const PLAIN_STOPS = new Set(["Cancelled", "Cancelled by user"]);
+const PLAIN_STOPS = new Set(["Cancelled", RUN_STOPPED_BY_USER]);
 
 /** The run that waited for the question was stopped (runner.ts `closePaused`): the question is withdrawn. */
 export function withdrawQuestion(runId: string, reason: string): void {

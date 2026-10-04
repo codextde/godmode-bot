@@ -1,32 +1,44 @@
 import * as Device from "expo-device";
 import Constants from "expo-constants";
+import { File } from "expo-file-system";
 import type {
   Agent,
+  AnswerQuestionResult,
   AgentQuestion,
   AppNotification,
   Bootstrap,
   BrowserProfile,
   ComputerInputEvent,
+  Effort,
   Conversation,
   ConversationWithMessages,
   MissingLogin,
   MobilePairResult,
   MobilePairingPayload,
   MobileSession,
+  ModelCatalog,
+  QueuedMessage,
+  RetryMode,
   Routine,
   Run,
   SendMessageResult,
+  SendMessageOutcome,
+  SlashCommand,
   StartChatResult,
   Task,
+  TaskAttachment,
   TaskStatus,
   TaskType,
   Vm,
   Workspace,
 } from "@godmode/shared";
 import { CloudErrorCode, isPhoneUrlAllowed } from "@godmode/shared";
+import type { PendingFile, UploadFile } from "./attachments";
+import { withPending } from "./pending-queue";
 import { addressOrder, baseUrl, useSession, type Connection } from "./session";
 
 const TIMEOUT_MS = 12_000;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const PROBE_TIMEOUT_MS = 5000;
 
 export class ApiError extends Error {
@@ -100,6 +112,11 @@ function qs(query?: Query): string {
   return parts.length ? `?${parts.join("&")}` : "";
 }
 
+/** Files take a while over a slow connection: about 100 KB/s at least before giving up. */
+function timeoutFor(bytes: number): number {
+  return TIMEOUT_MS + Math.round(bytes / 100);
+}
+
 const verified = new Set<string>();
 
 /**
@@ -148,12 +165,14 @@ export function forget(base: string) {
  * Calls the paired computer. Reads fall through to its other addresses; writes are sent once, so a slow answer never
  * turns into a second message or run. A write moves on only when the answer shows it never reached the computer.
  */
-export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown, minTimeoutMs = 0): Promise<T> {
   const connection = useSession.getState().connection;
   if (!connection) throw new ApiError(401, "This phone isn't paired.", "not_paired");
   const headers: Record<string, string> = { authorization: `Bearer ${connection.token}`, accept: "application/json" };
-  if (body !== undefined) headers["content-type"] = "application/json";
-  const payload = body === undefined ? undefined : JSON.stringify(body);
+  const form = body instanceof FormData;
+  if (body !== undefined && !form) headers["content-type"] = "application/json";
+  const payload = body === undefined ? undefined : form ? body : JSON.stringify(body);
+  const timeout = Math.max(minTimeoutMs, typeof payload === "string" ? timeoutFor(payload.length) : form ? timeoutFor(MAX_UPLOAD_BYTES) : TIMEOUT_MS);
   let refused: ApiError | null = null;
   for (const base of addressOrder(connection)) {
     const found = await isInstance(base, connection.instance.id);
@@ -163,7 +182,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
     }
     let res: Response;
     try {
-      res = await send(base + path, { method, headers, body: payload });
+      res = await send(base + path, { method, headers, body: payload }, timeout);
     } catch {
       forget(base);
       if (method === "GET") continue;
@@ -192,7 +211,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
 }
 
 const get = <T>(path: string, query?: Query) => request<T>("GET", path + qs(query));
-const post = <T>(path: string, body: unknown = {}) => request<T>("POST", path, body);
+const post = <T>(path: string, body: unknown = {}, minTimeoutMs = 0) => request<T>("POST", path, body, minTimeoutMs);
 const patch = <T>(path: string, body: unknown) => request<T>("PATCH", path, body);
 const del = <T>(path: string) => request<T>("DELETE", path);
 
@@ -248,6 +267,8 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
   );
 }
 
+export type ModelChoicePatch = { model?: string | null; effort?: Effort | null; ultracode?: boolean | null };
+
 export type BrowserInput =
   | { type: "click"; x: number; y: number }
   | { type: "scroll"; x: number; y: number; deltaY: number }
@@ -263,22 +284,46 @@ export const api = {
   agents: {
     list: () => get<Agent[]>("/api/agents"),
     get: (id: string) => get<Agent>(`/api/agents/${id}`),
+    /** Slash commands of the installed Claude Code CLI, as this agent's runs see them */
+    commands: (id: string) => get<SlashCommand[]>(`/api/agents/${id}/commands`),
   },
+
+  models: (refresh = false) => get<ModelCatalog>("/api/models", refresh ? { refresh: 1 } : {}),
 
   conversations: {
     /** With `workspaceId`: the workspace's chats. */
     list: (q: { search?: string; limit?: number; agentId?: string; workspaceId?: string | null } = {}) => get<Conversation[]>("/api/conversations", q),
-    get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
-    send: (id: string, content: string) => post<SendMessageResult>(`/api/conversations/${id}/messages`, { content }),
-    update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean }) => patch<Conversation>(`/api/conversations/${id}`, input),
+    /** With the queued messages this phone is still sending, so a refetch never drops them. */
+    get: async (id: string) => {
+      const conversation = await get<ConversationWithMessages>(`/api/conversations/${id}`);
+      return { ...conversation, queue: withPending(id, conversation.queue) };
+    },
+    /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
+    send: (id: string, input: { content: string; attachments: UploadFile[]; queueId: string }) =>
+      post<SendMessageOutcome | AnswerQuestionResult>(`/api/conversations/${id}/messages`, {
+        content: input.content,
+        ...(input.attachments.length ? { attachments: input.attachments } : {}),
+        queue: true,
+        queueId: input.queueId,
+      }),
+    update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean } & ModelChoicePatch) => patch<Conversation>(`/api/conversations/${id}`, input),
+    queue: {
+      edit: (id: string, messageId: string, content: string) => patch<QueuedMessage>(`/api/conversations/${id}/queue/${messageId}`, { content }),
+      remove: (id: string, messageId: string) => del<{ ok: true }>(`/api/conversations/${id}/queue/${messageId}`),
+      /** Stop what the agent is doing and start on the queue (the core waits for the run to end first). */
+      sendNow: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/queue/send`, {}, 30_000),
+    },
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     /** Continue the chat's paused run where it stopped. */
     continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
+    /** Pick up the chat's latest turn that ended early: continue where it stopped, or send it again. */
+    retry: (id: string, runId: string) => post<SendMessageResult & { mode: RetryMode }>(`/api/conversations/${id}/retry`, { runId }),
   },
 
   chat: {
     /** With `workspaceId`: a global agent's chat belongs to that workspace. */
-    start: (input: { agentId?: string; content: string; workspaceId?: string | null }) => post<StartChatResult>("/api/chat", input),
+    start: (input: { agentId?: string; content: string; attachments?: UploadFile[]; workspaceId?: string | null } & ModelChoicePatch) =>
+      post<StartChatResult>("/api/chat", input),
   },
 
   tasks: {
@@ -292,7 +337,15 @@ export const api = {
     update: (id: string, input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null; archived?: boolean }) =>
       patch<Task>(`/api/tasks/${id}`, input),
     /** Feedback for the agent in the task's chat; the task goes back to work. */
-    message: (id: string, content: string) => post<Task>(`/api/tasks/${id}/messages`, { content }),
+    message: (id: string, content: string, attachments?: UploadFile[]) =>
+      post<Task>(`/api/tasks/${id}/messages`, attachments?.length ? { content, attachments } : { content }),
+    /** A file for a description; link it there with its `url`. */
+    upload: (file: PendingFile) => {
+      const form = new FormData();
+      // expo/fetch (the global fetch) takes parts that read their own bytes, not React Native's `{ uri }` parts.
+      form.append("file", { name: file.name, type: file.mime, bytes: () => new File(file.uri).bytes() } as unknown as Blob);
+      return post<TaskAttachment>("/api/tasks/attachments", form);
+    },
   },
 
   runs: {

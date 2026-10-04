@@ -1,5 +1,6 @@
 import type {
   AttentionItem,
+  AwaySummary,
   BudgetOverview,
   BudgetReleaseInput,
   SpendPeriod,
@@ -92,6 +93,7 @@ import type {
   PermissionId,
   PermissionReport,
   RemoteRunner,
+  RetryMode,
   Routine,
   RoutineInput,
   Run,
@@ -103,6 +105,7 @@ import type {
   RunnerPatch,
   SendMessageInput,
   SendMessageOutcome,
+  SendMessageResult,
   Settings,
   SetupInput,
   SlashCommand,
@@ -415,6 +418,8 @@ export const api = {
 
   /** Everything that waits for the human ("Needs you"), from live state. */
   attention: () => get<AttentionItem[]>("/api/attention"),
+  /** What the team did since the human was last here. */
+  away: (since: string) => get<AwaySummary>("/api/away", { since }),
 
   budgets: {
     get: () => get<BudgetOverview>("/api/budgets"),
@@ -495,6 +500,8 @@ export const api = {
     /** Make the chat's run stand still (after the step it is in); `continue` picks the work up where it stopped. */
     pause: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/pause`),
     continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
+    /** Pick up the chat's latest turn that ended early: continue where it stopped, or send it again. */
+    retry: (id: string, runId: string) => post<SendMessageResult & { mode: RetryMode }>(`/api/conversations/${id}/retry`, { runId }),
     /** Whether a run that waits for Claude's usage limit continues by itself when the limit resets. */
     autoContinue: (id: string, auto: boolean) => patch<RunPause>(`/api/conversations/${id}/pause`, { auto }),
   },

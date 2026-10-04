@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { existsSync, readFileSync } from "node:fs";
-import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, isModelId } from "@godmode/shared";
+import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, RUN_STOPPED_BY_USER, isModelId } from "@godmode/shared";
 import {
   createConversation,
   deleteConversation,
@@ -21,6 +21,8 @@ import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } fro
 import { conflict, notFound } from "../../util";
 import { getAgent } from "../../agents/service";
 import { listAttention } from "../../services/attention";
+import { awaySummary } from "../../services/away";
+import { retryRun } from "../../services/retries";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
 import { validateTarget } from "../../computer/service";
@@ -109,8 +111,17 @@ export function registerChatRoutes(app: Hono): void {
     return c.json({ read: markConversationsRead(ids) });
   });
 
+  // Pick up a turn that ended early: continue where it stopped, or send it again.
+  app.post("/api/conversations/:id/retry", async (c) => {
+    const { runId } = await body(c, z.object({ runId: z.string().min(1).max(100) }));
+    return c.json(await retryRun(c.req.param("id"), runId), 201);
+  });
+
   // Everything that waits for the human, from live state.
   app.get("/api/attention", (c) => c.json(listAttention()));
+
+  // What the team did since the human was last here (Home's "while you were away").
+  app.get("/api/away", (c) => c.json(awaySummary(c.req.query("since") ?? "")));
 
   app.patch("/api/conversations/:id", async (c) => {
     const patch = await body(
@@ -236,7 +247,7 @@ export function registerChatRoutes(app: Hono): void {
   });
 
   app.post("/api/runs/:id/cancel", async (c) => {
-    await cancelRun(c.req.param("id"), "Cancelled by user", { byHuman: true });
+    await cancelRun(c.req.param("id"), RUN_STOPPED_BY_USER, { byHuman: true });
     return c.json({ ok: true as const });
   });
 

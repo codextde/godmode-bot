@@ -46,8 +46,8 @@ function resync(runId: string) {
 
 const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   workspaces: [qk.workspaces],
-  agents: [qk.agents, qk.spend],
-  routines: [qk.routines],
+  agents: [qk.agents, qk.spend, qk.bootstrap],
+  routines: [qk.routines, qk.bootstrap],
   credentials: [qk.credentials],
   totp: [qk.totp],
   "mcp-servers": [qk.mcpServers],
@@ -150,6 +150,22 @@ function scheduleReconnect(queryClient: QueryClient) {
   setTimeout(() => void connect(queryClient), delay);
 }
 
+/** Pending once-per-burst refetches, by query key. */
+const refreshing = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Refetch once per burst of events: "Mark all read" sends one event per chat, and every window would refetch each time. */
+function refreshSoon(qc: QueryClient, queryKey: readonly unknown[]) {
+  const id = JSON.stringify(queryKey);
+  if (refreshing.has(id)) return;
+  refreshing.set(
+    id,
+    setTimeout(() => {
+      refreshing.delete(id);
+      void qc.invalidateQueries({ queryKey });
+    }, 250),
+  );
+}
+
 function handle(qc: QueryClient, event: ServerEvent) {
   const live = useLive.getState();
   switch (event.type) {
@@ -161,7 +177,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       live.runStarted(event.run);
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
-      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon(qc, qk.bootstrap);
       break;
     case "run.delta":
       if (!live.runDelta(event)) resync(event.runId);
@@ -184,7 +200,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
       qc.invalidateQueries({ queryKey: qk.spend });
-      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon(qc, qk.bootstrap);
       break;
     case "message.created":
     case "message.updated":
@@ -198,9 +214,9 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     }
     case "conversation.updated":
-      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      refreshSoon(qc, qk.conversationsAll);
       // Unread and failed chats are on "Needs you".
-      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon(qc, qk.bootstrap);
       qc.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
       // Follow-ups show the chat's title.
       qc.invalidateQueries({ queryKey: qk.followups });
@@ -208,20 +224,26 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "conversation.deleted":
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.followups });
+      // A deleted chat's failed or paused row leaves "Needs you".
+      refreshSoon(qc, qk.bootstrap);
       break;
     case "agent.updated":
     case "agent.deleted":
       qc.invalidateQueries({ queryKey: qk.agents });
       if (event.type === "agent.deleted") qc.invalidateQueries({ queryKey: qk.followups });
+      // A switched-off or deleted agent's failing automations leave "Needs you".
+      refreshSoon(qc, qk.bootstrap);
       break;
     case "routine.updated":
     case "routine.deleted":
       qc.invalidateQueries({ queryKey: qk.routines });
+      // A switched-off, fixed or deleted automation leaves "Needs you" (and the Automations badge).
+      refreshSoon(qc, qk.bootstrap);
       break;
     case "task.updated":
       upsertTask(qc, event.task);
       // Tickets to review and blocked ones are on "Needs you".
-      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon(qc, qk.bootstrap);
       break;
     case "task.event": {
       // Merged into the cached timeline; the human's own message replaces its pending row.
@@ -241,7 +263,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
     }
     case "task.deleted":
       qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.filter((t) => t.id !== event.id));
-      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon(qc, qk.bootstrap);
       break;
     case "automation.event":
       void upsertAutomationEvent(qc, event.event);
@@ -257,7 +279,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
         return list.some((x) => x.id === q.id) ? list.map((x) => (x.id === q.id ? q : x)) : list;
       });
       qc.invalidateQueries({ queryKey: qk.questions });
-      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon(qc, qk.bootstrap);
       qc.invalidateQueries({ queryKey: qk.conversation(q.conversationId) });
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.agents });
@@ -267,15 +289,15 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "missing-login.created":
     case "missing-login.updated":
       qc.invalidateQueries({ queryKey: qk.missingLogins });
-      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon(qc, qk.bootstrap);
       break;
     case "notification":
       qc.invalidateQueries({ queryKey: qk.notifications });
-      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon(qc, qk.bootstrap);
       break;
     case "vault.status":
       qc.setQueryData(qk.vaultStatus, event.status);
-      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon(qc, qk.bootstrap);
       break;
     case "browser.updated": {
       // Frequent while chats browse (tabs and titles change): update in place instead of refetching.
@@ -330,7 +352,10 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries({ queryKey: qk.runners });
       break;
     case "entity.changed":
-      for (const key of ENTITY_KEYS[event.entity] ?? []) qc.invalidateQueries({ queryKey: key });
+      for (const key of ENTITY_KEYS[event.entity] ?? []) {
+        if (key === qk.bootstrap) refreshSoon(qc, key);
+        else qc.invalidateQueries({ queryKey: key });
+      }
       break;
   }
 }

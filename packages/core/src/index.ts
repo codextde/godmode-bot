@@ -170,8 +170,9 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   startFollowups();
   startPauses();
   startBudgets();
-  startRunNotices();
   if (!runner) {
+    // A runner's runs are told by the computer it works for (they arrive there as its own runs).
+    startRunNotices();
     startDreaming();
     startAutomationEvents();
     startAppTriggers();
@@ -286,13 +287,13 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopFollowups();
     stopPauses();
     stopBudgets();
-    stopRunNotices();
     if (runner) {
       stopLinkServer();
       stopKeepAwake();
       // Only its own: a runner.json that names another process is that runner's way of saying it serves.
       if (runningRunner(cfg.dataDir)?.pid === process.pid) rmSync(runnerFile(cfg.dataDir), { force: true });
     } else {
+      stopRunNotices();
       stopDreaming();
       stopAppTriggers();
       stopAutomationEvents();

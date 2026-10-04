@@ -32,6 +32,7 @@ import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { Thread } from "@/components/chat/thread";
+import { TurnEnd } from "@/components/chat/turn-end";
 import { ChatFilesScope } from "@/components/chat/local-files";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -402,6 +403,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const lastMessage = messages[messages.length - 1] ?? null;
   // The agent's dream log: the core refuses messages here, so it reads like a transcript.
   const dreamLog = conv.origin === "dream";
+  // The latest turn, when nothing else is about to happen in the chat: if it ended early, the thread offers to pick it up.
+  const lastTurn =
+    !inflight && !paused && !queue.length && !dreamLog && !runnerAway && agent?.enabled !== false && lastMessage?.role === "assistant" && lastMessage.runId ? lastMessage : null;
 
   return (
     <div className="flex h-full min-h-0">
@@ -441,6 +445,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               agent={agent}
               delegatedFrom={conv.delegatedFrom}
               inflight={inflight}
+              after={lastTurn && <TurnEnd key={lastTurn.id} conversation={conv} message={lastTurn} agent={agent} />}
               onStop={() => activeRunId && cancel.mutate(activeRunId)}
               stopping={cancel.isPending}
               onPause={conv.origin === "dream" || live?.trigger === "dream" || live?.trigger === "check" || paused ? undefined : () => pause.mutate()}
