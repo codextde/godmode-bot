@@ -2,6 +2,7 @@ import type { ComputerView } from "./computer";
 import type { Task, TaskEvent } from "./tasks";
 import type { Vm } from "./vm";
 import type { MobileDevice } from "./mobile";
+import type { RemoteRunner } from "./remote";
 import type {
   Agent,
   AgentQuestion,
@@ -121,6 +122,11 @@ export type ServerEvent =
   | { type: "task.event"; event: TaskEvent }
   /** A phone was paired (the pairing QR code was used). */
   | { type: "mobile.paired"; device: MobileDevice }
+  /** A runner's connection, sync, health or settings changed. */
+  | { type: "runner.updated"; runner: RemoteRunner }
+  | { type: "runner.deleted"; id: ID }
+  /** A runner was paired (its code arrived, or was entered by hand). */
+  | { type: "runner.paired"; runner: RemoteRunner }
   | { type: "entity.changed"; entity: EntityName };
 
 export type EntityName =
@@ -147,7 +153,8 @@ export type EntityName =
   | "tasks"
   | "followups"
   | "mobile"
-  | "system";
+  | "system"
+  | "runners";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =

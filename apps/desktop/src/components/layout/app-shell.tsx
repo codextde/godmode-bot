@@ -14,6 +14,7 @@ import {
   MessageCircle,
   MessageSquarePlus,
   MessagesSquare,
+  MonitorSmartphone,
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
@@ -120,6 +121,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/computer", label: "Computer", icon: <MonitorUp /> },
     { to: "/vms", label: "Virtual machines", icon: <Box /> },
     { to: "/ssh", label: "SSH servers", icon: <Server /> },
+    { to: "/runners", label: "Runners", icon: <MonitorSmartphone /> },
   ];
 
   return (

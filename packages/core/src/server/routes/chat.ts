@@ -22,6 +22,7 @@ import { getAgent } from "../../agents/service";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
 import { validateTarget } from "../../computer/service";
+import { startRemoteChat } from "../../remote/runners";
 
 const attachmentSchema = z.object({
   name: z.string().min(1).max(255),
@@ -195,9 +196,12 @@ export function registerChatRoutes(app: Hono): void {
         workspaceId,
         sshServerIds,
         instructions,
+        /** Work on this runner (another computer) instead of this one. */
+        runnerId: z.string().trim().min(1).max(100).nullable().optional(),
         ...modelChoice,
       }),
     );
+    if (input.runnerId) return c.json(await startRemoteChat(input.runnerId, input), 201);
     // Check the shared window/screen/tab before the chat exists, so a stale pick doesn't leave an empty chat.
     const computerTarget = input.computerTarget ? await validateTarget(input.computerTarget) : null;
     return c.json(await startChat({ ...input, computerTarget, origin: "chat" }), 201);

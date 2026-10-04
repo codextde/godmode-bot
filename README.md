@@ -85,6 +85,7 @@ needs to be useful:
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
 | 🩺 **Diagnostic log** | Errors, slow spots and how every run went, with secrets masked. Settings → Logs groups recurring problems and copies an AI-ready report — paste it into Claude to find bugs and speed things up. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
+| 🖥️ **Runners** | Keep working with the lid closed: put Godmode on another Mac — a Mac mini, an old laptop — with one install command, and pick it under **Run on** when you start a chat. Godmode copies your agents, logins, 2FA codes and browser sessions there, the work happens there, and you watch it here live like any other chat. Install, pairing and Claude Code set themselves up; a health view shows what's missing (software, macOS permissions, the vault) with one-click fixes, or hand it to **Fix with Claude**. Encrypted end to end. |
 | 📱 **Phone app** | Control Godmode from your iPhone or Android phone: hand over tasks, follow answers as they're written, stop runs, run automations and watch an agent's browser, shared screen or VM live — tap to take control. Pair once by scanning a QR code; the phone talks to your computer over [Tailscale](https://tailscale.com), never the open internet. Liquid Glass on iOS 26. |
 
 <img src="docs/screenshots/phone.png" alt="The Godmode phone app: what agents are doing now, a chat with a live browser strip, taking control of the agent's browser, and a finished answer" width="100%" />
@@ -219,6 +220,19 @@ docker compose up -d   # dashboard on http://localhost:7777
 The code works once and for five minutes; the phone gets its own key, and you can remove it anytime in the same place.
 Godmode only listens for phones on the computer's Tailscale address. The app lives in [`apps/mobile`](apps/mobile)
 (Expo) — build it with `bun run ios` / `bun run android` or EAS until it's in the stores.
+
+### Runners — another Mac that works while yours sleeps
+
+1. In Godmode open **Runners → Add runner** and copy the command.
+2. Run it in Terminal on the other Mac (a Mac mini, a laptop that stays plugged in — on the same network or in your
+   Tailscale). It installs Godmode as a runner that starts whenever you log in there, installs Claude Code and a
+   browser, and pairs itself with your Godmode.
+3. Start a chat and pick the runner under **Run on** in the message box.
+
+The runner keeps its Mac awake while it serves. Sign in to Claude Code on it once (`claude`), and grant Accessibility
+and Screen Recording on its screen if agents should use apps there — the runner's health view says what's left. On the
+runner: `godmode runner status`, `godmode runner pair` (a new pairing code to paste under **Add runner → Enter a
+pairing code**), `godmode runner uninstall`.
 
 ## ⚡ Quick start
 
@@ -365,6 +379,10 @@ Every run is committed, so you can see exactly what an agent learned and did —
   settings or folders, and only screens shared in a chat can be controlled. A paired phone can still ask agents to act
   on your computer — remove a lost phone in Settings → Phone, and turn on *Require Face ID* in the app.
 
+- **Runners** pair with a one-time code and pin each other's keys; the link is end-to-end encrypted (X25519, AES-256-GCM)
+  and the runner's API never listens beyond its own loopback. A paired Godmode gets your vault key on the runner so
+  logins work there — pair only computers you control.
+
 > ⚠️ Agents run Claude Code with **bypass permissions** by default. Treat them like a trusted coworker with access to
 > your machine; for sensitive work give the agent its own **macOS VM** (see above), or run Godmode in a VM or
 > container. See [SECURITY.md](SECURITY.md).
@@ -397,6 +415,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] SSH servers: agents run commands, edit files and copy files on remote machines — password or key, sudo, pinned host keys
 - [ ] Windows / Linux VMs
 - [x] Phone app (iOS / Android): chats, runs, automations, live browser, screen and VM views, paired over Tailscale
+- [x] Runners: another Mac does the work of a chat while this one sleeps — one install command, encrypted link, setup copied, live view
+- [ ] Runners on Windows and Linux, tasks of the board on a runner, VMs copied to a runner
 - [ ] Push notifications and a hosted gateway for phones without Tailscale
 - [ ] Team mode: shared workspaces and approvals
 

@@ -4,7 +4,8 @@ dist/
 .dev.vars
 .env
 .secrets.local
-# copied from scripts/install.sh at build time
+# copied from scripts/ at build time
 public/install.sh
+public/runner.sh
 # local secret files (never commit)
 *.local

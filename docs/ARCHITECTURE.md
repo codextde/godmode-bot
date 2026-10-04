@@ -46,6 +46,8 @@ vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, ta
                       shared/<vm-id>/ shared folders, logs/<vm-id>.log, ssh/ key
 tasks/<task-id>/      checkout of a coding task's repository (see "Tasks")
 logs/godmode.jsonl    diagnostic log (see "Diagnostic log"); godmode.1.jsonl is the previous 2 MB, desktop.log the shell's
+link-key              0600 — this installation's X25519 key pair for the runner link (see "Remote runners")
+runner.json           a runner only (~/.godmode-runner, GODMODE_RUNNER_HOME): pid and ports while it serves
 ```
 
 ### Agent repositories
@@ -980,6 +982,72 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   foreground. An optional Face ID lock covers the app in the app switcher.
 
 A hosted gateway can later be added as another URL in the pairing link.
+
+## Remote runners
+
+A **runner** is a headless Godmode core on another computer (macOS for now) that works for the human's Godmode — the
+**controller** — so chats go on while the controller's lid is closed. Everything lives in `packages/core/src/remote/`
+(not `runner/`, which is the Claude run executor); shared types are in `packages/shared/src/remote.ts`.
+
+* **Role and process.** `godmode runner serve` (or the LaunchAgent `dev.codext.godmode.runner` that `godmode runner
+  install` writes, `RunAtLoad`, `KeepAlive` on failure, `LimitLoadToSessionType Aqua` because agents need the desktop
+  session) starts the core with `config().role = "runner"` and data dir `~/.godmode-runner` (`GODMODE_RUNNER_HOME`).
+  A runner keeps its API on loopback (random port; the MCP gateway needs it), doesn't run schedules, dreaming,
+  automations, messaging, the task board or phone access, holds `caffeinate -i -m -s -w <pid>` (plus `-d` while runs
+  work, `keepAwake.ts`), writes `runner.json` (pid, ports) while it serves and refuses a second instance on the same
+  data dir. On its first start it installs what is missing (Claude Code, uv, browser-use, Chromium) through the
+  doctor's installers (`bootstrapDependencies`; `GODMODE_RUNNER_BOOTSTRAP=0` turns that off). Agents on a runner get no
+  tools that change the setup, automations or the board (`managesSetup` in `mcp/tools.ts`): their setup is a copy.
+* **The link.** The runner listens on every interface at its link port (meta `link.port`, default 7788, next free one
+  if taken, written back) and serves only `GET /` and the WebSocket `/link` (`linkServer.ts`, 30 handshakes per IP
+  and minute). Each socket gets a `SecureChannel` (`channel.ts`, `crypto.ts`): X25519 ephemeral + static keys,
+  HKDF-SHA256 over the transcript, one AES-256-GCM key per direction, frames numbered (replays, losses and reordering
+  end the link), 1 MiB per frame, binary streams up to 256 MiB. In a session the keys depend on both static keys (the
+  runner pins the controller's in `link_controllers`, the controller pins the runner's in `runners`); while pairing on
+  the runner's static key and the code's one-time secret. Every installation has one static key pair in
+  `<data dir>/link-key` (0600). Over the link the controller sends requests (`req` → the runner's own API with the master
+  token, tagged `c.env.channel = "runner-link"`, only `/api/*` and never `/api/auth/*`) and live-view subscriptions
+  (`client`); the runner sends answers and, through a virtual client of the event hub, every event a local UI would get
+  (frames and streaming text are dropped while the socket is backed up). The controller's `RemoteLink`
+  (`linkClient.ts`) dials each known address in turn (LAN, Tailscale, `.local`), pings every 20 s and reconnects with
+  backoff (5 minutes for a version mismatch). `/api/link/*` (`server/routes/link.ts`) exists only on that channel:
+  info, setup sync, health and fixes, agent memory, cookies, `exec` (for the autofix chat; audited) and `forget`.
+* **Pairing.** `godmode runner pair` (and the end of `runner install`) stores a one-time code in meta `link.pairing`
+  (10 minutes) and prints `gmr1.<base64url JSON>`: name, addresses, port, static key, pairing id and secret. Pasting it
+  in Godmode (`POST /api/runners`) runs the pair handshake: the runner stores the controller's key and drops the code
+  before it answers. Or Godmode makes an offer (`POST /api/runners/pairing`): a temporary listener on every interface
+  and `gmo1.<…>` with its URLs and a token, inside an install command — `curl …/godmode` from this computer with the
+  binary's SHA-256 pinned (compiled builds only) or `godmode.codext.de/runner.sh` with the license key — that ends in
+  `godmode runner install --pair <offer>`. The runner then posts its code to the offer's `POST /pair`, sealed with a
+  key derived from the token (which never crosses the network), and the controller pairs with it; the listener stops.
+* **Setup copy** (`snapshot.ts`). Before a chat starts on a runner, before every message to it, and 5 s after the
+  setup changes while it is connected, the controller compares its digest with the one the runner reported and sends
+  the snapshot when they differ: workspaces, agents, logins, 2FA, app secrets, MCP servers, Composio connections, API
+  tools, SSH servers, browser profiles, git sources and VM records with the same ids, settings except the machine's own
+  (`server`, `mobile`, `diagnostics`) and the fields that name programs, and the vault's wrapped key, canary and — when
+  the controller's vault is open — the data key, which the runner adopts (verified against the canary, remembered in
+  its keychain). The runner upserts by primary key, keeps its own columns (paths, last use, status), never deletes an
+  agent with an active run and rewrites changed agents' CLAUDE.md. Agent memory is merged three ways after each run and
+  before each start (`memorySync.ts`, base in `runner_memory`; no line is dropped), and the chat's browser profile's
+  cookies are copied when they changed (`runners.sync_browser`).
+* **Chats on a runner.** `POST /api/chat` with `runnerId` syncs, forwards the start to the runner (without folders,
+  shared screens and VMs, which are this computer's) and adopts the answer. The chat keeps `conversations.runner_id`;
+  its messages and runs are copies under the runner's ids. `mirror.ts` applies the runner's events — only for chats
+  whose `runner_id` is that runner's, field by field — and re-emits them, so the UI renders a runner's chat like any
+  other; `activeRuns.ts` knows which of its runs work. After every connect `catchUp` adopts and refreshes what changed
+  meanwhile. `routing.ts` forwards requests about a runner's chat (messages, queue, pause, continue, follow-ups, files,
+  its runs, its browser tab's input, `runner:<id>:<view>` screen input, `/api/runners/:id/proxy/*`); `pinned` and
+  `archived` stay local, and reading works from the copy while the runner is offline (`409 runner_offline` for
+  everything else). Live views: the hub hands subscriptions to a runner's chat tab and to `runner:` views to the link
+  (`setRemoteViewHandlers`) and re-sends them after a reconnect; the frames come back through the mirror.
+* **Health** (`health.ts`): software (doctor), macOS permissions (Accessibility, Screen Recording, Full Disk Access),
+  access (vault, setup copied), system (service, keep-awake, desktop session, disk, firewall), each with a fix kind
+  (`install`, `request`, `open-settings`, `sync`, `restart`, `manual` + hint) and `installing` for what is on its way.
+  `godmode runner status` asks the serving runner (`/api/runner/health` on loopback) for its own view. **Fix with
+  Claude** starts a chat on this computer with `conversations.runner_tools_id`: its agent gets `runner_health`,
+  `runner_fix` and `runner_exec` (a login shell on the runner, in its data dir) and the health report and log tail.
+* **Removing a runner** tells it to forget this computer, fails its working runs and turns its chats into chats of this
+  computer. Backups carry no runners, controllers or `link.*` meta, and restored chats lose their runner.
 
 ## Memory
 

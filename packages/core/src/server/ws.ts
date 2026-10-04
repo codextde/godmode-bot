@@ -39,6 +39,8 @@ const computerSubscribers = new Map<string, number>();
 
 /** Events a newly connected UI needs to catch up on (e.g. what running agents are doing right now). */
 let welcomeEvents: () => ServerEvent[] = () => [];
+/** More of them from elsewhere (what runs on runners are doing). */
+const moreWelcomeEvents: (() => ServerEvent[])[] = [];
 
 export function setWelcomeEvents(fn: () => ServerEvent[]) {
   welcomeEvents = fn;
@@ -49,6 +51,25 @@ let runSnapshots: (want: { runId?: string; conversationId?: string }) => RunDelt
 
 export function setRunSnapshots(fn: typeof runSnapshots) {
   runSnapshots = fn;
+}
+
+export function addWelcomeEvents(fn: () => ServerEvent[]) {
+  moreWelcomeEvents.push(fn);
+}
+
+/**
+ * Live views that are a runner's, not this computer's: a runner chat's browser tab and `runner:` screen views. Each
+ * handler answers whether the view was a remote one (and took care of it); otherwise the local live view starts.
+ */
+let remoteBrowser: ((view: BrowserViewRef, subscribed: boolean, passive: boolean) => boolean) | null = null;
+let remoteComputer: ((view: string, subscribed: boolean) => void) | null = null;
+
+export function setRemoteViewHandlers(handlers: {
+  browser: (view: BrowserViewRef, subscribed: boolean, passive: boolean) => boolean;
+  computer: (view: string, subscribed: boolean) => void;
+}) {
+  remoteBrowser = handlers.browser;
+  remoteComputer = handlers.computer;
 }
 
 /** Hooks invoked when the first/last UI subscribes to a browser live view. */
@@ -247,12 +268,14 @@ function changeSubscription(ws: ServerWebSocket<WsData>, ref: BrowserViewRef, su
   else ws.data.subscriptions.delete(key);
   const count = bump(browserSubscribers, view, subscribe ? 1 : -1);
   if (!count && !browserWatchers.has(view)) browserViews.delete(view);
-  if ((subscribe && count === 1) || (!subscribe && count === 0)) onBrowserSubscribe?.(ref, subscribe);
+  if ((subscribe && count === 1) || (!subscribe && count === 0)) {
+    if (!remoteBrowser?.(ref, subscribe, passive)) onBrowserSubscribe?.(ref, subscribe);
+  }
 }
 
-/** Views are "display:<id>", "window:<pid>:<id>" or "tab:<profile>:<target>" — keep keys bounded. */
+/** Views are "display:<id>", "window:<pid>:<id>" or "tab:<profile>:<target>", a runner's prefixed with "runner:<id>:" — keep keys bounded. */
 function validView(view: unknown): view is string {
-  return typeof view === "string" && view.length > 0 && view.length <= 300 && /^(display|window|tab):/.test(view);
+  return typeof view === "string" && view.length > 0 && view.length <= 300 && /^(runner:[A-Za-z0-9_-]{1,100}:)?(display|window|tab):/.test(view);
 }
 
 function changeComputerSubscription(ws: ServerWebSocket<WsData>, view: string, subscribe: boolean) {
@@ -262,7 +285,11 @@ function changeComputerSubscription(ws: ServerWebSocket<WsData>, view: string, s
   if (subscribe) ws.data.subscriptions.add(key);
   else ws.data.subscriptions.delete(key);
   const count = bump(computerSubscribers, view, subscribe ? 1 : -1);
-  if ((subscribe && count === 1) || (!subscribe && count === 0)) onComputerSubscribe?.(view, subscribe);
+  if ((subscribe && count === 1) || (!subscribe && count === 0)) {
+    // A runner's screen is never this computer's to capture, whether or not a runner handles it.
+    if (view.startsWith("runner:")) remoteComputer?.(view, subscribe);
+    else onComputerSubscribe?.(view, subscribe);
+  }
 }
 
 export const websocketHandler = {
@@ -276,6 +303,13 @@ export const websocketHandler = {
     for (const event of welcome) send(ws, event);
     // What runs have written so far: the stored message lags behind, and later deltas only say what changed.
     if (ws.data.auth !== "device") for (const event of runSnapshots({})) send(ws, event);
+    for (const more of moreWelcomeEvents) {
+      try {
+        for (const event of more()) send(ws, event);
+      } catch (err) {
+        log.warn("welcome events failed", err);
+      }
+    }
     if (!wasOnline) bus.changed("mobile");
   },
   message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {

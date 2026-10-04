@@ -17,7 +17,7 @@ import { getAppSecret, isUnlocked } from "../vault/vault";
 import { onSettingsApplied } from "../services/runtime";
 import { resolveUvx, toolPath } from "../services/doctor";
 import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
-import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type PageSession, type PageTarget } from "./cdp";
+import { CdpClient, attachToPage, getCookies, pickActivePage, probeCdp, isUserPage, type CdpCookie, type PageSession, type PageTarget } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
@@ -1000,6 +1000,20 @@ export const BROWSER_LLM_TOOLS = ["browser_extract_content", "retry_with_browser
 
 export async function listLocalChromeProfiles(): Promise<LocalChromeProfile[]> {
   return importer.listLocalChromeProfiles();
+}
+
+/**
+ * Every cookie of one of Godmode's own profiles (its browser starts headless just for this when it isn't running).
+ * For copying the profile's sessions to a runner.
+ */
+export async function exportProfileCookies(profileId: string): Promise<CdpCookie[]> {
+  requireRow(profileId);
+  const rb = await ensureBrowser(profileId, { headless: true, transient: true });
+  try {
+    return await getCookies(rb.client);
+  } finally {
+    await giveBack(rb);
+  }
 }
 
 /** Import cookies/sessions from the user's Chrome (profile-use technique) or a cookie JSON into a Godmode profile. */

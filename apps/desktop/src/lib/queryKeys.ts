@@ -90,6 +90,11 @@ export const qk = {
   sshLocalKeys: ["ssh-local-keys"] as unknown[],
   /** Phone access: Tailscale status and paired phones. */
   mobile: ["mobile"] as unknown[],
+  /** Runners (other computers that work for this one); the list is patched in place by `runner.updated` events. */
+  runners: ["runners"] as unknown[],
+  /** Not under ["runners"]: refreshing the list must not re-run a runner's checks. */
+  runnerHealth: (id: string) => ["runner-health", id],
+  runnerSources: (id: string) => ["runner-sources", id],
   chromeProfiles: ["chrome-profiles"] as unknown[],
   folders: ["folders"] as unknown[],
   folderList: (path: string, hidden: boolean) => ["folders", "list", path, hidden],

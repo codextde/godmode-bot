@@ -888,4 +888,58 @@ ALTER TABLE messages ADD COLUMN source TEXT;
 ${TEAM_BACKFILL_SQL}
 `,
   },
+  {
+    // 60, not the next free id: other branches add migrations at the same time, and the migrator applies every missing
+    // id in array order.
+    id: 60,
+    name: "runners",
+    sql: /* sql */ `
+-- Computers that run Godmode as a runner for this one. public_key: the runner's static X25519 key (base64url), pinned
+-- when it was paired.
+CREATE TABLE IF NOT EXISTS runners (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  hostname TEXT NOT NULL DEFAULT '',
+  public_key TEXT NOT NULL UNIQUE,
+  addresses TEXT NOT NULL DEFAULT '[]',
+  port INTEGER NOT NULL,
+  platform TEXT,
+  arch TEXT,
+  version TEXT,
+  sync_browser INTEGER NOT NULL DEFAULT 1,
+  last_address TEXT,
+  last_seen_at TEXT,
+  synced_at TEXT,
+  sync_digest TEXT,
+  sync_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+-- On a runner: the Godmode installations that may control it (their static X25519 keys).
+CREATE TABLE IF NOT EXISTS link_controllers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  public_key TEXT NOT NULL UNIQUE,
+  last_seen_at TEXT,
+  last_address TEXT,
+  created_at TEXT NOT NULL
+);
+-- Agent memory as controller and runner last agreed on it (the base of the next three-way merge).
+CREATE TABLE IF NOT EXISTS runner_memory (
+  runner_id TEXT NOT NULL REFERENCES runners(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  digest TEXT NOT NULL,
+  snapshot TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (runner_id, agent_id)
+);
+-- runner_id: the runner a chat works on (its messages and runs are copies of the runner's). runner_state: what the
+-- runner last said about it (JSON: running, activeRunId, paused, followup). runner_tools_id: a local chat whose agent
+-- may run commands on that runner (autofix).
+ALTER TABLE conversations ADD COLUMN runner_id TEXT;
+ALTER TABLE conversations ADD COLUMN runner_state TEXT;
+ALTER TABLE conversations ADD COLUMN runner_tools_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_conversations_runner ON conversations(runner_id) WHERE runner_id IS NOT NULL;
+`,
+  },
 ];
