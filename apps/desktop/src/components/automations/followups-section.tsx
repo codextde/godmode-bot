@@ -15,7 +15,7 @@ export function FollowupsSection({ followups, agentById }: { followups: Followup
   const now = useNow(30_000);
   const actions = useFollowupActions();
   const liveRuns = useLive((s) => s.runs);
-  const busy = new Set(Object.values(liveRuns).map((r) => r.conversationId));
+  const busy = new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.conversationId] : [])));
   if (!followups.length) return null;
 
   return (

@@ -42,7 +42,7 @@ export function createEngine(target: ComputerTarget, opts: { agent?: boolean } =
   switch (target.kind) {
     case "desktop":
     case "display":
-      return desktopEngine(target);
+      return desktopEngine(target, { agent: opts.agent ?? false });
     case "window":
       return windowEngine(target, { agent: opts.agent ?? false });
     case "tab":
@@ -138,7 +138,9 @@ async function otherSources(): Promise<{ displays: ComputerDisplay[]; windows: C
     problems.push("Single windows can be shared once Cua Driver is turned on in Settings → Computer.");
   } else {
     try {
-      const cua = await getCuaDriver();
+      // Opening the picker to share a window starts the first download, but the listing never waits for it: it says
+      // the download is under way (the windows are there next time), or what went wrong.
+      const cua = await getCuaDriver({ download: "background" });
       if (!displays.length) {
         const size = await cua.call("get_screen_size", {}).catch(() => null);
         const w = Number(size?.structured.width) || 0;
@@ -260,7 +262,7 @@ export async function computerStatus(): Promise<ComputerStatus> {
       ? `Running (v${running.version})`
       : installed.installed
         ? "Ready — starts when an agent controls a window"
-        : (cuaLastError() ?? "Not installed");
+        : (cuaLastError() ?? (installed.fetchable ? "Not downloaded yet — install it here, or Godmode downloads it with uv the first time it is needed" : "Not installed"));
   const cuaUsable = settings.useCuaDriver && installed.installed;
   const mac = platform === "darwin";
   return {

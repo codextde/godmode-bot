@@ -2,8 +2,8 @@ import { useCallback, useMemo, useRef, useState, type FormEvent, type KeyboardEv
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Folder, FolderGit2, Globe2, Maximize2, Minimize2, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
-import type { Agent, Task, TaskStatus, TaskType, Workspace } from "@godmode/shared";
-import { MAX_TASK_TITLE_LENGTH, TASK_TYPES } from "@godmode/shared";
+import type { Agent, Task, TaskPriority, TaskStatus, TaskType, Workspace } from "@godmode/shared";
+import { MAX_TASK_TITLE_LENGTH, TASK_PRIORITIES, TASK_TYPES } from "@godmode/shared";
 import { AgentAvatar, DraftStatus, Kbd } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -18,8 +18,8 @@ import { clearDraft, useDraft } from "@/lib/drafts";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { DescriptionEditor, withoutPlaceholders, type DescriptionEditorHandle, type TextUpdate } from "./description-editor";
-import { agentsInReach } from "./task-fields";
-import { STATUS_META, StatusIcon, TYPE_META, TypeIcon, sourceLabel, workspaceRepos } from "./task-meta";
+import { DueDateField, LabelsInput, agentsInReach } from "./task-fields";
+import { PRIORITY_META, PriorityIcon, STATUS_META, StatusIcon, TYPE_META, TypeIcon, sourceLabel, workspaceRepos } from "./task-meta";
 
 const GLOBAL = "__global";
 const NONE = "__none";
@@ -38,6 +38,9 @@ interface TaskForm {
   repoChoice: string;
   repoUrl: string;
   baseBranch: string;
+  priority: TaskPriority;
+  dueDate: string | null;
+  labels: string[];
 }
 
 /** Pill-shaped select, as in Multica's and Linear's issue composer. */
@@ -79,6 +82,9 @@ export function TaskDialog({
       repoChoice: "",
       repoUrl: "",
       baseBranch: "",
+      priority: "none",
+      dueDate: null,
+      labels: [],
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [open, defaultWorkspaceId, defaultStatus],
@@ -89,6 +95,10 @@ export function TaskDialog({
   if (open) closing.current = live;
   const form = open ? live : closing.current;
   const { title, description, type, status, workspaceId, agentId, repoChoice, repoUrl, baseBranch } = form;
+  // Drafts saved before tickets had these fields.
+  const priority = form.priority ?? "none";
+  const dueDate = form.dueDate ?? null;
+  const labels = form.labels ?? [];
   const set = <K extends keyof TaskForm>(key: K, value: TaskForm[K]) => setForm((f) => ({ ...f, [key]: value }));
   const setDescription = useCallback(
     (update: TextUpdate) => setForm((f) => ({ ...f, description: typeof update === "function" ? update(f.description) : update })),
@@ -115,6 +125,9 @@ export function TaskDialog({
         type,
         agentId: agent?.id ?? null,
         status,
+        priority,
+        dueDate,
+        labels,
         ...(type !== "coding"
           ? {}
           : picked?.kind === "folder"
@@ -320,6 +333,16 @@ export function TaskDialog({
                   </SelectItem>
                 ))}
               </Pill>
+              <Pill value={priority} onChange={(v) => set("priority", v as TaskPriority)} label="Priority">
+                {TASK_PRIORITIES.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    <PriorityIcon priority={p} /> {PRIORITY_META[p].label}
+                  </SelectItem>
+                ))}
+              </Pill>
+              <span className="flex h-8 items-center rounded-full border border-border/80 pr-1 pl-2">
+                <DueDateField value={dueDate} status={status} onChange={(d) => set("dueDate", d)} />
+              </span>
               <Pill
                 value={workspaceId ?? GLOBAL}
                 label="Workspace"
@@ -342,6 +365,9 @@ export function TaskDialog({
                   </SelectItem>
                 ))}
               </Pill>
+            </div>
+            <div className="rounded-xl border border-border/80 px-2.5">
+              <LabelsInput value={labels} onChange={(l) => set("labels", l)} />
             </div>
           </div>
 

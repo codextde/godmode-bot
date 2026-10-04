@@ -655,6 +655,16 @@ export function redactBlock(b: MessageBlock, redact: (s: string) => string): Mes
       return { ...b, text: redact(b.text) };
     case "command":
       return { ...b, args: redact(b.args), output: redact(b.output) };
+    case "question":
+      return {
+        ...b,
+        title: redact(b.title),
+        body: redact(b.body),
+        affects: redact(b.affects),
+        options: b.options.map((o) => ({ ...o, label: redact(o.label), ...(o.description ? { description: redact(o.description) } : {}) })),
+        ...(b.answer ? { answer: { ...b.answer, text: redact(b.answer.text) } } : {}),
+        ...(b.closedReason ? { closedReason: redact(b.closedReason) } : {}),
+      };
     default:
       return b;
   }

@@ -8,5 +8,7 @@
   <string>Godmode uses the camera to scan 2FA QR codes.</string>
   <key>NSSpeechRecognitionUsageDescription</key>
   <string>Godmode turns your dictation into text in voice mode.</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Godmode connects to your runners: other computers on your network that work for you.</string>
 </dict>
 </plist>

@@ -22,11 +22,29 @@ import { Lightbox } from "./lightbox";
 /* Which of the paths a message names exist                             */
 /* ------------------------------------------------------------------ */
 
-/** The chat whose messages are shown below: the paths they name are looked up where its agent works. */
-const ChatScope = createContext<string | null>(null);
+/**
+ * The chat whose messages are shown below: the paths they name are looked up where its agent works — on the runner, for
+ * a chat that lives on one.
+ */
+const ChatScope = createContext<{ conversationId: string | null; runnerId: string | null }>({ conversationId: null, runnerId: null });
 
-export function ChatFilesScope({ conversationId, children }: { conversationId: string | null | undefined; children: ReactNode }) {
-  return <ChatScope.Provider value={conversationId ?? null}>{children}</ChatScope.Provider>;
+export function ChatFilesScope({
+  conversationId,
+  runnerId,
+  children,
+}: {
+  conversationId: string | null | undefined;
+  /** The runner the chat works on; null or omitted = this computer. */
+  runnerId?: string | null;
+  children: ReactNode;
+}) {
+  const scope = useMemo(() => ({ conversationId: conversationId ?? null, runnerId: runnerId ?? null }), [conversationId, runnerId]);
+  return <ChatScope.Provider value={scope}>{children}</ChatScope.Provider>;
+}
+
+/** A picture of a runner's chat is on the runner: the address says which one, and the core fetches it over the link. */
+function onRunner(image: string, runnerId: string): string {
+  return `${image}${image.includes("?") ? "&" : "?"}runner=${encodeURIComponent(runnerId)}`;
 }
 
 type Answer = { local: boolean; files: ChatFile[] };
@@ -67,7 +85,7 @@ export interface MessageFiles {
 
 /** The files and folders a message names that exist; null outside a chat and while nothing is found. */
 export function useMessageFiles(markdown: string): MessageFiles | null {
-  const conversationId = useContext(ChatScope);
+  const { conversationId, runnerId } = useContext(ChatScope);
   const refs = useMemo(() => (conversationId ? fileRefs(markdown).join("\n") : ""), [conversationId, markdown]);
   // A message that is still being written names a longer path with every word.
   const asked = useDebouncedValue(refs, 300);
@@ -81,9 +99,11 @@ export function useMessageFiles(markdown: string): MessageFiles | null {
   });
   return useMemo(() => {
     if (!data?.files.length) return null;
-    const pictures = new Map(data.files.filter((f) => f.image).map((f) => [f.path, f]));
-    return { byRef: new Map(data.files.map((f) => [f.ref, f])), pictures: [...pictures.values()], local: data.local };
-  }, [data]);
+    const files = runnerId ? data.files.map((f) => (f.image ? { ...f, image: onRunner(f.image, runnerId) } : f)) : data.files;
+    const pictures = new Map(files.filter((f) => f.image).map((f) => [f.path, f]));
+    // The runner answers for its own machine; this computer's file manager has nothing to show for its paths.
+    return { byRef: new Map(files.map((f) => [f.ref, f])), pictures: [...pictures.values()], local: runnerId ? false : data.local };
+  }, [data, runnerId]);
 }
 
 /* ------------------------------------------------------------------ */

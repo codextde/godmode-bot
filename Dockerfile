@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.27
 #
 # Godmode Bot — headless server with the web dashboard (for a home server, NAS, VPS, Raspberry Pi 4/5, …).
 #
@@ -9,9 +9,9 @@
 # Claude Code needs credentials: pass ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`), or log in
 # once with `docker exec -it <container> claude` and keep /home/godmode/.claude on a volume (see docker-compose.yml).
 
-ARG NODE_VERSION=22
-ARG BUN_VERSION=1.3.14
-ARG DEBIAN_RELEASE=bookworm
+ARG NODE_VERSION=24
+ARG BUN_VERSION=1.4.2
+ARG DEBIAN_RELEASE=trixie
 
 # ---------------------------------------------------------------------------------------------------------------
 # Build: web UI (Vite) + standalone core binary with the UI embedded. Runs on the build machine's architecture and

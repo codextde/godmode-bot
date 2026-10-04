@@ -267,7 +267,8 @@ export function registerMcpRoutes(app: Hono): void {
     const input: unknown = await c.req.json().catch(() => null);
     // A subagent's steps: the pause and the message are for the agent itself, at its own next step.
     if (isObj(input) && input.agent_id) return c.body(null, 204);
-    if (pauseAtStep(ctx.runId)) return c.json({ continue: false, stopReason: "Paused" });
+    const stop = pauseAtStep(ctx.runId);
+    if (stop) return c.json({ continue: false, stopReason: stop === "question" ? "Waiting for the human's answer" : "Paused" });
     if (!hasQueued(ctx.conversationId)) return c.body(null, 204);
     const additionalContext = deliverQueued(ctx.runId);
     if (!additionalContext) return c.body(null, 204);

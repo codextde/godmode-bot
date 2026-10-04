@@ -30,7 +30,7 @@ import { notify } from "../services/notifications";
 import * as vault from "../vault/vault";
 import { sha256 } from "../vault/crypto";
 import { badRequest, conflict, HttpError, newId, notFound, now, parseJson, randomToken } from "../util";
-import { handleInbound, welcomeApproved } from "./bridge";
+import { followAnsweredRun, handleInbound, welcomeApproved } from "./bridge";
 import { SlackAdapter, verifySlack } from "./slack";
 import { TelegramAdapter, verifyTelegram } from "./telegram";
 import { TeamsAdapter, normalizePublicUrl, verifyTeams } from "./teams";
@@ -65,6 +65,7 @@ interface UserRow {
   name: string;
   username: string | null;
   status: MessagingUserStatus;
+  is_owner: number;
   last_seen_at: string | null;
   created_at: string;
   updated_at: string;
@@ -212,6 +213,7 @@ function toUser(r: UserRow): MessagingUser {
     name: r.name,
     username: r.username,
     status: r.status,
+    isOwner: r.is_owner === 1,
     lastSeenAt: r.last_seen_at,
     createdAt: r.created_at,
   };
@@ -425,6 +427,7 @@ export function upsertUser(connectionId: string, user: { id: string; name: strin
     name: user.name.slice(0, 200),
     username: user.username,
     status: "pending",
+    is_owner: 0,
     last_seen_at: ts,
     created_at: ts,
     updated_at: ts,
@@ -438,14 +441,40 @@ export async function setUserStatus(connectionId: string, userId: string, status
   const row = get<UserRow>("SELECT * FROM messaging_users WHERE id = ? AND connection_id = ?", userId, connectionId);
   if (!row) throw notFound("Person");
   if (row.status === status) return toUser(row);
-  exec("UPDATE messaging_users SET status = ?, updated_at = ? WHERE id = ?", status, now(), userId);
+  // Only an approved person can be the owner.
+  const owner = status === "approved" ? row.is_owner : 0;
+  exec("UPDATE messaging_users SET status = ?, is_owner = ?, updated_at = ? WHERE id = ?", status, owner, now(), userId);
   audit(actor, `messaging.user.${status === "approved" ? "approve" : status === "blocked" ? "block" : "reset"}`, connectionId, {
     user: row.name,
     externalId: row.external_id,
   });
   bus.changed("messaging");
   if (status === "approved") void welcomeApproved(connectionId, row.id).catch((err) => log.warn("could not welcome an approved person", err));
-  return toUser({ ...row, status });
+  return toUser({ ...row, status, is_owner: owner });
+}
+
+/**
+ * "This is me": the human who owns this Godmode writes from this platform account. Only they get an agent's questions
+ * in their chat and can answer them there. One owner per bot: marking someone takes the mark from the one before.
+ * Marking someone also approves them; only the human sets it (never an agent or a platform message).
+ */
+export async function setUserOwner(connectionId: string, userId: string, isOwner: boolean, actor = "user"): Promise<MessagingUser> {
+  requireRow(connectionId);
+  const row = get<UserRow>("SELECT * FROM messaging_users WHERE id = ? AND connection_id = ?", userId, connectionId);
+  if (!row) throw notFound("Person");
+  if (isOwner && row.status !== "approved") await setUserStatus(connectionId, userId, "approved", actor);
+  if ((row.is_owner === 1) === isOwner) return toUser(get<UserRow>("SELECT * FROM messaging_users WHERE id = ?", userId)!);
+  if (isOwner) exec("UPDATE messaging_users SET is_owner = 0, updated_at = ? WHERE connection_id = ? AND is_owner = 1", now(), connectionId);
+  exec("UPDATE messaging_users SET is_owner = ?, updated_at = ? WHERE id = ?", isOwner ? 1 : 0, now(), userId);
+  audit(actor, isOwner ? "messaging.user.owner" : "messaging.user.not_owner", connectionId, { user: row.name, externalId: row.external_id });
+  bus.changed("messaging");
+  return toUser(get<UserRow>("SELECT * FROM messaging_users WHERE id = ?", userId)!);
+}
+
+/** The person on this bot who is the owner of this Godmode, if the human marked one. */
+export function ownerOf(connectionId: string): MessagingUser | null {
+  const row = get<UserRow>("SELECT * FROM messaging_users WHERE connection_id = ? AND is_owner = 1 AND status = 'approved'", connectionId);
+  return row ? toUser(row) : null;
 }
 
 export function deleteUser(connectionId: string, userId: string, actor = "user"): void {
@@ -615,6 +644,9 @@ function requestSync() {
 
 function onBusEvent(event: ServerEvent) {
   if (event.type === "vault.status") requestSync();
+  if (event.type === "question.updated" && event.question.answer) {
+    void followAnsweredRun(event.question).catch((err) => log.warn("could not follow an answered run", err));
+  }
 }
 
 export function startMessaging(): void {

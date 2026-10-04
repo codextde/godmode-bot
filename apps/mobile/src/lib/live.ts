@@ -28,12 +28,14 @@ export interface Frame {
 
 interface LiveState {
   status: LinkStatus;
+  /** Why it's offline in the cloud gateway's words (computer not connected, plan limit), when it said so. */
+  offlineReason: string | null;
   runs: Record<string, LiveRun>;
   /** Latest activity per run; may arrive before the run itself is known. */
   labels: Record<string, string>;
   drafts: Record<string, Draft>;
   frames: Record<string, Frame>;
-  setStatus: (status: LinkStatus) => void;
+  setStatus: (status: LinkStatus, offlineReason?: string | null) => void;
   seedRuns: (runs: Run[]) => void;
   runStarted: (run: Run) => void;
   runActivity: (runId: string, label: string) => void;
@@ -45,11 +47,12 @@ interface LiveState {
 
 export const useLive = create<LiveState>((set) => ({
   status: "connecting",
+  offlineReason: null,
   runs: {},
   labels: {},
   drafts: {},
   frames: {},
-  setStatus: (status) => set({ status }),
+  setStatus: (status, offlineReason = null) => set({ status, offlineReason }),
   seedRuns: (runs) =>
     set((s) => {
       const ids = new Set(runs.map((r) => r.id));

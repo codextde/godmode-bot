@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { FixReport, MaintenanceStatus, PermissionReport, Settings, ToolUpdateResult, UpdateReport } from "@godmode/shared";
 import { BROWSER_USE_VERSION } from "../src/browser/browserUse";
+import { CUA_DRIVER_SPEC, CUA_DRIVER_VERSION, __resetCuaDriverForTests } from "../src/computer/cua";
 import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 import { setLogLevel } from "../src/log";
@@ -55,6 +56,9 @@ beforeAll(() => {
   openDb(join(dataDir, "godmode.db"));
   resetSettingsCache();
   tools = fakeTools(join(dataDir, "fake-bin"));
+  // The pinned Cua Driver the fake uvx "downloads" (only looked at, never started here).
+  writeFileSync(join(tools.dir, "cua-driver-bin"), "#!/bin/sh\necho cua-driver\n");
+  chmodSync(join(tools.dir, "cua-driver-bin"), 0o755);
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
     fetched.push(url);
@@ -68,6 +72,7 @@ afterAll(() => {
   stopMaintenance();
   globalThis.fetch = realFetch;
   __setUvxForTests(undefined);
+  __resetCuaDriverForTests();
   __resetMaintenanceForTests();
   setVmSupportForTests(null);
   restoreEnv("CLAUDE_CONFIG_DIR", realEnv.claude);
@@ -86,8 +91,11 @@ beforeEach(async () => {
   tools.set("claude-version", "2.1.274");
   tools.set("uv-version", "0.9.0");
   tools.set("browser-use-ready", "");
-  for (const name of ["claude-target", "uv-target", "uv-offline", "browser-use-broken", "browser-use-noop", "logged-out", "calls.log"]) tools.set(name, null);
+  for (const name of ["claude-target", "uv-target", "uv-offline", "browser-use-broken", "browser-use-noop", "cua-driver-ready", "logged-out", "calls.log"]) tools.set(name, null);
   rmSync(join(dataDir, "tools.json"), { force: true });
+  rmSync(join(dataDir, "cua-driver"), { recursive: true, force: true });
+  // No cua-driver of the machine's own.
+  __resetCuaDriverForTests({ standalone: null });
   rmSync(join(dataDir, "claude-config"), { recursive: true, force: true });
   rmSync(join(dataDir, "vm"), { recursive: true, force: true });
   loadConfig({ dataDir, token: "test-token" });
@@ -190,6 +198,19 @@ suite("background upkeep", () => {
     expect(status.fixes).toEqual([]);
     expect(status.updates.map((u) => [u.id, u.ok, u.version])).toEqual([["uv", true, "0.9.3"]]);
     expect(tools.calls()).toEqual(["uv self update"]);
+  });
+
+  test("a Cua Driver used before Godmode noted its version is brought to the pinned one", async () => {
+    updateSettings({ maintenance: { autoFix: false, autoUpdate: true } });
+    // Optional and never used: not installed unasked.
+    expect((await runMaintenance()).updates).toEqual([]);
+    expect(tools.calls()).toEqual([]);
+
+    // Its state folder shows an earlier Godmode ran it.
+    mkdirSync(join(dataDir, "cua-driver"));
+    const status = await runMaintenance();
+    expect(status.updates.map((u) => [u.id, u.ok, u.version])).toEqual([["cua-driver", true, CUA_DRIVER_VERSION]]);
+    expect(tools.calls()).toEqual([`uvx ${CUA_DRIVER_SPEC}`]);
   });
 
   test("updates wait while agents are working", async () => {

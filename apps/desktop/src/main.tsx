@@ -6,6 +6,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { VaultGrantDialog } from "@/components/vault/grant";
+import { isCloudError } from "@/lib/api";
+import { cloudContext } from "@/lib/core";
 import { installExternalLinks, installDropGuard } from "@/lib/desktop";
 import { installErrorReporting, reactRootErrorHandlers, reportRequestError } from "@/lib/diagnostics";
 import "./index.css";
@@ -25,6 +27,8 @@ const queryClient = new QueryClient({
       retry: (count, err) => {
         const status = (err as { status?: number })?.status;
         if (status && status >= 400 && status < 500) return false;
+        // The cloud's own answers (computer offline, link lost) don't change by asking again right away.
+        if (isCloudError(err)) return false;
         return count < 2;
       },
     },
@@ -36,7 +40,7 @@ createRoot(document.getElementById("root")!, reactRootErrorHandlers).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider delayDuration={250}>
-          <BrowserRouter>
+          <BrowserRouter basename={cloudContext?.base}>
             <App />
           </BrowserRouter>
           <Toaster richColors position="bottom-right" />

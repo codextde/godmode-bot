@@ -13,7 +13,7 @@ import type { ToolId, ToolUpdateResult, ToolUpdateStatus, UpdateReport } from "@
 import { BROWSER_USE_VERSION } from "../browser/browserUse";
 import { findChrome, playwrightChromiumCandidates, type DetectOptions } from "../browser/chrome";
 import { allRunning } from "../browser/state";
-import { CUA_DRIVER_VERSION, cuaDriverInstalled } from "../computer/cua";
+import { CUA_DRIVER_VERSION, cuaDownloadUnsupported, cuaDriverInstalled, cuaStateDir } from "../computer/cua";
 import { config } from "../config";
 import { logger } from "../log";
 import { CLAUDE_MEM_VERSION, claudeMemStatus } from "../memory/claudeMem";
@@ -95,17 +95,17 @@ function remember(key: string, value: string) {
 
 /**
  * Status of a tool whose version Godmode pins. `previous` is the version found instead of the pinned one (null =
- * none); `canInstall` whether Godmode can download the pinned one.
+ * none, "" = one whose version is unknown); `canInstall` whether Godmode can download the pinned one.
  */
 function pinned(id: ToolId, version: string, state: { ready: boolean; previous: string | null; canInstall: boolean }): ToolUpdateStatus {
   const base = { id, name: NAMES[id], latest: version, track: "pinned" as const, updatable: state.canInstall };
   if (state.ready) return { ...base, installed: true, current: version, updateAvailable: false, detail: PINNED };
-  if (!state.previous) return { ...base, installed: false, current: null, updateAvailable: false, detail: "Not installed" };
+  if (state.previous === null) return { ...base, installed: false, current: null, updateAvailable: false, detail: "Not installed" };
   const older = state.previous !== version;
   return {
     ...base,
     installed: true,
-    current: older ? state.previous : null,
+    current: older ? state.previous || null : null,
     updateAvailable: state.canInstall,
     detail: older ? `This Godmode release uses ${version}` : `${version} has to be downloaded again`,
   };
@@ -268,13 +268,56 @@ async function browserUseStatus(refresh: boolean): Promise<ToolUpdateStatus> {
   return pinned("browser-use", BROWSER_USE_VERSION, { ready, previous: readLedger()["browser-use"] ?? null, canInstall: !!uvx });
 }
 
+/**
+ * A Cua Driver this Godmode used before the ledger noted it: the newest other version uv has cached (what an older
+ * pin downloaded), else "" when only the driver's state folder shows it ran. null = no sign of one.
+ */
+async function earlierCuaDriver(uvx: string | null): Promise<string | null> {
+  const uv = uvx && uvBinary(uvx);
+  const res = uv ? await runCommand([uv, "cache", "dir"], { timeoutMs: 20_000 }) : null;
+  const cache = res?.code === 0 ? stripAnsi(res.stdout).trim() : "";
+  const versions: string[] = [];
+  try {
+    // uv keeps wheels as `wheels-v<n>/pypi/<package>/<version>-<tags>`.
+    for (const bucket of cache ? readdirSync(cache).filter((d) => /^wheels-v\d+$/.test(d)) : []) {
+      const dir = join(cache, bucket, "pypi", "cua-driver");
+      if (existsSync(dir)) versions.push(...readdirSync(dir).map((name) => name.split("-")[0]!));
+    }
+  } catch (err) {
+    log.debug("could not look into uv's cache", err);
+  }
+  // Only older ones: a newer version in the cache is no earlier pin (going back to the pinned one would be a downgrade).
+  const older = versions.filter((v) => /^\d+\.\d+/.test(v) && compareVersions(v, CUA_DRIVER_VERSION) < 0).sort((a, b) => compareVersions(b, a));
+  return older[0] ?? (existsSync(cuaStateDir()) ? "" : null);
+}
+
 async function cuaDriverStatus(): Promise<ToolUpdateStatus> {
   const found = await cuaDriverInstalled();
-  if (found.installed && found.source !== "uv") {
-    return external("cua-driver", null, found.source === "custom" ? "Started with your own command (Settings → Computer)" : "Your own cua-driver — update it with its installer");
+  if (found.source === "custom") return external("cua-driver", null, "Started with your own command (Settings → Computer)");
+  if (found.source === "installed" && !found.outdated) return external("cua-driver", found.version, "Your own cua-driver — update it with its installer");
+  const uvx = resolveUvx();
+  const on = getSettings().computer.useCuaDriver;
+  // Turned off, or PyPI has no build for this computer: nothing is downloaded for it, not even an update.
+  const canInstall = !!uvx && on && !cuaDownloadUnsupported();
+  if (found.source === "installed" && on && !uvx) {
+    // Older than the pinned version, and Godmode can't download that one: it keeps using this one.
+    return {
+      id: "cua-driver",
+      name: NAMES["cua-driver"],
+      installed: true,
+      current: found.version,
+      latest: CUA_DRIVER_VERSION,
+      updateAvailable: true,
+      updatable: false,
+      track: "pinned",
+      detail: `Your own cua-driver, older than ${CUA_DRIVER_VERSION} (the version this Godmode release was tested with) — update it with \`cua-driver update --apply\`, or install uv so Godmode can download ${CUA_DRIVER_VERSION}`,
+    };
   }
+  // An older cua-driver of its own is replaced by the pinned build once that is downloaded (see getCuaDriver).
+  if (found.source === "installed") return pinned("cua-driver", CUA_DRIVER_VERSION, { ready: false, previous: found.version ?? "", canInstall });
   if (found.installed) remember("cua-driver", CUA_DRIVER_VERSION);
-  return pinned("cua-driver", CUA_DRIVER_VERSION, { ready: found.installed, previous: readLedger()["cua-driver"] ?? null, canInstall: !!resolveUvx() });
+  const previous = found.installed ? null : (readLedger()["cua-driver"] ?? (await earlierCuaDriver(uvx)));
+  return pinned("cua-driver", CUA_DRIVER_VERSION, { ready: found.installed, previous, canInstall });
 }
 
 const claudeMemRoot = () => join(config().dataDir, "plugins", "claude-mem");

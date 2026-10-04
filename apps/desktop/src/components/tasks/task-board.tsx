@@ -20,8 +20,10 @@ import {
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Link } from "react-router";
-import { Archive, ChevronsLeftRight, MessagesSquare, PanelRightOpen, Plus, Trash2 } from "lucide-react";
+import { Archive, Check, ChevronsLeftRight, MessageSquareReply, MessagesSquare, PanelRightOpen, Play, Plus, RotateCcw, RotateCw, Trash2 } from "lucide-react";
 import type { Agent, Task, TaskStatus, Workspace } from "@godmode/shared";
+import { reopenStatus } from "@godmode/shared";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,6 +32,7 @@ import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { BOARD_COLUMNS, STATUS_META, StatusIcon } from "./task-meta";
 import { TaskCard } from "./task-card";
+import { focusReply } from "./task-sheet";
 
 type Columns = Record<TaskStatus, string[]>;
 
@@ -168,6 +171,7 @@ export function TaskBoard({ tasks, agents, workspaces, onOpen, onMove, onQuickAd
               dragging={!!drag}
               activeId={drag?.id ?? null}
               onOpen={onOpen}
+              onMove={onMove}
               onArchive={onArchive}
               onDelete={onDelete}
               onCollapse={() => toggleColumn(status)}
@@ -201,6 +205,7 @@ function Column({
   dragging,
   activeId,
   onOpen,
+  onMove,
   onArchive,
   onDelete,
   onCollapse,
@@ -215,6 +220,7 @@ function Column({
   dragging: boolean;
   activeId: string | null;
   onOpen: (task: Task) => void;
+  onMove: (task: Task, status: TaskStatus, beforeId: string | null) => void;
   onArchive: (tasks: Task[]) => void;
   onDelete: (task: Task) => void;
   onCollapse: () => void;
@@ -226,6 +232,12 @@ function Column({
   const [adding, setAdding] = useState(false);
   const meta = STATUS_META[status];
   const tasks = ids.map((id) => byId.get(id)).filter((t): t is Task => !!t);
+  // Tickets a restart cut off: continued together, one after the other.
+  const interrupted = status === "blocked" ? tasks.filter((t) => t.blockedKind === "interrupted" && t.agentId) : [];
+  const continueAll = () => {
+    toast(`Continuing ${interrupted.length} tasks`);
+    for (const t of interrupted) onMove(t, "todo", null);
+  };
 
   return (
     <section
@@ -249,6 +261,16 @@ function Column({
           </TooltipContent>
         </Tooltip>
         <div className="ml-auto flex items-center opacity-70 transition group-hover/col:opacity-100">
+          {interrupted.length >= 2 && !dragging && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={`Continue all ${interrupted.length} interrupted tasks`} onClick={continueAll}>
+                  <RotateCw className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Continue all {interrupted.length} interrupted tasks</TooltipContent>
+            </Tooltip>
+          )}
           {archiveAll && tasks.length > 0 && !dragging && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -283,6 +305,7 @@ function Column({
               workspace={workspaces ? (task.workspaceId ? (workspaces.get(task.workspaceId) ?? null) : null) : undefined}
               ghost={task.id === activeId}
               onOpen={onOpen}
+              onMove={onMove}
               onArchive={onArchive}
               onDelete={onDelete}
             />
@@ -314,6 +337,7 @@ function SortableCard({
   workspace,
   ghost,
   onOpen,
+  onMove,
   onArchive,
   onDelete,
 }: {
@@ -322,9 +346,16 @@ function SortableCard({
   workspace?: Workspace | null;
   ghost: boolean;
   onOpen: (task: Task) => void;
+  onMove: (task: Task, status: TaskStatus, beforeId: string | null) => void;
   onArchive: (tasks: Task[]) => void;
   onDelete: (task: Task) => void;
 }) {
+  // Open the ticket with the cursor in its reply box (Request changes, Answer).
+  const reply = () => {
+    onOpen(task);
+    setTimeout(() => focusReply(task.id), 350);
+  };
+  const restart = task.blockedKind === "interrupted" ? "Continue" : task.blockedKind === "stopped" || task.blockedKind === "manual" ? "Start again" : "Try again";
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: task.id });
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter") {
@@ -358,9 +389,52 @@ function SortableCard({
         {task.conversationId && (
           <ContextMenuItem asChild>
             <Link to={`/chat/${task.conversationId}`}>
-              <MessagesSquare /> Open conversation
+              <MessagesSquare /> Open chat
             </Link>
           </ContextMenuItem>
+        )}
+        {task.status === "in_review" && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => onMove(task, "done", null)}>
+              <Check /> Approve
+            </ContextMenuItem>
+            {task.agentId && task.conversationId && (
+              <ContextMenuItem onSelect={reply}>
+                <MessageSquareReply /> Request changes…
+              </ContextMenuItem>
+            )}
+          </>
+        )}
+        {task.status === "blocked" && task.agentId && (
+          <>
+            <ContextMenuSeparator />
+            {task.blockedKind === "needs_input" ? (
+              <ContextMenuItem onSelect={reply}>
+                <MessageSquareReply /> Answer…
+              </ContextMenuItem>
+            ) : (
+              <ContextMenuItem onSelect={() => onMove(task, "todo", null)}>
+                <RotateCcw /> {restart}
+              </ContextMenuItem>
+            )}
+          </>
+        )}
+        {(task.status === "done" || task.status === "cancelled") && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => onMove(task, reopenStatus(task), null)}>
+              <RotateCcw /> Reopen
+            </ContextMenuItem>
+          </>
+        )}
+        {task.status === "backlog" && task.agentId && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={() => onMove(task, "todo", null)}>
+              <Play /> Start
+            </ContextMenuItem>
+          </>
         )}
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => onArchive([task])}>

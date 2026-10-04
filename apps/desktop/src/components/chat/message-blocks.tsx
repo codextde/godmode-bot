@@ -1,11 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Credential, MessageBlock, ToolTaskAgent } from "@godmode/shared";
 import { WORKFLOW_TOOL } from "@godmode/shared";
-import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Lock, ShieldAlert, SquareSlash, TriangleAlert, Workflow, XCircle } from "lucide-react";
+import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Loader2, Lock, ShieldAlert, Square, SquareSlash, TriangleAlert, Workflow, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentAvatar } from "@/components/common";
 import { ThinkingState } from "@/components/aicss/ThinkingState";
@@ -14,21 +15,24 @@ import { FileDiff, diffLines, type DiffRow } from "@/components/aicss/FileDiff";
 import { DrawCheck } from "@/components/aicss/Motion";
 import { Orb } from "@/components/aicss/Orb";
 import { formatDuration, formatTokens } from "@/components/runs/run-status";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { useLive } from "@/stores/live";
 import { Markdown } from "./markdown";
 import { UserBubble } from "./user-bubble";
 import { CopyButton } from "./copy-button";
 import { Lightbox } from "./lightbox";
 import { PauseMarker } from "./pause";
+import { QuestionCard, viewOfBlock } from "./question-card";
 import { describeTool, formatToolInput, hostOf, todoItems, type ToolContext, type ToolKind, type ToolMeta } from "./tool-meta";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
 type ThinkingBlock = Extract<MessageBlock, { type: "thinking" }>;
 type UserMessageBlock = Extract<MessageBlock, { type: "user_message" }>;
 type PauseBlock = Extract<MessageBlock, { type: "pause" }>;
+type QuestionBlock = Extract<MessageBlock, { type: "question" }>;
 
 type Step = { type: "tool"; block: ToolUseBlock } | { type: "thought"; block: ThinkingBlock; key: string };
 
@@ -40,6 +44,7 @@ type Item =
   | { kind: "command"; key: string; name: string; args: string; output: string }
   | { kind: "user-message"; key: string; block: UserMessageBlock }
   | { kind: "pause"; key: string; block: PauseBlock }
+  | { kind: "question"; key: string; block: QuestionBlock }
   | { kind: "tools"; key: string; steps: Step[] }
   | { kind: "missing-login"; key: string; block: ToolUseBlock }
   | { kind: "delegate"; key: string; block: ToolUseBlock }
@@ -50,6 +55,12 @@ const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);
 
 function parentOf(b: MessageBlock): string | null {
   return "parentToolUseId" in b ? (b.parentToolUseId ?? null) : null;
+}
+
+const ASK_TOOLS = new Set(["ask_human", "request_approval"]);
+
+function bareName(name: string): string {
+  return name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : name;
 }
 
 function isStandaloneTool(name: string): "missing-login" | "delegate" | "workflow" | "subagent" | null {
@@ -81,6 +92,8 @@ function buildItems(blocks: MessageBlock[]): Item[] {
   top.forEach((b, i) => {
     const key = `${b.type}-${i}`;
     if (b.type === "tool_use") {
+      // The question card is the record of an ask; the call itself only shows when it failed.
+      if (ASK_TOOLS.has(bareName(b.name)) && !b.isError) return;
       const standalone = isStandaloneTool(b.name);
       if (standalone) {
         group = null;
@@ -110,7 +123,9 @@ function buildItems(blocks: MessageBlock[]): Item[] {
     else if (b.type === "notice") items.push({ kind: "notice", key, level: b.level, text: b.text });
     else if (b.type === "command") items.push({ kind: "command", key, name: b.name, args: b.args, output: b.output });
     else if (b.type === "user_message") items.push({ kind: "user-message", key: b.id, block: b });
-    else if (b.type === "pause") items.push({ kind: "pause", key, block: b });
+    // A run that stands still for a question: the card says so.
+    else if (b.type === "pause" && b.reason !== "question") items.push({ kind: "pause", key, block: b });
+    else if (b.type === "question") items.push({ kind: "question", key: b.id, block: b });
   });
   return items;
 }
@@ -141,7 +156,18 @@ function useToolContext(blocks: MessageBlock[]): ToolContext {
 }
 
 /** Renders an assistant turn from its structured blocks. */
-export function MessageBlocks({ blocks, streaming = false, compact = false }: { blocks: MessageBlock[]; streaming?: boolean; compact?: boolean }) {
+export function MessageBlocks({
+  blocks,
+  streaming = false,
+  compact = false,
+  runId,
+}: {
+  blocks: MessageBlock[];
+  streaming?: boolean;
+  compact?: boolean;
+  /** The run that wrote these blocks: handoff cards find the runs it handed over through it. */
+  runId?: string;
+}) {
   const items = useMemo(() => buildItems(blocks), [blocks]);
   const ctx = useToolContext(blocks);
   const lastBlock = blocks[blocks.length - 1];
@@ -175,12 +201,14 @@ export function MessageBlocks({ blocks, streaming = false, compact = false }: { 
             return <PickedUpMessage key={item.key} block={item.block} />;
           case "pause":
             return <PauseMarker key={item.key} block={item.block} />;
+          case "question":
+            return <QuestionCard key={item.key} question={viewOfBlock(item.block)} streaming={streaming && item.block.status === "open"} />;
           case "tools":
             return <ToolGroup key={item.key} steps={item.steps} ctx={ctx} streaming={active} />;
           case "missing-login":
             return <MissingLoginCard key={item.key} block={item.block} />;
           case "delegate":
-            return <DelegateCard key={item.key} block={item.block} streaming={streaming} />;
+            return <DelegateCard key={item.key} block={item.block} streaming={streaming} parentRunId={runId} />;
           case "workflow":
             return <WorkflowCard key={item.key} block={item.block} streaming={streaming} />;
           case "subagent":
@@ -706,14 +734,71 @@ function useAgentById(id: string | undefined): Agent | undefined {
   return id ? agents.find((a) => a.id === id) : undefined;
 }
 
-function DelegateCard({ block, streaming }: { block: ToolUseBlock; streaming: boolean }) {
+/**
+ * The run a handoff started: one of the runs the parent handed over to that agent. The id in the card's result decides
+ * (only this parent's own runs are candidates, so nothing an agent writes can point it elsewhere); before the result is
+ * there, the newest run with that task — the one being handed over right now.
+ */
+function useHandedOverRun(parentRunId: string | undefined, agentId: string | undefined, task: string | undefined, result: string, refused: boolean) {
+  const children = useQuery({
+    queryKey: qk.runChildren(parentRunId ?? ""),
+    queryFn: () => api.runs.list({ parentRunId, limit: 100 }),
+    enabled: !!parentRunId && !!agentId && !refused,
+    staleTime: 5_000,
+  });
+  const mine = (children.data ?? []).filter((r) => r.agentId === agentId);
+  const wanted = task?.trim();
+  const named = result ? mine.find((r) => result.includes(`(run ${r.id},`)) : undefined;
+  const run =
+    named ??
+    (result ? undefined : wanted ? mine.find((r) => r.prompt.trimEnd().endsWith(wanted)) : undefined) ??
+    (mine.length === 1 ? mine[0] : undefined);
+  const live = useLive((s) => (run ? s.runs[run.id] : undefined));
+  return { run, live, loading: children.isLoading };
+}
+
+function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; streaming: boolean; parentRunId?: string }) {
   const input = (block.input ?? {}) as { agentId?: string; task?: string; wait?: boolean };
   const agent = useAgentById(input.agentId);
   const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
   const running = stepRunning(block, streaming);
   const result = block.result ?? "";
+  // A refused handoff (not a peer, switched off, too deep…) never started a run.
+  const refused = !!block.isError && !/\(run run_/.test(result);
+  const { run: child, live } = useHandedOverRun(parentRunId, input.agentId, input.task, result, refused);
+  const status = live?.status ?? child?.status;
+  const working = status === "running" || status === "queued";
+  const stop = useMutation({
+    mutationFn: () => api.runs.cancel(child!.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.runs }),
+    onError: (err) => toast.error("Couldn't stop it", { description: errorMessage(err) }),
+  });
+  const name = agent?.name ?? "the agent";
+  const state =
+    refused
+      ? { text: "couldn't hand over", tone: "text-destructive" }
+      : status === "running"
+        ? { text: live?.activity && live.activity !== "Starting…" ? live.activity : "working on it…", tone: "text-shimmer" }
+        : status === "queued"
+          ? { text: "queued", tone: "text-muted-foreground" }
+          : status === "paused"
+            ? { text: "paused — open its chat to see why", tone: "text-warning" }
+            : status === "succeeded"
+              ? { text: "done", tone: "text-success", check: true }
+              : status === "failed"
+                ? { text: "failed", tone: "text-destructive" }
+                : status === "cancelled"
+                  ? { text: "stopped", tone: "text-muted-foreground" }
+                  : running
+                    ? { text: "handing over…", tone: "text-shimmer" }
+                    : block.isError
+                      ? { text: "failed", tone: "text-destructive" }
+                      : block.result !== undefined
+                        ? { text: input.wait === false ? "handed over" : "done", tone: "text-success", check: true }
+                        : null;
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", running && "glow-border", block.isError && "border-destructive/30")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", (running || status === "running") && "glow-border", (block.isError || status === "failed") && "border-destructive/30")}>
       <div className="flex items-start gap-3 p-3.5">
         {agent ? (
           <AgentAvatar agent={agent} size="md" />
@@ -723,8 +808,8 @@ function DelegateCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Delegated to</span>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+            <span className="text-muted-foreground">Handed to</span>
             {agent ? (
               <Link to={`/agents/${agent.id}`} className="font-semibold hover:underline">
                 {agent.name}
@@ -732,17 +817,29 @@ function DelegateCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
             ) : (
               <span className="font-semibold">another agent</span>
             )}
-            {running ? (
-              <span className="text-shimmer text-xs font-medium">working on it…</span>
-            ) : block.isError ? (
-              <span className="text-xs font-medium text-destructive">failed</span>
-            ) : block.result !== undefined ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
-                <DrawCheck className="size-3.5" /> {input.wait === false ? "handed off" : "done"}
+            {agent?.role && <span className="text-xs text-muted-foreground">· {agent.role}</span>}
+            {state && (
+              <span className={cn("inline-flex min-w-0 items-center gap-1 text-xs font-medium", state.tone)} aria-live="polite">
+                {state.check && <DrawCheck className="size-3.5" />}
+                <span className="truncate">{state.text}</span>
               </span>
-            ) : null}
+            )}
           </div>
           {input.task && <p className="mt-1 line-clamp-3 text-[13px] text-muted-foreground">{input.task}</p>}
+          {child && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <Button asChild size="xs" variant="outline">
+                <Link to={`/chat/${child.conversationId}`}>
+                  <ArrowUpRight /> Open chat
+                </Link>
+              </Button>
+              {working && (
+                <Button size="xs" variant="ghost" className="text-muted-foreground hover:text-destructive" disabled={stop.isPending} onClick={() => stop.mutate()} aria-label={`Stop ${name}'s part`}>
+                  {stop.isPending ? <Loader2 className="animate-spin" /> : <Square className="size-2.5 fill-current" />} Stop
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
       {result && (

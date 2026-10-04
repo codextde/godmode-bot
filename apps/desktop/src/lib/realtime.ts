@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { browserView, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type EntityName, type ServerEvent, type Task, type Vm } from "@godmode/shared";
+import { browserView, type AgentQuestion, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type EntityName, type RemoteRunner, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { withPending } from "./pending-queue";
@@ -47,6 +47,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   composio: [qk.composio],
   "browser-profiles": [qk.browserProfiles],
   "missing-logins": [qk.missingLogins, qk.bootstrap],
+  questions: [qk.questions, qk.bootstrap],
   notifications: [qk.notifications, qk.bootstrap],
   settings: [qk.settings, qk.bootstrap],
   runs: [qk.runs],
@@ -60,6 +61,10 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   tasks: [qk.tasks],
   // A phone was paired, removed, or connected.
   mobile: [qk.mobile],
+  // A runner was paired, removed, or its chats changed.
+  runners: [qk.runners],
+  // Cloud link state, plan or billing changed (linking approved, link up or down, notice from the cloud).
+  cloud: [qk.cloud, qk.cloudBilling],
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
   followups: [qk.followups],
@@ -137,6 +142,10 @@ function scheduleReconnect(queryClient: QueryClient) {
 function handle(qc: QueryClient, event: ServerEvent) {
   const live = useLive.getState();
   switch (event.type) {
+    case "hello":
+      // A run.started for each active run follows; whatever else still looks live ended while we were away.
+      if (event.activeRunIds) live.retainRuns(event.activeRunIds);
+      break;
     case "run.started":
       live.runStarted(event.run);
       qc.invalidateQueries({ queryKey: qk.runs });
@@ -197,6 +206,22 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "task.updated":
       upsertTask(qc, event.task);
       break;
+    case "task.event": {
+      // Merged into the cached timeline; the human's own message replaces its pending row.
+      const e = event.event;
+      qc.setQueryData<TaskEvent[]>(qk.taskEvents(e.taskId), (list) => {
+        if (!Array.isArray(list) || list.some((x) => x.id === e.id)) return list;
+        let rest = list;
+        if (e.kind === "feedback") {
+          const pending = list.findIndex((x) => x.id.startsWith("pending-") && x.body === e.body);
+          if (pending >= 0) rest = list.filter((_, i) => i !== pending);
+        }
+        const real = rest.filter((x) => !x.id.startsWith("pending-"));
+        const pending = rest.filter((x) => x.id.startsWith("pending-"));
+        return [...real, e].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).concat(pending);
+      });
+      break;
+    }
     case "task.deleted":
       qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.filter((t) => t.id !== event.id));
       break;
@@ -205,6 +230,22 @@ function handle(qc: QueryClient, event: ServerEvent) {
       // Pending counts and the trigger's last event live on the routine.
       qc.invalidateQueries({ queryKey: qk.routines });
       break;
+    case "question.created":
+    case "question.updated": {
+      const q = event.question;
+      // Seed the lists from the event so cards don't wait for a refetch.
+      qc.setQueriesData<AgentQuestion[]>({ queryKey: qk.questions }, (list) => {
+        if (!Array.isArray(list)) return list;
+        return list.some((x) => x.id === q.id) ? list.map((x) => (x.id === q.id ? q : x)) : list;
+      });
+      qc.invalidateQueries({ queryKey: qk.questions });
+      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      qc.invalidateQueries({ queryKey: qk.conversation(q.conversationId) });
+      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries({ queryKey: qk.agents });
+      qc.invalidateQueries({ queryKey: qk.tasks });
+      break;
+    }
     case "missing-login.created":
     case "missing-login.updated":
       qc.invalidateQueries({ queryKey: qk.missingLogins });
@@ -257,6 +298,18 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "vm.deleted":
       qc.setQueryData<Vm[]>(qk.vmList, (old) => (Array.isArray(old) ? old.filter((v) => v.id !== event.id) : old));
       qc.invalidateQueries({ queryKey: qk.vmStatus });
+      break;
+    case "runner.updated":
+      void upsertRunner(qc, event.runner);
+      break;
+    case "runner.deleted":
+      qc.setQueryData<RemoteRunner[]>(qk.runners, (old) => (Array.isArray(old) ? old.filter((r) => r.id !== event.id) : old));
+      qc.removeQueries({ queryKey: qk.runnerHealth(event.id) });
+      // Its chats stay, as ordinary chats of this computer.
+      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      break;
+    case "runner.paired":
+      qc.invalidateQueries({ queryKey: qk.runners });
       break;
     case "entity.changed":
       for (const key of ENTITY_KEYS[event.entity] ?? []) qc.invalidateQueries({ queryKey: key });
@@ -315,6 +368,26 @@ async function upsertVm(qc: QueryClient, vm: Vm) {
     return list.some((v) => v.id === vm.id) ? list.map((v) => (v.id === vm.id ? vm : v)) : [...list, vm];
   });
   if (fetching) void qc.invalidateQueries({ queryKey: qk.vmList });
+}
+
+/**
+ * Patch a runner into the cached list in place: its connection, latency and sync progress change often, which must not
+ * refetch the list each time. Only the list itself is touched — the health reports live under the same key prefix.
+ */
+export async function upsertRunner(qc: QueryClient, runner: RemoteRunner) {
+  const list = { queryKey: qk.runners, exact: true };
+  if (!Array.isArray(qc.getQueryData<RemoteRunner[]>(qk.runners))) {
+    void qc.invalidateQueries(list);
+    return;
+  }
+  // A list fetch that started before this change would land without it: cancel it, patch, and fetch again.
+  const fetching = qc.isFetching(list) > 0;
+  if (fetching) await qc.cancelQueries(list);
+  qc.setQueryData<RemoteRunner[]>(qk.runners, (old) => {
+    if (!Array.isArray(old)) return old;
+    return old.some((r) => r.id === runner.id) ? old.map((r) => (r.id === runner.id ? runner : r)) : [...old, runner];
+  });
+  if (fetching) void qc.invalidateQueries(list);
 }
 
 /** Computer live view subscribers per view in this UI; the core only hears about the first and the last. */

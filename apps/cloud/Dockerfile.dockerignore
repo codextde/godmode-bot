@@ -1,0 +1,49 @@
+# Build context of apps/cloud/Dockerfile. BuildKit (docker build, docker compose, Coolify) reads this file instead of
+# the root .dockerignore when it builds this Dockerfile. Keep local state, build output and secrets out, and keep the
+# package.json of every workspace package: pnpm checks the lockfile against the whole workspace.
+
+# Dependencies, build output and local data
+**/node_modules
+**/.next
+**/dist
+**/dist-cloud
+**/.data
+**/target
+**/*.tsbuildinfo
+**/next-env.d.ts
+**/coverage
+**/.DS_Store
+**/*.log
+
+# Secrets and local environment
+**/.env
+**/.env.*
+**/.dev.vars
+**/.secrets.local
+**/.wrangler
+.godmode
+*.godmode-backup
+
+# Not needed to build the cloud
+.git
+.github
+.omc
+.claude
+docs
+videos
+site
+tasks
+idea.md
+Dockerfile
+docker-compose.yml
+apps/mobile
+apps/desktop/src-tauri
+apps/website/*
+!apps/website/package.json
+packages/core/*
+!packages/core/package.json
+apps/cloud/Dockerfile
+apps/cloud/Dockerfile.dockerignore
+apps/cloud/docker-compose.yaml
+apps/cloud/docker-compose.override.yaml
+apps/cloud/README.md

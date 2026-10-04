@@ -1,7 +1,7 @@
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import type { ConversationWithMessages, QueuedMessage } from "@godmode/shared";
+import type { ConversationWithMessages, PauseReason, QueuedMessage } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
 import { ArrowUp, Paperclip, Pencil, X, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -42,7 +42,7 @@ export function QueueTray({
   /** The agent is working in this chat. */
   running: boolean;
   /** The chat's run stands still: the queue goes along when it continues. */
-  paused?: "user" | "limit" | null;
+  paused?: PauseReason | null;
   /** A rewording came too late — the agent has the message already: hand the new wording back. */
   onLost: (text: string) => void;
   /** Done with a row: the composer takes the focus again. */
@@ -125,9 +125,11 @@ export function QueueTray({
       ? "Stopping the current step…"
       : "Sending…"
     : paused
-      ? paused === "limit"
-        ? `${many ? "Go" : "Goes"} along when the limit resets`
-        : `${many ? "Go" : "Goes"} along when you continue`
+      ? paused === "question"
+        ? `${many ? "Go" : "Goes"} along with your answer`
+        : paused === "limit"
+          ? `${many ? "Go" : "Goes"} along when the limit resets`
+          : `${many ? "Go" : "Goes"} along when you continue`
       : !running
         ? "Not sent yet"
         : first && parseSlashCommand(first.content)
@@ -151,26 +153,29 @@ export function QueueTray({
               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" aria-live="polite">
                 {hint}
               </span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="xs"
-                    variant={running || paused ? "ghost" : "secondary"}
-                    disabled={sendNow.isPending || queue.every((m) => pendingQueued.has(m.id))}
-                    onClick={() => sendNow.mutate()}
-                  >
-                    {sendNow.isPending ? <Spinner className="size-3" /> : running || paused ? <Zap /> : <ArrowUp />}
-                    {running || paused ? "Send now" : "Send"}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  {paused
-                    ? `Continue now with ${many ? "these messages" : "this message"}`
-                    : running
-                      ? `Stop what ${agentName} is doing and start on ${many ? "these" : "this"}`
-                      : `Send ${many ? "these messages" : "this message"} to ${agentName}`}
-                </TooltipContent>
-              </Tooltip>
+              {/* A run that waits for an answer only continues with that answer. */}
+              {paused !== "question" && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="xs"
+                      variant={running || paused ? "ghost" : "secondary"}
+                      disabled={sendNow.isPending || queue.every((m) => pendingQueued.has(m.id))}
+                      onClick={() => sendNow.mutate()}
+                    >
+                      {sendNow.isPending ? <Spinner className="size-3" /> : running || paused ? <Zap /> : <ArrowUp />}
+                      {running || paused ? "Send now" : "Send"}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    {paused
+                      ? `Continue now with ${many ? "these messages" : "this message"}`
+                      : running
+                        ? `Stop what ${agentName} is doing and start on ${many ? "these" : "this"}`
+                        : `Send ${many ? "these messages" : "this message"} to ${agentName}`}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
             <ol className="max-h-44 overflow-y-auto overscroll-contain px-1.5 pb-1.5">
               <AnimatePresence initial={false}>

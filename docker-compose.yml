@@ -10,6 +10,7 @@
 #   * log in once: `docker compose exec -it godmode claude` (stored in the godmode-claude volume).
 #
 # Exposing the dashboard beyond your LAN? Put it behind HTTPS (reverse proxy / Tailscale) and set a password.
+# (Godmode Cloud has its own stack: apps/cloud/docker-compose.yaml.)
 
 services:
   godmode:

@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { Agent, Task, TaskStatus, TaskType } from "@godmode/shared";
+import { isOverdue, isWaiting, waitsForAnswer } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Avatar, Badge, Row, T, tap } from "./ui";
 import { shortTime } from "@/lib/format";
@@ -30,13 +31,27 @@ export function openTask(id: string) {
 }
 
 export function TaskStatusBadge({ task }: { task: Task }) {
+  // In progress isn't always live work: it may wait for the human's answer, stand still, or wait for its follow-up.
+  if (waitsForAnswer(task)) return <Badge label="Needs your answer" tone="warning" />;
+  if (task.status === "in_progress" && task.pause) return <Badge label="Paused" tone="neutral" />;
+  if (isWaiting(task)) return <Badge label="Waiting" tone="neutral" />;
   const meta = STATUS_META[task.status];
-  return <Badge label={meta.label} tone={meta.tone} live={task.status === "in_progress"} />;
+  const live = task.status === "in_progress" && (task.runStatus === "queued" || task.runStatus === "running" || !!task.activity);
+  return <Badge label={meta.label} tone={meta.tone} live={live} />;
 }
 
 export function TaskRow({ task, agent, workspaceName }: { task: Task; agent?: Agent; workspaceName?: string }) {
   const c = useColors();
-  const detail = task.status === "blocked" ? task.blockedReason : task.status === "in_progress" ? task.activity : null;
+  const detail =
+    task.status === "blocked"
+      ? task.blockedReason
+      : task.status === "in_progress"
+        ? (task.activity ?? (isWaiting(task) && task.followup ? `Continues ${shortTime(task.followup.dueAt)}` : null))
+        : null;
+  const extra = [
+    task.priority === "urgent" ? "Urgent" : task.priority === "high" ? "High" : null,
+    task.dueDate ? (isOverdue(task) ? "overdue" : `due ${task.dueDate.slice(5)}`) : null,
+  ].filter(Boolean);
   return (
     <Pressable onPress={() => openTask(task.id)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}>
       {agent ? (
@@ -56,7 +71,7 @@ export function TaskRow({ task, agent, workspaceName }: { task: Task; agent?: Ag
         <Row style={{ gap: space.sm }}>
           <TaskStatusBadge task={task} />
           <T variant="footnote" muted numberOfLines={1} style={{ flex: 1 }}>
-            {[`#${task.number}`, agent?.name ?? "No agent", workspaceName].filter(Boolean).join(" · ")}
+            {[`#${task.number}`, agent?.name ?? "No agent", workspaceName, ...extra].filter(Boolean).join(" · ")}
           </T>
         </Row>
         {detail ? (

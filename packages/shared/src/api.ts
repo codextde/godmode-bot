@@ -4,6 +4,7 @@ import type {
   Agent,
   AgentBrowserConfig,
   AgentPermissions,
+  AgentQuestion,
   Attachment,
   Conversation,
   Credential,
@@ -56,6 +57,10 @@ export interface AgentInput {
   personality?: string;
   description?: string;
   instructions?: string;
+  /** Job title on the team; "" = none. */
+  role?: string;
+  /** Its lead; null = the built-in agent. */
+  reportsTo?: ID | null;
   model?: string;
   effort?: Effort | null;
   /** null = the global default. */
@@ -83,6 +88,8 @@ export interface AgentTemplate {
   personality: string;
   description: string;
   instructions: string;
+  /** Its job title on the team. */
+  role: string;
   routine?: { name: string; cron: string; prompt: string };
 }
 
@@ -133,6 +140,31 @@ export interface SendMessageInput {
 export interface SendMessageResult {
   message: Message;
   run: Run;
+  /**
+   * The chat was waiting for the human's answer, so the message was taken as that answer: no message was added, `run` is
+   * the run that asked (it continues) and `message` is the agent's message that shows the question.
+   */
+  question?: AgentQuestion;
+}
+
+/**
+ * The human's answer to an AgentQuestion. Exactly one of `optionId` (questions: a suggested answer), `decision`
+ * (approvals; `note` optional) or `text` (own words, for both kinds; may be "" when files are attached).
+ */
+export interface AnswerQuestionInput {
+  optionId?: string;
+  decision?: "approve" | "decline";
+  /** A sentence for the agent that goes with the decision. */
+  note?: string;
+  text?: string;
+  /** Files that go with `text`. */
+  attachments?: SendMessageInput["attachments"];
+}
+
+/** `run` is the run that asked: it continues with the answer. */
+export interface AnswerQuestionResult {
+  question: AgentQuestion;
+  run: Run;
 }
 
 /** `queued`: the agent was working, so the message waits in the chat's queue. */
@@ -160,6 +192,8 @@ export interface StartChatInput {
   /** SSH servers the chat may use, in addition to the agent's. */
   sshServerIds?: ID[];
   instructions?: string;
+  /** Work on this runner instead of this computer. */
+  runnerId?: ID | null;
 }
 
 /** Move a chat's follow-up to another time. */

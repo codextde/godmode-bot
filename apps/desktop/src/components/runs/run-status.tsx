@@ -60,13 +60,14 @@ export function runStatusLabel(status: RunStatus): string {
   return STATUS_META[status]?.label ?? status;
 }
 
-/** Compact pill: coloured dot + label. */
-export function RunStatusBadge({ status, className }: { status: RunStatus; className?: string }) {
+/** Compact pill: coloured dot + label. `waitingFor`: a paused run that waits for the human's answer says so. */
+export function RunStatusBadge({ status, className, waitingFor }: { status: RunStatus; className?: string; waitingFor?: "answer" | "approval" | null }) {
   const meta = STATUS_META[status] ?? STATUS_META.queued;
+  const label = status === "paused" && waitingFor ? (waitingFor === "approval" ? "Needs your OK" : "Needs your answer") : meta.label;
   return (
     <span className={cn("inline-flex items-center gap-1.5 rounded-[5px] border px-2 py-0.5 text-[11px] font-medium", meta.className, className)}>
       <span className={cn("size-1.5 rounded-full", meta.dot)} />
-      {meta.label}
+      {label}
     </span>
   );
 }

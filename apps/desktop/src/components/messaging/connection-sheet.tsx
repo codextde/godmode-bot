@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Ban, Check, ChevronRight, ExternalLink, KeyRound, MessageSquare, MoreHorizontal, Trash2, TriangleAlert, Undo2, User, Users } from "lucide-react";
+import { Ban, Check, ChevronRight, ExternalLink, KeyRound, MessageSquare, MoreHorizontal, Trash2, TriangleAlert, Undo2, User, UserCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 import type { Agent, MessagingConnection, MessagingConnectionPatch, MessagingUser, MessagingUserStatus } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
@@ -104,6 +104,16 @@ function SheetBody({ connection: c, onClose }: { connection: MessagingConnection
       void qc.invalidateQueries({ queryKey: qk.messaging });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
     },
+  });
+
+  const setOwner = useMutation({
+    mutationFn: ({ user, isOwner }: { user: MessagingUser; isOwner: boolean }) => api.messaging.setOwner(c.id, user.id, isOwner),
+    onSuccess: (u, { isOwner }) => {
+      if (isOwner) toast.success(`${u.name} is you`, { description: "Your agents' questions and approval requests come to this chat, and your replies answer them." });
+      else toast(`${u.name} is no longer marked as you`, { description: "Questions are answered in Godmode only." });
+    },
+    onError: (err) => toastApiError(err, "Couldn't update", qc),
+    onSettled: () => void qc.invalidateQueries({ queryKey: qk.messagingUsers(c.id) }),
   });
 
   const forget = useMutation({
@@ -252,6 +262,14 @@ function SheetBody({ connection: c, onClose }: { connection: MessagingConnection
                           <Ban /> Block
                         </DropdownMenuItem>
                       )}
+                      {u.status !== "blocked" && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => setOwner.mutate({ user: u, isOwner: !u.isOwner })}>
+                            <UserCheck /> {u.isOwner ? "This isn't me" : "This is me"}
+                          </DropdownMenuItem>
+                        </>
+                      )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem variant="destructive" onClick={() => forget.mutate(u)}>
                         <Trash2 /> Forget
@@ -346,6 +364,13 @@ function Initials({ name, muted }: { name: string; muted?: boolean }) {
 
 function PersonStatus({ user, access }: { user: MessagingUser; access: MessagingConnection["access"] }) {
   if (user.status === "blocked") return <span className="text-[11px] text-destructive">Blocked</span>;
+  if (user.isOwner) {
+    return (
+      <span className="rounded-full bg-brand-soft px-1.5 py-0.5 text-[11px] font-medium text-brand-strong" title="Your agents' questions come here, and your replies answer them">
+        You
+      </span>
+    );
+  }
   if (user.status === "approved") return <span className="text-[11px] text-muted-foreground">Approved</span>;
   return access === "anyone" ? <span className="text-[11px] text-muted-foreground">Open access</span> : null;
 }

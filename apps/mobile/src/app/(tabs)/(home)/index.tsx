@@ -26,6 +26,7 @@ export default function Home() {
   const c = useColors();
   const computer = useSession((s) => s.connection?.instance.name ?? "Your computer");
   const status = useLive((s) => s.status);
+  const offlineReason = useLive((s) => s.offlineReason);
   const runs = useLive((s) => s.runs);
   const { byId: agents } = useAgents();
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
@@ -33,6 +34,7 @@ export default function Home() {
   const recent = useQuery({ queryKey: qk.conversationList("", workspaceId), queryFn: () => api.conversations.list({ limit: 100, workspaceId }) });
   const tasks = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }) });
   const missing = useQuery({ queryKey: qk.missingLogins, queryFn: api.missingLogins.open });
+  const questions = useQuery({ queryKey: qk.questions, queryFn: api.questions.open });
   const { screens } = useLiveScreens();
   const pull = usePullRefresh(async () => {
     reconnectNow();
@@ -99,7 +101,7 @@ export default function Home() {
               Can't reach {computer}
             </T>
             <T variant="footnote" muted>
-              Make sure it's awake and Tailscale is on, here and there. Tap to retry.
+              {offlineReason ?? "Make sure it's awake and connected to Tailscale or Godmode Cloud."} Tap to retry.
             </T>
           </View>
         </Card>
@@ -132,13 +134,22 @@ export default function Home() {
         )}
       </Animated.View>
 
-      {(vaultLocked || (missing.data?.length ?? 0) > 0) && (
+      {(vaultLocked || (missing.data?.length ?? 0) > 0 || (questions.data?.length ?? 0) > 0) && (
         <View style={styles.section}>
           <SectionTitle title="Needs you" />
           <Card>
             {vaultLocked && (
               <NeedsRow icon="lock" title="The vault is locked" body="Agents can't sign in until you unlock it on your computer." />
             )}
+            {questions.data?.slice(0, 4).map((q) => (
+              <NeedsRow
+                key={q.id}
+                icon="warning"
+                title={q.kind === "approval" ? `Needs your OK: ${q.title}` : q.title}
+                body={q.taskNumber != null ? `Task #${q.taskNumber} — reply to answer` : "Open the chat and reply to answer"}
+                onPress={() => router.push(`/chat/${q.conversationId}`)}
+              />
+            ))}
             {missing.data?.slice(0, 4).map((m) => (
               <NeedsRow key={m.id} icon="key" title={`${m.service}: ${m.kind === "missing_totp" ? "2FA code missing" : m.kind === "invalid_credential" ? "login doesn't work" : "login missing"}`} body={m.reason} />
             ))}
@@ -187,22 +198,24 @@ export default function Home() {
   );
 }
 
-function NeedsRow({ icon, title, body }: { icon: "lock" | "key"; title: string; body: string }) {
+function NeedsRow({ icon, title, body, onPress }: { icon: "lock" | "key" | "warning"; title: string; body: string; onPress?: () => void }) {
   const c = useColors();
   return (
-    <Row style={{ gap: space.md, padding: space.lg, alignItems: "flex-start" }}>
-      <View style={[styles.needsIcon, { backgroundColor: c.warningSoft }]}>
-        <Icon name={icon} size={14} color={c.warning} />
-      </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <T variant="subhead" style={{ fontWeight: "600" }}>
-          {title}
-        </T>
-        <T variant="footnote" muted numberOfLines={2}>
-          {body}
-        </T>
-      </View>
-    </Row>
+    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? "button" : undefined}>
+      <Row style={{ gap: space.md, padding: space.lg, alignItems: "flex-start" }}>
+        <View style={[styles.needsIcon, { backgroundColor: c.warningSoft }]}>
+          <Icon name={icon} size={14} color={c.warning} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <T variant="subhead" style={{ fontWeight: "600" }}>
+            {title}
+          </T>
+          <T variant="footnote" muted numberOfLines={2}>
+            {body}
+          </T>
+        </View>
+      </Row>
+    </Pressable>
   );
 }
 
