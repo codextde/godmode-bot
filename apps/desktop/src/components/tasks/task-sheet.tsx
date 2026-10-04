@@ -31,7 +31,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Agent, Task, TaskEvent, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
-import { MAX_TASK_TITLE_LENGTH, githubBranchUrl, isWaiting, reopenStatus } from "@godmode/shared";
+import { MAX_TASK_TITLE_LENGTH, githubBranchUrl, isWaiting, reopenStatus, waitsForTickets } from "@godmode/shared";
 import { WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { ChatFilesScope } from "@/components/chat/local-files";
@@ -242,8 +242,9 @@ function TaskDetail({
     mutationFn: (patch: TaskPatch) => api.tasks.update(task.id, patch),
     // Shown right away, not when the server answers. Not the description: its editor shows what it saved itself, and
     // must still tell the saved text from a failed save's (which it gets back as a draft).
+    // Nor what it waits for: the server answers with the tickets' numbers and titles.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onMutate: ({ description, ...patch }) => put((t) => ({ ...t, ...patch })),
+    onMutate: ({ description, waitsFor, ...patch }) => put((t) => ({ ...t, ...patch })),
     // Only this save's fields: another save still on its way keeps its optimistic value.
     onSuccess: (t, patch) => put((x) => ({ ...x, ...Object.fromEntries(Object.keys(patch).map((k) => [k, t[k as keyof Task]])) })),
     onError: (e) => {
@@ -340,6 +341,9 @@ function TaskDetail({
             <Prop label="Due date">
               <DueDateField value={task.dueDate} status={task.status} onChange={(dueDate) => save.mutate({ dueDate })} />
             </Prop>
+            <Prop label="Waits for">
+              <WaitsForField task={task} board={board} onChange={(waitsFor) => save.mutate({ waitsFor })} />
+            </Prop>
             <Prop label="Goal">
               <GoalSelect task={task} onChange={(goalId) => save.mutate({ goalId })} className={PROP_CONTROL} />
             </Prop>
@@ -404,7 +408,13 @@ function TaskDetail({
             )}
           </dl>
 
-          <WorkPanel task={task} agent={agent} onMove={onMove} onReason={(blockedReason) => save.mutate({ blockedReason })} />
+          <WorkPanel
+            task={task}
+            agent={agent}
+            onMove={onMove}
+            onReason={(blockedReason) => save.mutate({ blockedReason })}
+            onStartWithoutWaiting={() => save.mutate({ waitsFor: task.waitsFor.filter((w) => w.finished).map((w) => w.id) })}
+          />
 
           <PartsSection task={task} board={board} agents={agents} workspaces={workspaces} />
 
@@ -437,6 +447,43 @@ function TaskDetail({
 
       {started && task.agentId && !task.archivedAt && <FollowUp task={task} agent={agent} />}
     </div>
+  );
+}
+
+/** Tickets this one waits for: it starts once each is delivered. Chips to remove, a picker to add (no loops: the core says). */
+function WaitsForField({ task, board, onChange }: { task: Task; board: Task[]; onChange: (ids: string[]) => void }) {
+  const ADD = "add";
+  const ids = task.waitsFor.map((w) => w.id);
+  const choices = board.filter((t) => t.id !== task.id && !ids.includes(t.id) && t.status !== "done" && t.status !== "cancelled").sort((a, b) => b.number - a.number);
+  return (
+    <span className="flex min-h-8 flex-wrap items-center gap-1">
+      {task.waitsFor.map((w) => (
+        <span key={w.id} className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs", w.finished && "text-muted-foreground line-through decoration-foreground/30")} title={w.title}>
+          #{w.number} <span className="max-w-32 truncate">{w.title}</span>
+          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Stop waiting for #${w.number}`} onClick={() => onChange(ids.filter((id) => id !== w.id))}>
+            ×
+          </button>
+        </span>
+      ))}
+      {choices.length > 0 && ids.length < 10 && (
+        <Select value={ADD} onValueChange={(v) => v !== ADD && onChange([...ids, v])}>
+          <SelectTrigger aria-label="Wait for another ticket" className="h-7 w-auto gap-1 border-dashed px-2 text-xs text-muted-foreground">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" className="max-h-72">
+            <SelectItem value={ADD} disabled>
+              {ids.length ? "Also wait for…" : "Wait for a ticket…"}
+            </SelectItem>
+            {choices.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                #{t.number} {t.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {!ids.length && !choices.length && <span className="text-xs text-muted-foreground">Nothing</span>}
+    </span>
   );
 }
 
@@ -556,11 +603,14 @@ function WorkPanel({
   agent,
   onMove,
   onReason,
+  onStartWithoutWaiting,
 }: {
   task: Task;
   agent?: Agent;
   onMove: (task: Task, status: TaskStatus) => void;
   onReason: (reason: string) => void;
+  /** Drop what it waits for (it starts then). */
+  onStartWithoutWaiting: () => void;
 }) {
   const qc = useQueryClient();
   const activity = useTaskActivity(task);
@@ -888,6 +938,23 @@ function WorkPanel({
             <a href={pr.url} target="_blank" rel="noreferrer">
               {pr.number ? "Review" : "Open pull request"} <ArrowUpRight />
             </a>
+          </Button>
+        </div>
+      </Panel>
+    );
+  }
+
+  // Waits in Todo for tickets that aren't delivered yet: it starts by itself, or now without them.
+  if (agent && waitsForTickets(task)) {
+    const open = task.waitsFor.filter((w) => !w.finished);
+    return (
+      <Panel>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[13px] text-muted-foreground">
+            Waits for {open.map((w) => `#${w.number}`).join(", ")} — {agent.name} starts by itself once {open.length === 1 ? "it is" : "they are"} delivered, with {open.length === 1 ? "its" : "their"} result.
+          </p>
+          <Button size="sm" variant="outline" onClick={() => onStartWithoutWaiting()}>
+            <Play /> Start without waiting
           </Button>
         </div>
       </Panel>

@@ -1067,4 +1067,18 @@ ALTER TABLE tasks ADD COLUMN goal_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_tasks_goal ON tasks(goal_id) WHERE goal_id IS NOT NULL;
 `,
   },
+  {
+    id: 63,
+    name: "ticket_dependencies",
+    sql: /* sql */ `
+-- A ticket that waits for others: it starts once each of them is delivered (or done, cancelled, archived).
+CREATE TABLE IF NOT EXISTS task_dependencies (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  waits_for_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (task_id, waits_for_id)
+);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_waits_for ON task_dependencies(waits_for_id);
+`,
+  },
 ];

@@ -229,6 +229,8 @@ export interface Task {
   parentNumber: number | null;
   /** The goal this ticket serves (its agent is told why), or null. */
   goalId: ID | null;
+  /** Tickets this one waits for: it starts once each is delivered (or done, cancelled, archived). */
+  waitsFor: { id: ID; number: number; title: string; finished: boolean }[];
   /** Its own sub-tickets: how many, how many are still open (not delivered, done, cancelled or archived), and how many
    *  of those are blocked. null = none. */
   subtasks: { total: number; open: number; blocked: number } | null;
@@ -255,11 +257,15 @@ export interface TaskInput {
   parentId?: ID | null;
   /** The goal it serves (a part serves its ticket's goal). */
   goalId?: ID | null;
+  /** Tickets it waits for before it starts. */
+  waitsFor?: ID[];
 }
 
 export interface TaskPatch {
   /** The goal it serves; null = none. */
   goalId?: ID | null;
+  /** Tickets it waits for before it starts (replaces the list). */
+  waitsFor?: ID[];
   title?: string;
   description?: string;
   type?: TaskType;
@@ -309,6 +315,11 @@ export function isWaiting(t: Pick<Task, "status" | "followup" | "pause" | "runSt
 export function ticketList(numbers: readonly number[]): string {
   const n = numbers.map((x) => `#${x}`);
   return n.length < 2 ? (n[0] ?? "") : `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
+}
+
+/** In Todo, not started: it waits for tickets that aren't finished yet. */
+export function waitsForTickets(t: Pick<Task, "status" | "waitsFor">): boolean {
+  return t.status === "todo" && t.waitsFor.some((w) => !w.finished);
 }
 
 /** In progress, nothing running: the ticket waits until its sub-tickets are done (then its agent continues). */

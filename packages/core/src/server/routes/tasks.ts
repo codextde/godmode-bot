@@ -32,6 +32,7 @@ const status = z.enum(TASK_STATUSES as [string, ...string[]]);
 const type = z.enum(TASK_TYPES as [string, ...string[]]);
 const ticket = {
   goalId: id.nullable().optional(),
+  waitsFor: z.array(id).max(10).optional(),
   priority: z.enum(TASK_PRIORITIES as [string, ...string[]]).optional(),
   dueDate: z.string().max(10).nullable().optional(),
   labels: z.array(z.string().max(100)).max(50).optional(),

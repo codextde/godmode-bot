@@ -602,6 +602,7 @@ function taskSummary(t: Task, names: Map<string, string>, agentNames: Map<string
     ...(isWaiting(t) && t.followup ? { waitingUntil: t.followup.dueAt } : {}),
     ...(waitsForAnswer(t) ? { waitingForHuman: true } : {}),
     ...(t.goalId ? { goalId: t.goalId } : {}),
+    ...(t.waitsFor.length ? { waitsFor: t.waitsFor.map((w) => `#${w.number}${w.finished ? " (finished)" : ""}`) } : {}),
     ...(t.parentNumber ? { partOf: `#${t.parentNumber}` } : {}),
     ...(t.subtasks ? { parts: { total: t.subtasks.total, open: t.subtasks.open } } : {}),
     ...(waitsForSubtasks(t) ? { waitingForParts: true } : {}),
@@ -1448,9 +1449,10 @@ const TOOLS: ToolDef[] = [
       labels: z.array(z.string().max(100)).max(10).optional(),
       parentTaskId: z.string().optional().describe('Make it a part of this ticket (id or "#12"): that ticket waits until its parts are done, then its agent continues with their results'),
       goalId: z.string().optional().describe("The goal it serves (goals_list): its agent is told why"),
+      waitsFor: z.array(z.string()).max(10).optional().describe('Tickets it waits for ("#12" or ids): it starts once each is delivered, with their results in its brief'),
     }),
     when: managesSetup,
-    run: ({ start, parentTaskId, ...input }, { agent, ctx }) => {
+    run: ({ start, parentTaskId, waitsFor, ...input }, { agent, ctx }) => {
       const refusal = taskAssignRefusal(agent, ctx, input.agentId);
       if (refusal) return fail(refusal);
       const parentTask = parentTaskId ? findTask(parentTaskId) : null;
@@ -1462,6 +1464,7 @@ const TOOLS: ToolDef[] = [
         {
           ...(input as Parameters<typeof createTask>[0]),
           ...(parentTask ? { parentId: parentTask.id } : {}),
+          ...(waitsFor?.length ? { waitsFor: waitsFor.map((ref) => findTask(ref).id) } : {}),
           status: input.agentId && start !== false ? "todo" : "backlog",
         },
         `agent:${agent.id}`,
