@@ -1004,4 +1004,12 @@ ALTER TABLE routines ADD COLUMN notify TEXT NOT NULL DEFAULT 'failures';
 CREATE INDEX IF NOT EXISTS idx_runs_routine ON runs(routine_id, trigger, created_at);
 `,
   },
+  {
+    id: 55,
+    name: "budget_exempt",
+    sql: /* sql */ `
+-- A paused run the human started or let run past a used-up budget keeps that when it continues.
+ALTER TABLE paused_runs ADD COLUMN exempt INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];

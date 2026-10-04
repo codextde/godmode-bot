@@ -6,13 +6,14 @@
  */
 import type { Agent, BudgetOverview, BudgetReleaseInput, BudgetStatus } from "@godmode/shared";
 import { BUDGET_WARN_AT, formatUsd, monthName } from "@godmode/shared";
-import { all, get, getMeta, setMeta } from "../db";
+import { all, get, getMeta, run, setMeta } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { listAgents } from "../agents/service";
 import { resumeRun } from "../runner/runner";
 import { HttpError } from "../util";
 import { notify } from "./notifications";
+import { emitConversationUpdated } from "./conversations";
 import type { PausedRow } from "./pauses";
 import { getSettings } from "./settings";
 import { spentSince } from "./spend";
@@ -77,8 +78,14 @@ function stateOf(budget: number | null, spent: number): BudgetStatus["state"] {
   return spent >= budget ? "exhausted" : spent >= budget * BUDGET_WARN_AT ? "warning" : "ok";
 }
 
+/** Held runs that "Let them run" can continue (a switched-off agent's stay where they are). */
 function heldCount(where: string, ...params: string[]): number {
-  return get<{ n: number }>(`SELECT COUNT(*) AS n FROM paused_runs WHERE reason = 'budget' ${where}`, ...params)?.n ?? 0;
+  return (
+    get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM paused_runs WHERE reason = 'budget' AND agent_id IN (SELECT id FROM agents WHERE enabled = 1) ${where}`,
+      ...params,
+    )?.n ?? 0
+  );
 }
 
 export function budgetOverview(): BudgetOverview {
@@ -171,7 +178,17 @@ export function releaseHeld(by: "auto" | "user", only?: BudgetReleaseInput): num
   for (const row of rows) {
     const agent = agents.get(row.agent_id);
     if (!agent || !agent.enabled) continue;
-    if (by === "auto" && exhaustedBudget(agent)) continue;
+    if (by === "auto") {
+      const stop = exhaustedBudget(agent);
+      if (stop) {
+        // Still held — maybe by the other budget now: say which, so the chat points to the right one to raise.
+        if (stop.scope !== row.budget_scope || stop.budgetUsd !== row.budget_usd) {
+          run("UPDATE paused_runs SET budget_scope = ?, budget_usd = ? WHERE run_id = ?", stop.scope, stop.budgetUsd, row.run_id);
+          emitConversationUpdated(row.conversation_id);
+        }
+        continue;
+      }
+    }
     try {
       resumeRun(row, by);
       continued++;
@@ -200,12 +217,22 @@ export function exemptNotice(agent: Pick<Agent, "id" | "name" | "permissions">, 
 let unsubscribe: (() => void) | null = null;
 let releaseTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** A budget may have changed: held work with room continues (debounced; one query when nothing is held). */
+/** The budget amounts last seen: held work is looked at again only when one of them changes. */
+let lastAmounts: string | null = null;
+
+function amountsNow(): string {
+  return JSON.stringify([teamBudget(), ...listAgents().map((a) => [a.id, amount(a.permissions.monthlyBudgetUsd)])]);
+}
+
+/** A budget may have changed: held work with room continues (debounced; nothing happens unless an amount changed). */
 function budgetsMayHaveChanged(): void {
   if (releaseTimer) return;
   releaseTimer = setTimeout(() => {
     releaseTimer = null;
-    if (!heldCount("")) return;
+    const now = amountsNow();
+    if (now === lastAmounts) return;
+    lastAmounts = now;
+    if (!get("SELECT 1 FROM paused_runs WHERE reason = 'budget'")) return;
     try {
       releaseHeld("auto");
     } catch (err) {
@@ -215,6 +242,7 @@ function budgetsMayHaveChanged(): void {
 }
 
 export function startBudgets(): void {
+  lastAmounts = amountsNow();
   unsubscribe ??= bus.on((e) => {
     try {
       if (e.type === "run.finished" || e.type === "run.paused") checkThresholds(e.run.agentId);

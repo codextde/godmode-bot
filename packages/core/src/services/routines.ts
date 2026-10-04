@@ -631,7 +631,7 @@ export async function runRoutineNow(id: string, opts: { byHuman?: boolean } = {}
       return runConditionCheck(id, { manual: true });
     case "app":
     case "webhook": {
-      const { run: started } = await sendTestEvent(id);
+      const { run: started } = await sendTestEvent(id, undefined, { byHuman: opts.byHuman });
       if (!started) throw conflict(`"${routine.name}" is busy — the test event will run after the current run`);
       return started;
     }

@@ -62,6 +62,8 @@ export interface PausedRow {
   /** `budget` pauses: whose monthly budget holds the run, and how much it was. */
   budget_scope?: "agent" | "team" | null;
   budget_usd?: number | null;
+  /** 1: the human started it or let it run — a used-up budget doesn't hold it again. */
+  exempt?: number;
   created_at: string;
 }
 

@@ -72,7 +72,7 @@ import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
 import { spendReport } from "../services/spend";
 import { budgetOverview, budgetSentence, exhaustedBudget } from "../services/budgets";
-import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun } from "../runner/runner";
+import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun, runExempt } from "../runner/runner";
 import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow } from "../runner/prompt";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
@@ -1063,8 +1063,7 @@ const TOOLS: ToolDef[] = [
       const refusal = revealTargetRefusal(agent, target, "hand it tasks");
       if (refusal) return fail(refusal);
       // Unattended work doesn't spend past a used-up monthly budget by handing work on (a chat the human leads may).
-      const callerTrigger = get<{ trigger: string }>("SELECT trigger FROM runs WHERE id = ?", ctx.runId)?.trigger;
-      const stop = callerTrigger && !["chat", "manual", "api"].includes(callerTrigger) ? exhaustedBudget(target) : null;
+      const stop = runExempt(ctx.runId) ? null : exhaustedBudget(target);
       if (stop) {
         const human = getSettings().general.userName.trim() || "the human";
         return fail(
