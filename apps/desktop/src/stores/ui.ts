@@ -6,6 +6,8 @@ interface UiState {
   /** Workspace scope selected in the sidebar: "all" | "global" | workspace id */
   workspace: string;
   commandOpen: boolean;
+  /** The keyboard shortcuts list is open. */
+  shortcutsOpen: boolean;
   voiceMode: boolean;
   sidebarCollapsed: boolean;
   /** Show the live browser preview next to chats while the agent's browser is open. */
@@ -24,6 +26,7 @@ interface UiState {
   away: { since: string; until: string } | null;
   setWorkspace: (id: string) => void;
   setCommandOpen: (open: boolean) => void;
+  setShortcutsOpen: (open: boolean) => void;
   setVoiceMode: (on: boolean) => void;
   setSidebarCollapsed: (v: boolean) => void;
   setBrowserPanel: (v: boolean) => void;
@@ -40,6 +43,7 @@ export const useUi = create<UiState>()(
     (set) => ({
       workspace: "all",
       commandOpen: false,
+      shortcutsOpen: false,
       voiceMode: false,
       sidebarCollapsed: false,
       browserPanel: true,
@@ -51,6 +55,7 @@ export const useUi = create<UiState>()(
       away: null,
       setWorkspace: (workspace) => set({ workspace }),
       setCommandOpen: (commandOpen) => set({ commandOpen }),
+      setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
       setVoiceMode: (voiceMode) => set({ voiceMode }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setBrowserPanel: (browserPanel) => set({ browserPanel }),

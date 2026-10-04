@@ -66,6 +66,13 @@ import { useLive, useRunningCount } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { startPresence } from "@/lib/presence";
+import { GO_TO, ShortcutsDialog } from "@/components/layout/shortcuts-dialog";
+
+/** Typing in a field, or in a dialog: plain keys belong to it. */
+function typingIn(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || !!el.closest("[role=dialog]"));
+}
 
 interface NavItem {
   to: string;
@@ -98,8 +105,32 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Global shortcuts
   useEffect(() => {
+    // "G then T": the G, while the next key may still come.
+    let goAt = 0;
     const onKey = (e: KeyboardEvent) => {
       const mod = isMac ? e.metaKey : e.ctrlKey;
+      // Plain keys only outside text fields and dialogs (there they are typing).
+      if (!mod && !e.altKey && !typingIn(e.target)) {
+        const key = e.key.toLowerCase();
+        if (e.key === "?") {
+          e.preventDefault();
+          useUi.getState().setShortcutsOpen(true);
+          return;
+        }
+        if (goAt && Date.now() - goAt < 1500) {
+          goAt = 0;
+          const target = GO_TO.find((g) => g.key === key);
+          if (target) {
+            e.preventDefault();
+            navigate(target.to);
+          }
+          return;
+        }
+        if (key === "g" && !e.shiftKey) {
+          goAt = Date.now();
+          return;
+        }
+      }
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setCommandOpen(true);
@@ -217,6 +248,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </SidebarInset>
       <CommandPalette />
+      <ShortcutsDialog />
     </SidebarProvider>
   );
 }
