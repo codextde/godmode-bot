@@ -1,4 +1,5 @@
-import { request as httpRequest, type IncomingMessage } from "node:http";
+import { Agent, request as httpRequest, type IncomingMessage } from "node:http";
+import type { Socket } from "node:net";
 import { randomBytes } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
@@ -545,6 +546,54 @@ describe("phone gateway (/gw)", () => {
     await cloud.hub.flushUsage();
     const rows = await db.select({ n: sql<number>`count(*)::int` }).from(usageDaily);
     expect(rows[0]!.n).toBe(0);
+  });
+
+  test("health checks and pairing without a phone token cost the owner no usage", async () => {
+    computer.onRequest = (req) => void computer.respond(req, 200, [["content-type", "application/json"]], '{"ok":true}');
+    expect((await call(cloud.port, "GET", gw("/api/health"))).status).toBe(200);
+    expect((await call(cloud.port, "POST", gw("/api/mobile/pair"), { "content-type": "application/json" }, '{"code":"x"}')).status).toBe(200);
+    await cloud.hub.flushUsage();
+    expect(await db.select().from(usageDaily)).toEqual([]);
+    expect((await call(cloud.port, "GET", gw("/api/conversations"), token)).status).toBe(200);
+    await cloud.hub.flushUsage();
+    const [row] = await db.select().from(usageDaily);
+    expect(row).toMatchObject({ requests: 1, bytesOut: 11 });
+  });
+
+  test("an IPv6 address counts by its /64 for the 401 lock-out", async () => {
+    computer.onRequest = (req) => void computer.respond(req, 401, [["content-type", "application/json"]], '{"code":"unauthorized"}');
+    for (let i = 1; i <= 20; i++) {
+      const from = { ...token, "x-forwarded-for": `2001:db8:1:2::${i.toString(16)}` };
+      expect((await call(cloud.port, "GET", gw("/api/x"), from)).status).toBe(401);
+    }
+    expect((await call(cloud.port, "GET", gw("/api/x"), { ...token, "x-forwarded-for": "2001:db8:1:2:ffff:ffff:ffff:ffff" })).status).toBe(429);
+    expect((await call(cloud.port, "GET", gw("/api/x"), { ...token, "x-forwarded-for": "2001:db8:1:3::1" })).status).toBe(401);
+  });
+
+  test("refusals on a keep-alive connection don't pile up close listeners", async () => {
+    const sockets: Socket[] = [];
+    cloud.server.on("connection", (socket: Socket) => sockets.push(socket));
+    const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+    try {
+      for (let i = 0; i < 15; i++) {
+        const status = await new Promise<number>((resolve, reject) => {
+          const req = httpRequest(
+            { host: "127.0.0.1", port: cloud.port, method: "POST", path: gw("/api/conversations"), agent, headers: { "content-type": "application/octet-stream" } },
+            (res) => {
+              res.resume();
+              res.on("end", () => resolve(res.statusCode ?? 0));
+            },
+          );
+          req.on("error", reject);
+          req.end(Buffer.alloc(256 * 1024));
+        });
+        expect(status).toBe(404);
+      }
+      expect(sockets).toHaveLength(1);
+      expect(sockets[0]!.listenerCount("close")).toBeLessThan(5);
+    } finally {
+      agent.destroy();
+    }
   });
 
   test("at most 64 phone streams are open at once", async () => {

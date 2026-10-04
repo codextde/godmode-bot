@@ -64,6 +64,8 @@ export function safeNext(value: string | null | undefined): string | null {
     return null;
   }
   if (url.origin !== origin) return null;
+  // "/.//evil.com" stays on this origin but normalises to "//evil.com", which the browser reads as another host.
+  if (url.pathname.startsWith("//")) return null;
   return url.pathname + url.search + url.hash;
 }
 

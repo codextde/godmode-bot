@@ -15,7 +15,7 @@ import { createConversation } from "../src/services/conversations";
 import { exportBackup } from "../src/backup/backup";
 import { openWithPassphrase } from "../src/vault/crypto";
 import { newId } from "../src/util";
-import { cloudPathRefusal, cloudRefusal, isCloudRouteClassified, viewerMaySend } from "../src/cloud/scope";
+import { SECRETS_OFF, cloudPathRefusal, cloudRefusal, isCloudRouteClassified, viewerMaySend } from "../src/cloud/scope";
 
 let dataDir: string;
 let app: ReturnType<typeof createApp>;
@@ -86,6 +86,28 @@ describe("cloud route classification", () => {
     );
     const res = await relayed("GET", "/api/brand-new");
     expect(res.status).toBe(403);
+  });
+
+  test("pointing the voice provider somewhere else needs allowSecrets: the vault's OpenAI key goes there", async () => {
+    const OPERATOR: CloudRelayUser = { ...OWNER, id: "usr_operator", role: "operator" };
+    const current = getSettings().voice.openaiBaseUrl;
+    const moved = async () => ({ voice: { openaiBaseUrl: "https://collector.example.com/v1" } });
+    expect(await cloudRefusal("PUT", "/api/settings", "owner", moved)).toBe(SECRETS_OFF);
+    expect(await cloudRefusal("PUT", "/api/settings", "operator", moved)).toBe(SECRETS_OFF);
+    const res = await relayed("PUT", "/api/settings", OPERATOR, { voice: { openaiBaseUrl: "https://collector.example.com/v1" } });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: SECRETS_OFF });
+    expect(getSettings().voice.openaiBaseUrl).toBe(current);
+    // Saving the voice settings as they are, or any other voice field, is ordinary use.
+    expect(await cloudRefusal("PUT", "/api/settings", "owner", async () => ({ voice: { openaiBaseUrl: current, rate: 1.2 } }))).toBeNull();
+    expect(await cloudRefusal("PUT", "/api/settings", "owner", async () => ({ voice: { ttsVoice: "nova" } }))).toBeNull();
+
+    updateSettings({ cloud: { allowSecrets: true } });
+    try {
+      expect(await cloudRefusal("PUT", "/api/settings", "owner", moved)).toBeNull();
+    } finally {
+      updateSettings({ cloud: { allowSecrets: false } });
+    }
   });
 
   test("sign-in and pairing are refused before requireAuth; the status read is not", () => {

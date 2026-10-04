@@ -4,7 +4,7 @@
  */
 import { and, eq, gt } from "drizzle-orm";
 import { z } from "zod";
-import type { CloudLinkPollResponse, CloudLinkStartResponse } from "@godmode/shared";
+import { CloudClose, type CloudLinkPollResponse, type CloudLinkStartResponse } from "@godmode/shared";
 import { actorOf, audit } from "../audit";
 import type { SessionContext } from "../auth/sessions";
 import { deviceAllowance } from "../billing/entitlements";
@@ -143,13 +143,21 @@ export async function approveLink(userCode: string, ctx: SessionContext): Promis
         .where(and(eq(linkRequests.id, request.id), eq(linkRequests.status, "pending"), gt(linkRequests.expiresAt, new Date())))
         .returning();
       if (!claimed) throw gone();
-      const fields = { name: request.name, platform: request.platform, appVersion: request.appVersion, secretHash: request.secretHash };
-      const [row] = existing
-        ? await tx.update(devices).set(fields).where(eq(devices.id, existing.id)).returning()
-        : await tx
-            .insert(devices)
-            .values({ id: newId("dvc"), userId: ctx.user.id, instanceId: request.instanceId, ...fields })
-            .returning();
+      // Anyone can learn the instance id (the phone gateway's health check names it), so a request with it proves
+      // nothing: it gets a new computer, and the old record goes with its id, shares and gateway address.
+      if (existing) await tx.delete(devices).where(eq(devices.id, existing.id));
+      const [row] = await tx
+        .insert(devices)
+        .values({
+          id: newId("dvc"),
+          userId: ctx.user.id,
+          instanceId: request.instanceId,
+          name: request.name,
+          platform: request.platform,
+          appVersion: request.appVersion,
+          secretHash: request.secretHash,
+        })
+        .returning();
       if (!row) throw gone();
       await tx.update(linkRequests).set({ deviceId: row.id }).where(eq(linkRequests.id, request.id));
       return row;
@@ -159,7 +167,9 @@ export async function approveLink(userCode: string, ctx: SessionContext): Promis
     throw err;
   }
 
-  await audit(actorOf(ctx), "device.link", { type: "device", id: device.id }, { name: device.name, replaced: Boolean(existing), requestIp: request.ip });
+  // It was offline a moment ago; should it have connected since, its credentials are gone now.
+  if (existing) relayHub().disconnect(existing.id, CloudClose.BadCredential, "Linked again as a new computer");
+  await audit(actorOf(ctx), "device.link", { type: "device", id: device.id }, { name: device.name, replaced: existing?.id ?? null, requestIp: request.ip });
   void notifyLinked(ctx.user.email, device.name);
   return { device };
 }
