@@ -1,8 +1,9 @@
 # Godmode for iOS and Android
 
-The phone app for Godmode: hand over tasks, follow answers as they stream, stop runs, run automations, and watch an
-agent's browser, shared screen or VM live (tap to take control). The chat input works like the desktop's: photos and
-files, Claude Code's slash commands, a queue for messages sent while the agent works, and the model, effort and Ultracode. It controls the Godmode running on your computer and
+The phone app for Godmode: hand over tasks with photos and files, follow answers as they stream, stop runs, run
+automations, and watch an agent's browser, shared screen or VM live (tap to take control). The chat input works like
+the desktop's: photos and files, Claude Code's slash commands, a queue for messages sent while the agent works, and the
+model, effort and Ultracode. It controls the Godmode running on your computer and
 nothing else.
 
 Built with [Expo](https://expo.dev) SDK 57 and Expo Router: native tabs and headers (Liquid Glass on iOS 26),
@@ -66,6 +67,6 @@ src/app/                routes (Expo Router)
   compose.tsx           new chat (sheet)
   settings.tsx          connection, Face ID lock, disconnect (sheet)
   welcome.tsx scan.tsx pair.tsx   pairing
-src/lib/                api (address failover), realtime (WebSocket), session (Keychain), live state, theme
-src/components/         glass, icons (SF Symbols / Material Symbols), rows, markdown, composer, live views
+src/lib/                api (address failover), realtime (WebSocket), session (Keychain), live state, attachments, theme
+src/components/         glass, icons (SF Symbols / Material Symbols), rows, markdown, composer, attachments, live views
 ```

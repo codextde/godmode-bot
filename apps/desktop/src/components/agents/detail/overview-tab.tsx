@@ -13,6 +13,8 @@ import { RunDetailSheet } from "@/components/runs/run-detail-sheet";
 import { formatCost, formatDuration } from "@/components/runs/run-status";
 import { RunTaskDialog } from "../agent-actions";
 import { Plate } from "./plate";
+import { useBudgets } from "@/lib/hooks";
+import { BudgetMeter } from "@/components/budgets/budget-meter";
 
 export function OverviewTab({ agent }: { agent: Agent }) {
   const runsQ = useRuns(agent.id);
@@ -50,6 +52,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
   return (
     <div className="space-y-6">
       <Plate agent={agent} onRunTask={() => setRunTask(true)} />
+      <AgentBudget agent={agent} />
       <RunTaskDialog agent={agent} open={runTask} onOpenChange={setRunTask} />
 
       <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
@@ -174,5 +177,31 @@ function Sparkbars({ values }: { values: number[] }) {
         />
       ))}
     </div>
+  );
+}
+
+/** The agent's monthly budget (only when it has one, or the team's is used up). */
+function AgentBudget({ agent }: { agent: Agent }) {
+  const { data } = useBudgets();
+  if (!data) return null;
+  const own = data.agents.find((b) => b.agentId === agent.id);
+  const teamOut = data.team.state === "exhausted";
+  if (!own?.budgetUsd && !teamOut) return null;
+  return (
+    <section aria-label="Budget" className="rounded-xl border bg-card p-4 shadow-card">
+      <h2 className="mb-2 text-sm font-medium tracking-[-0.01em]">Budget</h2>
+      {own?.budgetUsd ? (
+        <BudgetMeter status={own} resetsAt={data.resetsAt} whose={`${agent.name}'s`} setLink={`/agents/${agent.id}/settings#permissions`} release={{ scope: "agent", agentId: agent.id }} />
+      ) : null}
+      {teamOut && (
+        <p className={cn("text-[13px] text-muted-foreground", own?.budgetUsd && "mt-2")}>
+          The team's budget for this month is used up too —{" "}
+          <Link to="/settings/ai" className="underline-offset-2 hover:text-foreground hover:underline">
+            see Settings
+          </Link>
+          .
+        </p>
+      )}
+    </section>
   );
 }

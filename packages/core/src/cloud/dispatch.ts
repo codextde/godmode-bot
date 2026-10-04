@@ -49,6 +49,7 @@ const log = logger("cloud");
 const HEAD_MAX = 64 * 1024;
 
 export const BROWSER_ACCESS_OFF = "Browser access is turned off on this computer. Turn it on under Settings → Cloud.";
+const COULD_NOT_ANSWER = "The computer could not answer.";
 const PHONE_ACCESS_OFF = "This computer doesn't accept phones through Godmode Cloud right now.";
 
 export interface CloudApp {
@@ -367,7 +368,11 @@ export class CloudConnection {
       throw new CloudProtocolError("ReqHead can't be read.");
     }
     s.channel = head.channel;
-    void this.serve(s, head);
+    void this.serve(s, head).catch((err: unknown) => {
+      // Anything outside the handler (the announcement, reading the answer) must still end the stream.
+      if (!s.over) log.warn("relayed request failed", err);
+      this.abort(s, COULD_NOT_ANSWER);
+    });
   }
 
   private async serve(s: HttpStream, head: CloudReqHead) {
@@ -406,7 +411,7 @@ export class CloudConnection {
       res = await (head.channel === "mobile" ? servePhoneRequest(this.opts.handler.app, req, env) : this.opts.handler.app.fetch(req, env));
     } catch (err) {
       if (!s.over) log.warn("relayed request failed", err);
-      return this.abort(s, "The computer could not answer.");
+      return this.abort(s, COULD_NOT_ANSWER);
     }
     await this.respond(s, res, method === "HEAD");
   }
@@ -514,7 +519,12 @@ export class CloudConnection {
       data = { id: newId("ws"), subscriptions: new Set(), auth: "device", deviceId: device.id };
     } else {
       data = { id: newId("ws"), subscriptions: new Set(), auth: "cloud" };
-      this.opts.onCloudUse?.(open.user!, ip);
+      try {
+        this.opts.onCloudUse?.(open.user!, ip);
+      } catch (err) {
+        log.warn("could not announce a cloud user", err);
+        return this.reject(id, 500, COULD_NOT_ANSWER);
+      }
     }
     const viewer = open.channel === "cloud" && open.user!.role === "viewer";
     const socket = new VirtualSocket(this, this.opts.handler.websocket, id, open.channel, viewer, data);

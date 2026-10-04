@@ -211,4 +211,24 @@ describe("owner accounts", () => {
   test("the default role setting follows the granting rule too", async () => {
     await expect(writeSettings("auth", { defaultRoleKey: "billing" }, SYSTEM)).rejects.toMatchObject({ status: 400 });
   });
+
+  test("the role open sign-ups get holds only personal permissions", async () => {
+    const owner = await makeUser({ role: "owner" });
+    const signup = await createRole({ name: "Sign-up", permissions: ["devices.link"] }, owner);
+    const reader = await createRole({ name: "Reader", permissions: ["devices.link", "users.read"] }, owner);
+    // Not the admin area, but still more than a person's own things.
+    await expect(writeSettings("auth", { defaultRoleKey: reader.key }, SYSTEM)).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining("only the Personal permissions"),
+    });
+    await writeSettings("auth", { defaultRoleKey: signup.key }, SYSTEM);
+    for (const extra of ["users.read", "devices.read", "audit.read", "admin.access"]) {
+      await expect(updateRole(signup.id, { permissions: ["devices.link", extra] }, owner)).rejects.toMatchObject({ status: 400 });
+    }
+    await expect(updateRole(signup.id, { permissions: ["devices.link", "devices.share", "billing.self"] }, owner)).resolves.toMatchObject({
+      permissions: ["devices.link", "devices.share", "billing.self"],
+    });
+    // Another role is not affected.
+    await expect(updateRole(reader.id, { permissions: ["devices.link", "users.read", "audit.read"] }, owner)).resolves.toBeDefined();
+  });
 });

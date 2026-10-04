@@ -1,34 +1,18 @@
 import { Button as MenuButton, Host, Image as SwiftImage, Menu } from "@expo/ui/swift-ui";
 import { accessibilityLabel, background, contentShape, frame, shapes } from "@expo/ui/swift-ui/modifiers";
-import { Image } from "expo-image";
 import { useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import type { SlashCommand } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
+import { AttachmentTray } from "./attachments";
 import { Glass } from "./glass";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
-import {
-  findCommand,
-  formatBytes,
-  MAX_ATTACHMENTS,
-  pickAttachments,
-  rankCommands,
-  readAttachments,
-  useDraft,
-  useDrafts,
-  useSlashCommands,
-  type AttachSource,
-  type PendingAttachment,
-} from "@/lib/composer";
 import { errorText } from "@/lib/api";
+import { addFiles, MAX_FILES, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
+import { findCommand, rankCommands, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
 import { radius, space, type, useColors } from "@/lib/theme";
-
-export interface ComposerInput {
-  content: string;
-  attachments: { name: string; mime: string; data: string }[];
-}
 
 export interface ComposerHandle {
   focus: () => void;
@@ -55,7 +39,7 @@ export function Composer({
   sendLabel,
   ref,
 }: {
-  onSend: (input: ComposerInput) => Promise<unknown> | void;
+  onSend: (text: string, files: PendingFile[]) => Promise<unknown> | void;
   onStop?: () => void;
   running?: boolean;
   placeholder?: string;
@@ -80,7 +64,6 @@ export function Composer({
   const { text, files } = draft;
   const setText = (t: string) => setDraft(draftKey, { text: t });
   const [sending, setSending] = useState(false);
-  const [reading, setReading] = useState(false);
   const [focused, setFocused] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState<string | null>(null);
   const [menuForced, setMenuForced] = useState(false);
@@ -99,7 +82,7 @@ export function Composer({
     },
   }));
 
-  const canSend = (text.trim().length > 0 || files.length > 0) && !sending && !reading && !disabled;
+  const canSend = (text.trim().length > 0 || files.length > 0) && !sending && !disabled;
   const showStop = !!running && !!onStop && !canSend && !sending;
 
   const slashToken = /^\/([\w:.-]*)$/.exec(text)?.[1] ?? null;
@@ -129,29 +112,14 @@ export function Composer({
     input.current?.focus();
   };
 
-  const attach = async (source: AttachSource) => {
-    const room = MAX_ATTACHMENTS - files.length;
-    if (room <= 0) {
-      Alert.alert(`You can attach up to ${MAX_ATTACHMENTS} files.`);
-      return;
-    }
-    try {
-      const picked = await pickAttachments(source, room);
-      if (!picked.length) return;
-      setReading(true);
-      const current = useDrafts.getState().drafts[draftKey]?.files ?? [];
-      const read = await readAttachments(picked, current);
-      if (read.files.length) setDraft(draftKey, { files: [...current, ...read.files] });
-      if (read.skipped) Alert.alert("Some files weren't added", read.skipped);
-    } catch (err) {
-      Alert.alert("Couldn't add the file", errorText(err));
-    } finally {
-      setReading(false);
-    }
+  const attach = async (source: FileSource) => {
+    const picked = await pickFrom(source, MAX_FILES - files.length);
+    if (!picked.length) return;
+    const current = useDrafts.getState().drafts[draftKey]?.files ?? [];
+    setDraft(draftKey, { files: addFiles(current, picked) });
   };
 
   const removeFile = (id: string) => {
-    tap();
     setDraft(draftKey, { files: files.filter((f) => f.id !== id) });
   };
 
@@ -164,7 +132,7 @@ export function Composer({
     setMenuForced(false);
     useDrafts.getState().clear(draftKey);
     try {
-      await onSend({ content, attachments: sent.map(({ name, mime, data }) => ({ name, mime, data })) });
+      await onSend(content, sent);
     } catch {
       // Nothing gets lost: the caller shows the error, the field gets the text and files back next to anything new.
       const cur = useDrafts.getState().drafts[draftKey];
@@ -181,7 +149,7 @@ export function Composer({
     <View style={styles.root}>
       {menuOpen ? <SlashMenu items={menuItems} grouped={!menuQuery} loading={commands.isLoading} error={commands.error} onPick={pickCommand} /> : null}
       <Glass style={styles.capsule} fallback={c.surface}>
-        {files.length > 0 || reading ? <Files files={files} reading={reading} onRemove={removeFile} /> : null}
+        {files.length > 0 ? <AttachmentTray files={files} onRemove={removeFile} /> : null}
         {hint ? <SlashHint command={hint} /> : null}
         <TextInput
           ref={input}
@@ -192,7 +160,7 @@ export function Composer({
           }}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder={placeholder}
+          placeholder={files.length ? "Add a message" : placeholder}
           placeholderTextColor={c.textFaint}
           multiline
           autoFocus={autoFocus}
@@ -204,7 +172,7 @@ export function Composer({
         <View style={styles.toolbar}>
           {allowFiles ? (
             // A new native menu when the strip above it opens or closes: SwiftUI hosts keep their old place otherwise.
-            <AttachButton key={files.length > 0 || reading ? "below-files" : "alone"} onPick={(s) => void attach(s)} disabled={disabled || files.length >= MAX_ATTACHMENTS} />
+            <AttachButton key={files.length > 0 ? "below-files" : "alone"} onPick={(s) => void attach(s)} disabled={disabled || sending || files.length >= MAX_FILES} />
           ) : null}
           {agentId ? (
             <Pressable
@@ -253,7 +221,7 @@ export function ComposerDock({ children }: { children: ReactNode }) {
 }
 
 /** Photos, camera and files: the system menu on iOS, a choice dialog on Android. */
-function AttachButton({ onPick, disabled }: { onPick: (source: AttachSource) => void; disabled?: boolean }) {
+function AttachButton({ onPick, disabled }: { onPick: (source: FileSource) => void; disabled?: boolean }) {
   const c = useColors();
   if (process.env.EXPO_OS === "ios") {
     return (
@@ -270,7 +238,7 @@ function AttachButton({ onPick, disabled }: { onPick: (source: AttachSource) => 
             }
             modifiers={[accessibilityLabel("Attach")]}
           >
-            <MenuButton label="Photo Library" systemImage="photo.on.rectangle" onPress={() => onPick("photos")} />
+            <MenuButton label="Photo Library" systemImage="photo.on.rectangle" onPress={() => onPick("library")} />
             <MenuButton label="Take Photo" systemImage="camera" onPress={() => onPick("camera")} />
             <MenuButton label="Choose Files" systemImage="folder" onPress={() => onPick("files")} />
           </Menu>
@@ -286,56 +254,15 @@ function AttachButton({ onPick, disabled }: { onPick: (source: AttachSource) => 
       onPress={() => {
         tap();
         Alert.alert("Attach", "Add photos or files to the message.", [
-          { text: "Photos", onPress: () => onPick("photos") },
+          { text: "Photos", onPress: () => onPick("library") },
           { text: "Camera", onPress: () => onPick("camera") },
           { text: "Files", onPress: () => onPick("files") },
         ], { cancelable: true });
       }}
       style={({ pressed }) => [styles.tool, { backgroundColor: c.sunken, opacity: disabled ? 0.4 : pressed ? 0.6 : 1 }]}
     >
-      <Icon name="attach" size={17} color={c.textMuted} weight="semibold" />
+      <Icon name="plus" size={17} color={c.textMuted} weight="semibold" />
     </Pressable>
-  );
-}
-
-function Files({ files, reading, onRemove }: { files: PendingAttachment[]; reading: boolean; onRemove: (id: string) => void }) {
-  const c = useColors();
-  return (
-    <Animated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.files} keyboardShouldPersistTaps="always">
-        {files.map((f) => (
-          <Animated.View key={f.id} entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.fileWrap}>
-            {f.uri ? (
-              <Image source={{ uri: f.uri }} style={[styles.thumb, { backgroundColor: c.sunken }]} contentFit="cover" accessibilityLabel={f.name} />
-            ) : (
-              <View style={[styles.fileChip, { backgroundColor: c.sunken }]}>
-                <View style={[styles.fileIcon, { backgroundColor: c.surface }]}>
-                  <Icon name="doc" size={16} color={c.textMuted} />
-                </View>
-                <View style={{ flexShrink: 1 }}>
-                  <T variant="footnote" numberOfLines={1} style={{ fontWeight: "600" }}>
-                    {f.name}
-                  </T>
-                  <T variant="caption" muted>
-                    {formatBytes(f.size)}
-                  </T>
-                </View>
-              </View>
-            )}
-            <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${f.name}`} hitSlop={8} onPress={() => onRemove(f.id)} style={styles.removeFile}>
-              <View style={[styles.removeDot, { backgroundColor: c.background }]}>
-                <Icon name="remove" size={20} color={c.textMuted} />
-              </View>
-            </Pressable>
-          </Animated.View>
-        ))}
-        {reading ? (
-          <View style={[styles.thumb, styles.center, { backgroundColor: c.sunken }]}>
-            <ActivityIndicator size="small" color={c.textMuted} />
-          </View>
-        ) : null}
-      </ScrollView>
-    </Animated.View>
   );
 }
 
@@ -466,53 +393,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: "center",
     justifyContent: "center",
-  },
-  files: {
-    gap: 10,
-    paddingHorizontal: space.md,
-    paddingTop: 10,
-    paddingBottom: 2,
-  },
-  fileWrap: {
-    paddingTop: 6,
-    paddingRight: 6,
-  },
-  thumb: {
-    width: 60,
-    height: 60,
-    borderRadius: radius.md,
-    borderCurve: "continuous",
-  },
-  center: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 6,
-  },
-  fileChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    height: 60,
-    maxWidth: 200,
-    paddingLeft: 10,
-    paddingRight: 14,
-    borderRadius: radius.md,
-    borderCurve: "continuous",
-  },
-  fileIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  removeFile: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-  },
-  removeDot: {
-    borderRadius: radius.pill,
   },
   hint: {
     flexDirection: "row",

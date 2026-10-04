@@ -5,9 +5,21 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { characterGreeting, type Agent, type ConversationWithMessages, type Message, type MessageBlock, type QueuedMessage } from "@godmode/shared";
+import {
+  characterGreeting,
+  type Agent,
+  type ConversationWithMessages,
+  type Message,
+  type MessageBlock,
+  type QueuedMessage,
+  type RetryMode,
+  budgetPauseTitle,
+  retryHelps,
+  retryModeOf,
+  runEndOf,
+} from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
-import { Composer, ComposerDock, type ComposerHandle, type ComposerInput } from "@/components/composer";
+import { Composer, ComposerDock, type ComposerHandle } from "@/components/composer";
 import { HeaderActions } from "@/components/header-actions";
 import { LiveStrip } from "@/components/live-strip";
 import { AssistantMessage, UserMessage } from "@/components/message";
@@ -16,6 +28,7 @@ import { ModelButton } from "@/components/model-button";
 import { QueueTray } from "@/components/queue-tray";
 import { EmptyState, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { setQueue } from "@/lib/composer";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { useAgents } from "@/lib/hooks";
@@ -72,7 +85,7 @@ export default function Chat() {
   // While the agent works, is paused or older messages still wait, a new message joins the queue.
   const queueing = !waiting && (!!run || !!paused || queue.length > 0);
 
-  const send = async ({ content, attachments }: ComposerInput) => {
+  const send = async (content: string, files: PendingFile[]) => {
     const key = qk.conversation(id);
     const queueId = newQueueId();
     const tempId = `pending-${queueId}`;
@@ -80,7 +93,7 @@ export default function Chat() {
     const draft = {
       conversationId: id,
       content,
-      attachments: attachments.map((a) => ({ name: a.name, mime: a.mime, path: "", size: Math.round((a.data.length * 3) / 4) })),
+      attachments: files.map((f) => ({ name: f.name, mime: f.mime, path: "", size: f.size })),
       createdAt: new Date().toISOString(),
     };
     if (queueing) {
@@ -93,7 +106,7 @@ export default function Chat() {
       requestAnimationFrame(() => list.current?.scrollToEnd({ animated: true }));
     }
     try {
-      const result = await api.conversations.send(id, { content, attachments, queueId });
+      const result = await api.conversations.send(id, { content, attachments: await encodeFiles(files), queueId });
       pendingQueued.delete(queueId);
       if ("queued" in result) {
         queryClient.setQueryData<ConversationWithMessages>(key, (old) => {
@@ -149,6 +162,22 @@ export default function Chat() {
       .catch((err) => Alert.alert("Couldn't continue", errorText(err)));
   };
 
+  // The latest turn ended early (failed, stopped, cut off): one tap picks it up.
+  const ended = !run && !paused && conversation.data ? endedTurn(conversation.data) : null;
+  const retry = () => {
+    if (!ended) return;
+    tap();
+    api.conversations
+      .retry(id, ended.runId)
+      .then((result) => {
+        queryClient.setQueryData<ConversationWithMessages>(qk.conversation(id), (old) =>
+          old && !old.messages.some((m) => m.id === result.message.id) ? { ...old, messages: [...old.messages, result.message] } : old,
+        );
+        useLive.getState().runStarted(result.run);
+      })
+      .catch((err) => Alert.alert("Couldn't pick this up", errorText(err)));
+  };
+
   const title = conversation.data?.title || "Chat";
   const primary = screens[0];
 
@@ -182,7 +211,14 @@ export default function Chat() {
         {paused?.reason === "question" ? (
           <AskingStrip agentName={agent?.name ?? "The agent"} approval={paused.question?.kind === "approval"} />
         ) : paused ? (
-          <PausedStrip limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null} auto={paused.auto} onContinue={resume} />
+          <PausedStrip
+            limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null}
+            held={paused.reason === "budget" && paused.budget ? budgetPauseTitle(paused.budget, agent?.name ?? "The agent", paused.pausedAt) : null}
+            auto={paused.auto}
+            onContinue={resume}
+          />
+        ) : ended ? (
+          <EndedStrip mode={ended.mode} onRetry={retry} />
         ) : null}
         <QueueTray
           conversationId={id}
@@ -201,7 +237,7 @@ export default function Chat() {
             onSend={send}
             onStop={stop}
             running={!!run && !paused}
-            sendLabel={waiting ? "Send answer" : paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : queueing ? "Queue message" : null}
+            sendLabel={waiting ? "Send answer" : paused ? (paused.reason === "user" ? "Send and continue" : "Queue message") : queueing ? "Queue message" : null}
             placeholder={
               !agent
                 ? "Message"
@@ -209,11 +245,13 @@ export default function Chat() {
                   ? `Answer ${agent.name}`
                   : paused?.reason === "user"
                     ? `Tell ${agent.name} how to go on`
-                    : paused
+                    : paused?.reason === "limit"
                       ? `Message ${agent.name} — goes along after the reset`
-                      : run
-                        ? `Queue a message for ${agent.name}`
-                        : `Message ${agent.name}, or / for commands`
+                      : paused
+                        ? `Message ${agent.name} — goes along when it continues`
+                        : run
+                          ? `Queue a message for ${agent.name}`
+                          : `Message ${agent.name}, or / for commands`
             }
             disabled={agent ? !agent.enabled : false}
             trailing={
@@ -247,17 +285,50 @@ function AskingStrip({ agentName, approval }: { agentName: string; approval: boo
 }
 
 /** Above the composer while the chat's run stands still. */
-function PausedStrip({ limit, auto, onContinue }: { limit: string | null; auto: boolean; onContinue: () => void }) {
+function PausedStrip({ limit, held, auto, onContinue }: { limit: string | null; held: string | null; auto: boolean; onContinue: () => void }) {
   const c = useColors();
   return (
     <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
-      <Icon name={limit ? "clock" : "pause"} size={15} color={limit ? c.warning : c.textMuted} />
+      <Icon name={limit || held ? "clock" : "pause"} size={15} color={limit || held ? c.warning : c.textMuted} />
       <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
-        {limit ? `Claude's ${limit} is reached${auto ? " — continues by itself after the reset" : ""}` : "Paused — continues where it stopped"}
+        {held
+          ? `${held} — raise the budget on your computer, or let it run.`
+          : limit
+            ? `Claude's ${limit} is reached${auto ? " — continues by itself after the reset" : ""}`
+            : "Paused — continues where it stopped"}
       </T>
-      <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel="Continue">
+      <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel={held ? "Let it run" : "Continue"}>
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
-          {limit ? "Try now" : "Continue"}
+          {held ? "Let it run" : limit ? "Try now" : "Continue"}
+        </T>
+      </Pressable>
+    </View>
+  );
+}
+
+/** The chat's last turn, when it ended early and trying again can help (not in a ticket's or a chat platform's chat). */
+function endedTurn(conv: ConversationWithMessages): { runId: string; mode: RetryMode } | null {
+  if (conv.origin === "task" || conv.origin === "dream" || conv.origin === "slack" || conv.origin === "telegram" || conv.origin === "teams") return null;
+  const last = conv.messages[conv.messages.length - 1];
+  if (last?.role !== "assistant" || !last.runId) return null;
+  const end = last.blocks[last.blocks.length - 1];
+  const text = end?.type === "error" ? end.text : end?.type === "notice" && runEndOf(end.text) ? end.text : null;
+  if (text === null || !retryHelps(runEndOf(text))) return null;
+  return { runId: last.runId, mode: retryModeOf(last.blocks) === "continue" && conv.claudeSessionId ? "continue" : "again" };
+}
+
+/** Above the composer when the last turn ended early. */
+function EndedStrip({ mode, onRetry }: { mode: RetryMode; onRetry: () => void }) {
+  const c = useColors();
+  return (
+    <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
+      <Icon name="warning" size={15} color={c.textMuted} />
+      <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
+        {mode === "continue" ? "Stopped before it was done" : "Didn't get through"}
+      </T>
+      <Pressable onPress={onRetry} hitSlop={10} accessibilityRole="button" accessibilityLabel={mode === "continue" ? "Continue" : "Try again"}>
+        <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
+          {mode === "continue" ? "Continue" : "Try again"}
         </T>
       </Pressable>
     </View>

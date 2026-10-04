@@ -2,11 +2,12 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { CharacterAvatar } from "@/components/character";
-import { Composer, type ComposerHandle, type ComposerInput } from "@/components/composer";
+import { Composer, type ComposerHandle } from "@/components/composer";
 import { ModelButton } from "@/components/model-button";
 import { T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
+import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { useNewChatChoice } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
@@ -35,8 +36,9 @@ export default function Compose() {
   // The model belongs to the agent picked here: a new pick starts from that agent's default.
   useEffect(() => useNewChatChoice.getState().reset(), [current?.id]);
 
-  const start = async ({ content, attachments }: ComposerInput) => {
+  const start = async (content: string, files: PendingFile[]) => {
     try {
+      const attachments = await encodeFiles(files);
       const result = await api.chat.start({
         agentId: current?.id,
         content,

@@ -14,7 +14,7 @@ import { rmSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { loadConfig, config, BUILD, VERSION, isLoopbackHost, type CoreConfig } from "./config";
 import { logger, setLogDir, setLogLevel } from "./log";
-import { openDb, closeDb, setMeta } from "./db";
+import { openDb, closeDb, setMeta, getDb } from "./db";
 import { createApp } from "./server/app";
 import { websocketHandler, type WsData } from "./server/ws";
 import { authenticateRequest, getAccessToken, isAllowedOrigin, setDashboardPassword } from "./server/auth";
@@ -27,6 +27,8 @@ import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
 import { startPauses, stopPauses } from "./services/pauses";
+import { startBudgets, stopBudgets } from "./services/budgets";
+import { startRunNotices, stopRunNotices } from "./services/runNotices";
 import { startAutomationEvents, stopAutomationEvents } from "./automations/events";
 import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
 import { startMessaging, stopMessaging } from "./messaging/service";
@@ -50,6 +52,7 @@ import { bootstrapDependencies } from "./remote/health";
 import { startKeepAwake, stopKeepAwake } from "./remote/keepAwake";
 import { startCloudLink, stopCloudLink } from "./cloud/link";
 import { newId } from "./util";
+import { SPEND_BACKFILL_SQL } from "./db/migrations";
 
 const log = logger("core");
 
@@ -157,11 +160,15 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   ensureDefaultProfile();
   await ensureDefaultAgent();
   recoverInterruptedRuns();
+  // Runs that were cut off by a crash are booked now (once): what their earlier stretches cost counts.
+  getDb().run(SPEND_BACKFILL_SQL);
   // Before anything can start a run: the runner keeps the display on while runs work, and counts them from the start.
   if (runner) startKeepAwake();
   else startScheduler();
   startFollowups();
   startPauses();
+  startBudgets();
+  startRunNotices();
   if (!runner) {
     startDreaming();
     startAutomationEvents();
@@ -276,6 +283,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     if (!runner) stopScheduler();
     stopFollowups();
     stopPauses();
+    stopBudgets();
+    stopRunNotices();
     if (runner) {
       stopLinkServer();
       stopKeepAwake();

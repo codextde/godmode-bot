@@ -12,7 +12,7 @@ import { decryptSecret, encryptSecret } from "../crypto";
 import { db, roles, sessions, settings as settingsTable, users } from "../db";
 import { badRequest, forbidden } from "../errors";
 import { setProxyTrust } from "../ratelimit";
-import { can, canGrantRole, OWNER_ROLE_ID, OWNER_ROLE_KEY, SETTINGS_PERMISSIONS } from "../rbac/permissions";
+import { can, canGrantRole, OWNER_ROLE_ID, OWNER_ROLE_KEY, PERSONAL_PERMISSIONS, SETTINGS_PERMISSIONS } from "../rbac/permissions";
 import { shared } from "../shared";
 import {
   SECRET_FIELDS,
@@ -185,8 +185,8 @@ async function validateAcrossGroups(group: SettingsGroup, value: Plain): Promise
     const key = value.defaultRoleKey as string;
     const [role] = await db.select().from(roles).where(eq(roles.key, key)).limit(1);
     if (!role) throw badRequest("Choose an existing role for people who sign up on their own.");
-    if (role.key === OWNER_ROLE_KEY || role.permissions.includes("admin.access")) {
-      throw badRequest("People who sign up on their own must get a role without access to the admin area.");
+    if (role.key === OWNER_ROLE_KEY || role.permissions.some((p) => !(PERSONAL_PERMISSIONS as string[]).includes(p))) {
+      throw badRequest("People who sign up on their own must get a role without access to the admin area, with only the Personal permissions.");
     }
   }
   if (group === "email" && value.transport === "smtp" && (!value.host || !value.fromEmail)) {

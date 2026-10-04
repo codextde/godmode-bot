@@ -1,13 +1,14 @@
 import type { Hono } from "hono";
 import { homedir } from "node:os";
 import type { Bootstrap } from "@godmode/shared";
-import { MAX_INSTRUCTIONS_LENGTH, isModelId } from "@godmode/shared";
+import { MAX_INSTRUCTIONS_LENGTH, isModelId, countAttention } from "@godmode/shared";
 import { config } from "../../config";
 import { get } from "../../db";
 import * as vault from "../../vault/vault";
 import { getSettings, updateSettings } from "../../services/settings";
 import { listNotifications, markRead, clearNotifications, unreadCount } from "../../services/notifications";
 import { audit, listAudit } from "../../services/audit";
+import { listAttention } from "../../services/attention";
 import { runDoctor, installDependency } from "../../services/doctor";
 import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
 import { PERMISSION_IDS, checkPermissions, fixPermission } from "../../services/permissions";
@@ -52,8 +53,11 @@ export function registerSystemRoutes(app: Hono) {
         openQuestions: count("SELECT COUNT(*) AS c FROM questions WHERE status = 'open'"),
         runningRuns: count("SELECT COUNT(*) AS c FROM runs WHERE status IN ('queued','running')"),
         // A question counts once: as the open question, not also as its notification.
-        unreadNotifications: count("SELECT COUNT(*) AS c FROM notifications WHERE read = 0 AND kind != 'question'"),
+        // Questions and missing logins count once: as the waiting thing ("Needs you"), not also as their notification.
+        unreadNotifications: count("SELECT COUNT(*) AS c FROM notifications WHERE read = 0 AND kind NOT IN ('question', 'missing_login')"),
         messagingRequests: pendingRequestCount(),
+        attention: countAttention(listAttention()),
+        unreadChats: count("SELECT COUNT(*) AS c FROM conversations WHERE unread_run_id IS NOT NULL AND archived = 0"),
       },
     };
     return c.json(data);
@@ -77,6 +81,10 @@ export function registerSystemRoutes(app: Hono) {
       throw badRequest(`Instructions for every agent can be at most ${MAX_INSTRUCTIONS_LENGTH.toLocaleString("en-US")} characters`);
     }
     if (runner?.ultracode !== undefined && typeof runner.ultracode !== "boolean") throw badRequest("runner.ultracode must be true or false");
+    const budget = (runner as { monthlyBudgetUsd?: unknown } | undefined)?.monthlyBudgetUsd;
+    if (budget !== undefined && budget !== null && !(typeof budget === "number" && Number.isFinite(budget) && budget > 0 && budget <= 1_000_000)) {
+      throw badRequest("The monthly budget must be an amount above 0, or empty for no budget");
+    }
     const memory = patch.memory as { dreaming?: unknown } | undefined;
     if (memory !== undefined && (typeof memory !== "object" || memory === null || Array.isArray(memory))) throw badRequest("Invalid memory settings");
     if (memory?.dreaming !== undefined && (typeof memory.dreaming !== "object" || memory.dreaming === null || Array.isArray(memory.dreaming))) {
@@ -139,9 +147,11 @@ export function registerSystemRoutes(app: Hono) {
         if (typeof value !== "boolean") throw badRequest(`cloud.${key} must be true or false`);
       }
     }
+    const before = getSettings().runner.monthlyBudgetUsd ?? null;
     const next = updateSettings(patch as never);
     applyRuntimeSettings(next);
     if (cloud) audit("user", "cloud.settings", null, cloud);
+    if ((next.runner.monthlyBudgetUsd ?? null) !== before) audit("user", "budget.set", null, { scope: "team", from: before, to: next.runner.monthlyBudgetUsd ?? null });
     return c.json(next);
   });
 

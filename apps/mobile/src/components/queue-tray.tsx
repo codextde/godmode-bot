@@ -219,7 +219,7 @@ function Row({
       )}
       {files > 0 && !editing ? (
         <View style={styles.files}>
-          <Icon name="paperclip" size={11} color={c.textMuted} />
+          <Icon name="attach" size={11} color={c.textMuted} />
           <T variant="caption" muted>
             {files}
           </T>

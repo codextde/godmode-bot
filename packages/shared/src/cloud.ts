@@ -321,8 +321,9 @@ export const CLOUD_UI_META = "godmode-cloud";
  * than CLOUD_WINDOW ungranted body bytes on one stream closes the link with Protocol. WebSocket messages
  * computer → client: the cloud grants Window credit for WsText/WsBinary payload bytes it has written out to the
  * client (CLOUD_WS_WINDOW, CloudCredit(CLOUD_WS_WINDOW / 4)); the computer counts unacknowledged bytes and drops
- * live-view frames above CLOUD_WS_WINDOW and closes the socket (1013) above CLOUD_WS_BACKLOG_MAX. Client → computer
- * messages are at most CLOUD_WS_CLIENT_MESSAGE_MAX bytes and are not windowed.
+ * live-view frames above CLOUD_WS_WINDOW and closes the socket (1013) above CLOUD_WS_BACKLOG_MAX; more than
+ * CLOUD_WS_BACKLOG_MAX ungranted bytes on one socket is a protocol error. Client → computer messages are at most
+ * CLOUD_WS_CLIENT_MESSAGE_MAX bytes and are not windowed.
  */
 export const CLOUD_PROTOCOL = 1;
 
@@ -364,7 +365,8 @@ export const CloudFrame = {
   Pong: 0x21,
   /**
    * computer → cloud, stream 0. JSON CloudHello. The first frame of a link; sent again (not answered) whenever the
-   * computer's name or access switches change, and the cloud updates its record.
+   * computer's name or access switches change, never before Welcome. The cloud updates its record with the newest at
+   * most every 10 s; more than 10 Hellos in a minute is a protocol error.
    */
   Hello: 0x30,
   /** cloud → computer, stream 0, answer to Hello. JSON CloudWelcome. */

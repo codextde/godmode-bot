@@ -1,4 +1,9 @@
 import type {
+  AttentionItem,
+  BudgetOverview,
+  BudgetReleaseInput,
+  SpendPeriod,
+  SpendReport,
   Agent,
   AgentFileEntry,
   AgentInput,
@@ -80,6 +85,7 @@ import type {
   PermissionId,
   PermissionReport,
   RemoteRunner,
+  RetryMode,
   Routine,
   RoutineInput,
   Run,
@@ -91,6 +97,7 @@ import type {
   RunnerPatch,
   SendMessageInput,
   SendMessageOutcome,
+  SendMessageResult,
   Settings,
   SetupInput,
   SlashCommand,
@@ -396,6 +403,20 @@ export const api = {
     },
   },
 
+  spend: {
+    /** What the team (or one agent) cost, booked when it was spent: four period totals and the chosen period per agent and kind of work. */
+    report: (period: SpendPeriod, agentId?: string | null) => get<SpendReport>("/api/spend", { period, agentId: agentId ?? undefined }),
+  },
+
+  /** Everything that waits for the human ("Needs you"), from live state. */
+  attention: () => get<AttentionItem[]>("/api/attention"),
+
+  budgets: {
+    get: () => get<BudgetOverview>("/api/budgets"),
+    /** Let held work run although its budget is used up. */
+    release: (input: BudgetReleaseInput) => post<{ continued: number }>("/api/budgets/release", input),
+  },
+
   agents: {
     list: (q: { workspaceId?: ScopeFilter } = {}) => get<Agent[]>("/api/agents", q),
     get: (id: string) => get<Agent>(`/api/agents/${id}`),
@@ -450,6 +471,8 @@ export const api = {
   },
 
   conversations: {
+    /** The human has seen these chats ("all" = every chat). */
+    read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),
     list: (q: { agentId?: string; search?: string; limit?: number; archived?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
@@ -467,6 +490,8 @@ export const api = {
     /** Make the chat's run stand still (after the step it is in); `continue` picks the work up where it stopped. */
     pause: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/pause`),
     continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
+    /** Pick up the chat's latest turn that ended early: continue where it stopped, or send it again. */
+    retry: (id: string, runId: string) => post<SendMessageResult & { mode: RetryMode }>(`/api/conversations/${id}/retry`, { runId }),
     /** Whether a run that waits for Claude's usage limit continues by itself when the limit resets. */
     autoContinue: (id: string, auto: boolean) => patch<RunPause>(`/api/conversations/${id}/pause`, { auto }),
   },

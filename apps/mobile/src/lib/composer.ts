@@ -1,33 +1,15 @@
-import * as DocumentPicker from "expo-document-picker";
-import { File } from "expo-file-system";
-import * as ImagePicker from "expo-image-picker";
 import { useQuery } from "@tanstack/react-query";
 import { create } from "zustand";
 import type { Agent, ClaudeModel, ConversationWithMessages, Effort, ModelCatalog, QueuedMessage, SlashCommand } from "@godmode/shared";
 import { BUILTIN_MODELS, DEFAULT_MODEL, EFFORT_OPTIONS, effortForModel, findModel } from "@godmode/shared";
 import { api } from "./api";
+import type { PendingFile } from "./attachments";
 import { qk, queryClient } from "./query";
-
-export interface PendingAttachment {
-  id: string;
-  name: string;
-  mime: string;
-  size: number;
-  /** base64 without the data: prefix */
-  data: string;
-  /** Local file for image thumbnails */
-  uri: string | null;
-}
 
 export interface Draft {
   text: string;
-  files: PendingAttachment[];
+  files: PendingFile[];
 }
-
-export const MAX_ATTACHMENTS = 10;
-export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
-/** The phones' listener takes requests up to 64 MB, and base64 adds a third. */
-export const MAX_UPLOAD_BYTES = 40 * 1024 * 1024;
 
 const EMPTY: Draft = { text: "", files: [] };
 
@@ -50,113 +32,6 @@ export function useDraft(key: string): Draft {
 
 export function setQueue(conversationId: string, fn: (queue: QueuedMessage[]) => QueuedMessage[]) {
   queryClient.setQueryData<ConversationWithMessages>(qk.conversation(conversationId), (old) => (old ? { ...old, queue: fn(old.queue) } : old));
-}
-
-/* Attachments */
-
-const MIME_BY_EXT: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  gif: "image/gif",
-  webp: "image/webp",
-  heic: "image/heic",
-  pdf: "application/pdf",
-  txt: "text/plain",
-  md: "text/markdown",
-  csv: "text/csv",
-  json: "application/json",
-};
-
-function extOf(name: string): string {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-}
-
-function baseName(uri: string): string {
-  return decodeURIComponent(uri.split("/").pop() ?? "file");
-}
-
-async function read(uri: string, name: string, mime?: string, size?: number): Promise<PendingAttachment> {
-  const file = new File(uri);
-  const data = await file.base64();
-  return {
-    id: `${name}-${Math.random().toString(36).slice(2, 8)}`,
-    name,
-    mime: mime || MIME_BY_EXT[extOf(name)] || "application/octet-stream",
-    size: size ?? file.size ?? Math.round((data.length * 3) / 4),
-    data,
-    uri: (mime ?? MIME_BY_EXT[extOf(name)] ?? "").startsWith("image/") ? uri : null,
-  };
-}
-
-export type AttachSource = "photos" | "camera" | "files";
-
-/** Opens the picker; resolves with the picked files (none when cancelled), or throws when access was denied. */
-export async function pickAttachments(source: AttachSource, room: number): Promise<{ name: string; uri: string; mime?: string; size?: number }[]> {
-  if (source === "files") {
-    const res = await DocumentPicker.getDocumentAsync({ multiple: room > 1, copyToCacheDirectory: true, type: "*/*" });
-    if (res.canceled) return [];
-    return res.assets.map((a) => ({ name: a.name, uri: a.uri, mime: a.mimeType, size: a.size }));
-  }
-  if (source === "camera") {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) throw new Error("Allow camera access for Godmode in Settings to take a photo.");
-  }
-  const options: ImagePicker.ImagePickerOptions = {
-    mediaTypes: ["images"],
-    quality: 0.8,
-    allowsMultipleSelection: source === "photos" && room > 1,
-    selectionLimit: room,
-    // JPEG instead of HEIC: Claude reads JPEG, PNG, GIF and WebP.
-    preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-  };
-  const res = source === "camera" ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
-  if (res.canceled) return [];
-  return res.assets.map((a, i) => {
-    // The picker hands out a converted copy: name it after what it is now.
-    const ext = extOf(baseName(a.uri)) || "jpg";
-    const stem = a.fileName ? a.fileName.replace(/\.[^.]+$/, "") : `photo-${Date.now()}${res.assets.length > 1 ? `-${i + 1}` : ""}`;
-    return { name: `${stem}.${ext}`, uri: a.uri, mime: MIME_BY_EXT[ext] ?? a.mimeType, size: a.fileSize };
-  });
-}
-
-/** Reads picked files, leaving out what doesn't fit; `skipped` says why something was left out. */
-export async function readAttachments(
-  picked: { name: string; uri: string; mime?: string; size?: number }[],
-  current: PendingAttachment[],
-): Promise<{ files: PendingAttachment[]; skipped: string | null }> {
-  let total = current.reduce((n, a) => n + a.size, 0);
-  const files: PendingAttachment[] = [];
-  let skipped: string | null = null;
-  for (const p of picked) {
-    if (current.length + files.length >= MAX_ATTACHMENTS) {
-      skipped = `You can attach up to ${MAX_ATTACHMENTS} files.`;
-      break;
-    }
-    if ((p.size ?? 0) > MAX_ATTACHMENT_BYTES) {
-      skipped = `${p.name} is larger than 25 MB.`;
-      continue;
-    }
-    const file = await read(p.uri, p.name, p.mime, p.size);
-    if (file.size > MAX_ATTACHMENT_BYTES) {
-      skipped = `${p.name} is larger than 25 MB.`;
-      continue;
-    }
-    if (total + file.size > MAX_UPLOAD_BYTES) {
-      skipped = "That's more than 40 MB for one message. Send the rest in another one.";
-      continue;
-    }
-    total += file.size;
-    files.push(file);
-  }
-  return { files, skipped };
-}
-
-export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /* Slash commands */

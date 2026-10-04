@@ -24,7 +24,8 @@ import {
 import { browserAccess, header, phoneAccess, type Grant } from "./access";
 import { relayRequestHeaders } from "./http";
 import type { RelayHub } from "./hub";
-import { LINK_BUFFER_MAX, ProtocolError, type Link, type RelayStream } from "./link";
+import { addressKey } from "./limits";
+import { LINK_BUFFER_MAX, LINK_WS_UNGRANTED_MAX, ProtocolError, type Link, type RelayStream } from "./link";
 import { denial, rejectUpgrade, truncateUtf8 } from "./respond";
 
 /** Relayed sockets one computer may have open at once. */
@@ -75,6 +76,10 @@ class WsRelayStream implements RelayStream {
   private state: "opening" | "open" | "over" = "opening";
   private client: WebSocket | null = null;
   private readonly credit = new CloudCredit(CLOUD_WS_WINDOW / 4);
+  /** WsText/WsBinary payload bytes from the computer that were not granted back yet. */
+  private ungranted = 0;
+  /** A phone the computer turned away (401) costs its owner nothing. */
+  private uncounted = false;
   private acceptTimer: NodeJS.Timeout | null = null;
   private alive = true;
   private readonly onRawClose = () => {
@@ -84,6 +89,7 @@ class WsRelayStream implements RelayStream {
   };
 
   constructor(
+    private readonly hub: RelayHub,
     private readonly link: Link,
     readonly id: number,
     private readonly server: WebSocketServer,
@@ -194,6 +200,12 @@ class WsRelayStream implements RelayStream {
     const raw = reject?.status;
     const status = typeof raw === "number" && Number.isInteger(raw) && raw >= 400 && raw <= 599 ? raw : 502;
     const message = typeof reject?.message === "string" ? reject.message.slice(0, 500) : "The computer refused the connection.";
+    // The same lock-out as for phone requests the computer answered 401 (http.ts), so guessing tokens over
+    // WebSockets is not a way around it.
+    if (this.channel === "mobile" && status === 401) {
+      this.hub.gatewayUnauthorized.strike(addressKey(this.grant.ip));
+      this.uncounted = true;
+    }
     rejectUpgrade(this.socket, denial(status, rejectCode(status), message));
     this.finish();
   }
@@ -212,16 +224,25 @@ class WsRelayStream implements RelayStream {
     if (this.state === "opening") throw new ProtocolError("Message before WsAccept.");
     const client = this.client;
     if (this.state !== "open" || !client) return;
+    const n = frame.payload.byteLength;
+    // The computer closes a socket (1013) once this much is unacknowledged; one that keeps sending anyway would have
+    // the cloud hold it all in memory.
+    this.ungranted += n;
+    this.link.wsUngranted += n;
+    if (this.ungranted > CLOUD_WS_BACKLOG_MAX) throw new ProtocolError("WebSocket messages beyond the backlog limit.");
+    if (this.link.wsUngranted > LINK_WS_UNGRANTED_MAX) throw new ProtocolError("WebSocket messages beyond the link's limit.");
     if (client.bufferedAmount > CLOUD_WS_BACKLOG_MAX) {
       this.endBoth(1013, "The connection is too slow to keep up.");
       return;
     }
-    const n = frame.payload.byteLength;
     this.link.count(0, n, 0);
     client.send(frame.payload, { binary: frame.type === CloudFrame.WsBinary }, (err) => {
       if (err || this.state !== "open") return;
       const grant = this.credit.consumed(n);
-      if (grant) this.link.send(encodeCloudWindow(this.id, grant));
+      if (!grant) return;
+      this.ungranted -= grant;
+      this.link.wsUngranted -= grant;
+      this.link.send(encodeCloudWindow(this.id, grant));
     });
   }
 
@@ -281,10 +302,13 @@ class WsRelayStream implements RelayStream {
   private finish(): void {
     if (this.state === "over") return;
     this.state = "over";
+    // What this socket still held no longer counts against the link.
+    this.link.wsUngranted -= this.ungranted;
+    this.ungranted = 0;
     if (this.acceptTimer) clearTimeout(this.acceptTimer);
     this.socket.off("close", this.onRawClose);
     this.link.end(this.id);
-    this.link.count(0, 0, 1);
+    if (!this.uncounted) this.link.count(0, 0, 1);
   }
 }
 
@@ -316,7 +340,7 @@ export async function relayWebSocket(
   if (link.socketCount >= SOCKETS_PER_DEVICE) {
     return rejectUpgrade(socket, denial(429, "rate_limited", "Too many open connections to this computer.", 5_000));
   }
-  const stream = link.open(channel, "ws", (id) => new WsRelayStream(link, id, server, req, socket, head, result.grant));
+  const stream = link.open(channel, "ws", (id) => new WsRelayStream(hub, link, id, server, req, socket, head, result.grant));
   if (!stream) return rejectUpgrade(socket, denial(429, "rate_limited", "This computer is busy. Try again in a moment.", 1_000));
   stream.start();
 }

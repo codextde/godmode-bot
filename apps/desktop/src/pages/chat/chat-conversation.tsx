@@ -32,6 +32,7 @@ import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { Thread } from "@/components/chat/thread";
+import { TurnEnd } from "@/components/chat/turn-end";
 import { ChatFilesScope } from "@/components/chat/local-files";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -41,7 +42,7 @@ import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces } from "@/lib/hooks";
-import { onServerEvent } from "@/lib/realtime";
+import { onServerEvent, viewConversation } from "@/lib/realtime";
 import { speak, useVoicePrefs, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
@@ -69,6 +70,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const armVoice = useVoiceSession((s) => s.arm);
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
   const composerRef = useRef<ComposerHandle>(null);
+  useViewing(conversationId);
   const queueRef = useRef<QueueTrayHandle>(null);
   const mountedAt = useRef(Date.now());
   // A profile picked mid-run applies from the next message: keep showing the browser the running agent drives.
@@ -133,7 +135,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const mood = waiting
     ? { mood: "attention" as const, label: approval ? "Needs your OK" : "Needs your answer" }
     : paused
-      ? { mood: "idle" as const, label: paused.reason === "limit" ? "Waiting for the limit to reset" : "Paused" }
+      ? { mood: "idle" as const, label: paused.reason === "limit" ? "Waiting for the limit to reset" : paused.reason === "budget" ? "Held — budget used up" : "Paused" }
       : liveMood;
   const { pause } = usePauseActions(conversationId);
   const pausing = pause.isPending || live?.activity === "Pausing…" || live?.activity === "Asking you…";
@@ -401,6 +403,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const lastMessage = messages[messages.length - 1] ?? null;
   // The agent's dream log: the core refuses messages here, so it reads like a transcript.
   const dreamLog = conv.origin === "dream";
+  // The latest turn, when nothing else is about to happen in the chat: if it ended early, the thread offers to pick it up.
+  const lastTurn =
+    !inflight && !paused && !queue.length && !dreamLog && !runnerAway && agent?.enabled !== false && lastMessage?.role === "assistant" && lastMessage.runId ? lastMessage : null;
 
   return (
     <div className="flex h-full min-h-0">
@@ -440,6 +445,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               agent={agent}
               delegatedFrom={conv.delegatedFrom}
               inflight={inflight}
+              after={lastTurn && <TurnEnd key={lastTurn.id} conversation={conv} message={lastTurn} agent={agent} />}
               onStop={() => activeRunId && cancel.mutate(activeRunId)}
               stopping={cancel.isPending}
               onPause={conv.origin === "dream" || live?.trigger === "dream" || live?.trigger === "check" || paused ? undefined : () => pause.mutate()}
@@ -500,7 +506,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                     className="overflow-hidden"
                   >
-                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} queued={queue.length} />
+                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} agentId={agent?.id} queued={queue.length} />
                   </motion.div>
                 )}
                 {runnerAway && (
@@ -602,7 +608,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     />
                   </>
                 }
-                sendHint={waiting ? "Send answer" : paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : undefined}
+                sendHint={waiting ? "Send answer" : paused ? (paused.reason === "limit" || paused.reason === "budget" ? "Queue message" : "Send and continue") : undefined}
                 placeholder={
                   runnerAway
                     ? runner.state === "connecting"
@@ -619,7 +625,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     : paused?.reason === "user"
                       ? `Message ${agent.name} to continue with new instructions…`
                       : paused
-                        ? `Message ${agent.name} — it goes along when the limit resets`
+                        ? paused.reason === "budget"
+                          ? `Message ${agent.name} — it goes along when the run continues`
+                          : `Message ${agent.name} — it goes along when the limit resets`
                         : `Message ${agent.name} — or type / for commands`
                 }
                 trailing={
@@ -803,4 +811,22 @@ function ConversationSkeleton() {
       </div>
     </div>
   );
+}
+
+/** While this chat is on screen in a focused window, the core knows: it's read, and its runs don't notify. */
+function useViewing(conversationId: string | undefined) {
+  useEffect(() => {
+    if (!conversationId) return;
+    const update = () => viewConversation(document.visibilityState === "visible" && document.hasFocus() ? conversationId : null);
+    update();
+    window.addEventListener("focus", update);
+    window.addEventListener("blur", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.removeEventListener("focus", update);
+      window.removeEventListener("blur", update);
+      document.removeEventListener("visibilitychange", update);
+      viewConversation(null);
+    };
+  }, [conversationId]);
 }

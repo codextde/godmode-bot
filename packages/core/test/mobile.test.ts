@@ -150,6 +150,9 @@ describe("device scope", () => {
     expect(deviceMayCall("PATCH", "/api/tasks/tsk_1")).toBe(true);
     expect(deviceMayCall("POST", "/api/tasks/tsk_1/messages")).toBe(true);
     expect(deviceMayCall("DELETE", "/api/tasks/tsk_1")).toBe(false);
+    expect(deviceMayCall("POST", "/api/tasks/attachments")).toBe(true);
+    expect(deviceMayCall("GET", "/api/tasks/attachments/tat_1/shot.png")).toBe(true);
+    expect(deviceMayCall("GET", "/api/files/image")).toBe(false);
     expect(deviceMayCall("POST", "/api/workspaces")).toBe(false);
     expect(deviceMayCall("GET", "/api/agents/a1/commands")).toBe(true);
     expect(deviceMayCall("GET", "/api/models")).toBe(true);
@@ -269,6 +272,25 @@ describe("phone access", () => {
     const moved = await phone(`/api/tasks/${task.id}`, json("PATCH", { status: "cancelled" }));
     expect(((await moved.json()) as { status: string }).status).toBe("cancelled");
     expect((await phone(`/api/conversations?workspaceId=${ws.id}`, { bearer: device })).status).toBe(200);
+  });
+
+  test("phones send files with messages and attach them to tasks", async () => {
+    const { token: device } = await pair("Files");
+    const json = (method: string, body: unknown) => ({ bearer: device, method, body: JSON.stringify(body) });
+    const file = { name: "receipt.png", mime: "image/png", data: Buffer.from("png").toString("base64") };
+    expect((await phone("/api/conversations/cnv_missing/messages", json("POST", { content: "", attachments: [file] }))).status).toBe(404);
+    expect((await phone("/api/chat", json("POST", { agentId: "agt_missing", content: "", attachments: [file] }))).status).toBe(404);
+    expect((await phone("/api/tasks/tsk_missing/messages", json("POST", { content: "Here", attachments: [file] }))).status).toBe(404);
+
+    const form = new FormData();
+    form.append("file", new File([Buffer.from("screenshot")], "bug.png", { type: "image/png" }));
+    const uploaded = await fetch(`${base}/api/tasks/attachments`, { method: "POST", headers: { authorization: `Bearer ${device}` }, body: form });
+    expect(uploaded.status).toBe(200);
+    const attachment = (await uploaded.json()) as { url: string; name: string };
+    expect(attachment.name).toBe("bug.png");
+    const read = await phone(attachment.url, { bearer: device });
+    expect(read.status).toBe(200);
+    expect(await read.text()).toBe("screenshot");
   });
 
   test("the phones' listener refuses everything but paired phones", async () => {
