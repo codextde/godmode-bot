@@ -19,6 +19,7 @@ import { AgentAvatar } from "@/components/common";
 import type { AgentMood } from "@/components/chat/conversation-mood";
 import { PLATFORMS } from "@/components/messaging/platform";
 import { DeleteChatDialog, useArchiveChat } from "@/components/chat/chat-actions";
+import { useEffectiveModel } from "@/components/chat/model-picker";
 import { useModelLabel } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -80,6 +81,16 @@ export function ConversationHeader({
 
   const origin = conversation.origin !== "chat" ? ORIGIN_META[conversation.origin] : null;
 
+  // What this chat overrides. Ultracode only counts with a model that can run it, as in the model picker.
+  const { current } = useEffectiveModel(agent, { model: conversation.model ?? null, effort: conversation.effort ?? null, ultracode: conversation.ultracode ?? null });
+  const overrides = [
+    conversation.model && modelLabel(conversation.model),
+    conversation.effort && EFFORT_LABELS[conversation.effort],
+    conversation.ultracode != null && (conversation.ultracode ? current.ultracode && "Ultracode" : "Ultracode off"),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <header
       className={cn(
@@ -127,15 +138,15 @@ export function ConversationHeader({
             <origin.icon className="size-3" /> {origin.label}
           </span>
         )}
-        {(conversation.model || conversation.effort) && (
+        {overrides && (
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground @xl:inline-flex">
                 <Cpu className="size-3" />
-                {[conversation.model && modelLabel(conversation.model), conversation.effort && EFFORT_LABELS[conversation.effort]].filter(Boolean).join(" · ")}
+                {overrides}
               </span>
             </TooltipTrigger>
-            <TooltipContent>Set for this chat in the model picker or with /model and /effort</TooltipContent>
+            <TooltipContent>Model, effort and Ultracode set for this chat — in the model picker or with /model and /effort</TooltipContent>
           </Tooltip>
         )}
         {conversation.archived && (

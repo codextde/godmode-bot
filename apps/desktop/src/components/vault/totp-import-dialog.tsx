@@ -110,11 +110,12 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
       e.preventDefault();
       if (e.dataTransfer?.files?.length && images.addFiles(e.dataTransfer.files) > 0) setTab("images");
     };
-    window.addEventListener("dragover", onDragOver);
-    window.addEventListener("drop", onDrop);
+    // On the document: ahead of the app-wide drop guard on window.
+    document.addEventListener("dragover", onDragOver);
+    document.addEventListener("drop", onDrop);
     return () => {
-      window.removeEventListener("dragover", onDragOver);
-      window.removeEventListener("drop", onDrop);
+      document.removeEventListener("dragover", onDragOver);
+      document.removeEventListener("drop", onDrop);
     };
   }, [result, images.addFiles]);
 

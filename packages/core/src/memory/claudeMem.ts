@@ -16,7 +16,7 @@ import { which } from "../util";
 
 const log = logger("claude-mem");
 
-export const CLAUDE_MEM_VERSION = "13.28.0";
+export const CLAUDE_MEM_VERSION = "13.29.0";
 const REGISTRY = "https://registry.npmjs.org/claude-mem";
 
 function installRoot(): string {

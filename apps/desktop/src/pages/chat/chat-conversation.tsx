@@ -28,7 +28,8 @@ import { InstructionsChip } from "@/components/instructions/instructions";
 import { SshChip } from "@/components/ssh/ssh-chip";
 import { VmChip } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
-import { ChatDropZone, Thread } from "@/components/chat/thread";
+import { ChatDropZone } from "@/components/chat/drop-zone";
+import { Thread } from "@/components/chat/thread";
 import { ChatFilesScope } from "@/components/chat/local-files";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -59,6 +60,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const agentWorkspace = agent?.workspaceId ? workspaces.find((w) => w.id === agent.workspaceId) : undefined;
   const live = useConversationLiveRun(conversationId);
   const voiceSettings = useVoiceSettings();
+  const voiceMode = useUi((s) => s.voiceMode);
   const setVoiceMode = useUi((s) => s.setVoiceMode);
   const armVoice = useVoiceSession((s) => s.arm);
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
@@ -204,11 +206,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     onMutate: (patch) => {
       const old = qc.getQueryData<ConversationWithMessages>(key);
       qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...patch } : c));
-      return { prev: { model: old?.model ?? null, effort: old?.effort ?? null } };
+      return { prev: { model: old?.model ?? null, effort: old?.effort ?? null, ultracode: old?.ultracode ?? null } };
     },
-    onError: (err, _patch, ctx) => {
+    onError: (err, patch, ctx) => {
       if (ctx) qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...ctx.prev } : c));
-      toast.error("Couldn't switch the model", { description: errorMessage(err) });
+      toast.error(patch.ultracode !== undefined && patch.model === undefined ? "Couldn't switch Ultracode" : "Couldn't switch the model", { description: errorMessage(err) });
     },
   });
 
@@ -371,7 +373,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
   return (
     <div className="flex h-full min-h-0">
-      <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="@container flex h-full min-w-0 flex-1 flex-col">
+      <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} disabled={dreamLog || voiceMode} className="@container flex h-full min-w-0 flex-1 flex-col">
         <ConversationHeader
           conversation={conv}
           agent={agent}
@@ -543,7 +545,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                         : `Message ${agent.name} — or type / for commands`
                 }
                 trailing={
-                  <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(patch) => choose.mutate(patch)} />
+                  <ModelPicker
+                    agent={agent}
+                    value={{ model: conv.model ?? null, effort: conv.effort ?? null, ultracode: conv.ultracode ?? null }}
+                    onChange={(patch) => choose.mutate(patch)}
+                  />
                 }
                 onSubmit={(input) => send.mutateAsync({ ...input, queueId: newQueueId() })}
               />

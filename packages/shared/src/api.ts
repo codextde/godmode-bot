@@ -58,6 +58,8 @@ export interface AgentInput {
   instructions?: string;
   model?: string;
   effort?: Effort | null;
+  /** null = the global default. */
+  ultracode?: boolean | null;
   enabled?: boolean;
   permissions?: Partial<AgentPermissions>;
   browser?: Partial<AgentBrowserConfig>;
@@ -144,6 +146,7 @@ export interface StartChatInput {
   /** Model for this chat; omitted = the agent's. */
   model?: string | null;
   effort?: Effort | null;
+  ultracode?: boolean | null;
   /** Work in this folder instead of the agent's default. */
   workingDirectory?: string | null;
   /** Share a screen, window or browser tab with the new chat. */
@@ -168,9 +171,10 @@ export interface ConversationPatch {
   title?: string;
   pinned?: boolean;
   archived?: boolean;
-  /** null = back to the agent's model / effort. */
+  /** null = back to the agent's model / effort / Ultracode. */
   model?: string | null;
   effort?: Effort | null;
+  ultracode?: boolean | null;
   /** null = back to the agent's default folder. */
   workingDirectory?: string | null;
   /** Share a screen, window or browser tab with the agent; null = stop sharing. */

@@ -2,7 +2,7 @@
  * What a paired phone may call. The app controls Godmode — chats, tasks, runs, automations and the screens agents work
  * on — but never reaches secrets, backups, settings, integrations or this computer's files (only the ones attached to
  * tasks, and what it uploads itself), can't change what a chat, a task or an automation is allowed to do, and only
- * controls screens the human shared in a chat.
+ * controls screens the human shared in a chat and Godmode's VMs.
  */
 import { computerView, type ComputerTarget } from "@godmode/shared";
 import { all } from "../db";
@@ -51,7 +51,7 @@ const ROUTES: [method: string, path: RegExp][] = [
 
   ["GET", /^\/api\/vms$/],
   ["GET", new RegExp(`^/api/vms/${ID}/screenshot$`)],
-  ["POST", new RegExp(`^/api/vms/${ID}/(start|stop)$`)],
+  ["POST", new RegExp(`^/api/vms/${ID}/(start|stop|input)$`)],
 ];
 
 /** Requests whose JSON body may only carry these fields when a phone sends them. */
@@ -66,6 +66,7 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],
   ["POST", /^\/api\/computer\/input$/, ["view", "event", "frame"]],
+  ["POST", new RegExp(`^/api/vms/${ID}/input$`), ["event", "frame"]],
 ];
 
 export function deviceMayCall(method: string, path: string): boolean {

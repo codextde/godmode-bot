@@ -345,6 +345,7 @@ const agentFields = {
     .optional()
     .describe("Claude model id or alias (opus, sonnet, haiku…); empty = global default"),
   effort: effortSchema.nullable().optional(),
+  ultracode: z.boolean().nullable().optional().describe("Ultracode: Claude plans every task as a workflow of several agents — thorough, but slower and far more tokens; null = global default"),
   enabled: z.boolean().optional(),
   permissions: z
     .object({
@@ -872,6 +873,7 @@ const TOOLS: ToolDef[] = [
         instructions: snippet(target.instructions, 4000),
         model: target.model || "(default)",
         effort: target.effort,
+        ultracode: target.ultracode,
         permissions: {
           allowDelegation: target.permissions.allowDelegation,
           canManageAgents: target.permissions.canManageAgents,

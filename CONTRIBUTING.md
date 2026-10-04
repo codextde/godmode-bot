@@ -4,7 +4,7 @@ Thanks for helping build an AI teammate people can trust! 🎉
 
 ## Development setup
 
-Requirements: [Bun](https://bun.sh) ≥ 1.3, Node.js ≥ 20, [pnpm](https://pnpm.io) 9, Rust (stable) for the desktop shell,
+Requirements: [Bun](https://bun.sh) ≥ 1.3, Node.js ≥ 22, [pnpm](https://pnpm.io) 12, Rust (stable) for the desktop shell,
 [Claude Code](https://code.claude.com) CLI, [uv](https://docs.astral.sh/uv/) (for browser-use) and Google Chrome/Chromium.
 
 ```bash

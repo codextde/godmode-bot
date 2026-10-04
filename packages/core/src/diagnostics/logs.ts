@@ -6,7 +6,7 @@ import { closeSync, openSync, readSync, rmSync, statSync, truncateSync } from "n
 import { cpus, release, totalmem } from "node:os";
 import { join } from "node:path";
 import type { LogEntry, LogIssue, LogLevel, LogOverview } from "@godmode/shared";
-import { config } from "../config";
+import { BUILD, config } from "../config";
 import { get } from "../db";
 import { LOG_FILE, ROTATED_LOG_FILE, logFileCleared, logGeneration, scrub } from "../log";
 import { listActiveRuns } from "../runner/runner";
@@ -271,9 +271,9 @@ function environment(): string[] {
   };
   const on = (v: boolean) => (v ? "on" : "off");
   return [
-    `- Godmode ${cfg.version} · ${cfg.mode === "server" ? "web dashboard (godmode serve)" : "desktop app"} · ${cfg.platform} ${release()} (${cfg.arch}) · Bun ${Bun.version}`,
+    `- Godmode ${cfg.version} (build ${BUILD}) · ${cfg.mode === "server" ? "web dashboard (godmode serve)" : "desktop app"} · ${cfg.platform} ${release()} (${cfg.arch}) · Bun ${Bun.version}`,
     `- ${cpu.length} × ${cpu[0]?.model.trim() ?? "CPU"} · ${bytes(totalmem())} RAM · core up ${duration(process.uptime() * 1000)}, using ${bytes(process.memoryUsage().rss)}`,
-    `- Settings: model ${s.runner.model}, effort ${s.runner.effort}, up to ${s.runner.maxConcurrentRuns} runs at once, run timeout ${s.runner.runTimeoutMinutes ? `${s.runner.runTimeoutMinutes} min` : "none"} · browser ${on(s.browser.enabled)}${s.browser.headless ? " (headless)" : ""} · computer use ${on(s.computer.enabled)} · VMs ${on(s.vm.enabled)} · memory ${s.memory.backend}, dreaming ${on(s.memory.dreaming.enabled)} · detailed logging ${on(s.diagnostics.verbose)}`,
+    `- Settings: model ${s.runner.model}, effort ${s.runner.effort}${s.runner.ultracode ? ", Ultracode on" : ""}, up to ${s.runner.maxConcurrentRuns} runs at once, run timeout ${s.runner.runTimeoutMinutes ? `${s.runner.runTimeoutMinutes} min` : "none"} · browser ${on(s.browser.enabled)}${s.browser.headless ? " (headless)" : ""} · computer use ${on(s.computer.enabled)} · VMs ${on(s.vm.enabled)} · memory ${s.memory.backend}, dreaming ${on(s.memory.dreaming.enabled)} · detailed logging ${on(s.diagnostics.verbose)}`,
     `- ${count("agents", "agent")}, ${count("routines", "routine")}, ${count("workspaces", "workspace")} · now ${active.filter((r) => r.status === "running").length} running and ${active.filter((r) => r.status === "queued").length} queued runs`,
   ];
 }
@@ -312,6 +312,27 @@ function runsSection(lists: LogEntry[][]): string[] {
     if (f) f.count++;
     else failures.set(key, { count: 1, text: error });
   }
+  // Who spent it, and how much the model read per turn (a chat that grew large makes every turn expensive).
+  const agents = new Map<string, { runs: number; cost: number; context: number[] }>();
+  for (const e of runs) {
+    const name = str(e.data!.agent) ?? "?";
+    const a = agents.get(name) ?? { runs: 0, cost: 0, context: [] };
+    a.runs++;
+    a.cost += num(e.data!.costUsd) ?? 0;
+    const context = num(e.data!.contextTokens);
+    if (context !== null) a.context.push(context);
+    agents.set(name, a);
+  }
+  const spenders = [...agents.entries()].filter(([, a]) => a.cost > 0).sort((a, b) => b[1].cost - a[1].cost).slice(0, 6);
+  if (spenders.length) {
+    out.push(
+      `- Cost by agent: ${spenders
+        .map(([name, a]) => `${cell(name)} $${a.cost.toFixed(2)} in ${a.runs} run${a.runs === 1 ? "" : "s"}${a.context.length ? `, ~${Math.round(median(a.context) / 1000)}k tokens read per turn` : ""}`)
+        .join(" · ")}`,
+    );
+  }
+  const walls = runs.filter((e) => (num(e.data!.wallMs) ?? 0) > (num(e.data!.ms) ?? 0) * 2 + 60_000);
+  if (walls.length) out.push(`- ${walls.length} run${walls.length === 1 ? "" : "s"} took much longer by the clock than Claude worked (the computer slept, or a background task was waited for): ${walls.slice(-5).map((e) => `${str(e.data!.runId) ?? "?"} ${duration(num(e.data!.wallMs) ?? NaN)} vs ${duration(num(e.data!.ms) ?? NaN)}`).join(", ")}`);
   if (failures.size) {
     out.push("- Failures:");
     for (const f of [...failures.values()].sort((a, b) => b.count - a.count).slice(0, 8)) out.push(`  - ${f.count}× ${cell(f.text)}`);
@@ -328,6 +349,26 @@ function runsSection(lists: LogEntry[][]): string[] {
   if (tools.size) {
     const top = [...tools.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
     out.push(`- Tool calls that failed most: ${top.map(([name, n]) => `${name} ×${n}`).join(", ")}`);
+  }
+  return out;
+}
+
+/** What the core's memory did, and how the computer slept: from the periodic `resources` entries. */
+function resourcesSection(lists: LogEntry[][]): string[] {
+  const all = lists.flat();
+  const snaps = all.filter((e) => e.scope === "perf" && (e.msg === "resources" || e.msg === "high memory use") && num(e.data?.rssMb) !== null);
+  if (!snaps.length) return [];
+  const peak = snaps.reduce((a, e) => (num(e.data!.rssMb)! > num(a.data!.rssMb)! ? e : a));
+  const last = snaps.at(-1)!;
+  const mb = (e: LogEntry, key: string) => `${num(e.data?.[key]) ?? "?"} MB`;
+  const out = [
+    `- Memory: highest ${mb(peak, "rssMb")} (${when(peak.ts)}, ${num(peak.data!.running) ?? 0} running; JavaScript heap ${mb(peak, "heapUsedMb")}), latest ${mb(last, "rssMb")} (heap ${mb(last, "heapUsedMb")})${num(last.data!.dbMb) !== null ? ` · database ${mb(last, "dbMb")}, its write-ahead log ${mb(last, "walMb")}` : ""}`,
+  ];
+  const slept = all.filter((e) => e.scope === "perf" && e.msg === "resumed after the computer slept");
+  const naps = snaps.reduce((sum, e) => sum + (num(e.data!.sleeps) ?? 0), 0);
+  if (slept.length || naps) {
+    const under = slept.filter((e) => (num(e.data?.running) ?? 0) > 0).length;
+    out.push(`- Sleep: the computer slept ${Math.max(naps, slept.length)} time${Math.max(naps, slept.length) === 1 ? "" : "s"}${under ? `, ${under} of them while a run was working` : ""}`);
   }
   return out;
 }
@@ -349,12 +390,34 @@ function slowSection(lists: LogEntry[][]): string[] {
     return [`**${title}**`, "", "| What | Count | Median | Slowest |", "|---|---:|---:|---:|", ...sorted.map(([k, v]) => `| ${cell(k)} | ${v.length} | ${duration(median(v))} | ${duration(max(v))} |`), ""];
   };
   const out = [
-    ...table("Requests slower than 1 s", all.filter((e) => e.scope === "http" && e.msg === "slow request"), (e) => `${str(e.data?.method) ?? ""} ${str(e.data?.route) ?? ""}`.trim()),
+    ...table("Requests slower than 1 s", all.filter((e) => e.scope === "http" && e.msg === "slow request" && e.data?.expected !== true), (e) => `${str(e.data?.method) ?? ""} ${str(e.data?.route) ?? ""}`.trim()),
+    ...table("Requests that wait by design (a VM, a download, git)", all.filter((e) => e.scope === "http" && e.msg === "slow request" && e.data?.expected === true), (e) => `${str(e.data?.method) ?? ""} ${str(e.data?.route) ?? ""}`.trim()),
     ...table("Agent tool calls slower than 10 s", all.filter((e) => e.scope === "mcp" && e.msg === "slow tool call"), (e) => str(e.data?.tool)),
     ...table("Slow database queries", all.filter((e) => e.scope === "db" && e.msg === "slow database query"), (e) => str(e.data?.sql)),
     ...table("Event loop blocked (the core could not respond meanwhile)", all.filter((e) => e.scope === "perf" && e.msg === "event loop blocked"), () => "core"),
+    ...blockedBy(all),
   ];
   return out.length ? out : ["Nothing slow recorded."];
+}
+
+/** What the core was doing while its event loop was blocked: the `during` lists of those entries, added up. */
+function blockedBy(all: LogEntry[]): string[] {
+  const work = new Map<string, { times: number; totalMs: number; worstMs: number }>();
+  for (const e of all) {
+    if (e.scope !== "perf" || e.msg !== "event loop blocked" || !Array.isArray(e.data?.during)) continue;
+    for (const d of e.data.during as Record<string, unknown>[]) {
+      const what = str(d?.what);
+      if (!what) continue;
+      const w = work.get(what) ?? { times: 0, totalMs: 0, worstMs: 0 };
+      w.times += num(d.times) ?? 1;
+      w.totalMs += num(d.totalMs) ?? 0;
+      w.worstMs = Math.max(w.worstMs, num(d.worstMs) ?? 0);
+      work.set(what, w);
+    }
+  }
+  if (!work.size) return [];
+  const sorted = [...work.entries()].sort((a, b) => b[1].totalMs - a[1].totalMs).slice(0, 10);
+  return ["**What blocked it (slow synchronous work recorded meanwhile)**", "", "| What | Count | In total | Slowest |", "|---|---:|---:|---:|", ...sorted.map(([what, w]) => `| ${cell(what)} | ${w.times} | ${duration(w.totalMs)} | ${duration(w.worstMs)} |`), ""];
 }
 
 function desktopTail(): string[] {
@@ -400,6 +463,7 @@ export function buildLogReport(maxBytes = REPORT_MAX_BYTES): string {
     "## Runs",
     "",
     ...runsSection(lists),
+    ...resourcesSection(lists),
     "",
     "## Slow spots",
     "",

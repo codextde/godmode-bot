@@ -249,9 +249,11 @@ async function report(r: FollowupRow, runId: string): Promise<void> {
     if (await deliverFollowup(r.conversation_id, runId)) return;
     const run = await waitForRun(runId);
     if (run.status === "cancelled") return;
-    const blocks = all<{ blocks: string }>("SELECT blocks FROM messages WHERE run_id = ? AND role = 'assistant'", runId).flatMap((m) =>
-      parseJson<MessageBlock[]>(m.blocks, []),
-    );
+    // Only a message that mentions the tool is read: a run's blocks hold megabytes of tool output and screenshots.
+    const blocks = all<{ blocks: string }>(
+      "SELECT blocks FROM messages WHERE run_id = ? AND role = 'assistant' AND instr(blocks, 'notify_user') > 0",
+      runId,
+    ).flatMap((m) => parseJson<MessageBlock[]>(m.blocks, []));
     if (blocks.some((b) => b.type === "tool_use" && b.name.endsWith("notify_user"))) return;
     const agentName = get<{ name: string }>("SELECT name FROM agents WHERE id = ?", r.agent_id)?.name ?? "An agent";
     const text = (run.status === "succeeded" ? run.result : run.error)?.replace(/\s+/g, " ").trim() ?? "";

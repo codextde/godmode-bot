@@ -6,6 +6,7 @@
  * Behaviour is chosen by keywords in the prompt:
  *   (default)   replay stream-partial.jsonl       → "Hello, nice to meet you!"
  *   USE_TOOL    replay stream-tooluse.jsonl       → Bash tool + "DONE"
+ *   USE_WORKFLOW  replay stream-workflow.jsonl    → a workflow of two agents in the background, two results
  *   SLEEP       emit init, then hang (cancel / timeout tests)
  *   LOGIN_FAIL  answer with a login-failure sentence
  *   CALL_MCP    call the Godmode MCP gateway from --mcp-config (initialize, tools/list, report_missing_login)
@@ -21,6 +22,10 @@
  *   TASK_COMMIT_ENV  write and commit .env.production in the cwd
  *   TASK_ENV    write .env and feature.txt into the cwd
  *   TASK_LEAK:<value>  write config.txt containing <value> into the cwd
+ *   TASK_HISTORY:<value>  commit .env.production and a config.txt containing <value> (also named in the commit message),
+ *              then commit config.txt without it and feature.txt
+ *   TASK_LEAK_BYTES:<value>  write legacy.txt containing <value> in Latin-1 (not UTF-8), and feature.txt, into the cwd
+ *   TASK_TIDY   in settings.txt, remove the `old_token=` line and add plain settings (a region, a base URL, a database)
  *   TASK_SHOTS:<dir>  answer with a summary naming the files in <dir> in every way an agent does (code, links, paths)
  *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
  *   CRASH       print to stderr and exit 3 without a result
@@ -38,10 +43,27 @@
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
  *               and answers "DREAM {json}". Digest keywords: DREAM_SLEEP hangs and DREAM_CRASH exits 3 (both after
  *               writing the memory), DREAM_NO_REPORT skips the report.
- *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected)
+ *   SESSION_COST  report the cost like Claude Code does: as the total of the whole session ($0.5 more with every
+ *              invocation that resumes it), with the tokens and turns of this invocation only
+ *   TWO_RESULTS  end twice in one process, like Claude Code does when a background task finishes after its answer:
+ *              the second ending counts its own time, turns and tokens, and reports the running total of the cost
+ *   SLOW_STREAM  stream "one two three four five six" word by word as partial messages, 120 ms apart
+ *   SLOW_TASK   a tool call whose background task reports progress three times, 150 ms apart, then completes
+ *   SHOTS:<n>   run <n> tool steps that each answer with a screenshot and a line of text, then answer "shots done".
+ *              With THEN_WAIT:<key> it first waits for the state dir's `<key>-next` file, writes "almost there", and
+ *              waits for `<key>-done`
+ *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected,
+ *               `/effort ultracode [on|off]` switches Ultracode, and a new effort level ends an Ultracode that the
+ *               --settings file turned on)
  *
- * With `--input-format stream-json` it answers the `initialize` control request with a command and model catalog.
- * Env: FAKE_CLAUDE_STATE — directory for known sessions + an invocation log (invocations.jsonl).
+ * With `--input-format stream-json` it answers the `initialize` control request with a command and model catalog,
+ * `get_settings` with what applies to the session, and `set_model` (every request goes to control-requests.jsonl).
+ * Env: FAKE_CLAUDE_STATE — directory for known sessions + an invocation log (invocations.jsonl, with the content of the
+ * --settings file). FAKE_CLAUDE_ULTRACODE — =off: no dynamic workflows; a Claude Code from before Ultracode: =error
+ * rejects `get_settings`, =silent never answers it, =unknown answers without the Ultracode fields; =exit: it exits
+ * on `get_settings` instead of answering.
+ * FAKE_CLAUDE_SESSION_MODEL — the model of the probe's session until `set_model` names another (default opus);
+ * FAKE_CLAUDE_SET_MODEL — =error rejects `set_model`, =silent never answers it.
  */
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,8 +83,10 @@ if (args.includes("--version")) {
   process.exit(0);
 }
 
+const ultracodeMode = process.env.FAKE_CLAUDE_ULTRACODE ?? "";
+
 /**
- * Catalog probe (`initialize` over stream-json), logged to invocations.jsonl and probes.jsonl.
+ * Catalog probe (`initialize`, then `get_settings` over stream-json), logged to invocations.jsonl and probes.jsonl.
  * FAKE_CLAUDE_MODELS=error answers with an error, =silent exits without answering, =hang never answers and keeps a
  * child holding stdout (its pid goes to hang.pid).
  */
@@ -98,6 +122,9 @@ if (argValue("--input-format") === "stream-json") {
     { name: "hello", description: "Say hello to someone (project)", argumentHint: "<name>" },
     { name: "clear", description: "A project command shadowed by the built-in (project)", argumentHint: "" },
   ];
+  // Ultracode is available with dynamic workflows and a session model that has the xhigh level.
+  let sessionModel = process.env.FAKE_CLAUDE_SESSION_MODEL ?? "opus";
+  const setModelMode = process.env.FAKE_CLAUDE_SET_MODEL ?? "";
   const decoder = new TextDecoder();
   const reader = Bun.stdin.stream().getReader();
   let buf = "";
@@ -107,8 +134,25 @@ if (argValue("--input-format") === "stream-json") {
     buf += decoder.decode(value, { stream: true });
     let nl: number;
     while ((nl = buf.indexOf("\n")) >= 0) {
-      const msg = JSON.parse(buf.slice(0, nl)) as { type: string; request_id: string; request: { subtype: string } };
+      const msg = JSON.parse(buf.slice(0, nl)) as { type: string; request_id: string; request: { subtype: string; model?: string } };
       buf = buf.slice(nl + 1);
+      if (msg.type === "control_request") appendFileSync(join(stateDir, "control-requests.jsonl"), JSON.stringify(msg.request) + "\n");
+      if (msg.type === "control_request" && msg.request.subtype === "set_model" && setModelMode !== "silent") {
+        if (setModelMode !== "error") sessionModel = msg.request.model ?? sessionModel;
+        const response = setModelMode === "error" ? { subtype: "error", request_id: msg.request_id, error: "Could not switch the model" } : { subtype: "success", request_id: msg.request_id };
+        process.stdout.write(JSON.stringify({ type: "control_response", response }) + "\n");
+      }
+      if (msg.type === "control_request" && msg.request.subtype === "get_settings" && ultracodeMode === "exit") process.exit(0);
+      if (msg.type === "control_request" && msg.request.subtype === "get_settings" && ultracodeMode !== "silent") {
+        const session = models.find((m) => m.value === sessionModel || m.resolvedModel === sessionModel);
+        const available = ultracodeMode !== "off" && !!session && "supportedEffortLevels" in session && session.supportedEffortLevels.includes("xhigh");
+        const applied = { model: session?.resolvedModel ?? sessionModel, effort: "high", ...(ultracodeMode === "unknown" ? {} : { ultracode: false, ultracodeRequested: false, ultracodeAvailable: available }) };
+        const response =
+          ultracodeMode === "error"
+            ? { subtype: "error", request_id: msg.request_id, error: "Unsupported control request subtype: get_settings" }
+            : { subtype: "success", request_id: msg.request_id, response: { effective: {}, sources: [], applied } };
+        process.stdout.write(JSON.stringify({ type: "control_response", response }) + "\n");
+      }
       if (msg.type !== "control_request" || msg.request.subtype !== "initialize") continue;
       process.stdout.write(JSON.stringify({ type: "system", subtype: "hook_started" }) + "\n");
       const response =
@@ -124,6 +168,9 @@ if (argValue("--input-format") === "stream-json") {
 const prompt = await new Response(Bun.stdin.stream()).text();
 const resume = argValue("--resume");
 const sessionId = resume ?? argValue("--session-id") ?? crypto.randomUUID();
+// The run's settings file is gone once the run has ended: its content is kept for the tests.
+const settingsFile = argValue("--settings");
+const sessionSettings = settingsFile && existsSync(settingsFile) ? (JSON.parse(readFileSync(settingsFile, "utf8")) as { ultracode?: boolean }) : null;
 
 appendFileSync(
   join(stateDir, "invocations.jsonl"),
@@ -131,6 +178,7 @@ appendFileSync(
     args,
     prompt,
     cwd: process.cwd(),
+    settings: sessionSettings,
     env: {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? null,
       GODMODE_TOKEN: process.env.GODMODE_TOKEN ?? null,
@@ -193,6 +241,10 @@ if (slash?.[1] === "clear") {
   out(init);
   if (name === "compact") out({ type: "system", subtype: "compact_boundary", compact_metadata: { trigger: "manual", pre_tokens: 900, post_tokens: 100 } });
   const effort = args.toLowerCase();
+  const valid = "Valid options are: low, medium, high, xhigh, max, auto, ultracode";
+  const stays = `Effort stays ${argValue("--effort") ?? "high"}.`;
+  // A new effort level ends the session's Ultracode.
+  const ends = sessionSettings?.ultracode === true ? " · Ultracode off" : "";
   const text =
     name === "model"
       ? args === "bogus"
@@ -200,10 +252,18 @@ if (slash?.[1] === "clear") {
         : `Set model to \`${args}\` for this session only`
       : name === "effort"
         ? effort === "auto"
-          ? "Effort level set to auto (this session only)"
+          ? `Effort level set to auto (this session only)${ends}`
           : ["low", "medium", "high", "xhigh", "max"].includes(effort)
-            ? `Set effort level to ${effort} (this session only)`
-            : `Invalid argument: ${args}. Valid options are: low, medium, high, xhigh, max, auto`
+            ? `Set effort level to ${effort} (this session only)${ends}`
+            : /^ultracode( on| off)?$/.test(effort)
+              ? ultracodeMode
+                ? `Ultracode needs dynamic workflows enabled (see /config). ${valid}`
+                : argValue("--model") === "haiku"
+                  ? `Ultracode isn't available on Haiku 9. ${valid}`
+                  : effort.endsWith(" off")
+                    ? `Ultracode off. ${stays}`
+                    : `Ultracode on (this session only): Claude plans every task as a workflow of several agents. ${stays}`
+              : `Invalid argument: ${args}. ${valid}`
         : `Ran /${name} ${args}`.trim();
   out({
     type: "assistant",
@@ -291,6 +351,36 @@ if (slash?.[1] === "clear") {
   out(init);
   writeFileSync(join(process.cwd(), "config.txt"), `token=${/TASK_LEAK:(\S+)/.exec(prompt)![1]}\n`);
   const text = "Wrote the config.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_HISTORY:")) {
+  out(init);
+  const value = /TASK_HISTORY:(\S+)/.exec(prompt)![1]!;
+  const git = (...a: string[]) => Bun.spawnSync(["git", "-c", "user.name=Agent", "-c", "user.email=agent@example.com", ...a], { cwd: process.cwd() });
+  writeFileSync(join(process.cwd(), ".env.production"), "API_TOKEN=abc123\n");
+  writeFileSync(join(process.cwd(), "config.txt"), `token=${value}\n`);
+  git("add", "-f", ".env.production", "config.txt");
+  git("commit", "-qm", `Configure with ${value}`);
+  writeFileSync(join(process.cwd(), "config.txt"), "token=$API_TOKEN\n");
+  writeFileSync(join(process.cwd(), "feature.txt"), "a feature\n");
+  git("add", "config.txt", "feature.txt");
+  git("commit", "-qm", "Read the token from the environment");
+  const text = "Configured it.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_LEAK_BYTES:")) {
+  out(init);
+  const line = `token=${/TASK_LEAK_BYTES:(\S+)/.exec(prompt)![1]}\n`;
+  writeFileSync(join(process.cwd(), "legacy.txt"), Buffer.concat([Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]), Buffer.from(line)]));
+  writeFileSync(join(process.cwd(), "feature.txt"), "a feature\n");
+  const text = "Wrote the legacy config.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_TIDY")) {
+  out(init);
+  const file = join(process.cwd(), "settings.txt");
+  writeFileSync(file, `${readFileSync(file, "utf8").replace(/^old_token=.*\n/m, "")}region=eu-central-1\nbase=https://api.example.com/v1\ndb=postgres\n`);
+  const text = "Tidied the settings.";
   textTurn(text);
   result(text);
 } else if (prompt.includes("TASK_SHOTS:")) {
@@ -613,6 +703,75 @@ if (slash?.[1] === "clear") {
   const text = `GUEST ${JSON.stringify(summary)}`;
   textTurn(text);
   result(text);
+} else if (prompt.includes("USE_WORKFLOW")) {
+  await replay("stream-workflow.jsonl");
+} else if (prompt.includes("SESSION_COST")) {
+  out(init);
+  const costFile = join(stateDir, "sessions", `${sessionId}.cost`);
+  const total = (existsSync(costFile) ? Number(readFileSync(costFile, "utf8")) : 0) + 0.5;
+  writeFileSync(costFile, String(total));
+  textTurn("spent");
+  result("spent", { total_cost_usd: total });
+} else if (prompt.includes("TWO_RESULTS")) {
+  out(init);
+  textTurn("first answer");
+  result("first answer", { total_cost_usd: 0.25, duration_ms: 1000, num_turns: 3, usage: { input_tokens: 10, output_tokens: 20, cache_read_input_tokens: 30, cache_creation_input_tokens: 40 } });
+  await pause(20);
+  textTurn("the background task finished");
+  result("the background task finished", { total_cost_usd: 0.3, duration_ms: 200, num_turns: 1, usage: { input_tokens: 1, output_tokens: 2, cache_read_input_tokens: 3, cache_creation_input_tokens: 4 } });
+} else if (prompt.includes("SLOW_TASK")) {
+  out(init);
+  const toolId = "toolu_slow_task";
+  out({ type: "assistant", message: { id: `msg_${crypto.randomUUID()}`, role: "assistant", content: [{ type: "tool_use", id: toolId, name: "Task", input: { description: "Count" } }] }, parent_tool_use_id: null, session_id: sessionId });
+  out({ type: "system", subtype: "task_started", task_id: "task_1", tool_use_id: toolId, task_type: "local_agent", description: "Count words", session_id: sessionId });
+  for (let i = 1; i <= 3; i++) {
+    await pause(150);
+    out({ type: "system", subtype: "task_progress", task_id: "task_1", description: `step ${i}`, usage: { total_tokens: i * 100, tool_uses: i, duration_ms: i * 10 }, session_id: sessionId });
+  }
+  await pause(150);
+  out({ type: "system", subtype: "task_notification", task_id: "task_1", status: "completed", usage: { total_tokens: 400, tool_uses: 4, duration_ms: 40 }, session_id: sessionId });
+  out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: "counted" }] }, parent_tool_use_id: null, session_id: sessionId });
+  textTurn("task done");
+  result("task done");
+} else if (prompt.includes("SLOW_STREAM")) {
+  out(init);
+  const id = `msg_${crypto.randomUUID()}`;
+  const words = ["one", " two", " three", " four", " five", " six"];
+  const event = (ev: unknown) => out({ type: "stream_event", event: ev, parent_tool_use_id: null, session_id: sessionId });
+  event({ type: "message_start", message: { id, role: "assistant", model: "fake-model", content: [] } });
+  event({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+  for (const w of words) {
+    event({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: w } });
+    await pause(120);
+  }
+  event({ type: "content_block_stop", index: 0 });
+  out({ type: "assistant", message: { id, role: "assistant", content: [{ type: "text", text: words.join("") }] }, parent_tool_use_id: null, session_id: sessionId });
+  result(words.join(""));
+} else if (/SHOTS:(\d+)/.test(prompt)) {
+  out(init);
+  const count = Number(/SHOTS:(\d+)/.exec(prompt)![1]);
+  // A PNG header and filler: what matters is its size.
+  const image = `iVBORw0KGgo${"A".repeat(4000)}`;
+  for (let i = 0; i < count; i++) {
+    const id = `toolu_shot_${i}`;
+    out({ type: "assistant", message: { id: `msg_${crypto.randomUUID()}`, role: "assistant", content: [{ type: "tool_use", id, name: "mcp__browser__browser_screenshot", input: { n: i } }] }, parent_tool_use_id: null, session_id: sessionId });
+    await pause(3);
+    out({
+      type: "user",
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: [{ type: "text", text: `shot ${i}` }, { type: "image", source: { type: "base64", media_type: "image/png", data: `${image}${i}` } }] }] },
+      parent_tool_use_id: null,
+      session_id: sessionId,
+    });
+    await pause(3);
+  }
+  const key = /THEN_WAIT:([\w-]+)/.exec(prompt)?.[1];
+  if (key) {
+    for (let i = 0; i < 400 && !existsSync(join(stateDir, `${key}-next`)); i++) await pause(50);
+    textTurn("almost there");
+    for (let i = 0; i < 400 && !existsSync(join(stateDir, `${key}-done`)); i++) await pause(50);
+  }
+  textTurn("shots done");
+  result("shots done");
 } else if (prompt.includes("USE_TOOL")) {
   await replay("stream-tooluse.jsonl");
 } else {

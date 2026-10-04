@@ -170,7 +170,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
-       --settings <tmp json>                   (the message-queue hook, see below)
+       --settings <tmp json>                   (the message-queue hook, see below; `ultracode: true` with Ultracode)
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key or in a VM; Bash in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
        [--add-dir <folder or clone> for each usable workspace folder and repository]
@@ -180,9 +180,38 @@ cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <a
 
 Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + result) and pushed as
 `run.delta` WS events; the final assistant message is stored in SQLite and in the agent repo.
+A long run has hundreds of blocks and megabytes of tool output and screenshots, and all but the last few never change
+again: each block is masked and serialized once and made again only when it changed (or when the vault learned or
+forgot a secret). A delta carries what changed (`patch`, see WebSocket); the row saved every few seconds while the run
+works is put together from the serialized blocks, less often the longer saving takes (never more than 1/50 of the time).
+Claude Code reports a run's cost as the total of its whole Claude session, so on a resumed session the chat's earlier
+runs are in it: the run is charged that total minus what the session had counted before
+(`conversations.claude_session_cost_usd`). A process can end more than once (a background task that finishes wakes it
+for another turn); time, turns and tokens of the endings add up.
 Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-conversation lock prevents
 two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
 works in its own tabs (see Browser).
+
+### Ultracode
+
+Claude Code's Ultracode — dynamic workflows on every task, at any effort level — is a setting of the session, not a
+flag: the runner adds `ultracode: true` to the run's `--settings` file. Whether it is on: the chat
+(`conversations.ultracode`, from the model picker or `/effort ultracode [on|off]`), else the agent, else
+`settings.runner.ultracode`. Dreams and condition checks never get it.
+
+* **Availability.** The model catalog probe asks Claude Code (`get_settings` after `initialize`) whether the install has
+  dynamic workflows; a model has `ultracode` when it does and the model supports `xhigh` effort (Claude Code's rule).
+  The answer is about the probe session's model: when that one has no `xhigh`, the probe switches the session to a
+  model that has (`set_model`) and asks again. The UI offers the switch only for such models, and `ultracodeFor` drops
+  the setting for the others — an older CLI never sees the key.
+* **Without full bypass** the `Workflow` tool joins `--allowedTools`: print mode cannot ask, and Claude Code refuses a
+  workflow nobody reviewed.
+* **Progress.** A workflow runs in the background of its `Workflow` tool call. Claude Code reports it as `system`
+  events (`task_started`, `task_progress`, `task_updated`, `task_notification`); the stream accumulator keeps them as
+  `task` on that `tool_use` block (status, current activity, its agents with their state), which the chat shows as a
+  card. The process stays until the workflow is done and then sends one `result` per turn; the last one is the answer,
+  their usage adds up (the tokens of the workflow's agents are on the `task`, not in the run's usage). A pause ends
+  the process and with it the workflow: its `task` is `stopped`, and the continued run starts it again if it needs it.
 
 ### Message queue
 
@@ -291,23 +320,33 @@ directory are masked; request paths are logged as route patterns. `info` and up 
 
 | Scope | Entries |
 |---|---|
-| `runner` | One per run: status, duration, queue wait, cost, tokens, tool calls, failed tools with their error |
-| `http` | Requests slower than 1 s, rejected requests (4xx except sign-in, vault-locked and grant prompts), unknown API routes, 5xx with stack; every request with `verbose` |
+| `runner` | A run's start, and one entry when it ends: status, duration (`ms`: Claude's own, `wallMs`: by the clock), queue wait, cost, tokens, tokens read per turn (`contextTokens`), the session's total on a resumed one, tool calls, failed tools with the head and end of their output, how heavy the message got (`blocks`, `resultKb`, `images`, `imageKb`, `deltas`, `slowestSaveMs`) |
+| `http` | Requests slower than 1 s (`expected` when the route waits by design — `expectSlow`), rejected requests (4xx except sign-in, vault-locked and grant prompts), unknown API routes, 5xx with stack; every request with `verbose` |
 | `mcp` | Agent tool calls slower than 10 s or returning an error, crashes, unknown tools |
-| `db` | Statements slower than 100 ms (SQL only, once a minute each) |
-| `perf` | Event-loop stalls over 300 ms, sleep/wake gaps, memory every 30 min |
+| `db` | Statements slower than 100 ms (SQL only, once a minute each, with how often it was that slow meanwhile) |
+| `perf` | Event-loop stalls over 300 ms with what the core was doing (`during`: slow synchronous work noted through `diagnostics/slow.ts`) and the runs at work; a sleep after real use or under a run (`sleptAt`; the stirring of a sleeping computer is only counted); every 30 min memory, database size, connected UIs and those sleeps — "high memory use" once, and again when it grew by a quarter |
+| `browser` | A browser that went away by itself: whether its process was still alive, how the connection ended, how long it ran and sat idle |
+| `sources` | A failed clone or update with git's own words, the step and how long it took |
 | `crash` | Uncaught exceptions and unhandled rejections (the core still exits with 1) |
 | `ui` | Render crashes, uncaught errors and failed requests that never reached the core (`POST /api/logs/client`, 60 a minute) |
 
 Settings → Logs reads it through `GET /api/logs` (counts, recurring warnings/errors grouped by message without ids and
 numbers), `GET /api/logs/entries?level=&search=&limit=` and `GET /api/logs/report[?full=1]`: Markdown for an AI with
-the environment, recurring problems, a run summary, slow spots, the tail of `desktop.log` and the newest entries that fit
-in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
+the environment (with the build's commit), recurring problems, a run summary (cost by agent, runs that took far longer
+by the clock than Claude worked), memory and sleep, slow spots (requests, by-design waits apart, tool calls, queries,
+stalls and what blocked them), the tail of `desktop.log` and the newest entries that fit in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
 
 ## WebSocket (`/api/ws`)
 
 Server → UI events are defined in `packages/shared/src/events.ts`. The UI keeps React Query caches in sync
 (`apps/desktop/src/lib/realtime.ts`). Browser live view frames are only sent to subscribed clients.
+
+`run.delta` counts up per stretch of a run (`stream`, `seq`: a paused run continues in a new stretch). A client that
+says `deltas.patch` gets only what changed (`patch`: `[index, block]` pairs, `length`: how long the list is afterwards)
+and applies it with `applyRunDelta`; when a delta doesn't fit what it has (one was missed), it asks for the whole list
+with `run.resync`. A client that connects, or a phone that
+opens a chat, is sent the whole list of what runs there. Clients that don't ask for patches (older phone apps) get the
+whole list, at most once a second per run.
 
 ## Browser
 
@@ -404,16 +443,22 @@ Each model screenshot remembers the screen area it shows (`Shot`), so image pixe
 * **Window** — [Cua Driver](https://github.com/trycua/cua) (`libs/cua-driver`, MIT), run as `cua-driver mcp --direct`
   (Godmode is its MCP client; `--direct` keeps the TCC grants of the app running Godmode). The pinned build comes from
   PyPI (`cua-driver`, bundles the native binary) via `uvx`, with telemetry and update checks off and its state under
-  `<data>/cua-driver`. Its pixel coordinates refer to its last screenshot of the window, so all calls go through one
-  queue and that size is tracked. Element tokens that a newer driver snapshot made stale are re-resolved by
-  role/label/position. On macOS the native helper backs it up: window capture for the live view, scrolling (through the
-  scroll area's accessibility scroll bars — posted wheel events don't reach background windows), and pointer/keyboard
-  delivery with `CGEventPostToPid` + `AXPress` when the driver refuses a window it can't match in the accessibility tree.
+  `<data>/cua-driver`; it is downloaded in the background on first use — an agent's action or opening the share picker
+  starts it; the macOS helper acts meanwhile, elsewhere an action waits up to 20 s and the picker says it is under way;
+  status checks never start one, also in place of an installed
+  `cua-driver` older than the pin (which is used only without uv, and flagged in the system check). Its pixel coordinates refer to its last screenshot
+  of the window, so all calls go through one queue and that size is tracked. Element tokens that a newer driver
+  snapshot made stale are re-resolved by role/label/position. On macOS the native helper backs it up: window capture
+  for the live view, scrolling (through the scroll area's accessibility scroll bars — posted wheel events don't reach
+  background windows), and pointer/keyboard delivery with `CGEventPostToPid` + `AXPress` when the driver refuses a
+  window it can't match in the accessibility tree.
 * **Desktop / display** — the native helper, every monitor: macOS `native/macos/GodmodeComputer.swift` (ScreenCaptureKit,
   global CGEvents; embedded into the compiled core by `scripts/build.ts`, extracted to `<data>/bin`, compiled with
   `swiftc` when running from source), Windows a PowerShell-hosted C# class (`helpers/windowsHelper.ts`: `Screen.AllScreens`,
   `CopyFromScreen`, `SendInput`), Linux/X11 `xrandr` + ImageMagick `import` + `xdotool`. Without one, Cua Driver's
-  desktop target covers the primary display. Desktop runs take turns (one mouse); window/tab shares only lock themselves.
+  desktop target covers the primary display (the driver scales desktop pixels by how much its last desktop screenshot
+  was downsized, so the client sends them at that size). Desktop runs take turns (one mouse); window/tab shares only
+  lock themselves.
 * **Tab** — CDP on Godmode's Chromium (`Page.captureScreenshot`, `Input.dispatch*`), background tabs included.
 
 Live view: `computer.subscribe { view }` over the WebSocket (`display:<id>`, `window:<pid>:<windowId>`,
@@ -473,7 +518,7 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   it can't change, delete or schedule agents that work on the host. Ending a run aborts its in-flight VM calls.
 * **`vm` MCP tools** (`vm/tools.ts`): `shell` (`tart exec <id> /bin/zsh -l -c …`, exit code + stdout/stderr, timeout),
   `read_file` / `write_file` / `edit_file` (through the same channel, content via stdin; non-UTF-8 files are refused
-  for edits), `info`, and `screen` — the computer-use action vocabulary (screenshot, clicks, drag, scroll, type, key,
+  for edits), `info`, `permissions` (below) and `screen` — the computer-use action vocabulary (screenshot, clicks, drag, scroll, type, key,
   zoom) over the guest's macOS Screen Sharing on the VM's NAT address (`vm/vnc.ts`: RFB 3.8/3.889 client with Apple
   Remote Desktop authentication, raw 32-bit updates, pointer/key events; `vm/raster.ts`: crop, area-average downscale,
   PNG). Long or non-ASCII text is pasted through the guest clipboard. Screenshots remember their frame, so model
@@ -481,6 +526,21 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   network interface.) `fill_login` / `fill_totp` type vault secrets into the focused field (optionally clicking a
   `coordinate` first) when `settings.vm.vaultFill` allows it; a password needs `kCGSSessionSecureInputPID` in the guest's
   `ioreg` (the app that owns it is named in the result and the audit entry). The value is never in a tool result.
+* **Privacy permissions in the guest** (`vm/permissions.ts`): the `permissions` tool (`grant` / `revoke` / `list` /
+  `denied`) lets the agent set macOS's privacy permissions (TCC) for the VM's software itself, so no dialog waits for a
+  human. The Cirrus Labs images run with System Integrity Protection off, so an entry is a row in a SQLite database:
+  the system one (`/Library/Application Support/com.apple.TCC/TCC.db`, through `sudo`: Accessibility, Screen Recording,
+  Input Monitoring, Full Disk Access, Developer Tools) or the guest user's (everything else — Automation, Camera,
+  Microphone, Contacts, folders, …); which daemon answers for a service was measured on macOS 26. A client is an
+  app's bundle id or the real path of a bare program, resolved in the guest from a name, bundle id or path; `"shell"`
+  is the Tart guest agent, which macOS holds responsible for everything `tart exec` starts. Entries are written without
+  a code requirement (like the image's own) and replace a stored refusal — one transaction per database, the system one
+  first, so a failure there changes nothing; tccd reads the database on every request, so they apply at once. Automation is per controlled app
+  (`target`); revoking Accessibility also removes the PostEvent entry macOS would turn back into it. `denied` reads
+  tccd's `AUTHREQ_*` log lines (`log show`) for requests that weren't allowed (Automation requests aren't logged
+  that way). Grants and revocations made with the tool are audited, failed attempts included
+  (`vm.permission.grant` / `.revoke`). An image with System Integrity Protection on answers with why it can't be done.
+  Nothing dismisses dialogs: closing one without "Allow" makes macOS store a refusal over the entry.
 * **Godmode's agent in the VM** (`vm/guest.ts`): the browser and computer use of a VM run live in the guest. Claude
   Code starts two stdio MCP servers as `tart exec -i <vm> /bin/zsh -f -c …` (stdio through the Tart guest agent, which
   runs in the guest user's GUI session; no startup files, so nothing the agent puts there can print into the JSON-RPC
@@ -489,7 +549,9 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   in `~/.godmode/browser-profile`, DevTools on the guest's `127.0.0.1:9322`, visible on the VM's screen, downloads in
   `~/Downloads`), started again when it was closed — and `cua` — Cua Driver (`cua-driver mcp --direct`), which controls
   the guest's apps and windows; the Cirrus Labs images grant the guest agent (and so everything `tart exec` starts)
-  Accessibility and Screen Recording. Everything is installed on first use, shared by concurrent runs: uv is copied
+  Accessibility and Screen Recording. `prepareGuest` restores what is missing of that on every run (`ensureAgentAccess`:
+  the image's entries name one version of the agent's binary and are lost when Homebrew upgrades it), plus Automation of
+  System Events and Finder, so an `osascript` from the shell doesn't wait at a dialog. Everything is installed on first use, shared by concurrent runs: uv is copied
   from the host (the official installer as fallback), Chrome comes from Google's disk image, browser-use and Cua Driver
   are fetched through uv (`uv tool run --from <pinned spec> python …` records the program's path in
   `~/.godmode/stamps`). A tool that failed isn't retried for 10 minutes (or until the VM stops). Vault fills
@@ -640,14 +702,36 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   without one when it can't be created (with a notification). Deleting a task removes its worktree and prunes it from
   the repository; its branch stays (while the worktree exists, the branch can't be checked out elsewhere — merge it).
 * **Coding tasks** publish their branch: when a run succeeds, Godmode commits what the agent left uncommitted (new
-  `.env`/key files are left out), refuses to push when the branch adds such files or its diff contains a secret from
-  the vault, merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks the task),
+  `.env`/key files are left out), takes secrets out of the commits the remote doesn't have yet (see the next point),
+  merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks the task),
   and pushes with an explicit lease on what it saw — so nothing pushed meanwhile is overwritten. It then opens a pull
-  request with `gh pr create` (body: the agent's summary, redacted); without `gh`, or for GitLab, the task links to the
+  request with `gh pr create` (body: the agent's summary, redacted — saved secrets are taken out of the title and body
+  even with redaction off); without `gh`, or for GitLab, the task links to the
   page that opens one. A branch without commits on top of its base goes to review without a pull request; a local
   repository without a remote keeps the commits on the task's branch. Restarting fast-forwards the worktree to the
   remote branch first; only the task's branch is fetched and pushed (nothing is written to the repository's config).
   When a `general` or `research` task's run ends, what it changed is committed on its branch, which isn't pushed.
+* **Secrets never stop a push and never go along**: before a task's branch is pushed (when a run ends, or from the
+  board), Godmode checks the commits that are neither on the base nor on the remote yet, and only what they add: files
+  that look like secrets (`.env`, keys), and secrets saved in the vault in an added line, a file name, any version of
+  a binary file those commits add (read whole, up to 20 MB) or a commit message. Lines a change removes or merely surrounds don't
+  count, a moved file adds only what changed, and what the remote already has isn't checked again. A value counts
+  when it is stored as a secret (passwords, 2FA secrets, API keys, tokens; of a custom MCP server's env variables and
+  headers the ones whose name says so, like `API_KEY`, `signingKey`, `SENTRY_DSN`, `SLACK_WEBHOOK_URL` or
+  `Authorization` — not public keys like `STRIPE_PUBLISHABLE_KEY`, nor a snake_case identifier under a key's name like
+  `SORT_KEY=created_at` —, plus bearer tokens and passwords inside URLs) and isn't a single plain word or number — a
+  server's other settings (`NODE_ENV=production`, URLs) are only masked in
+  transcripts. When something is found, Godmode fixes the branch instead of blocking the task: such files are left out
+  (they stay in the worktree; one the branch already had keeps the version the remote has), the secret is replaced
+  with `GODMODE_REMOVED_SECRET` in text files (a file that can't be rewritten safely — binary, not UTF-8, a link, not
+  writable — is left out too), and the unpushed commits become one commit on top of what the remote has (the branch's
+  own last commit as its first parent), so no pushed commit or commit message carries the secret and nothing on the
+  remote is rewritten. Exactly the commit that was checked is pushed: when a turn that started meanwhile stages or
+  commits something during the fix (or before a merge with someone else's push), nothing is pushed now and that
+  turn's end pushes the branch. The branch as the agent left it stays in the worktree as
+  `refs/worktree/godmode/with-secrets/<commit>` (never pushed; its reflog keeps the commits for git's 90 days even
+  when the repository is cleaned up from another checkout), a notification names the files, and the agent's brief
+  tells it to read secrets from the environment. With a locked vault only the file names are checked.
 * **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
   `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
   `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
@@ -748,12 +832,14 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
 * **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
   allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents, conversations and messages (with files),
-  tasks and their attachments (upload and read), runs (cancel),
-  routines (run, enable), browser profiles (launch, input), computer input, VMs (list, screenshot, start/stop), notifications,
+  tasks and their attachments (upload and read), runs (cancel), routines (run, enable), browser profiles (launch,
+  input), computer input, VMs (list, screenshot, start/stop, input), notifications,
   missing logins and `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are
   restricted too: a phone can't set a chat's folder, VM, browser, shared screen or instructions, or change an
   automation beyond switching it on or off, and it only watches and controls screens that are shared in a chat
-  (`computer.subscribe` and `/api/computer/input`). The listener checks the decoded path, so `/api/%61uth/…` is refused
+  (`computer.subscribe` and `/api/computer/input`); Godmode's VMs it may always take over (`POST /api/vms/:id/input`,
+  the computer input events on a picture of the whole screen, sent over the VM's Screen Sharing and never booting
+  it). The listener checks the decoded path, so `/api/%61uth/…` is refused
   like `/api/auth/…`.
 * **Key hygiene.** The app only sends its key over plain HTTP to a Tailscale address (100.64.0.0/10 or `*.ts.net`;
   https anywhere, for a future gateway — `isPhoneUrlAllowed`), and first asks the address's `/api/health`, which on

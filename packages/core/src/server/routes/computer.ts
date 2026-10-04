@@ -15,7 +15,7 @@ const view = z
 
 const point = { x: z.number(), y: z.number() };
 
-const inputEvent = z.discriminatedUnion("type", [
+export const inputEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("click"), ...point, button: z.enum(["left", "right", "middle"]).optional(), count: z.number().int().min(1).max(3).optional() }),
   z.object({ type: z.literal("move"), ...point }),
   z.object({ type: z.literal("drag"), ...point, toX: z.number(), toY: z.number() }),

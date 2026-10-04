@@ -5,9 +5,9 @@
   "description": "Godmode Bot \u2014 the AI coworker that works like a human on your computer, with your logins, 2FA and tools. Powered by Claude Code + browser-use.",
   "license": "SEE LICENSE IN LICENSE",
   "type": "module",
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@12.9.1",
   "engines": {
-    "node": ">=20",
+    "node": ">=22",
     "bun": ">=1.3"
   },
   "scripts": {
@@ -25,11 +25,5 @@
     "start": "pnpm --filter @godmode/core start",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"
-  },
-  "pnpm": {
-    "neverBuiltDependencies": [
-      "ssh2",
-      "cpu-features"
-    ]
   }
 }

@@ -132,6 +132,8 @@ export interface Agent {
   /** Claude model id or alias. Empty string = use global default. */
   model: string;
   effort: Effort | null;
+  /** Ultracode (see RunnerSettings.ultracode) for this agent. null = the global default. */
+  ultracode: boolean | null;
   /** The built-in main assistant ("Godmode"). Cannot be deleted. */
   isDefault: boolean;
   enabled: boolean;
@@ -308,6 +310,8 @@ export interface Conversation {
   model: string | null;
   /** Per-chat override from the effort control or /effort. null = the agent's effort. */
   effort: Effort | null;
+  /** Per-chat override from the Ultracode switch or `/effort ultracode`. null = the agent's. */
+  ultracode: boolean | null;
   /** Folder this conversation works in, overriding the agent's. null = the agent's default. */
   workingDirectory: string | null;
   /** What the human shared with the agent in this chat (screen, window or browser tab). null = nothing. */
@@ -397,6 +401,8 @@ export type MessageBlock =
       isError?: boolean;
       /** Optional base64 image result (e.g. browser screenshot). */
       image?: string;
+      /** Work the tool started in the background (a Claude Code workflow), kept up to date while it runs. */
+      task?: ToolTask;
       parentToolUseId?: string | null;
     }
   | { type: "error"; text: string }
@@ -409,6 +415,36 @@ export type MessageBlock =
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */
   | { type: "pause"; reason: PauseReason; at: ISODate; limit?: string | null; resumeAt?: ISODate | null; resumedAt?: ISODate };
+
+/**
+ * Background work of a tool call, as Claude Code reports it (`task_started`, `task_progress`, `task_notification`).
+ * `running` on a run that has ended means the work was cut off with it.
+ */
+export interface ToolTask {
+  id: string;
+  /** "local_workflow" for a workflow; other kinds of background work keep Claude Code's name. */
+  kind: string;
+  status: "running" | "completed" | "failed" | "stopped";
+  /** What the task is, e.g. "Review the changed files". */
+  description: string;
+  /** What it does right now, e.g. "Review: bugs". "" = nothing reported yet. */
+  activity: string;
+  totalTokens: number;
+  toolUses: number;
+  durationMs: number;
+  /** The agents of a workflow in the order they were queued. Empty for other kinds of work. */
+  agents: ToolTaskAgent[];
+}
+
+export interface ToolTaskAgent {
+  label: string;
+  /** Title of the workflow phase the agent belongs to; "" = none. */
+  phase: string;
+  state: "queued" | "running" | "done" | "failed";
+  /** The tool it used last, e.g. "Bash". */
+  lastTool?: string;
+  tokens?: number;
+}
 
 /** Why a follow-up ran: it was due, it was overdue (Godmode was off or asleep), or the human said "continue now". */
 export type FollowupReason = "due" | "late" | "now";
@@ -887,6 +923,14 @@ export interface DiagnosticsSettings {
   verbose: boolean;
 }
 
+/** Keeping the tools Godmode relies on working and current (Settings → System). */
+export interface MaintenanceSettings {
+  /** Repair in the background what Godmode can repair by itself: file permissions and missing required tools. */
+  autoFix: boolean;
+  /** Install updates of the installed tools in the background, while no agent is working. */
+  autoUpdate: boolean;
+}
+
 export interface GeneralSettings {
   theme: "dark" | "light" | "system";
   accent: string;
@@ -904,6 +948,11 @@ export interface RunnerSettings {
   model: string;
   fallbackModel: string;
   effort: Effort;
+  /**
+   * Ultracode by default: Claude Code plans every task as a dynamic workflow of several subagents, at any effort
+   * level. Thorough, but slower and far more tokens. Only applies to models that support it (ClaudeModel.ultracode).
+   */
+  ultracode: boolean;
   /** --dangerously-skip-permissions (full bypass). */
   bypassPermissions: boolean;
   maxConcurrentRuns: number;
@@ -1066,6 +1115,7 @@ export interface Settings {
   server: ServerSettings;
   memory: MemorySettings;
   diagnostics: DiagnosticsSettings;
+  maintenance: MaintenanceSettings;
   mobile: MobileSettings;
   onboardingComplete: boolean;
 }
@@ -1083,6 +1133,8 @@ export interface ClaudeModel {
   description: string;
   /** Effort levels the model accepts, low → high. Empty = no effort control. */
   efforts: Effort[];
+  /** Ultracode can be turned on with this model: the installed Claude Code has dynamic workflows and the model supports them. */
+  ultracode: boolean;
   /** Newest model of its family; the others are older versions. */
   latest: boolean;
 }
@@ -1138,6 +1190,103 @@ export interface ClaudeUpdateResult {
   previous: string | null;
   version: string | null;
   output: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Permissions, repairs and tool updates (Settings → System)            */
+/* ------------------------------------------------------------------ */
+
+export type PermissionId = "data-dir" | "data-private" | "tool-binaries" | "claude-config" | "accessibility" | "screen-recording" | "full-disk-access";
+
+export interface PermissionStatus {
+  id: PermissionId;
+  name: string;
+  ok: boolean;
+  detail: string;
+  /** File or folder the check is about. */
+  path: string | null;
+  /** Godmode can't work without it; false = only a feature is limited. */
+  required: boolean;
+  /**
+   * How a problem gets solved: "auto" = Godmode repairs it itself, "request" = Godmode asks the system and the human
+   * allows it there, "manual" = only the human can (see fixHint).
+   */
+  fix: "auto" | "request" | "manual";
+  fixHint: string;
+}
+
+export interface PermissionReport {
+  ok: boolean;
+  checkedAt: ISODate;
+  permissions: PermissionStatus[];
+}
+
+/** What a repair did: "pending" = the system now waits for the human, "manual" = Godmode can't do it. */
+export type FixOutcome = "fixed" | "pending" | "failed" | "manual";
+
+export interface FixResult {
+  kind: "dependency" | "permission";
+  id: DependencyId | PermissionId;
+  name: string;
+  outcome: FixOutcome;
+  output: string;
+}
+
+export interface FixReport {
+  /** Nothing that Godmode needs is still broken. */
+  ok: boolean;
+  startedAt: ISODate;
+  finishedAt: ISODate;
+  results: FixResult[];
+}
+
+export type ToolId = Exclude<DependencyId, "claude-auth"> | "tart";
+
+/**
+ * How a tool is kept current: "release" follows its own releases, "pinned" is the version this Godmode release was
+ * tested with, "external" is updated by the system or a package manager.
+ */
+export type UpdateTrack = "release" | "pinned" | "external";
+
+export interface ToolUpdateStatus {
+  id: ToolId;
+  name: string;
+  installed: boolean;
+  current: string | null;
+  /** Version an update would install; null = unknown. */
+  latest: string | null;
+  updateAvailable: boolean;
+  /** Godmode can install updates of it. */
+  updatable: boolean;
+  track: UpdateTrack;
+  detail: string;
+}
+
+export interface UpdateReport {
+  checkedAt: ISODate;
+  tools: ToolUpdateStatus[];
+}
+
+export interface ToolUpdateResult {
+  id: ToolId;
+  name: string;
+  ok: boolean;
+  /** Nothing was installed: it already was up to date. */
+  upToDate: boolean;
+  previous: string | null;
+  version: string | null;
+  output: string;
+}
+
+/** The background upkeep (settings.maintenance) and what its last pass did. */
+export interface MaintenanceStatus {
+  running: boolean;
+  lastRunAt: ISODate | null;
+  nextRunAt: ISODate | null;
+  /** Why the last pass left updates for later, e.g. agents were working. */
+  postponed: string | null;
+  fixes: FixResult[];
+  updates: ToolUpdateResult[];
 }
 
 /* ------------------------------------------------------------------ */

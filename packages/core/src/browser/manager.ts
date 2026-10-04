@@ -417,7 +417,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean; trans
   client.on("Target.targetInfoChanged", activity);
   tabs.onChange((conversationId) => conversationId && emitProfileSoon(profileId));
   client.onClose(() => void onBrowserGone(rb, "CDP connection closed"));
-  proc?.exited.then((code) => onBrowserGone(rb, `exited with code ${code}`));
+  proc?.exited.then((code) => onBrowserGone(rb, code === null ? "killed by a signal" : `exited with code ${code}`));
 
   registerBrowser(rb);
   startIdleWatcher();
@@ -499,7 +499,18 @@ function forget(rb: RunningBrowser) {
 async function onBrowserGone(rb: RunningBrowser, reason: string) {
   if (rb.stopping || getRegistered(rb.profileId) !== rb) return;
   rb.stopping = true;
-  log.warn(`browser for profile ${rb.profileId} stopped unexpectedly (${reason})`);
+  // Whether the browser itself went (crash, quit by the human) or only the connection to it: `processAlive`. A browser
+  // that is still there is ended below, and the next run that needs it starts a new one.
+  log.warn(`browser for profile ${rb.profileId} stopped unexpectedly (${reason})`, {
+    pid: rb.pid,
+    processAlive: pidAlive(rb),
+    connection: rb.client.closeReason,
+    headless: rb.headless,
+    adopted: !rb.process,
+    upMin: Math.round((Date.now() - rb.startedAt) / 60_000),
+    idleS: rb.lastUsedAt ? Math.round((Date.now() - rb.lastUsedAt) / 1000) : null,
+    chats: rb.tabs.openChats().length,
+  });
   rb.client.close();
   await terminate(rb);
   forget(rb);

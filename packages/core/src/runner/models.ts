@@ -1,13 +1,14 @@
 /**
  * Model catalog (owner: runner): the models the installed Claude Code offers in `/model`, read through the stream-json
- * `initialize` control request (no prompt, no API call). Cached in memory and on disk, refreshed in the background.
+ * `initialize` control request, and whether it has Ultracode (`get_settings`) — no prompt, no API call. Cached in memory
+ * and on disk, refreshed in the background.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import type { ClaudeModel, Effort, ModelCatalog } from "@godmode/shared";
-import { BUILTIN_MODELS, EFFORT_OPTIONS, effortForModel, findModel, isModelId } from "@godmode/shared";
+import { BUILTIN_MODELS, EFFORT_OPTIONS, ULTRACODE_EFFORT, effortForModel, findModel, isModelId } from "@godmode/shared";
 import { config, ensureDir } from "../config";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -18,6 +19,7 @@ const log = logger("models");
 
 const EXIT_GRACE_MS = 5_000;
 const VERSION_TIMEOUT_MS = 10_000;
+const SETTINGS_TIMEOUT_MS = 3_000;
 const FRESH_MS = 15 * 60_000;
 const RETRY_MS = 60_000;
 
@@ -32,6 +34,8 @@ interface RawModel {
 
 let cached: ModelCatalog | null = null;
 let inflight: Promise<ModelCatalog> | null = null;
+/** The last probe got no answer about Ultracode: its models have none for now, and Claude Code is asked again soon. */
+let ultracodeUnknown = false;
 let probeTimeoutMs = 20_000;
 
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -46,8 +50,11 @@ function efforts(levels: unknown): Effort[] {
   return EFFORT_OPTIONS.filter((e) => reported.includes(e));
 }
 
-/** Normalize the CLI's model list. "default" is dropped: in Godmode the default is the agent's model. */
-export function parseModels(raw: unknown): ClaudeModel[] {
+/**
+ * Normalize the CLI's model list. "default" is dropped: in Godmode the default is the agent's model.
+ * `workflows`: this Claude Code has dynamic workflows — Ultracode then works with every model that has its effort level.
+ */
+export function parseModels(raw: unknown, workflows = false): ClaudeModel[] {
   if (!Array.isArray(raw)) return [];
   const entries = raw.filter((m): m is RawModel => !!m && typeof m === "object");
   // CLIs that predate per-model effort info accept every level.
@@ -64,12 +71,14 @@ export function parseModels(raw: unknown): ClaudeModel[] {
     const base = resolvedModel.replace(/\[[^\]]*\]$/, "");
     const family = /claude-([a-z]+)/i.exec(base)?.[1]?.toLowerCase() ?? base;
     if (!newest.has(family)) newest.set(family, base);
+    const levels = !reportsEffort || m.supportsEffort === true ? efforts(m.supportedEffortLevels) : [];
     models.push({
       id,
       resolvedModel,
       label: text(m.displayName) || id,
       description: text(m.description),
-      efforts: !reportsEffort || m.supportsEffort === true ? efforts(m.supportedEffortLevels) : [],
+      efforts: levels,
+      ultracode: workflows && levels.includes(ULTRACODE_EFFORT),
       latest: newest.get(family) === base,
     });
   }
@@ -109,15 +118,16 @@ function drain(stream: ReadableStream<Uint8Array>, max = 4096): () => string {
   return () => out;
 }
 
-async function readControlResponse(stream: ReadableStream<Uint8Array>, requestId: string): Promise<Record<string, unknown>> {
+/** Claude Code answered a control request with an error. */
+class Rejected extends Error {}
+
+/** Reads the answers to control requests off one stream, one request after the other: what a read leaves over is kept for the next. */
+function controlResponses(stream: ReadableStream<Uint8Array>): (requestId: string) => Promise<Record<string, unknown>> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-  try {
+  return async (requestId) => {
     for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, nl).trim();
@@ -131,14 +141,15 @@ async function readControlResponse(stream: ReadableStream<Uint8Array>, requestId
         }
         const res = event.response;
         if (event.type !== "control_response" || res?.request_id !== requestId) continue;
-        if (res.subtype === "error") throw new Error(text(res.error) || "Claude Code rejected the request");
+        if (res.subtype === "error") throw new Rejected(text(res.error) || "Claude Code rejected the request");
         return (res.response as Record<string, unknown> | undefined) ?? {};
       }
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
     }
-  } finally {
-    reader.releaseLock();
-  }
-  throw new Error("Claude Code exited without answering");
+    throw new Error("Claude Code exited without answering");
+  };
 }
 
 function deadline<T>(ms: number, onTimeout: () => T): { promise: Promise<T>; clear: () => void } {
@@ -155,7 +166,32 @@ function deadline<T>(ms: number, onTimeout: () => T): { promise: Promise<T>; cle
   return { promise, clear: () => clearTimeout(timer) };
 }
 
-async function probe(cmd: string[]): Promise<unknown> {
+/** A question after the model list. null: Claude Code rejected it; undefined: no answer (in time). */
+type Ask = (subtype: string, fields?: Record<string, unknown>) => Promise<Record<string, unknown> | null | undefined>;
+
+/**
+ * Whether this Claude Code has dynamic workflows, per `get_settings`; null = not known, a question went unanswered. One
+ * from before Ultracode rejects the request or leaves the field out: "no". Its "no" may also be about the session's
+ * model: when that one lacks the Ultracode effort level, the session gets a model that has it and is asked once more.
+ */
+async function hasWorkflows(ask: Ask, models: ClaudeModel[]): Promise<boolean | null> {
+  const first = await ask("get_settings");
+  if (first === undefined) return null;
+  const applied = first?.applied as { model?: unknown; ultracodeAvailable?: unknown } | undefined;
+  if (applied?.ultracodeAvailable !== false) return applied?.ultracodeAvailable === true;
+  const capable = (m: ClaudeModel | undefined) => !!m?.efforts.includes(ULTRACODE_EFFORT);
+  const other = models.find(capable);
+  // With a model that has the level, "no" is about the workflows.
+  if (!other || capable(findModel(models, text(applied.model)))) return false;
+  // A request without an answer leaves its read on the stream: nothing more is asked then.
+  const switched = await ask("set_model", { model: other.id });
+  if (!switched) return switched === null ? false : null;
+  const second = await ask("get_settings");
+  return second === undefined ? null : (second?.applied as { ultracodeAvailable?: unknown } | undefined)?.ultracodeAvailable === true;
+}
+
+/** The CLI's model list, and whether it has dynamic workflows (what Ultracode runs on; null = it didn't say). */
+async function probe(cmd: string[]): Promise<{ models: unknown; workflows: boolean | null }> {
   const proc: Subprocess<"pipe", "pipe", "pipe"> = Bun.spawn({
     cmd: [...cmd, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--setting-sources", "project,local", "--strict-mcp-config"],
     cwd: ensureDir(join(config().dataDir, "claude-probe")),
@@ -167,17 +203,28 @@ async function probe(cmd: string[]): Promise<unknown> {
     detached: posix,
   });
   const stderr = drain(proc.stderr);
-  const requestId = `models_${randomUUID()}`;
+  const read = controlResponses(proc.stdout);
+  const ask = async (subtype: string, fields: Record<string, unknown> = {}) => {
+    const requestId = `models_${randomUUID()}`;
+    proc.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype, ...fields } })}\n`);
+    await proc.stdin.flush();
+    return read(requestId);
+  };
   const timeout = deadline(probeTimeoutMs, () => {
     throw new Error(`Claude Code did not answer within ${Math.round(probeTimeoutMs / 1000)}s`);
   });
   try {
-    proc.stdin.write(`${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "initialize" } })}\n`);
-    await proc.stdin.flush();
-    const read = readControlResponse(proc.stdout, requestId);
-    read.catch(() => {});
-    const response = await Promise.race([read, timeout.promise]);
-    return response.models;
+    const initialize = ask("initialize");
+    initialize.catch(() => {});
+    const response = await Promise.race([initialize, timeout.promise]);
+    // What is asked after the list gets a moment each, and never fails the probe.
+    const brief: Ask = async (subtype, fields) => {
+      const wait = deadline(Math.min(SETTINGS_TIMEOUT_MS, probeTimeoutMs), () => undefined);
+      const answer = await Promise.race([ask(subtype, fields).catch((err: unknown) => (err instanceof Rejected ? null : undefined)), wait.promise]);
+      wait.clear();
+      return answer;
+    };
+    return { models: response.models, workflows: await hasWorkflows(brief, parseModels(response.models)) };
   } catch (err) {
     killTree(proc, true);
     const reason = err instanceof Error ? err.message : String(err);
@@ -211,9 +258,10 @@ async function fetchCatalog(): Promise<ModelCatalog> {
   try {
     const cmd = resolveClaudeCommand();
     if (!cmd) return builtinCatalog("Claude Code CLI not found");
-    const [raw, version] = await Promise.all([probe(cmd), claudeVersion(cmd)]);
-    const models = parseModels(raw);
+    const [probed, version] = await Promise.all([probe(cmd), claudeVersion(cmd)]);
+    const models = parseModels(probed.models, probed.workflows === true);
     if (!models.length) throw new Error("Claude Code reported no models");
+    ultracodeUnknown = probed.workflows === null;
     return { models, source: "claude", claudeVersion: version, fetchedAt: now(), error: null };
   } catch (err) {
     log.warn("could not read the model list from Claude Code", err);
@@ -227,7 +275,11 @@ function loadCached(): ModelCatalog | null {
     const file = cacheFile();
     if (!existsSync(file)) return null;
     const data: unknown = JSON.parse(readFileSync(file, "utf8"));
-    if (isCatalog(data)) cached = data;
+    if (isCatalog(data)) {
+      // A list from before Ultracode says nothing about it: it is served as it is, and asked for again right away.
+      const complete = data.models.every((m) => typeof m.ultracode === "boolean");
+      cached = complete ? data : { ...data, models: data.models.map((m) => ({ ...m, ultracode: false })), fetchedAt: new Date(0).toISOString() };
+    }
   } catch (err) {
     log.debug("ignoring unreadable model cache", err);
   }
@@ -264,7 +316,7 @@ function refresh(): Promise<ModelCatalog> {
 export async function getModelCatalog(opts: { refresh?: boolean } = {}): Promise<ModelCatalog> {
   const current = loadCached();
   if (opts.refresh || !current) return refresh();
-  const ttl = current.source === "claude" && !current.error ? FRESH_MS : RETRY_MS;
+  const ttl = current.source === "claude" && !current.error && !ultracodeUnknown ? FRESH_MS : RETRY_MS;
   if (Date.now() - Date.parse(current.fetchedAt) > ttl) refresh().catch((err) => log.warn("model refresh failed", err));
   return current;
 }
@@ -276,9 +328,20 @@ export function effortFor(model: string, effort: Effort | null): Effort | null {
   return known ? effortForModel(known.efforts, effort) : effort;
 }
 
+/**
+ * Whether a run with `--model <model>` gets Ultracode when it is switched on, per the cached catalog. Never spawns the
+ * CLI. A model the catalog doesn't list (a custom or provider id) gets it when this Claude Code has it for any model.
+ */
+export function ultracodeFor(model: string, on: boolean): boolean {
+  if (!on) return false;
+  const models = loadCached()?.models ?? [];
+  return findModel(models, model)?.ultracode ?? models.some((m) => m.ultracode);
+}
+
 /** Tests: forget the in-memory catalog; optionally shorten the probe timeout. */
 export function __resetModelCatalogForTests(opts: { probeTimeoutMs?: number } = {}) {
   cached = null;
   inflight = null;
+  ultracodeUnknown = false;
   probeTimeoutMs = opts.probeTimeoutMs ?? 20_000;
 }

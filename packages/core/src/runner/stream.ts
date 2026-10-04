@@ -7,12 +7,13 @@
  *  - full `assistant` messages (the CLI emits one per content block, repeating the message id; older
  *    versions repeat the cumulative content) — reconciled against what the deltas already produced
  *  - `user` tool results (matched to their tool_use block)
- *  - the final `result`
+ *  - background work a tool call started (`task_started`, `task_progress`, … — a workflow), kept on its tool_use block
+ *  - the final `result` (one per turn: a workflow that ends later starts another turn in the same process)
  * Subagent output (events with `parent_tool_use_id`) is kept but flagged with `parentToolUseId`.
  * Slash commands that Claude Code runs locally (`/context`, `/model sonnet`…) become `command` blocks;
  * `/clear` and `/compact` become notices.
  */
-import type { MessageBlock, QueuedMessage, RunUsage } from "@godmode/shared";
+import type { MessageBlock, QueuedMessage, RunUsage, ToolTask, ToolTaskAgent } from "@godmode/shared";
 
 /** Longest tool result text kept per tool_use block (UI + DB). */
 export const MAX_TOOL_RESULT_CHARS = 20_000;
@@ -24,6 +25,7 @@ export interface StreamFinal {
   isError: boolean;
   /** "success" | "error_max_turns" | "error_during_execution" | "error_max_budget_usd" | … */
   subtype: string | null;
+  /** Claude Code's total for the whole Claude session: on a resumed session the runs before this one are in it. */
   costUsd: number | null;
   durationMs: number | null;
   numTurns: number | null;
@@ -127,11 +129,52 @@ export function mapUsage(u: unknown): RunUsage | null {
   };
 }
 
+function plus(a: number | null | undefined, b: number | null): number | null {
+  return a == null ? b : a + (b ?? 0);
+}
+
+/** How a task ended, from Claude Code's status for it; null while that ends nothing ("pending", "running", "paused"). */
+function taskEnd(status: unknown): ToolTask["status"] | null {
+  if (status === "completed" || status === "failed") return status;
+  return typeof status !== "string" || status === "pending" || status === "running" || status === "paused" ? null : "stopped";
+}
+
+/** The agents of a workflow as its `workflow_progress` lists them; null when the event carries no list. */
+function workflowAgents(progress: unknown): ToolTaskAgent[] | null {
+  if (!Array.isArray(progress)) return null;
+  const agents: ToolTaskAgent[] = [];
+  for (const p of progress) {
+    if (!isObj(p) || p.type !== "workflow_agent") continue;
+    const lastTool = str(p.lastToolName);
+    const tokens = num(p.tokens);
+    agents.push({
+      label: str(p.label) ?? "",
+      phase: str(p.phaseTitle) ?? "",
+      state: p.state === "done" ? "done" : p.state === "error" || p.state === "failed" ? "failed" : p.startedAt == null ? "queued" : "running",
+      ...(lastTool ? { lastTool } : {}),
+      ...(tokens !== null ? { tokens } : {}),
+    });
+  }
+  return agents;
+}
+
+export function addUsage(a: RunUsage | null, b: RunUsage | null): RunUsage | null {
+  if (!a || !b) return a ?? b;
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+  };
+}
+
 export class StreamAccumulator {
   readonly blocks: MessageBlock[];
   sessionId: string | null = null;
   model: string | null = null;
   final: StreamFinal | null = null;
+  /** `result` events seen: one per turn of the process. */
+  results = 0;
   /** Raw names of every tool the run called (including subagents). */
   readonly toolsCalled = new Set<string>();
   /** The usage limit Claude last reported as reached; null while requests go through. */
@@ -150,6 +193,8 @@ export class StreamAccumulator {
 
   private streams = new Map<string, StreamState>();
   private messages = new Map<string, BlockRef[]>();
+  /** Background work this stretch of the run started, by Claude Code's task id (the same objects as on the blocks). */
+  private tasks = new Map<string, ToolTask>();
   private pendingTextDelta = "";
 
   /** `blocks`: what the run already produced before it was paused. */
@@ -203,6 +248,8 @@ export class StreamAccumulator {
     if (this.compacting) return "Compacting conversation…";
     const last = this.blocks[this.blocks.length - 1];
     if (!last) return "Starting…";
+    const workflow = this.backgroundWorkflow();
+    if (workflow) return `Running workflow · ${workflow.activity || workflow.description}`;
     switch (last.type) {
       case "tool_use":
         return last.result === undefined ? `Using ${displayToolName(last.name)}` : "Thinking…";
@@ -247,6 +294,8 @@ export class StreamAccumulator {
     if (pause.reason === "limit" && last?.type === "text" && !last.parentToolUseId && last.text.length < 300 && LIMIT_TEXT.test(last.text)) this.blocks.pop();
     this.messages.clear();
     this.streams.clear();
+    // Background work ends with the process; the run that continues streams these blocks again.
+    for (const b of this.blocks) if (b.type === "tool_use" && b.task?.status === "running") b.task.status = "stopped";
     this.blocks.push(pause);
   }
 
@@ -265,8 +314,53 @@ export class StreamAccumulator {
       const post = num(meta.post_tokens);
       this.addNotice("success", `Conversation compacted${pre !== null && post !== null ? ` · ${kTokens(pre)} → ${kTokens(post)} tokens` : ""}`);
       return true;
+    } else if (e.subtype === "task_started" || e.subtype === "task_progress" || e.subtype === "task_updated" || e.subtype === "task_notification") {
+      return this.onTask(e);
     }
     return false;
+  }
+
+  /** Background work of a tool call: started, then progress (for a workflow with its agents), then how it ended. */
+  private onTask(e: Json): boolean {
+    const id = str(e.task_id);
+    if (!id) return false;
+    if (e.subtype === "task_started") {
+      const idx = this.findToolUse(str(e.tool_use_id) ?? "");
+      if (idx < 0) return false;
+      const task: ToolTask = { id, kind: str(e.task_type) ?? "task", status: "running", description: str(e.description) ?? "", activity: "", totalTokens: 0, toolUses: 0, durationMs: 0, agents: [] };
+      (this.blocks[idx] as ToolUseBlock).task = task;
+      this.tasks.set(id, task);
+      return true;
+    }
+    const task = this.tasks.get(id);
+    if (!task) return false;
+    const before = JSON.stringify(task);
+    if (e.subtype === "task_progress") {
+      task.activity = str(e.description) ?? task.activity;
+      // Not every progress event lists the agents.
+      task.agents = workflowAgents(e.workflow_progress) ?? task.agents;
+    } else {
+      task.status = taskEnd(e.subtype === "task_updated" ? (isObj(e.patch) ? e.patch.status : null) : e.status) ?? task.status;
+    }
+    const usage = isObj(e.usage) ? e.usage : {};
+    task.totalTokens = num(usage.total_tokens) ?? task.totalTokens;
+    task.toolUses = num(usage.tool_uses) ?? task.toolUses;
+    task.durationMs = num(usage.duration_ms) ?? task.durationMs;
+    return JSON.stringify(task) !== before;
+  }
+
+  /** The workflow that runs in the background while no top-level tool call waits for its result. */
+  private backgroundWorkflow(): ToolTask | null {
+    let workflow: ToolTask | null = null;
+    for (const task of this.tasks.values()) if (task.kind === "local_workflow" && task.status === "running") workflow = task;
+    if (!workflow) return null;
+    for (let i = this.blocks.length - 1; i >= 0; i--) {
+      const b = this.blocks[i]!;
+      // Steps an earlier stretch of the run left cut off don't count.
+      if (b.type === "pause") break;
+      if (b.type === "tool_use" && !b.parentToolUseId && b.result === undefined) return null;
+    }
+    return workflow;
   }
 
   private stream(parent: string | null): StreamState {
@@ -489,14 +583,19 @@ export class StreamAccumulator {
     const errors = Array.isArray(e.errors) ? e.errors.filter((x): x is string => typeof x === "string") : [];
     const resultText = str(e.result);
     this.sessionId = str(e.session_id) ?? this.sessionId;
+    // Claude Code can end more than once in one process: a workflow or a background task that outlives its turn starts
+    // another turn, with a result of its own. Time, turns and tokens are per result, so they add up; the cost is the
+    // session's so far.
+    const prev = this.final;
+    this.results++;
     this.final = {
       text: resultText ?? this.lastTurnText(),
       isError: e.is_error === true || (subtype !== null && subtype !== "success"),
       subtype,
-      costUsd: num(e.total_cost_usd),
-      durationMs: num(e.duration_ms),
-      numTurns: num(e.num_turns),
-      usage: mapUsage(e.usage),
+      costUsd: num(e.total_cost_usd) ?? prev?.costUsd ?? null,
+      durationMs: plus(prev?.durationMs, num(e.duration_ms)),
+      numTurns: plus(prev?.numTurns, num(e.num_turns)),
+      usage: addUsage(prev?.usage ?? null, mapUsage(e.usage)),
       sessionId: this.sessionId,
       errors,
       apiErrorStatus: num(e.api_error_status),
@@ -536,28 +635,33 @@ function redactDeep(value: unknown, redact: (s: string) => string, depth = 0): u
   return out;
 }
 
-/** Copy of `blocks` with every string (text, tool input, results) passed through `redact`. */
+/** Copy of `block` with every string (text, tool input, results) passed through `redact`. */
+export function redactBlock(b: MessageBlock, redact: (s: string) => string): MessageBlock {
+  switch (b.type) {
+    case "tool_use":
+      return {
+        ...b,
+        input: redactDeep(b.input, redact),
+        ...(b.result !== undefined ? { result: redact(b.result) } : {}),
+        ...(b.task
+          ? { task: { ...b.task, description: redact(b.task.description), activity: redact(b.task.activity), agents: b.task.agents.map((a) => ({ ...a, label: redact(a.label), phase: redact(a.phase) })) } }
+          : {}),
+      };
+    case "text":
+    case "thinking":
+    case "error":
+    case "notice":
+    case "user_message":
+      return { ...b, text: redact(b.text) };
+    case "command":
+      return { ...b, args: redact(b.args), output: redact(b.output) };
+    default:
+      return b;
+  }
+}
+
 export function redactBlocks(blocks: MessageBlock[], redact: (s: string) => string): MessageBlock[] {
-  return blocks.map((b) => {
-    switch (b.type) {
-      case "tool_use":
-        return {
-          ...b,
-          input: redactDeep(b.input, redact),
-          ...(b.result !== undefined ? { result: redact(b.result) } : {}),
-        };
-      case "text":
-      case "thinking":
-      case "error":
-      case "notice":
-      case "user_message":
-        return { ...b, text: redact(b.text) };
-      case "command":
-        return { ...b, args: redact(b.args), output: redact(b.output) };
-      default:
-        return b;
-    }
-  });
+  return blocks.map((b) => redactBlock(b, redact));
 }
 
 /* ------------------------------------------------------------------ */

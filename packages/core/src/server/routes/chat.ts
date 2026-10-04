@@ -26,7 +26,7 @@ const attachmentSchema = z.object({
   data: z.string().min(1),
 });
 
-/** Per-chat model/effort. null or "" = use the agent's. */
+/** Per-chat model/effort/Ultracode. null or "" = use the agent's. */
 const modelChoice = {
   model: z
     .string()
@@ -35,6 +35,7 @@ const modelChoice = {
     .nullable()
     .optional(),
   effort: z.enum(EFFORT_OPTIONS).nullable().optional(),
+  ultracode: z.boolean().nullable().optional(),
 };
 
 const folder = z.string().trim().max(4096).nullable().optional();
