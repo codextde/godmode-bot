@@ -84,6 +84,10 @@ export function useSpend(period: SpendPeriod, agentId?: string | null) {
   return useQuery({ queryKey: qk.spendReport(period, agentId ?? null), queryFn: () => api.spend.report(period, agentId) });
 }
 
+export function useAttention() {
+  return useQuery({ queryKey: qk.attention, queryFn: api.attention, staleTime: 2_000 });
+}
+
 export function useBudgets() {
   return useQuery({ queryKey: qk.budgets, queryFn: api.budgets.get });
 }

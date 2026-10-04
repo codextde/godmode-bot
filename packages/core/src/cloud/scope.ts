@@ -123,6 +123,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
 
   ["GET|POST", "/api/conversations", A],
   ["GET|PATCH|DELETE", "/api/conversations/:id", A],
+  ["POST", "/api/conversations/read", A],
+  ["GET", "/api/attention", A],
   ["POST", "/api/conversations/:id/messages", A],
   ["PATCH|DELETE", "/api/conversations/:id/queue/:messageId", A],
   ["POST", "/api/conversations/:id/queue/send", A],

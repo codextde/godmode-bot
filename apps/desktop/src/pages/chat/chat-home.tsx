@@ -27,10 +27,11 @@ import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useConversations, useRunners, useScopeWorkspace, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useConversations, useRunners, useScopeWorkspace, useWorkspaces, useAttention } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
+import { AttentionList } from "@/components/attention/attention-list";
 import { useLive, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
@@ -280,6 +281,7 @@ export default function ChatHome() {
       </div>
 
       <div className="relative mx-auto w-full max-w-5xl space-y-10 px-4 pb-16 @md:px-5 @xl:px-8">
+        <NeedsYou agents={agents} />
         <RunningNow agents={agents} />
         <RecentChats agents={agents} />
       </div>
@@ -302,6 +304,30 @@ export default function ChatHome() {
         }}
       />
     </ChatDropZone>
+  );
+}
+
+/** What waits for the human, first thing on Home: the newest few, the rest in the Inbox. */
+function NeedsYou({ agents }: { agents: Agent[] }) {
+  const { data: items = [] } = useAttention();
+  const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
+  if (!items.length) return null;
+  const shown = items.slice(0, 5);
+  return (
+    <section aria-labelledby="needs-you-title">
+      <div className="mb-3 flex items-center gap-2">
+        <h2 id="needs-you-title" className="eyebrow flex items-center gap-2">
+          Needs you
+          <span className="rounded-[4px] bg-warning/12 px-1 font-mono text-[10px] font-medium text-warning tabular-nums">{items.length}</span>
+        </h2>
+        {items.length > shown.length && (
+          <Link to="/inbox" className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+            All {items.length} in the Inbox
+          </Link>
+        )}
+      </div>
+      <AttentionList items={shown} agentById={agentById} />
+    </section>
   );
 }
 

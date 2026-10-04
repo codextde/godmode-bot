@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { CircleCheck } from "lucide-react";
-import type { ComposioConnection, Routine, RoutineInput, RoutineTrigger, RoutineTriggerType } from "@godmode/shared";
+import type { ComposioConnection, Routine, RoutineInput, RoutineTrigger, RoutineTriggerType, RoutineNotify } from "@godmode/shared";
 import { findModel } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -72,6 +72,7 @@ export interface RoutineDraft {
   prompt: string;
   enabled: boolean;
   reuseConversation: boolean;
+  notify: RoutineNotify;
 }
 
 /** Like the core: events get a conversation each (named after the event); schedules and conditions keep one. */
@@ -100,6 +101,7 @@ function initialDraft(routine: Routine | null | undefined, agentId: string | und
     prompt: routine?.prompt ?? initial?.prompt ?? "",
     enabled: routine?.enabled ?? initial?.enabled ?? true,
     reuseConversation: routine?.reuseConversation ?? initial?.reuseConversation ?? defaultReuse(triggerType),
+    notify: routine?.notify ?? "failures",
   };
 }
 
@@ -206,6 +208,7 @@ export function RoutineDialog({
         filter: eventTrigger ? draft.filter.trim() : "",
         enabled: draft.enabled,
         reuseConversation: draft.reuseConversation,
+        notify: draft.notify,
       };
       return routine ? api.routines.update(routine.id, input) : api.routines.create(input);
     },
@@ -487,6 +490,29 @@ export function RoutineDialog({
                 checked={draft.enabled}
                 onChange={(v) => set("enabled", v)}
               />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <Label htmlFor="routine-notify" className="shrink-0">
+                Tell me
+              </Label>
+              <Select value={draft.notify} onValueChange={(v) => set("notify", v as RoutineNotify)}>
+                <SelectTrigger id="routine-notify" className="w-56" aria-describedby="routine-notify-hint">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="failures">When a run fails</SelectItem>
+                  <SelectItem value="always">After every run</SelectItem>
+                  <SelectItem value="never">Never</SelectItem>
+                </SelectContent>
+              </Select>
+              <p id="routine-notify-hint" className="basis-full text-xs text-muted-foreground">
+                {draft.notify === "never"
+                  ? "No notifications. A failing automation still shows under Needs you."
+                  : draft.notify === "always"
+                    ? "A notification after every run, with what it did."
+                    : "A failure is told once, until a run works again."}
+              </p>
             </div>
 
             <DialogFooter className="items-center sm:justify-between">

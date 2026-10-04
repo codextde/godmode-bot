@@ -13,7 +13,8 @@ import { NotificationList } from "@/components/inbox/notification-list";
 import { InboxQuestion } from "@/components/inbox/question-item";
 import { isVaultLocked } from "@/components/vault/vault-utils";
 import { errorMessage } from "@/lib/api";
-import { useAllAgents, useMissingLogins, useQuestions } from "@/lib/hooks";
+import { useAllAgents, useAttention, useMissingLogins, useQuestions } from "@/lib/hooks";
+import { AttentionList } from "@/components/attention/attention-list";
 
 type Entry = { kind: "login"; item: MissingLogin; at: number } | { kind: "question"; item: AgentQuestion; at: number };
 
@@ -61,12 +62,16 @@ export default function InboxPage() {
       ].sort((a, b) => b.at - a.at),
     [current.data, currentQuestions.data],
   );
-  const openCount = (open.data?.length ?? 0) + (qOpen.data?.length ?? 0);
+  // The rest of what waits (tickets, paused chats, budgets, failures, people): questions and logins have their cards below.
+  const attention = useAttention();
+  const others = (attention.data ?? []).filter((i) => i.kind !== "question" && i.kind !== "login");
+  const openCount = (open.data?.length ?? 0) + (qOpen.data?.length ?? 0) + others.length;
 
   const count = (s: MissingLoginStatus) => {
     const logins = byStatus[s].data?.length;
     const questions = questionsBy[s].data?.length;
-    return logins === undefined && questions === undefined ? undefined : (logins ?? 0) + (questions ?? 0);
+    if (logins === undefined && questions === undefined) return undefined;
+    return (logins ?? 0) + (questions ?? 0) + (s === "open" ? others.length : 0);
   };
 
   return (
@@ -109,6 +114,11 @@ export default function InboxPage() {
               </Tabs>
             </div>
 
+            {tab === "open" && others.length > 0 && (
+              <div className="mb-4">
+                <AttentionList items={others} agentById={agentById} />
+              </div>
+            )}
             {current.isLoading && currentQuestions.isLoading ? (
               <div className="space-y-3">
                 {Array.from({ length: 3 }).map((_, i) => (
@@ -126,7 +136,7 @@ export default function InboxPage() {
                   </Button>
                 }
               />
-            ) : items.length === 0 ? (
+            ) : items.length === 0 && !(tab === "open" && others.length > 0) ? (
               <EmptyState
                 key={tab}
                 icon={EMPTY[tab].icon}
