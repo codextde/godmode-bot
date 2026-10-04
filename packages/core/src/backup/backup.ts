@@ -24,7 +24,8 @@ import { isValidBranch, parseGitUrl } from "@godmode/shared";
 import { config, VERSION } from "../config";
 import { all, get, getDb, run as exec } from "../db";
 import { recoverInterruptedRuns } from "../runner/runner";
-import { TEAM_BACKFILL_SQL, TICKET_FACTS_SQL } from "../db/migrations";
+import { SPEND_BACKFILL_SQL, TEAM_BACKFILL_SQL, TICKET_FACTS_SQL } from "../db/migrations";
+import { startBudgets, stopBudgets } from "../services/budgets";
 import { repairReportingLines } from "../agents/service";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -716,6 +717,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
     stopScheduler();
     stopFollowups();
     stopPauses();
+    stopBudgets();
     stopAppTriggers();
     stopAutomationEvents();
     await stopMessaging();
@@ -736,6 +738,8 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       // A backup from before the ticket package: who filed each ticket, why it is blocked, what it cost.
       getDb().run(TICKET_FACTS_SQL);
       recomputeTicketTotals();
+      // A backup from before the spend ledger: what its runs cost, booked when they last ran.
+      getDb().run(SPEND_BACKFILL_SQL);
       exec("UPDATE automation_events SET status = 'skipped', note = 'Restored from a backup' WHERE status = 'pending'");
       exec("DELETE FROM followups WHERE due_at <= ?", new Date().toISOString());
       // Paused runs come back paused; none continues by itself after a restore.
@@ -771,6 +775,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       startScheduler();
       startFollowups();
       startPauses();
+      startBudgets();
       startAutomationEvents();
       startAppTriggers();
       startMessaging();

@@ -1,3 +1,4 @@
+import type { SpendPeriod } from "@godmode/shared";
 import { useQuery } from "@tanstack/react-query";
 import { BUILTIN_MODELS, type ModelCatalog } from "@godmode/shared";
 import { api, type ScopeFilter } from "./api";
@@ -79,6 +80,18 @@ export function useVaultStatus() {
 }
 
 /** What agents asked the human; "open" ones keep a run standing still until they are answered. */
+export function useSpend(period: SpendPeriod, agentId?: string | null) {
+  return useQuery({ queryKey: qk.spendReport(period, agentId ?? null), queryFn: () => api.spend.report(period, agentId) });
+}
+
+export function useAttention() {
+  return useQuery({ queryKey: qk.attention, queryFn: api.attention, staleTime: 2_000 });
+}
+
+export function useBudgets() {
+  return useQuery({ queryKey: qk.budgets, queryFn: api.budgets.get });
+}
+
 export function useQuestions(status = "open") {
   return useQuery({ queryKey: [...qk.questions, status], queryFn: () => api.questions.list({ status }) });
 }

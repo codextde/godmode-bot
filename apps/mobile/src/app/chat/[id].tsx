@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { characterGreeting, type Agent, type ConversationWithMessages, type Message, type MessageBlock } from "@godmode/shared";
+import { characterGreeting, type Agent, type ConversationWithMessages, type Message, type MessageBlock, budgetPauseTitle } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { Composer, ComposerDock } from "@/components/composer";
 import { HeaderActions } from "@/components/header-actions";
@@ -120,7 +120,12 @@ export default function Chat() {
         {paused?.reason === "question" ? (
           <AskingStrip agentName={agent?.name ?? "The agent"} approval={paused.question?.kind === "approval"} />
         ) : paused ? (
-          <PausedStrip limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null} auto={paused.auto} onContinue={resume} />
+          <PausedStrip
+            limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null}
+            held={paused.reason === "budget" && paused.budget ? budgetPauseTitle(paused.budget, agent?.name ?? "The agent", paused.pausedAt) : null}
+            auto={paused.auto}
+            onContinue={resume}
+          />
         ) : null}
         <ComposerDock>
           <Composer
@@ -151,17 +156,21 @@ function AskingStrip({ agentName, approval }: { agentName: string; approval: boo
 }
 
 /** Above the composer while the chat's run stands still. */
-function PausedStrip({ limit, auto, onContinue }: { limit: string | null; auto: boolean; onContinue: () => void }) {
+function PausedStrip({ limit, held, auto, onContinue }: { limit: string | null; held: string | null; auto: boolean; onContinue: () => void }) {
   const c = useColors();
   return (
     <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
-      <Icon name={limit ? "clock" : "pause"} size={15} color={limit ? c.warning : c.textMuted} />
+      <Icon name={limit || held ? "clock" : "pause"} size={15} color={limit || held ? c.warning : c.textMuted} />
       <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
-        {limit ? `Claude's ${limit} is reached${auto ? " — continues by itself after the reset" : ""}` : "Paused — continues where it stopped"}
+        {held
+          ? `${held} — raise the budget on your computer, or let it run.`
+          : limit
+            ? `Claude's ${limit} is reached${auto ? " — continues by itself after the reset" : ""}`
+            : "Paused — continues where it stopped"}
       </T>
-      <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel="Continue">
+      <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel={held ? "Let it run" : "Continue"}>
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
-          {limit ? "Try now" : "Continue"}
+          {held ? "Let it run" : limit ? "Try now" : "Continue"}
         </T>
       </Pressable>
     </View>

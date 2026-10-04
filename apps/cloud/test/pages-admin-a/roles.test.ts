@@ -79,6 +79,8 @@ describe("a custom role manager who is not an owner", () => {
     actAs(owner.token);
     const managerRole = await createRoleAction({ name: "Role manager", permissions: ["admin.access", "roles.manage", "users.read"] });
     if (!managerRole.ok) throw new Error(managerRole.error);
+    const helperRole = await createRoleAction({ name: "Helper", permissions: ["devices.link"] });
+    if (!helperRole.ok) throw new Error(helperRole.error);
     const manager = await person({ roleId: managerRole.data.id });
     actAs(manager.token);
 
@@ -94,8 +96,13 @@ describe("a custom role manager who is not an owner", () => {
       ok: false,
       error: "You can only add permissions you have yourself.",
     });
-    expect(await updateRoleAction("role_member", { permissions: ["devices.link", "users.read"] })).toEqual({ ok: true, data: undefined });
-    const [member] = await db.select().from(roles).where(eq(roles.id, "role_member"));
-    expect(member?.permissions).toEqual(["users.read", "devices.link"]);
+    // Member is the role open sign-ups get: personal permissions only.
+    expect(await updateRoleAction("role_member", { permissions: ["devices.link", "users.read"] })).toMatchObject({
+      ok: false,
+      error: "People who sign up on their own get this role, so it can only have the Personal permissions. Choose another default role first.",
+    });
+    expect(await updateRoleAction(helperRole.data.id, { permissions: ["devices.link", "users.read"] })).toEqual({ ok: true, data: undefined });
+    const [helper] = await db.select().from(roles).where(eq(roles.id, helperRole.data.id));
+    expect(helper?.permissions).toEqual(["users.read", "devices.link"]);
   });
 });

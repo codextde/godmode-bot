@@ -3,8 +3,9 @@
  * object owns its stream table; frames are only ever delivered to streams that were opened on this very object, so a
  * replaced or dropped socket can never answer someone else's request.
  *
- * Everything the computer sends is untrusted. The message handler never lets an exception out: a broken frame, or a
- * bug while handling one, closes this link with Protocol and leaves the rest of the process alone.
+ * Everything the computer sends is untrusted. The message handler never lets an exception out: a broken or abusive
+ * frame closes this link with Protocol, a bug of ours while handling one with 1011 (the computer just reconnects), and
+ * the rest of the process is left alone.
  */
 import { randomInt } from "node:crypto";
 import type { RawData, WebSocket } from "ws";
@@ -29,10 +30,20 @@ import {
 import type { RelayLinkInfo } from "@/server/relay-bridge";
 import { truncateUtf8 } from "./respond";
 
-/** Bytes queued on the link's socket before body pumps wait for it to drain. */
+/** Bytes queued on the link's socket before body pumps wait for it to drain. Twice this closes the link. */
 export const LINK_BUFFER_MAX = 8 * 1024 * 1024;
+/**
+ * WebSocket bytes from the computer not yet granted back, over all of one link's sockets. Each socket may run up to
+ * CLOUD_WS_BACKLOG_MAX ahead; this bounds what one computer can make the cloud hold however many sockets it has.
+ */
+export const LINK_WS_UNGRANTED_MAX = 64 * 1024 * 1024;
 const HELLO_MS = 10_000;
 const TICK_MS = 5_000;
+/** A later Hello updates the computer's record at most this often; the newest one wins. */
+export const HELLO_UPDATE_MS = 10_000;
+/** More Hellos than this in a minute is a computer gone wrong. */
+const HELLOS_PER_MINUTE = 10;
+const NOT_READING = "The computer is not reading.";
 
 /** The computer broke the protocol; the link is closed with CloudClose.Protocol. */
 export class ProtocolError extends Error {}
@@ -114,10 +125,17 @@ export class Link {
   // A random start makes a stale id from an earlier link of the same computer meaningless here.
   private nextId = 1 + randomInt(2 ** 30);
   private queued = 0;
+  /** WebSocket payload bytes the computer sent beyond the credit it got back, summed over this link's sockets. */
+  wsUngranted = 0;
   private drainWaiters: (() => void)[] = [];
   private lastIn = Date.now();
   private lastOut = Date.now();
   private hello: "waiting" | "pending" | "done" = "waiting";
+  /** The newest Hello not applied yet (sent while Welcome was pending, or within HELLO_UPDATE_MS of the last update). */
+  private latestHello: CloudHello | null = null;
+  private lastUpdate = 0;
+  private updateTimer: NodeJS.Timeout | null = null;
+  private hellos = { count: 0, since: Date.now() };
   private readonly helloTimer: NodeJS.Timeout;
   private readonly tickTimer: NodeJS.Timeout;
 
@@ -157,6 +175,11 @@ export class Link {
   send(frame: Uint8Array): boolean {
     if (this.closed) return false;
     const n = frame.byteLength;
+    // Pumps wait at LINK_BUFFER_MAX; only a computer that stopped reading gets this far.
+    if (this.queued + n > 2 * LINK_BUFFER_MAX) {
+      this.close(CloudClose.Protocol, NOT_READING);
+      return false;
+    }
     this.queued += n;
     this.lastOut = Date.now();
     try {
@@ -263,14 +286,21 @@ export class Link {
       this.lastIn = Date.now();
       this.handle(frame);
     } catch (err) {
-      if (!(err instanceof ProtocolError)) console.error(`[relay] link ${this.deviceId}: error while handling a frame:`, err);
-      this.close(CloudClose.Protocol, err instanceof ProtocolError ? err.message : "Protocol error.");
+      if (err instanceof ProtocolError) {
+        this.close(CloudClose.Protocol, err.message);
+        return;
+      }
+      // Our own bug: the computer must not back off for minutes and be told to update.
+      console.error(`[relay] link ${this.deviceId}: error while handling a frame:`, err);
+      this.close(1011, "Internal error.");
     }
   }
 
   private handle(frame: CloudFrameData): void {
     switch (frame.type) {
       case CloudFrame.Ping:
+        // Every Pong is queued behind what the computer has not read: pinging without reading would pile them up.
+        if (this.queued > LINK_BUFFER_MAX) throw new ProtocolError(NOT_READING);
         this.send(encodeCloudFrame(CloudFrame.Pong, 0));
         return;
       case CloudFrame.Pong:
@@ -305,18 +335,42 @@ export class Link {
       this.close(CloudClose.Protocol, "This Godmode and the cloud don't speak the same version.");
       return;
     }
+    const now = Date.now();
+    if (now - this.hellos.since >= 60_000) this.hellos = { count: 0, since: now };
+    if (++this.hellos.count > HELLOS_PER_MINUTE) throw new ProtocolError("Too many Hello frames.");
     this.version = hello.version;
-    if (this.hello === "done") {
-      this.hooks.update(this, hello);
+    if (this.hello !== "waiting") {
+      // Only the newest counts: applied once welcomed, then at most every HELLO_UPDATE_MS.
+      this.latestHello = hello;
+      this.applyHello();
       return;
     }
-    if (this.hello === "pending") return;
     this.hello = "pending";
     clearTimeout(this.helloTimer);
-    this.hooks.welcome(this, hello).catch((err: unknown) => {
-      console.error(`[relay] link ${this.deviceId}: could not welcome:`, err);
-      this.close(1011, "Internal error.");
-    });
+    this.hooks.welcome(this, hello).then(
+      () => this.applyHello(),
+      (err: unknown) => {
+        console.error(`[relay] link ${this.deviceId}: could not welcome:`, err);
+        this.close(1011, "Internal error.");
+      },
+    );
+  }
+
+  /** Hands the newest Hello to hooks.update, now or when HELLO_UPDATE_MS have passed since the last one. */
+  private applyHello(): void {
+    if (!this.welcomed || !this.latestHello || this.updateTimer) return;
+    const wait = this.lastUpdate + HELLO_UPDATE_MS - Date.now();
+    if (wait > 0) {
+      this.updateTimer = setTimeout(() => {
+        this.updateTimer = null;
+        this.applyHello();
+      }, wait);
+      return;
+    }
+    const hello = this.latestHello;
+    this.latestHello = null;
+    this.lastUpdate = Date.now();
+    this.hooks.update(this, hello);
   }
 
   /** Called by the hub right before it registers the link and sends Welcome; streams may open from now on. */
@@ -339,6 +393,7 @@ export class Link {
     this.closed = true;
     clearTimeout(this.helloTimer);
     clearInterval(this.tickTimer);
+    if (this.updateTimer) clearTimeout(this.updateTimer);
     const streams = [...this.streams.values()];
     this.streams.clear();
     this.mobileStreams = 0;

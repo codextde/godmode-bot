@@ -27,6 +27,7 @@ import type {
   Effort,
   Message,
   MessageBlock,
+  PauseBudget,
   PauseReason,
   QuestionAnswer,
   QuestionStatus,
@@ -76,6 +77,9 @@ import {
   type PendingQuestion,
   type ResumedAnswer,
 } from "../services/questions";
+import { bookSpend } from "../services/spend";
+import { audit } from "../services/audit";
+import { exhaustedBudget, exemptNotice, nextMonthStart, type BudgetStop } from "../services/budgets";
 import { MAX_RETRIES, dropPause, limitReached, pauseOf, pausedConversations, pausedRun, savePause, stopContinuing, toPause, type LimitPause, type PausedRow } from "../services/pauses";
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
@@ -123,6 +127,8 @@ export interface StartRunInput {
   alsoAnswers?: string[];
   /** Id for the run (callers that must know it before the run can start or finish). Default: a new one. */
   runId?: string;
+  /** The human started this by hand (Run now, Continue now): a used-up monthly budget doesn't hold it. */
+  byHuman?: boolean;
 }
 
 export const CLAUDE_NOT_FOUND = "Claude Code CLI not found. Install it from Settings → System.";
@@ -323,6 +329,8 @@ interface Job {
     killed?: boolean;
     /** What the run asked the human (`question` pauses): stored once the run stands still for it. */
     question?: PendingQuestion;
+    /** `budget` pauses: which monthly budget holds it. */
+    budget?: PauseBudget;
   } & Partial<LimitPause>;
   pauseTimer?: ReturnType<typeof setTimeout> | null;
   /**
@@ -346,6 +354,8 @@ interface Job {
   answersSettled?: boolean;
   /** The human stopped it (from a chat, the board or a chat platform), not Godmode. */
   stoppedByHuman?: boolean;
+  /** The human started or let it run: a used-up monthly budget doesn't hold it. */
+  exempt?: boolean;
   /** What this stretch of the run sends to Claude. */
   body?: string;
   /** Claude Code asks Godmode between two steps of this run (PostToolBatch hook). */
@@ -497,6 +507,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
     parentRunId: input.parentRunId ?? null,
     depth: input.depth ?? 0,
     voice: input.voice ?? false,
+    exempt: input.byHuman === true || (!!input.parentRunId && runExempt(input.parentRunId)),
     status: "queued",
     acc: new StreamAccumulator(),
     proc: null,
@@ -724,6 +735,9 @@ export function resumeRun(
     deltaTimer: null,
     done: null,
   };
+  // The human continuing a run lets it run past a used-up budget; so does an earlier "Let it run" or "Run now".
+  if (by === "user" || p.exempt === 1) job.exempt = true;
+  if (p.reason === "budget" && by === "user") audit("user", "budget.continue", row.id, { scope: p.budget_scope ?? null });
   if (!p.delivered && kept === undefined && /•{4,}/.test(job.resumed!.redo ?? "")) {
     job.acc.addNotice("warning", "Godmode restarted while this was paused, so the message is sent again with its saved secrets masked.");
   }
@@ -904,6 +918,7 @@ function pump() {
   let running = [...jobs.values()].filter((j) => j.status === "running" && j.trigger !== "dream").length;
   const blocked = new Set<string>();
   const frozen = queue.length ? pausedConversations() : null;
+  const held: { job: Job; stop: BudgetStop }[] = [];
   for (const runId of ticketOrder()) {
     const job = jobs.get(runId);
     if (!job) {
@@ -920,6 +935,16 @@ function pump() {
       emitActivity(job, pauseOf(job.conversationId)?.reason === "question" ? "Waiting — this chat waits for your answer" : "Waiting — this chat is paused");
       blocked.add(job.conversationId);
       continue;
+    }
+    // Unattended work waits while a monthly budget is used up (what the human starts or lets run still goes). Only a
+    // run that would start now is held: its chat has nothing working or standing still, so the hold is the chat's pause.
+    if (!job.exempt && !job.pause && !job.cancelReason && (HELD_TRIGGERS.has(job.trigger) || platformChat(job))) {
+      const stop = budgetStopFor(job.agentId);
+      if (stop) {
+        held.push({ job, stop });
+        blocked.add(job.conversationId);
+        continue;
+      }
     }
     // A delegated run whose parent is running (and typically waiting for it) may exceed the limit — otherwise
     // a parent holding the last slot would deadlock on its own child.
@@ -963,6 +988,44 @@ function pump() {
         pump();
       });
   }
+  // After the loop: suspending takes the run out of the queue and pumps again.
+  const stillFree = held.length ? pausedConversations() : null;
+  for (const { job, stop } of held) {
+    if (jobs.get(job.runId) !== job || job.pause || job.status !== "queued" || stillFree?.has(job.conversationId)) continue;
+    job.pause = { reason: "budget", applied: true, budget: { scope: stop.scope, limitUsd: stop.budgetUsd }, resumeAt: nextMonthStart().toISOString() };
+    void suspend(job, null, Date.now());
+  }
+}
+
+/** Automations, follow-ups and board tickets: work nobody waits for at the screen, held while a budget is used up. */
+const HELD_TRIGGERS: ReadonlySet<RunTrigger> = new Set(["routine", "followup", "task"]);
+
+/** A message from Slack, Telegram or Teams: anyone in that channel could spend past the owner's budget. */
+function platformChat(job: Job): boolean {
+  if (job.trigger !== "chat") return false;
+  const origin = get<{ origin: string }>("SELECT origin FROM conversations WHERE id = ?", job.conversationId)?.origin;
+  return origin === "slack" || origin === "telegram" || origin === "teams";
+}
+
+/** The human started this run or let it run (or it is a chat they lead): a used-up budget doesn't stop it or its handoffs. */
+export function runExempt(runId: string): boolean {
+  const job = jobs.get(runId);
+  if (job?.exempt) return true;
+  const trigger = job?.trigger ?? get<{ trigger: string }>("SELECT trigger FROM runs WHERE id = ?", runId)?.trigger;
+  return trigger === "chat" || trigger === "manual" || trigger === "api";
+}
+
+function budgetStopFor(agentId: string): BudgetStop | null {
+  try {
+    return exhaustedBudget(getAgent(agentId));
+  } catch {
+    return null;
+  }
+}
+
+/** The agent's name for the spend ledger (it keeps the name when the agent is deleted later). */
+function agentNameOf(agentId: string): string {
+  return get<{ name: string }>("SELECT name FROM agents WHERE id = ?", agentId)?.name ?? "";
 }
 
 /**
@@ -1904,6 +1967,17 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         : lateNote + body;
     // What the run did before a pause, and what the chat's queue added to this stretch.
     const kept = job.acc.blocks.length;
+    // A chat the human started runs although a monthly budget is used up — once a month the chat says so.
+    if (!job.resumed && !dreaming && (job.trigger === "chat" || job.trigger === "manual" || job.trigger === "api")) {
+      let notice: string | null = null;
+      safely("check the budget", () => {
+        notice = exemptNotice(agent, job.conversationId);
+      });
+      if (notice) {
+        job.acc.addNotice("warning", notice);
+        scheduleDelta(job);
+      }
+    }
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
 
     const lostSession =
@@ -2017,6 +2091,19 @@ function stretchCost(job: Job): number | null {
   return Math.round((total - before) * 1e6) / 1e6;
 }
 
+/** Book what the stretch that just ended cost (the run's total so far minus what earlier stretches booked). */
+function bookStretch(job: Job, spent: Spent, failed: boolean): void {
+  bookSpend({
+    runId: job.runId,
+    agentId: job.agentId,
+    agentName: agentNameOf(job.agentId),
+    trigger: job.trigger,
+    costUsd: (spent.costUsd ?? 0) - (job.spent.costUsd ?? 0),
+    durationMs: (spent.durationMs ?? 0) - (job.spent.durationMs ?? 0),
+    failed,
+  });
+}
+
 /** Cost, time and turns of the run so far: the stretches before a pause plus the one that just ended. */
 function spentBy(job: Job, startedMs: number): Spent {
   const { final } = job.acc;
@@ -2103,7 +2190,12 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
     reason: pause.reason,
     limit_name: pause.limit ?? null,
     resume_at: pause.resumeAt ?? null,
-    auto: pause.reason === "limit" && !!pause.resumeAt && retries < MAX_RETRIES && wanted ? 1 : 0,
+    // Held for a budget: it continues by itself next month, or once the budget has room again.
+    auto: (pause.reason === "limit" && !!pause.resumeAt && retries < MAX_RETRIES && wanted) || pause.reason === "budget" ? 1 : 0,
+    budget_scope: pause.budget?.scope ?? null,
+    budget_usd: pause.budget?.limitUsd ?? null,
+    // The human let it run (or started it): that holds after this pause too.
+    exempt: job.exempt ? 1 : 0,
     choice: choice === null ? null : choice ? 1 : 0,
     delivered: delivered ? 1 : 0,
     redo: unsent === null ? null : redact(unsent),
@@ -2114,7 +2206,13 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
   };
   const spent = spentBy(job, startedMs);
   const asked = pause.reason === "question" ? pause.question : undefined;
-  acc.markPause({ type: "pause", reason: pause.reason, at: ts, ...(pause.reason === "limit" ? { limit: row.limit_name, resumeAt: row.resume_at } : {}) });
+  acc.markPause({
+    type: "pause",
+    reason: pause.reason,
+    at: ts,
+    ...(pause.reason === "limit" ? { limit: row.limit_name, resumeAt: row.resume_at } : {}),
+    ...(pause.budget ? { budget: pause.budget, resumeAt: row.resume_at } : {}),
+  });
   const text = redact(acc.lastTurnText());
   const blocks = redactedBlocks(job);
   if (job.deltaTimer) clearTimeout(job.deltaTimer);
@@ -2159,12 +2257,14 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
   }
 
   if (wasRunning) {
+    // Booked once the pause is saved: a pause that couldn't be saved ends as a failed run, which books it then.
+    safely("book the spend", () => bookStretch(job, spent, false));
     const others = [...jobs.values()].some((j) => j.agentId === job.agentId && j.status === "running");
     if (!others) safely("set agent status", () => setAgentStatus(job.agentId, "idle"));
     safely("touch agent", () => touchAgentRun(job.agentId));
   }
   settleAnswers(job);
-  emitActivity(job, asked ? "Waiting for your answer" : "Paused");
+  emitActivity(job, asked ? "Waiting for your answer" : pause.reason === "budget" ? "Held — a monthly budget is used up" : "Paused");
   safely("emit run.paused", () => bus.emit({ type: "run.paused", run: getRun(job.runId) }));
   bus.changed("runs");
   if (asked) safely("announce the question", () => announceQuestion(asked.block.id));
@@ -2194,6 +2294,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   const ts = now();
   const wasRunning = job.status === "running";
   const spent = spentBy(job, startedMs);
+  if (wasRunning) safely("book the spend", () => bookStretch(job, spent, outcome.status === "failed"));
   unanswered.delete(job.runId);
   settleAnswers(job);
   // Stopped before Claude read an answer: it must not reach a later turn as an order. (Not when Godmode shuts down, and

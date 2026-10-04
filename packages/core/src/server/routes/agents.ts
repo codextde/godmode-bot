@@ -56,6 +56,7 @@ const permissionsSchema = z
     credentialIds: z.array(id).max(1000).nullable(),
     totpIds: z.array(id).max(1000).nullable(),
     maxBudgetUsd: z.number().positive().max(10_000).nullable(),
+    monthlyBudgetUsd: z.number().positive().max(1_000_000).nullable(),
   })
   .partial();
 
@@ -153,6 +154,7 @@ export const routineSchema = z.object({
   filter: z.string().trim().max(2000).optional(),
   enabled: z.boolean().optional(),
   reuseConversation: z.boolean().optional(),
+  notify: z.enum(["always", "failures", "never"]).optional(),
 });
 
 function scopeParam(value: string | undefined): string | null | "all" {
@@ -282,7 +284,7 @@ export function registerAgentRoutes(app: Hono): void {
     return c.json({ ok: true });
   });
 
-  app.post("/api/routines/:id/run", async (c) => c.json(await runRoutineNow(c.req.param("id"))));
+  app.post("/api/routines/:id/run", async (c) => c.json(await runRoutineNow(c.req.param("id"), { byHuman: true })));
 
   /* Automation events -------------------------------------------------- */
 
@@ -299,7 +301,7 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post("/api/routines/:id/test-event", async (c) => {
     const { payload } = await body(c, z.object({ payload: z.unknown().optional() }));
-    const { event } = await sendTestEvent(c.req.param("id"), payload);
+    const { event } = await sendTestEvent(c.req.param("id"), payload, { byHuman: true });
     return c.json(event);
   });
 

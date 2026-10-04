@@ -34,6 +34,30 @@ UPDATE tasks SET blocked_kind = CASE
 `;
 
 /**
+ * What was spent before the spend ledger existed, booked when each run last stood still or ended. Idempotent (runs that
+ * have a ledger row are skipped); also run after a restore, because a backup from before migration 52 has no ledger.
+ * Costs of runs from before migration 30 are Claude's session totals: only what a run added to its chat's session
+ * counts. Migration 52 embeds it: only ever add guarded, idempotent statements here.
+ */
+export const SPEND_BACKFILL_SQL = /* sql */ `
+INSERT INTO spend (run_id, agent_id, agent_name, trigger, at, cost_usd, duration_ms, failed)
+SELECT id, agent_id, agent_name, trigger, at, MAX(0, own), duration_ms, failed FROM (
+  SELECT r.id, r.agent_id, COALESCE(a.name, '') AS agent_name, r.trigger,
+    COALESCE(r.finished_at, r.started_at, r.created_at) AS at,
+    CASE
+      WHEN r.cost_usd IS NULL THEN 0
+      WHEN r.created_at >= COALESCE((SELECT applied_at FROM _migrations WHERE id = 30), '') THEN r.cost_usd
+      WHEN LAG(r.cost_usd) OVER w IS NOT NULL AND r.cost_usd >= LAG(r.cost_usd) OVER w THEN r.cost_usd - LAG(r.cost_usd) OVER w
+      ELSE r.cost_usd
+    END AS own,
+    COALESCE(r.duration_ms, 0) AS duration_ms, r.status = 'failed' AS failed
+  FROM runs r LEFT JOIN agents a ON a.id = r.agent_id
+  WHERE r.status IN ('succeeded', 'failed', 'cancelled', 'paused')
+  WINDOW w AS (PARTITION BY r.conversation_id ORDER BY r.created_at, r.rowid)
+) WHERE id NOT IN (SELECT run_id FROM spend) AND (own > 0 OR duration_ms > 0);
+`;
+
+/**
  * Ordered, append-only SQL migrations. Never edit a shipped migration — add a new one.
  * JSON columns are stored as TEXT. Encrypted columns end with `_enc` and hold vault ciphertext.
  */
@@ -940,6 +964,52 @@ ALTER TABLE conversations ADD COLUMN runner_id TEXT;
 ALTER TABLE conversations ADD COLUMN runner_state TEXT;
 ALTER TABLE conversations ADD COLUMN runner_tools_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_conversations_runner ON conversations(runner_id) WHERE runner_id IS NOT NULL;
+`,
+  },
+  {
+    id: 52,
+    name: "spend",
+    sql: /* sql */ `
+-- What the team spent, booked when it was spent: one row per stretch of a run (until it ended, or stood still for a
+-- pause), so a run that continues next month is charged to next month for what it costs then. No foreign keys: spend
+-- stays when an agent, a chat or a run is deleted (agent_name keeps who it was).
+CREATE TABLE IF NOT EXISTS spend (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  agent_name TEXT NOT NULL DEFAULT '',
+  trigger TEXT NOT NULL,
+  at TEXT NOT NULL,
+  cost_usd REAL NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  -- 1: this stretch ended the run as failed.
+  failed INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_spend_at ON spend(at);
+CREATE INDEX IF NOT EXISTS idx_spend_agent ON spend(agent_id, at);
+${SPEND_BACKFILL_SQL}
+-- A run held because a monthly budget is used up (reason 'budget'): whose budget ('agent' | 'team') and how much it was.
+ALTER TABLE paused_runs ADD COLUMN budget_scope TEXT;
+ALTER TABLE paused_runs ADD COLUMN budget_usd REAL;
+`,
+  },
+  {
+    id: 54,
+    name: "needs_you",
+    sql: /* sql */ `
+-- A chat with something new: the run that ended while nobody had it open (NULL = read).
+ALTER TABLE conversations ADD COLUMN unread_run_id TEXT;
+-- When an automation tells the human that a run ended: 'failures' (default), 'always' or 'never'.
+ALTER TABLE routines ADD COLUMN notify TEXT NOT NULL DEFAULT 'failures';
+CREATE INDEX IF NOT EXISTS idx_runs_routine ON runs(routine_id, trigger, created_at);
+`,
+  },
+  {
+    id: 55,
+    name: "budget_exempt",
+    sql: /* sql */ `
+-- A paused run the human started or let run past a used-up budget keeps that when it continues.
+ALTER TABLE paused_runs ADD COLUMN exempt INTEGER NOT NULL DEFAULT 0;
 `,
   },
   {

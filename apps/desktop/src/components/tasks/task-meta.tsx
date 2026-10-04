@@ -95,6 +95,7 @@ export function pauseLabel(task: Task): string | null {
     const title = task.pause.question?.title ?? "";
     return `${task.pause.question?.kind === "approval" ? "Needs your OK" : "Needs your answer"}${title ? `: ${title}` : ""}`;
   }
+  if (task.pause.reason === "budget") return task.pause.budget?.scope === "team" ? "Held — the team's budget is used up" : "Held — its agent's budget is used up";
   return task.pause.reason === "limit" ? `Waiting — Claude's ${task.pause.limit ?? "usage limit"} is reached` : "Paused";
 }
 

@@ -13,7 +13,7 @@ import {
 } from "@/server/billing/plans";
 import { checkStripeKey, ensurePortalConfiguration, ensureWebhook, setStripeClientForTests, syncPlanToStripe } from "@/server/billing/stripe";
 import { resetConfig } from "@/server/config";
-import { db, planPrices, plans } from "@/server/db";
+import { db, planPrices, plans, users } from "@/server/db";
 import { getSettings, getSettingsWithSecrets, writeSettings } from "@/server/settings";
 import { SYSTEM } from "@/server/audit";
 import { closeDatabase, resetDatabase, truncateAll } from "../helpers/db";
@@ -224,6 +224,15 @@ describe("Stripe setup", () => {
     // A restricted key without the account permission still passes when it can read products.
     stripe.fail.set("accounts.retrieveCurrent", new Stripe.errors.StripePermissionError({ message: "no access" }));
     expect(await checkStripeKey("rk_live_restricted")).toMatchObject({ ok: true, livemode: true, accountName: "" });
+  });
+
+  test("switching the key between test and live forgets every Stripe customer; the same mode keeps them", async () => {
+    const buyer = await createUser("buyer@example.com", "member", { stripeCustomerId: "cus_test_1" });
+    await checkStripeKey("sk_test_first");
+    await checkStripeKey("sk_test_second");
+    expect((await db.select().from(users).where(eq(users.id, buyer.id)))[0]!.stripeCustomerId).toBe("cus_test_1");
+    await checkStripeKey("sk_live_real");
+    expect((await db.select().from(users).where(eq(users.id, buyer.id)))[0]!.stripeCustomerId).toBeNull();
   });
 
   test("ensureWebhook needs https, creates a tagged endpoint and stores its secret", async () => {

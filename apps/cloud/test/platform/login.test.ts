@@ -232,6 +232,18 @@ describe("limits and fallbacks", () => {
     await expect(requestLogin("stranger@example.com", { ...META, ip: "198.51.100.1" })).rejects.toMatchObject({ status: 429 });
   });
 
+  test("requests the IP limit refuses don't count against the address", async () => {
+    await writeSettings("security", { loginPerIp: 2, loginPerEmail: 1 }, SYSTEM);
+    await makeUser({ email: "victim@example.com" });
+    const flood = { ...META, ip: "198.51.100.66" };
+    await requestLogin("a@example.com", flood);
+    await requestLogin("b@example.com", flood);
+    for (let i = 0; i < 3; i++) await expect(requestLogin("victim@example.com", flood)).rejects.toMatchObject({ status: 429 });
+    // The person's own sign-in from elsewhere still goes through.
+    await requestLogin("victim@example.com", { ...META, ip: "198.51.100.67" });
+    await vi.waitFor(() => expect(mail.sent.map((m) => m.to)).toContain("victim@example.com"));
+  });
+
   test("an owner's link goes to the server log when sending fails", async () => {
     await makeUser({ email: "owner@example.com", role: "owner" });
     await makeUser({ email: "member@example.com" });
