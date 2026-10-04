@@ -28,7 +28,9 @@ import {
   isOverdue,
   isWaiting,
   taskEventText,
+  ticketList,
   waitsForAnswer,
+  waitsForSubtasks,
 } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
@@ -52,7 +54,7 @@ import { reportDream } from "../memory/dreaming";
 import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/composio";
 import { listTriggerTypes } from "../integrations/composioTriggers";
 import { listWorkspaces } from "../services/workspaces";
-import { createAgent, deleteAgent, getAgent, listAgents, peersFor, updateAgent } from "../agents/service";
+import { createAgent, deleteAgent, getAgent, listAgents, peersFor, teamOf, updateAgent } from "../agents/service";
 import { addCredentialDomain, credentialsForAgent, findCredentialsForAgent, getCredential, listCredentials, markCredentialUsed, revealForAgent } from "../vault/credentials";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
 import { nameGuessMatchesHost } from "../vault/match";
@@ -598,6 +600,9 @@ function taskSummary(t: Task, names: Map<string, string>, agentNames: Map<string
     ...(t.blockedKind ? { blockedKind: t.blockedKind } : {}),
     ...(isWaiting(t) && t.followup ? { waitingUntil: t.followup.dueAt } : {}),
     ...(waitsForAnswer(t) ? { waitingForHuman: true } : {}),
+    ...(t.parentNumber ? { partOf: `#${t.parentNumber}` } : {}),
+    ...(t.subtasks ? { parts: { total: t.subtasks.total, open: t.subtasks.open } } : {}),
+    ...(waitsForSubtasks(t) ? { waitingForParts: true } : {}),
     ...(t.summary ? { hasResult: true } : {}),
     description: snippet(t.description, 400),
   };
@@ -1409,20 +1414,77 @@ const TOOLS: ToolDef[] = [
       priority: z.enum(TASK_PRIORITIES as [string, ...string[]]).optional(),
       dueDate: z.string().max(10).nullable().optional().describe("YYYY-MM-DD"),
       labels: z.array(z.string().max(100)).max(10).optional(),
+      parentTaskId: z.string().optional().describe('Make it a part of this ticket (id or "#12"): that ticket waits until its parts are done, then its agent continues with their results'),
     }),
     when: managesSetup,
-    run: ({ start, ...input }, { agent, ctx }) => {
+    run: ({ start, parentTaskId, ...input }, { agent, ctx }) => {
       const refusal = taskAssignRefusal(agent, ctx, input.agentId);
       if (refusal) return fail(refusal);
       const t = createTask(
         {
           ...(input as Parameters<typeof createTask>[0]),
+          ...(parentTaskId ? { parentId: findTask(parentTaskId).id } : {}),
           status: input.agentId && start !== false ? "todo" : "backlog",
         },
         `agent:${agent.id}`,
       );
       audit(`agent:${agent.id}`, "task.create", t.id, { agentId: t.agentId, type: t.type });
       return json(taskSummary(t, workspaceNames(), new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]))));
+    },
+  }),
+
+  defineTool({
+    name: "task_split",
+    description:
+      "Split the ticket you are working on into parts for your team: each part becomes a sub-ticket on the board, and an assigned one starts right away. Your ticket then waits (In progress) until every part is done, cancelled or archived, and you continue in this chat with their results to finish the whole ticket. After splitting, end your turn: say briefly how you split the work. Give each part a self-contained title and description (what to do, what to deliver back). agentId: one of your reports (managers: any agent they may give tasks to); without one the part waits in the backlog for the human to assign.",
+    schema: z.object({
+      parts: z
+        .array(
+          z.object({
+            title: z.string().min(1).max(200),
+            description: z.string().max(20_000).optional(),
+            agentId: z.string().optional(),
+            type: z.enum(TASK_TYPES as [string, ...string[]]).optional(),
+            priority: z.enum(TASK_PRIORITIES as [string, ...string[]]).optional(),
+          }),
+        )
+        .min(1)
+        .max(8),
+    }),
+    // A lead on a ticket: a manager, or an agent with reports. Not on a runner (its board is a copy).
+    when: (agent, ctx) => config().role !== "runner" && isTaskRun(ctx) && (isManager(agent) || teamOf(agent).reports.length > 0),
+    run: ({ parts }, { agent, ctx }) => {
+      const parent = taskForConversation(ctx.conversationId);
+      if (!parent) return fail("Only the agent working on a ticket can split it.");
+      const reports = new Set(teamOf(agent).reports.map((r) => r.id));
+      for (const p of parts) {
+        if (!p.agentId) continue;
+        if (p.agentId === agent.id) return fail("Do your own part yourself — split off only what others should do.");
+        if (!isManager(agent) && !reports.has(p.agentId)) return fail(`${getAgent(p.agentId).name} doesn't report to you — give parts to your reports, or leave agentId out for the human to assign.`);
+        const refusal = taskAssignRefusal(agent, ctx, p.agentId);
+        if (refusal) return fail(refusal);
+      }
+      const agentNames = new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]));
+      const created = parts.map((p) =>
+        createTask(
+          {
+            title: redact(p.title),
+            description: p.description ? redact(p.description) : undefined,
+            type: (p.type as Task["type"] | undefined) ?? "general",
+            priority: (p.priority as Task["priority"] | undefined) ?? parent.priority,
+            workspaceId: parent.workspaceId,
+            agentId: p.agentId ?? null,
+            // A coding part works in the same repository, from the same base.
+            ...(p.type === "coding" ? { repoUrl: parent.repoUrl, repoPath: parent.repoPath, baseBranch: parent.baseBranch } : {}),
+            status: p.agentId ? "todo" : "backlog",
+            parentId: parent.id,
+          },
+          `agent:${agent.id}`,
+        ),
+      );
+      audit(`agent:${agent.id}`, "task.split", parent.id, { parts: created.map((t) => t.id) });
+      const list = created.map((t) => `#${t.number} ${t.title} — ${t.agentId ? (agentNames.get(t.agentId) ?? "an agent") : "waits for the human to assign it"}`).join("\n");
+      return `Split #${parent.number} into ${ticketList(created.map((t) => t.number))}:\n${list}\n\nEnd your turn now with a short note on how you split the work. Your ticket waits until the parts are done; then you continue here with their results.`;
     },
   }),
 

@@ -79,9 +79,9 @@ export interface TaskEventData {
   assigned: { from: ID | null; to: ID | null; fromName: string; toName: string };
   archived: { archived: boolean };
   /** again: not the ticket's first start. */
-  started: { trigger: RunTrigger; again: boolean };
-  /** body: what the agent said when it ended its turn. */
-  waiting: { dueAt: ISODate; note: string };
+  started: { trigger: RunTrigger; again: boolean; subtasks?: number[] };
+  /** body: what the agent said when it ended its turn. Waits for a follow-up (dueAt, note) or for sub-tickets. */
+  waiting: { dueAt?: ISODate; note?: string; subtasks?: number[] };
   /** body: the full result. */
   delivered: { costUsd: number | null; durationMs: number | null; pullRequest: number | null };
   /** body: the reason. */
@@ -223,6 +223,11 @@ export interface Task {
   completedAt: ISODate | null;
   /** Off the board since then; null = on the board. */
   archivedAt: ISODate | null;
+  /** The bigger ticket this one is part of (it waits for this one), and its number. */
+  parentId: ID | null;
+  parentNumber: number | null;
+  /** Its own sub-tickets: how many, and how many are still open (not done, cancelled or archived). null = none. */
+  subtasks: { total: number; open: number } | null;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -242,6 +247,8 @@ export interface TaskInput {
   priority?: TaskPriority;
   dueDate?: string | null;
   labels?: string[];
+  /** Make it a sub-ticket of this ticket (it waits for it). */
+  parentId?: ID | null;
 }
 
 export interface TaskPatch {
@@ -288,6 +295,17 @@ export function isOverdue(t: Pick<Task, "dueDate" | "status">, today = localDay(
 /** Nothing runs and nothing stands still: the ticket waits for the time its agent set to continue. */
 export function isWaiting(t: Pick<Task, "status" | "followup" | "pause" | "runStatus" | "activity">): boolean {
   return t.status === "in_progress" && !!t.followup && !t.pause && t.runStatus !== "queued" && t.runStatus !== "running" && !t.activity;
+}
+
+/** "#13", "#13 and #14", "#13, #14 and #15". */
+export function ticketList(numbers: readonly number[]): string {
+  const n = numbers.map((x) => `#${x}`);
+  return n.length < 2 ? (n[0] ?? "") : `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
+}
+
+/** In progress, nothing running: the ticket waits until its sub-tickets are done (then its agent continues). */
+export function waitsForSubtasks(t: Pick<Task, "status" | "subtasks" | "pause" | "runStatus" | "activity" | "followup">): boolean {
+  return t.status === "in_progress" && !!t.subtasks?.open && !t.followup && !t.pause && t.runStatus !== "queued" && t.runStatus !== "running" && !t.activity;
 }
 
 /** The ticket's run waits for the human's answer to a question or an approval. */
@@ -342,12 +360,14 @@ export function taskEventText(e: TaskEvent, o: { you: string; youObject: string;
     case "archived":
       return e.data.archived ? `${a} archived it` : `${a} put it back on the board`;
     case "started":
+      if (e.data.subtasks?.length) return `${a} picked it up again — ${ticketList(e.data.subtasks)} ${e.data.subtasks.length === 1 ? "is" : "are"} done`;
       if (!e.data.again) return `${a} started working`;
       if (e.data.trigger === "followup") return `${a} continued as planned`;
       if (e.data.trigger === "task") return `${a} started over`;
       return `${a} picked it up again`;
     case "waiting":
-      return `${a} is waiting — continues ${o.when ? o.when(e.data.dueAt) : e.data.dueAt}`;
+      if (e.data.subtasks?.length) return `${a} is waiting for ${ticketList(e.data.subtasks)}`;
+      return `${a} is waiting — continues ${e.data.dueAt ? (o.when ? o.when(e.data.dueAt) : e.data.dueAt) : "later"}`;
     case "delivered":
       return `${a} delivered${e.data.pullRequest ? ` — pull request #${e.data.pullRequest}` : ""}`;
     case "blocked":

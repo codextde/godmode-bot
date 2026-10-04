@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { ClipboardList, CodeXml, Telescope } from "lucide-react";
 import type { Task, TaskBlockedKind, TaskPriority, TaskStatus, TaskType, Workspace, WorkspaceSource } from "@godmode/shared";
-import { isWaiting } from "@godmode/shared";
+import { isWaiting, waitsForSubtasks } from "@godmode/shared";
 import { followupWhen } from "@/components/chat/followup";
 import { cn } from "@/lib/utils";
 
@@ -179,6 +179,7 @@ export const BLOCKED_META: Record<TaskBlockedKind, { title: (agent: string) => s
 
 /** "Waiting — continues tomorrow at 10:00" for a ticket that waits for the time its agent set. */
 export function waitingLabel(task: Task): string | null {
+  if (waitsForSubtasks(task)) return `Waiting for ${task.subtasks!.open === 1 ? "1 part" : `${task.subtasks!.open} parts`}`;
   return isWaiting(task) && task.followup ? `Waiting — continues ${followupWhen(task.followup.dueAt)}` : null;
 }
 

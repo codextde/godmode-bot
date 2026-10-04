@@ -12,10 +12,12 @@ import {
   ArrowUpRight,
   Check,
   ChevronRight,
+  CornerDownRight,
   EllipsisVertical,
   GitBranch,
   GitPullRequestCreateArrow,
   Hourglass,
+  ListTree,
   MessageSquareReply,
   MessagesSquare,
   OctagonAlert,
@@ -53,6 +55,7 @@ import { cn } from "@/lib/utils";
 import { DescriptionEditor, withoutPlaceholders, type DescriptionEditorHandle, type TextUpdate } from "./description-editor";
 import { AgentSelect, DueDateField, LabelsInput, PrioritySelect, StatusSelect, agentsInReach } from "./task-fields";
 import { TaskTimeline } from "./task-timeline";
+import { TaskDialog } from "./task-dialog";
 import { PullRequestChip, useTaskActivity } from "./task-card";
 import { BLOCKED_META, StatusIcon, TYPE_META, TypeIcon, formatCost, formatWork, isWorking, pauseLabel, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
 import { followupWhen, useFollowupActions } from "@/components/chat/followup";
@@ -131,6 +134,71 @@ function isTextField(el: Element | null): boolean {
 
 /** Property values read as text and turn into a control on hover, as in Linear. */
 const PROP_CONTROL = "-ml-2.5 h-8 w-auto max-w-full border-transparent bg-transparent px-2.5 shadow-none hover:bg-accent/60 data-[state=open]:bg-accent/60 dark:bg-transparent";
+
+/**
+ * A ticket split into parts: the bigger ticket it belongs to, and its own parts with where each one stands. The parent
+ * waits until its parts are delivered, done, cancelled or archived; then its agent continues with their results.
+ */
+function PartsSection({ task, board, agents, workspaces }: { task: Task; board: Task[]; agents: Agent[]; workspaces: Map<string, Workspace> }) {
+  const [adding, setAdding] = useState(false);
+  const parent = task.parentId ? board.find((t) => t.id === task.parentId) : undefined;
+  const parts = board.filter((t) => t.parentId === task.id).sort((a, b) => a.number - b.number);
+  const hidden = (task.subtasks?.total ?? 0) - parts.length;
+  const closed = task.status === "done" || task.status === "cancelled" || !!task.archivedAt;
+  if (!task.parentNumber && !parts.length && closed) return null;
+  return (
+    <section className="space-y-2" aria-labelledby={`parts-${task.id}`}>
+      <div className="flex items-center gap-2">
+        <h3 id={`parts-${task.id}`} className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          {parts.length ? `Parts · ${(task.subtasks?.total ?? 0) - (task.subtasks?.open ?? 0)} of ${task.subtasks?.total ?? parts.length} finished` : "Parts"}
+        </h3>
+        {!closed && (
+          <Button size="xs" variant="ghost" className="ml-auto text-muted-foreground" onClick={() => setAdding(true)}>
+            <ListTree /> Add a part
+          </Button>
+        )}
+      </div>
+      {task.parentNumber && (
+        <p className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
+          <CornerDownRight className="size-3.5 shrink-0" aria-hidden />
+          Part of{" "}
+          <Link to={`/tasks?task=${task.parentId}`} className="min-w-0 truncate font-medium text-foreground underline-offset-2 hover:underline">
+            #{task.parentNumber} {parent?.title ?? ""}
+          </Link>
+        </p>
+      )}
+      {parts.length > 0 && (
+        <ul className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
+          {parts.map((p) => {
+            const who = agents.find((a) => a.id === p.agentId);
+            return (
+              <li key={p.id}>
+                <Link to={`/tasks?task=${p.id}`} className="flex min-w-0 items-center gap-2.5 px-3 py-2 text-[13px] transition hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none">
+                  <StatusIcon status={p.status} className="size-3.5 shrink-0" />
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">#{p.number}</span>
+                  <span className="min-w-0 flex-1 truncate">{p.title}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{who?.name ?? "Unassigned"}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {hidden > 0 && <p className="text-xs text-muted-foreground">{hidden === 1 ? "1 more part is archived." : `${hidden} more parts are archived.`}</p>}
+      {!parts.length && !task.parentNumber && (
+        <p className="text-xs text-muted-foreground">Split the work: each part is a ticket of its own, and this one waits until they're finished.</p>
+      )}
+      <TaskDialog
+        open={adding}
+        onOpenChange={setAdding}
+        workspaces={[...workspaces.values()]}
+        agents={agents}
+        defaultWorkspaceId={task.workspaceId}
+        parent={task}
+      />
+    </section>
+  );
+}
 
 function TaskDetail({
   task,
@@ -329,6 +397,8 @@ function TaskDetail({
           </dl>
 
           <WorkPanel task={task} agent={agent} onMove={onMove} onReason={(blockedReason) => save.mutate({ blockedReason })} />
+
+          <PartsSection task={task} board={board} agents={agents} workspaces={workspaces} />
 
           {task.summary && (
             <section className="space-y-2">

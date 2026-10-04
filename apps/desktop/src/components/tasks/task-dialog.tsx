@@ -54,6 +54,7 @@ export function TaskDialog({
   defaultWorkspaceId,
   defaultStatus,
   onCreated,
+  parent,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -62,6 +63,8 @@ export function TaskDialog({
   defaultWorkspaceId: string | null;
   defaultStatus?: TaskStatus;
   onCreated?: (task: Task) => void;
+  /** A part of this ticket (it waits for it). */
+  parent?: Pick<Task, "id" | "number"> | null;
 }) {
   const qc = useQueryClient();
   const editor = useRef<DescriptionEditorHandle>(null);
@@ -128,6 +131,7 @@ export function TaskDialog({
         priority,
         dueDate,
         labels,
+        ...(parent ? { parentId: parent.id } : {}),
         ...(type !== "coding"
           ? {}
           : picked?.kind === "folder"
@@ -194,7 +198,7 @@ export function TaskDialog({
                 )}
               </span>
               <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" />
-              <span className="font-medium">New task</span>
+              <span className="font-medium">{parent ? `New part of #${parent.number}` : "New task"}</span>
             </DialogTitle>
             <DialogDescription className="sr-only">Give the task a title and a description — paste or drop images, PDFs and files into it.</DialogDescription>
             <div className="ml-auto flex items-center gap-0.5">
