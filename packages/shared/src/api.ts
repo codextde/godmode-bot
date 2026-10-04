@@ -95,6 +95,26 @@ export interface AgentTemplate {
   routine?: { name: string; cron: string; prompt: string };
 }
 
+/** A whole team to start with: a lead and its reports (agent templates), wired up in the org chart. */
+export interface TeamTemplate {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  /** Leads the team: hands out the work, reviews it and reports to the human. */
+  lead: AgentTemplate;
+  /** Its reports, by agent template id (`GET /api/agent-templates`). */
+  members: string[];
+}
+
+/** What installing a team created. */
+export interface TeamInstallResult {
+  lead: Agent;
+  members: Agent[];
+  /** Automations created from the members' templates (when asked for). */
+  automations: number;
+}
+
 export interface RoutineInput {
   agentId: ID;
   name: string;

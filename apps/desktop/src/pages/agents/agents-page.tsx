@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AgentCard } from "@/components/agents/agent-card";
 import { DeleteAgentDialog, RunTaskDialog } from "@/components/agents/agent-actions";
 import { OrgChart } from "@/components/agents/org-chart";
+import { TeamTemplates } from "@/components/agents/team-templates";
 
 type Filter = "all" | "running" | "needs" | "scheduled" | "disabled";
 
@@ -307,6 +308,16 @@ export default function AgentsPage() {
               </Link>
             </motion.div>
           </motion.div>
+        )}
+        {/* Just the built-in agent so far: offer a whole team to start with. */}
+        {!agentsQ.isLoading && allAgents.length > 0 && allAgents.every((a) => a.isDefault) && (
+          <section className="mt-10" aria-labelledby="start-team">
+            <h2 id="start-team" className="text-lg font-medium tracking-[-0.02em]">
+              Start a team
+            </h2>
+            <p className="mb-4 text-sm text-muted-foreground">A lead and its reports in one go — the lead hands out the work, reviews it and tells you what needs you.</p>
+            <TeamTemplates />
+          </section>
         )}
       </PageBody>
 

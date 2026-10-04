@@ -227,3 +227,7 @@ export function useRunners() {
 export function useAgentTemplates() {
   return useQuery({ queryKey: qk.agentTemplates, queryFn: api.agents.templates, staleTime: 5 * 60_000 });
 }
+
+export function useTeamTemplates() {
+  return useQuery({ queryKey: qk.teamTemplates, queryFn: api.agents.teams, staleTime: 5 * 60_000 });
+}
