@@ -1,11 +1,11 @@
 /**
  * Mods: Claude Code mods the human installs (see `@godmode/shared` mods.ts). The database holds a mod's files; a run
- * gets them written to `<data>/mods/<name>/` and loaded with `--plugin-dir`, its options through the run's settings
- * file. A mod is only loaded when Claude Code's validator accepts it (check.ts) — the engine itself says nothing about
- * a mod it refuses. Only the human switches a mod on; code an agent wrote arrives switched off and marked for review.
+ * gets its own copy under `<data>/mods/<run-id>/` and loads it with `--plugin-dir`, its options through the run's
+ * settings file. A mod is only loaded when Claude Code's validator accepts it (check.ts) — the engine itself says nothing
+ * about a mod it refuses. Only the human switches a mod on; code an agent wrote arrives switched off and marked for
+ * review.
  */
-import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import type { Agent, Mod, ModCheck, ModIcon, ModInput, ModOption, ModOptionValue, ModOrigin, ModPatch, ModScope, ModTemplate } from "@godmode/shared";
 import {
@@ -26,7 +26,7 @@ import { logger } from "../log";
 import { audit } from "../services/audit";
 import { badRequest, conflict, HttpError, newId, notFound, now, parseJson, truncate } from "../util";
 import * as vault from "../vault/vault";
-import { checkModFiles, claudeStamp, writeModFiles } from "./check";
+import { checkMod, claudeStamp, filesDigest, writeModFiles } from "./check";
 import { fitsOption, manifestOptions, readManifest } from "./manifest";
 import { blankModFiles, findModTemplate, listModTemplates, manifestJson } from "./templates";
 
@@ -35,6 +35,8 @@ const log = logger("mods");
 /** Plugins Godmode and Claude Code load themselves. */
 const RESERVED_NAMES = /^(claude-mem|cc-plugin-.*|godmode)$/;
 const IMPORT_SKIP_DIRS = new Set([".git", "node_modules", ".DS_Store"]);
+/** Run ids name the folder a run's mods are copied to. */
+const SAFE_RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 interface ModRow {
   id: string;
@@ -63,11 +65,21 @@ type Values = Record<string, ModOptionValue>;
 
 const secretsContext = (id: string) => `mods.secrets:${id}`;
 
-/** A row's files. A restored backup or a synced setup wrote the row as it came: only paths that stay in the mod's folder count. */
+/** A JSON column as an object: a restored backup or a synced setup wrote the row as it came. */
+function objectOf(json: string | null): Record<string, unknown> {
+  const parsed = parseJson<unknown>(json, null);
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+}
+
+function stringsOf(json: string | null): string[] {
+  const parsed = parseJson<unknown>(json, null);
+  return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+}
+
+/** A row's files: only paths that stay in the mod's folder count. */
 function filesOf(row: ModRow): Record<string, string> {
-  const stored = parseJson<Record<string, unknown>>(row.files, {});
   const out: Record<string, string> = {};
-  for (const [path, content] of Object.entries(stored ?? {})) {
+  for (const [path, content] of Object.entries(objectOf(row.files))) {
     if (typeof content === "string" && !modPathProblem(path)) out[path] = content;
   }
   return out;
@@ -77,9 +89,9 @@ function optionsOf(files: Record<string, string>): ModOption[] {
   return manifestOptions(readManifest(files));
 }
 
-/** Saved values that still fit what the manifest declares (the code may have changed since they were saved). */
+/** Saved values that fit what the manifest declares. */
 function valuesOf(row: ModRow, options: ModOption[]): Values {
-  const stored = parseJson<Record<string, unknown>>(row.option_values, {});
+  const stored = objectOf(row.option_values);
   const out: Values = {};
   for (const option of options) {
     const value = stored[option.key];
@@ -89,8 +101,19 @@ function valuesOf(row: ModRow, options: ModOption[]): Values {
 }
 
 function secretKeysOf(row: ModRow, options: ModOption[]): string[] {
-  const saved = new Set(parseJson<string[]>(row.secret_keys, []));
+  const saved = new Set(stringsOf(row.secret_keys));
   return options.filter((o) => o.sensitive && saved.has(o.key)).map((o) => o.key);
+}
+
+function checkOf(row: ModRow): ModCheck | null {
+  const check = objectOf(row.check_report);
+  return typeof check.ok === "boolean" && [check.errors, check.warnings, check.hooks, check.calls].every(Array.isArray)
+    ? (check as unknown as ModCheck)
+    : null;
+}
+
+function scopeOf(row: ModRow): ModScope {
+  return row.scope === "agents" ? "agents" : "all";
 }
 
 function existingAgents(): Set<string> {
@@ -111,13 +134,14 @@ function toModel(row: ModRow, agents: Set<string>): Mod {
     createdBy: row.created_by,
     enabled: bool(row.enabled),
     needsReview: bool(row.needs_review),
-    scope: row.scope === "agents" ? "agents" : "all",
-    agentIds: parseJson<string[]>(row.agent_ids, []).filter((id) => agents.has(id)),
+    scope: scopeOf(row),
+    agentIds: stringsOf(row.agent_ids).filter((id) => agents.has(id)),
     files,
+    digest: filesDigest(files),
     options,
     values: valuesOf(row, options),
     secretKeys: secretKeysOf(row, options),
-    check: parseJson<ModCheck | null>(row.check_report, null),
+    check: checkOf(row),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -179,7 +203,7 @@ function nameTaken(name: string): boolean {
 }
 
 function freeName(base: string): string {
-  const root = RESERVED_NAMES.test(base) ? `${base}-mod` : base;
+  const root = RESERVED_NAMES.test(base) ? `${base.slice(0, 44)}-mod` : base;
   let name = root;
   for (let n = 2; nameTaken(name); n++) name = `${root.slice(0, 44)}-${n}`;
   return name;
@@ -210,7 +234,7 @@ function cleanFiles(name: string, input: unknown): Record<string, string> {
   for (const path of seen) {
     if ([...seen].some((other) => other.startsWith(`${path}/`))) throw badRequest(`${path} is both a file and a folder`);
   }
-  if (!(MOD_MANIFEST_PATH in out)) throw badRequest(`A mod needs its manifest, ${MOD_MANIFEST_PATH}`);
+  if (!Object.hasOwn(out, MOD_MANIFEST_PATH)) throw badRequest(`A mod needs its manifest, ${MOD_MANIFEST_PATH}`);
   const manifest = readManifest(out);
   if (!manifest) throw badRequest(`${MOD_MANIFEST_PATH} must be a JSON object`);
   if (manifest.name !== name) out[MOD_MANIFEST_PATH] = manifestJson("name" in manifest ? { ...manifest, name } : { name, ...manifest });
@@ -231,22 +255,23 @@ function cleanAgentIds(ids: unknown): string[] {
   return unique;
 }
 
-function digestOf(files: Record<string, string>): string {
-  const hash = createHash("sha256");
-  for (const path of Object.keys(files).sort()) hash.update(`${path}\0${files[path]}\0`);
-  return hash.digest("hex");
-}
-
 function checkKey(files: Record<string, string>): string {
-  return `${digestOf(files)}|${claudeStamp() ?? ""}`;
+  return `${filesDigest(files)}|${claudeStamp() ?? ""}`;
 }
 
-/** Secret option values; throws 423 while the vault is locked. */
-function openSecrets(row: ModRow): Record<string, string> {
-  if (!row.secrets_enc) return {};
-  const values = parseJson<Record<string, string>>(vault.open(row.secrets_enc, secretsContext(row.id)), {});
-  vault.rememberSecretValues(values);
-  return values;
+/** The saved secret option values; throws 423 while the vault is locked. */
+function openSecrets(row: ModRow, keys: string[]): Record<string, string> {
+  if (!row.secrets_enc || keys.length === 0) return {};
+  const stored = parseJson<unknown>(vault.open(row.secrets_enc, secretsContext(row.id)), null);
+  const out: Record<string, string> = {};
+  if (typeof stored !== "object" || stored === null) return out;
+  // Only what `secret_keys` still names: a value whose option the code dropped doesn't come back with a later version.
+  for (const key of keys) {
+    const value = (stored as Record<string, unknown>)[key];
+    if (typeof value === "string") out[key] = value;
+  }
+  vault.rememberSecretValues(out);
+  return out;
 }
 
 function sealSecrets(id: string, values: Record<string, string>): string | null {
@@ -257,7 +282,8 @@ function sealSecrets(id: string, values: Record<string, string>): string | null 
 
 /** The first required option that has neither a value nor a default. */
 function missingOption(options: ModOption[], values: Values, secretKeys: string[]): ModOption | null {
-  return options.find((o) => o.required && o.default === null && !(o.sensitive ? secretKeys.includes(o.key) : o.key in values)) ?? null;
+  const has = (o: ModOption) => (o.sensitive ? secretKeys.includes(o.key) : values[o.key] !== undefined && values[o.key] !== "");
+  return options.find((o) => o.required && (o.default === null || o.default === "") && !has(o)) ?? null;
 }
 
 /** The first problem in one line, without the reminder of the API's spelling the validator appends to it. */
@@ -266,12 +292,20 @@ function firstError(check: ModCheck): string {
   return e ? truncate(`${e.where}: ${e.message.split("; $ is always spelled")[0]}`, 300) : "Claude Code refused it";
 }
 
+/** Check the files and say what goes into the row: a check that gave no report keeps no key, so it is asked again. */
+async function checked(name: string, files: Record<string, string>): Promise<{ check: ModCheck | null; columns: { check_report: string | null; check_key: string | null } }> {
+  const { check, retry } = await checkMod(name, files);
+  return { check, columns: { check_report: check ? JSON.stringify(check) : null, check_key: check && !retry ? checkKey(files) : null } };
+}
+
 /* ------------------------------------------------------------------ */
 /* CRUD                                                                 */
 /* ------------------------------------------------------------------ */
 
 interface NewMod {
   name: string;
+  /** The name was made up from the title: when it got taken meanwhile, another is as good. */
+  anyName: boolean;
   title: string;
   description: string;
   icon: ModIcon;
@@ -284,22 +318,29 @@ interface NewMod {
 }
 
 async function insertMod(mod: NewMod, actor: string): Promise<Mod> {
-  const check = await checkModFiles(mod.name, mod.files);
+  const { check, columns } = await checked(mod.name, mod.files);
   const byAgent = actor.startsWith("agent:");
   // A mod that is on from the start has to load: one the check refuses, or with an option still to fill in, waits.
   const ready = (!check || check.ok) && !missingOption(optionsOf(mod.files), {}, []);
+  // The check took a moment: another request may have taken the name meanwhile.
+  let name = mod.name;
+  if (nameTaken(name)) {
+    if (!mod.anyName) throw conflict(`There already is a mod named "${name}"`);
+    name = freeName(name);
+  }
+  const files = name === mod.name ? mod.files : cleanFiles(name, mod.files);
   const id = newId("mod");
   const ts = now();
   insert("mods", {
     id,
-    name: mod.name,
+    name,
     title: mod.title,
     description: mod.description,
     icon: mod.icon,
     origin: mod.origin,
     template_id: mod.templateId,
     created_by: actor,
-    files: JSON.stringify(mod.files),
+    files: JSON.stringify(files),
     option_values: "{}",
     secrets_enc: null,
     secret_keys: "[]",
@@ -307,18 +348,20 @@ async function insertMod(mod: NewMod, actor: string): Promise<Mod> {
     needs_review: byAgent ? 1 : 0,
     scope: mod.scope,
     agent_ids: JSON.stringify(mod.agentIds),
-    check_report: check ? JSON.stringify(check) : null,
-    check_key: check ? checkKey(mod.files) : null,
+    check_report: columns.check_report,
+    check_key: columns.check_key && name === mod.name ? columns.check_key : null,
     created_at: ts,
     updated_at: ts,
   });
-  audit(actor, "mod.create", id, { name: mod.name, origin: mod.origin, files: Object.keys(mod.files) });
+  audit(actor, "mod.create", id, { name, origin: mod.origin, files: Object.keys(files) });
   bus.changed("mods");
   return getMod(id);
 }
 
 export async function createMod(input: ModInput, actor = "user"): Promise<Mod> {
   if (!input || typeof input !== "object") throw badRequest("Invalid mod");
+  // A gallery mod is Godmode's code as it ships: other files under its label would be on from the start, unread.
+  if (input.templateId && input.files !== undefined) throw badRequest("Add the gallery mod first, then change its code");
   const template = input.templateId ? findModTemplate(input.templateId) : null;
   if (input.templateId && !template) throw badRequest(`There is no mod "${input.templateId}" in the gallery`);
   const title = cleanTitle(input.title ?? template?.title);
@@ -331,6 +374,7 @@ export async function createMod(input: ModInput, actor = "user"): Promise<Mod> {
   return insertMod(
     {
       name,
+      anyName: input.name === undefined,
       title,
       description,
       icon: input.icon !== undefined ? cleanIcon(input.icon) : (template?.icon ?? "puzzle"),
@@ -358,25 +402,32 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user"): Pr
   if (patch.agentIds !== undefined) changes.agent_ids = JSON.stringify(cleanAgentIds(patch.agentIds));
 
   let files = filesOf(row);
-  let check = parseJson<ModCheck | null>(row.check_report, null);
+  let check = checkOf(row);
   let codeChanged = false;
   if (patch.files !== undefined) {
     const next = cleanFiles(row.name, patch.files);
-    codeChanged = digestOf(next) !== digestOf(files);
+    codeChanged = filesDigest(next) !== filesDigest(files);
     files = next;
   }
-  if (codeChanged) {
-    check = await checkModFiles(row.name, files);
-    changes.files = JSON.stringify(files);
-    changes.check_report = check ? JSON.stringify(check) : null;
-    changes.check_key = check ? checkKey(files) : null;
-    // Code the human never saw doesn't run: an agent's change waits for them.
-    if (byAgent) Object.assign(changes, { enabled: 0, needs_review: 1 });
-  }
-
   const options = optionsOf(files);
   let values = valuesOf(row, options);
   let secretKeys = secretKeysOf(row, options);
+  if (codeChanged) {
+    const result = await checked(row.name, files);
+    check = result.check;
+    Object.assign(changes, result.columns, {
+      files: JSON.stringify(files),
+      // What the new code no longer declares is forgotten for good, not kept for a later version to pick up.
+      option_values: JSON.stringify(values),
+      secret_keys: JSON.stringify(secretKeys),
+    });
+    // Code the human never saw doesn't run: an agent's change waits for them.
+    if (byAgent) Object.assign(changes, { enabled: 0, needs_review: 1 });
+    // A gallery mod with other code is no longer the gallery's.
+    const template = row.template_id ? findModTemplate(row.template_id) : null;
+    if (template && filesDigest(cleanFiles(row.name, template.files)) !== filesDigest(files)) Object.assign(changes, { origin: byAgent ? "agent" : "custom", template_id: null });
+  }
+
   if (patch.values !== undefined) {
     if (typeof patch.values !== "object" || patch.values === null || Array.isArray(patch.values)) throw badRequest("values must be an object");
     values = { ...values };
@@ -385,7 +436,7 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user"): Pr
       const option = options.find((o) => o.key === key);
       if (!option) throw badRequest(`The mod has no option "${key}"`);
       if (option.sensitive) {
-        secrets ??= openSecrets(row);
+        secrets ??= openSecrets(row, secretKeys);
         if (value === null || value === "") delete secrets[key];
         else if (typeof value === "string" && value.length <= 16_384) secrets[key] = value;
         else throw badRequest(`"${option.title}" must be text`);
@@ -395,14 +446,26 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user"): Pr
     }
     changes.option_values = JSON.stringify(values);
     if (secrets) {
-      secretKeys = options.filter((o) => o.sensitive && o.key in secrets).map((o) => o.key);
-      changes.secrets_enc = sealSecrets(id, secrets);
+      const kept = secrets;
+      secretKeys = options.filter((o) => o.sensitive && Object.hasOwn(kept, o.key)).map((o) => o.key);
+      changes.secrets_enc = sealSecrets(id, kept);
       changes.secret_keys = JSON.stringify(secretKeys);
     }
   }
 
   if (patch.enabled !== undefined && !byAgent) {
     if (patch.enabled) {
+      // The human's OK is for the code they read: an agent may have saved another version since the page loaded.
+      if (patch.digest !== undefined && patch.digest !== filesDigest(files)) {
+        throw conflict("The code changed since you opened this mod. Read it again, then switch it on.");
+      }
+      // A report about other code, or from another Claude Code, says nothing about what would load now.
+      if (!codeChanged && row.check_key !== checkKey(files)) {
+        const result = await checked(row.name, files);
+        check = result.check;
+        Object.assign(changes, result.columns);
+        run("UPDATE mods SET check_report = ?, check_key = ? WHERE id = ?", result.columns.check_report, result.columns.check_key, id);
+      }
       if (check && !check.ok) throw conflict(`Fix the mod before you switch it on — ${firstError(check)}`);
       const missing = missingOption(options, values, secretKeys);
       if (missing) throw conflict(`Set "${missing.title}" under Options before you switch the mod on.`);
@@ -418,6 +481,8 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user"): Pr
     ...(codeChanged ? { files: Object.keys(files) } : {}),
     ...(changes.enabled !== undefined ? { enabled: changes.enabled === 1 } : {}),
     ...(patch.values !== undefined ? { options: Object.keys(patch.values) } : {}),
+    ...(changes.scope !== undefined ? { scope: changes.scope } : {}),
+    ...(patch.agentIds !== undefined ? { agents: patch.agentIds.length } : {}),
   });
   bus.changed("mods");
   return getMod(id);
@@ -426,7 +491,6 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user"): Pr
 export function deleteMod(id: string, actor = "user"): void {
   const row = getRow(id);
   run("DELETE FROM mods WHERE id = ?", id);
-  rmSync(modDir(row.name), { recursive: true, force: true });
   audit(actor, "mod.delete", id, { name: row.name });
   bus.changed("mods");
 }
@@ -440,15 +504,16 @@ export async function recheckMod(id: string): Promise<Mod> {
 }
 
 async function storeCheck(row: ModRow, files: Record<string, string>): Promise<ModCheck | null> {
-  const check = await checkModFiles(row.name, files);
-  run("UPDATE mods SET check_report = ?, check_key = ? WHERE id = ?", check ? JSON.stringify(check) : null, check ? checkKey(files) : null, row.id);
+  const { check, columns } = await checked(row.name, files);
+  // Only for the code that was checked: the human may have saved another version meanwhile.
+  run("UPDATE mods SET check_report = ?, check_key = ? WHERE id = ? AND files = ?", columns.check_report, columns.check_key, row.id, row.files);
   return check;
 }
 
 /** Check files that aren't saved (the editor's "Check"). */
 export async function checkUnsaved(files: unknown): Promise<ModCheck | null> {
   const name = readManifestName(files) ?? "mod";
-  return checkModFiles(name, cleanFiles(name, files));
+  return (await checkMod(name, cleanFiles(name, files))).check;
 }
 
 function readManifestName(files: unknown): string | null {
@@ -467,7 +532,7 @@ function readPluginFolder(root: string): Record<string, string> {
   const walk = (dir: string, prefix: string) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (IMPORT_SKIP_DIRS.has(entry.name) || path === ".claude-plugin/types") continue;
+      if (IMPORT_SKIP_DIRS.has(entry.name) || path.toLowerCase() === ".claude-plugin/types") continue;
       // Links could lead anywhere on the computer.
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) walk(join(dir, entry.name), path);
@@ -502,6 +567,7 @@ export async function importMod(path: unknown, actor = "user"): Promise<Mod> {
   return insertMod(
     {
       name,
+      anyName: false,
       title: words.charAt(0).toUpperCase() + words.slice(1),
       description: cleanDescription(manifest.description),
       icon: "puzzle",
@@ -520,41 +586,23 @@ export async function importMod(path: unknown, actor = "user"): Promise<Mod> {
 /* Runs                                                                 */
 /* ------------------------------------------------------------------ */
 
-export function modDir(name: string): string {
-  return join(config().dataDir, "mods", name);
+function modsRoot(): string {
+  return join(config().dataDir, "mods");
 }
 
-/** Claude Code lays its type declarations (and a tsconfig for them) beside a mod it loads: those stay. */
-function isEngineFile(path: string, files: Record<string, string>): boolean {
-  return path.startsWith(".claude-plugin/types/") || (path === "tsconfig.json" && !("tsconfig.json" in files));
+/** Where a run's copy of a mod lies. A copy per run: a run that writes into its mods reaches no other run's. */
+export function runModDir(runId: string, name: string): string {
+  return join(modsRoot(), runId, name);
 }
 
-/** Make the folder hold exactly the mod's files: whatever else got there (a run may write anywhere) is removed. */
-function syncModDir(dir: string, files: Record<string, string>) {
-  if (existsSync(dir) && !lstatSync(dir).isDirectory()) rmSync(dir, { force: true });
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const walk = (at: string, prefix: string) => {
-    for (const entry of readdirSync(at, { withFileTypes: true })) {
-      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(join(at, entry.name), path);
-      else if (!entry.isFile() || !(path in files || isEngineFile(path, files))) rmSync(join(at, entry.name), { recursive: true, force: true });
-    }
-  };
-  walk(dir, "");
-  const stale: Record<string, string> = {};
-  for (const [path, content] of Object.entries(files)) {
-    const full = join(dir, ...path.split("/"));
-    let current = false;
-    try {
-      current = lstatSync(full).isFile() && readFileSync(full, "utf8") === content;
-    } catch {
-      /* not there */
-    }
-    if (current) continue;
-    rmSync(full, { recursive: true, force: true });
-    stale[path] = content;
-  }
-  writeModFiles(dir, stale);
+/** A run ended: its copy of the mods goes. */
+export function removeRunMods(runId: string): void {
+  if (SAFE_RUN_ID.test(runId)) rmSync(join(modsRoot(), runId), { recursive: true, force: true });
+}
+
+/** At startup no run is at work: what crashed runs left behind goes. */
+export function clearRunMods(): void {
+  rmSync(modsRoot(), { recursive: true, force: true });
 }
 
 /**
@@ -575,26 +623,25 @@ export interface RunMods {
 }
 
 /**
- * The mods a run of `agent` loads, written to disk. A mod that is switched on but can't be loaded (the check fails,
- * an option is missing, its secrets are locked) is left out and named through `onNotice` — the human relies on it.
+ * The mods a run of `agent` loads, copied to the run's own folder. A mod that is switched on but can't be loaded (the
+ * check fails, an option is missing, its secrets are locked) is left out and named through `onNotice` — the human
+ * relies on it.
  */
-export async function modsForRun(agent: Pick<Agent, "id">, onNotice: (text: string) => void): Promise<RunMods> {
+export async function modsForRun(agent: Pick<Agent, "id">, runId: string, onNotice: (text: string) => void): Promise<RunMods> {
   const out: RunMods = { dirs: [], configs: {} };
   const agents = existingAgents();
   const rows = all<ModRow>("SELECT * FROM mods WHERE enabled = 1 ORDER BY created_at, id")
-    .filter((row) =>
-      modAppliesTo({ scope: row.scope === "agents" ? "agents" : "all", agentIds: parseJson<string[]>(row.agent_ids, []).filter((id) => agents.has(id)) }, agent.id),
-    )
+    .filter((row) => modAppliesTo({ scope: scopeOf(row), agentIds: stringsOf(row.agent_ids).filter((id) => agents.has(id)) }, agent.id))
     .map((row, i) => ({ row, i, rank: loadRank(row) }))
     .sort((a, b) => a.rank - b.rank || a.i - b.i)
     .map((x) => x.row);
-  if (rows.length === 0) return out;
+  if (rows.length === 0 || !SAFE_RUN_ID.test(runId)) return out;
   const stamp = claudeStamp();
   let rechecked = false;
   const checks = await Promise.all(
     rows.map(async (row) => {
       const files = filesOf(row);
-      if (row.check_key === `${digestOf(files)}|${stamp ?? ""}`) return parseJson<ModCheck | null>(row.check_report, null);
+      if (row.check_key === `${filesDigest(files)}|${stamp ?? ""}`) return checkOf(row);
       // Another Claude Code than the one that checked it: what loaded yesterday may be refused today.
       rechecked = true;
       return storeCheck(row, files).catch((err) => {
@@ -614,8 +661,7 @@ export async function modsForRun(agent: Pick<Agent, "id">, onNotice: (text: stri
     const secretKeys = secretKeysOf(row, options);
     if (secretKeys.length) {
       try {
-        const secrets = openSecrets(row);
-        for (const key of secretKeys) if (key in secrets) values[key] = secrets[key]!;
+        Object.assign(values, openSecrets(row, secretKeys));
       } catch (err) {
         return skip(err instanceof HttpError && err.status === 423 ? "its secret options need the vault unlocked." : "its secret options couldn't be read.");
       }
@@ -623,8 +669,9 @@ export async function modsForRun(agent: Pick<Agent, "id">, onNotice: (text: stri
     const missing = missingOption(options, values, secretKeys);
     if (missing) return skip(`its option "${missing.title}" has no value.`);
     try {
-      const dir = modDir(row.name);
-      syncModDir(dir, files);
+      const dir = runModDir(runId, row.name);
+      rmSync(dir, { recursive: true, force: true });
+      writeModFiles(dir, files);
       out.dirs.push(dir);
       if (Object.keys(values).length) out.configs[row.name] = { options: values };
     } catch (err) {

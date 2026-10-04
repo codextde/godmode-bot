@@ -83,7 +83,8 @@ export function useModActions() {
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
   });
 
-  const toggle = (mod: Mod, enabled: boolean) => update.mutate({ mod, patch: { enabled } });
+  // Switching on names the code that is on screen: the core refuses when an agent saved another version meanwhile.
+  const toggle = (mod: Mod, enabled: boolean) => update.mutate({ mod, patch: enabled ? { enabled, digest: mod.digest } : { enabled } });
 
   const check = useMutation({
     mutationFn: ({ mod }: { mod: Mod; silent?: boolean }) => api.mods.check(mod.id),

@@ -11,6 +11,10 @@ export const register: Register = (on, options) => {
   })
 
   on('tool.call', ($, e, next) => {
+    // Godmode's own tools stay open: past the limit the agent can still report, notify and ask the human.
+    if (String(e.tool).startsWith('mcp__godmode__')) {
+      return next(e)
+    }
     calls += 1
     if (calls <= limit) {
       return next(e)

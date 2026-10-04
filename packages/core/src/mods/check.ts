@@ -3,6 +3,7 @@
  * hooks module the way the engine will, and says what the module hooks and calls and everything the engine would
  * refuse. A run that loads a mod the engine refuses gets no word about it, so Godmode checks before it loads one.
  */
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, normalize, sep } from "node:path";
@@ -11,7 +12,7 @@ import { logger } from "../log";
 import { claudeEnv, resolveClaudeCommand } from "../runner/claude";
 import { runCommand, stripAnsi, versionFrom } from "../services/doctor";
 import { now } from "../util";
-import { hasCommandHooks } from "./manifest";
+import { startsPrograms } from "./manifest";
 
 const log = logger("mods");
 const CHECK_TIMEOUT_MS = 60_000;
@@ -38,6 +39,12 @@ export function claudeStamp(): string | null {
     .join("|");
 }
 
+export function filesDigest(files: Record<string, string>): string {
+  const hash = createHash("sha256");
+  for (const path of Object.keys(files).sort()) hash.update(`${path}\0${files[path]}\0`);
+  return hash.digest("hex");
+}
+
 const versions = new Map<string, string | null>();
 
 async function claudeVersion(cmd: string[], stamp: string): Promise<string | null> {
@@ -56,28 +63,39 @@ export function writeModFiles(dir: string, files: Record<string, string>) {
   }
 }
 
-/** "a, b{tool=Bash}, c{component=Pane, requestId=x}" → one entry per hook (commas inside braces belong to a matcher). */
-function splitHooks(list: string): ModHook[] {
-  const hooks: ModHook[] = [];
+/** Split a list at its commas, leaving alone the ones inside braces or parentheses ("a{x=1, y=2}", "$.fs.read (via a, b)"). */
+function splitList(list: string): string[] {
+  const items: string[] = [];
   let depth = 0;
   let start = 0;
-  const push = (end: number) => {
-    const item = list.slice(start, end).trim();
-    if (!item) return;
-    const m = /^([^{]+)(?:\{(.*)\})?$/.exec(item);
-    hooks.push({ event: (m?.[1] ?? item).trim(), matcher: m?.[2]?.trim() || null });
-  };
   for (let i = 0; i < list.length; i++) {
     const ch = list[i];
-    if (ch === "{") depth++;
-    else if (ch === "}") depth = Math.max(0, depth - 1);
+    if (ch === "{" || ch === "(") depth++;
+    else if (ch === "}" || ch === ")") depth = Math.max(0, depth - 1);
     else if (ch === "," && depth === 0) {
-      push(i);
+      items.push(list.slice(start, i).trim());
       start = i + 1;
     }
   }
-  push(list.length);
-  return hooks;
+  items.push(list.slice(start).trim());
+  return items.filter(Boolean);
+}
+
+/** "session.start, tool.call{tool=Bash}" → hooks; a module that registers none says "nothing". */
+function parseHooks(list: string): ModHook[] {
+  return splitList(list)
+    .filter((item) => item !== "nothing")
+    .map((item) => {
+      const m = /^([^{]+)(?:\{(.*)\})?$/.exec(item);
+      return { event: (m?.[1] ?? item).trim(), matcher: m?.[2]?.trim() || null };
+    });
+}
+
+/** "$.ui.log, $.http.fetch (via send)" → the calls themselves: one made through a helper function is still the mod's. */
+function parseCalls(list: string): string[] {
+  return splitList(list)
+    .map((item) => item.replace(/\s*\(via [^)]*\)$/, ""))
+    .filter((call) => call.startsWith("$."));
 }
 
 function escapeRegExp(text: string): string {
@@ -94,8 +112,9 @@ function problems(list: unknown, file: string, files: Record<string, string>, cl
     const module = /^modules\.(.+)$/.exec(path)?.[1];
     const moduleFile = module ? normalize(join(dirname(file), module)).split(sep).join("/") : null;
     // The validator starts a module's problems with "<plugin>: <file>, ": `where` says that already.
-    if (moduleFile && moduleFile in files) out.push({ where: moduleFile, message: clean(item.message).replace(new RegExp(`^[\\w-]+: ${escapeRegExp(moduleFile)}, `), "") });
-    else out.push({ where: file, message: path ? `${path}: ${clean(item.message)}` : clean(item.message) });
+    if (moduleFile && Object.hasOwn(files, moduleFile)) {
+      out.push({ where: moduleFile, message: clean(item.message).replace(new RegExp(`^[\\w-]+: ${escapeRegExp(moduleFile)}, `), "") });
+    } else out.push({ where: file, message: path ? `${path}: ${clean(item.message)}` : clean(item.message) });
   }
   return out;
 }
@@ -115,6 +134,8 @@ export function parseReport(stdout: string, dir: string, files: Record<string, s
   } catch {
     /* the folder is gone: the plain path is all there is */
   }
+  // The longer spelling first: /private/var/… holds /var/….
+  roots.sort((a, b) => b.length - a.length);
   const clean = (text: string) => roots.reduce((t, root) => t.split(`${root}/`).join("").split(root).join("."), stripAnsi(text));
   const relative = (file: unknown) => (typeof file === "string" ? clean(file) : "plugin");
 
@@ -135,9 +156,9 @@ export function parseReport(stdout: string, dir: string, files: Record<string, s
     for (const note of Array.isArray(part.notes) ? part.notes : []) {
       if (typeof note !== "string") continue;
       const hooked = /\shooks: (.*)$/.exec(note);
-      if (hooked) hooks.push(...splitHooks(hooked[1]!));
+      if (hooked) hooks.push(...parseHooks(hooked[1]!));
       const called = /\scalls: (.*)$/.exec(note);
-      if (called) for (const call of called[1]!.split(",")) if (call.trim().startsWith("$.")) calls.add(call.trim());
+      if (called) for (const call of parseCalls(called[1]!)) calls.add(call);
     }
   }
   return {
@@ -146,17 +167,20 @@ export function parseReport(stdout: string, dir: string, files: Record<string, s
     warnings,
     hooks,
     calls: [...calls].sort(),
-    commandHooks: hasCommandHooks(files),
+    startsPrograms: startsPrograms(files),
     claudeVersion,
     checkedAt: now(),
   };
 }
 
-/** Run the validator over `files`. null: Claude Code isn't installed, so nothing can be said. */
-export async function checkModFiles(name: string, files: Record<string, string>): Promise<ModCheck | null> {
-  const cmd = resolveClaudeCommand();
-  const stamp = claudeStamp();
-  if (!cmd || !stamp) return null;
+export interface CheckResult {
+  /** null: Claude Code isn't installed, so nothing can be said. */
+  check: ModCheck | null;
+  /** The validator gave no report this time (it timed out): what is said isn't about the code, so ask again later. */
+  retry: boolean;
+}
+
+async function validate(name: string, files: Record<string, string>, cmd: string[], stamp: string): Promise<CheckResult> {
   const work = mkdtempSync(join(tmpdir(), "godmode-mod-"));
   const dir = join(work, name);
   try {
@@ -166,27 +190,51 @@ export async function checkModFiles(name: string, files: Record<string, string>)
       claudeVersion(cmd, stamp),
     ]);
     const report = parseReport(res.stdout, dir, files, version);
-    if (report) return report;
+    if (report) return { check: report, retry: false };
     const said = stripAnsi(res.stderr || res.stdout).trim().slice(0, 400);
     log.warn("the mod check gave no report", { timedOut: res.timedOut, code: res.code, said });
     return {
-      ok: false,
-      errors: [
-        {
-          where: "Claude Code",
-          message: res.timedOut
-            ? "Claude Code took too long to check this mod. Try again."
-            : `This Claude Code can't check mods${said ? ` (${said})` : ""}. Update Claude Code under Settings → System and check again.`,
-        },
-      ],
-      warnings: [],
-      hooks: [],
-      calls: [],
-      commandHooks: hasCommandHooks(files),
-      claudeVersion: version,
-      checkedAt: now(),
+      check: {
+        ok: false,
+        errors: [
+          {
+            where: "Claude Code",
+            message: res.timedOut
+              ? "Claude Code took too long to check this mod. Check it again."
+              : `This Claude Code can't check mods${said ? ` (${said})` : ""}. Update Claude Code under Settings → System and check again.`,
+          },
+        ],
+        warnings: [],
+        hooks: [],
+        calls: [],
+        startsPrograms: startsPrograms(files),
+        claudeVersion: version,
+        checkedAt: now(),
+      },
+      retry: res.timedOut,
     };
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
+}
+
+/** Checks under way, by the code and the Claude Code they are about: runs that start together ask once. */
+const inFlight = new Map<string, Promise<CheckResult>>();
+
+/** Run the validator over `files`. */
+export function checkMod(name: string, files: Record<string, string>): Promise<CheckResult> {
+  const cmd = resolveClaudeCommand();
+  const stamp = claudeStamp();
+  if (!cmd || !stamp) return Promise.resolve({ check: null, retry: false });
+  const key = `${name}\0${filesDigest(files)}\0${stamp}`;
+  let pending = inFlight.get(key);
+  if (!pending) {
+    pending = validate(name, files, cmd, stamp).finally(() => inFlight.delete(key));
+    inFlight.set(key, pending);
+  }
+  return pending;
+}
+
+export async function checkModFiles(name: string, files: Record<string, string>): Promise<ModCheck | null> {
+  return (await checkMod(name, files)).check;
 }

@@ -1,5 +1,14 @@
 import type { Register } from 'claude-code'
 
+// A shell command reaches a computer through Bash, and through Godmode's tools for servers and virtual machines
+// (mcp__ssh__shell, mcp__vm__shell).
+function shellCommand(e: { tool: string }): string | undefined {
+  const command = (e as { command?: unknown }).command
+  const isShell = e.tool === 'Bash' || /^mcp__.+__shell$/.test(e.tool)
+
+  return isShell && typeof command === 'string' ? command : undefined
+}
+
 export const register: Register = (on, options) => {
   const rules: RegExp[] = []
   const unreadable: string[] = []
@@ -23,9 +32,9 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('tool.call', { tool: 'Bash' }, ($, e, next) => {
-    const rule = rules.find(one => one.test(e.command))
+  on('tool.call', ($, e, next) => {
+    const command = shellCommand(e)
 
-    return rule === undefined ? next(e) : { deny: `${String(options.message)} (Matched: ${rule.source})` }
+    return command !== undefined && rules.some(rule => rule.test(command)) ? { deny: String(options.message) } : next(e)
   })
 }

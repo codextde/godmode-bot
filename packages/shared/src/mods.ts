@@ -78,8 +78,8 @@ export interface ModCheck {
   hooks: ModHook[];
   /** Everything the mod calls on the engine, e.g. "$.ui.log", "$.fs.write". */
   calls: string[];
-  /** The mod also ships classic command hooks: shell commands Claude Code runs on this computer. */
-  commandHooks: boolean;
+  /** The plugin also ships something Claude Code starts as a program: command hooks, MCP or LSP servers, monitors, `bin/`. */
+  startsPrograms: boolean;
   /** The Claude Code that checked it; null when the version is unknown. */
   claudeVersion: string | null;
   checkedAt: ISODate;
@@ -105,6 +105,8 @@ export interface Mod {
   agentIds: ID[];
   /** Every file of the plugin by its path, e.g. ".claude-plugin/plugin.json", "hooks/register.ts". */
   files: Record<string, string>;
+  /** Which code this is: sent back when switching the mod on, so the OK is for the code that was read. */
+  digest: string;
   /** The options its manifest declares. */
   options: ModOption[];
   /** Saved option values (never a sensitive one). */
@@ -138,6 +140,8 @@ export interface ModPatch {
   icon?: ModIcon;
   /** Refused (409) while the check fails. */
   enabled?: boolean;
+  /** With `enabled: true`: the `digest` of the code the human saw. Refused (409) when the code is another by now. */
+  digest?: string;
   scope?: ModScope;
   agentIds?: ID[];
   /** The whole set of files; checked again when it changed. */
@@ -209,8 +213,11 @@ export function modPathProblem(path: string): string | null {
   if (!path || path.length > 200) return "File paths must be 1–200 characters";
   if (path.startsWith("/") || path.includes("\\") || path.includes("\0")) return `"${path}" must be a relative path with forward slashes`;
   const segments = path.split("/");
-  if (segments.some((s) => !s || s === "." || s === ".." || !/^[A-Za-z0-9._@+-]+$/.test(s))) return `"${path}" has a folder or file name that isn't allowed`;
-  if (path.startsWith(".claude-plugin/types/")) return `"${path}" is written by Claude Code itself`;
+  if (segments.some((s) => !s || s === "." || s === ".." || s === "__proto__" || !/^[A-Za-z0-9._@+-]+$/.test(s))) {
+    return `"${path}" has a folder or file name that isn't allowed`;
+  }
+  // One folder in any spelling on macOS and Windows.
+  if (/^\.claude-plugin\/types(\/|$)/i.test(path)) return `"${path}" is written by Claude Code itself`;
   return null;
 }
 
@@ -324,18 +331,18 @@ const ABILITIES: { id: string; label: string; detail: string; level: ModAbilityL
 ];
 
 /** What a checked mod can do, sensitive abilities last. */
-export function modAbilities(check: Pick<ModCheck, "hooks" | "calls" | "commandHooks">): ModAbility[] {
+export function modAbilities(check: Pick<ModCheck, "hooks" | "calls" | "startsPrograms">): ModAbility[] {
   const out: ModAbility[] = [];
   for (const a of ABILITIES) {
     const hooked = !!a.hooks && check.hooks.some((h) => a.hooks!.test(h.event));
     const called = !!a.calls && check.calls.some((c) => a.calls!.test(c));
     if (hooked || called) out.push({ id: a.id, label: a.label, detail: a.detail, level: a.level });
   }
-  if (check.commandHooks) {
+  if (check.startsPrograms) {
     out.push({
-      id: "command-hooks",
-      label: "Runs shell commands",
-      detail: "Its command hooks run on this computer whenever their event happens.",
+      id: "programs",
+      label: "Starts programs of its own",
+      detail: "It ships command hooks, servers, monitors or scripts that Claude Code runs on this computer.",
       level: "sensitive",
     });
   }

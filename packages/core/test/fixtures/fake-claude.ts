@@ -79,7 +79,7 @@
  * FAKE_CLAUDE_SESSION_MODEL — the model of the probe's session until `set_model` names another (default opus);
  * FAKE_CLAUDE_SET_MODEL — =error rejects `set_model`, =silent never answers it.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -236,6 +236,24 @@ const sessionId = resume ?? argValue("--session-id") ?? crypto.randomUUID();
 const settingsFile = argValue("--settings");
 const sessionSettings = settingsFile && existsSync(settingsFile) ? (JSON.parse(readFileSync(settingsFile, "utf8")) as { ultracode?: boolean }) : null;
 
+/** Every --plugin-dir folder as the run found it: its files (but for what Claude Code lays there itself) and its hooks module. */
+const plugins = args.flatMap((arg, i) => {
+  if (arg !== "--plugin-dir") return [];
+  const dir = args[i + 1]!;
+  if (!existsSync(join(dir, ".claude-plugin", "plugin.json"))) return [];
+  const files: string[] = [];
+  const walk = (at: string, prefix: string) => {
+    for (const entry of readdirSync(at, { withFileTypes: true })) {
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(join(at, entry.name), path);
+      else files.push(path);
+    }
+  };
+  walk(dir, "");
+  const module = join(dir, "hooks", "register.ts");
+  return [{ dir, files: files.sort(), module: existsSync(module) ? readFileSync(module, "utf8") : null }];
+});
+
 appendFileSync(
   join(stateDir, "invocations.jsonl"),
   JSON.stringify({
@@ -243,6 +261,7 @@ appendFileSync(
     prompt,
     cwd: process.cwd(),
     settings: sessionSettings,
+    plugins,
     env: {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? null,
       GODMODE_TOKEN: process.env.GODMODE_TOKEN ?? null,

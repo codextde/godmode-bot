@@ -30,7 +30,7 @@ const pushSecrets = new Set<string>();
 /** What a secret taken out of a file is replaced with: plain letters, so it fits wherever the secret stood. */
 export const SECRET_PLACEHOLDER = "GODMODE_REMOVED_SECRET";
 /** Sealed values that aren't one secret: free-text notes, and the JSON of a map whose values are remembered one by one. */
-const SEALED_NOT_SECRET = /^(credentials\.notes|mcp_servers\.(env|headers)|messaging_connections\.secrets):/;
+const SEALED_NOT_SECRET = /^(credentials\.notes|mcp_servers\.(env|headers)|messaging_connections\.secrets|mods\.secrets):/;
 /** Names of env variables and headers that hold a secret (API_KEY, botToken, Authorization, SENTRY_DSN) — the rest is settings. */
 const SECRET_NAME = /(pass(word|wd|phrase)|secret|token|(api|private|access)key|authorization|credentials?|cookie|signature|dsn|webhook([_-]?url)?|connection[_-]?string|(^|[_-])(pass|pwd|key|auth|pat))$/i;
 /** …except keys meant to be public (STRIPE_PUBLISHABLE_KEY, NEXT_PUBLIC_…, an anon key). */
@@ -414,6 +414,16 @@ function loadKnownSecrets() {
         } catch {
           /* ignore */
         }
+      }
+    }
+    // Mods: their secret options are sealed as one JSON object (see mods/service.ts).
+    for (const row of all<{ id: string; secrets_enc: string | null }>("SELECT id, secrets_enc FROM mods")) {
+      if (!row.secrets_enc) continue;
+      try {
+        const parsed: unknown = JSON.parse(decrypt(dek, row.secrets_enc, `mods.secrets:${row.id}`));
+        if (parsed && typeof parsed === "object") rememberSecretValues(parsed as Record<string, unknown>);
+      } catch {
+        /* ignore */
       }
     }
     for (const row of all<{ id: string; key_enc: string | null }>("SELECT id, key_enc FROM api_tools")) {

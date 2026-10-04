@@ -33,20 +33,20 @@ const SPECS: Spec[] = [
     description: "Keeps agents away from the files you name: .env files, keys, a secrets folder.",
     icon: "file-lock",
     category: "guardrails",
-    highlights: ["Refuses edits and overwrites of protected paths", "Can also refuse reading them and shell commands that name them", "You choose the paths"],
+    highlights: ["Refuses edits, overwrites and shell commands that change protected paths", "Can also refuse reading them and every shell command that names them", "You choose the paths"],
     source: protectFiles,
     userConfig: {
       paths: {
         type: "string",
         multiple: true,
         title: "Protected paths",
-        description: "Files and folders to protect. * matches within a name, ** across folders; a folder protects everything in it.",
+        description: "Files and folders to protect, in upper or lower case. * matches within a name, ** across folders; a folder protects everything in it.",
         default: [".env", ".env.*", "*.pem", "id_rsa", "id_ed25519", "secrets"],
       },
       mode: {
         type: "string",
         title: "Protection",
-        description: "writes: the files can't be edited or overwritten. everything: they also can't be read, and shell commands that name them are refused.",
+        description: "writes: the files can't be edited or overwritten, also not by a shell command that redirects into them or removes, moves or edits them. everything: they also can't be read, and any shell command that names them is refused.",
         options: ["writes", "everything"],
         default: "writes",
       },
@@ -58,23 +58,27 @@ const SPECS: Spec[] = [
     description: "Refuses shell commands you would never want an agent to run, like a force push or rm -rf on your home folder.",
     icon: "terminal",
     category: "guardrails",
-    highlights: ["Blocks force pushes, hard resets, piping downloads into a shell and more", "The agent is told to explain instead of finding another way", "Add patterns of your own"],
+    highlights: ["Blocks force pushes, hard resets, piping downloads into a shell and more", "Also on servers and virtual machines the agent works on", "Add patterns of your own"],
     source: commandGuard,
     userConfig: {
       blocked: {
         type: "string",
         multiple: true,
         title: "Blocked commands",
-        description: "Regular expressions, matched against the whole command without regard to case.",
+        description: "Regular expressions, matched against the whole command without regard to case — in the shell on this computer and in Godmode's shells on servers and virtual machines.",
         default: [
-          String.raw`\brm\s+-[a-z]*r[a-z]*\s+(-[a-z]+\s+)*(/|~|\$HOME)(\s|$)`,
-          String.raw`\bgit\s+push\b.*\s(--force|-f)(\s|$)`,
-          String.raw`\bgit\s+reset\s+--hard\b`,
-          String.raw`\bgit\s+clean\s+-[a-z]*f`,
-          String.raw`\b(curl|wget)\b[^|;&]*\|\s*(sudo\s+)?(ba|z)?sh\b`,
-          String.raw`\bmkfs(\.[a-z0-9]+)?\b`,
-          String.raw`\bdd\b.*\bof=/dev/`,
-          String.raw`\bdrop\s+(table|database|schema)\b`,
+          // rm -r of the root or the home folder itself, however it is spelled
+          String.raw`\brm\s+(?:[^;&|\n]*\s)?-(?:[a-z]*r[a-z]*|-recursive)\b[^;&|\n]*\s["']?(?:/|~|\$\{?HOME\}?)/?\*?["']?(?=\s|$|[;&|)])`,
+          // a force push (--force-with-lease is the careful one and passes)
+          String.raw`\bgit\s+push\b[^;&|\n]*\s(?:--force(?!-with-lease)\b|-[a-z]*f[a-z]*\b|\+[\w/.-]+)`,
+          String.raw`\bgit\s+reset\b[^;&|\n]*\s--hard\b`,
+          String.raw`\bgit\s+clean\b[^;&|\n]*\s-[a-z]*f`,
+          // a download piped into a shell
+          String.raw`\b(?:curl|wget)\b[^;&\n]*\|\s*(?:sudo\s+(?:-\S+\s+)*)?(?:ba|z|da)?sh\b`,
+          String.raw`\bmkfs(?:\.[a-z0-9]+)?\b`,
+          String.raw`\bdd\b[^;&|\n]*\bof=/dev/(?!null\b|zero\b|stdout\b|stderr\b)`,
+          // dropping a table or database through a database client
+          String.raw`\b(?:psql|mysql|mariadb|sqlite3|sqlcmd|clickhouse-client)\b[^;&|\n]*\bdrop\s+(?:table|database|schema)\b`,
         ],
       },
       message: {
@@ -92,7 +96,7 @@ const SPECS: Spec[] = [
     description: "Stops a turn that keeps calling tools: after the limit, further calls are refused and the agent wraps up.",
     icon: "gauge",
     category: "guardrails",
-    highlights: ["Caps the tool calls of one turn, subagents included", "The agent reports what is done and what is left", "Says so in the chat when the limit is hit"],
+    highlights: ["Caps the tool calls of one turn, subagents included", "The agent reports what is done and what is left — Godmode's own tools stay open for that", "Says so in the chat when the limit is hit"],
     source: stepLimit,
     userConfig: {
       maxCalls: {
@@ -111,13 +115,13 @@ const SPECS: Spec[] = [
     description: "Masks keys, tokens and passwords in tool output before the model reads it — also the ones that aren't in your vault.",
     icon: "eye-off",
     category: "privacy",
-    highlights: ["Recognises AWS, GitHub, Stripe, Slack and Google keys, JWTs and private keys", "Masks values after password=, token=, api_key=…", "Add patterns for secrets of your own"],
+    highlights: ["Recognises AWS, GitHub, Stripe, Slack and Google keys, JWTs, private keys, bearer tokens and passwords in URLs", "Masks values after password=, token=, api_key=… and leaves code alone", "Add patterns for secrets of your own"],
     source: secretScrubber,
     userConfig: {
       assignments: {
         type: "boolean",
         title: "Mask values after password=, token=, api_key=…",
-        description: "Also masks whatever follows a name that sounds like a secret, in files like .env and in command output.",
+        description: "Also masks the value written after a name that sounds like a secret, in files like .env and in command output. Code is left as it is: a function call or a variable is no secret.",
         default: true,
       },
       extra: {
@@ -160,14 +164,14 @@ const SPECS: Spec[] = [
     description: "Type a short word, send a long instruction: !brief, !plan and shortcuts of your own are expanded before the agent reads the message.",
     icon: "wand",
     category: "workflow",
-    highlights: ["Write !name anywhere in a message", "Comes with !brief, !plan and !sources", "Works in every chat, automation and task"],
+    highlights: ["Write !name at the start of a line or as the last word", "Comes with !brief, !plan and !sources", "Works in every chat, automation and task"],
     source: promptShortcuts,
     userConfig: {
       shortcuts: {
         type: "string",
         multiple: true,
         title: "Shortcuts",
-        description: "One per row as name = text. Write !name anywhere in a message to send the text instead.",
+        description: "One per row as name = text. Write !name at the start of a line, or as the last word of a message, to send the text instead.",
         default: [
           "brief = Answer in at most five sentences.",
           "plan = Before you change anything, write a short plan and wait for my OK.",

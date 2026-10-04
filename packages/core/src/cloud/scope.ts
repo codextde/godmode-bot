@@ -260,15 +260,15 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/ssh/local-keys", S],
   ["POST", "/api/ssh/keys", S],
 
-  // A mod is code that runs inside every turn and reaches whatever the run reaches.
+  // A mod is code that runs inside every turn and reaches whatever the run reaches. Deleting one is a change like any
+  // other: a guard that is gone restricts nothing.
   ["GET", "/api/mods", A],
   ["GET", "/api/mods/templates", A],
   ["POST", "/api/mods", S],
   ["POST", "/api/mods/check", S],
   ["POST", "/api/mods/import", refused(COMPUTER_ONLY)],
   ["GET", "/api/mods/:id", A],
-  ["PATCH", "/api/mods/:id", S],
-  ["DELETE", "/api/mods/:id", A],
+  ["PATCH|DELETE", "/api/mods/:id", S],
   ["POST", "/api/mods/:id/check", A],
 
   ["POST", "/api/backup/export", S],

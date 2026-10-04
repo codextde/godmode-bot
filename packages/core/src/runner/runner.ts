@@ -84,7 +84,7 @@ import { exhaustedBudget, exemptNotice, nextMonthStart, type BudgetStop } from "
 import { MAX_RETRIES, dropPause, limitReached, pauseOf, pausedConversations, pausedRun, savePause, stopContinuing, toPause, type LimitPause, type PausedRow } from "../services/pauses";
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
-import { modsForRun } from "../mods/service";
+import { modsForRun, removeRunMods } from "../mods/service";
 import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
@@ -1760,7 +1760,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const wantsUltracode = (conv.ultracode === null ? null : conv.ultracode === 1) ?? agent.ultracode ?? settings.runner.ultracode;
   const ultracode = !dreaming && job.trigger !== "check" && ultracodeFor(model, wantsUltracode === true);
   // The human's mods (Mods page). Dreams and condition checks are small jobs with a fixed shape: they load none.
-  const mods = dreaming || job.trigger === "check" ? null : await modsForRun(agent, (text) => job.acc.addNotice("warning", text));
+  const mods = dreaming || job.trigger === "check" ? null : await modsForRun(agent, job.runId, (text) => job.acc.addNotice("warning", text));
   // Between two steps Claude Code asks for the messages waiting in the chat's queue. Dreams and condition checks run in
   // chats nobody writes to.
   const hooksPath =
@@ -1925,7 +1925,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 
   const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
-  // doesn't load. With it they reach the chat as notes from the mod.
+  // doesn't load. With it they reach the chat as notes from the mod. It also watches the folders — the run's own copies.
   if (mods?.dirs.length) env.CLAUDE_CODE_PLUGIN_DIR_WATCH = "1";
   const logPath = runLogPath(agent, getRun(job.runId));
   mkdirSync(join(logPath, ".."), { recursive: true });
@@ -2072,6 +2072,7 @@ async function execute(job: Job): Promise<void> {
     if (res.token) revokeRunToken(res.token);
     releaseChatBrowser(job.runId);
     for (const f of res.files) removeMcpConfigFile(f);
+    safely("remove the run's mods", () => removeRunMods(job.runId));
     await detachComputer(job.runId).catch(() => {});
     detachVm(job.runId);
     detachSsh(job.runId);

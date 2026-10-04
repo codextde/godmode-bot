@@ -12,12 +12,18 @@ export const register: Register = (on, options) => {
     }
   }
 
-  on('prompt.submit', ($, e, next) => {
-    const text = e.text.replace(/(^|\s)!([a-z0-9_-]+)(?=$|[\s.,;:!?])/gi, (whole, before: string, name: string) => {
-      const expansion = shortcuts.get(name.toLowerCase())
+  const expand = (whole: string, before: string, name: string) => {
+    const text = shortcuts.get(name.toLowerCase())
 
-      return expansion === undefined ? whole : before + expansion
-    })
+    return text === undefined ? whole : before + text
+  }
+
+  // A shortcut stands at the start of a line or is the last word of the message: "!done" in the middle of pasted
+  // code ("return !done;") is code.
+  on('prompt.submit', ($, e, next) => {
+    const text = e.text
+      .replace(/^([ \t]*)!([a-z0-9_-]+)(?=\s|$)/gim, expand)
+      .replace(/(\s)!([a-z0-9_-]+)(?=\s*$)/i, expand)
 
     return text === e.text ? next(e) : next({ ...e, text })
   })

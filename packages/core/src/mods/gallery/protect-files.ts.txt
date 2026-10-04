@@ -1,6 +1,7 @@
 import type { Register } from 'claude-code'
 
-// "*" matches within a name, "**" across folders; a folder protects everything in it.
+// "*" matches within a name, "**" across folders; a folder protects everything in it. macOS and Windows don't tell
+// .env from .ENV, so neither does this.
 function pathPattern(glob: string): RegExp {
   const body = glob
     .trim()
@@ -14,29 +15,59 @@ function pathPattern(glob: string): RegExp {
     .replace(/\u0001/g, '(?:[^/]+/)*')
     .replace(/\u0002/g, '.*')
 
-  return new RegExp(`(?:^|/)${body}(?:/.*)?$`)
+  return new RegExp(`(?:^|/)${body}(?:/.*)?$`, 'i')
 }
+
+// Commands that change the files they are given; sed, perl and ruby do with -i.
+const WRITERS = /^(?:rm|mv|cp|tee|truncate|touch|chmod|chown|ln|install|shred|dd|rsync)$/
+const EDITORS = /^(?:sed|perl|ruby)$/
+const PREFIXES = /^(?:sudo|env|command|nohup|time|[A-Za-z_]\w*=.*)$/
+
+// In a shell command a word counts as a path when it can't be an ordinary word: it has a slash, a dot, an
+// underscore or a digit ("kubectl get secrets" names no file, "cat secrets/key" does).
+const words = (text: string) => text.split(/[\s<>()'"`=]+/).filter(word => /[/._\d]/.test(word))
 
 export const register: Register = (on, options) => {
   const patterns = (options.paths as readonly string[]).filter(glob => glob.trim() !== '').map(pathPattern)
   const isProtected = (path: string) => patterns.some(pattern => pattern.test(path.replace(/\\/g, '/')))
+  const everything = options.mode === 'everything'
   const refusal = (path: string) => ({
     deny: `${path} is protected by the "Protect files" mod. Leave it as it is and tell the human what you wanted to do with it.`,
   })
+
+  // The protected path a shell command writes to: the target of a redirect, or an argument of a command that
+  // changes its files.
+  const written = (command: string): string | undefined => {
+    for (const segment of command.split(/&&|\|\||[;|\n]/)) {
+      for (const redirect of segment.matchAll(/>>?\s*["']?([^\s"'<>]+)/g)) {
+        if (isProtected(redirect[1] ?? '')) {
+          return redirect[1]
+        }
+      }
+      const parts = segment.trim().split(/\s+/)
+      const program = parts.find(part => !PREFIXES.test(part)) ?? ''
+      const edits = EDITORS.test(program) && parts.some(part => /^-[a-z]*i/.test(part))
+      if (WRITERS.test(program) || edits) {
+        const named = words(segment).find(isProtected)
+        if (named !== undefined) {
+          return named
+        }
+      }
+    }
+
+    return undefined
+  }
 
   on('tool.call', { tool: 'Edit' }, ($, e, next) => (isProtected(e.file_path) ? refusal(e.file_path) : next(e)))
   on('tool.call', { tool: 'Write' }, ($, e, next) => (isProtected(e.file_path) ? refusal(e.file_path) : next(e)))
   on('tool.call', { tool: 'NotebookEdit' }, ($, e, next) =>
     isProtected(e.notebook_path) ? refusal(e.notebook_path) : next(e),
   )
-
-  if (options.mode !== 'everything') {
-    return
-  }
-
-  on('tool.call', { tool: 'Read' }, ($, e, next) => (isProtected(e.file_path) ? refusal(e.file_path) : next(e)))
+  on('tool.call', { tool: 'Read' }, ($, e, next) =>
+    everything && isProtected(e.file_path) ? refusal(e.file_path) : next(e),
+  )
   on('tool.call', { tool: 'Bash' }, ($, e, next) => {
-    const named = e.command.split(/[\s;|&<>()'"`=]+/).find(word => word !== '' && isProtected(word))
+    const named = everything ? words(e.command).find(isProtected) : written(e.command)
 
     return named === undefined ? next(e) : refusal(named)
   })

@@ -296,8 +296,11 @@ export class StreamAccumulator {
     const partial = new Set<number>();
     for (const refs of this.messages.values()) for (const r of refs) if (!r.confirmed) partial.add(r.blockIdx);
     for (let i = this.blocks.length - 1; i >= 0; i--) if (partial.has(i)) this.blocks.splice(i, 1);
-    const last = this.blocks[this.blocks.length - 1];
-    if (pause.reason === "limit" && last?.type === "text" && !last.parentToolUseId && last.text.length < 300 && LIMIT_TEXT.test(last.text)) this.blocks.pop();
+    // A mod may have posted after Claude Code's line about the limit (a recap at the turn's end).
+    let at = this.blocks.length - 1;
+    while (at >= 0 && this.blocks[at]!.type === "notice" && (this.blocks[at] as Extract<MessageBlock, { type: "notice" }>).mod) at--;
+    const last = this.blocks[at];
+    if (pause.reason === "limit" && last?.type === "text" && !last.parentToolUseId && last.text.length < 300 && LIMIT_TEXT.test(last.text)) this.blocks.splice(at, 1);
     this.messages.clear();
     this.streams.clear();
     // Background work ends with the process; the run that continues streams these blocks again.

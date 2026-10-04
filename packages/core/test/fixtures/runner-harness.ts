@@ -142,6 +142,8 @@ export interface Invocation {
   cwd: string;
   /** Content of the run's `--settings` file (the hooks, `ultracode` when on, the mods' options); null without one. */
   settings: { hooks?: unknown; ultracode?: boolean; pluginConfigs?: Record<string, { options: Record<string, unknown> }> } | null;
+  /** The --plugin-dir folders as the run found them (a run's mods are gone once it has ended). */
+  plugins: { dir: string; files: string[]; module: string | null }[];
   env: {
     ANTHROPIC_API_KEY: string | null;
     GODMODE_TOKEN: string | null;

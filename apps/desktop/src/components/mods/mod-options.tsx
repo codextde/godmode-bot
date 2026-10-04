@@ -146,15 +146,21 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
           } else if (typeof value === "string") {
             if (o.sensitive) {
               control = (
-                <PasswordInput
-                  id={id}
-                  value={value}
-                  onChange={(e) => set(o, e.target.value)}
-                  placeholder={hasSecret(o) ? (draft[o.key] === null ? "The saved value goes when you save" : "A value is saved — type to replace it") : "Not set"}
-                  aria-invalid={!!shownError}
-                  aria-describedby={describedBy}
-                  groupClassName="h-9 @xl:max-w-md"
-                />
+                <div className="space-y-1.5">
+                  <PasswordInput
+                    id={id}
+                    value={value}
+                    onChange={(e) => set(o, e.target.value)}
+                    placeholder={hasSecret(o) ? (draft[o.key] === null ? "The saved value goes when you save" : "A value is saved — type to replace it") : "Not set"}
+                    aria-invalid={!!shownError}
+                    aria-describedby={describedBy}
+                    groupClassName="h-9 @xl:max-w-md"
+                  />
+                  <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+                    Kept sealed in the vault. Runs that load this mod are handed the value, where an agent with full access to this computer could read
+                    it — use a key made for this mod.
+                  </p>
+                </div>
               );
             } else if (o.choices?.length) {
               control = (

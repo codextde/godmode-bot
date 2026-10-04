@@ -177,6 +177,10 @@ needs to be useful:
     <td><img src="docs/screenshots/mod-options.png" alt="The options of Protect files: the protected paths and the kind of protection" /><br /><sub><b>Options</b> — set what a mod protects or refuses without touching its code</sub></td>
     <td><img src="docs/screenshots/mods-chat.png" alt="A chat where Secret scrubber masked a token, Command guard and Protect files refused two steps and Turn recap summed up the turn" /><br /><sub><b>In the chat</b> — mods refuse steps, mask secrets and post notes while the agent works</sub></td>
   </tr>
+  <tr>
+    <td><img src="docs/screenshots/mods-gallery.png" alt="The mod gallery: Protect files, Command guard, Step limit, Secret scrubber, Turn recap and Prompt shortcuts" /><br /><sub><b>Gallery</b> — guardrails, privacy, insight and workflow mods that work as they are</sub></td>
+    <td><img src="docs/screenshots/mod-overview.png" alt="A mod's overview: what it can do, with talking to the internet marked as reaching outside the conversation, and the event it hooks" /><br /><sub><b>What it can do</b> — told from the code by Claude Code's validator, before you switch it on</sub></td>
+  </tr>
 </table>
 
 ## 📦 Install
@@ -327,16 +331,17 @@ Open **Mods** in the sidebar. The **gallery** has mods that are ready to use —
 
 | | |
 |---|---|
-| **Protect files** | Agents can't edit or overwrite the paths you name (`.env`, keys, a `secrets` folder) — or, if you choose, can't read them or name them in a shell command either. |
-| **Command guard** | Refuses shell commands that match a pattern: force pushes, `git reset --hard`, `rm -rf` on your home folder, piping a download into a shell. The agent is told to explain instead of finding another way. |
+| **Protect files** | Agents can't edit or overwrite the paths you name (`.env`, keys, a `secrets` folder), also not with a shell command that redirects into them or removes, moves or edits them — or, if you choose, can't read them or name them in a shell command at all. |
+| **Command guard** | Refuses shell commands that match a pattern: force pushes, `git reset --hard`, `rm -rf` on your home folder, piping a download into a shell — on this computer and in the shells of servers and virtual machines. The agent is told to explain instead of finding another way. |
 | **Step limit** | Caps the tool calls of one turn; past the limit the agent has to wrap up and say what is left. |
-| **Secret scrubber** | Masks AWS, GitHub, Stripe, Slack and Google keys, JWTs, private keys and `password=…` values in tool output before the model reads it — also secrets that aren't in your vault. |
+| **Secret scrubber** | Masks AWS, GitHub, Stripe, Slack and Google keys, JWTs, private keys, bearer tokens, passwords in URLs and `password=…` values in tool output before the model reads it — also secrets that aren't in your vault. Code is left as it is. |
 | **Turn recap** | Posts a line after each long turn: duration, tools used, failed calls. |
-| **Prompt shortcuts** | `!brief`, `!plan` and shortcuts of your own are expanded before the agent reads your message. |
+| **Prompt shortcuts** | `!brief`, `!plan` and shortcuts of your own, at the start of a line or as the last word, are expanded before the agent reads your message. |
 
 Each mod has **options** (the paths, the patterns, the limit), and **Runs for** decides whose runs load it: every agent
 or the ones you pick. For anything else, **New mod** opens an editor with a starting point, or **Ask Godmode to write
-one** and review its draft: a mod an agent wrote arrives switched off, and switching it on is your OK.
+one** and review its draft: a mod an agent wrote arrives switched off, and switching it on is your OK — for exactly
+the code you read.
 
 A mod is real code inside the agent's process, so Godmode shows what it is before it runs: Claude Code's validator
 checks every change, and the mod's page lists what it **hooks into** (Bash calls, prompts, …) and what it can **reach

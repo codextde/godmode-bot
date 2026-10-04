@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Agent, MessageBlock } from "@godmode/shared";
 import { MAX_MOD_FILES, MOD_HOOKS_PATH, MOD_MANIFEST_PATH, modAbilities, modHookLabel, modNameFrom, modPathProblem, modState } from "@godmode/shared";
 import { argValue, invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
@@ -17,8 +17,12 @@ import { MAX_MOD_NOTES, StreamAccumulator } from "../src/runner/stream";
 import { callTool, listToolsFor } from "../src/mcp/tools";
 import { get, run as sql } from "../src/db";
 import { parseReport } from "../src/mods/check";
-import { checkUnsaved, createMod, deleteMod, getMod, importMod, listMods, listTemplates, modDir, recheckMod, updateMod } from "../src/mods/service";
-import { MOD_MODULE_PATH } from "../src/mods/templates";
+import { startsPrograms } from "../src/mods/manifest";
+import { checkUnsaved, clearRunMods, createMod, deleteMod, getMod, importMod, listMods, listTemplates, recheckMod, runModDir, updateMod } from "../src/mods/service";
+import { MOD_MODULE_PATH, findModTemplate } from "../src/mods/templates";
+import { cloudRefusal } from "../src/cloud/scope";
+import { getAccessToken } from "../src/server/auth";
+import { updateSettings } from "../src/services/settings";
 import type { RunContext } from "../src/types";
 
 const PASSPHRASE = "correct horse battery staple";
@@ -66,6 +70,11 @@ function pluginDirs(args: string[]): string[] {
   return args.flatMap((arg, i) => (arg === "--plugin-dir" ? [args[i + 1]!] : []));
 }
 
+/** The mods a run loaded, in load order, by name. */
+function loaded(args: string[]): string[] {
+  return pluginDirs(args).map((dir) => basename(dir));
+}
+
 function notes(blocks: MessageBlock[]) {
   return blocks.filter((b): b is Extract<MessageBlock, { type: "notice" }> => b.type === "notice");
 }
@@ -100,7 +109,7 @@ describe("mods", () => {
     const mod = await createMod({ title: "Protect .env files!" });
     expect(mod).toMatchObject({ name: "protect-env-files", origin: "custom", enabled: false, createdBy: "user", icon: "puzzle" });
     expect(Object.keys(mod.files).sort()).toEqual([MOD_MANIFEST_PATH, MOD_HOOKS_PATH, MOD_MODULE_PATH].sort());
-    expect(mod.check).toMatchObject({ ok: true, hooks: [{ event: "tool.call", matcher: "tool=Bash" }], calls: [], commandHooks: false });
+    expect(mod.check).toMatchObject({ ok: true, hooks: [{ event: "tool.call", matcher: "tool=Bash" }], calls: [], startsPrograms: false });
     expect(modState(mod)).toBe("off");
 
     const renamed = await updateMod(mod.id, { files: pluginFiles("something-else", LOGGER) });
@@ -132,6 +141,12 @@ describe("mods", () => {
     await expect(updateMod(mod.id, { files: { ...mod.files, ...many } })).rejects.toThrow(/at most/);
     await expect(updateMod(mod.id, { files: { ...mod.files, "big.txt": "x".repeat(200_001) } })).rejects.toThrow(/larger than/);
     expect(modPathProblem("hooks/lib/util.ts")).toBeNull();
+    expect(modPathProblem("__proto__")).not.toBeNull();
+    expect(modPathProblem("lib/__proto__/x.ts")).not.toBeNull();
+    // Claude Code's own folder, in any spelling.
+    expect(modPathProblem(".claude-plugin/Types/x.d.ts")).not.toBeNull();
+    expect(modPathProblem(".claude-plugin/types")).not.toBeNull();
+    expect(modPathProblem(".claude-plugin/typeset.md")).toBeNull();
     removeAll();
   });
 
@@ -153,6 +168,36 @@ describe("mods", () => {
     const born = await createMod({ title: "Born broken", files: pluginFiles("born-broken", BROKEN), enabled: true });
     expect(born.enabled).toBe(false);
     removeAll();
+  });
+
+  test("switching on is the OK for the code that was read", async () => {
+    const mod = await createMod({ title: "Read me", files: pluginFiles("read-me", LOGGER) });
+    const seen = mod.digest;
+    // An agent saves another version while the human still looks at the first.
+    const changed = await updateMod(mod.id, { files: pluginFiles("read-me", `${LOGGER}// v2\n`) }, `agent:${manager.id}`);
+    expect(changed.digest).not.toBe(seen);
+    await expect(updateMod(mod.id, { enabled: true, digest: seen })).rejects.toMatchObject({ status: 409, message: expect.stringContaining("code changed") });
+    expect(getMod(mod.id)).toMatchObject({ enabled: false, needsReview: true });
+    expect(await updateMod(mod.id, { enabled: true, digest: changed.digest })).toMatchObject({ enabled: true, needsReview: false });
+    removeAll();
+  });
+
+  test("a gallery mod is Godmode's code as it ships; with other code it is the human's own", async () => {
+    await expect(createMod({ templateId: "turn-recap", files: pluginFiles("turn-recap", LOGGER) })).rejects.toThrow(/Add the gallery mod first/);
+    const mod = await createMod({ templateId: "turn-recap" });
+    expect((await updateMod(mod.id, { values: { minSeconds: 5 } })).origin).toBe("template");
+    const edited = await updateMod(mod.id, { files: { ...mod.files, [MOD_MODULE_PATH]: LOGGER } });
+    expect(edited).toMatchObject({ origin: "custom", templateId: null, enabled: true });
+    removeAll();
+  });
+
+  test("runs that start together ask Claude Code once about the same code", async () => {
+    const validations = () => readFileSync(join(env.stateDir, "validations.jsonl"), "utf8").split("\n").filter(Boolean).length;
+    const before = validations();
+    const files = pluginFiles("same", `${LOGGER}// same\n`);
+    const [a, b, c] = await Promise.all([checkUnsaved(files), checkUnsaved(files), checkUnsaved(files)]);
+    expect([a?.ok, b?.ok, c?.ok]).toEqual([true, true, true]);
+    expect(validations() - before).toBe(1);
   });
 
   test("unsaved files can be checked", async () => {
@@ -195,21 +240,44 @@ describe("mods", () => {
     const { invocation } = await chat(agent.id, "MOD_NOTES");
     expect(invocation.settings?.pluginConfigs).toEqual({ options: { options: { paths: ["x/**", "y"], mode: "hard", loud: true, apiKey: "sk-live-very-secret-1" } } });
 
-    // A value the new code no longer declares is dropped, and so is one that no longer fits.
+    expect(JSON.stringify(listAudit(50, "mod.update"))).not.toContain("sk-live-very-secret-1");
+    expect(JSON.stringify(listAudit(50, "mod.update"))).not.toContain("x/**");
+
+    // A value the new code no longer declares is forgotten, and so is one that no longer fits.
     const slim = await updateMod(mod.id, { files: pluginFiles("options", LOGGER, { mode: { ...userConfig.mode, options: ["soft"] } }) });
     expect(slim.values).toEqual({});
     expect(slim.secretKeys).toEqual([]);
+    expect(get<Record<string, unknown>>("SELECT option_values, secret_keys FROM mods WHERE id = ?", mod.id)).toEqual({ option_values: "{}", secret_keys: "[]" });
+    // For good: code that declares the option again doesn't get the old secret.
+    const again = await updateMod(mod.id, { files: pluginFiles("options", LOGGER, userConfig) });
+    expect(again.secretKeys).toEqual([]);
+    expect(again.values).toEqual({});
+    await expect(updateMod(mod.id, { enabled: true })).rejects.toThrow(/Set "API key"/);
+    await updateMod(mod.id, { values: { loud: true } });
+    expect(getMod(mod.id).secretKeys).toEqual([]);
+
+    // A list takes only its choices; a required option isn't filled by nothing.
+    const picky = await createMod({
+      title: "Picky",
+      files: pluginFiles("picky", LOGGER, {
+        tags: { type: "string", multiple: true, title: "Tags", description: "d", options: ["a", "b"], default: ["a"] },
+        owner: { type: "string", title: "Owner", description: "d", required: true },
+      }),
+    });
+    await expect(updateMod(picky.id, { values: { tags: ["a", "z"] } })).rejects.toThrow(/"Tags"/);
+    await updateMod(picky.id, { values: { tags: ["b"], owner: "" } });
+    await expect(updateMod(picky.id, { enabled: true })).rejects.toThrow(/Set "Owner"/);
     removeAll();
   });
 
   test("a mod runs for every agent, or for the ones it names", async () => {
     const mod = await createMod({ title: "Scoped", files: pluginFiles("scoped", LOGGER), enabled: true });
-    expect((await chat(other.id, "hello")).invocation.args).toContain(modDir("scoped"));
+    expect(loaded((await chat(other.id, "hello")).invocation.args)).toEqual(["scoped"]);
 
     const scoped = await updateMod(mod.id, { scope: "agents", agentIds: [agent.id, agent.id] });
     expect(scoped.agentIds).toEqual([agent.id]);
-    expect(pluginDirs((await chat(agent.id, "hello")).invocation.args)).toEqual([modDir("scoped")]);
-    expect(pluginDirs((await chat(other.id, "hello")).invocation.args)).toEqual([]);
+    expect(loaded((await chat(agent.id, "hello")).invocation.args)).toEqual(["scoped"]);
+    expect(loaded((await chat(other.id, "hello")).invocation.args)).toEqual([]);
     await expect(updateMod(mod.id, { agentIds: ["agt_missing"] })).rejects.toThrow(/does not exist/);
 
     // An agent that is gone doesn't widen the mod to everyone.
@@ -217,13 +285,13 @@ describe("mods", () => {
     await updateMod(mod.id, { agentIds: [gone.id] });
     await deleteAgent(gone.id);
     expect(getMod(mod.id)).toMatchObject({ scope: "agents", agentIds: [] });
-    expect(pluginDirs((await chat(agent.id, "hello")).invocation.args)).toEqual([]);
+    expect(loaded((await chat(agent.id, "hello")).invocation.args)).toEqual([]);
     removeAll();
   });
 });
 
 describe("runs", () => {
-  test("load the mods that are on from files Godmode wrote: insight first, guardrails last", async () => {
+  test("load the mods that are on from a copy of their own: insight first, guardrails last", async () => {
     await createMod({ templateId: "command-guard" });
     const first = await createMod({ title: "First", files: pluginFiles("first", LOGGER), enabled: true });
     await createMod({ title: "Off", files: pluginFiles("off", LOGGER) });
@@ -232,18 +300,23 @@ describe("runs", () => {
     const second = await createMod({ title: "Second", files: pluginFiles("second", LOGGER), enabled: true });
 
     // The recap sees every call, refused ones too; the guard judges a call after the others had their say.
-    expect(pluginDirs((await chat(agent.id, "hello")).invocation.args)).toEqual([modDir("turn-recap"), modDir("first"), modDir("second"), modDir("command-guard")]);
+    expect(loaded((await chat(agent.id, "hello")).invocation.args)).toEqual(["turn-recap", "first", "second", "command-guard"]);
     deleteMod(second.id);
     deleteMod(listMods().find((m) => m.name === "command-guard")!.id);
 
     const { invocation, blocks, run } = await chat(agent.id, "MOD_NOTES");
     expect(run.status).toBe("succeeded");
-    expect(pluginDirs(invocation.args)).toEqual([modDir("turn-recap"), modDir("first")]);
+    expect(loaded(invocation.args)).toEqual(["turn-recap", "first"]);
     expect(invocation.settings?.pluginConfigs).toEqual({ "turn-recap": { options: { minSeconds: 0 } } });
     expect(invocation.settings?.hooks).toBeDefined();
     expect(invocation.env.CLAUDE_CODE_PLUGIN_DIR_WATCH).toBe("1");
-    expect(readFileSync(join(modDir("first"), MOD_MODULE_PATH), "utf8")).toBe(LOGGER);
-    expect(existsSync(modDir("off"))).toBe(false);
+
+    // The run had the mod's files, exactly, in a folder of its own that is gone once the run has ended.
+    const copy = invocation.plugins.find((p) => basename(p.dir) === "first")!;
+    expect(copy.dir).toBe(runModDir(run.id, "first"));
+    expect(copy.module).toBe(LOGGER);
+    expect(copy.files).toEqual(Object.keys(first.files).sort());
+    expect(existsSync(join(env.dataDir, "mods", run.id))).toBe(false);
 
     // What a mod posts shows as a note from that mod; a status that stands is said once, a cleared one not at all.
     expect(notes(blocks).map((n) => [n.mod, n.text])).toEqual([
@@ -255,23 +328,16 @@ describe("runs", () => {
       ["first", "done"],
     ]);
 
-    // Whatever a run left in the folder is gone before the next one loads it; Claude Code's own files stay.
-    const dir = modDir("first");
-    writeFileSync(join(dir, MOD_MODULE_PATH), "export const register = on => { /* tampered */ }\n");
-    writeFileSync(join(dir, "hooks", "planted.ts"), "export const x = 1\n");
-    symlinkSync("/etc", join(dir, "link"));
-    mkdirSync(join(dir, ".claude-plugin", "types", "claude-code"), { recursive: true });
-    writeFileSync(join(dir, ".claude-plugin", "types", "claude-code", "index.d.ts"), "// laid by the engine\n");
-    writeFileSync(join(dir, "tsconfig.json"), "{}\n");
-    await chat(agent.id, "hello");
-    expect(readFileSync(join(dir, MOD_MODULE_PATH), "utf8")).toBe(LOGGER);
-    expect(existsSync(join(dir, "hooks", "planted.ts"))).toBe(false);
-    expect(existsSync(join(dir, "link"))).toBe(false);
-    expect(existsSync(join(dir, ".claude-plugin", "types", "claude-code", "index.d.ts"))).toBe(true);
-    expect(existsSync(join(dir, "tsconfig.json"))).toBe(true);
+    // What a run wrote into its mods reaches no other run: the next one gets the code as it is kept.
+    const next = await chat(other.id, "hello");
+    expect(next.invocation.plugins.find((p) => basename(p.dir) === "first")!.dir).not.toBe(copy.dir);
+    expect(next.invocation.plugins.find((p) => basename(p.dir) === "first")!.module).toBe(LOGGER);
 
-    deleteMod(first.id);
-    expect(existsSync(dir)).toBe(false);
+    // What a crashed run left behind goes when Godmode starts.
+    const left = runModDir("run_crashed", "first");
+    mkdirSync(left, { recursive: true });
+    clearRunMods();
+    expect(existsSync(join(env.dataDir, "mods"))).toBe(false);
     removeAll();
   });
 
@@ -281,13 +347,19 @@ describe("runs", () => {
     sql("UPDATE mods SET files = ?, check_key = 'stale' WHERE id = ?", JSON.stringify(pluginFiles("was-fine", BROKEN)), mod.id);
     const { invocation, blocks, run } = await chat(agent.id, "hello");
     expect(run.status).toBe("succeeded");
-    expect(pluginDirs(invocation.args)).toEqual([]);
+    expect(loaded(invocation.args)).toEqual([]);
     const warning = notes(blocks).find((n) => n.level === "warning")!;
     expect(warning.text).toContain('The mod "Was fine" wasn\'t loaded');
     expect(warning.text).toContain("is not an event");
     expect(warning.mod).toBeUndefined();
     expect(getMod(mod.id).check?.ok).toBe(false);
     expect(modState(getMod(mod.id))).toBe("broken");
+
+    // Switching on asks Claude Code first when the report on file is about other code.
+    sql("UPDATE mods SET enabled = 0, check_report = ?, check_key = 'stale' WHERE id = ?", JSON.stringify({ ...mod.check, ok: true, errors: [] }), mod.id);
+    expect(getMod(mod.id).check?.ok).toBe(true);
+    await expect(updateMod(mod.id, { enabled: true })).rejects.toMatchObject({ status: 409 });
+    expect(getMod(mod.id)).toMatchObject({ enabled: false, check: { ok: false } });
 
     // Fixed files are checked again by "Check again".
     sql("UPDATE mods SET files = ? WHERE id = ?", JSON.stringify(pluginFiles("was-fine", LOGGER)), mod.id);
@@ -297,11 +369,16 @@ describe("runs", () => {
 
   test("a row that came in with a path outside the folder never writes there", async () => {
     const mod = await createMod({ title: "Restored", files: pluginFiles("restored", LOGGER), enabled: true });
-    const outside = join(env.dataDir, "mods", "escaped.ts");
-    sql("UPDATE mods SET files = ? WHERE id = ?", JSON.stringify({ ...pluginFiles("restored", LOGGER), "../escaped.ts": "planted" }), mod.id);
+    sql("UPDATE mods SET files = ? WHERE id = ?", JSON.stringify({ ...pluginFiles("restored", LOGGER), "../escaped.ts": "planted", "../../escaped.ts": "planted" }), mod.id);
     expect(Object.keys(getMod(mod.id).files)).not.toContain("../escaped.ts");
-    await chat(agent.id, "hello");
-    expect(existsSync(outside)).toBe(false);
+    const { invocation } = await chat(agent.id, "hello");
+    expect(invocation.plugins[0]!.files).toEqual([MOD_MANIFEST_PATH, MOD_HOOKS_PATH, MOD_MODULE_PATH].sort());
+    expect(readdirSync(env.dataDir).filter((f) => f.includes("escaped"))).toEqual([]);
+
+    // Columns that aren't what they should be (a mirrored or restored row) don't take the list down.
+    sql("UPDATE mods SET option_values = 'null', secret_keys = '5', agent_ids = '{}', check_report = '[]' WHERE id = ?", mod.id);
+    expect(getMod(mod.id)).toMatchObject({ values: {}, secretKeys: [], agentIds: [], check: null });
+    expect((await chat(agent.id, "hello")).run.status).toBe("succeeded");
     removeAll();
   });
 
@@ -321,8 +398,8 @@ describe("runs", () => {
     const check = await startRun({ agentId: agent.id, conversationId: started.conversation.id, prompt: "hello", trigger: "check" });
     await waitForRun(check.id, 20_000);
     const [chatRun, checkRun] = invocations(env).slice(-2);
-    expect(pluginDirs(chatRun!.args)).toEqual([modDir("everywhere")]);
-    expect(pluginDirs(checkRun!.args)).toEqual([]);
+    expect(loaded(chatRun!.args)).toEqual(["everywhere"]);
+    expect(loaded(checkRun!.args)).toEqual([]);
     expect(argValue(checkRun!, "--settings")).toBeNull();
     expect(checkRun!.env.CLAUDE_CODE_PLUGIN_DIR_WATCH).toBeNull();
     removeAll();
@@ -358,7 +435,7 @@ describe("agents", () => {
     const draft = getMod(summary.id);
     expect(draft).toMatchObject({ enabled: false, needsReview: true, origin: "agent", createdBy: `agent:${manager.id}` });
     expect(listNotifications(5)[0]).toMatchObject({ title: "Boss drafted a mod: Protect migrations", link: `/mods?mod=${draft.id}&tab=code` });
-    expect(pluginDirs((await chat(agent.id, "hello")).invocation.args)).toEqual([]);
+    expect(loaded((await chat(agent.id, "hello")).invocation.args)).toEqual([]);
 
     // A broken save comes back with what to fix; saving again over the draft repairs it.
     const broken = JSON.parse((await tool(manager, "mod_save", { mod: draft.id, title: "Protect migrations", files: pluginFiles("x", BROKEN) })).text);
@@ -382,6 +459,25 @@ describe("agents", () => {
     expect(list[0]!.files).toBeUndefined();
     expect(JSON.parse((await tool(manager, "mods_list", { mod: "protect-migrations" })).text).files[MOD_MODULE_PATH]).toBe(LOGGER);
     expect((await tool(manager, "mods_list", { mod: "nope" })).isError).toBe(true);
+    removeAll();
+  });
+
+  test("an agent saves over its drafts only, and every version is told", async () => {
+    const mine = await createMod({ title: "Mine", files: pluginFiles("mine", LOGGER) });
+    const refused = await tool(manager, "mod_save", { mod: mine.id, title: "Mine", files: pluginFiles("mine", "export const register = () => {}\n") });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("not a draft of yours");
+    expect(getMod(mine.id).files[MOD_MODULE_PATH]).toBe(LOGGER);
+
+    // Nor a gallery guard the human paused for a moment.
+    const guard = await createMod({ templateId: "command-guard" });
+    await updateMod(guard.id, { enabled: false });
+    expect((await tool(manager, "mod_save", { mod: "command-guard", title: "Command guard", files: pluginFiles("command-guard", LOGGER) })).isError).toBe(true);
+    expect(getMod(guard.id)).toMatchObject({ origin: "template", needsReview: false });
+
+    const draft = JSON.parse((await tool(manager, "mod_save", { title: "Told twice", files: pluginFiles("x", LOGGER) })).text) as { id: string };
+    await tool(manager, "mod_save", { mod: draft.id, title: "Told twice", files: pluginFiles("x", `${LOGGER}// v2\n`) });
+    expect(listNotifications(2).map((n) => n.title)).toEqual(["Boss changed its draft of the mod Told twice", "Boss drafted a mod: Told twice"]);
     removeAll();
   });
 
@@ -426,8 +522,52 @@ describe("import", () => {
   });
 });
 
+describe("the API", () => {
+  test("create, check, change, switch on for the code that was read, delete", async () => {
+    const token = getAccessToken();
+    const call = async (method: string, path: string, body?: unknown) => {
+      const res = await fetch(`${env.baseUrl}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: res.status, body: (await res.json()) as Record<string, any> };
+    };
+    expect((await call("GET", "/api/mods/templates")).body).toHaveLength(6);
+    expect((await call("POST", "/api/mods/check", { files: pluginFiles("draft", BROKEN) })).body.check).toMatchObject({ ok: false });
+
+    const created = await call("POST", "/api/mods", { title: "Over HTTP", files: pluginFiles("over-http", LOGGER) });
+    expect(created.status).toBe(201);
+    const id = created.body.id as string;
+    expect(created.body).toMatchObject({ name: "over-http", enabled: false, check: { ok: true } });
+    expect((await call("GET", "/api/mods")).body.map((m: { name: string }) => m.name)).toEqual(["over-http"]);
+
+    // The switch names the code that was on screen.
+    const seen = created.body.digest as string;
+    const changed = await call("PATCH", `/api/mods/${id}`, { files: pluginFiles("over-http", `${LOGGER}// v2\n`) });
+    expect(changed.body.digest).not.toBe(seen);
+    const stale = await call("PATCH", `/api/mods/${id}`, { enabled: true, digest: seen });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error).toContain("code changed");
+    expect((await call("PATCH", `/api/mods/${id}`, { enabled: true, digest: changed.body.digest })).body).toMatchObject({ enabled: true });
+
+    expect((await call("PATCH", `/api/mods/${id}`, { scope: "agents", agentIds: [agent.id], icon: "shield", title: "Renamed" })).body).toMatchObject({
+      scope: "agents",
+      agentIds: [agent.id],
+      icon: "shield",
+      title: "Renamed",
+      name: "over-http",
+    });
+    expect((await call("PATCH", `/api/mods/${id}`, { icon: "rocket" })).status).toBe(400);
+    expect((await call("POST", `/api/mods/${id}/check`)).body.check.ok).toBe(true);
+    expect((await call("POST", "/api/mods/import", { path: tmpdir() })).status).toBe(400);
+    expect((await call("DELETE", `/api/mods/${id}`)).body).toEqual({ ok: true });
+    expect((await call("GET", `/api/mods/${id}`)).status).toBe(404);
+  });
+});
+
 describe("what a mod can do", () => {
-  const check = (hooks: string[], calls: string[], commandHooks = false) => ({ hooks: hooks.map((event) => ({ event, matcher: null })), calls, commandHooks });
+  const check = (hooks: string[], calls: string[], programs = false) => ({ hooks: hooks.map((event) => ({ event, matcher: null })), calls, startsPrograms: programs });
 
   test("abilities come from what the mod hooks and calls, sensitive ones last", () => {
     expect(modAbilities(check(["tool.call"], [])).map((a) => a.id)).toEqual(["tools"]);
@@ -440,7 +580,7 @@ describe("what a mod can do", () => {
       ["process", "sensitive"],
       ["network", "sensitive"],
       ["env", "sensitive"],
-      ["command-hooks", "sensitive"],
+      ["programs", "sensitive"],
     ]);
     expect(modAbilities(check(["ui.render"], ["$.ui.open"])).map((a) => a.id)).toEqual(["panes"]);
   });
@@ -472,7 +612,7 @@ describe("what a mod can do", () => {
     };
     const files = { [MOD_MANIFEST_PATH]: "{}", [MOD_HOOKS_PATH]: '{ "modules": ["./register.tsx"], "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "say done" }] }] } }' };
     const parsed = parseReport(JSON.stringify(report), dir, files, "2.1.289")!;
-    expect(parsed).toMatchObject({ ok: true, commandHooks: true, claudeVersion: "2.1.289", calls: ["$.ui.open", "$.ui.resolve"] });
+    expect(parsed).toMatchObject({ ok: true, startsPrograms: true, claudeVersion: "2.1.289", calls: ["$.ui.open", "$.ui.resolve"] });
     expect(parsed.hooks).toEqual([
       { event: "session.start", matcher: null },
       { event: "ui.render", matcher: "component=Pane, requestId=probe" },
@@ -481,6 +621,50 @@ describe("what a mod can do", () => {
     expect(parsed.warnings).toEqual([{ where: ".claude-plugin/plugin.json", message: "bogus: Unknown field 'bogus'" }]);
     expect(parseReport("not json", dir, files, null)).toBeNull();
     expect(parseReport("{}", dir, files, null)).toBeNull();
+  });
+
+  test("a call made through a helper function still counts, and a module that hooks nothing has no hooks", () => {
+    const dir = "/tmp/godmode-mod-y/leaky";
+    const notes = (hooks: string, calls: string) =>
+      JSON.stringify({ success: true, manifest: { file: `${dir}/.claude-plugin/plugin.json`, errors: [], warnings: [] }, contents: [{ file: `${dir}/hooks/hooks.json`, errors: [], warnings: [], notes: [`./register.ts hooks: ${hooks}`, `./register.ts calls: ${calls}`] }] });
+    // The validator's wording for a call reached through a function of the same file.
+    const leaky = parseReport(notes("tool.call", "$.fs.read (via peek), $.fs.write (via save, keep), $.http.fetch (via send), $.settings.read (via conf), $.ui.log"), dir, {}, null)!;
+    expect(leaky.calls).toEqual(["$.fs.read", "$.fs.write", "$.http.fetch", "$.settings.read", "$.ui.log"]);
+    expect(modAbilities(leaky).filter((a) => a.level === "sensitive").map((a) => a.id)).toEqual(["files-read", "files-write", "network", "env"]);
+    expect(parseReport(notes("nothing", "nothing on $"), dir, {}, null)).toMatchObject({ hooks: [], calls: [] });
+  });
+
+  test("a plugin that ships programs says so, however it declares them", () => {
+    const manifest = (extra: Record<string, unknown>) => ({ [MOD_MANIFEST_PATH]: JSON.stringify({ name: "p", ...extra }) });
+    const command = '{ "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "say done" }] }] } }';
+    expect(startsPrograms({ ...manifest({}), [MOD_HOOKS_PATH]: '{ "modules": ["./register.ts"] }' })).toBe(false);
+    expect(startsPrograms({ ...manifest({}), [MOD_HOOKS_PATH]: command })).toBe(true);
+    expect(startsPrograms({ ...manifest({ hooks: "./extra/cmd.json" }), "extra/cmd.json": command })).toBe(true);
+    expect(startsPrograms({ ...manifest({ hooks: ["./hooks/hooks.json", "./extra/cmd.json"] }), [MOD_HOOKS_PATH]: "{}", "extra/cmd.json": command })).toBe(true);
+    expect(startsPrograms(manifest({ hooks: [{ Stop: [{ hooks: [{ type: "command", command: "x" }] }] }] }))).toBe(true);
+    expect(startsPrograms(manifest({ hooks: { modules: ["./a.ts"] } }))).toBe(false);
+    expect(startsPrograms(manifest({ mcpServers: { x: { command: "node" } } }))).toBe(true);
+    expect(startsPrograms({ ...manifest({}), "bin/tool.sh": "#!/bin/sh" })).toBe(true);
+    expect(startsPrograms({ ...manifest({}), ".mcp.json": "{}" })).toBe(true);
+    expect(startsPrograms({ ...manifest({}), "monitors/monitors.json": "{}" })).toBe(true);
+  });
+
+  test("through Godmode Cloud, mods are read freely and changed only with the secrets switch", async () => {
+    const may = (method: string, path: string, role: "owner" | "operator" | "viewer" = "operator") => cloudRefusal(method, path, role, async () => ({}));
+    updateSettings({ cloud: { allowSecrets: false } });
+    expect(await may("GET", "/api/mods")).toBeNull();
+    expect(await may("GET", "/api/mods/templates", "viewer")).toBeNull();
+    expect(await may("POST", "/api/mods/mod_x/check")).toBeNull();
+    for (const [method, path] of [["POST", "/api/mods"], ["PATCH", "/api/mods/mod_x"], ["DELETE", "/api/mods/mod_x"], ["POST", "/api/mods/check"]] as const) {
+      expect(await may(method, path)).not.toBeNull();
+    }
+    expect(await may("POST", "/api/mods/import", "owner")).toContain("on the computer itself");
+    updateSettings({ cloud: { allowSecrets: true } });
+    expect(await may("PATCH", "/api/mods/mod_x")).toBeNull();
+    expect(await may("DELETE", "/api/mods/mod_x")).toBeNull();
+    expect(await may("DELETE", "/api/mods/mod_x", "viewer")).not.toBeNull();
+    expect(await may("POST", "/api/mods/import", "owner")).not.toBeNull();
+    updateSettings({ cloud: { allowSecrets: false } });
   });
 
   test("the stream turns a mod's log, toast and status into notes", () => {

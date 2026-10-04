@@ -18,7 +18,7 @@ const fields = {
 };
 
 const createSchema = z.object({ ...fields, templateId: z.string().max(100), name: z.string().max(100) }).partial();
-const patchSchema = z.object({ ...fields, values: z.record(z.string().max(200), optionValue.nullable()) }).partial();
+const patchSchema = z.object({ ...fields, digest: z.string().max(100), values: z.record(z.string().max(200), optionValue.nullable()) }).partial();
 
 export function registerModRoutes(app: Hono): void {
   app.get("/api/mods", (c) => c.json(listMods()));

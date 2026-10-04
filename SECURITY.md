@@ -56,13 +56,17 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
   agent setting; agents without it can't hand work to agents that have it, and backups never restore it. Shares and
   their first use per run are audited (`computer.share`, `computer.unshare`, `computer.control`).
 - **Mods are code you switch on**: a mod runs inside Claude Code in every turn of the agents it is for and can reach
-  whatever its code asks for, so only you switch one on. Godmode keeps a mod's files in its database and writes them out
-  before each run — what a run changed in the folder is gone by the next one. Claude Code's validator checks every
-  change; the mod's page lists what it hooks and what it reaches outside the conversation (files, programs, the network,
-  environment variables). A mod an agent wrote arrives switched off and marked for review, an agent can't change a mod
-  that is on, and a backup brings mods back switched off. The gallery's guardrails (*Protect files*, *Command guard*,
-  *Secret scrubber*) match patterns in tool calls and output: they catch mistakes and the obvious cases, not an agent
-  that is determined to get around them — isolation is what VMs and permissions are for.
+  whatever its code asks for, so only you switch one on — and the switch counts for the code you saw: if it changed
+  meanwhile, Godmode asks you to read it again. Claude Code's validator checks every change; the mod's page lists what
+  it hooks and what it reaches outside the conversation (files, programs, the network, environment variables). A mod an
+  agent wrote arrives switched off and marked for review, an agent can only save over its own drafts — never a mod you
+  made, added or have had on — and a backup brings mods back switched off. Godmode keeps a mod's files in its database
+  and gives every run a copy of its own, so what one run does to its mods reaches no other run. Secret options are
+  sealed in the vault; a run that loads the mod is handed them, where an agent with full access to your computer could
+  read them — use a key made for the mod. The gallery's guardrails (*Protect files*, *Command guard*, *Secret
+  scrubber*) match patterns in tool calls and output: they catch mistakes and the obvious cases, not an agent that is
+  set on getting around them (a run with full permissions can rewrite its own copy of a guard) — isolation is what VMs
+  and permissions are for.
 - **SSH servers are assigned by you**: an agent only reaches the servers you give its chat or the agent itself — agents
   can't assign servers to themselves or others, and delegated work doesn't inherit a chat's servers. Godmode signs in
   with the password or key sealed in the vault; they are never part of the prompt, and tool results mask them (the

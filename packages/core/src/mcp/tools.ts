@@ -1675,9 +1675,9 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "mod_save",
     description:
-      "Save a Claude Code mod you wrote as a draft for the human to review: it arrives switched off, the human reads the code under Mods and switches it on — you can't. `files` is the whole plugin by path: \".claude-plugin/plugin.json\" (name, version, description, and `userConfig` for options the human sets), \"hooks/hooks.json\" ({ \"modules\": [\"./register.ts\"] }) and the hooks module \"hooks/register.ts\" exporting `register(on, options)`. Godmode checks the files with Claude Code's validator and returns what it found: fix every error and save again with the same `mod` until `check.ok` is true. `mod` (an id or name) saves over a draft; a mod that is switched on can't be changed by you — save your version under a new name and tell the human.",
+      "Save a Claude Code mod you wrote as a draft for the human to review: it arrives switched off, the human reads the code under Mods and switches it on — you can't. `files` is the whole plugin by path: \".claude-plugin/plugin.json\" (name, version, description, and `userConfig` for options the human sets), \"hooks/hooks.json\" ({ \"modules\": [\"./register.ts\"] }) and the hooks module \"hooks/register.ts\" exporting `register(on, options)`. Godmode checks the files with Claude Code's validator and returns what it found: fix every error and save again with the same `mod` until `check.ok` is true. `mod` (an id or name) saves over a draft an agent wrote that still waits for review. Every other mod is the human's — one they made, added from the gallery or switched on: you can't change it, so save your version as a new mod and say what is different.",
     schema: z.object({
-      mod: z.string().max(100).optional().describe("Id or name of a switched-off mod to save over; omit for a new one"),
+      mod: z.string().max(100).optional().describe("Id or name of an agent's draft to save over; omit for a new mod"),
       title: z.string().min(1).max(80).describe("What the human sees, two or three words: \"Protect migrations\""),
       description: z.string().max(500).optional().describe("One sentence: what the mod does"),
       files: z.record(z.string().max(200), z.string()).describe("Every file of the plugin, path → text"),
@@ -1687,15 +1687,24 @@ const TOOLS: ToolDef[] = [
       const actor = `agent:${agent.id}`;
       const existing = mod ? findMod(mod) : null;
       if (mod && !existing) return fail(`There is no mod "${mod}". Omit \`mod\` to save a new one.`);
+      const human = getSettings().general.userName || "the human";
       if (existing?.enabled) {
-        return fail(`"${existing.title}" is switched on: only ${getSettings().general.userName || "the human"} changes a mod that is running. Save your version as a new mod and say what you changed.`);
+        return fail(`"${existing.title}" is switched on: only ${human} changes a mod that is running. Save your version as a new mod and say what you changed.`);
+      }
+      // A draft is an agent's until the human has had it on; anything else was made, added or approved by them.
+      if (existing && !(existing.needsReview && existing.createdBy.startsWith("agent:"))) {
+        return fail(`"${existing.title}" is ${human}'s mod, not a draft of yours. Save your version as a new mod and say what you changed.`);
       }
       const saved = existing
         ? await updateMod(existing.id, { title, ...(description !== undefined ? { description } : {}), files }, actor)
         : await createMod({ title, description, files }, actor);
-      if (!existing) {
-        notify("info", `${agent.name} drafted a mod: ${saved.title}`, "It is switched off. Read the code and switch it on under Mods.", `/mods?mod=${saved.id}&tab=code`);
-      }
+      // Every version is told: the human reads the code as it is now, not the one from an earlier notice.
+      notify(
+        "info",
+        existing ? `${agent.name} changed its draft of the mod ${saved.title}` : `${agent.name} drafted a mod: ${saved.title}`,
+        "It is switched off. Read the code and switch it on under Mods.",
+        `/mods?mod=${saved.id}&tab=code`,
+      );
       return json({
         ...modSummary(saved),
         next: saved.check && !saved.check.ok ? "Fix the errors and save again with this mod's id." : "Saved as a draft. Tell the human to review it under Mods and switch it on.",
