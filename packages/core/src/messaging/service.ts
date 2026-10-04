@@ -557,7 +557,8 @@ async function startRuntime(row: ConnectionRow) {
   const adapter = adapterFor(row, ctx);
   runtimes.set(row.id, { adapter, status: { state: "connecting", message: null, lastEventAt: null }, fingerprint: fingerprintOf(row) });
   adapter.start();
-  log.info(`${row.provider} bot ${row.name} (${row.id}) started`);
+  // The name goes in the details: "bot <name>" in the message reads like a credential ("Bot <token>") and is masked.
+  log.info(`${row.provider} bot started`, { name: row.name, connection: row.id });
 }
 
 async function stopRuntime(id: string) {

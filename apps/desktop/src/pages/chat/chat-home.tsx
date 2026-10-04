@@ -64,7 +64,7 @@ function greeting(date: Date): string {
   return "Good night";
 }
 
-const NO_MODEL_CHOICE: ModelChoice = { model: null, effort: null };
+const NO_MODEL_CHOICE: ModelChoice = { model: null, effort: null, ultracode: null };
 const SETUP_DRAFT = "chat:home-setup:";
 const NO_SSH_SERVERS: string[] = [];
 

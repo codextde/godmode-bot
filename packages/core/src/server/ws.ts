@@ -1,5 +1,6 @@
 import type { ServerWebSocket } from "bun";
-import { browserView, type ClientEvent, type ServerEvent } from "@godmode/shared";
+import { browserView, type ClientEvent, type RunDelta, type ServerEvent } from "@godmode/shared";
+import { timedSync } from "../diagnostics/slow";
 import { bus } from "../events/bus";
 import { VERSION } from "../config";
 import { logger } from "../log";
@@ -19,6 +20,8 @@ export interface WsData {
   deviceId?: string;
   /** Phones: conversations whose streaming replies (`run.delta`) they want. */
   conversations?: Set<string>;
+  /** The client applies `run.delta` patches (it said `deltas.patch`); the others get the whole block list. */
+  patches?: boolean;
 }
 
 const clients = new Set<ServerWebSocket<WsData>>();
@@ -39,6 +42,13 @@ let welcomeEvents: () => ServerEvent[] = () => [];
 
 export function setWelcomeEvents(fn: () => ServerEvent[]) {
   welcomeEvents = fn;
+}
+
+/** The whole in-flight message of running runs (all, one run's, or one conversation's), as `run.delta` events. */
+let runSnapshots: (want: { runId?: string; conversationId?: string }) => RunDelta[] = () => [];
+
+export function setRunSnapshots(fn: typeof runSnapshots) {
+  runSnapshots = fn;
 }
 
 /** Hooks invoked when the first/last UI subscribes to a browser live view. */
@@ -117,10 +127,10 @@ bus.on((event) => {
     }
     return;
   }
-  const payload = JSON.stringify(event);
+  if (event.type === "run.delta") return sendDelta(event);
+  if (event.type === "run.finished" || event.type === "run.paused") forgetWhole(event.run.id);
+  const payload = timedSync(`send ${event.type}`, () => JSON.stringify(event));
   for (const ws of clients) {
-    // Streaming replies are large and frequent; phones only get them for the chats they have open.
-    if (event.type === "run.delta" && ws.data.auth === "device" && !ws.data.conversations?.has(event.conversationId)) continue;
     try {
       ws.send(payload);
     } catch {
@@ -128,6 +138,74 @@ bus.on((event) => {
     }
   }
 });
+
+/** Streaming replies are frequent; phones only get them for the chats they have open. */
+function wantsDeltas(ws: ServerWebSocket<WsData>, conversationId: string): boolean {
+  return ws.data.auth !== "device" || !!ws.data.conversations?.has(conversationId);
+}
+
+/**
+ * How often a client that doesn't apply patches gets the whole block list of a run: often enough for text to stream,
+ * and once a second when the list has grown heavy (screenshots).
+ */
+const WHOLE_EVERY_MS = 200;
+const WHOLE_HEAVY_EVERY_MS = 1000;
+const WHOLE_HEAVY_BYTES = 1_000_000;
+const whole = new Map<string, { at: number; every: number; timer: ReturnType<typeof setTimeout> | null }>();
+
+function forgetWhole(runId: string) {
+  const w = whole.get(runId);
+  if (w?.timer) clearTimeout(w.timer);
+  whole.delete(runId);
+}
+
+/** The run's whole block list to the clients that don't apply patches (megabytes in a long run: see WHOLE_EVERY_MS). */
+function sendWhole(runId: string) {
+  const w = whole.get(runId) ?? { at: 0, every: WHOLE_EVERY_MS, timer: null };
+  whole.set(runId, w);
+  if (w.timer) return;
+  const wait = w.at + w.every - Date.now();
+  if (wait > 0) {
+    w.timer = setTimeout(() => {
+      w.timer = null;
+      sendWhole(runId);
+    }, wait);
+    return;
+  }
+  const snapshot = runSnapshots({ runId })[0];
+  if (!snapshot) return forgetWhole(runId);
+  w.at = Date.now();
+  const payload = timedSync("send run delta (whole list)", () => JSON.stringify(snapshot));
+  w.every = payload.length > WHOLE_HEAVY_BYTES ? WHOLE_HEAVY_EVERY_MS : WHOLE_EVERY_MS;
+  for (const ws of clients) {
+    if (ws.data.patches || !wantsDeltas(ws, snapshot.conversationId)) continue;
+    try {
+      ws.send(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function sendDelta(event: RunDelta) {
+  let payload: string | null = null;
+  let others = false;
+  for (const ws of clients) {
+    if (!wantsDeltas(ws, event.conversationId)) continue;
+    // A delta that carries the whole list suits every client.
+    if (!ws.data.patches && !event.blocks) {
+      others = true;
+      continue;
+    }
+    payload ??= JSON.stringify(event);
+    try {
+      ws.send(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (others) sendWhole(event.runId);
+}
 
 const MAX_CONVERSATIONS_PER_SOCKET = 20;
 
@@ -193,6 +271,8 @@ export const websocketHandler = {
     clients.add(ws);
     send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString() });
     for (const event of welcomeEvents()) send(ws, event);
+    // What runs have written so far: the stored message lags behind, and later deltas only say what changed.
+    if (ws.data.auth !== "device") for (const event of runSnapshots({})) send(ws, event);
     if (!wasOnline) bus.changed("mobile");
   },
   message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
@@ -222,9 +302,17 @@ export const websocketHandler = {
         if (typeof msg.conversationId !== "string" || msg.conversationId.length > 100) break;
         ws.data.conversations ??= new Set();
         if (ws.data.conversations.size < MAX_CONVERSATIONS_PER_SOCKET) ws.data.conversations.add(msg.conversationId);
+        if (ws.data.conversations.has(msg.conversationId)) for (const event of runSnapshots({ conversationId: msg.conversationId })) send(ws, event);
         break;
       case "conversation.unsubscribe":
         if (typeof msg.conversationId === "string") ws.data.conversations?.delete(msg.conversationId);
+        break;
+      case "deltas.patch":
+        ws.data.patches = true;
+        break;
+      case "run.resync":
+        if (typeof msg.runId !== "string" || msg.runId.length > 100) break;
+        for (const event of runSnapshots({ runId: msg.runId })) if (wantsDeltas(ws, event.conversationId)) send(ws, event);
         break;
     }
   },

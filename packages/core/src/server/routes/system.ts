@@ -68,10 +68,12 @@ export function registerSystemRoutes(app: Hono) {
     // Making "reveal" the default secret access for new agents needs a fresh passphrase confirmation.
     const security = patch.security as { defaultSecretAccess?: unknown } | undefined;
     if (security?.defaultSecretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
-    const instructions = (patch.runner as { appendSystemPrompt?: unknown } | undefined)?.appendSystemPrompt;
+    const runner = patch.runner as { appendSystemPrompt?: unknown; ultracode?: unknown } | undefined;
+    const instructions = runner?.appendSystemPrompt;
     if (typeof instructions === "string" && instructions.length > MAX_INSTRUCTIONS_LENGTH) {
       throw badRequest(`Instructions for every agent can be at most ${MAX_INSTRUCTIONS_LENGTH.toLocaleString("en-US")} characters`);
     }
+    if (runner?.ultracode !== undefined && typeof runner.ultracode !== "boolean") throw badRequest("runner.ultracode must be true or false");
     const memory = patch.memory as { dreaming?: unknown } | undefined;
     if (memory !== undefined && (typeof memory !== "object" || memory === null || Array.isArray(memory))) throw badRequest("Invalid memory settings");
     if (memory?.dreaming !== undefined && (typeof memory.dreaming !== "object" || memory.dreaming === null || Array.isArray(memory.dreaming))) {

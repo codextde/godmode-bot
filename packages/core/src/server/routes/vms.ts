@@ -26,7 +26,7 @@ import { KeyError } from "../../computer/keys";
 import { badRequest, conflict, sleep } from "../../util";
 import { body, z } from "../validate";
 import { inputEvent } from "./computer";
-import { disableIdleTimeout } from "../../mcp/http";
+import { disableIdleTimeout, expectSlow } from "../../mcp/http";
 import { resetDoctorCache } from "../../services/doctor";
 
 const name = z.string().trim().min(1, "Name is required").max(60);
@@ -95,6 +95,7 @@ export function registerVmRoutes(app: Hono): void {
 
   app.post("/api/vms/:id/start", async (c) => {
     const id = c.req.param("id");
+    expectSlow(c);
     await startSoon(id);
     return c.json(await getVm(id));
   });

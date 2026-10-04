@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Cpu, Gauge, ShieldAlert, SlidersHorizontal, Sparkles, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
-import { EFFORT_LABELS, EFFORT_OPTIONS, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
+import { EFFORT_LABELS, EFFORT_OPTIONS, ULTRACODE_HINT, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
 import { ReasoningEffort } from "@/components/aicss/ReasoningEffort";
 import {
   AlertDialog,
@@ -133,6 +133,10 @@ export function AiSection({ settings }: { settings: Settings }) {
   const { catalog } = useModelCatalog();
   const r = settings.runner;
   const [confirmBypass, setConfirmBypass] = useState(false);
+  const defaultModel = findModel(catalog.models, r.model);
+  // A custom model id: possible whenever this Claude Code has Ultracode at all.
+  const anyUltracode = catalog.models.some((m) => m.ultracode);
+  const ultracodeAvailable = defaultModel ? defaultModel.ultracode : anyUltracode;
 
   const setBypass = (on: boolean) => {
     if (on) {
@@ -160,13 +164,37 @@ export function AiSection({ settings }: { settings: Settings }) {
         <SettingRow label="Reasoning effort" description="Higher effort thinks longer before acting — better results, more tokens.">
           <ReasoningEffort
             aria-label="Reasoning effort"
-            label={findModel(catalog.models, r.model)?.label ?? "Effort"}
+            label={defaultModel?.label ?? "Effort"}
             stops={EFFORT_OPTIONS.map((e) => EFFORT_LABELS[e])}
             value={Math.max(0, EFFORT_OPTIONS.indexOf(r.effort))}
             onChange={(i) => {
               const effort: Effort = EFFORT_OPTIONS[i] ?? "high";
               if (effort !== r.effort) patch({ runner: { effort } });
             }}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Ultracode"
+          htmlFor="ultracode"
+          description={
+            <>
+              {ULTRACODE_HINT}
+              {!ultracodeAvailable && (
+                <span className="mt-1 block font-medium text-foreground/80">
+                  {anyUltracode
+                    ? `${defaultModel?.label ?? "The default model"} doesn't support dynamic workflows — pick a model that does.`
+                    : "The installed Claude Code doesn't offer dynamic workflows."}
+                </span>
+              )}
+            </>
+          }
+        >
+          {/* Stays switchable while it is on: agents with a model of their own still follow this default. */}
+          <Switch
+            id="ultracode"
+            checked={r.ultracode ?? false}
+            disabled={!ultracodeAvailable && !r.ultracode}
+            onCheckedChange={(ultracode) => patch({ runner: { ultracode } })}
           />
         </SettingRow>
       </SettingsGroup>

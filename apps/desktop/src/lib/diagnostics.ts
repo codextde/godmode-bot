@@ -12,7 +12,8 @@ const FLUSH_MS = 2_000;
 const RETRY_MS = 15_000;
 const MAX_QUEUE = 50;
 const REPEAT_WINDOW_MS = 60_000;
-const IGNORED = [/ResizeObserver loop/i, /^Script error\.?$/];
+/** Not problems: browser noise, and the human closing the vault's passphrase prompt (callers abort silently). */
+const IGNORED = [/ResizeObserver loop/i, /^Script error\.?$/, /^GrantCancelledError\b/];
 
 const queue: Entry[] = [];
 const recent = new Map<string, number>();

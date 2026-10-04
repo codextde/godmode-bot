@@ -170,7 +170,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
-       --settings <tmp json>                   (the message-queue hook, see below)
+       --settings <tmp json>                   (the message-queue hook, see below; `ultracode: true` with Ultracode)
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key or in a VM; Bash in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
        [--add-dir <folder or clone> for each usable workspace folder and repository]
@@ -180,9 +180,38 @@ cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <a
 
 Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + result) and pushed as
 `run.delta` WS events; the final assistant message is stored in SQLite and in the agent repo.
+A long run has hundreds of blocks and megabytes of tool output and screenshots, and all but the last few never change
+again: each block is masked and serialized once and made again only when it changed (or when the vault learned or
+forgot a secret). A delta carries what changed (`patch`, see WebSocket); the row saved every few seconds while the run
+works is put together from the serialized blocks, less often the longer saving takes (never more than 1/50 of the time).
+Claude Code reports a run's cost as the total of its whole Claude session, so on a resumed session the chat's earlier
+runs are in it: the run is charged that total minus what the session had counted before
+(`conversations.claude_session_cost_usd`). A process can end more than once (a background task that finishes wakes it
+for another turn); time, turns and tokens of the endings add up.
 Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-conversation lock prevents
 two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
 works in its own tabs (see Browser).
+
+### Ultracode
+
+Claude Code's Ultracode — dynamic workflows on every task, at any effort level — is a setting of the session, not a
+flag: the runner adds `ultracode: true` to the run's `--settings` file. Whether it is on: the chat
+(`conversations.ultracode`, from the model picker or `/effort ultracode [on|off]`), else the agent, else
+`settings.runner.ultracode`. Dreams and condition checks never get it.
+
+* **Availability.** The model catalog probe asks Claude Code (`get_settings` after `initialize`) whether the install has
+  dynamic workflows; a model has `ultracode` when it does and the model supports `xhigh` effort (Claude Code's rule).
+  The answer is about the probe session's model: when that one has no `xhigh`, the probe switches the session to a
+  model that has (`set_model`) and asks again. The UI offers the switch only for such models, and `ultracodeFor` drops
+  the setting for the others — an older CLI never sees the key.
+* **Without full bypass** the `Workflow` tool joins `--allowedTools`: print mode cannot ask, and Claude Code refuses a
+  workflow nobody reviewed.
+* **Progress.** A workflow runs in the background of its `Workflow` tool call. Claude Code reports it as `system`
+  events (`task_started`, `task_progress`, `task_updated`, `task_notification`); the stream accumulator keeps them as
+  `task` on that `tool_use` block (status, current activity, its agents with their state), which the chat shows as a
+  card. The process stays until the workflow is done and then sends one `result` per turn; the last one is the answer,
+  their usage adds up (the tokens of the workflow's agents are on the `task`, not in the run's usage). A pause ends
+  the process and with it the workflow: its `task` is `stopped`, and the continued run starts it again if it needs it.
 
 ### Message queue
 
@@ -291,18 +320,21 @@ directory are masked; request paths are logged as route patterns. `info` and up 
 
 | Scope | Entries |
 |---|---|
-| `runner` | One per run: status, duration, queue wait, cost, tokens, tool calls, failed tools with their error |
-| `http` | Requests slower than 1 s, rejected requests (4xx except sign-in, vault-locked and grant prompts), unknown API routes, 5xx with stack; every request with `verbose` |
+| `runner` | A run's start, and one entry when it ends: status, duration (`ms`: Claude's own, `wallMs`: by the clock), queue wait, cost, tokens, tokens read per turn (`contextTokens`), the session's total on a resumed one, tool calls, failed tools with the head and end of their output, how heavy the message got (`blocks`, `resultKb`, `images`, `imageKb`, `deltas`, `slowestSaveMs`) |
+| `http` | Requests slower than 1 s (`expected` when the route waits by design — `expectSlow`), rejected requests (4xx except sign-in, vault-locked and grant prompts), unknown API routes, 5xx with stack; every request with `verbose` |
 | `mcp` | Agent tool calls slower than 10 s or returning an error, crashes, unknown tools |
-| `db` | Statements slower than 100 ms (SQL only, once a minute each) |
-| `perf` | Event-loop stalls over 300 ms, sleep/wake gaps, memory every 30 min |
+| `db` | Statements slower than 100 ms (SQL only, once a minute each, with how often it was that slow meanwhile) |
+| `perf` | Event-loop stalls over 300 ms with what the core was doing (`during`: slow synchronous work noted through `diagnostics/slow.ts`) and the runs at work; a sleep after real use or under a run (`sleptAt`; the stirring of a sleeping computer is only counted); every 30 min memory, database size, connected UIs and those sleeps — "high memory use" once, and again when it grew by a quarter |
+| `browser` | A browser that went away by itself: whether its process was still alive, how the connection ended, how long it ran and sat idle |
+| `sources` | A failed clone or update with git's own words, the step and how long it took |
 | `crash` | Uncaught exceptions and unhandled rejections (the core still exits with 1) |
 | `ui` | Render crashes, uncaught errors and failed requests that never reached the core (`POST /api/logs/client`, 60 a minute) |
 
 Settings → Logs reads it through `GET /api/logs` (counts, recurring warnings/errors grouped by message without ids and
 numbers), `GET /api/logs/entries?level=&search=&limit=` and `GET /api/logs/report[?full=1]`: Markdown for an AI with
-the environment, recurring problems, a run summary, slow spots, the tail of `desktop.log` and the newest entries that fit
-in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
+the environment (with the build's commit), recurring problems, a run summary (cost by agent, runs that took far longer
+by the clock than Claude worked), memory and sleep, slow spots (requests, by-design waits apart, tool calls, queries,
+stalls and what blocked them), the tail of `desktop.log` and the newest entries that fit in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
 
 ## Cleanup
 
@@ -332,6 +364,13 @@ while no agent works. The last run is kept in `meta` (`cleanup.lastRun`).
 
 Server → UI events are defined in `packages/shared/src/events.ts`. The UI keeps React Query caches in sync
 (`apps/desktop/src/lib/realtime.ts`). Browser live view frames are only sent to subscribed clients.
+
+`run.delta` counts up per stretch of a run (`stream`, `seq`: a paused run continues in a new stretch). A client that
+says `deltas.patch` gets only what changed (`patch`: `[index, block]` pairs, `length`: how long the list is afterwards)
+and applies it with `applyRunDelta`; when a delta doesn't fit what it has (one was missed), it asks for the whole list
+with `run.resync`. A client that connects, or a phone that
+opens a chat, is sent the whole list of what runs there. Clients that don't ask for patches (older phone apps) get the
+whole list, at most once a second per run.
 
 ## Browser
 

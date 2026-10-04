@@ -20,6 +20,8 @@ let autoLockMinutes = 0;
 
 /** Values we know are secrets — used to redact them from transcripts and logs. */
 const knownSecrets = new Set<string>();
+/** Bumped when the known secrets are forgotten (the vault locked): see `redactionEpoch`. */
+let secretsForgotten = 0;
 
 function keychainName(): string {
   return `vault-dek-${sha256(config().dataDir).slice(0, 16)}`;
@@ -109,6 +111,7 @@ export function lock() {
   if (dek) dek.fill(0);
   dek = null;
   knownSecrets.clear();
+  secretsForgotten++;
   emitStatus();
 }
 
@@ -284,8 +287,11 @@ export function hasAppSecret(key: string): boolean {
 /* Redaction                                                             */
 /* ------------------------------------------------------------------ */
 
+/** Words every login page and every tool message uses: masking them hides nothing and garbles what agents read. */
+const NOT_A_SECRET = new Set(["password", "passwort", "username", "benutzername", "secret", "passphrase"]);
+
 export function rememberSecret(value: string | null | undefined) {
-  if (value && value.length >= 6) knownSecrets.add(value);
+  if (value && value.length >= 6 && !NOT_A_SECRET.has(value.toLowerCase())) knownSecrets.add(value);
 }
 
 /** Remember every value of an env/header map, plus the token of "Bearer <token>"-style auth values. */
@@ -386,6 +392,11 @@ export function containsSecret(text: string): boolean {
 export function redact(text: string): string {
   if (!text || knownSecrets.size === 0 || !getSettings().security.redactSecrets) return text;
   return maskKnownSecrets(text);
+}
+
+/** Changes whenever `redact` may answer differently for the same text: whoever keeps redacted text starts over then. */
+export function redactionEpoch(): string {
+  return `${secretsForgotten}:${knownSecrets.size}:${getSettings().security.redactSecrets ? 1 : 0}`;
 }
 
 /** `redact` regardless of the setting: the diagnostic log is meant to be shared. */

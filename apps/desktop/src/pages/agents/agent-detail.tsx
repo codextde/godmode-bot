@@ -159,6 +159,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
               <span className="flex items-center gap-1">
                 <Cpu className="size-3.5" /> {agent.model ? modelLabel(agent.model) : "Default model"}
                 {agent.effort && <span className="text-muted-foreground/70">· {agent.effort} effort</span>}
+                {agent.ultracode && <span className="text-muted-foreground/70">· Ultracode</span>}
               </span>
               {agent.browser.enabled && (
                 <span className="flex items-center gap-1">

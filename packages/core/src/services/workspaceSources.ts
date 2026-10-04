@@ -22,9 +22,17 @@ const log = logger("sources");
 export const MAX_SOURCES = 20;
 const CLONE_TIMEOUT_MS = 15 * 60_000;
 const SYNC_TIMEOUT_MS = 2 * 60_000;
-/** Before a run, clones not updated for this long are fast-forwarded (quickly, or not at all). */
+/** Before a run, clones not updated for this long are fast-forwarded. */
 const RUN_SYNC_AFTER_MS = 15 * 60_000;
-const RUN_SYNC_TIMEOUT_MS = 20_000;
+/** How long a run waits for that update; a slower fetch goes on behind the run (see `prepareSource`). */
+let runSyncWaitMs = 20_000;
+
+/** How long a run waits for a fast-forward that has begun (status, merge: a few seconds, 40 s at most). */
+const RUN_UPDATE_WAIT_MS = 45_000;
+
+export function __setRunSyncWaitForTests(ms: number) {
+  runSyncWaitMs = ms;
+}
 /** How long a run waits for a first clone; it goes on without it after that (the clone continues). */
 const RUN_CLONE_WAIT_MS = 90_000;
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
@@ -274,9 +282,12 @@ export function syncSource(workspaceId: string, sourceId: string): WorkspaceSour
   if (!busy.has(row.id)) {
     if (isClone(clonePath(row))) void track(row, "syncing", (signal) => pullRepo(row, SYNC_TIMEOUT_MS, signal));
     else void track(row, "cloning", (signal) => cloneRepo(row, signal));
-  }
+  } else updateAsked.add(row.id);
   return toModel(row);
 }
+
+/** The human asked for an update while a fetch ran behind a run: that fetch fast-forwards after all. */
+const updateAsked = new Set<string>();
 
 /** Run `work` for a source unless something already runs for it; failures are stored on the source. */
 function track(row: SourceRow, kind: "cloning" | "syncing", work: (signal: AbortSignal) => Promise<void>): Promise<void> {
@@ -290,11 +301,13 @@ function track(row: SourceRow, kind: "cloning" | "syncing", work: (signal: Abort
     .catch((err) => {
       if (abort.signal.aborted) return;
       const message = err instanceof Error ? err.message : String(err);
-      log.warn(`${kind === "cloning" ? "clone" : "update"} of ${row.url} failed: ${message}`);
+      // What git itself said and how long it took: "timed out" alone doesn't tell a slow network from a waiting helper.
+      log.warn(`${kind === "cloning" ? "clone" : "update"} of ${row.url} failed: ${message}`, err instanceof GitError ? err.details : undefined);
       run("UPDATE workspace_sources SET error = ?, updated_at = ? WHERE id = ?", message, now(), row.id);
     })
     .finally(() => {
       busy.delete(row.id);
+      updateAsked.delete(row.id);
       bus.changed("workspaces");
     });
   busy.set(row.id, { kind, done, abort });
@@ -330,6 +343,16 @@ interface GitResult {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  ms: number;
+}
+
+/** A failed git command in words for the human (the message), with what git reported for the diagnostic log. */
+class GitError extends Error {
+  readonly details: { step: string; ms: number; timedOut: boolean; stderr: string };
+  constructor(step: string, res: GitResult, url: string, branch: string | null) {
+    super(gitFailure(res, url, branch));
+    this.details = { step, ms: res.ms, timedOut: res.timedOut, stderr: res.stderr.trim().slice(-600) };
+  }
 }
 
 async function exec(
@@ -338,7 +361,8 @@ async function exec(
 ): Promise<GitResult> {
   const bin = which("git");
   if (!bin) throw new Error(NO_GIT);
-  if (opts.signal?.aborted) return { ok: false, stdout: "", stderr: "", timedOut: false };
+  if (opts.signal?.aborted) return { ok: false, stdout: "", stderr: "", timedOut: false, ms: 0 };
+  const started = performance.now();
   // Settings in a clone's .git/config that would run programs on this computer (hooks, fsmonitor) are ignored.
   const safe = ["-c", "protocol.ext.allow=never", "-c", "protocol.file.allow=never", "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${devNull}`];
   const proc = Bun.spawn([bin, ...safe, ...args], { cwd: opts.cwd, env: opts.env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
@@ -355,7 +379,7 @@ async function exec(
     // A stopped git's transport helper may hold the pipes a little longer: don't wait for it.
     const stopped = timedOut || !!opts.signal?.aborted;
     const [stdout, stderr] = stopped ? await Promise.race([output, Bun.sleep(500).then(() => ["", ""] as const)]) : await output;
-    return { ok: code === 0 && !stopped, stdout, stderr, timedOut };
+    return { ok: code === 0 && !stopped, stdout, stderr, timedOut, ms: Math.round(performance.now() - started) };
   } finally {
     clearTimeout(timer);
     opts.signal?.removeEventListener("abort", stop);
@@ -421,7 +445,7 @@ async function cloneRepo(row: SourceRow, signal: AbortSignal): Promise<void> {
   if (!res.ok) {
     rmSync(tmp, { recursive: true, force: true });
     if (signal.aborted) return;
-    throw new Error(gitFailure(res, row.url, row.branch));
+    throw new GitError("clone", res, row.url, row.branch);
   }
   // Removed while cloning: nothing to keep.
   if (signal.aborted || !get("SELECT id FROM workspace_sources WHERE id = ?", row.id)) {
@@ -433,13 +457,20 @@ async function cloneRepo(row: SourceRow, signal: AbortSignal): Promise<void> {
   log.info(`cloned ${row.url} into ${path}`);
 }
 
-/** Fetch, then fast-forward when the clone has no local changes and its branch tracks one. Local work is never touched. */
-async function pullRepo(row: SourceRow, timeoutMs: number, signal: AbortSignal): Promise<void> {
+/**
+ * Fetch, then fast-forward when the clone has no local changes and its branch tracks one. Local work is never touched.
+ * `mayUpdate` is asked once the fetch is done: false leaves the checkout as it is (what was fetched stays).
+ */
+async function pullRepo(row: SourceRow, timeoutMs: number, signal: AbortSignal, mayUpdate: () => boolean = () => true): Promise<void> {
   const path = clonePath(row);
   if (!isClone(path) || !row.url) throw new Error("The repository isn't cloned yet.");
   const fetched = await git(["fetch", "--quiet", "--prune", "origin"], { cwd: path, timeoutMs, signal });
   if (signal.aborted) return;
-  if (!fetched.ok) throw new Error(gitFailure(fetched, row.url, row.branch));
+  if (!fetched.ok) throw new GitError("fetch", fetched, row.url, row.branch);
+  if (!mayUpdate() && !updateAsked.has(row.id)) {
+    log.info(`fetched ${row.url} in ${Math.round(fetched.ms / 1000)} s — a run started meanwhile, so its checkout is updated later`);
+    return;
+  }
   const status = await git(["status", "--porcelain", "--untracked-files=no"], { cwd: path, timeoutMs: 10_000 });
   const upstream = await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], { cwd: path, timeoutMs: 10_000 });
   let note: string | null = null;
@@ -491,7 +522,22 @@ async function prepareSource(
   } else if (!busy.has(row.id) && Date.now() - Math.max(row.synced_at ? Date.parse(row.synced_at) : 0, runSyncAttempts.get(row.id) ?? 0) > RUN_SYNC_AFTER_MS) {
     runSyncAttempts.set(row.id, Date.now());
     opts.onActivity(`Updating ${name} …`);
-    await settle(track(row, "syncing", (signal) => pullRepo(row, RUN_SYNC_TIMEOUT_MS, signal)), opts.signal, RUN_SYNC_TIMEOUT_MS + 5_000);
+    // The run doesn't wait long. A fetch that takes longer isn't stopped (stopped, it would start over before every
+    // run and never get through): it finishes behind the run, which keeps the files it started with. The checkout is
+    // fast-forwarded by a later update (RUN_SYNC_AFTER_MS on — runs of other chats may work in it meanwhile), which
+    // then has nothing left to load.
+    let waiting = true;
+    let updating = false;
+    const synced = track(row, "syncing", (signal) =>
+      pullRepo(row, SYNC_TIMEOUT_MS, signal, () => {
+        updating ||= waiting;
+        return waiting;
+      }),
+    );
+    await settle(synced, opts.signal, runSyncWaitMs);
+    waiting = false;
+    // The fetch was done in time and the fast-forward is under way: the run doesn't start in a checkout that changes.
+    if (updating) await settle(synced, opts.signal, RUN_UPDATE_WAIT_MS);
   }
   if (isClone(path)) return { source: { kind: "git", name, path, url: row.url, branch: row.branch } };
   if (busy.get(row.id)?.kind === "cloning") return { notice: `The repository "${name}" is still being cloned — it's available once that's done.` };

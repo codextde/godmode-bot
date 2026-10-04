@@ -704,4 +704,29 @@ CREATE TABLE IF NOT EXISTS paused_runs (
 CREATE INDEX IF NOT EXISTS idx_paused_runs_agent ON paused_runs(agent_id);
 `,
   },
+  {
+    id: 30,
+    name: "session_cost",
+    sql: /* sql */ `
+-- What Claude Code has counted for the chat's Claude session so far. It reports the total of the whole session, so a
+-- run's own cost is that total minus this. Runs recorded before this column hold such totals (their costs stay as they
+-- are): the latest one of each chat with a session is where its count stands — a paused one too, which goes on from it.
+ALTER TABLE conversations ADD COLUMN claude_session_cost_usd REAL;
+UPDATE conversations SET claude_session_cost_usd = (
+  SELECT r.cost_usd FROM runs r
+  WHERE r.conversation_id = conversations.id AND r.cost_usd IS NOT NULL AND r.status IN ('succeeded', 'failed', 'paused')
+  ORDER BY r.created_at DESC LIMIT 1
+) WHERE claude_session_id IS NOT NULL;
+`,
+  },
+  {
+    id: 40,
+    name: "ultracode",
+    sql: /* sql */ `
+-- Ultracode (Claude Code plans every task as a workflow of several agents). NULL = inherit: an agent the global
+-- default, a chat its agent's.
+ALTER TABLE agents ADD COLUMN ultracode INTEGER;
+ALTER TABLE conversations ADD COLUMN ultracode INTEGER;
+`,
+  },
 ];

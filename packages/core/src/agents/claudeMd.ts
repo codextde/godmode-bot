@@ -175,6 +175,7 @@ export function renderAgentState(agent: Agent): string {
     instructions: agent.instructions,
     model: agent.model,
     effort: agent.effort,
+    ultracode: agent.ultracode,
     isDefault: agent.isDefault,
     enabled: agent.enabled,
     permissions: agent.permissions,

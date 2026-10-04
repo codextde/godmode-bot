@@ -12,7 +12,7 @@
  */
 import { parseArgs } from "node:util";
 import { formatBytes } from "@godmode/shared";
-import { loadConfig, config, VERSION, isLoopbackHost } from "./config";
+import { loadConfig, config, BUILD, VERSION, isLoopbackHost } from "./config";
 import { logger, setLogDir } from "./log";
 import { openDb, closeDb } from "./db";
 import { createApp } from "./server/app";
@@ -198,6 +198,7 @@ async function serve(values: Record<string, unknown>) {
   // Machine-readable ready line for the desktop shell.
   console.log(`GODMODE_READY ${JSON.stringify({ url, port: cfg.port, version: VERSION })}`);
   log.info(`Godmode core ${VERSION} listening on ${url} (mode=${cfg.mode}, data=${cfg.dataDir})`, {
+    build: BUILD,
     platform: `${cfg.platform} ${cfg.arch}`,
     bun: Bun.version,
     startupMs: Math.round(performance.now()),
