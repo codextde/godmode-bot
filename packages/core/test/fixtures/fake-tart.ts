@@ -129,7 +129,7 @@ const flag = (name: string) => {
 
 switch (cmd) {
   case "--version":
-    console.log("2.40.0");
+    console.log("2.40.1");
     break;
 
   case "list": {

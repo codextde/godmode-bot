@@ -159,7 +159,7 @@ describe("VM lifecycle", () => {
     const status = await vmStatus();
     expect(status.supported).toBe(true);
     expect(status.tart.installed).toBe(true);
-    expect(status.tart.version).toBe("2.40.0");
+    expect(status.tart.version).toBe("2.40.1");
     expect(status.maxRunning).toBe(2);
     expect(status.images.find((i) => i.recommended)?.downloaded).toBe(false);
   });
