@@ -993,4 +993,15 @@ ALTER TABLE paused_runs ADD COLUMN budget_scope TEXT;
 ALTER TABLE paused_runs ADD COLUMN budget_usd REAL;
 `,
   },
+  {
+    id: 54,
+    name: "needs_you",
+    sql: /* sql */ `
+-- A chat with something new: the run that ended while nobody had it open (NULL = read).
+ALTER TABLE conversations ADD COLUMN unread_run_id TEXT;
+-- When an automation tells the human that a run ended: 'failures' (default), 'always' or 'never'.
+ALTER TABLE routines ADD COLUMN notify TEXT NOT NULL DEFAULT 'failures';
+CREATE INDEX IF NOT EXISTS idx_runs_routine ON runs(routine_id, trigger, created_at);
+`,
+  },
 ];

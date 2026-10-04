@@ -1,4 +1,5 @@
 import type {
+  AttentionItem,
   BudgetOverview,
   BudgetReleaseInput,
   SpendPeriod,
@@ -405,6 +406,9 @@ export const api = {
     report: (period: SpendPeriod, agentId?: string | null) => get<SpendReport>("/api/spend", { period, agentId: agentId ?? undefined }),
   },
 
+  /** Everything that waits for the human ("Needs you"), from live state. */
+  attention: () => get<AttentionItem[]>("/api/attention"),
+
   budgets: {
     get: () => get<BudgetOverview>("/api/budgets"),
     /** Let held work run although its budget is used up. */
@@ -465,6 +469,8 @@ export const api = {
   },
 
   conversations: {
+    /** The human has seen these chats ("all" = every chat). */
+    read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),
     list: (q: { agentId?: string; search?: string; limit?: number; archived?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),

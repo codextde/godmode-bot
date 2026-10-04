@@ -1,13 +1,14 @@
 import type { Hono } from "hono";
 import { homedir } from "node:os";
 import type { Bootstrap } from "@godmode/shared";
-import { MAX_INSTRUCTIONS_LENGTH, isModelId } from "@godmode/shared";
+import { MAX_INSTRUCTIONS_LENGTH, isModelId, countAttention } from "@godmode/shared";
 import { config } from "../../config";
 import { get } from "../../db";
 import * as vault from "../../vault/vault";
 import { getSettings, updateSettings } from "../../services/settings";
 import { listNotifications, markRead, clearNotifications, unreadCount } from "../../services/notifications";
 import { audit, listAudit } from "../../services/audit";
+import { listAttention } from "../../services/attention";
 import { runDoctor, installDependency } from "../../services/doctor";
 import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
 import { PERMISSION_IDS, checkPermissions, fixPermission } from "../../services/permissions";
@@ -52,8 +53,11 @@ export function registerSystemRoutes(app: Hono) {
         openQuestions: count("SELECT COUNT(*) AS c FROM questions WHERE status = 'open'"),
         runningRuns: count("SELECT COUNT(*) AS c FROM runs WHERE status IN ('queued','running')"),
         // A question counts once: as the open question, not also as its notification.
-        unreadNotifications: count("SELECT COUNT(*) AS c FROM notifications WHERE read = 0 AND kind != 'question'"),
+        // Questions and missing logins count once: as the waiting thing ("Needs you"), not also as their notification.
+        unreadNotifications: count("SELECT COUNT(*) AS c FROM notifications WHERE read = 0 AND kind NOT IN ('question', 'missing_login')"),
         messagingRequests: pendingRequestCount(),
+        attention: countAttention(listAttention()),
+        unreadChats: count("SELECT COUNT(*) AS c FROM conversations WHERE unread_run_id IS NOT NULL AND archived = 0"),
       },
     };
     return c.json(data);

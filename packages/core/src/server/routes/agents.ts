@@ -154,6 +154,7 @@ export const routineSchema = z.object({
   filter: z.string().trim().max(2000).optional(),
   enabled: z.boolean().optional(),
   reuseConversation: z.boolean().optional(),
+  notify: z.enum(["always", "failures", "never"]).optional(),
 });
 
 function scopeParam(value: string | undefined): string | null | "all" {

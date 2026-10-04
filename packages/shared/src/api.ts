@@ -2,6 +2,7 @@ import type { SpendKind } from "./budget";
 import type { AgentCharacter } from "./character";
 import type { AgentComputerConfig, ComputerTarget } from "./computer";
 import type {
+  RoutineNotify,
   Agent,
   AgentBrowserConfig,
   AgentPermissions,
@@ -107,6 +108,7 @@ export interface RoutineInput {
   filter?: string;
   enabled?: boolean;
   reuseConversation?: boolean;
+  notify?: RoutineNotify;
 }
 
 export interface WebhookRotateResult {

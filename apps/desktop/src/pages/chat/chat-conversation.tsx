@@ -41,7 +41,7 @@ import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces } from "@/lib/hooks";
-import { onServerEvent } from "@/lib/realtime";
+import { onServerEvent, viewConversation } from "@/lib/realtime";
 import { speak, useVoicePrefs, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
@@ -69,6 +69,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const armVoice = useVoiceSession((s) => s.arm);
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
   const composerRef = useRef<ComposerHandle>(null);
+  useViewing(conversationId);
   const queueRef = useRef<QueueTrayHandle>(null);
   const mountedAt = useRef(Date.now());
   // A profile picked mid-run applies from the next message: keep showing the browser the running agent drives.
@@ -805,4 +806,22 @@ function ConversationSkeleton() {
       </div>
     </div>
   );
+}
+
+/** While this chat is on screen in a focused window, the core knows: it's read, and its runs don't notify. */
+function useViewing(conversationId: string | undefined) {
+  useEffect(() => {
+    if (!conversationId) return;
+    const update = () => viewConversation(document.visibilityState === "visible" && document.hasFocus() ? conversationId : null);
+    update();
+    window.addEventListener("focus", update);
+    window.addEventListener("blur", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.removeEventListener("focus", update);
+      window.removeEventListener("blur", update);
+      document.removeEventListener("visibilitychange", update);
+      viewConversation(null);
+    };
+  }, [conversationId]);
 }
