@@ -59,6 +59,18 @@ const RUST_TRIPLES: Record<string, string> = {
 
 class BuildError extends Error {}
 
+/** "<commit>[+changes] <date>" of the checkout that is built; "unknown" outside a git checkout. */
+function buildStamp(): string {
+  const git = (...args: string[]) => {
+    const res = Bun.spawnSync(["git", ...args], { cwd: repoDir, stdout: "pipe", stderr: "ignore" });
+    return res.exitCode === 0 ? res.stdout.toString().trim() : null;
+  };
+  const commit = git("rev-parse", "--short", "HEAD");
+  if (!commit) return "unknown";
+  const dirty = git("status", "--porcelain", "--untracked-files=no");
+  return `${commit}${dirty ? "+changes" : ""} ${new Date().toISOString().slice(0, 10)}`;
+}
+
 function fail(message: string): never {
   throw new BuildError(message);
 }
@@ -208,7 +220,8 @@ async function compile(opts: {
       sourcemap: "linked",
       bytecode: opts.bytecode,
       naming: { asset: "[dir]/[name].[ext]" },
-      define: { "process.env.NODE_ENV": JSON.stringify("production") },
+      // GODMODE_BUILD: which commit this binary is (every build of a version says the same number otherwise).
+      define: { "process.env.NODE_ENV": JSON.stringify("production"), "process.env.GODMODE_BUILD": JSON.stringify(buildStamp()) },
       throw: false,
     });
   } catch (err) {

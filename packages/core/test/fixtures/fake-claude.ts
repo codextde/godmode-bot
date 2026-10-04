@@ -39,6 +39,15 @@
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
  *               and answers "DREAM {json}". Digest keywords: DREAM_SLEEP hangs and DREAM_CRASH exits 3 (both after
  *               writing the memory), DREAM_NO_REPORT skips the report.
+ *   SESSION_COST  report the cost like Claude Code does: as the total of the whole session ($0.5 more with every
+ *              invocation that resumes it), with the tokens and turns of this invocation only
+ *   TWO_RESULTS  end twice in one process, like Claude Code does when a background task finishes after its answer:
+ *              the second ending counts its own time, turns and tokens, and reports the running total of the cost
+ *   SLOW_STREAM  stream "one two three four five six" word by word as partial messages, 120 ms apart
+ *   SLOW_TASK   a tool call whose background task reports progress three times, 150 ms apart, then completes
+ *   SHOTS:<n>   run <n> tool steps that each answer with a screenshot and a line of text, then answer "shots done".
+ *              With THEN_WAIT:<key> it first waits for the state dir's `<key>-next` file, writes "almost there", and
+ *              waits for `<key>-done`
  *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected,
  *               `/effort ultracode [on|off]` switches Ultracode, and a new effort level ends an Ultracode that the
  *               --settings file turned on)
@@ -662,6 +671,73 @@ if (slash?.[1] === "clear") {
   result(text);
 } else if (prompt.includes("USE_WORKFLOW")) {
   await replay("stream-workflow.jsonl");
+} else if (prompt.includes("SESSION_COST")) {
+  out(init);
+  const costFile = join(stateDir, "sessions", `${sessionId}.cost`);
+  const total = (existsSync(costFile) ? Number(readFileSync(costFile, "utf8")) : 0) + 0.5;
+  writeFileSync(costFile, String(total));
+  textTurn("spent");
+  result("spent", { total_cost_usd: total });
+} else if (prompt.includes("TWO_RESULTS")) {
+  out(init);
+  textTurn("first answer");
+  result("first answer", { total_cost_usd: 0.25, duration_ms: 1000, num_turns: 3, usage: { input_tokens: 10, output_tokens: 20, cache_read_input_tokens: 30, cache_creation_input_tokens: 40 } });
+  await pause(20);
+  textTurn("the background task finished");
+  result("the background task finished", { total_cost_usd: 0.3, duration_ms: 200, num_turns: 1, usage: { input_tokens: 1, output_tokens: 2, cache_read_input_tokens: 3, cache_creation_input_tokens: 4 } });
+} else if (prompt.includes("SLOW_TASK")) {
+  out(init);
+  const toolId = "toolu_slow_task";
+  out({ type: "assistant", message: { id: `msg_${crypto.randomUUID()}`, role: "assistant", content: [{ type: "tool_use", id: toolId, name: "Task", input: { description: "Count" } }] }, parent_tool_use_id: null, session_id: sessionId });
+  out({ type: "system", subtype: "task_started", task_id: "task_1", tool_use_id: toolId, task_type: "local_agent", description: "Count words", session_id: sessionId });
+  for (let i = 1; i <= 3; i++) {
+    await pause(150);
+    out({ type: "system", subtype: "task_progress", task_id: "task_1", description: `step ${i}`, usage: { total_tokens: i * 100, tool_uses: i, duration_ms: i * 10 }, session_id: sessionId });
+  }
+  await pause(150);
+  out({ type: "system", subtype: "task_notification", task_id: "task_1", status: "completed", usage: { total_tokens: 400, tool_uses: 4, duration_ms: 40 }, session_id: sessionId });
+  out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: toolId, content: "counted" }] }, parent_tool_use_id: null, session_id: sessionId });
+  textTurn("task done");
+  result("task done");
+} else if (prompt.includes("SLOW_STREAM")) {
+  out(init);
+  const id = `msg_${crypto.randomUUID()}`;
+  const words = ["one", " two", " three", " four", " five", " six"];
+  const event = (ev: unknown) => out({ type: "stream_event", event: ev, parent_tool_use_id: null, session_id: sessionId });
+  event({ type: "message_start", message: { id, role: "assistant", model: "fake-model", content: [] } });
+  event({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+  for (const w of words) {
+    event({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: w } });
+    await pause(120);
+  }
+  event({ type: "content_block_stop", index: 0 });
+  out({ type: "assistant", message: { id, role: "assistant", content: [{ type: "text", text: words.join("") }] }, parent_tool_use_id: null, session_id: sessionId });
+  result(words.join(""));
+} else if (/SHOTS:(\d+)/.test(prompt)) {
+  out(init);
+  const count = Number(/SHOTS:(\d+)/.exec(prompt)![1]);
+  // A PNG header and filler: what matters is its size.
+  const image = `iVBORw0KGgo${"A".repeat(4000)}`;
+  for (let i = 0; i < count; i++) {
+    const id = `toolu_shot_${i}`;
+    out({ type: "assistant", message: { id: `msg_${crypto.randomUUID()}`, role: "assistant", content: [{ type: "tool_use", id, name: "mcp__browser__browser_screenshot", input: { n: i } }] }, parent_tool_use_id: null, session_id: sessionId });
+    await pause(3);
+    out({
+      type: "user",
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: [{ type: "text", text: `shot ${i}` }, { type: "image", source: { type: "base64", media_type: "image/png", data: `${image}${i}` } }] }] },
+      parent_tool_use_id: null,
+      session_id: sessionId,
+    });
+    await pause(3);
+  }
+  const key = /THEN_WAIT:([\w-]+)/.exec(prompt)?.[1];
+  if (key) {
+    for (let i = 0; i < 400 && !existsSync(join(stateDir, `${key}-next`)); i++) await pause(50);
+    textTurn("almost there");
+    for (let i = 0; i < 400 && !existsSync(join(stateDir, `${key}-done`)); i++) await pause(50);
+  }
+  textTurn("shots done");
+  result("shots done");
 } else if (prompt.includes("USE_TOOL")) {
   await replay("stream-tooluse.jsonl");
 } else {

@@ -398,6 +398,31 @@ describe("StreamAccumulator — synthetic cases", () => {
   });
 });
 
+describe("StreamAccumulator — a process that ends more than once", () => {
+  const result = (extra: Record<string, unknown>) => ({ type: "result", subtype: "success", is_error: false, session_id: "s1", ...extra });
+
+  test("time, turns and tokens add up; the cost is the latest total", () => {
+    const acc = new StreamAccumulator();
+    acc.push(result({ result: "answer", total_cost_usd: 1.5, duration_ms: 60_000, num_turns: 12, usage: { input_tokens: 5, output_tokens: 100, cache_read_input_tokens: 1000, cache_creation_input_tokens: 50 } }));
+    acc.push(result({ result: "the task finished", total_cost_usd: 1.75, duration_ms: 8_000, num_turns: 1, usage: { input_tokens: 2, output_tokens: 10, cache_read_input_tokens: 2000, cache_creation_input_tokens: 0 } }));
+    expect(acc.results).toBe(2);
+    expect(acc.final).toMatchObject({
+      text: "the task finished",
+      costUsd: 1.75,
+      durationMs: 68_000,
+      numTurns: 13,
+      usage: { inputTokens: 7, outputTokens: 110, cacheReadTokens: 3000, cacheWriteTokens: 50 },
+    });
+  });
+
+  test("an ending that says less keeps what the one before said", () => {
+    const acc = new StreamAccumulator();
+    acc.push(result({ result: "answer", total_cost_usd: 0.4, duration_ms: 1000, num_turns: 2, usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 1, cache_creation_input_tokens: 1 } }));
+    acc.push(result({ result: "again" }));
+    expect(acc.final).toMatchObject({ costUsd: 0.4, durationMs: 1000, numTurns: 2, usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 1, cacheWriteTokens: 1 } });
+  });
+});
+
 describe("helpers", () => {
   test("displayToolName", () => {
     expect(displayToolName("mcp__browser__browser_navigate")).toBe("browser_navigate");

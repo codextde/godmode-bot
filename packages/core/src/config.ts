@@ -4,6 +4,8 @@ import { mkdirSync, chmodSync } from "node:fs";
 import { DEFAULT_PORT } from "@godmode/shared";
 
 export const VERSION = "0.1.0";
+/** The commit a compiled core was built from (scripts/build.ts); "dev" when it runs from source. */
+export const BUILD = process.env.GODMODE_BUILD || "dev";
 
 export type RunMode = "desktop" | "server";
 

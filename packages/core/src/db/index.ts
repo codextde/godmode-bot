@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { chmodSync } from "node:fs";
 import { MIGRATIONS } from "./migrations";
+import { noteSync } from "../diagnostics/slow";
 import { logger } from "../log";
 
 const log = logger("db");
@@ -63,7 +64,7 @@ function migrate(instance: Database) {
 type Param = string | number | bigint | boolean | null | Uint8Array;
 
 const SLOW_QUERY_MS = 100;
-const slowLogged = new Map<string, number>();
+const slowLogged = new Map<string, { at: number; skipped: number }>();
 
 /** Slow statements go to the diagnostic log (SQL only — parameters may hold secrets), at most once a minute each. */
 function timed<T>(sql: string, fn: () => T): T {
@@ -74,12 +75,16 @@ function timed<T>(sql: string, fn: () => T): T {
     const ms = performance.now() - started;
     if (ms >= SLOW_QUERY_MS) {
       const key = sql.replace(/\s+/g, " ").trim().slice(0, 300);
+      // The database is synchronous: a slow statement is a stalled event loop, and the stall's entry names it.
+      noteSync(`db: ${key.slice(0, 120)}`, ms);
       const now = Date.now();
-      if (now - (slowLogged.get(key) ?? 0) >= 60_000) {
+      const seen = slowLogged.get(key);
+      if (now - (seen?.at ?? 0) >= 60_000) {
         if (slowLogged.size > 500) slowLogged.clear();
-        slowLogged.set(key, now);
-        log.warn("slow database query", { sql: key, ms: Math.round(ms) });
-      }
+        slowLogged.set(key, { at: now, skipped: 0 });
+        // `times`: how often it was this slow since its last entry (repeats within a minute aren't logged one by one).
+        log.warn("slow database query", { sql: key, ms: Math.round(ms), ...(seen?.skipped ? { times: seen.skipped + 1 } : {}) });
+      } else if (seen) seen.skipped++;
     }
   }
 }

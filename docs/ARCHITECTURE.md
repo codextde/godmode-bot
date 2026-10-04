@@ -180,6 +180,14 @@ cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <a
 
 Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + result) and pushed as
 `run.delta` WS events; the final assistant message is stored in SQLite and in the agent repo.
+A long run has hundreds of blocks and megabytes of tool output and screenshots, and all but the last few never change
+again: each block is masked and serialized once and made again only when it changed (or when the vault learned or
+forgot a secret). A delta carries what changed (`patch`, see WebSocket); the row saved every few seconds while the run
+works is put together from the serialized blocks, less often the longer saving takes (never more than 1/50 of the time).
+Claude Code reports a run's cost as the total of its whole Claude session, so on a resumed session the chat's earlier
+runs are in it: the run is charged that total minus what the session had counted before
+(`conversations.claude_session_cost_usd`). A process can end more than once (a background task that finishes wakes it
+for another turn); time, turns and tokens of the endings add up.
 Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-conversation lock prevents
 two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
 works in its own tabs (see Browser).
@@ -312,23 +320,33 @@ directory are masked; request paths are logged as route patterns. `info` and up 
 
 | Scope | Entries |
 |---|---|
-| `runner` | One per run: status, duration, queue wait, cost, tokens, tool calls, failed tools with their error |
-| `http` | Requests slower than 1 s, rejected requests (4xx except sign-in, vault-locked and grant prompts), unknown API routes, 5xx with stack; every request with `verbose` |
+| `runner` | A run's start, and one entry when it ends: status, duration (`ms`: Claude's own, `wallMs`: by the clock), queue wait, cost, tokens, tokens read per turn (`contextTokens`), the session's total on a resumed one, tool calls, failed tools with the head and end of their output, how heavy the message got (`blocks`, `resultKb`, `images`, `imageKb`, `deltas`, `slowestSaveMs`) |
+| `http` | Requests slower than 1 s (`expected` when the route waits by design — `expectSlow`), rejected requests (4xx except sign-in, vault-locked and grant prompts), unknown API routes, 5xx with stack; every request with `verbose` |
 | `mcp` | Agent tool calls slower than 10 s or returning an error, crashes, unknown tools |
-| `db` | Statements slower than 100 ms (SQL only, once a minute each) |
-| `perf` | Event-loop stalls over 300 ms, sleep/wake gaps, memory every 30 min |
+| `db` | Statements slower than 100 ms (SQL only, once a minute each, with how often it was that slow meanwhile) |
+| `perf` | Event-loop stalls over 300 ms with what the core was doing (`during`: slow synchronous work noted through `diagnostics/slow.ts`) and the runs at work; a sleep after real use or under a run (`sleptAt`; the stirring of a sleeping computer is only counted); every 30 min memory, database size, connected UIs and those sleeps — "high memory use" once, and again when it grew by a quarter |
+| `browser` | A browser that went away by itself: whether its process was still alive, how the connection ended, how long it ran and sat idle |
+| `sources` | A failed clone or update with git's own words, the step and how long it took |
 | `crash` | Uncaught exceptions and unhandled rejections (the core still exits with 1) |
 | `ui` | Render crashes, uncaught errors and failed requests that never reached the core (`POST /api/logs/client`, 60 a minute) |
 
 Settings → Logs reads it through `GET /api/logs` (counts, recurring warnings/errors grouped by message without ids and
 numbers), `GET /api/logs/entries?level=&search=&limit=` and `GET /api/logs/report[?full=1]`: Markdown for an AI with
-the environment, recurring problems, a run summary, slow spots, the tail of `desktop.log` and the newest entries that fit
-in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
+the environment (with the build's commit), recurring problems, a run summary (cost by agent, runs that took far longer
+by the clock than Claude worked), memory and sleep, slow spots (requests, by-design waits apart, tool calls, queries,
+stalls and what blocked them), the tail of `desktop.log` and the newest entries that fit in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
 
 ## WebSocket (`/api/ws`)
 
 Server → UI events are defined in `packages/shared/src/events.ts`. The UI keeps React Query caches in sync
 (`apps/desktop/src/lib/realtime.ts`). Browser live view frames are only sent to subscribed clients.
+
+`run.delta` counts up per stretch of a run (`stream`, `seq`: a paused run continues in a new stretch). A client that
+says `deltas.patch` gets only what changed (`patch`: `[index, block]` pairs, `length`: how long the list is afterwards)
+and applies it with `applyRunDelta`; when a delta doesn't fit what it has (one was missed), it asks for the whole list
+with `run.resync`. A client that connects, or a phone that
+opens a chat, is sent the whole list of what runs there. Clients that don't ask for patches (older phone apps) get the
+whole list, at most once a second per run.
 
 ## Browser
 

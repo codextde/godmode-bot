@@ -341,6 +341,8 @@ export function setConversationState(
   id: string,
   patch: {
     claudeSessionId?: string | null;
+    /** What Claude Code has counted for that session so far. A session set without it starts uncounted. */
+    claudeSessionCostUsd?: number | null;
     /** `instructionsDigest` of the standing instructions the Claude session has seen. */
     instructionsDigest?: string;
     /** `memoryDigest` of the MEMORY.md the Claude session has seen. */
@@ -355,6 +357,7 @@ export function setConversationState(
 ) {
   update("conversations", id, {
     claude_session_id: patch.claudeSessionId,
+    claude_session_cost_usd: patch.claudeSessionCostUsd !== undefined ? patch.claudeSessionCostUsd : patch.claudeSessionId !== undefined ? null : undefined,
     instructions_digest: patch.instructionsDigest,
     memory_digest: patch.memoryDigest,
     archived: int(patch.archived),

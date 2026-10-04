@@ -25,6 +25,7 @@ export interface StreamFinal {
   isError: boolean;
   /** "success" | "error_max_turns" | "error_during_execution" | "error_max_budget_usd" | … */
   subtype: string | null;
+  /** Claude Code's total for the whole Claude session: on a resumed session the runs before this one are in it. */
   costUsd: number | null;
   durationMs: number | null;
   numTurns: number | null;
@@ -155,6 +156,16 @@ function workflowAgents(progress: unknown): ToolTaskAgent[] | null {
     });
   }
   return agents;
+}
+
+export function addUsage(a: RunUsage | null, b: RunUsage | null): RunUsage | null {
+  if (!a || !b) return a ?? b;
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+  };
 }
 
 export class StreamAccumulator {
@@ -572,10 +583,10 @@ export class StreamAccumulator {
     const errors = Array.isArray(e.errors) ? e.errors.filter((x): x is string => typeof x === "string") : [];
     const resultText = str(e.result);
     this.sessionId = str(e.session_id) ?? this.sessionId;
-    // A workflow that ends after its turn starts another turn in the same process, with a result of its own: time, turns
-    // and tokens are per result, the cost is the session's so far.
+    // Claude Code can end more than once in one process: a workflow or a background task that outlives its turn starts
+    // another turn, with a result of its own. Time, turns and tokens are per result, so they add up; the cost is the
+    // session's so far.
     const prev = this.final;
-    const usage = mapUsage(e.usage);
     this.results++;
     this.final = {
       text: resultText ?? this.lastTurnText(),
@@ -584,15 +595,7 @@ export class StreamAccumulator {
       costUsd: num(e.total_cost_usd) ?? prev?.costUsd ?? null,
       durationMs: plus(prev?.durationMs, num(e.duration_ms)),
       numTurns: plus(prev?.numTurns, num(e.num_turns)),
-      usage:
-        usage && prev?.usage
-          ? {
-              inputTokens: usage.inputTokens + prev.usage.inputTokens,
-              outputTokens: usage.outputTokens + prev.usage.outputTokens,
-              cacheReadTokens: usage.cacheReadTokens + prev.usage.cacheReadTokens,
-              cacheWriteTokens: usage.cacheWriteTokens + prev.usage.cacheWriteTokens,
-            }
-          : (usage ?? prev?.usage ?? null),
+      usage: addUsage(prev?.usage ?? null, mapUsage(e.usage)),
       sessionId: this.sessionId,
       errors,
       apiErrorStatus: num(e.api_error_status),
@@ -632,31 +635,33 @@ function redactDeep(value: unknown, redact: (s: string) => string, depth = 0): u
   return out;
 }
 
-/** Copy of `blocks` with every string (text, tool input, results) passed through `redact`. */
+/** Copy of `block` with every string (text, tool input, results) passed through `redact`. */
+export function redactBlock(b: MessageBlock, redact: (s: string) => string): MessageBlock {
+  switch (b.type) {
+    case "tool_use":
+      return {
+        ...b,
+        input: redactDeep(b.input, redact),
+        ...(b.result !== undefined ? { result: redact(b.result) } : {}),
+        ...(b.task
+          ? { task: { ...b.task, description: redact(b.task.description), activity: redact(b.task.activity), agents: b.task.agents.map((a) => ({ ...a, label: redact(a.label), phase: redact(a.phase) })) } }
+          : {}),
+      };
+    case "text":
+    case "thinking":
+    case "error":
+    case "notice":
+    case "user_message":
+      return { ...b, text: redact(b.text) };
+    case "command":
+      return { ...b, args: redact(b.args), output: redact(b.output) };
+    default:
+      return b;
+  }
+}
+
 export function redactBlocks(blocks: MessageBlock[], redact: (s: string) => string): MessageBlock[] {
-  return blocks.map((b) => {
-    switch (b.type) {
-      case "tool_use":
-        return {
-          ...b,
-          input: redactDeep(b.input, redact),
-          ...(b.result !== undefined ? { result: redact(b.result) } : {}),
-          ...(b.task
-            ? { task: { ...b.task, description: redact(b.task.description), activity: redact(b.task.activity), agents: b.task.agents.map((a) => ({ ...a, label: redact(a.label), phase: redact(a.phase) })) } }
-            : {}),
-        };
-      case "text":
-      case "thinking":
-      case "error":
-      case "notice":
-      case "user_message":
-        return { ...b, text: redact(b.text) };
-      case "command":
-        return { ...b, args: redact(b.args), output: redact(b.output) };
-      default:
-        return b;
-    }
-  });
+  return blocks.map((b) => redactBlock(b, redact));
 }
 
 /* ------------------------------------------------------------------ */

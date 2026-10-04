@@ -161,8 +161,20 @@ function bearer(c: Context): string {
   return header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
 }
 
+const waiting = new WeakSet<Request>();
+
+/** The request waits for something that takes its time (a VM, a download, git): slow by design, the log says so. */
+export function expectSlow(c: Context) {
+  waiting.add(c.req.raw);
+}
+
+export function isExpectedSlow(c: Context): boolean {
+  return waiting.has(c.req.raw);
+}
+
 /** Long requests (tool calls, VM boots, downloads) must not be cut off by Bun's idle timeout. */
 export function disableIdleTimeout(c: Context) {
+  expectSlow(c);
   try {
     const server = (c.env as { server?: { timeout?: (req: Request, seconds: number) => void } } | undefined)?.server;
     server?.timeout?.(c.req.raw, 0);

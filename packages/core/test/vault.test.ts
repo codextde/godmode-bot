@@ -163,6 +163,17 @@ describe("vault lifecycle", () => {
     expect(vault.open(sealed, "credentials.password:cred_a")).toBe("my-password");
   }, SLOW);
 
+  test("words every login page uses are never masked, and the epoch moves when what is masked changes", () => {
+    const before = vault.redactionEpoch();
+    vault.rememberSecret("password");
+    vault.rememberSecret("Username");
+    expect(vault.redactionEpoch()).toBe(before);
+    expect(vault.redact("Could not find a password field for the username")).toBe("Could not find a password field for the username");
+    vault.rememberSecret("hunter2-epoch-probe");
+    expect(vault.redactionEpoch()).not.toBe(before);
+    expect(vault.redact("typed hunter2-epoch-probe")).toBe("typed ••••••••");
+  });
+
   test("app secrets are encrypted and redacted", () => {
     vault.setAppSecret("openai_api_key", "sk-test-1234567890");
     expect(vault.hasAppSecret("openai_api_key")).toBe(true);
