@@ -20,15 +20,30 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Subprocess } from "bun";
-import type { Agent, BrowserProfile, ComputerTarget, Effort, Message, PauseReason, Run, RunStatus, RunTrigger, RunUsage } from "@godmode/shared";
-import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, isModelId, parseSlashCommand } from "@godmode/shared";
-import { all, get, insert, run as sql } from "../db";
+import type {
+  Agent,
+  BrowserProfile,
+  ComputerTarget,
+  Effort,
+  Message,
+  PauseReason,
+  QuestionAnswer,
+  QuestionStatus,
+  Run,
+  RunStatus,
+  RunTrigger,
+  RunUsage,
+  ServerEvent,
+  TaskPriority,
+} from "@godmode/shared";
+import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, TASK_PRIORITY_RANK, isModelId, parseSlashCommand } from "@godmode/shared";
+import { all, get, insert, run as sql, tx } from "../db";
 import { bus } from "../events/bus";
 import { setWelcomeEvents } from "../server/ws";
 import { excerpt, logger } from "../log";
 import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson } from "../util";
 import { isUnlocked, redact } from "../vault/vault";
-import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentStatus, touchAgentRun } from "../agents/service";
+import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentFailedRun, setAgentStatus, teamOf, touchAgentRun } from "../agents/service";
 import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { getSettings } from "../services/settings";
@@ -47,14 +62,36 @@ import {
   updateMessage,
 } from "../services/conversations";
 import { startQueued, takeQueued } from "../services/messageQueue";
-import { MAX_RETRIES, dropPause, limitReached, pausedConversations, pausedRun, savePause, stopContinuing, type LimitPause, type PausedRow } from "../services/pauses";
+import {
+  announceQuestion,
+  owedAnswer,
+  saveQuestion,
+  settleBlock,
+  settleOwed,
+  withdrawOpenBlocks,
+  withdrawQuestion,
+  type PendingQuestion,
+  type ResumedAnswer,
+} from "../services/questions";
+import { MAX_RETRIES, dropPause, limitReached, pauseOf, pausedConversations, pausedRun, savePause, stopContinuing, type LimitPause, type PausedRow } from "../services/pauses";
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
 import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor } from "./models";
-import { buildDreamSystemPrompt, buildSystemPrompt, continueContext, instructionsDigest, instructionsSection, queuedMessagesContext, resumeContextPrefix, type PromptApiTool, type PromptVm } from "./prompt";
+import {
+  buildDreamSystemPrompt,
+  buildSystemPrompt,
+  continueContext,
+  instructionsDigest,
+  instructionsSection,
+  lateAnswerContext,
+  queuedMessagesContext,
+  resumeContextPrefix,
+  type PromptApiTool,
+  type PromptVm,
+} from "./prompt";
 import { apiToolEnv, apiToolEnvOwners, apiToolsForAgent } from "../integrations/apiTools";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
 import { attachVm, detachVm, type RunVm } from "../vm/service";
@@ -162,9 +199,13 @@ export function getRun(id: string): Run {
   return toRun(row);
 }
 
-export function listRuns(opts: { agentId?: string; status?: string; conversationId?: string; limit?: number } = {}): Run[] {
+export function listRuns(opts: { agentId?: string; status?: string; conversationId?: string; parentRunId?: string; limit?: number } = {}): Run[] {
   const where: string[] = [];
   const params: (string | number)[] = [];
+  if (opts.parentRunId) {
+    where.push("parent_run_id = ?");
+    params.push(opts.parentRunId);
+  }
   if (opts.agentId) {
     where.push("agent_id = ?");
     params.push(opts.agentId);
@@ -250,14 +291,34 @@ interface Job {
   /**
    * The run is to stand still. `applied` once Godmode stopped it for that: a run that ends by itself before simply ends.
    */
-  pause?: { reason: PauseReason; applied: boolean; /** Claude Code was told to stop between two steps. */ atStep?: boolean } & Partial<LimitPause>;
+  pause?: {
+    reason: PauseReason;
+    applied: boolean;
+    /** Claude Code was told to stop between two steps. */
+    atStep?: boolean;
+    /** Godmode stopped the process while a step was still running (the grace time ran out). */
+    killed?: boolean;
+    /** What the run asked the human (`question` pauses): stored once the run stands still for it. */
+    question?: PendingQuestion;
+  } & Partial<LimitPause>;
   pauseTimer?: ReturnType<typeof setTimeout> | null;
   /**
    * The run continues after a pause. `redo`: what Claude never got and is sent again; null = it has everything.
    * `byTimer`: the limit had reset and Godmode continued it. `choice`: what the human set for this run with the Auto
    * switch (null = the setting decides).
    */
-  resumed?: { reason: PauseReason; pausedAt: string; redo: string | null; byTimer: boolean; choice: boolean | null; retries: number };
+  resumed?: {
+    reason: PauseReason;
+    pausedAt: string;
+    redo: string | null;
+    byTimer: boolean;
+    choice: boolean | null;
+    retries: number;
+    /** The run stood still for a question and continues with the human's answer. */
+    answer?: ResumedAnswer | null;
+  };
+  /** An answer the chat's agent hadn't read yet (an earlier run broke off): this run's prompt starts with it. */
+  lateAnswer?: string;
   /** What this stretch of the run sends to Claude. */
   body?: string;
   /** Claude Code asks Godmode between two steps of this run (PostToolBatch hook). */
@@ -495,21 +556,58 @@ function applyPause(job: Job) {
   if (!job.pause || job.pause.applied) return;
   job.pause.applied = true;
   // A job still in setup (no process yet) checks `halted` before spawning.
-  if (job.proc) killTree(job.proc);
+  if (job.proc) {
+    job.pause.killed = stepRunning(job);
+    killTree(job.proc);
+  }
 }
 
-/** Claude Code asks between two steps of a run (PostToolBatch hook): true = stop here, the run is being paused. */
-export function pauseAtStep(runId: string): boolean {
+/**
+ * Claude Code asks between two steps of a run (PostToolBatch hook): the reason the run is being stopped here (it is
+ * being paused, or it waits for the human's answer), or null to go on.
+ */
+export function pauseAtStep(runId: string): PauseReason | null {
   const job = jobs.get(runId);
-  if (!job?.pause || job.cancelReason) return false;
+  if (!job?.pause || job.cancelReason) return null;
   // Already being stopped for the pause: it gets nothing more to do.
-  if (job.pause.applied) return true;
+  if (job.pause.applied) return job.pause.reason;
   if (job.pauseTimer) clearTimeout(job.pauseTimer);
   job.pause.applied = true;
   job.pause.atStep = true;
   // Claude Code ends by itself now; a process that doesn't is stopped.
   job.pauseTimer = setTimeout(() => job.proc && killTree(job.proc), KILL_GRACE_MS);
-  return true;
+  return job.pause.reason;
+}
+
+/** Why the run can't ask the human right now (`ask_human`, `request_approval`), or null when it can. */
+export function questionRefusal(runId: string, human: string): string | null {
+  const job = jobs.get(runId);
+  if (!job || job.status !== "running" || job.cancelReason || job.timedOut) return "This run is being stopped — nothing was asked.";
+  if (job.pause?.question) {
+    return `You already asked “${job.pause.question.block.title}” in this step and it hasn't been answered. One at a time: stop now, and ask the next one after the answer.`;
+  }
+  if (job.pause) return `${human} is pausing this run right now — ask again when it continues.`;
+  return null;
+}
+
+/**
+ * The run asked the human: it stands still at its next step (the PostToolBatch hook stops it there, or Godmode does
+ * after a moment) and the question is stored and announced then (`suspend`). Returns a refusal, or null.
+ */
+export function askPause(runId: string, question: PendingQuestion, human: string): string | null {
+  const refused = questionRefusal(runId, human);
+  if (refused) return refused;
+  const job = jobs.get(runId)!;
+  job.pause = { reason: "question", applied: false, question };
+  job.acc.blocks.push(question.block);
+  job.lastPersistAt = 0;
+  emitDelta(job);
+  emitActivity(job, "Asking you…");
+  // The ask is a step of its own: Claude Code asks the hook as soon as it is answered. Without a hook (or when a step of
+  // a subagent asked), the run is stopped after the same grace a pause gets.
+  if (job.proc) job.pauseTimer = setTimeout(() => applyPause(job), PAUSE_GRACE_MS);
+  else applyPause(job);
+  return null;
 }
 
 /** Why the run must not go on: it was stopped, or it is to stand still. */
@@ -523,14 +621,28 @@ function halted(job: Job): Outcome | null {
  * Continue a paused run where it stopped: it goes back into the queue, ahead of what waited behind it, with what it
  * did so far. `by`: the human, or Godmode once the limit has reset.
  */
-export function resumeRun(p: PausedRow, by: "user" | "auto" = "user"): Run {
+export function resumeRun(
+  p: PausedRow,
+  by: "user" | "auto" = "user",
+  answer: ResumedAnswer | null = null,
+  settled: (QuestionAnswer & { status: QuestionStatus }) | null = null,
+): Run {
   if (shuttingDown) throw new HttpError(503, "Godmode is shutting down", "shutting_down");
   const row = get<RunRow>("SELECT * FROM runs WHERE id = ?", p.run_id);
   if (!row || row.status !== "paused") throw conflict("That run isn't paused anymore");
   const agent = getAgent(row.agent_id);
+  if (p.reason === "question" && !answer) {
+    throw new HttpError(409, `${agent.name} is waiting for your answer — answer the question to continue.`, "needs_answer");
+  }
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   const ts = now();
-  const blocks = getMessage(p.message_id).blocks.map((b) => (b.type === "pause" && !b.resumedAt ? { ...b, resumedAt: ts } : b));
+  let blocks = getMessage(p.message_id).blocks.map((b) => (b.type === "pause" && !b.resumedAt ? { ...b, resumedAt: ts } : b));
+  if (answer && settled) {
+    const { status, ...given } = settled;
+    blocks = settleBlock(blocks, answer.questionId, { status, answer: given });
+    // The card shows the answer at once, also where nobody follows the run's stream.
+    updateMessage(p.message_id, { blocks });
+  }
   const kept = unanswered.get(row.id);
   unanswered.delete(row.id);
   const job: Job = {
@@ -557,6 +669,7 @@ export function resumeRun(p: PausedRow, by: "user" | "auto" = "user"): Run {
       byTimer: by === "auto",
       choice: p.choice === null ? null : p.choice === 1,
       retries: p.reason === "limit" ? p.retries : 0,
+      answer,
     },
     spent: { costUsd: row.cost_usd, durationMs: row.duration_ms, numTurns: row.num_turns, usage: parseJson<RunUsage | null>(row.usage, null) },
     timedOut: false,
@@ -594,9 +707,11 @@ function closePaused(row: RunRow, reason: string): void {
   if (p && convAlive) {
     safely("close the paused message", () => {
       const message = getMessage(p.message_id);
-      assistant = updateMessage(p.message_id, { blocks: [...message.blocks, { type: "notice", level: "info", text: reason }] });
+      const blocks = p.reason === "question" ? withdrawOpenBlocks(message.blocks, reason === "Cancelled" || reason === "Cancelled by user" ? null : reason) : message.blocks;
+      assistant = updateMessage(p.message_id, { blocks: [...blocks, { type: "notice", level: "info", text: reason }] });
     });
   }
+  if (p?.reason === "question") safely("withdraw the question", () => withdrawQuestion(row.id, reason));
   const run = getRun(row.id);
   if (p && convAlive && row.started_at) {
     safely("append transcript", () => {
@@ -671,19 +786,23 @@ export function recoverInterruptedRuns(): void {
   if (!stale.length) return;
   const ts = now();
   const agentIds = new Set<string>();
+  // An agent that was working when Godmode stopped says "Last run failed" until it runs again (latest run wins).
+  const broke = new Map<string, string>();
   for (const r of stale) {
     sql("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?", INTERRUPTED, ts, r.id);
     agentIds.add(r.agent_id);
+    if (r.status === "running" && r.trigger !== "dream" && r.trigger !== "check") broke.set(r.agent_id, r.id);
     for (const m of all<{ id: string; content: string; blocks: string }>(
       "SELECT id, content, blocks FROM messages WHERE run_id = ? AND role = 'assistant'",
       r.id,
     )) {
-      const blocks = parseJson<Message["blocks"]>(m.blocks, []);
+      const blocks = withdrawOpenBlocks(parseJson<Message["blocks"]>(m.blocks, []), "Godmode restarted before this was asked.");
       blocks.push({ type: "error", text: INTERRUPTED });
       sql("UPDATE messages SET blocks = ? WHERE id = ?", JSON.stringify(blocks), m.id);
     }
   }
   for (const agentId of agentIds) safely("reset agent status", () => setAgentStatus(agentId, "idle"));
+  for (const [agentId, runId] of broke) safely("remember the failure", () => setAgentFailedRun(agentId, runId));
   log.info(`marked ${stale.length} interrupted run(s) as failed`);
   bus.changed("runs");
 }
@@ -721,7 +840,7 @@ function pump() {
   let running = [...jobs.values()].filter((j) => j.status === "running" && j.trigger !== "dream").length;
   const blocked = new Set<string>();
   const frozen = queue.length ? pausedConversations() : null;
-  for (const runId of [...queue]) {
+  for (const runId of ticketOrder()) {
     const job = jobs.get(runId);
     if (!job) {
       queue.splice(queue.indexOf(runId), 1);
@@ -734,7 +853,7 @@ function pump() {
     }
     // A paused run keeps its place: what came after it waits until it continues or is stopped.
     if (frozen?.has(job.conversationId)) {
-      emitActivity(job, "Waiting — this chat is paused");
+      emitActivity(job, pauseOf(job.conversationId)?.reason === "question" ? "Waiting — this chat waits for your answer" : "Waiting — this chat is paused");
       blocked.add(job.conversationId);
       continue;
     }
@@ -780,6 +899,40 @@ function pump() {
         pump();
       });
   }
+}
+
+/**
+ * The queue with board tickets' runs in priority order (then the earliest due day, then first come). Only the places
+ * ticket runs hold are shared out among them: the human's chat, an automation or a run that continues after a pause
+ * keeps its turn, and the runs of one ticket keep their order.
+ */
+function ticketOrder(): string[] {
+  const order = [...queue];
+  const candidates = order
+    .map((runId, index) => ({ runId, index, job: jobs.get(runId) }))
+    .filter((c) => c.job && !c.job.resumed && (c.job.trigger === "task" || c.job.trigger === "followup"));
+  if (candidates.length < 2) return order;
+  const convs = [...new Set(candidates.map((c) => c.job!.conversationId))];
+  const tickets = new Map(
+    all<{ conversation_id: string; priority: TaskPriority; due_date: string | null }>(
+      `SELECT conversation_id, priority, due_date FROM tasks WHERE conversation_id IN (${convs.map(() => "?").join(",")})`,
+      ...convs,
+    ).map((t) => [t.conversation_id, t]),
+  );
+  const slots = candidates.filter((c) => tickets.has(c.job!.conversationId));
+  if (slots.length < 2) return order;
+  const key = (c: (typeof slots)[number]) => tickets.get(c.job!.conversationId)!;
+  const sorted = [...slots].sort((a, b) => {
+    const ta = key(a);
+    const tb = key(b);
+    return (
+      (TASK_PRIORITY_RANK[ta.priority] ?? 2) - (TASK_PRIORITY_RANK[tb.priority] ?? 2) ||
+      (ta.due_date ?? "9999").localeCompare(tb.due_date ?? "9999") ||
+      a.index - b.index
+    );
+  });
+  slots.forEach((slot, i) => (order[slot.index] = sorted[i]!.runId));
+  return order;
 }
 
 /** A running job of the same agent that conflicts with `job` over the agent's memory (one of them is a dream). */
@@ -958,10 +1111,27 @@ export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record
   return env;
 }
 
+/** The agent's place on the team for its prompt; a lookup that fails leaves the block without a reporting line. */
+function teamFor(agent: Agent): ReturnType<typeof teamOf> | undefined {
+  try {
+    return teamOf(agent);
+  } catch (err) {
+    log.warn(`could not read the team of agent ${agent.id}`, err);
+    return undefined;
+  }
+}
+
+// A new socket learns every active run (so a reloaded app shows the truth, queued apart from running) and its label.
 setWelcomeEvents(() =>
-  [...jobs.values()]
-    .filter((j) => j.lastLabel)
-    .map((j) => ({ type: "run.activity" as const, runId: j.runId, agentId: j.agentId, label: j.lastLabel })),
+  [...jobs.values()].flatMap((j): ServerEvent[] => {
+    let started: Run | null = null;
+    try {
+      started = getRun(j.runId);
+    } catch {
+      return [];
+    }
+    return [{ type: "run.started", run: started }, ...(j.lastLabel ? [{ type: "run.activity" as const, runId: j.runId, agentId: j.agentId, label: j.lastLabel }] : [])];
+  }),
 );
 
 function emitActivity(job: Job, label: string) {
@@ -1105,13 +1275,16 @@ async function spawnClaude(
       return;
     }
     if (job.acc.push(event)) scheduleDelta(job);
-    emitActivity(job, job.pause && !job.cancelReason ? "Pausing…" : job.acc.activityLabel());
+    emitActivity(job, job.pause && !job.cancelReason ? (job.pause.reason === "question" ? "Asking you…" : "Pausing…") : job.acc.activityLabel());
   });
   const exitCode = await proc.exited;
   const stderr = await stderrP;
   job.proc = null;
   return { exitCode, stderr, noise };
 }
+
+/** Who wrote a user message, as a recap names them. */
+const SOURCE_SPEAKER: Record<NonNullable<Message["source"]> | "human", string> = { human: "User", automation: "Automation", delegation: "Delegated task", task: "Task" };
 
 function recapPrefix(job: Job): string {
   // A run that continues after a pause sends a note instead of its prompt: its own task and answer so far belong to the recap.
@@ -1120,11 +1293,14 @@ function recapPrefix(job: Job): string {
     .filter((m) => !own(m.id) && m.role !== "system" && m.content.trim())
     .slice(-10);
   if (!msgs.length) return "";
+  // A handed-over task is stored bare; the run's prompt still says who handed it over and where the answer goes.
+  const ownPrompt = job.resumed ? (get<{ prompt: string }>("SELECT prompt FROM runs WHERE id = ?", job.runId)?.prompt ?? null) : null;
   const lines = msgs.map((m) => {
     // The task a continued run works on must arrive whole.
     const max = job.resumed && (m.id === job.userMessageId || job.alsoAnswers.includes(m.id)) ? 20_000 : 1500;
-    const text = m.content.length > max ? `${m.content.slice(0, max - 1)}…` : m.content;
-    return `${m.role === "user" ? "User" : "Assistant"}: ${text}`;
+    const content = m.id === job.userMessageId && m.source && ownPrompt ? ownPrompt : m.content;
+    const text = content.length > max ? `${content.slice(0, max - 1)}…` : content;
+    return `${m.role === "user" ? SOURCE_SPEAKER[m.source ?? "human"] : "Assistant"}: ${text}`;
   });
   return `<godmode-context>\nThe previous Claude session of this conversation could not be restored. Recap of the most recent messages:\n\n${lines.join("\n\n")}\n</godmode-context>\n\n`;
 }
@@ -1171,7 +1347,7 @@ function bodyOf(job: Job, agent: Agent): string {
   if (taken.length) scheduleDelta(job);
   const messages = taken.map((t) => t.prompt);
   if (resumed.redo !== null) return [resumed.redo, ...messages].join("\n\n");
-  return continueContext({ reason: resumed.reason, userName: getSettings().general.userName, pausedAt: resumed.pausedAt, messages });
+  return continueContext({ reason: resumed.reason, userName: getSettings().general.userName, pausedAt: resumed.pausedAt, messages, answer: resumed.answer });
 }
 
 /** The usage limit that ended the run, when that is why it failed and the run can wait for the reset. */
@@ -1387,6 +1563,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath) : null,
         followups: job.trigger !== "check" && job.trigger !== "delegation",
+        // Delegated work reports to the run that handed it over; checks only observe.
+        asking: job.trigger !== "check" && !job.parentRunId,
+        delegated: !!job.parentRunId,
+        team: teamFor(agent),
       });
   const memoryNow = memoryDigest(agent.repoPath);
 
@@ -1416,6 +1596,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   if (hooksPath) baseArgs.push("--settings", hooksPath);
   if (dreaming) baseArgs.push("--tools", DREAM_TOOLS);
   const disallowed: string[] = [];
+  // Godmode's ask_human / request_approval are how an agent asks: Claude Code's own question tool would go nowhere.
+  if (!dreaming) disallowed.push("AskUserQuestion");
   // Hide browser-use tools that need their own LLM key when none is configured (they would only error). The key never
   // goes into a VM, so a VM's browser has none.
   if (mcp.mcpServers[BROWSER_MCP_NAME] && (vm || !browserLlmKey())) disallowed.push(...BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`));
@@ -1505,11 +1687,16 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     // Another chat, a dream or the human changed the memory since this session last saw it.
     const memoryChanged = resuming && !dreaming && conv.memory_digest != null && conv.memory_digest !== memoryNow;
     const followup = get<{ dueAt: string; note: string }>("SELECT due_at AS dueAt, note FROM followups WHERE conversation_id = ?", job.conversationId);
+    // The human answered a question, but the run that took the answer broke off before Claude read it.
+    const late = !command && !dreaming && !job.resumed?.answer ? owedAnswer(job.conversationId) : null;
+    if (late) job.lateAnswer = late.questionId;
+    const lateNote = late ? lateAnswerContext(settings.general.userName, late) : "";
     const prompt =
       resuming && !command
         ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, apiTools, ssh }) +
+          lateNote +
           body
-        : body;
+        : lateNote + body;
     // What the run did before a pause, and what the chat's queue added to this stretch.
     const kept = job.acc.blocks.length;
     let attempt = await spawnClaude(job, cmd, [...baseArgs, ...sessionArgs, ...extraArgs], prompt, cwd, env, logSink);
@@ -1541,6 +1728,13 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const answer = !!final && !final.isError;
     // Whatever Claude Code reports as the outcome, its own line about the limit as the answer is no answer.
     const limited = !!job.acc.limitLine && (final?.text ?? "").includes(job.acc.limitLine);
+    // A run that asked the human stands still for the answer however its process ended — stopped at the next step, after
+    // the grace, by itself, or at the usage limit (the answer then goes along) — unless it was stopped, timed out or
+    // broke off before it could ask properly.
+    if (job.pause?.reason === "question" && !job.cancelReason && !job.timedOut && (job.pause.applied || answer || limitOf(job, attempt))) {
+      job.pause.applied = true;
+      return { status: "paused", error: null };
+    }
     const ended = halted(job);
     // A run that finished while it was being stopped for a pause is finished (stopped between two steps, it never is).
     if (ended && !(ended.status === "paused" && !job.pause?.atStep && answer && !limited)) return ended;
@@ -1654,6 +1848,13 @@ function saveConversation(job: Job, agent: Agent | null, succeeded: boolean, ts:
   });
 }
 
+/** Claude read the human's answers this stretch carried: they are not owed anymore. */
+function settleAnswers(job: Job) {
+  if (!job.acc.answered) return;
+  if (job.resumed?.answer) safely("settle the answer", () => settleOwed(job.resumed!.answer!.questionId));
+  if (job.lateAnswer) safely("settle the late answer", () => settleOwed(job.lateAnswer!));
+}
+
 /**
  * The run stands still (paused by the human, or waiting for Claude's usage limit): what it did so far is kept with
  * what continuing needs. It has not ended — no `run.finished`, nothing that waits for its end is told. Never throws.
@@ -1670,8 +1871,14 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
   // What the human chose for this run stays; otherwise the setting decides.
   const choice = before?.choice ?? null;
   const wanted = choice ?? getSettings().runner.autoContinueOnLimit;
-  const delivered = answered || (!!before && before.redo === null && job.body === undefined);
-  const unsent = delivered ? null : (job.body ?? before?.redo ?? job.prompt);
+  // A run that continued with the human's answer and stands still again before Claude read it keeps the answer: it is
+  // sent again when the run continues.
+  const answerNote =
+    before?.answer && !answered && job.body === undefined
+      ? continueContext({ reason: before.reason, userName: getSettings().general.userName, pausedAt: before.pausedAt, messages: [], answer: before.answer })
+      : null;
+  const delivered = answered || (!!before && before.redo === null && job.body === undefined && !answerNote);
+  const unsent = delivered ? null : (job.body ?? before?.redo ?? answerNote ?? job.prompt);
   const row: PausedRow = {
     run_id: job.runId,
     conversation_id: job.conversationId,
@@ -1692,6 +1899,7 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
     created_at: ts,
   };
   const spent = spentBy(job, startedMs);
+  const asked = pause.reason === "question" ? pause.question : undefined;
   acc.markPause({ type: "pause", reason: pause.reason, at: ts, ...(pause.reason === "limit" ? { limit: row.limit_name, resumeAt: row.resume_at } : {}) });
   const text = redact(acc.lastTurnText());
   const blocks = redactBlocks(acc.blocks, redact);
@@ -1718,11 +1926,18 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
     // What Claude never got is sent again when the run continues.
     if (unsent === null) unanswered.delete(job.runId);
     else unanswered.set(job.runId, unsent);
-    savePause(row);
+    // An open question and the pause that waits for it exist together or not at all.
+    tx(() => {
+      if (asked) {
+        saveQuestion(asked, { runId: job.runId, agentId: job.agentId, conversationId: job.conversationId, messageId: job.messageId, cutOff: !!pause.killed });
+      }
+      savePause(row);
+    });
   } catch (err) {
     // A run that can't be kept must not look paused forever, and nothing may freeze its chat.
     log.error(`run ${job.runId} could not be paused`, err);
     safely("drop the pause", () => sql("DELETE FROM paused_runs WHERE run_id = ?", job.runId));
+    if (asked) safely("drop the question", () => sql("DELETE FROM questions WHERE id = ?", asked.block.id));
     unanswered.delete(job.runId);
     acc.blocks.pop();
     jobs.set(job.runId, job);
@@ -1734,9 +1949,11 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
     if (!others) safely("set agent status", () => setAgentStatus(job.agentId, "idle"));
     safely("touch agent", () => touchAgentRun(job.agentId));
   }
-  emitActivity(job, "Paused");
+  settleAnswers(job);
+  emitActivity(job, asked ? "Waiting for your answer" : "Paused");
   safely("emit run.paused", () => bus.emit({ type: "run.paused", run: getRun(job.runId) }));
   bus.changed("runs");
+  if (asked) safely("announce the question", () => announceQuestion(asked.block.id));
   log.info("run paused", { runId: job.runId, reason: pause.reason, ...(row.resume_at ? { resumeAt: row.resume_at, auto: !!row.auto } : {}) });
   if (pause.reason === "limit" && retries >= MAX_RETRIES && wanted) {
     safely("stop continuing", () => stopContinuing(row, `Claude still reports its ${row.limit_name ?? "usage limit"} after ${MAX_RETRIES} tries. Continue the chat when the limit has reset.`));
@@ -1754,6 +1971,8 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   const acc = job.acc;
   const final = acc.final;
   const text = redact(acc.finalText());
+  // A question the run asked but never stood still for (it was stopped, timed out or broke off right after) is gone.
+  if (job.pause?.question) acc.blocks.splice(0, acc.blocks.length, ...withdrawOpenBlocks(acc.blocks, "Stopped before it could wait for your answer."));
   const blocks = redactBlocks(acc.blocks, redact);
   const error = outcome.error ? redact(outcome.error) : null;
   if (outcome.status === "failed" && error) blocks.push({ type: "error", text: error });
@@ -1762,6 +1981,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   const wasRunning = job.status === "running";
   const spent = spentBy(job, startedMs);
   unanswered.delete(job.runId);
+  settleAnswers(job);
 
   safely("update run row", () =>
     sql(
@@ -1789,6 +2009,12 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   }
 
   if (wasRunning) {
+    // "Last run failed" follows the agent's real work (not dreams or condition checks): a failure is remembered until
+    // a later run succeeds, the human stops one, or the human dismisses it. Set before run.finished goes out.
+    if (job.trigger !== "dream" && job.trigger !== "check") {
+      if (outcome.status === "failed") safely("remember the failure", () => setAgentFailedRun(job.agentId, job.runId));
+      else if (outcome.status === "succeeded" || job.cancelReason === "Cancelled by user") safely("forget the failure", () => setAgentFailedRun(job.agentId, null));
+    }
     const others = [...jobs.values()].some((j) => j !== job && j.agentId === job.agentId && j.status === "running");
     if (!others) safely("set agent status", () => setAgentStatus(job.agentId, "idle"));
     // A dream is not activity of the agent ("last active" stays the last real run).

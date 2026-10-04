@@ -24,6 +24,8 @@ import { isValidBranch, parseGitUrl } from "@godmode/shared";
 import { config, VERSION } from "../config";
 import { all, get, getDb, run as exec } from "../db";
 import { recoverInterruptedRuns } from "../runner/runner";
+import { TEAM_BACKFILL_SQL } from "../db/migrations";
+import { repairReportingLines } from "../agents/service";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
@@ -42,6 +44,7 @@ import { isSafeCloneDir } from "../services/workspaceSources";
 import * as vault from "../vault/vault";
 import { assertSafeKdf, openWithPassphrase, sealWithPassphrase } from "../vault/crypto";
 import { badRequest, conflict, HttpError, slugify } from "../util";
+import { reconcileTasks } from "../tasks/service";
 
 const log = logger("backup");
 
@@ -88,6 +91,7 @@ const ALL_ENTITIES: EntityName[] = [
   "composio",
   "browser-profiles",
   "missing-logins",
+  "questions",
   "notifications",
   "settings",
   "runs",
@@ -95,6 +99,7 @@ const ALL_ENTITIES: EntityName[] = [
   "ssh-servers",
   "messaging",
   "followups",
+  "tasks",
 ];
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
@@ -708,10 +713,16 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       // Runs that were in progress when the backup was made will never finish, and events that were waiting then
       // are stale now: don't replay them.
       recoverInterruptedRuns();
+      // A backup from before the team package: who wrote old prompts, the built-in agent's role. Then fix reporting
+      // lines an edited or partial backup may have broken.
+      getDb().run(TEAM_BACKFILL_SQL);
+      repairReportingLines();
       exec("UPDATE automation_events SET status = 'skipped', note = 'Restored from a backup' WHERE status = 'pending'");
       exec("DELETE FROM followups WHERE due_at <= ?", new Date().toISOString());
       // Paused runs come back paused; none continues by itself after a restore.
       exec("UPDATE paused_runs SET auto = 0");
+      // Tickets that were being worked on in the backup (or waited for a follow-up the restore dropped): to be continued.
+      reconcileTasks("Interrupted (restored from a backup).");
       // The restored vault has a different key: a key remembered on this device is obsolete.
       try {
         await vault.setRememberDevice(false);

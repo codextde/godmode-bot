@@ -117,19 +117,36 @@ export default function Chat() {
           getItemType={(item) => item.role}
         />
         {run && primary ? <LiveStrip screen={primary} activity={run.activity} /> : null}
-        {paused ? <PausedStrip limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null} auto={paused.auto} onContinue={resume} /> : null}
+        {paused?.reason === "question" ? (
+          <AskingStrip agentName={agent?.name ?? "The agent"} approval={paused.question?.kind === "approval"} />
+        ) : paused ? (
+          <PausedStrip limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null} auto={paused.auto} onContinue={resume} />
+        ) : null}
         <ComposerDock>
           <Composer
             onSend={send}
             onStop={stop}
             running={!!run}
-            placeholder={agent ? `Message ${agent.name}` : "Message"}
+            placeholder={agent ? (paused?.reason === "question" ? `Answer ${agent.name}` : `Message ${agent.name}`) : "Message"}
             disabled={agent ? !agent.enabled : false}
           />
         </ComposerDock>
         <View style={{ height: keyboardOpen ? space.sm : Math.max(insets.bottom, space.md) }} />
       </KeyboardAvoidingView>
     </>
+  );
+}
+
+/** Above the composer while the chat's run waits for the human's answer: the reply in the composer is the answer. */
+function AskingStrip({ agentName, approval }: { agentName: string; approval: boolean }) {
+  const c = useColors();
+  return (
+    <View style={[styles.paused, { backgroundColor: c.warningSoft, borderColor: c.warning }]}>
+      <Icon name="warning" size={15} color={c.warning} />
+      <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
+        {approval ? `${agentName} needs your OK — reply below` : `${agentName} is waiting for your answer — reply below`}
+      </T>
+    </View>
   );
 }
 

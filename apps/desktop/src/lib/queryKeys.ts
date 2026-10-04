@@ -23,6 +23,8 @@ export const qk = {
   tasks: ["tasks"] as unknown[],
   taskList: (workspaceId: string) => ["tasks", "list", workspaceId],
   archivedTaskList: (workspaceId: string) => ["tasks", "archived", workspaceId],
+  /** Its own root: updaters assume every query under ["tasks"] holds Task[]. */
+  taskEvents: (id: string) => ["task-events", id],
   agents: ["agents"] as unknown[],
   agentList: (workspaceId: string) => ["agents", "list", workspaceId],
   agent: (id: string) => ["agents", "detail", id],
@@ -52,9 +54,12 @@ export const qk = {
   /** Times agents set to continue their chats on their own. */
   followups: ["followups"] as unknown[],
   runs: ["runs"] as unknown[],
+  /** Runs handed over by a run (under `runs`, so run events refresh them). */
+  runChildren: (runId: string) => ["runs", "children", runId] as const,
   runList: (agentId: string, status: string) => ["runs", "list", agentId, status],
   run: (id: string) => ["runs", "detail", id],
   missingLogins: ["missing-logins"] as unknown[],
+  questions: ["questions"] as unknown[],
   mcpServers: ["mcp-servers"] as unknown[],
   apiTools: ["api-tools"] as unknown[],
   composio: ["composio"] as unknown[],

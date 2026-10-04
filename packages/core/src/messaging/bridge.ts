@@ -2,13 +2,14 @@
  * From a platform message to an agent's answer: who may talk (approval), chat commands (/new, /agent …), which
  * conversation continues, and sending the answer back once the run finishes.
  */
-import type { Agent, MessagingProvider, Run } from "@godmode/shared";
+import type { Agent, AgentQuestion, MessagingProvider, Run } from "@godmode/shared";
 import { parseSlashCommand, SLACK_COMMAND } from "@godmode/shared";
 import { getAgent } from "../agents/service";
 import { get } from "../db";
 import { logger } from "../log";
 import { cancelRun, listActiveRuns, waitForRun } from "../runner/runner";
 import { pauseOf } from "../services/pauses";
+import { answerByMessage, getQuestion, openQuestionOf } from "../services/questions";
 import { conversationExists, createConversation, MAX_ATTACHMENT_BYTES, sendMessage } from "../services/conversations";
 import { notify } from "../services/notifications";
 import { getSettings } from "../services/settings";
@@ -197,7 +198,8 @@ export async function handleInbound(connectionId: string, msg: InboundMessage): 
       return;
     }
     if (!msg.text.trim() && !msg.files.length) return;
-    await startTurn(conn, adapter, msg, chat.id);
+    // The owner of this Godmode, writing from their own account: only they answer what an agent asks.
+    await startTurn(conn, adapter, msg, chat.id, { userId: user.id, owner: user.is_owner === 1 && user.status === "approved" });
   });
 }
 
@@ -380,7 +382,7 @@ async function attachmentsOf(msg: InboundMessage): Promise<{ files: { name: stri
   return { files, problems };
 }
 
-async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: InboundMessage, chatId: string) {
+async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: InboundMessage, chatId: string, from: { userId: string; owner: boolean }) {
   let chat = chatById(chatId);
   if (!chat) return;
   let agent = chatAgent(conn, chat);
@@ -404,6 +406,26 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
   agent = chat ? chatAgent(conn, chat) : null;
   if (!chat || !agent) return;
   const conversationId = conversationFor(conn, msg, chat, agent);
+  // The chat's run waits for the owner's answer, and this is the owner: the message is the answer (their own words —
+  // not prefixed with their name — and the files they sent).
+  if (from.owner && openQuestionOf(conversationId)) {
+    let answered: ReturnType<typeof answerByMessage> = null;
+    try {
+      answered = answerByMessage(conversationId, { content: msg.text, attachments: files.length ? files : undefined }, {
+        actor: `messaging:${from.userId}`,
+        via: conn.provider,
+      });
+    } catch (err) {
+      await say(adapter, msg, err instanceof HttpError ? err.message : "Something went wrong — try again in a moment.");
+      return;
+    }
+    if (answered) {
+      patchChat(chatId, { last_message_at: now() });
+      const stopAnswered = await adapter.working(msg.target, msg.messageId).catch(() => async () => {});
+      void deliver(conn, adapter, msg, answered.run.id, stopAnswered, true);
+      return;
+    }
+  }
   const stopWorking = await adapter.working(msg.target, msg.messageId).catch(() => async () => {});
   let stopped = false;
   const stop = async () => {
@@ -423,13 +445,45 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
   }
   patchChat(chatId, { last_message_at: now() });
   // The message waits behind a run that stands still.
-  if (run.status === "queued" && pauseOf(conversationId)) await say(adapter, msg, pausedNote(conversationId));
-  void deliver(adapter, msg, run.id, stop);
+  if (run.status === "queued" && pauseOf(conversationId)) await say(adapter, msg, pausedNote(conn, msg, conversationId, from.owner));
+  void deliver(conn, adapter, msg, run.id, stop, from.owner);
 }
 
-/** Why the chat's run stands still, and when it goes on. */
-function pausedNote(conversationId: string): string {
+/** The person this Godmode belongs to, for messages that name them. */
+function ownerLabel(): string {
+  return getSettings().general.userName.trim() || "the owner";
+}
+
+/** How to answer here: in Slack and Teams channels the bot only hears mentions, in Telegram groups replies to it. */
+function replyHint(conn: ConnectionRow, msg: InboundMessage, q: AgentQuestion): string {
+  const group = msg.kind !== "direct";
+  const how = !group ? "Reply" : conn.provider === "telegram" ? "Reply to this message" : "Mention me";
+  if (q.kind === "approval") return `${how} with **approve** or **decline** — or say what to do instead.`;
+  if (q.options.length) return `${how} with a number, or write your answer.`;
+  return `${how} with your answer.`;
+}
+
+/** The question an agent waits for, as a platform message for the owner. */
+export function questionText(conn: ConnectionRow, msg: InboundMessage, q: AgentQuestion, agentName: string): string {
+  if (q.kind === "approval") {
+    return [`**${agentName} needs an OK:** ${q.title}`, q.body ? `**Why:** ${q.body}` : "", q.affects ? `**Affects:** ${q.affects}` : "", "", replyHint(conn, msg, q)]
+      .filter((l, i) => l || i === 3)
+      .join("\n");
+  }
+  const options = q.options.map((o, i) => `${i + 1}. ${o.label}${o.description ? ` — ${o.description}` : ""}${o.recommended ? " *(recommended)*" : ""}`);
+  return [`**${agentName} asks:** ${q.title}`, ...(q.body ? [q.body] : []), "", ...options, ...(options.length ? [""] : []), replyHint(conn, msg, q)].join("\n");
+}
+
+/** Why the chat's run stands still, and when it goes on. `owner`: the owner of this Godmode is the one writing here. */
+function pausedNote(conn: ConnectionRow, msg: InboundMessage, conversationId: string, owner: boolean): string {
   const pause = pauseOf(conversationId);
+  if (pause?.reason === "question") {
+    const q = openQuestionOf(conversationId);
+    if (!q) return "This chat is waiting in Godmode. I'll answer when it continues.";
+    if (!owner) return `I need to check something with ${ownerLabel()} first. I'll get back to you here.`;
+    const agentName = agentOrNull(q.agentId)?.name ?? "Your agent";
+    return questionText(conn, msg, q, agentName);
+  }
   if (pause?.reason !== "limit") return "This chat is paused in Godmode. I'll answer when it continues.";
   const at = pause.resume_at ? new Date(pause.resume_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }) : null;
   return `Claude's ${pause.limit_name ?? "usage limit"} is reached. ${pause.auto && at ? `I'll continue around ${at} and answer then.` : "I'll answer once it has reset."}`;
@@ -440,6 +494,30 @@ function answerOf(run: Run): string {
   if (run.status === "cancelled") return "Stopped.";
   // Errors can name local paths or programs: the details stay in Godmode.
   return "Sorry — something went wrong while working on this. The details are in Godmode.";
+}
+
+/**
+ * The owner answered in Godmode a question asked in a platform chat that nobody follows anymore (Godmode restarted
+ * since): the chat is told the work goes on and gets the answer.
+ */
+export async function followAnsweredRun(q: AgentQuestion): Promise<void> {
+  if (!q.answer || followed.has(q.runId) || (["slack", "telegram", "teams"] as string[]).includes(q.answer.via)) return;
+  const chat = get<ChatRow>("SELECT * FROM messaging_chats WHERE conversation_id = ? ORDER BY updated_at DESC LIMIT 1", q.conversationId);
+  if (!chat) return;
+  const target = parseJson<ChatTarget | null>(chat.reply, null);
+  const adapter = runtimeOf(chat.connection_id);
+  if (!target?.chatId || !adapter) return;
+  followed.add(q.runId);
+  try {
+    await adapter.send(target, "Got the answer in Godmode — I'm continuing.");
+    const run = await waitForRun(q.runId);
+    if (run.status !== "cancelled") await adapter.send(target, answerOf(run));
+    patchChat(chat.id, { last_message_at: now() });
+  } catch (err) {
+    log.warn(`could not follow run ${q.runId} after its answer`, err instanceof Error ? err.message : err);
+  } finally {
+    followed.delete(q.runId);
+  }
 }
 
 /** A follow-up the agent scheduled in a platform chat: its answer goes to that chat. False when it isn't one. */
@@ -460,21 +538,67 @@ export async function deliverFollowup(conversationId: string, runId: string): Pr
   return true;
 }
 
-async function deliver(adapter: MessagingAdapter, msg: InboundMessage, runId: string, stop: () => Promise<void>) {
+/** Runs whose answer a platform chat waits for (one delivery each, also across questions). */
+const followed = new Set<string>();
+
+/** Resolves once a paused run moves again: it continued, or it was stopped. */
+function untilItMoves(runId: string): Promise<void> {
+  return new Promise((resolve) => {
+    const off = bus.on((e) => {
+      if ((e.type === "run.started" || e.type === "run.finished") && e.run.id === runId) {
+        off();
+        resolve();
+      }
+    });
+    try {
+      if (getRunStatus(runId) !== "paused") {
+        off();
+        resolve();
+      }
+    } catch {
+      off();
+      resolve();
+    }
+  });
+}
+
+function getRunStatus(runId: string): string | null {
+  return get<{ status: string }>("SELECT status FROM runs WHERE id = ?", runId)?.status ?? null;
+}
+
+/**
+ * Follow a run for a platform chat and send its answer there. Each time it stands still (paused, a usage limit, a
+ * question for the owner) the chat is told why, and the run is followed again once it continues.
+ */
+async function deliver(conn: ConnectionRow, adapter: MessagingAdapter, msg: InboundMessage, runId: string, stop: () => Promise<void>, owner: boolean) {
+  if (followed.has(runId)) {
+    await stop();
+    return;
+  }
+  followed.add(runId);
   let run: Run;
   try {
     run = await waitForRun(runId, undefined, { orPaused: true });
-    // It stands still, maybe for hours: say so, then wait for the answer.
-    if (run.status === "paused") {
+    // It stands still, maybe for hours: say so, then wait for it to go on.
+    while (run.status === "paused") {
       await stop();
-      await say(adapter, msg, pausedNote(run.conversationId));
-      run = await waitForRun(runId);
+      const asked = pauseOf(run.conversationId)?.reason === "question" ? openQuestionOf(run.conversationId) : null;
+      await say(adapter, msg, pausedNote(conn, msg, run.conversationId, owner));
+      await untilItMoves(runId);
+      // The owner answered somewhere else (the app, the phone): this chat learns the work goes on.
+      if (asked && owner) {
+        const answered = getQuestion(asked.id).answer;
+        if (answered && answered.via !== conn.provider) await say(adapter, msg, "Got the answer in Godmode — I'm continuing.");
+      }
+      run = await waitForRun(runId, undefined, { orPaused: true });
     }
   } catch (err) {
     await stop();
+    followed.delete(runId);
     log.warn(`run ${runId} vanished`, err);
     return;
   }
+  followed.delete(runId);
   await stop();
   try {
     await adapter.send(withReplyTo(msg.target, msg.messageId), answerOf(run));

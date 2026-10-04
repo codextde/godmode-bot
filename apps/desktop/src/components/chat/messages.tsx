@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { motion } from "motion/react";
-import type { Agent, Message, MessageBlock } from "@godmode/shared";
-import { Coins, Cpu, Info, Loader2, Pause, Square, Timer, Volume2 } from "lucide-react";
+import { Link } from "react-router";
+import type { Agent, Conversation, Message, MessageBlock } from "@godmode/shared";
+import { ArrowUpRight, Coins, Cpu, Info, KanbanSquare, Loader2, Pause, Square, Timer, Volume2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
@@ -17,6 +18,8 @@ import { cn } from "@/lib/utils";
 import { MessageBlocks } from "./message-blocks";
 import { CopyButton } from "./copy-button";
 import { UserBubble } from "./user-bubble";
+import { AttachmentChip } from "./attachments";
+import { useAllAgents, useTasks } from "@/lib/hooks";
 import { describeTool } from "./tool-meta";
 import { FollowupMarker, followupBlock } from "./followup";
 import { liveMood } from "./conversation-mood";
@@ -52,6 +55,91 @@ export function UserMessage({ message, pending }: { message: Message; pending?: 
             {message.content && <CopyButton text={message.content} label="Copy message" />}
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** "[Delegated by X]" / "[From X, another agent — …]" at the start of an older or board-relayed handoff. */
+const HANDOFF_PREFIX = /^\[(?:Delegated by ([^\]\n]+?)|From ([^,\]\n]+), another agent[^\]\n]*)\]\s*/;
+
+/**
+ * A turn the human didn't write — an automation, another agent handing work over, the task board — shown as what it
+ * is, on the left in a dashed card, never as the human's own bubble.
+ */
+export function StartedMessage({ message, delegatedFrom }: { message: Message; delegatedFrom?: Conversation["delegatedFrom"] }) {
+  const { data: agents = [] } = useAllAgents();
+  const { data: tasks = [] } = useTasks("all");
+  const [open, setOpen] = useState(false);
+  const prefix = message.source === "delegation" ? HANDOFF_PREFIX.exec(message.content) : null;
+  const body = prefix ? message.content.slice(prefix[0].length) : message.content;
+  const named = prefix ? (prefix[1] ?? prefix[2] ?? "").replace(/\s*\(.*$/, "").trim() : "";
+  const from = message.source === "delegation" ? (agents.find((a) => a.id === delegatedFrom?.agentId) ?? agents.find((a) => named && a.name === named)) : undefined;
+  const task = message.source === "task" ? tasks.find((t) => t.conversationId === message.conversationId) : undefined;
+  const long = body.length > 400 || body.split("\n").length > 4;
+  const time = timeOf(message.createdAt);
+
+  const head =
+    message.source === "automation" ? (
+      <>
+        <Workflow className="size-3.5" aria-hidden />
+        <span className="font-medium text-foreground">Automation</span>
+      </>
+    ) : message.source === "task" ? (
+      <>
+        <KanbanSquare className="size-3.5" aria-hidden />
+        <span className="font-medium text-foreground">{task ? `Board ticket #${task.number}` : "Board ticket"}</span>
+      </>
+    ) : from ? (
+      <>
+        <AgentAvatar agent={from} size="sm" still className="size-4 rounded-[4px] text-[9px]" />
+        <span className="min-w-0 truncate">
+          From <span className="font-medium text-foreground">{from.name}</span>
+          {from.role && ` · ${from.role}`}
+        </span>
+      </>
+    ) : (
+      <span className="font-medium text-foreground">{named ? `From ${named}` : "Handed over by another agent"}</span>
+    );
+  const action =
+    message.source === "task" && task ? (
+      <Link to={`/tasks?task=${task.id}`} className="inline-flex items-center gap-0.5 underline-offset-2 hover:text-foreground hover:underline">
+        Open ticket <ArrowUpRight className="size-3" />
+      </Link>
+    ) : message.source === "delegation" && from && delegatedFrom?.conversationId ? (
+      <Link to={`/chat/${delegatedFrom.conversationId}`} className="inline-flex items-center gap-0.5 underline-offset-2 hover:text-foreground hover:underline">
+        Open {from.name}'s chat <ArrowUpRight className="size-3" />
+      </Link>
+    ) : null;
+
+  return (
+    <div className="group/msg flex flex-col items-start">
+      <div className="w-full max-w-[85%] rounded-xl border border-dashed border-foreground/15 bg-card/60 px-4 py-3">
+        <div className="mb-1.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+          {head}
+          {time && (
+            <time dateTime={message.createdAt} className="tabular-nums">
+              · {time}
+            </time>
+          )}
+          {action && <span className="ml-auto">{action}</span>}
+        </div>
+        {body && <p className={cn("text-[14px] leading-relaxed break-words whitespace-pre-wrap text-foreground/85", long && !open && "line-clamp-4")}>{body}</p>}
+        {long && (
+          <button type="button" className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+            {open ? "Show less" : "Show all"}
+          </button>
+        )}
+        {message.attachments.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {message.attachments.map((a, i) => (
+              <AttachmentChip key={`${a.name}-${i}`} name={a.name} mime={a.mime} size={a.size} />
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="mt-1 flex h-6 items-center gap-1.5 pl-1 text-[11px] text-muted-foreground opacity-0 transition group-focus-within/msg:opacity-100 group-hover/msg:opacity-100">
+        {body && <CopyButton text={body} label="Copy message" />}
       </div>
     </div>
   );
@@ -95,7 +183,7 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
       <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" mood="idle" still className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <AgentHeader agent={agent} />
-        <MessageBlocks blocks={blocks} />
+        <MessageBlocks blocks={blocks} runId={message.runId ?? undefined} />
         <div className="mt-1.5 flex h-7 items-center gap-0.5 text-[11px] text-muted-foreground opacity-0 transition group-focus-within/msg:opacity-100 group-hover/msg:opacity-100 [@media(hover:none)]:opacity-100">
           {text && <CopyButton text={text} label="Copy reply" />}
           {text && speaker.supported && (
@@ -262,7 +350,7 @@ export function LiveAssistantMessage({
             </span>
           )}
         </AgentHeader>
-        <MessageBlocks blocks={live?.blocks ?? []} streaming />
+        <MessageBlocks blocks={live?.blocks ?? []} streaming runId={live?.runId} />
       </div>
     </motion.div>
   );

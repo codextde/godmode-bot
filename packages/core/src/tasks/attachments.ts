@@ -311,17 +311,3 @@ export function withResultImages(taskId: string, result: string, folders: string
   );
 }
 
-/** Pictures an earlier result showed that the new one doesn't: they go, unless a description links them. */
-export function removeStaleResultImages(taskId: string, previous: string | null, current: string | null): void {
-  const kept = new Set(taskAttachmentIds(current ?? ""));
-  const stale = taskAttachmentIds(previous ?? "").filter((id) => !kept.has(id));
-  if (!stale.length) return;
-  remove(
-    all<AttachmentRow>(
-      `SELECT * FROM task_attachments a WHERE task_id = ? AND id IN (${stale.map(() => "?").join(",")})
-        AND NOT EXISTS (SELECT 1 FROM tasks WHERE instr(description, '/' || a.id || '/') > 0)`,
-      taskId,
-      ...stale,
-    ),
-  );
-}

@@ -43,8 +43,10 @@ export function registerSystemRoutes(app: Hono) {
         credentials: count("SELECT COUNT(*) AS c FROM credentials"),
         totp: count("SELECT COUNT(*) AS c FROM totp"),
         openMissingLogins: count("SELECT COUNT(*) AS c FROM missing_logins WHERE status = 'open'"),
+        openQuestions: count("SELECT COUNT(*) AS c FROM questions WHERE status = 'open'"),
         runningRuns: count("SELECT COUNT(*) AS c FROM runs WHERE status IN ('queued','running')"),
-        unreadNotifications: unreadCount(),
+        // A question counts once: as the open question, not also as its notification.
+        unreadNotifications: count("SELECT COUNT(*) AS c FROM notifications WHERE read = 0 AND kind != 'question'"),
         messagingRequests: pendingRequestCount(),
       },
     };

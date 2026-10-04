@@ -7,11 +7,14 @@ import {
   CHARACTER_NECKS,
   CHARACTER_TOPS,
   EFFORT_OPTIONS,
+  MAX_AGENT_ROLE_LENGTH,
   isModelId,
 } from "@godmode/shared";
 import {
   createAgent,
   deleteAgent,
+  dismissFailedRun,
+  duplicateAgent,
   getAgent,
   listAgentCommits,
   listAgentFiles,
@@ -104,6 +107,8 @@ export const agentSchema = z.object({
   personality: z.string().max(2000).optional(),
   description: z.string().max(2000).optional(),
   instructions: z.string().max(50_000).optional(),
+  role: z.string().max(MAX_AGENT_ROLE_LENGTH, `A role is at most ${MAX_AGENT_ROLE_LENGTH} characters`).optional(),
+  reportsTo: id.nullable().optional(),
   model: modelId,
   effort: z.enum(EFFORT_OPTIONS).nullable().optional(),
   enabled: z.boolean().optional(),
@@ -183,6 +188,16 @@ export function registerAgentRoutes(app: Hono): void {
     return c.json({ ok: true });
   });
 
+  // Same setup, fresh memory, no chats or automations. A copy that reads secrets needs the passphrase like a new one.
+  app.post("/api/agents/:id/duplicate", async (c) => {
+    const source = getAgent(c.req.param("id"));
+    if (source.permissions.secretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
+    return c.json(await duplicateAgent(source.id));
+  });
+
+  // The human has seen the failure: the agent stops saying "Last run failed".
+  app.delete("/api/agents/:id/failed-run", (c) => c.json(dismissFailedRun(c.req.param("id"))));
+
   app.post("/api/agents/:id/run", async (c) => {
     const agent = getAgent(c.req.param("id"));
     const { prompt, workspaceId } = await body(
@@ -190,7 +205,7 @@ export function registerAgentRoutes(app: Hono): void {
       z.object({ prompt: z.string().trim().max(100_000).optional(), workspaceId: z.string().trim().max(100).nullable().optional() }),
     );
     if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
-    return c.json(await startChat({ agentId: agent.id, content: prompt || DEFAULT_TASK_PROMPT, origin: "api", workspaceId }));
+    return c.json(await startChat({ agentId: agent.id, content: prompt || DEFAULT_TASK_PROMPT, origin: "chat", workspaceId }));
   });
 
   // Pause everything the agent is working on; it continues where it stopped.

@@ -12,3 +12,4 @@ export * from "./tasks";
 export * from "./mobile";
 export * from "./character";
 export * from "./files";
+export * from "./team";

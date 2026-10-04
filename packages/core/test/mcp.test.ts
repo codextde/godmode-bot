@@ -380,7 +380,11 @@ describe("agents + delegation", () => {
     const conv = getConversation(child.conversationId);
     expect(conv.origin).toBe("delegation");
     expect(conv.title).toBe("Task from Delegator");
-    expect(conv.messages[0]!.content).toBe("[Delegated by Delegator]\n\nSay hello");
+    // The chat shows the bare task (marked as handed over); Claude also learns who asked and where the answer goes.
+    expect(conv.messages[0]!.content).toBe("Say hello");
+    expect(conv.messages[0]!.source).toBe("delegation");
+    expect(child.prompt).toStartWith("[Delegated by Delegator");
+    expect(child.prompt).toContain("Your final answer goes back to Delegator.]\n\nSay hello");
   });
 
   test("agent_delegate without waiting + delegation_status", async () => {

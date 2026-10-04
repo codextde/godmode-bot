@@ -274,7 +274,8 @@ export default function ChatHome() {
 
 function RunningNow({ agents }: { agents: Agent[] }) {
   const runs = useLive((s) => s.runs);
-  const list = Object.values(runs);
+  const list = Object.values(runs).filter((r) => r.status === "running");
+  const queued = Object.values(runs).length - list.length;
   if (list.length === 0) return null;
   return (
     <section aria-label="Working now">
@@ -282,6 +283,7 @@ function RunningNow({ agents }: { agents: Agent[] }) {
         <LiveDot />
         Working now
         <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{list.length}</span>
+        {queued > 0 && <span className="text-[11px] font-normal tracking-normal text-muted-foreground normal-case">· {queued} queued</span>}
       </h2>
       <div className="-mx-2 flex gap-3 overflow-x-auto px-2 pt-1 pb-3">
         {list.map((r, i) => (
@@ -320,7 +322,7 @@ function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index
 function RecentChats({ agents }: { agents: Agent[] }) {
   const { data: conversations = [], isLoading } = useConversations();
   const liveRuns = useLive((s) => s.runs);
-  const running = useMemo(() => new Set(Object.values(liveRuns).map((r) => r.conversationId)), [liveRuns]);
+  const running = useMemo(() => new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.conversationId] : []))), [liveRuns]);
   const recent = useMemo(
     () =>
       [...conversations]

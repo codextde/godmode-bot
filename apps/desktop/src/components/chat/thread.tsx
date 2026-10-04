@@ -1,11 +1,11 @@
 import { Fragment, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, Message } from "@godmode/shared";
+import type { Agent, Conversation, Message } from "@godmode/shared";
 import { ArrowDown, Paperclip } from "lucide-react";
 import type { LiveRun } from "@/stores/live";
 import { cn } from "@/lib/utils";
-import { AssistantMessage, LiveAssistantMessage, SystemMessage, UserMessage } from "./messages";
+import { AssistantMessage, LiveAssistantMessage, StartedMessage, SystemMessage, UserMessage } from "./messages";
 import { useStickToBottom } from "./use-stick-to-bottom";
 
 function dayLabel(iso: string): string {
@@ -27,9 +27,11 @@ export interface ThreadProps {
   pausing?: boolean;
   /** Rendered when there are no messages and nothing in flight */
   empty?: ReactNode;
+  /** A handed-over chat: who asked (names the opening message). */
+  delegatedFrom?: Conversation["delegatedFrom"];
 }
 
-export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty }: ThreadProps) {
+export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom }: ThreadProps) {
   const { scrollRef, contentRef, atBottom, scrollToBottom } = useStickToBottom();
   // Messages present on first render don't animate in
   const initialIds = useRef<Set<string> | null>(null);
@@ -62,7 +64,9 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
                 >
-                  {m.role === "user" ? (
+                  {m.role === "user" && m.source ? (
+                    <StartedMessage message={m} delegatedFrom={delegatedFrom} />
+                  ) : m.role === "user" ? (
                     <UserMessage message={m} pending={m.id.startsWith("pending-")} />
                   ) : m.role === "assistant" ? (
                     <AssistantMessage message={m} agent={agent} />

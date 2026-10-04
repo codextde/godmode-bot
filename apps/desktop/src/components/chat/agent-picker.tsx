@@ -25,7 +25,7 @@ export function AgentPicker({
   const navigate = useNavigate();
   const { data: workspaces = [] } = useWorkspaces();
   const liveRuns = useLive((s) => s.runs);
-  const running = useMemo(() => new Set(Object.values(liveRuns).map((r) => r.agentId)), [liveRuns]);
+  const running = useMemo(() => new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.agentId] : []))), [liveRuns]);
   const current = agents.find((a) => a.id === value) ?? null;
 
   const wsName = (id: string | null) => (id ? (workspaces.find((w) => w.id === id)?.name ?? "Workspace") : "Global");
@@ -62,7 +62,7 @@ export function AgentPicker({
               {sorted.map((a) => (
                 <CommandItem
                   key={a.id}
-                  value={`${a.name} ${a.description} ${a.id}`}
+                  value={`${a.name} ${a.role} ${a.description} ${a.id}`}
                   onSelect={() => {
                     onChange(a.id);
                     setOpen(false);
@@ -75,7 +75,7 @@ export function AgentPicker({
                       <span className="truncate font-medium">{a.name}</span>
                       {running.has(a.id) && <span className="text-shimmer text-[10.5px] font-medium">working</span>}
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">{a.description || wsName(a.workspaceId)}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{[a.role, a.description].filter(Boolean).join(" · ") || wsName(a.workspaceId)}</span>
                   </span>
                   {a.id === value && <Check className="size-4 text-foreground" />}
                 </CommandItem>

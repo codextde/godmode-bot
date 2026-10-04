@@ -23,6 +23,10 @@
  *   TASK_LEAK:<value>  write config.txt containing <value> into the cwd
  *   TASK_SHOTS:<dir>  answer with a summary naming the files in <dir> in every way an agent does (code, links, paths)
  *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
+ *   TASK_FOLLOWUP call the gateway's followup_schedule (in 60 minutes, "Check the reply") and answer "Waiting for the reply"
+ *   TASK_NOTE   call the gateway's task_note ("Halfway") and answer "NOTE {json}"
+ *   DELEGATE_TO:<agent id>  hand "Say hello" to that agent with agent_delegate (wait: false) as a tool step and answer
+ *              "DELEGATED <tool result>"
  *   CRASH       print to stderr and exit 3 without a result
  *   WAIT_FOR_QUEUE  run a tool step, then — once the state dir has a `queue-ready` file — call the PostToolBatch hook
  *              from --settings like Claude Code does between steps (first once as a subagent) until it hands over
@@ -38,12 +42,20 @@
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
  *               and answers "DREAM {json}". Digest keywords: DREAM_SLEEP hangs and DREAM_CRASH exits 3 (both after
  *               writing the memory), DREAM_NO_REPORT skips the report.
+ *   ASK_HUMAN   call the gateway's ask_human (arguments from the state dir's `ask-args.json` when it exists) as a step,
+ *              then call the PostToolBatch hook like Claude Code does: told to stop, write `stopped-by-hook` and end the
+ *              turn without an answer, else answer "no stop". The tool's result goes to `ask-result.json`.
+ *   ASK_APPROVAL  the same with request_approval
+ *   ASK_TWICE   ask_human twice in one step (both results in `ask-result.json`), then the hook
+ *   ASK_NO_HOOK ask_human, then end the turn with an answer without calling the hook
+ *   <godmode-continue> … <your-question>  a run continuing with the human's answer: answers "CONTINUED", or — while the
+ *              state dir has an `ask-again` file (removed then) — asks once more like ASK_HUMAN
  *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected)
  *
  * With `--input-format stream-json` it answers the `initialize` control request with a command and model catalog.
  * Env: FAKE_CLAUDE_STATE — directory for known sessions + an invocation log (invocations.jsonl).
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -183,6 +195,60 @@ function textTurn(text: string) {
 
 const slash = /^\/(\S+)\s*([\s\S]*)$/.exec(prompt.trim());
 
+/** Ask the human through the gateway like an agent does, as one step, then stand still at the hook. */
+async function ask(mode: "question" | "approval" | "twice" | "nohook") {
+  out(init);
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  const name = mode === "approval" ? "request_approval" : "ask_human";
+  const argsFile = join(stateDir, "ask-args.json");
+  const args = existsSync(argsFile)
+    ? (JSON.parse(readFileSync(argsFile, "utf8")) as Record<string, unknown>)
+    : mode === "approval"
+      ? { action: "Send the payment reminder to billing@acme.com", reason: "The invoice is 30 days overdue.", affects: "ACME's billing team gets an email from you." }
+      : {
+          question: "Which color should the header be?",
+          context: "The brand guide allows two.",
+          options: [{ label: "Yellow", recommended: true }, { label: "Blue", description: "Matches the logo" }],
+        };
+  out({ type: "assistant", message: { id: "msg_ask", role: "assistant", content: [{ type: "tool_use", id: "toolu_ask", name: `mcp__godmode__${name}`, input: args }] }, parent_tool_use_id: null, session_id: sessionId });
+  const first = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name, arguments: args } });
+  const second = mode === "twice" ? await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "ask_human", arguments: { question: "And which font?" } } }) : null;
+  const text = first.result.content[0].text as string;
+  out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_ask", content: text, is_error: first.result.isError === true }] }, parent_tool_use_id: null, session_id: sessionId });
+  writeFileSync(join(stateDir, "ask-result.json"), JSON.stringify({ first: first.result, second: second?.result ?? null }));
+  if (mode === "nohook") {
+    textTurn("I asked and will wait.");
+    result("I asked and will wait.");
+    return;
+  }
+  const settings = JSON.parse(readFileSync(argValue("--settings")!, "utf8")) as {
+    hooks: { PostToolBatch: { hooks: { url: string; headers: Record<string, string> }[] }[] };
+  };
+  const hook = settings.hooks.PostToolBatch[0]!.hooks[0]!;
+  const res = await fetch(hook.url, {
+    method: "POST",
+    headers: { ...hook.headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ hook_event_name: "PostToolBatch", session_id: sessionId, tool_calls: [] }),
+  });
+  const raw = await res.text();
+  if (raw && (JSON.parse(raw) as { continue?: boolean }).continue === false) {
+    writeFileSync(join(stateDir, "stopped-by-hook"), raw);
+    result("", { stop_reason: "tool_use", terminal_reason: "hook_stopped" });
+  } else {
+    textTurn("no stop");
+    result("no stop");
+  }
+}
+
 if (slash?.[1] === "clear") {
   const fresh = crypto.randomUUID();
   out({ type: "conversation_reset", new_conversation_id: fresh, trigger: "clear" });
@@ -213,6 +279,24 @@ if (slash?.[1] === "clear") {
     local_command_run: { command: name, args },
   });
   result(text, { num_turns: 0, local_command: name });
+} else if (prompt.includes("<godmode-continue>") && prompt.includes("<your-question>")) {
+  const again = join(stateDir, "ask-again");
+  if (existsSync(again)) {
+    rmSync(again);
+    await ask("question");
+  } else {
+    out(init);
+    textTurn("CONTINUED");
+    result("CONTINUED");
+  }
+} else if (prompt.includes("ASK_TWICE")) {
+  await ask("twice");
+} else if (prompt.includes("ASK_NO_HOOK")) {
+  await ask("nohook");
+} else if (prompt.includes("ASK_APPROVAL")) {
+  await ask("approval");
+} else if (prompt.includes("ASK_HUMAN")) {
+  await ask("question");
 } else if (prompt.startsWith("Dream: consolidate")) {
   out(init);
   const cwd = process.cwd();
@@ -310,6 +394,50 @@ if (slash?.[1] === "clear") {
     `open ${dir}/light.png`,
     "```",
   ].join("\n");
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_FOLLOWUP") || prompt.includes("TASK_NOTE")) {
+  out(init);
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  if (prompt.includes("TASK_FOLLOWUP")) {
+    await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "followup_schedule", arguments: { inMinutes: 60, note: "Check the reply" } } });
+    textTurn("Waiting for the reply");
+    result("Waiting for the reply");
+  } else {
+    const call = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "task_note", arguments: { text: "Halfway" } } });
+    const text = `NOTE ${JSON.stringify({ text: call.result.content[0].text, isError: call.result.isError === true })}`;
+    textTurn(text);
+    result(text);
+  }
+} else if (/DELEGATE_TO:(\S+)/.test(prompt)) {
+  // Hand "Say hello" to that agent without waiting, shown like Claude Code shows the tool step.
+  out(init);
+  const agentId = /DELEGATE_TO:(\S+)/.exec(prompt)![1]!;
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  const input = { agentId, task: "Say hello", wait: false };
+  const call = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "agent_delegate", arguments: input } });
+  const reply = call.result.content[0].text as string;
+  out({ type: "assistant", message: { id: "msg_dlg", role: "assistant", content: [{ type: "tool_use", id: "toolu_dlg", name: "mcp__godmode__agent_delegate", input }] }, parent_tool_use_id: null, session_id: sessionId });
+  out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_dlg", content: reply, is_error: !!call.result.isError }] }, parent_tool_use_id: null, session_id: sessionId });
+  const text = `DELEGATED ${reply}`;
   textTurn(text);
   result(text);
 } else if (prompt.includes("TASK_BLOCKED")) {

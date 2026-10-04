@@ -11,6 +11,7 @@ import { registerWorkspaceRoutes } from "./routes/workspaces";
 import { registerAgentRoutes } from "./routes/agents";
 import { registerChatRoutes } from "./routes/chat";
 import { registerMissingLoginRoutes } from "./routes/missingLogins";
+import { registerQuestionRoutes } from "./routes/questions";
 import { registerIntegrationRoutes } from "./routes/integrations";
 import { registerBrowserRoutes } from "./routes/browser";
 import { registerBackupRoutes } from "./routes/backup";
@@ -141,6 +142,7 @@ export function createApp() {
   registerAgentRoutes(app);
   registerChatRoutes(app);
   registerMissingLoginRoutes(app);
+  registerQuestionRoutes(app);
   registerIntegrationRoutes(app);
   registerMessagingRoutes(app);
   registerBrowserRoutes(app);

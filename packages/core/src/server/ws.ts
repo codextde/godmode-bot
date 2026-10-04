@@ -191,8 +191,11 @@ export const websocketHandler = {
   open(ws: ServerWebSocket<WsData>) {
     const wasOnline = ws.data.deviceId ? deviceOnline(ws.data.deviceId) : true;
     clients.add(ws);
-    send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString() });
-    for (const event of welcomeEvents()) send(ws, event);
+    const welcome = welcomeEvents();
+    // The runs active right now: the app drops whatever else it still shows as live (they ended while it was away).
+    const activeRunIds = welcome.flatMap((e) => (e.type === "run.started" ? [e.run.id] : []));
+    send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString(), activeRunIds });
+    for (const event of welcome) send(ws, event);
     if (!wasOnline) bus.changed("mobile");
   },
   message(ws: ServerWebSocket<WsData>, raw: string | Buffer) {
