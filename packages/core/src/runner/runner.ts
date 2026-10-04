@@ -1256,6 +1256,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       guest = await prepareGuest(vm.id, { browser, onActivity, signal: cancelled.signal }).catch((err: unknown) => ({
         browser: null,
         cua: null,
+        shellAutomation: false,
         problems: [`The VM's browser and computer-use tools are unavailable in this run: ${errorText(err)}`],
       }));
       const stopped = halted(job);
@@ -1275,6 +1276,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         hostShellOff: settings.vm.isolateHostShell,
         browser: !!guest?.browser,
         cua: !!guest?.cua,
+        shellAutomation: !!guest?.shellAutomation,
         vaultFill: settings.vm.vaultFill,
       }
     : null;

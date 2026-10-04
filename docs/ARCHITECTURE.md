@@ -473,7 +473,7 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   it can't change, delete or schedule agents that work on the host. Ending a run aborts its in-flight VM calls.
 * **`vm` MCP tools** (`vm/tools.ts`): `shell` (`tart exec <id> /bin/zsh -l -c …`, exit code + stdout/stderr, timeout),
   `read_file` / `write_file` / `edit_file` (through the same channel, content via stdin; non-UTF-8 files are refused
-  for edits), `info`, and `screen` — the computer-use action vocabulary (screenshot, clicks, drag, scroll, type, key,
+  for edits), `info`, `permissions` (below) and `screen` — the computer-use action vocabulary (screenshot, clicks, drag, scroll, type, key,
   zoom) over the guest's macOS Screen Sharing on the VM's NAT address (`vm/vnc.ts`: RFB 3.8/3.889 client with Apple
   Remote Desktop authentication, raw 32-bit updates, pointer/key events; `vm/raster.ts`: crop, area-average downscale,
   PNG). Long or non-ASCII text is pasted through the guest clipboard. Screenshots remember their frame, so model
@@ -481,6 +481,21 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   network interface.) `fill_login` / `fill_totp` type vault secrets into the focused field (optionally clicking a
   `coordinate` first) when `settings.vm.vaultFill` allows it; a password needs `kCGSSessionSecureInputPID` in the guest's
   `ioreg` (the app that owns it is named in the result and the audit entry). The value is never in a tool result.
+* **Privacy permissions in the guest** (`vm/permissions.ts`): the `permissions` tool (`grant` / `revoke` / `list` /
+  `denied`) lets the agent set macOS's privacy permissions (TCC) for the VM's software itself, so no dialog waits for a
+  human. The Cirrus Labs images run with System Integrity Protection off, so an entry is a row in a SQLite database:
+  the system one (`/Library/Application Support/com.apple.TCC/TCC.db`, through `sudo`: Accessibility, Screen Recording,
+  Input Monitoring, Full Disk Access, Developer Tools) or the guest user's (everything else — Automation, Camera,
+  Microphone, Contacts, folders, …); which daemon answers for a service was measured on macOS 26. A client is an
+  app's bundle id or the real path of a bare program, resolved in the guest from a name, bundle id or path; `"shell"`
+  is the Tart guest agent, which macOS holds responsible for everything `tart exec` starts. Entries are written without
+  a code requirement (like the image's own) and replace a stored refusal — one transaction per database, the system one
+  first, so a failure there changes nothing; tccd reads the database on every request, so they apply at once. Automation is per controlled app
+  (`target`); revoking Accessibility also removes the PostEvent entry macOS would turn back into it. `denied` reads
+  tccd's `AUTHREQ_*` log lines (`log show`) for requests that weren't allowed (Automation requests aren't logged
+  that way). Grants and revocations made with the tool are audited, failed attempts included
+  (`vm.permission.grant` / `.revoke`). An image with System Integrity Protection on answers with why it can't be done.
+  Nothing dismisses dialogs: closing one without "Allow" makes macOS store a refusal over the entry.
 * **Godmode's agent in the VM** (`vm/guest.ts`): the browser and computer use of a VM run live in the guest. Claude
   Code starts two stdio MCP servers as `tart exec -i <vm> /bin/zsh -f -c …` (stdio through the Tart guest agent, which
   runs in the guest user's GUI session; no startup files, so nothing the agent puts there can print into the JSON-RPC
@@ -489,7 +504,9 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   in `~/.godmode/browser-profile`, DevTools on the guest's `127.0.0.1:9322`, visible on the VM's screen, downloads in
   `~/Downloads`), started again when it was closed — and `cua` — Cua Driver (`cua-driver mcp --direct`), which controls
   the guest's apps and windows; the Cirrus Labs images grant the guest agent (and so everything `tart exec` starts)
-  Accessibility and Screen Recording. Everything is installed on first use, shared by concurrent runs: uv is copied
+  Accessibility and Screen Recording. `prepareGuest` restores what is missing of that on every run (`ensureAgentAccess`:
+  the image's entries name one version of the agent's binary and are lost when Homebrew upgrades it), plus Automation of
+  System Events and Finder, so an `osascript` from the shell doesn't wait at a dialog. Everything is installed on first use, shared by concurrent runs: uv is copied
   from the host (the official installer as fallback), Chrome comes from Google's disk image, browser-use and Cua Driver
   are fetched through uv (`uv tool run --from <pinned spec> python …` records the program's path in
   `~/.godmode/stamps`). A tool that failed isn't retried for 10 minutes (or until the VM stops). Vault fills

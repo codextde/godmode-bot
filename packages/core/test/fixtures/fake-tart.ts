@@ -18,6 +18,10 @@
  * `pbcopy` writes the "guest clipboard" to `$TART_HOME/clipboard`. Run directly (without a shell), `/usr/sbin/ioreg`
  * reports secure keyboard input while `$TART_HOME/secure-input` exists (or once for `secure-input-once`), and `/bin/ps`
  * names its owner: the app in that file (default Safari).
+ * macOS privacy permissions (TCC): the guest's `sqlite3` is fixtures/fake-sqlite3.ts (also behind `sudo`), the system
+ * database lives in `$TART_HOME/guest-system-tcc` (the user's in the guest home; neither exists until a test creates
+ * it), `PlistBuddy` reads a bundle id, `ps -axo` lists `$TART_HOME/processes`, `log` prints `$TART_HOME/tcc-log`, and
+ * with `$TART_HOME/sip-on` present the databases can't be opened and `csrutil` reports protection as enabled.
  *
  * Env: FAKE_TART_PULL_MS — how long a pull takes (default 300); FAKE_TART_BOOT_FAILS — number of `exec` readiness
  * probes that fail before the guest agent "answers" (default 1); FAKE_TART_OS — guest OS of every VM ("darwin"; with
@@ -370,7 +374,7 @@ switch (cmd) {
     const shims = join(home, "shims");
     mkdirSync(join(guestHome), { recursive: true });
     mkdirSync(shims, { recursive: true });
-    for (const tool of ["sudo", "defaults", "scutil", "pmset", "launchctl", "shutdown", "route", "pfctl"]) {
+    for (const tool of ["defaults", "scutil", "pmset", "launchctl", "shutdown", "route", "pfctl"]) {
       const p = join(shims, tool);
       if (!existsSync(p)) {
         writeFileSync(p, "#!/bin/sh\nexit 0\n");
@@ -410,7 +414,20 @@ mkdir -p "$mnt/Google Chrome.app/Contents/MacOS"
       pbcopy: `cat > "${join(home, "clipboard")}"`,
       // secure-input-once: the password field loses focus right after the first look.
       ioreg: `on=; [ -f "${join(home, "secure-input")}" ] && on=1; [ -f "${join(home, "secure-input-once")}" ] && rm "${join(home, "secure-input-once")}" && on=1; [ -n "$on" ] && echo '  "IOConsoleUsers" = ({"kCGSSessionOnConsoleKey"=Yes,"kCGSSessionSecureInputPID"=4242,"kCGSSessionUserNameKey"="admin"})'; exit 0`,
-      ps: `app=$(cat "${join(home, "secure-input")}" 2>/dev/null); echo "/Applications/\${app:-Safari}.app/Contents/MacOS/\${app:-Safari}"`,
+      ps: `case "$*" in *-axo*) cat "${join(home, "processes")}" 2>/dev/null; exit 0 ;; esac
+app=$(cat "${join(home, "secure-input")}" 2>/dev/null); echo "/Applications/\${app:-Safari}.app/Contents/MacOS/\${app:-Safari}"`,
+      // Like the guest's passwordless sudo, for the one program whose effect tests look at.
+      sudo: `[ "$1" = -n ] && shift
+case "$1" in */sqlite3) exec "$@" ;; esac
+exit 0`,
+      sqlite3: `if [ -f "${join(home, "sip-on")}" ]; then echo "Error: unable to open database: authorization denied" >&2; exit 1; fi
+exec "${process.execPath}" "${join(import.meta.dir, "fake-sqlite3.ts")}" "$@"`,
+      PlistBuddy: `[ -f "$3" ] || exit 1
+id=$(tr -d '\\n' < "$3" | sed -n 's/.*<key>CFBundleIdentifier<\\/key>[[:space:]]*<string>\\([^<]*\\)<\\/string>.*/\\1/p')
+[ -n "$id" ] || exit 1
+echo "$id"`,
+      log: `cat "${join(home, "tcc-log")}" 2>/dev/null; exit 0`,
+      csrutil: `if [ -f "${join(home, "sip-on")}" ]; then echo "System Integrity Protection status: enabled."; else echo "System Integrity Protection status: disabled."; fi`,
     };
     for (const [tool, body] of Object.entries(scripted)) {
       const p = join(shims, tool);
@@ -428,9 +445,12 @@ mkdir -p "$mnt/Google Chrome.app/Contents/MacOS"
     const guestize = (arg: string) => {
       let out = arg.replaceAll("/Volumes/My Shared Files/godmode", vm.shared ?? join(home, "no-share")).replaceAll("/Users/admin", guestHome);
       // System tools the guest calls by absolute path → the safe shims.
-      for (const tool of ["/usr/sbin/scutil", "/bin/launchctl", "/usr/bin/pmset", "/usr/bin/defaults", "/sbin/shutdown", "/sbin/route", "/sbin/pfctl"]) {
+      for (const tool of ["/usr/sbin/scutil", "/bin/launchctl", "/usr/bin/pmset", "/usr/bin/defaults", "/sbin/shutdown", "/sbin/route", "/sbin/pfctl", "/usr/bin/sqlite3", "/usr/libexec/PlistBuddy", "/usr/bin/log", "/usr/bin/csrutil"]) {
         out = out.replaceAll(tool, join(shims, tool.split("/").pop()!));
       }
+      // `/bin/ps` in a script (not the end of another path), and the system's privacy database (the user's is in the guest home).
+      out = out.replace(/(?<![\w/.-])\/bin\/ps(?![\w/.-])/g, join(shims, "ps"));
+      out = out.replaceAll('"/Library/Application Support/com.apple.TCC/', `"${join(home, "guest-system-tcc")}/`);
       return out;
     };
     let argv = command.map(guestize);
