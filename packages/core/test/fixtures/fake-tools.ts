@@ -4,7 +4,11 @@
  * `uv-offline` (the updater can't reach its server), `browser-use-ready` (the pinned browser-use is "downloaded"),
  * `browser-use-broken` / `browser-use-noop` (its download fails / "succeeds" without leaving anything),
  * `playwright-dry-run` / `playwright-location` (what the newest Playwright would install, and where), `logged-out`,
- * `calls.log` (every update/install) and `probes.log` (every look at what the newest Playwright has).
+ * `cua-driver-ready` / `cua-driver-broken` (the pinned Cua Driver is "downloaded" / its download fails; its program
+ * is `cua-driver-bin`, which the test writes), `cua-driver-slow` (its download goes on until `cua-driver-release`
+ * exists),
+ * `uv-cache` (what `uv cache dir` names), `calls.log` (every update/install), `probes.log` (every look at what the
+ * newest Playwright has) and `cua-lookups.log` (every look into uv's cache for the pinned Cua Driver).
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,6 +28,7 @@ const UV = `#!/bin/sh
 DIR="$(dirname "$0")"
 case "$1 $2" in
   "--version "*) echo "uv $(cat "$DIR/uv-version")" ;;
+  "cache dir") echo "$DIR/uv-cache" ;;
   "self update")
     echo "uv self update" >> "$DIR/calls.log"
     if [ -f "$DIR/uv-offline" ]; then echo "error: could not reach github.com" >&2; exit 2; fi
@@ -48,6 +53,17 @@ case "$1 $2" in
     if [ -f "$DIR/browser-use-broken" ]; then echo "error: Failed to fetch $2" >&2; exit 1; fi
     if [ -f "$DIR/browser-use-noop" ]; then echo "browser-use ready"; exit 0; fi
     touch "$DIR/browser-use-ready"; echo "browser-use ready"; exit 0 ;;
+  "--from cua-driver=="*)
+    if [ "$OFFLINE" = 0 ]; then
+      echo "uvx $2" >> "$DIR/calls.log"
+      if [ -f "$DIR/cua-driver-slow" ]; then while [ ! -f "$DIR/cua-driver-release" ]; do sleep 0.05; done; fi
+      if [ -f "$DIR/cua-driver-broken" ]; then echo "error: Failed to fetch $2" >&2; exit 1; fi
+      touch "$DIR/cua-driver-ready"
+    else
+      echo "uvx --offline $2" >> "$DIR/cua-lookups.log"
+    fi
+    if [ -f "$DIR/cua-driver-ready" ]; then printf %s "$DIR/cua-driver-bin"; exit 0; fi
+    echo "error: cua-driver was not found in the cache" >&2; exit 1 ;;
   "playwright@latest install")
     if [ "$5" = "--dry-run" ]; then echo "playwright dry-run" >> "$DIR/probes.log"; cat "$DIR/playwright-dry-run"; exit 0; fi
     echo "uvx playwright install" >> "$DIR/calls.log"
@@ -72,6 +88,8 @@ export interface FakeTools {
   calls(): string[];
   /** Every time the newest Playwright was asked what it would install. */
   probes(): string[];
+  /** Every time uv's cache was asked for the pinned Cua Driver (without downloading). */
+  cuaLookups(): string[];
 }
 
 export function fakeTools(dir: string): FakeTools {
@@ -95,6 +113,7 @@ export function fakeTools(dir: string): FakeTools {
     },
     calls: () => lines("calls.log"),
     probes: () => lines("probes.log"),
+    cuaLookups: () => lines("cua-lookups.log"),
   };
   tools.set("claude-version", "2.1.274");
   tools.set("uv-version", "0.9.0");

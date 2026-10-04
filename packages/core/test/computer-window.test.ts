@@ -3,11 +3,13 @@
  * typing and keys are routed, what the model is told, and when the agent cursor shows.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setupEnv, type TestEnv } from "./fixtures/runner-harness";
-import { stopCuaDriver } from "../src/computer/cua";
+import { setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { fakeTools } from "./fixtures/fake-tools";
+import { CUA_DRIVER_SPEC, __resetCuaDriverForTests, installCuaDriver, stopCuaDriver } from "../src/computer/cua";
+import { __setUvxForTests } from "../src/services/doctor";
 import { stopHelper } from "../src/computer/helper";
 import { windowEngine } from "../src/computer/engines/window";
 import { updateSettings } from "../src/services/settings";
@@ -156,6 +158,45 @@ suite("window shares (macOS helper)", () => {
       await stopCuaDriver();
       updateSettings({ computer: { useCuaDriver: false, allowForeground: false, cuaDriverCommand: "" } });
       rmSync(state, { recursive: true, force: true });
+    }
+  });
+
+  test("while Cua Driver downloads for its first use the helper acts, and the driver takes over once it is there", async () => {
+    const tools = fakeTools(join(dir, "fake-bin"));
+    const state = join(dir, "cua-state");
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(tools.dir, "cua-driver-bin"), `#!/bin/sh\nexec '${process.execPath}' '${FAKE_CUA_DRIVER}' '${state}'\n`);
+    chmodSync(join(tools.dir, "cua-driver-bin"), 0o755);
+    tools.set("cua-driver-slow", "");
+    __setUvxForTests(tools.uvx);
+    __resetCuaDriverForTests({ standalone: null });
+    updateSettings({ computer: { useCuaDriver: true, cuaDriverCommand: "" } });
+    const f5 = [{ key: "f5", modifiers: [] }];
+    try {
+      const engine = windowEngine(target, { agent: true });
+      const started = Date.now();
+      expect((await engine.keys("window:70:7", f5, {})).detail).toBe("Pressed (background)");
+      expect(Date.now() - started).toBeLessThan(5000);
+      // The download started in the background.
+      await until(() => tools.calls().length > 0, 5000, "the download to start");
+      expect(tools.calls()).toEqual([`uvx ${CUA_DRIVER_SPEC}`]);
+      expect(calls().filter((c) => c.cmd === "key" && !c.webOnly)).toHaveLength(1);
+      // What only the driver can do says it is on its way — for this action, not for good.
+      await expect(engine.elements()).rejects.toMatchObject({ code: "downloading" });
+
+      tools.set("cua-driver-release", "");
+      await installCuaDriver();
+      rmSync(logFile, { force: true });
+      expect((await engine.keys("window:70:7", f5, {})).detail).toBe("Pressed");
+      expect(calls().filter((c) => c.cmd === "key" && !c.webOnly)).toEqual([]);
+      const driverCalls = readFileSync(join(state, "calls.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
+      expect(driverCalls.filter((c) => c.name === "press_key")).toEqual([{ name: "press_key", pid: 70, window_id: 7, key: "f5" }]);
+      expect(tools.calls()).toEqual([`uvx ${CUA_DRIVER_SPEC}`]);
+    } finally {
+      await stopCuaDriver();
+      __setUvxForTests(undefined);
+      __resetCuaDriverForTests();
+      updateSettings({ computer: { useCuaDriver: false } });
     }
   });
 

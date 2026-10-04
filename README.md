@@ -245,8 +245,9 @@ running in the background). **Stop sharing** takes effect immediately, even mid-
 desktop access for routines (agent settings → *Computer*). Setup lives in **Settings → Computer**:
 
 - **macOS** asks once for *Accessibility* and *Screen Recording* for Godmode (restart Godmode after granting).
-- **Cua Driver** (`cua-driver` from PyPI, MIT) is downloaded with one click via uv. Without it, Godmode's built-in
-  macOS helper controls windows on its own.
+- **Cua Driver** (`cua-driver` from PyPI, MIT) is downloaded via uv the first time an agent needs it (or with one
+  click), and kept at the version Godmode was tested with. Without it, Godmode's built-in macOS helper controls
+  windows on its own.
 - **Windows / Linux**: single windows need Cua Driver; the whole desktop uses a built-in PowerShell helper (Windows) or
   `xrandr` + ImageMagick + `xdotool` (Linux/X11), and falls back to Cua Driver's primary display.
 

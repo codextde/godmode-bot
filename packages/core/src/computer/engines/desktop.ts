@@ -10,7 +10,7 @@ import { computerTargetLabel } from "@godmode/shared";
 import { sleep } from "../../util";
 import { fitSize, type Point, type Rect } from "../geometry";
 import { getHelper, HelperError, type ComputerHelper, type HelperDisplay } from "../helper";
-import { CuaError, cuaKeyName, cuaModifier, getCuaDriver, type CuaDriverClient } from "../cua";
+import { CuaError, cuaKeyName, cuaModifier, getCuaDriver, type CuaDownload, type CuaDriverClient } from "../cua";
 import type { KeyCombo } from "../keys";
 import {
   EngineError,
@@ -37,14 +37,15 @@ export function engineErrorFrom(err: unknown): EngineError {
   if (err instanceof CuaError) {
     const gone = /window_id_not_found|window_target_not_found|not_found/.test(err.code);
     const refused = /refused|background_|off_space|ax_unresolved|occluded|ambiguous/.test(err.code) || err.result?.structured.effect === "refused";
-    return new EngineError(err.message, gone ? "gone" : err.code === "unavailable" ? "unsupported" : refused ? "refused" : "failed");
+    const code = gone ? "gone" : err.code === "unavailable" ? "unsupported" : err.code === "downloading" ? "downloading" : refused ? "refused" : "failed";
+    return new EngineError(err.message, code);
   }
   return new EngineError(err instanceof Error ? err.message : String(err), "failed");
 }
 
-async function cuaCall(tool: string, args: Record<string, unknown>) {
+async function cuaCall(tool: string, args: Record<string, unknown>, download: CuaDownload) {
   try {
-    const cua = await getCuaDriver();
+    const cua = await getCuaDriver({ download });
     return await cua.exclusive(() => cua.call(tool, args));
   } catch (err) {
     throw engineErrorFrom(err);
@@ -59,7 +60,11 @@ export class HelperDesktopEngine implements ComputerEngine {
   readonly name = "native";
   private displayCache: { at: number; displays: HelperDisplay[] } | null = null;
 
-  constructor(readonly target: DesktopTarget) {}
+  constructor(
+    readonly target: DesktopTarget,
+    /** Whether a missing Cua Driver (Windows / Linux) is downloaded for this engine: see CuaDownload. */
+    private download: CuaDownload = "never",
+  ) {}
 
   private async helper(): Promise<ComputerHelper> {
     try {
@@ -236,7 +241,7 @@ export class HelperDesktopEngine implements ComputerEngine {
     } catch (err) {
       if (!(err instanceof HelperError && err.code === "unsupported")) throw engineErrorFrom(err);
       // Linux: apps are launched through Cua Driver.
-      await cuaCall("launch_app", { name });
+      await cuaCall("launch_app", { name }, this.download);
       return { detail: `Opened ${name}` };
     }
   }
@@ -248,7 +253,7 @@ export class HelperDesktopEngine implements ComputerEngine {
     } catch (err) {
       if (!(err instanceof HelperError && err.code === "unsupported")) throw engineErrorFrom(err);
       // Windows / Linux: windows come from Cua Driver.
-      const cua = await getCuaDriver().catch((e) => {
+      const cua = await getCuaDriver({ download: this.download }).catch((e) => {
         throw engineErrorFrom(e);
       });
       return (await cua.listWindows().catch((e) => { throw engineErrorFrom(e); }))
@@ -272,7 +277,7 @@ export class HelperDesktopEngine implements ComputerEngine {
       const w = (await this.windows()).find((x) => x.id === id);
       if (!w) throw new EngineError(`There is no window ${id}. Use computer_windows to list them.`, "bad_request");
       await this.guard({ x: w.frame.x + w.frame.width / 2, y: w.frame.y + w.frame.height / 2 });
-      await cuaCall("bring_to_front", { pid: w.pid, window_id: id });
+      await cuaCall("bring_to_front", { pid: w.pid, window_id: id }, this.download);
       return { detail: `Brought ${w.app} to the front` };
     }
     const w = await helper.window(id).catch(() => null);
@@ -300,11 +305,14 @@ export class CuaDesktopEngine implements ComputerEngine {
   readonly name = "cua";
   private size: { width: number; height: number } | null = null;
 
-  constructor(readonly target: DesktopTarget) {}
+  constructor(
+    readonly target: DesktopTarget,
+    private download: CuaDownload = "never",
+  ) {}
 
   private async driver(): Promise<CuaDriverClient> {
     try {
-      return await getCuaDriver();
+      return await getCuaDriver({ download: this.download });
     } catch (err) {
       throw engineErrorFrom(err);
     }
@@ -313,7 +321,7 @@ export class CuaDesktopEngine implements ComputerEngine {
   private async screen(): Promise<{ width: number; height: number }> {
     if (this.size) return this.size;
     const cua = await this.driver();
-    const r = await cua.call("get_desktop_state", { max_image_dimension: 64 }).catch((e) => {
+    const r = await cua.desktopState(64).catch((e) => {
       throw engineErrorFrom(e);
     });
     const w = Number(r.structured.screenshot_original_width);
@@ -331,7 +339,7 @@ export class CuaDesktopEngine implements ComputerEngine {
   async capture(_view: string, opts: CaptureOptions): Promise<Capture> {
     const s = await this.screen();
     const fit = fitSize(s.width, s.height, opts.maxEdge);
-    const r = await (await this.driver()).call("get_desktop_state", { max_image_dimension: Math.max(fit.width, fit.height) }).catch((e) => {
+    const r = await (await this.driver()).desktopState(Math.max(fit.width, fit.height)).catch((e) => {
       throw engineErrorFrom(e);
     });
     const image = r.content.find((c) => c.type === "image" && c.data);
@@ -351,8 +359,14 @@ export class CuaDesktopEngine implements ComputerEngine {
     };
   }
 
+  /** Frame coordinates are native pixels; the driver gets them at the size of its last desktop screenshot. */
   private async act(tool: string, args: Record<string, unknown>): Promise<void> {
-    await (await this.driver()).exclusive(() => this.driverCall(tool, args));
+    const cua = await this.driver();
+    try {
+      await cua.desktopAct(tool, args);
+    } catch (err) {
+      throw engineErrorFrom(err);
+    }
   }
 
   private async driverCall(tool: string, args: Record<string, unknown>) {
@@ -371,7 +385,7 @@ export class CuaDesktopEngine implements ComputerEngine {
       y: p.y,
       ...(opts.button !== "left" ? { button: opts.button } : {}),
       ...(opts.count > 1 ? { count: opts.count } : {}),
-      ...(opts.modifiers.length ? { modifier: opts.modifiers.map(cuaModifier) } : {}),
+      ...(opts.modifiers.length ? { modifier: opts.modifiers.map((m) => cuaModifier(m)) } : {}),
     });
     return { detail: "Clicked" };
   }
@@ -389,7 +403,7 @@ export class CuaDesktopEngine implements ComputerEngine {
       to_x: to.x,
       to_y: to.y,
       ...(opts.button !== "left" ? { button: opts.button } : {}),
-      ...(opts.modifiers.length ? { modifier: opts.modifiers.map(cuaModifier) } : {}),
+      ...(opts.modifiers.length ? { modifier: opts.modifiers.map((m) => cuaModifier(m)) } : {}),
     });
     return { detail: "Dragged" };
   }
@@ -414,7 +428,7 @@ export class CuaDesktopEngine implements ComputerEngine {
         }
         throw new EngineError(`The key "${c.key}" can't be sent on this platform.`, "bad_request");
       }
-      if (c.modifiers.length) await this.act("hotkey", { scope: "desktop", keys: [...c.modifiers.map(cuaModifier), key] });
+      if (c.modifiers.length) await this.act("hotkey", { scope: "desktop", keys: [...c.modifiers.map((m) => cuaModifier(m)), key] });
       else await this.act("press_key", { scope: "desktop", key });
     }
     return { detail: "Pressed" };
@@ -450,12 +464,15 @@ class AutoDesktopEngine implements ComputerEngine {
   readonly name = "desktop";
   private inner: Promise<ComputerEngine> | null = null;
 
-  constructor(readonly target: DesktopTarget) {}
+  constructor(
+    readonly target: DesktopTarget,
+    private download: CuaDownload,
+  ) {}
 
   private engine(): Promise<ComputerEngine> {
     this.inner ??= getHelper().then(
-      () => new HelperDesktopEngine(this.target) as ComputerEngine,
-      () => new CuaDesktopEngine(this.target) as ComputerEngine,
+      () => new HelperDesktopEngine(this.target, this.download) as ComputerEngine,
+      () => new CuaDesktopEngine(this.target, this.download) as ComputerEngine,
     );
     return this.inner;
   }
@@ -511,6 +528,8 @@ class AutoDesktopEngine implements ComputerEngine {
   }
 }
 
-export function desktopEngine(target: DesktopTarget): ComputerEngine {
-  return process.platform === "darwin" ? new HelperDesktopEngine(target) : new AutoDesktopEngine(target);
+/** `agent`: the run's engine — a missing Cua Driver (Windows / Linux) is downloaded for it, waiting a little. */
+export function desktopEngine(target: DesktopTarget, opts: { agent?: boolean } = {}): ComputerEngine {
+  const download: CuaDownload = opts.agent ? "wait" : "never";
+  return process.platform === "darwin" ? new HelperDesktopEngine(target, download) : new AutoDesktopEngine(target, download);
 }

@@ -443,16 +443,22 @@ Each model screenshot remembers the screen area it shows (`Shot`), so image pixe
 * **Window** — [Cua Driver](https://github.com/trycua/cua) (`libs/cua-driver`, MIT), run as `cua-driver mcp --direct`
   (Godmode is its MCP client; `--direct` keeps the TCC grants of the app running Godmode). The pinned build comes from
   PyPI (`cua-driver`, bundles the native binary) via `uvx`, with telemetry and update checks off and its state under
-  `<data>/cua-driver`. Its pixel coordinates refer to its last screenshot of the window, so all calls go through one
-  queue and that size is tracked. Element tokens that a newer driver snapshot made stale are re-resolved by
-  role/label/position. On macOS the native helper backs it up: window capture for the live view, scrolling (through the
-  scroll area's accessibility scroll bars — posted wheel events don't reach background windows), and pointer/keyboard
-  delivery with `CGEventPostToPid` + `AXPress` when the driver refuses a window it can't match in the accessibility tree.
+  `<data>/cua-driver`; it is downloaded in the background on first use — an agent's action or opening the share picker
+  starts it; the macOS helper acts meanwhile, elsewhere an action waits up to 20 s and the picker says it is under way;
+  status checks never start one, also in place of an installed
+  `cua-driver` older than the pin (which is used only without uv, and flagged in the system check). Its pixel coordinates refer to its last screenshot
+  of the window, so all calls go through one queue and that size is tracked. Element tokens that a newer driver
+  snapshot made stale are re-resolved by role/label/position. On macOS the native helper backs it up: window capture
+  for the live view, scrolling (through the scroll area's accessibility scroll bars — posted wheel events don't reach
+  background windows), and pointer/keyboard delivery with `CGEventPostToPid` + `AXPress` when the driver refuses a
+  window it can't match in the accessibility tree.
 * **Desktop / display** — the native helper, every monitor: macOS `native/macos/GodmodeComputer.swift` (ScreenCaptureKit,
   global CGEvents; embedded into the compiled core by `scripts/build.ts`, extracted to `<data>/bin`, compiled with
   `swiftc` when running from source), Windows a PowerShell-hosted C# class (`helpers/windowsHelper.ts`: `Screen.AllScreens`,
   `CopyFromScreen`, `SendInput`), Linux/X11 `xrandr` + ImageMagick `import` + `xdotool`. Without one, Cua Driver's
-  desktop target covers the primary display. Desktop runs take turns (one mouse); window/tab shares only lock themselves.
+  desktop target covers the primary display (the driver scales desktop pixels by how much its last desktop screenshot
+  was downsized, so the client sends them at that size). Desktop runs take turns (one mouse); window/tab shares only
+  lock themselves.
 * **Tab** — CDP on Godmode's Chromium (`Page.captureScreenshot`, `Input.dispatch*`), background tabs included.
 
 Live view: `computer.subscribe { view }` over the WebSocket (`display:<id>`, `window:<pid>:<windowId>`,

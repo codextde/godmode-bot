@@ -15,7 +15,7 @@ import { logger } from "../log";
 import { childEnv, which } from "../util";
 import { findChrome } from "../browser/chrome";
 import { BROWSER_USE_SPEC, BROWSER_USE_VERSION } from "../browser/browserUse";
-import { CUA_DRIVER_SPEC, CUA_DRIVER_VERSION, cuaDriverInstalled, installCuaDriver } from "../computer/cua";
+import { CUA_DRIVER_SPEC, CUA_DRIVER_VERSION, cuaDownloadNote, cuaDriverInstalled, installCuaDriver } from "../computer/cua";
 
 const log = logger("doctor");
 
@@ -374,9 +374,17 @@ async function checkCuaDriver(): Promise<Check> {
   const s = settingsOrNull()?.computer;
   if (s && !s.useCuaDriver) return { ...base, ok: false, version: null, path: null, detail: "Turned off — optional, controls single app windows in the background" };
   const found = await cuaDriverInstalled();
-  if (found.installed) {
-    return { ...base, ok: true, version: found.source === "uv" ? CUA_DRIVER_VERSION : null, path: found.path, detail: found.source === "uv" ? `${CUA_DRIVER_SPEC} (via uv)` : `Using ${found.source} cua-driver` };
+  const uv = !!resolveUvx();
+  // Under way, failed a short while ago, or impossible here: say so. Otherwise it is downloaded when an agent needs it.
+  const download = found.downloading || !found.fetchable ? cuaDownloadNote() : `Godmode downloads ${CUA_DRIVER_SPEC} with uv when an agent needs it`;
+  if (found.outdated) {
+    const next = uv ? download : `update it with \`cua-driver update --apply\`, or install uv so Godmode can download ${CUA_DRIVER_VERSION}`;
+    return { ...base, ok: true, version: found.version, path: found.path, detail: `cua-driver ${found.version ?? "(version unknown)"} is older than the tested ${CUA_DRIVER_VERSION} — ${next}` };
   }
+  if (found.installed) {
+    return { ...base, ok: true, version: found.version, path: found.path, detail: found.source === "uv" ? `${CUA_DRIVER_SPEC} (via uv)` : `Using ${found.source} cua-driver` };
+  }
+  if (uv) return { ...base, ok: false, version: null, path: null, detail: `Not installed — optional; ${download}` };
   return { ...base, ok: false, version: null, path: null, detail: "Not installed — optional, lets agents control a single app window in the background" };
 }
 

@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, ComputerTarget, ServerEvent } from "@godmode/shared";
@@ -13,7 +13,7 @@ import { attachComputer, computerLockKey, detachAgentComputer, detachComputer, i
 import { config } from "../src/config";
 import { isGodmodeAppName } from "../src/computer/self";
 import { callTool } from "../src/mcp/tools";
-import { cuaKeyName, getCuaDriver, scrubSummary, stopCuaDriver } from "../src/computer/cua";
+import { cuaDriverRunning, cuaKeyName, cuaModifier, getCuaDriver, scrubSummary, stopCuaDriver } from "../src/computer/cua";
 import { CuaDesktopEngine } from "../src/computer/engines/desktop";
 import { cdpCommands, cdpKey, cdpModifiers } from "../src/computer/engines/tab";
 import { keysym, parseMonitors, pointerArgs } from "../src/computer/helpers/x11Helper";
@@ -133,10 +133,16 @@ describe("targets", () => {
   });
 
   test("engine key mappings", () => {
-    expect(cuaKeyName("enter")).toBe("return");
-    expect(cuaKeyName("backspace")).toBe("delete");
-    expect(cuaKeyName("A")).toBe("a");
-    expect(cuaKeyName("€")).toBeNull();
+    // The names each platform's Cua Driver takes (0.33.1: platform-macos input/keyboard.rs key_name_to_code,
+    // platform-windows input/keyboard.rs key_name_to_vk, platform-linux input/mod.rs key_name_to_keysym).
+    const keys = ["enter", "kpenter", "backspace", "delete", "insert", "escape", "tab", "space", "left", "up", "home", "pagedown", "f1", "f12", "f13", "capslock", "volumeup", "a", "A", "7", "€", "/"];
+    const table = (platform: NodeJS.Platform) => Object.fromEntries(keys.map((k) => [k, cuaKeyName(k, platform)]));
+    const shared = { enter: "return", kpenter: "return", escape: "escape", tab: "tab", space: "space", left: "left", up: "up", home: "home", pagedown: "pagedown", f1: "f1", f12: "f12", f13: null, capslock: null, volumeup: null, a: "a", A: "a", "7": "7", "€": null, "/": null };
+    expect(table("darwin")).toEqual({ ...shared, backspace: "delete", delete: "forward_delete", insert: null });
+    for (const platform of ["win32", "linux"] as const) expect(table(platform)).toEqual({ ...shared, backspace: "backspace", delete: "delete", insert: "insert" });
+    expect(["cmd", "ctrl", "alt", "shift"].map((m) => cuaModifier(m, "darwin"))).toEqual(["cmd", "ctrl", "option", "shift"]);
+    expect(["cmd", "ctrl", "alt", "shift"].map((m) => cuaModifier(m, "win32"))).toEqual(["cmd", "ctrl", "alt", "shift"]);
+    expect(["cmd", "ctrl", "alt", "shift"].map((m) => cuaModifier(m, "linux"))).toEqual(["super", "ctrl", "alt", "shift"]);
     expect(cdpKey("a", true)).toEqual({ key: "A", code: "KeyA", keyCode: 65, text: "A" });
     expect(cdpKey("enter", false).key).toBe("Enter");
     expect(cdpModifiers(["cmd", "shift"])).toBe(12);
@@ -349,9 +355,68 @@ describe("Cua Driver calls", () => {
     await desktop.click("display:primary", { x: 5, y: 6 }, { button: "left", count: 2, modifiers: [] });
     await desktop.click("display:primary", { x: 5, y: 6 }, { button: "right", count: 1, modifiers: [] });
     expect(calls().slice(-2)).toEqual([
-      { name: "click", target: { kind: "desktop", display_id: "primary" }, x: 5, y: 6, count: 2 },
-      { name: "click", target: { kind: "desktop", display_id: "primary" }, x: 5, y: 6, button: "right" },
+      { name: "click", target: { kind: "desktop", display_id: "primary" }, x: 5, y: 6, count: 2, effective: { x: 5, y: 6 } },
+      { name: "click", target: { kind: "desktop", display_id: "primary" }, x: 5, y: 6, button: "right", effective: { x: 5, y: 6 } },
     ]);
+  });
+
+  test("desktop actions land on the native pixel they aim at, whichever capture the driver took last", async () => {
+    const desktop = new CuaDesktopEngine({ kind: "desktop" });
+    const view = "display:primary";
+    const pointer = { button: "left" as const, count: 1, modifiers: [] };
+
+    // The model's screenshot: 1920×1080 downsized to 1280×720. Its frame is the native display.
+    const shot = await desktop.capture(view, { maxEdge: 1280, purpose: "model" });
+    expect([shot.width, shot.height, shot.frame]).toEqual([1280, 720, { x: 0, y: 0, width: 1920, height: 1080 }]);
+    await desktop.click(view, { x: 960, y: 540 }, pointer);
+    // The live view captured at another size in between.
+    await desktop.capture(view, { maxEdge: 640, purpose: "live" });
+    await desktop.move(view, { x: 100, y: 200 });
+    await desktop.drag(view, { x: 10, y: 20 }, { x: 1910, y: 1070 }, pointer);
+    await desktop.scroll(view, { x: 1500, y: 300 }, 0, 2);
+    // A capture at full size: the driver scales nothing any more.
+    await (await getCuaDriver()).desktopState(1920);
+    await desktop.click(view, { x: 1919, y: 1079 }, pointer);
+
+    // The driver's own 64 px look at the display size (a factor of 30), then clicks: whole pixels, none 1 px short
+    // (123 ÷ 30 × 30 is 122.99999999999999, which Windows truncates to 122).
+    const fresh = new CuaDesktopEngine({ kind: "desktop" });
+    await fresh.views();
+    await fresh.click(view, { x: 123, y: 245 }, pointer);
+    await fresh.drag(view, { x: 246, y: 247 }, { x: 490, y: 492 }, pointer);
+
+    const actions = calls().filter((c) => c.effective);
+    expect(actions.map((c) => [c.name, c.effective])).toEqual([
+      ["click", { x: 960, y: 540 }],
+      ["move_cursor", { x: 100, y: 200 }],
+      ["drag", { from_x: 10, from_y: 20, to_x: 1910, to_y: 1070 }],
+      ["scroll", { x: 1500, y: 300 }],
+      ["click", { x: 1919, y: 1079 }],
+      ["click", { x: 123, y: 245 }],
+      ["drag", { from_x: 246, from_y: 247, to_x: 490, to_y: 492 }],
+    ]);
+  });
+
+  test("turned off while it starts: the driver that started is stopped, not used", async () => {
+    writeFileSync(join(state, "init-delay-ms"), "300");
+    const asked = getCuaDriver();
+    await until(() => existsSync(join(state, "started")));
+    updateSettings({ computer: { useCuaDriver: false } });
+    try {
+      await expect(asked).rejects.toMatchObject({ code: "unavailable", message: "Cua Driver is turned off in Settings → Computer." });
+      expect(cuaDriverRunning()).toBeNull();
+      const pid = Number(readFileSync(join(state, "started"), "utf8").trim());
+      await until(() => {
+        try {
+          process.kill(pid, 0);
+          return false;
+        } catch {
+          return true;
+        }
+      }, 5000, "the driver to exit");
+    } finally {
+      updateSettings({ computer: { useCuaDriver: true } });
+    }
   });
 
   test("pixels the driver refuses for lack of a screenshot are sent once more, after a new screenshot", async () => {
