@@ -147,7 +147,7 @@ export function McpServersTab() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: Math.min(i, 12) * 0.03 }}
                 onClick={() => openPreset(p)}
-                className="group flex items-start gap-3 rounded-xl border bg-card p-4 text-left shadow-card transition hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                className="group flex items-start gap-3 rounded-xl border bg-card p-4 text-left shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 <span className="grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2 text-foreground transition group-hover:bg-card group-hover:shadow-card">
                   <p.icon className="size-4" />
