@@ -277,6 +277,10 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/cloud/billing/cancel", refused(LINK_ONLY)],
   ["POST", "/api/cloud/billing/resume", refused(LINK_ONLY)],
   ["GET", "/api/usage", A],
+  // What the team spent and its monthly budgets; letting held work run is like continuing a paused chat.
+  ["GET", "/api/spend", A],
+  ["GET", "/api/budgets", A],
+  ["POST", "/api/budgets/release", A],
 ];
 
 /** Writes a viewer may make: resolving a chat's files changes nothing. */

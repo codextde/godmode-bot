@@ -137,6 +137,8 @@ export interface AgentPresence {
   waiting: number;
   /** Runs paused by the human or waiting for Claude's usage limit. */
   paused: number;
+  /** Runs held because a monthly budget is used up. */
+  held: number;
   needsLogin: boolean;
   failed: boolean;
   /** Waiting for an answer, missing a login, or its last run failed. */
@@ -148,13 +150,14 @@ export interface AgentPresence {
  * it, so the card, the chart, the header and the phone say the same. Queued never counts as working.
  */
 export function agentPresence(
-  agent: Pick<Agent, "enabled" | "status" | "pausedRuns" | "openQuestions" | "failedRunId">,
+  agent: Pick<Agent, "enabled" | "status" | "pausedRuns" | "openQuestions" | "failedRunId"> & { heldRuns?: number },
   live: { running?: number; queued?: number; needsLogin?: boolean } = {},
 ): AgentPresence {
   const running = Math.max(live.running ?? 0, agent.status === "running" ? 1 : 0);
   const queued = live.queued ?? 0;
   const waiting = agent.openQuestions ?? 0;
   const paused = agent.pausedRuns ?? 0;
+  const held = agent.heldRuns ?? 0;
   const needsLogin = !!live.needsLogin;
   const failed = !!agent.failedRunId;
   const state: AgentPresenceState = !agent.enabled
@@ -165,12 +168,12 @@ export function agentPresence(
         ? "waiting"
         : failed
           ? "failed"
-          : paused > 0
+          : paused > 0 || held > 0
             ? "paused"
             : queued > 0
               ? "queued"
               : "idle";
-  return { state, running, queued, waiting, paused, needsLogin, failed, needsYou: agent.enabled && (waiting > 0 || needsLogin || failed) };
+  return { state, running, queued, waiting, paused, held, needsLogin, failed, needsYou: agent.enabled && (waiting > 0 || needsLogin || failed) };
 }
 
 export function presenceLabel(p: AgentPresence): string {
@@ -185,6 +188,7 @@ export function presenceLabel(p: AgentPresence): string {
     case "failed":
       return "Last run failed";
     case "paused":
+      if (!p.paused) return p.held > 1 ? `Held · budget used up · ${p.held} runs` : "Held · budget used up";
       return p.paused > 1 ? `Paused · ${p.paused} chats` : "Paused";
     case "queued":
       return p.queued > 1 ? `Queued · ${p.queued}` : "Queued";

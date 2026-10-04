@@ -92,7 +92,13 @@ export function RecentChats() {
                               <Pause className="size-3 shrink-0 fill-current" aria-hidden />
                             )}
                             <span className="truncate">
-                              {c.paused.reason === "user" ? "Paused" : c.paused.auto && c.paused.resumeAt ? `Continues ${followupWhen(c.paused.resumeAt)}` : "Waiting for the limit"}
+                              {c.paused.reason === "user"
+                                ? "Paused"
+                                : c.paused.reason === "budget"
+                                  ? "Held — budget used up"
+                                  : c.paused.auto && c.paused.resumeAt
+                                    ? `Continues ${followupWhen(c.paused.resumeAt)}`
+                                    : "Waiting for the limit"}
                             </span>
                           </span>
                         ) : c.followup ? (

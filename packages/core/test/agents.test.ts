@@ -86,6 +86,7 @@ describe("agent creation", () => {
       credentialIds: null,
       totpIds: null,
       maxBudgetUsd: null,
+      monthlyBudgetUsd: null,
     });
     expect(agent.browser).toEqual({ profileId: null, enabled: true, headless: null });
 

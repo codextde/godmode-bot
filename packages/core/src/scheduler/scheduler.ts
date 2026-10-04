@@ -7,7 +7,7 @@
 import { Cron } from "croner";
 import type { Routine, Run } from "@godmode/shared";
 import { MAX_START_WINDOW_MINUTES } from "@godmode/shared";
-import { all, run as exec } from "../db";
+import { all, get, run as exec } from "../db";
 import { logger } from "../log";
 import { getAgent } from "../agents/service";
 import { computeNextRunAt, emitRoutine, getRoutine, lastScheduledStart, nextRandomStart, startWindowOf } from "../services/routines";
@@ -19,6 +19,7 @@ import { activeMainRun, ensureRunListener, recordEvent, settleIfFinished } from 
 import { HttpError, badRequest, conflict, now } from "../util";
 import { pausedRun } from "../services/pauses";
 import { remindWaitingAutomation } from "../services/questions";
+import { exhaustedBudget } from "../services/budgets";
 
 const log = logger("scheduler");
 
@@ -98,7 +99,7 @@ function nextRunAt(routine: Routine): string | null {
  * Run a schedule automation now: same path as a cron tick. Throws 409 when the agent is disabled or the routine is
  * already running. `scheduled` ticks additionally skip routines that were disabled meanwhile.
  */
-export async function triggerRoutine(id: string, opts: { scheduled?: boolean } = {}): Promise<Run> {
+export async function triggerRoutine(id: string, opts: { scheduled?: boolean; byHuman?: boolean } = {}): Promise<Run> {
   ensureRunListener();
   const routine = getRoutine(id);
   if (routine.trigger.type !== "schedule") throw badRequest(`“${routine.name}” is not a scheduled automation`);
@@ -108,13 +109,12 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean } =
   const active = triggering.has(id) ? null : activeMainRun(id);
   if (triggering.has(id) || active) {
     if (opts.scheduled) {
-      const waits = !!active && pausedRun(active)?.reason === "question";
-      recordEvent(id, {
-        source: "schedule",
-        title: "Scheduled time reached",
-        status: "skipped",
-        note: waits ? "The previous run is waiting for your answer" : "The previous run was still in progress",
-      });
+      const reason = active ? pausedRun(active)?.reason : undefined;
+      const waits = reason === "question";
+      const note = waits ? "The previous run is waiting for your answer" : reason === "budget" ? "The previous run is held — a monthly budget is used up" : "The previous run was still in progress";
+      // A held run skips every tick until the budget has room: once on the list is enough.
+      const last = get<{ note: string | null }>("SELECT note FROM automation_events WHERE routine_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1", id);
+      if (reason !== "budget" || last?.note !== note) recordEvent(id, { source: "schedule", title: "Scheduled time reached", status: "skipped", note });
       if (waits) remindWaitingAutomation(id);
     }
     throw conflict(`Routine "${routine.name}" is already running`);
@@ -129,7 +129,7 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean } =
       nextRunAt(routine),
       id,
     );
-    const { run } = await sendMessage(conversationId, { content: routine.prompt, trigger: "routine", routineId: routine.id, source: "automation" });
+    const { run } = await sendMessage(conversationId, { content: routine.prompt, trigger: "routine", routineId: routine.id, source: "automation", byHuman: opts.byHuman });
     recordEvent(id, {
       source: opts.scheduled ? "schedule" : "manual",
       title: opts.scheduled ? "Scheduled time reached" : "Started manually",
@@ -159,6 +159,11 @@ async function onTick(routineId: string) {
     return;
   }
   try {
+    // A condition check costs money each time: none while the agent's or the team's monthly budget is used up.
+    if (routine.trigger.type === "condition" && exhaustedBudget(getAgent(routine.agentId))) {
+      log.info(`routine ${routineId} skipped its check: a monthly budget is used up`);
+      return;
+    }
     const run =
       routine.trigger.type === "condition"
         ? await runConditionCheck(routineId, { scheduled: true })

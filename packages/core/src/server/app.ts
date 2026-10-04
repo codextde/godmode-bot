@@ -9,6 +9,7 @@ import { registerSystemRoutes } from "./routes/system";
 import { registerVaultRoutes } from "./routes/vault";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
 import { registerAgentRoutes } from "./routes/agents";
+import { registerSpendRoutes } from "./routes/spend";
 import { registerChatRoutes } from "./routes/chat";
 import { registerMissingLoginRoutes } from "./routes/missingLogins";
 import { registerQuestionRoutes } from "./routes/questions";
@@ -147,6 +148,7 @@ export function createApp() {
   registerVaultRoutes(app);
   registerWorkspaceRoutes(app);
   registerAgentRoutes(app);
+  registerSpendRoutes(app);
   registerChatRoutes(app);
   registerMissingLoginRoutes(app);
   registerQuestionRoutes(app);

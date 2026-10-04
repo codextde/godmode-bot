@@ -56,6 +56,7 @@ const permissionsSchema = z
     credentialIds: z.array(id).max(1000).nullable(),
     totpIds: z.array(id).max(1000).nullable(),
     maxBudgetUsd: z.number().positive().max(10_000).nullable(),
+    monthlyBudgetUsd: z.number().positive().max(1_000_000).nullable(),
   })
   .partial();
 
@@ -282,7 +283,7 @@ export function registerAgentRoutes(app: Hono): void {
     return c.json({ ok: true });
   });
 
-  app.post("/api/routines/:id/run", async (c) => c.json(await runRoutineNow(c.req.param("id"))));
+  app.post("/api/routines/:id/run", async (c) => c.json(await runRoutineNow(c.req.param("id"), { byHuman: true })));
 
   /* Automation events -------------------------------------------------- */
 

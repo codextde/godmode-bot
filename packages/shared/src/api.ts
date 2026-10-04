@@ -1,3 +1,4 @@
+import type { SpendKind } from "./budget";
 import type { AgentCharacter } from "./character";
 import type { AgentComputerConfig, ComputerTarget } from "./computer";
 import type {
@@ -496,3 +497,54 @@ export interface ClientLogInput {
 }
 
 export type { Agent, Attachment, Conversation, Credential, Message, Routine, Run, TotpEntry, Workspace };
+
+/* ------------------------------------------------------------------ */
+/* Spend and budgets                                                    */
+/* ------------------------------------------------------------------ */
+
+export type SpendPeriod = "today" | "week" | "month" | "all";
+
+export interface SpendTotals {
+  /** Runs that worked in the period (a run that went on after a pause counts in each period it worked in). */
+  runs: number;
+  failed: number;
+  costUsd: number;
+  durationMs: number;
+}
+
+/**
+ * What the team cost, booked when the money was spent (each stretch of a run when it ended). `periods` holds the four
+ * totals; the breakdowns are for `period`.
+ */
+export interface SpendReport {
+  period: SpendPeriod;
+  /** IANA zone days and months are counted in (the computer Godmode runs on). */
+  timeZone: string;
+  periods: Record<SpendPeriod, SpendTotals>;
+  byAgent: (SpendTotals & { agentId: ID; name: string; deleted: boolean })[];
+  byKind: (SpendTotals & { kind: SpendKind })[];
+  /** Runs queued, working or standing still right now: what they cost so far is in, the rest comes. */
+  active: number;
+}
+
+export interface BudgetStatus {
+  /** null = the team's budget. */
+  agentId: ID | null;
+  budgetUsd: number | null;
+  spentUsd: number;
+  /** Runs held for this budget. */
+  held: number;
+  state: "none" | "ok" | "warning" | "exhausted";
+}
+
+export interface BudgetOverview {
+  /** "2026-10" */
+  month: string;
+  /** When the month's budgets start over. */
+  resetsAt: ISODate;
+  team: BudgetStatus;
+  /** Agents with a budget of their own, or held runs. */
+  agents: BudgetStatus[];
+}
+
+export type BudgetReleaseInput = { scope: "team" } | { scope: "agent"; agentId: ID };
