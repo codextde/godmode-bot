@@ -61,7 +61,8 @@ export default function ActivityPage() {
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const liveRuns = useLive((s) => s.runs);
   const liveList = useMemo(
-    () => Object.values(liveRuns).filter((r) => agentFilter === "all" || r.agentId === agentFilter),
+    // Working right now; a queued run shows in the list below as queued.
+    () => Object.values(liveRuns).filter((r) => r.status === "running" && (agentFilter === "all" || r.agentId === agentFilter)),
     [liveRuns, agentFilter],
   );
 

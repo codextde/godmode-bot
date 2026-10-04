@@ -108,6 +108,8 @@ export function SubmitButton({
 export function unlockError(err: unknown): string {
   if (err instanceof ApiRequestError) {
     if (err.status === 429) return "Too many attempts — wait a minute and try again.";
+    // Through Godmode Cloud the computer may refuse unlocking at all; its sentence says why.
+    if (err.code === "cloud_forbidden") return err.message;
     if (err.status === 400 || err.status === 401 || err.status === 403) return "That passphrase isn't right.";
   }
   return errorMessage(err);

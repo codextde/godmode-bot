@@ -44,6 +44,7 @@ export default function Compose() {
         ...(attachments.length ? { attachments } : {}),
         ...(choice.model ? { model: choice.model } : {}),
         ...(choice.effort ? { effort: choice.effort } : {}),
+        ...(choice.ultracode !== null ? { ultracode: choice.ultracode } : {}),
       });
       useLive.getState().runStarted(result.run);
       router.dismiss();

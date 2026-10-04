@@ -161,8 +161,20 @@ function bearer(c: Context): string {
   return header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
 }
 
+const waiting = new WeakSet<Request>();
+
+/** The request waits for something that takes its time (a VM, a download, git): slow by design, the log says so. */
+export function expectSlow(c: Context) {
+  waiting.add(c.req.raw);
+}
+
+export function isExpectedSlow(c: Context): boolean {
+  return waiting.has(c.req.raw);
+}
+
 /** Long requests (tool calls, VM boots, downloads) must not be cut off by Bun's idle timeout. */
 export function disableIdleTimeout(c: Context) {
+  expectSlow(c);
   try {
     const server = (c.env as { server?: { timeout?: (req: Request, seconds: number) => void } } | undefined)?.server;
     server?.timeout?.(c.req.raw, 0);
@@ -255,7 +267,8 @@ export function registerMcpRoutes(app: Hono): void {
     const input: unknown = await c.req.json().catch(() => null);
     // A subagent's steps: the pause and the message are for the agent itself, at its own next step.
     if (isObj(input) && input.agent_id) return c.body(null, 204);
-    if (pauseAtStep(ctx.runId)) return c.json({ continue: false, stopReason: "Paused" });
+    const stop = pauseAtStep(ctx.runId);
+    if (stop) return c.json({ continue: false, stopReason: stop === "question" ? "Waiting for the human's answer" : "Paused" });
     if (!hasQueued(ctx.conversationId)) return c.body(null, 204);
     const additionalContext = deliverQueued(ctx.runId);
     if (!additionalContext) return c.body(null, 204);

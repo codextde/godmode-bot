@@ -17,7 +17,7 @@ import { getAppSecret, isUnlocked } from "../vault/vault";
 import { onSettingsApplied } from "../services/runtime";
 import { resolveUvx, toolPath } from "../services/doctor";
 import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
-import { CdpClient, attachToPage, pickActivePage, probeCdp, isUserPage, type PageSession, type PageTarget } from "./cdp";
+import { CdpClient, attachToPage, getCookies, pickActivePage, probeCdp, isUserPage, type CdpCookie, type PageSession, type PageTarget } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
@@ -417,7 +417,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean; trans
   client.on("Target.targetInfoChanged", activity);
   tabs.onChange((conversationId) => conversationId && emitProfileSoon(profileId));
   client.onClose(() => void onBrowserGone(rb, "CDP connection closed"));
-  proc?.exited.then((code) => onBrowserGone(rb, `exited with code ${code}`));
+  proc?.exited.then((code) => onBrowserGone(rb, code === null ? "killed by a signal" : `exited with code ${code}`));
 
   registerBrowser(rb);
   startIdleWatcher();
@@ -499,7 +499,18 @@ function forget(rb: RunningBrowser) {
 async function onBrowserGone(rb: RunningBrowser, reason: string) {
   if (rb.stopping || getRegistered(rb.profileId) !== rb) return;
   rb.stopping = true;
-  log.warn(`browser for profile ${rb.profileId} stopped unexpectedly (${reason})`);
+  // Whether the browser itself went (crash, quit by the human) or only the connection to it: `processAlive`. A browser
+  // that is still there is ended below, and the next run that needs it starts a new one.
+  log.warn(`browser for profile ${rb.profileId} stopped unexpectedly (${reason})`, {
+    pid: rb.pid,
+    processAlive: pidAlive(rb),
+    connection: rb.client.closeReason,
+    headless: rb.headless,
+    adopted: !rb.process,
+    upMin: Math.round((Date.now() - rb.startedAt) / 60_000),
+    idleS: rb.lastUsedAt ? Math.round((Date.now() - rb.lastUsedAt) / 1000) : null,
+    chats: rb.tabs.openChats().length,
+  });
   rb.client.close();
   await terminate(rb);
   forget(rb);
@@ -989,6 +1000,20 @@ export const BROWSER_LLM_TOOLS = ["browser_extract_content", "retry_with_browser
 
 export async function listLocalChromeProfiles(): Promise<LocalChromeProfile[]> {
   return importer.listLocalChromeProfiles();
+}
+
+/**
+ * Every cookie of one of Godmode's own profiles (its browser starts headless just for this when it isn't running).
+ * For copying the profile's sessions to a runner.
+ */
+export async function exportProfileCookies(profileId: string): Promise<CdpCookie[]> {
+  requireRow(profileId);
+  const rb = await ensureBrowser(profileId, { headless: true, transient: true });
+  try {
+    return await getCookies(rb.client);
+  } finally {
+    await giveBack(rb);
+  }
 }
 
 /** Import cookies/sessions from the user's Chrome (profile-use technique) or a cookie JSON into a Godmode profile. */

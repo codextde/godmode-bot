@@ -34,4 +34,5 @@ export const qk = {
   vmScreen: (id: string) => ["vm-screen", id],
   notifications: ["notifications"],
   missingLogins: ["missing-logins"],
+  questions: ["questions"],
 } as const;

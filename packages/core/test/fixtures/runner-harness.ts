@@ -140,6 +140,8 @@ export interface Invocation {
   args: string[];
   prompt: string;
   cwd: string;
+  /** Content of the run's `--settings` file (the hooks, and `ultracode` when on); null without one. */
+  settings: { hooks?: unknown; ultracode?: boolean } | null;
   env: { ANTHROPIC_API_KEY: string | null; GODMODE_TOKEN: string | null; CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: string | null };
 }
 

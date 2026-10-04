@@ -22,8 +22,8 @@ export function EffortGlyph({ level, count, color }: { level: number; count: num
 /** The model and effort a chat runs with, in the composer's toolbar; opens the picker. */
 export function ModelButton({ agent, choice, conversationId }: { agent?: Agent; choice: ModelChoice; conversationId?: string }) {
   const c = useColors();
-  const { current, effort } = useEffectiveModel(agent, choice);
-  const summary = effort ? `${current.label}, ${EFFORT_LABELS[effort]} effort` : current.label;
+  const { current, effort, ultracode } = useEffectiveModel(agent, choice);
+  const summary = [current.label, effort && `${EFFORT_LABELS[effort]} effort`, ultracode && "Ultracode"].filter(Boolean).join(", ");
   return (
     <Pressable
       accessibilityRole="button"
@@ -40,6 +40,7 @@ export function ModelButton({ agent, choice, conversationId }: { agent?: Agent; 
         {current.label}
       </T>
       {effort ? <EffortGlyph level={current.efforts.indexOf(effort)} count={current.efforts.length} color={c.textMuted} /> : null}
+      {ultracode ? <Icon name="workflow" size={12} color={c.textMuted} /> : null}
       <Icon name="down" size={10} weight="bold" color={c.textFaint} />
     </Pressable>
   );

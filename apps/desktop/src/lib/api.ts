@@ -1,12 +1,15 @@
 import type {
   Agent,
   AgentFileEntry,
+  AgentInput,
+  AgentQuestion,
+  AgentTemplate,
+  AnswerQuestionInput,
+  AnswerQuestionResult,
+  ApiError,
   ApiTool,
   ApiToolInput,
   ApiToolTestResult,
-  AgentInput,
-  AgentTemplate,
-  ApiError,
   AppNotification,
   AuditEntry,
   AutomationEvent,
@@ -17,13 +20,16 @@ import type {
   BrowserProfile,
   ChatFiles,
   ChromeImportInput,
-  ClientLogInput,
   ChromeImportResult,
   ClaudeUpdateResult,
   ClaudeUpdateStatus,
+  ClientLogInput,
+  CloudBilling,
+  CloudSettings,
+  CloudStatus,
   ComposioConnectInput,
-  ComposioConnectResult,
   ComposioConnection,
+  ComposioConnectResult,
   ComposioStatus,
   ComposioToolkit,
   ComposioTriggerType,
@@ -41,6 +47,8 @@ import type {
   Dream,
   DreamDetail,
   DreamOverview,
+  FixReport,
+  FixResult,
   FolderListing,
   Followup,
   FollowupPatch,
@@ -49,6 +57,7 @@ import type {
   LogEntry,
   LogLevel,
   LogOverview,
+  MaintenanceStatus,
   McpServer,
   McpServerInput,
   MessagingChat,
@@ -65,11 +74,21 @@ import type {
   MobilePairingOffer,
   MobileStatus,
   ModelCatalog,
+  PasswordImportPreview,
+  PasswordImportResult,
+  QueuedMessage,
+  PermissionId,
+  PermissionReport,
+  RemoteRunner,
   Routine,
   RoutineInput,
   Run,
   RunPause,
-  QueuedMessage,
+  RunnerAutofixInput,
+  RunnerFixResult,
+  RunnerHealth,
+  RunnerPairingOffer,
+  RunnerPatch,
   SendMessageInput,
   SendMessageOutcome,
   Settings,
@@ -89,16 +108,19 @@ import type {
   StartChatResult,
   Task,
   TaskAttachment,
+  TaskEvent,
   TaskInput,
   TaskPatch,
+  TestEventInput,
+  ToolId,
+  ToolUpdateResult,
   TotpCode,
   TotpEntry,
   TotpImportInput,
   TotpImportResult,
-  PasswordImportPreview,
-  PasswordImportResult,
-  TestEventInput,
   TotpInput,
+  UpdateReport,
+  UsageSummary,
   VaultStatus,
   Vm,
   VmAssignInput,
@@ -111,7 +133,8 @@ import type {
   WorkspaceInput,
   WorkspaceSource,
 } from "@godmode/shared";
-import { getCoreInfo } from "./core";
+import { CloudErrorCode } from "@godmode/shared";
+import { cloudContext, getCoreInfo, goToCloudLogin } from "./core";
 
 export class ApiRequestError extends Error {
   constructor(
@@ -122,6 +145,21 @@ export class ApiRequestError extends Error {
   ) {
     super(message);
   }
+}
+
+const CLOUD_ERROR_CODES: readonly string[] = Object.values(CloudErrorCode);
+
+/** Cloud mode: an error the cloud answered itself (offline computer, plan limit, signed out…), not the computer. */
+export function isCloudError(err: unknown): err is ApiRequestError {
+  return !!cloudContext && err instanceof ApiRequestError && !!err.code && CLOUD_ERROR_CODES.includes(err.code);
+}
+
+/** What stops the whole dashboard in cloud mode; App shows a full page for it. */
+export type CloudIssue = { kind: "offline" } | { kind: "plan"; message: string };
+
+let onCloudIssue: ((issue: CloudIssue) => void) | null = null;
+export function setCloudIssueHandler(fn: (issue: CloudIssue) => void) {
+  onCloudIssue = fn;
 }
 
 type Query = Record<string, string | number | boolean | null | undefined>;
@@ -176,6 +214,11 @@ export async function request<T>(method: string, path: string, body?: unknown, i
       err = await res.json();
     } catch {
       /* not json */
+    }
+    if (cloudContext) {
+      if (res.status === 401 && err.code === CloudErrorCode.CloudUnauthorized) goToCloudLogin();
+      else if (err.code === CloudErrorCode.DeviceOffline || err.code === CloudErrorCode.LinkLost) onCloudIssue?.({ kind: "offline" });
+      else if (res.status === 402 && err.code === CloudErrorCode.PlanLimit) onCloudIssue?.({ kind: "plan", message: err.error });
     }
     if (res.status === 401 && !path.startsWith("/api/auth/")) onUnauthorized?.();
     if (res.status === 403 && err.code === "grant_required" && headers.has(GRANT_HEADER)) onGrantRejected?.();
@@ -263,6 +306,14 @@ export const api = {
     install: (id: DependencyId) => post<{ ok: boolean; output: string }>("/api/doctor/install", { id }),
     claudeUpdate: (refresh = false) => get<ClaudeUpdateStatus>("/api/doctor/claude-update", { refresh: refresh ? 1 : undefined }),
     updateClaude: () => post<ClaudeUpdateResult>("/api/doctor/claude-update"),
+    permissions: () => get<PermissionReport>("/api/doctor/permissions"),
+    fixPermission: (id: PermissionId) => post<FixResult>("/api/doctor/permissions/fix", { id }),
+    /** Repair everything Godmode can repair by itself. */
+    fixAll: () => post<FixReport>("/api/doctor/fix"),
+    updates: (refresh = false) => get<UpdateReport>("/api/doctor/updates", { refresh: refresh ? 1 : undefined }),
+    /** Update one tool, or (without an id) every tool that has an update. */
+    update: (id?: ToolId) => post<ToolUpdateResult[]>("/api/doctor/updates", { id }),
+    maintenance: () => get<MaintenanceStatus>("/api/doctor/maintenance"),
   },
 
   vault: {
@@ -321,6 +372,8 @@ export const api = {
     list: (q: { workspaceId?: ScopeFilter; archived?: boolean } = {}) =>
       get<Task[]>("/api/tasks", { workspaceId: q.workspaceId, archived: q.archived ? 1 : undefined }),
     get: (id: string) => get<Task>(`/api/tasks/${id}`),
+    /** The ticket's timeline, oldest first. */
+    events: (id: string) => get<TaskEvent[]>(`/api/tasks/${id}/events`),
     /** With an agent and status todo (the default then), the agent starts right away. */
     create: (input: TaskInput) => post<Task>("/api/tasks", input),
     /** Moving to todo starts the agent; moving away from in_progress stops it. */
@@ -361,6 +414,10 @@ export const api = {
     /** Pause everything the agent works on (409 when it isn't working); `continue` resumes all of it. */
     pause: (id: string) => post<{ paused: number }>(`/api/agents/${id}/pause`),
     continue: (id: string) => post<{ continued: number }>(`/api/agents/${id}/continue`),
+    /** Same setup under "<Name> copy", with a fresh memory and no chats or automations. */
+    duplicate: (id: string, grant?: string) => request<Agent>("POST", `/api/agents/${id}/duplicate`, {}, withGrant(grant)),
+    /** Stop showing "Last run failed". */
+    dismissFailure: (id: string) => del<Agent>(`/api/agents/${id}/failed-run`),
   },
 
   dreams: {
@@ -495,6 +552,46 @@ export const api = {
     removeDevice: (id: string) => del<{ ok: true }>(`/api/mobile/devices/${id}`),
   },
 
+  runners: {
+    list: () => get<RemoteRunner[]>("/api/runners"),
+    get: (id: string) => get<RemoteRunner>(`/api/runners/${id}`),
+    /** A one-time offer (10 minutes): the install commands that set up a runner and pair it with this computer. */
+    pairing: () => post<RunnerPairingOffer>("/api/runners/pairing"),
+    cancelPairing: () => del<{ ok: true }>("/api/runners/pairing"),
+    /** Pair with the `gmr1.` code a runner printed. */
+    pair: (code: string) => post<RemoteRunner>("/api/runners", { code }),
+    update: (id: string, input: RunnerPatch) => patch<RemoteRunner>(`/api/runners/${id}`, input),
+    remove: (id: string) => del<{ ok: true }>(`/api/runners/${id}`),
+    /** Dial the runner again now instead of waiting for the next retry. */
+    connect: (id: string) => post<RemoteRunner>(`/api/runners/${id}/connect`),
+    /** Copy the setup (agents, logins, integrations, settings) to the runner now. */
+    sync: (id: string) => post<RemoteRunner>(`/api/runners/${id}/sync`),
+    /** `refresh` runs the checks on the runner again instead of answering from its last result. */
+    health: (id: string, refresh = false) => get<RunnerHealth>(`/api/runners/${id}/health`, { refresh: refresh ? 1 : undefined }),
+    fix: (id: string, checkId: string) => post<RunnerFixResult>(`/api/runners/${id}/health/fix`, { id: checkId }),
+    /** Starts a chat here whose agent diagnoses and repairs the runner. */
+    autofix: (id: string, input: RunnerAutofixInput = {}) => post<StartChatResult>(`/api/runners/${id}/autofix`, input),
+    /** Any API call answered by the runner instead of this computer: `path` is the route without `/api`, e.g. "/computer/sources". */
+    proxy: <T>(id: string, method: string, path: string, body?: unknown) => request<T>(method, `/api/runners/${id}/proxy${path}`, body),
+  },
+
+  /** Godmode Cloud link of this computer. Answered only on the computer itself, never through the cloud. */
+  cloud: {
+    status: () => get<CloudStatus>("/api/cloud"),
+    update: (input: Partial<CloudSettings>) => put<CloudStatus>("/api/cloud", input),
+    /** Starts linking: the answer carries `pending` (code and approval page). */
+    link: (url: string) => post<CloudStatus>("/api/cloud/link", { url }),
+    /** Cancels a pending link, or unlinks. */
+    unlink: () => del<CloudStatus>("/api/cloud/link"),
+    /** 409 `not_linked` while unlinked; 502 with a sentence when the cloud can't be reached. */
+    billing: () => get<CloudBilling>("/api/cloud/billing"),
+    cancel: () => post<CloudBilling>("/api/cloud/billing/cancel"),
+    resume: () => post<CloudBilling>("/api/cloud/billing/resume"),
+  },
+
+  /** What the agents on this computer used over the last `days` days (from its run history). */
+  usage: (days: number) => get<UsageSummary>("/api/usage", { days }),
+
   chat: {
     /** Create a conversation and send the first message in one call. */
     start: (input: StartChatInput) => post<StartChatResult>("/api/chat", input),
@@ -515,10 +612,17 @@ export const api = {
   },
 
   runs: {
-    list: (q: { agentId?: string; status?: string; limit?: number } = {}) => get<Run[]>("/api/runs", q),
+    list: (q: { agentId?: string; status?: string; conversationId?: string; parentRunId?: string; limit?: number } = {}) => get<Run[]>("/api/runs", q),
     get: (id: string) => get<Run>(`/api/runs/${id}`),
     cancel: (id: string) => post<{ ok: true }>(`/api/runs/${id}/cancel`),
     log: (id: string) => get<string>(`/api/runs/${id}/log`),
+  },
+
+  questions: {
+    /** `status`: open, resolved (answered, approved or declined), withdrawn, one status, or all. */
+    list: (q: { status?: string; conversationId?: string; agentId?: string; limit?: number } = {}) => get<AgentQuestion[]>("/api/questions", q),
+    /** The run that asked continues with the answer. */
+    answer: (id: string, input: AnswerQuestionInput) => post<AnswerQuestionResult>(`/api/questions/${id}/answer`, input),
   },
 
   missingLogins: {
@@ -553,6 +657,8 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/messaging/${id}`),
     users: (id: string) => get<MessagingUser[]>(`/api/messaging/${id}/users`),
     setUser: (id: string, userId: string, status: MessagingUserStatus) => patch<MessagingUser>(`/api/messaging/${id}/users/${userId}`, { status }),
+    /** "This is me": the owner's own account answers agents' questions there. */
+    setOwner: (id: string, userId: string, isOwner: boolean) => patch<MessagingUser>(`/api/messaging/${id}/users/${userId}`, { isOwner }),
     removeUser: (id: string, userId: string) => del<{ ok: true }>(`/api/messaging/${id}/users/${userId}`),
     chats: (id: string) => get<MessagingChat[]>(`/api/messaging/${id}/chats`),
     /** Teams app package (zip) to upload in Teams. */

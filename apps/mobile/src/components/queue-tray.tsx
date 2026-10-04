@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
-import type { QueuedMessage } from "@godmode/shared";
+import type { PauseReason, QueuedMessage } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
@@ -28,7 +28,7 @@ export function QueueTray({
   agentName: string;
   running: boolean;
   /** The chat's run stands still: the queue goes along when it continues. */
-  paused?: "user" | "limit" | null;
+  paused?: PauseReason | null;
   /** A rewording came too late (the agent has the message already): hand the new wording back. */
   onLost: (text: string) => void;
 }) {
@@ -96,7 +96,9 @@ export function QueueTray({
       ? "Stopping the current step…"
       : "Sending…"
     : paused
-      ? `${many ? "Go" : "Goes"} along when ${paused === "limit" ? "the limit resets" : "you continue"}`
+      ? paused === "question"
+        ? `${many ? "Go" : "Goes"} along with your answer`
+        : `${many ? "Go" : "Goes"} along when ${paused === "limit" ? "the limit resets" : "you continue"}`
       : !running
         ? "Not sent yet"
         : first && parseSlashCommand(first.content)
@@ -123,7 +125,8 @@ export function QueueTray({
         <T variant="caption" muted numberOfLines={1} style={{ flex: 1 }} accessibilityLiveRegion="polite">
           {hint}
         </T>
-        <Pressable
+        {/* A run that waits for an answer only continues with that answer. */}
+        {paused === "question" ? null : <Pressable
           accessibilityRole="button"
           accessibilityLabel={live ? `Send now: stop what ${agentName} is doing and start on the queue` : "Send"}
           disabled={sendingNow || queue.every((m) => pendingQueued.has(m.id))}
@@ -139,7 +142,7 @@ export function QueueTray({
           <T variant="footnote" color={live ? c.text : c.onPrimary} style={{ fontWeight: "600" }}>
             {live ? "Send now" : "Send"}
           </T>
-        </Pressable>
+        </Pressable>}
       </View>
       <ScrollView style={{ maxHeight: 168 }} contentContainerStyle={styles.rows} keyboardShouldPersistTaps="handled">
         {queue.map((m, i) => (

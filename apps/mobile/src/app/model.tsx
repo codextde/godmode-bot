@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { EFFORT_LABELS, type ClaudeModel, type ConversationWithMessages, type Effort } from "@godmode/shared";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { EFFORT_LABELS, ULTRACODE_HINT, type ClaudeModel, type ConversationWithMessages, type Effort } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { Card, Hairline, T, tap } from "@/components/ui";
 import { api, errorText, type ModelChoicePatch } from "@/lib/api";
@@ -32,16 +32,16 @@ export default function ModelSheet() {
   const newChoice = useNewChatChoice((s) => s.choice);
   const agent = byId.get(conversation.data?.agentId ?? agentId ?? "");
   const choice: ModelChoice = conversationId
-    ? { model: conversation.data?.model ?? null, effort: conversation.data?.effort ?? null }
+    ? { model: conversation.data?.model ?? null, effort: conversation.data?.effort ?? null, ultracode: conversation.data?.ultracode ?? null }
     : newChoice;
-  const { catalog, base, baseEffort, current, effort } = useEffectiveModel(agent, choice);
+  const { catalog, base, baseEffort, baseUltracode, anyUltracode, current, effort, ultracode } = useEffectiveModel(agent, choice);
   const [showOlder, setShowOlder] = useState(!current.latest);
 
   const models = catalog.data?.models ?? [];
   const listed = models.some((m) => m.id === current.id) ? models : [current, ...models];
   const latest = listed.filter((m) => m.latest);
   const older = listed.filter((m) => !m.latest);
-  const overridden = choice.model !== null || choice.effort !== null;
+  const overridden = choice.model !== null || choice.effort !== null || choice.ultracode !== null;
 
   const change = (patch: ModelChoicePatch) => {
     tap();
@@ -53,13 +53,14 @@ export default function ModelSheet() {
     const prev = queryClient.getQueryData<ConversationWithMessages>(key);
     queryClient.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...patch } : old));
     api.conversations.update(conversationId, patch).catch((err) => {
-      if (prev) queryClient.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, model: prev.model, effort: prev.effort } : old));
+      if (prev) queryClient.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, model: prev.model, effort: prev.effort, ultracode: prev.ultracode } : old));
       Alert.alert("Couldn't switch the model", errorText(err));
     });
   };
 
   const pickModel = (m: ClaudeModel) => change({ model: m.id === base.id ? null : m.id });
   const pickEffort = (e: Effort) => change({ effort: e === baseEffort ? null : e });
+  const pickUltracode = (on: boolean) => change({ ultracode: on === baseUltracode ? null : on });
 
   return (
     <ScrollView contentContainerStyle={styles.content} style={{ backgroundColor: c.background }}>
@@ -123,6 +124,25 @@ export default function ModelSheet() {
           </T>
         )}
       </Card>
+
+      {current.ultracode ? (
+        <Card style={styles.effortCard}>
+          <View style={styles.ultracodeHead}>
+            <Icon name="workflow" size={15} color={c.textMuted} />
+            <T variant="headline" style={{ fontSize: 15, flex: 1 }}>
+              Ultracode
+            </T>
+            <Switch value={ultracode} onValueChange={pickUltracode} accessibilityLabel="Ultracode" />
+          </View>
+          <T variant="footnote" muted style={{ marginTop: space.sm }}>
+            {ULTRACODE_HINT}
+          </T>
+        </Card>
+      ) : anyUltracode ? (
+        <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
+          Ultracode isn't available for {current.label}.
+        </T>
+      ) : null}
 
       <View style={styles.footer}>
         <View style={[styles.dot, { backgroundColor: catalog.data?.source === "claude" ? c.brand : c.warning }]} />
@@ -250,6 +270,11 @@ const styles = StyleSheet.create({
   },
   effortCard: {
     padding: space.lg,
+  },
+  ultracodeHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.sm,
   },
   effortHead: {
     flexDirection: "row",

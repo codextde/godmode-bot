@@ -9,6 +9,7 @@ import type { AgentCharacter } from "./character";
  *    pinned to a single agent via `agentId`.
  */
 import type { AgentComputerConfig, ComputerTarget } from "./computer";
+import type { CloudSettings } from "./cloud";
 
 export type ID = string;
 export type ISODate = string;
@@ -127,11 +128,19 @@ export interface Agent {
   /** How the agent sounds: a PERSONALITY_PRESETS id, free text, or "" for no particular tone. */
   personality: string;
   description: string;
-  /** The agent's role / standing instructions (goes into its CLAUDE.md). */
+  /** The agent's standing instructions (go into its CLAUDE.md). */
   instructions: string;
+  /** Job title on the team, e.g. "Bookkeeper". "" = none set. One line, at most MAX_AGENT_ROLE_LENGTH. */
+  role: string;
+  /** Its lead. null = the built-in agent (which reports to the human; always null for the built-in agent). */
+  reportsTo: ID | null;
+  /** Its latest real run when that failed and the human hasn't dismissed it. `status` is then "error". */
+  failedRunId: ID | null;
   /** Claude model id or alias. Empty string = use global default. */
   model: string;
   effort: Effort | null;
+  /** Ultracode (see RunnerSettings.ultracode) for this agent. null = the global default. */
+  ultracode: boolean | null;
   /** The built-in main assistant ("Godmode"). Cannot be deleted. */
   isDefault: boolean;
   enabled: boolean;
@@ -153,8 +162,10 @@ export interface Agent {
   sshServerIds: ID[];
   /** Absolute path of the agent's git repository. */
   repoPath: string;
-  /** Runs of the agent that stand still (paused, or waiting for Claude's usage limit to reset). */
+  /** Runs of the agent that stand still: paused by the human, or waiting for Claude's usage limit to reset. */
   pausedRuns?: number;
+  /** Runs of the agent that wait for the human's answer (see AgentQuestion). They are not part of `pausedRuns`. */
+  openQuestions?: number;
   lastRunAt: ISODate | null;
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -308,6 +319,8 @@ export interface Conversation {
   model: string | null;
   /** Per-chat override from the effort control or /effort. null = the agent's effort. */
   effort: Effort | null;
+  /** Per-chat override from the Ultracode switch or `/effort ultracode`. null = the agent's. */
+  ultracode: boolean | null;
   /** Folder this conversation works in, overriding the agent's. null = the agent's default. */
   workingDirectory: string | null;
   /** What the human shared with the agent in this chat (screen, window or browser tab). null = nothing. */
@@ -322,6 +335,10 @@ export interface Conversation {
   sshServerIds: ID[];
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
   instructions: string;
+  /** The runner (another computer) this chat works on; fixed when the chat is created. null = this computer. */
+  runnerId: ID | null;
+  /** A local chat whose agent may run commands on that runner (the "fix with Claude" chat of a runner). */
+  runnerToolsId: ID | null;
   pinned: boolean;
   archived: boolean;
   lastMessageAt: ISODate | null;
@@ -332,14 +349,19 @@ export interface Conversation {
   running?: boolean;
   /** When the agent continues this chat on its own (see Followup). */
   followup?: ConversationFollowup | null;
-  /** The chat's run stands still: paused by the human, or waiting for Claude's usage limit to reset. */
+  /** The chat's run stands still: paused by the human, waiting for Claude's usage limit to reset, or waiting for the human's answer. */
   paused?: RunPause | null;
+  /** A chat another agent handed over: who asked, from which chat (null when that chat was deleted) and which run. */
+  delegatedFrom?: { agentId: ID; conversationId: ID | null; runId: ID } | null;
 }
 
 export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt">;
 
-/** `user`: the human paused the run · `limit`: Claude's usage limit was reached mid-run. */
-export type PauseReason = "user" | "limit";
+/**
+ * `user`: the human paused the run · `limit`: Claude's usage limit was reached mid-run · `question`: the run asked the
+ * human something and waits for the answer (see AgentQuestion).
+ */
+export type PauseReason = "user" | "limit" | "question";
 
 /** A run that stands still. Continuing it picks the work up where it stopped, in the same run and Claude session. */
 export interface RunPause {
@@ -352,6 +374,80 @@ export interface RunPause {
   resumeAt: ISODate | null;
   /** Limit pauses: the run continues by itself at `resumeAt`. */
   auto: boolean;
+  /** Question pauses: what the human is asked. Answering it is the only way to continue the run. */
+  question?: Pick<AgentQuestion, "id" | "kind" | "title"> | null;
+}
+
+/** `question`: the agent asks something, with suggested answers · `approval`: it asks for an OK before one specific step. */
+export type QuestionKind = "question" | "approval";
+
+/**
+ * `open`: the run stands still for it · `answered`: an option was picked or the human wrote something · `approved` /
+ * `declined`: the decision on an approval · `withdrawn`: the run was stopped before the answer came.
+ */
+export type QuestionStatus = "open" | "answered" | "approved" | "declined" | "withdrawn";
+
+/** Where the answer was given: the desktop app or dashboard, the phone app, the task's message box, or a chat platform. */
+export type AnswerVia = "app" | "phone" | "task" | "slack" | "telegram" | "teams";
+
+/** An answer the agent suggests. `id` is its position, "1" for the first. */
+export interface QuestionOption {
+  id: string;
+  /** The answer as the human would say it. */
+  label: string;
+  /** What choosing it means or leads to. */
+  description?: string;
+  /** The agent's recommendation (at most one option has it). */
+  recommended?: boolean;
+}
+
+export interface QuestionAnswer {
+  /** The suggested answer that was picked; null = the human's own words, or a decision on an approval. */
+  optionId: string | null;
+  /** The picked option's label, what the human wrote, or the note that came with a decision ("" = none). Saved secrets masked. */
+  text: string;
+  attachments: Attachment[];
+  at: ISODate;
+  via: AnswerVia;
+}
+
+/**
+ * Something an agent asked the human in the middle of a run (`ask_human`, `request_approval`). While it is open the run
+ * stands still (`RunPause.reason` is "question"); the answer continues that run in the same Claude session, and
+ * stopping the run withdraws the question.
+ */
+export interface AgentQuestion {
+  id: ID;
+  kind: QuestionKind;
+  agentId: ID;
+  runId: ID;
+  conversationId: ID;
+  /** The agent's message that shows the question (its `question` block has the same id). */
+  messageId: ID;
+  /** The board task the run works on. */
+  taskId: ID | null;
+  /** The automation that started the run. */
+  routineId: ID | null;
+  workspaceId: ID | null;
+  /** The question in one sentence, or the step to approve. */
+  title: string;
+  /** Question: what the human needs to know to decide. Approval: why the agent wants to take the step. Markdown. */
+  body: string;
+  /** Approvals: what the step changes and for whom. "" for questions. */
+  affects: string;
+  /** Suggested answers ([] for approvals and open questions). The human can always answer in their own words. */
+  options: QuestionOption[];
+  status: QuestionStatus;
+  /** Set once the status is answered, approved or declined. */
+  answer: QuestionAnswer | null;
+  /** Withdrawn: why, when it wasn't simply stopped by the human (e.g. "Stopped from the task board"). */
+  closedReason: string | null;
+  /** Denormalized for lists. */
+  conversationTitle?: string;
+  taskNumber?: number | null;
+  routineName?: string | null;
+  createdAt: ISODate;
+  updatedAt: ISODate;
 }
 
 /**
@@ -397,6 +493,8 @@ export type MessageBlock =
       isError?: boolean;
       /** Optional base64 image result (e.g. browser screenshot). */
       image?: string;
+      /** Work the tool started in the background (a Claude Code workflow), kept up to date while it runs. */
+      task?: ToolTask;
       parentToolUseId?: string | null;
     }
   | { type: "error"; text: string }
@@ -408,7 +506,55 @@ export type MessageBlock =
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */
-  | { type: "pause"; reason: PauseReason; at: ISODate; limit?: string | null; resumeAt?: ISODate | null; resumedAt?: ISODate };
+  | { type: "pause"; reason: PauseReason; at: ISODate; limit?: string | null; resumeAt?: ISODate | null; resumedAt?: ISODate }
+  /**
+   * What the agent asked the human at this point of the turn (see AgentQuestion; `id` is the question's). A snapshot
+   * that needs no lookup: it is `open` from the moment the agent asks — the run stands still for it a moment later,
+   * once `Conversation.paused.question` names it — and changes when the answer comes or the question is withdrawn.
+   */
+  | {
+      type: "question";
+      id: ID;
+      kind: QuestionKind;
+      title: string;
+      body: string;
+      affects: string;
+      options: QuestionOption[];
+      askedAt: ISODate;
+      status: QuestionStatus;
+      answer?: QuestionAnswer | null;
+      closedReason?: string | null;
+    };
+
+/**
+ * Background work of a tool call, as Claude Code reports it (`task_started`, `task_progress`, `task_notification`).
+ * `running` on a run that has ended means the work was cut off with it.
+ */
+export interface ToolTask {
+  id: string;
+  /** "local_workflow" for a workflow; other kinds of background work keep Claude Code's name. */
+  kind: string;
+  status: "running" | "completed" | "failed" | "stopped";
+  /** What the task is, e.g. "Review the changed files". */
+  description: string;
+  /** What it does right now, e.g. "Review: bugs". "" = nothing reported yet. */
+  activity: string;
+  totalTokens: number;
+  toolUses: number;
+  durationMs: number;
+  /** The agents of a workflow in the order they were queued. Empty for other kinds of work. */
+  agents: ToolTaskAgent[];
+}
+
+export interface ToolTaskAgent {
+  label: string;
+  /** Title of the workflow phase the agent belongs to; "" = none. */
+  phase: string;
+  state: "queued" | "running" | "done" | "failed";
+  /** The tool it used last, e.g. "Bash". */
+  lastTool?: string;
+  tokens?: number;
+}
 
 /** Why a follow-up ran: it was due, it was overdue (Godmode was off or asleep), or the human said "continue now". */
 export type FollowupReason = "due" | "late" | "now";
@@ -440,10 +586,15 @@ export interface QueuedMessage {
   createdAt: ISODate;
 }
 
+/** Who wrote a user message when it wasn't the human: an automation, another agent handing work over, the task board. */
+export type MessageSource = "automation" | "delegation" | "task";
+
 export interface Message {
   id: ID;
   conversationId: ID;
   role: MessageRole;
+  /** A user message that wasn't written by the human. */
+  source?: MessageSource;
   /** Plain-text version (final text for assistant). */
   content: string;
   blocks: MessageBlock[];
@@ -487,6 +638,8 @@ export interface Run {
   startedAt: ISODate | null;
   finishedAt: ISODate | null;
   createdAt: ISODate;
+  /** In run lists: why a paused run stands still (and until when). */
+  pause?: RunPause | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -827,7 +980,8 @@ export interface LocalChromeProfile {
 /* Notifications, audit, settings                                       */
 /* ------------------------------------------------------------------ */
 
-export type NotificationKind = "info" | "success" | "warning" | "error" | "missing_login" | "run";
+/** `question`: an agent asked something and waits for the answer (marked read once it is answered or withdrawn). */
+export type NotificationKind = "info" | "success" | "warning" | "error" | "missing_login" | "run" | "question";
 
 export interface AppNotification {
   id: ID;
@@ -887,6 +1041,14 @@ export interface DiagnosticsSettings {
   verbose: boolean;
 }
 
+/** Keeping the tools Godmode relies on working and current (Settings → System). */
+export interface MaintenanceSettings {
+  /** Repair in the background what Godmode can repair by itself: file permissions and missing required tools. */
+  autoFix: boolean;
+  /** Install updates of the installed tools in the background, while no agent is working. */
+  autoUpdate: boolean;
+}
+
 export interface GeneralSettings {
   theme: "dark" | "light" | "system";
   accent: string;
@@ -904,6 +1066,11 @@ export interface RunnerSettings {
   model: string;
   fallbackModel: string;
   effort: Effort;
+  /**
+   * Ultracode by default: Claude Code plans every task as a dynamic workflow of several subagents, at any effort
+   * level. Thorough, but slower and far more tokens. Only applies to models that support it (ClaudeModel.ultracode).
+   */
+  ultracode: boolean;
   /** --dangerously-skip-permissions (full bypass). */
   bypassPermissions: boolean;
   maxConcurrentRuns: number;
@@ -1066,7 +1233,10 @@ export interface Settings {
   server: ServerSettings;
   memory: MemorySettings;
   diagnostics: DiagnosticsSettings;
+  maintenance: MaintenanceSettings;
   mobile: MobileSettings;
+  /** Godmode Cloud (see cloud.ts). The link secret is never part of the settings. */
+  cloud: CloudSettings;
   onboardingComplete: boolean;
 }
 
@@ -1083,6 +1253,8 @@ export interface ClaudeModel {
   description: string;
   /** Effort levels the model accepts, low → high. Empty = no effort control. */
   efforts: Effort[];
+  /** Ultracode can be turned on with this model: the installed Claude Code has dynamic workflows and the model supports them. */
+  ultracode: boolean;
   /** Newest model of its family; the others are older versions. */
   latest: boolean;
 }
@@ -1141,6 +1313,103 @@ export interface ClaudeUpdateResult {
 }
 
 /* ------------------------------------------------------------------ */
+/* Permissions, repairs and tool updates (Settings → System)            */
+/* ------------------------------------------------------------------ */
+
+export type PermissionId = "data-dir" | "data-private" | "tool-binaries" | "claude-config" | "accessibility" | "screen-recording" | "full-disk-access";
+
+export interface PermissionStatus {
+  id: PermissionId;
+  name: string;
+  ok: boolean;
+  detail: string;
+  /** File or folder the check is about. */
+  path: string | null;
+  /** Godmode can't work without it; false = only a feature is limited. */
+  required: boolean;
+  /**
+   * How a problem gets solved: "auto" = Godmode repairs it itself, "request" = Godmode asks the system and the human
+   * allows it there, "manual" = only the human can (see fixHint).
+   */
+  fix: "auto" | "request" | "manual";
+  fixHint: string;
+}
+
+export interface PermissionReport {
+  ok: boolean;
+  checkedAt: ISODate;
+  permissions: PermissionStatus[];
+}
+
+/** What a repair did: "pending" = the system now waits for the human, "manual" = Godmode can't do it. */
+export type FixOutcome = "fixed" | "pending" | "failed" | "manual";
+
+export interface FixResult {
+  kind: "dependency" | "permission";
+  id: DependencyId | PermissionId;
+  name: string;
+  outcome: FixOutcome;
+  output: string;
+}
+
+export interface FixReport {
+  /** Nothing that Godmode needs is still broken. */
+  ok: boolean;
+  startedAt: ISODate;
+  finishedAt: ISODate;
+  results: FixResult[];
+}
+
+export type ToolId = Exclude<DependencyId, "claude-auth"> | "tart";
+
+/**
+ * How a tool is kept current: "release" follows its own releases, "pinned" is the version this Godmode release was
+ * tested with, "external" is updated by the system or a package manager.
+ */
+export type UpdateTrack = "release" | "pinned" | "external";
+
+export interface ToolUpdateStatus {
+  id: ToolId;
+  name: string;
+  installed: boolean;
+  current: string | null;
+  /** Version an update would install; null = unknown. */
+  latest: string | null;
+  updateAvailable: boolean;
+  /** Godmode can install updates of it. */
+  updatable: boolean;
+  track: UpdateTrack;
+  detail: string;
+}
+
+export interface UpdateReport {
+  checkedAt: ISODate;
+  tools: ToolUpdateStatus[];
+}
+
+export interface ToolUpdateResult {
+  id: ToolId;
+  name: string;
+  ok: boolean;
+  /** Nothing was installed: it already was up to date. */
+  upToDate: boolean;
+  previous: string | null;
+  version: string | null;
+  output: string;
+}
+
+/** The background upkeep (settings.maintenance) and what its last pass did. */
+export interface MaintenanceStatus {
+  running: boolean;
+  lastRunAt: ISODate | null;
+  nextRunAt: ISODate | null;
+  /** Why the last pass left updates for later, e.g. agents were working. */
+  postponed: string | null;
+  fixes: FixResult[];
+  updates: ToolUpdateResult[];
+}
+
+/* ------------------------------------------------------------------ */
 /* Bootstrap                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -1160,6 +1429,8 @@ export interface Bootstrap {
     credentials: number;
     totp: number;
     openMissingLogins: number;
+    /** Questions and approvals agents wait for (see AgentQuestion). */
+    openQuestions: number;
     runningRuns: number;
     unreadNotifications: number;
     /** People waiting for approval to talk to a messaging bot. */

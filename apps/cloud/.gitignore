@@ -1,0 +1,23 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# custom server bundle
+/dist/
+
+# local data (generated secret, setup code)
+/.data/
+
+# env files: only the example is committed
+.env*
+!.env.example
+
+.DS_Store
+*.pem
+npm-debug.log*
+.pnpm-debug.log*

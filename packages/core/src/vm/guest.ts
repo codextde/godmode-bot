@@ -6,7 +6,7 @@
  *   agent — so no browser starts on the host, and pages, downloads and uploads all stay in the VM.
  * - Computer use: Cua Driver's MCP server (`cua-driver mcp --direct`) runs in the VM the same way and controls its
  *   apps and windows. The Cirrus Labs images grant the Tart guest agent — and so everything started through
- *   `tart exec` — Accessibility and Screen Recording.
+ *   `tart exec` — Accessibility and Screen Recording; every run restores what is missing of that (permissions.ts).
  * - Logins: vault fills reach the VM's Chrome over CDP through an SSH port forward (Godmode's key; the guest only lets
  *   this Mac connect, see `provision` in service.ts), so secrets are still typed into the page for the agent.
  *
@@ -29,6 +29,7 @@ import { logger } from "../log";
 import { resolveUvx } from "../services/doctor";
 import { getSettings } from "../services/settings";
 import type { McpServerJson } from "../types";
+import { ensureAgentAccess } from "./permissions";
 import { GUEST_USER, execInVm, onVmStopped, shq, sshKeyPath, vmAddress, vmName } from "./service";
 import { TartError, resolveTart, tartEnv } from "./tart";
 
@@ -260,6 +261,8 @@ export interface GuestTools {
   browser: string | null;
   /** Cua Driver's program in the guest — null when computer use in the VM is unavailable. */
   cua: string | null;
+  /** The guest agent's macOS permissions are in place (permissions.ts): shell commands may script System Events and Finder. */
+  shellAutomation: boolean;
   /** What couldn't be set up, for the human. */
   problems: string[];
 }
@@ -274,6 +277,8 @@ export async function prepareGuest(
 ): Promise<GuestTools> {
   watchStops();
   const problems: string[] = [];
+  // Meanwhile: the macOS permissions Godmode's tools in the guest rely on, in case the guest lost them.
+  const access = ensureAgentAccess((script, o) => execInVm(vmId, script, { ...o, signal: opts.signal }), vmId);
   let have = await probe(vmId, opts.signal);
   const wanted: Tool[] = [...(opts.browser ? (["chrome", "browser-use"] as const) : []), "cua"];
   const missing = wanted.filter((t) => (t === "chrome" ? !have.chrome : t === "browser-use" ? !have.browserUse : !have.cua));
@@ -294,6 +299,7 @@ export async function prepareGuest(
     have = await probe(vmId, opts.signal);
   }
 
+  const shellAutomation = (await until(access, opts.signal)) !== null;
   let browser = opts.browser && have.chrome ? have.browserUse : null;
   if (browser) {
     const home = `/Users/${GUEST_USER}`;
@@ -318,7 +324,7 @@ export async function prepareGuest(
       browser = null;
     }
   }
-  return { browser, cua: have.cua, problems };
+  return { browser, cua: have.cua, shellAutomation, problems };
 }
 
 /** A stdio MCP server that runs in the guest: Claude Code talks to it through `tart exec -i`. */

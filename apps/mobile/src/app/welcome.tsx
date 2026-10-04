@@ -11,7 +11,11 @@ import { space, useColors } from "@/lib/theme";
 const POINTS: { icon: IconName; title: string; body: string }[] = [
   { icon: "chats", title: "Hand over work from anywhere", body: "Start a task, follow the answer as it's written, stop it with one tap." },
   { icon: "eye", title: "Look over their shoulder", body: "Watch the browser, shared screen or VM an agent works in, live." },
-  { icon: "lock", title: "Private by design", body: "Your phone talks to your computer over your own Tailscale network. Logins stay on the computer." },
+  {
+    icon: "lock",
+    title: "Your computer stays in charge",
+    body: "Your phone reaches it over Tailscale or Godmode Cloud with a key of its own, which the computer can revoke anytime. Logins stay on the computer.",
+  },
 ];
 
 export default function Welcome() {
@@ -66,7 +70,7 @@ export default function Welcome() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + space.lg, backgroundColor: c.background }]}>
         <T variant="footnote" muted style={{ textAlign: "center" }}>
-          On your computer: Settings → Phone → Connect a phone.{"\n"}Tailscale on, here and there, same account.
+          On your computer: Settings → Phone → Connect a phone.{"\n"}Tailscale on both (same account), or the computer linked to Godmode Cloud.
         </T>
         <Button title="Scan QR code" icon="scan" size="lg" onPress={() => router.push("/scan")} />
       </View>

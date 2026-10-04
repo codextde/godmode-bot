@@ -67,6 +67,7 @@ export function ComputerLiveView({
   expanded: expandedProp,
   onExpandedChange,
   defaultTakeover = false,
+  notes,
   className,
 }: {
   target: ComputerTarget;
@@ -75,6 +76,8 @@ export function ComputerLiveView({
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   defaultTakeover?: boolean;
+  /** The banner's wording when the screen isn't this computer's (a runner's): whose mouse and keyboard it is. */
+  notes?: { watching: string; control: string };
   className?: string;
 }) {
   const qc = useQueryClient();
@@ -407,10 +410,11 @@ export function ComputerLiveView({
               {takeover ? <MousePointerClick className="size-3.5 shrink-0" /> : <LiveDot live={live} className="shrink-0" />}
               <span className="min-w-0 flex-1">
                 {takeover
-                  ? target.kind === "window" || target.kind === "tab"
-                    ? "You're in control — clicks, scrolling and typing go to the shared window, in the background."
-                    : "You're in control — clicks and typing move your real mouse and keyboard."
-                  : controlNote(target)}
+                  ? (notes?.control ??
+                    (target.kind === "window" || target.kind === "tab"
+                      ? "You're in control — clicks, scrolling and typing go to the shared window, in the background."
+                      : "You're in control — clicks and typing move your real mouse and keyboard."))
+                  : (notes?.watching ?? controlNote(target))}
               </span>
             </div>
 

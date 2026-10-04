@@ -201,9 +201,11 @@ export interface ModelChoice {
   model: string | null;
   /** null = the agent's effort */
   effort: Effort | null;
+  /** null = the agent's Ultracode setting */
+  ultracode: boolean | null;
 }
 
-export const NO_CHOICE: ModelChoice = { model: null, effort: null };
+export const NO_CHOICE: ModelChoice = { model: null, effort: null, ultracode: null };
 
 /** The model picked for the next new chat (the compose sheet), until it starts. */
 export const useNewChatChoice = create<{ choice: ModelChoice; set: (patch: Partial<ModelChoice>) => void; reset: () => void }>((set) => ({
@@ -212,8 +214,8 @@ export const useNewChatChoice = create<{ choice: ModelChoice; set: (patch: Parti
   reset: () => set({ choice: NO_CHOICE }),
 }));
 
-function customModel(id: string): ClaudeModel {
-  return { id, resolvedModel: id, label: id, description: "Custom model id", efforts: [...EFFORT_OPTIONS], latest: true };
+function customModel(id: string, ultracode: boolean): ClaudeModel {
+  return { id, resolvedModel: id, label: id, description: "Custom model id", efforts: [...EFFORT_OPTIONS], ultracode, latest: true };
 }
 
 const BUILTIN_CATALOG: ModelCatalog = { models: BUILTIN_MODELS, source: "builtin", claudeVersion: null, fetchedAt: "", error: null };
@@ -229,10 +231,14 @@ export function useEffectiveModel(agent: Agent | null | void, choice: ModelChoic
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
   const models = catalog.data?.models ?? [];
   const runner = boot.data?.settings.runner;
+  // Nobody knows what a custom model id can do: it gets Ultracode whenever this Claude Code has it at all.
+  const anyUltracode = models.some((m) => m.ultracode);
   const baseId = agent?.model?.trim() || runner?.model?.trim() || DEFAULT_MODEL;
-  const base = findModel(models, baseId) ?? customModel(baseId);
-  const current = choice.model ? (findModel(models, choice.model) ?? customModel(choice.model)) : base;
+  const base = findModel(models, baseId) ?? customModel(baseId, anyUltracode);
+  const current = choice.model ? (findModel(models, choice.model) ?? customModel(choice.model, anyUltracode)) : base;
   const baseEffort: Effort = agent?.effort ?? runner?.effort ?? "high";
   const effort = effortForModel(current.efforts, choice.effort ?? baseEffort);
-  return { catalog, base, baseEffort, current, effort };
+  const baseUltracode = agent?.ultracode ?? runner?.ultracode ?? false;
+  const ultracode = current.ultracode && (choice.ultracode ?? baseUltracode);
+  return { catalog, base, baseEffort, baseUltracode, anyUltracode, current, effort, ultracode };
 }

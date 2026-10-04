@@ -29,6 +29,7 @@ Godmode Bot is an AI coworker that runs on your machine. It drives **Claude Code
 | `packages/core` | The daemon (Bun + Hono + bun:sqlite). HTTP API under `/api`, WebSocket at `/api/ws`, MCP gateway at `/mcp`. |
 | `apps/desktop` | React UI (also served by the core as the web dashboard) + `src-tauri` desktop shell. |
 | `apps/mobile` | Phone app (Expo, iOS + Android). Own toolchain (bun), outside the pnpm workspace; imports `@godmode/shared` from source. |
+| `apps/cloud` | Godmode Cloud, optional and self-hosted (Next.js + a custom Node server, PostgreSQL): accounts, admin, Stripe billing and the relay to linked computers. See [Godmode Cloud](#godmode-cloud). |
 | `docs/` | Docs, logo, screenshots. |
 
 ## Data directory (`~/.godmode`, override with `GODMODE_HOME`)
@@ -46,6 +47,8 @@ vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, ta
                       shared/<vm-id>/ shared folders, logs/<vm-id>.log, ssh/ key
 tasks/<task-id>/      checkout of a coding task's repository (see "Tasks")
 logs/godmode.jsonl    diagnostic log (see "Diagnostic log"); godmode.1.jsonl is the previous 2 MB, desktop.log the shell's
+link-key              0600 — this installation's X25519 key pair for the runner link (see "Remote runners")
+runner.json           a runner only (~/.godmode-runner, GODMODE_RUNNER_HOME): pid and ports while it serves
 ```
 
 ### Agent repositories
@@ -150,7 +153,8 @@ ask within the same moment share a request.
 * **Audit log**: every secret access (`credential.fill`, `credential.reveal`, `totp.fill`, …) is recorded.
 * **API auth**: bearer token (desktop shell / `godmode token`) or HttpOnly SameSite=Strict session cookie
   (dashboard password). Loopback-only by default with Host-header DNS-rebinding protection, CSRF origin check,
-  login rate limiting, strict CSP for the dashboard.
+  login rate limiting, strict CSP for the dashboard. Requests relayed by a linked Godmode Cloud never use these
+  credentials; see [Godmode Cloud](#godmode-cloud).
 * **MCP gateway**: each run gets a random bearer token scoped to that run/agent; expires when the run ends.
   Management tools cannot grant reveal access, move agents between workspaces or attach out-of-scope profiles/MCP
   servers; fill-only agents cannot delegate to reveal-mode agents.
@@ -170,7 +174,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
-       --settings <tmp json>                   (the message-queue hook, see below)
+       --settings <tmp json>                   (the message-queue hook, see below; `ultracode: true` with Ultracode)
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key or in a VM; Bash in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
        [--add-dir <folder or clone> for each usable workspace folder and repository]
@@ -180,9 +184,38 @@ cwd = agent repo, or the conversation's / agent's folder (then also --add-dir <a
 
 Stream events are converted into `MessageBlock[]` (text, thinking, tool_use + result) and pushed as
 `run.delta` WS events; the final assistant message is stored in SQLite and in the agent repo.
+A long run has hundreds of blocks and megabytes of tool output and screenshots, and all but the last few never change
+again: each block is masked and serialized once and made again only when it changed (or when the vault learned or
+forgot a secret). A delta carries what changed (`patch`, see WebSocket); the row saved every few seconds while the run
+works is put together from the serialized blocks, less often the longer saving takes (never more than 1/50 of the time).
+Claude Code reports a run's cost as the total of its whole Claude session, so on a resumed session the chat's earlier
+runs are in it: the run is charged that total minus what the session had counted before
+(`conversations.claude_session_cost_usd`). A process can end more than once (a background task that finishes wakes it
+for another turn); time, turns and tokens of the endings add up.
 Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-conversation lock prevents
 two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
 works in its own tabs (see Browser).
+
+### Ultracode
+
+Claude Code's Ultracode — dynamic workflows on every task, at any effort level — is a setting of the session, not a
+flag: the runner adds `ultracode: true` to the run's `--settings` file. Whether it is on: the chat
+(`conversations.ultracode`, from the model picker or `/effort ultracode [on|off]`), else the agent, else
+`settings.runner.ultracode`. Dreams and condition checks never get it.
+
+* **Availability.** The model catalog probe asks Claude Code (`get_settings` after `initialize`) whether the install has
+  dynamic workflows; a model has `ultracode` when it does and the model supports `xhigh` effort (Claude Code's rule).
+  The answer is about the probe session's model: when that one has no `xhigh`, the probe switches the session to a
+  model that has (`set_model`) and asks again. The UI offers the switch only for such models, and `ultracodeFor` drops
+  the setting for the others — an older CLI never sees the key.
+* **Without full bypass** the `Workflow` tool joins `--allowedTools`: print mode cannot ask, and Claude Code refuses a
+  workflow nobody reviewed.
+* **Progress.** A workflow runs in the background of its `Workflow` tool call. Claude Code reports it as `system`
+  events (`task_started`, `task_progress`, `task_updated`, `task_notification`); the stream accumulator keeps them as
+  `task` on that `tool_use` block (status, current activity, its agents with their state), which the chat shows as a
+  card. The process stays until the workflow is done and then sends one `result` per turn; the last one is the answer,
+  their usage adds up (the tokens of the workflow's agents are on the `task`, not in the run's usage). A pause ends
+  the process and with it the workflow: its `task` is `stopped`, and the continued run starts it again if it needs it.
 
 ### Message queue
 
@@ -216,8 +249,9 @@ bridge, older clients — a message still gets a run of its own behind the runni
 A run can stand still and continue later (`services/pauses.ts`, `runner.ts`). It has not ended: its status is `paused`,
 it keeps its row, its assistant message and its Claude session, and nothing that waits for its end (a task, an
 automation's events, a delegating agent, a platform chat) is told anything — there is no `run.finished`, only
-`run.paused`. Table `paused_runs` holds what continuing needs (one per chat); `Conversation.paused`, `Task.pause` and
-`Agent.pausedRuns` carry it to the UI.
+`run.paused`. Table `paused_runs` holds what continuing needs (one per chat) and why it stands still: paused by the
+human (`user`), Claude's usage limit (`limit`) or a question for the human (`question`, see Questions and approvals —
+only an answer continues it); `Conversation.paused`, `Task.pause` and `Agent.pausedRuns` carry it to the UI.
 
 * **Pausing** (`POST /api/conversations/:id/pause`, `POST /api/agents/:id/pause` for everything an agent works on):
   while a step runs, the `PostToolBatch` hook answers `{ "continue": false }` when Claude Code asks between two steps,
@@ -249,6 +283,97 @@ automation's events, a delegating agent, a platform chat) is told anything — t
   progress) ends it as `cancelled`, like a run stopped while it worked. Backups carry paused runs; after a restore none
   continues by itself.
 
+### Questions and approvals
+
+An agent that needs the human asks and waits, instead of ending its turn with a question in prose
+(`services/questions.ts`, table `questions`, `AgentQuestion`):
+
+* **Asking.** `ask_human({ question, context?, options? })` asks for a decision (2–4 suggested answers, at most one
+  `recommended`; the human can always answer in their own words), `request_approval({ action, reason, affects })` asks
+  for an OK before one specific step. Every run gets them except condition checks, dreams and delegated runs (their
+  system prompt tells them to name what needs deciding in their answer, so the agent that handed the task over can ask).
+  The system prompt's "Asking" section says when asking is right; Claude Code's own `AskUserQuestion` is disallowed.
+  Text is redacted and loses Godmode's note tags. Refused: a second question in the same step, a question while a
+  message from the human waits in the chat's queue (it may already answer it), more than 10 per run, and asking while
+  the run is being stopped or paused.
+* **Standing still.** The question goes on the job and as a `question` block into the turn; the run is paused with
+  reason `question` at its next step (the PostToolBatch hook answers `{ continue: false, stopReason: "Waiting for the
+  human's answer" }`, else after the pause grace). A run that asked stands still however its process ended — also
+  when it ended by itself or hit the usage limit — unless it was stopped, timed out or broke off. The `questions` row
+  and the `paused_runs` row are written in one transaction, so an open question always has a run that waits for it;
+  `startPauses` repairs what doesn't fit after a restart or restore (an open question without its pause is withdrawn, a
+  question pause without its question becomes reason `user`). Then the human is told: a `question` notification
+  (toast with *Answer*, OS notification), `question.created`, audit `question.ask`. `Conversation.paused.question`,
+  `Task.pause.question` and `Agent.openQuestions` carry it to the UI; `Agent.pausedRuns` doesn't count it.
+* **Answering.** `POST /api/questions/:id/answer` with exactly one of `optionId`, `decision` (`approve` | `decline`,
+  optional `note`) or `text` (with files). A message to the chat (`POST /api/conversations/:id/messages`, also with
+  `queue`) or to its task (`POST /api/tasks/:id/messages`) is the answer: an option's label or number picks it, a few
+  plain words approve or decline, anything else is the human's own words; slash commands are not answers. The answer is
+  stored redacted on the question and in its block, and the same run continues in the same Claude session with a
+  `<godmode-continue>` note: the decision in Godmode's own words (built from the stored status), the question in
+  `<your-question>` and the answer in `<answer-from-human>` tags, both stripped of note tags. Continuing without an answer
+  is refused (409 `needs_answer` — the chat's Continue, Send now, the agent's Continue). An answer the agent hasn't read
+  (the continued run was paused again before it started, or broke off) is kept: re-sent on continue, or put in front of
+  the chat's next run (`answer_owed`). It counts as read the moment Claude starts replying (not when the run ends, so a
+  crash later can't hand an approval over twice), and the human stopping the run drops it (except when queued
+  messages take over: then it goes along with them), so no later turn is told to do a step the human stopped. A reply
+  sent while the agent is still asking (before its run stands still) waits up to 15 s and then counts as the answer.
+  Audit `question.answer`; the notification is marked read.
+* **Withdrawing.** Stopping the run (`POST /api/runs/:id/cancel`, deleting the chat, agent or task, moving the task off
+  In progress) withdraws the question; deleting the chat removes it. A question asked by an automation keeps the
+  automation busy: skipped ticks say so and remind the human at most once a day.
+* **Who may answer.** Only the human: the API (desktop, dashboard, a paired phone — no files), the chat and the task.
+  In Slack, Telegram and Teams only the person the human marked as themselves (*This is me* on the bot's people,
+  `messaging_users.is_owner`, one per bot, audited) gets the question posted and can answer; everyone else is told the
+  agent is checking with the owner. An answer given in Godmode is followed back into the platform chat. Agents have no
+  tool that answers.
+
+## Team
+
+Agents form a team with the built-in agent on top (it reports to the human). `shared/team.ts` holds the rules, used by
+the core, the desktop and the phone alike.
+
+* **Role and lead.** `agents.role` is a job title (one line, at most 60 characters, no `<`/`>`; agent-written ones pass
+  `redact()`). `agents.reports_to` is the agent's lead; NULL = the built-in agent, whose own `reports_to` is always NULL
+  (its id given as a lead is stored as NULL). A lead is a global agent or one of the same workspace, never the agent
+  itself or one of its reports (`leadProblem`; `resolveLead` answers 400 with the reason). There is no foreign key:
+  deleting a lead moves its reports up to the deleted agent's lead (read inside the delete transaction), moving an
+  agent into a workspace lets go of reports from other workspaces and resets a lead from elsewhere, and
+  `repairReportingLines()` (startup and after a restore) nulls leads that are gone, self, out of scope, the built-in
+  agent or part of a loop. Reporting lines grant nothing: who an agent can hand work to stays `peersFor` (scope via
+  `withinReach`, enabled, `delegateTo`) plus the reveal/VM/computer refusals and depth 3. An agent can't set a lead it
+  couldn't hand work to itself (one that reads secrets in plain text, or controls the computer on its own).
+* **In the prompt.** Every run except dreams gets a "Your team" section in the system prompt (`prompt.ts`
+  `teamSection`): its job, the reporting line up to the human, and — when it may delegate — the teammates it can reach
+  with role and *(your lead)* / *(reports to you)*; otherwise the reports it can reach. Names, roles and descriptions
+  are put on one line with tags removed. Delegated runs are told their answer goes back to the teammate; other runs
+  say in their answer what is above them (or hand that part to their lead when they can reach it and it doesn't manage
+  agents — a decision steered towards a manager goes to the human instead). CLAUDE.md is not touched by team changes.
+* **Last run failed.** `agents.failed_run_id` is set in `finalize` when a real run (not a dream or a condition check)
+  fails, and by `recoverInterruptedRuns` for runs that were working when Godmode stopped; it is cleared by a later run
+  that succeeds, a run the human stops (in a chat, on the board, on a chat platform, or a paused one; `cancelRun(…,
+  { byHuman })`), deleting that run's chat, or `DELETE /api/agents/:id/failed-run`. `Agent.status`
+  reads `"error"` while it is set; the status column itself holds only idle/running.
+* **Presence.** `agentPresence()` decides what an agent is doing — switched off, working (running runs only; queued is
+  never working), needs you (an open question or a missing login), last run failed, paused, queued, idle — and
+  `presenceLabel()` words it, so cards, the org chart, the agent page and the phone agree. A new socket's `hello`
+  carries `activeRunIds` and a `run.started` follows for each active run, so the app drops runs that ended while it
+  was away and shows queued runs as queued after a reload.
+* **Who wrote a message.** `messages.source` marks user turns the human didn't write: `automation` (scheduler, app and
+  condition automations), `delegation` (`agent_delegate`, an agent's `task_message`) and `task` (the board's prompt).
+  The human's own messages, including feedback on a ticket, carry none. The thread shows sourced turns as labelled
+  cards, transcripts name the speaker from it, and the recap after a lost session labels them.
+* **Handoffs both ways.** `Conversation.delegatedFrom` is derived (a join through the chat's first run's parent run),
+  so it goes null by itself when the asking agent or chat is deleted. `GET /api/runs?parentRunId=` lists what a run
+  handed over; the handoff card, the run sheet ("Handed on") and the chat header ("From <agent>") use it.
+* **Duplicate.** `POST /api/agents/:id/duplicate` copies an agent's setup under "<Name> copy" — not its memory, chats
+  or automations; a copy that may read secrets needs the passphrase; audited as `agent.duplicate`.
+* **Switched off.** `POST /api/conversations` refuses a switched-off agent (409); its existing chats show a bar with
+  *Switch on* and keep the draft.
+* **Restore.** Migration 53's backfill (`TEAM_BACKFILL_SQL`: the built-in agent's role, message sources of old
+  automation/handoff/board prompts, "Run task" chats from origin `api` to `chat`) runs again after a restore, followed
+  by `repairReportingLines()`.
+
 ## Godmode MCP gateway tools (`/mcp`)
 
 | Tool | Purpose |
@@ -259,11 +384,13 @@ automation's events, a delegating agent, a platform chat) is told anything — t
 | `vault_get_login({ credentialId })` | Reveal username/password — only when `secretAccess = "reveal"` |
 | `vault_get_totp({ totpId })` | Reveal current code — only in reveal mode |
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |
-| `agents_list()`, `agent_get({id})` | Discover peer agents |
-| `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result) |
-| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list`, `tasks_list`, `task_create`, `task_update` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent) |
+| `agents_list()`, `agent_get({id})` | Discover peer agents: role, who they report to (`relation` marks the caller's lead and reports), and for `agent_get` who reports to it (only agents the caller could reach) |
+| `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result). The chat stores the bare task (`source: "delegation"`); the run's prompt starts with `[Delegated by <name> (<role>), your lead. Your final answer goes back to <name>.]` |
+| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo` |
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
-| `task_report_blocked({ reason })` | Only in runs working on a board task: say what's missing; the task moves to Blocked when the run ends (see Tasks) |
+| `task_note({ text, taskId? })` | A progress note on the ticket the run works on (managers: any ticket); on its timeline, nobody is notified |
+| `ask_human({ question, context?, options? })`, `request_approval({ action, reason, affects })` | Ask the human a question or for an OK and stand still until the answer; the run continues with it (see Questions and approvals). Not in condition checks, dreams or delegated runs |
+| `task_report_blocked({ reason })` | Only in runs working on a board task: say what's missing (access, an account, information nobody can give now); the task moves to Blocked when the run ends (see Tasks). Decisions and OKs go through `ask_human` / `request_approval` |
 | `memory_dream_report({ summary, changes })` | Only in dream runs — and the only tool they get: report what a memory consolidation changed (see Dreaming) |
 | `notify_user({ title, body })` | Push a notification to the human |
 | `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
@@ -291,23 +418,33 @@ directory are masked; request paths are logged as route patterns. `info` and up 
 
 | Scope | Entries |
 |---|---|
-| `runner` | One per run: status, duration, queue wait, cost, tokens, tool calls, failed tools with their error |
-| `http` | Requests slower than 1 s, rejected requests (4xx except sign-in, vault-locked and grant prompts), unknown API routes, 5xx with stack; every request with `verbose` |
+| `runner` | A run's start, and one entry when it ends: status, duration (`ms`: Claude's own, `wallMs`: by the clock), queue wait, cost, tokens, tokens read per turn (`contextTokens`), the session's total on a resumed one, tool calls, failed tools with the head and end of their output, how heavy the message got (`blocks`, `resultKb`, `images`, `imageKb`, `deltas`, `slowestSaveMs`) |
+| `http` | Requests slower than 1 s (`expected` when the route waits by design — `expectSlow`), rejected requests (4xx except sign-in, vault-locked and grant prompts), unknown API routes, 5xx with stack; every request with `verbose` |
 | `mcp` | Agent tool calls slower than 10 s or returning an error, crashes, unknown tools |
-| `db` | Statements slower than 100 ms (SQL only, once a minute each) |
-| `perf` | Event-loop stalls over 300 ms, sleep/wake gaps, memory every 30 min |
+| `db` | Statements slower than 100 ms (SQL only, once a minute each, with how often it was that slow meanwhile) |
+| `perf` | Event-loop stalls over 300 ms with what the core was doing (`during`: slow synchronous work noted through `diagnostics/slow.ts`) and the runs at work; a sleep after real use or under a run (`sleptAt`; the stirring of a sleeping computer is only counted); every 30 min memory, database size, connected UIs and those sleeps — "high memory use" once, and again when it grew by a quarter |
+| `browser` | A browser that went away by itself: whether its process was still alive, how the connection ended, how long it ran and sat idle |
+| `sources` | A failed clone or update with git's own words, the step and how long it took |
 | `crash` | Uncaught exceptions and unhandled rejections (the core still exits with 1) |
 | `ui` | Render crashes, uncaught errors and failed requests that never reached the core (`POST /api/logs/client`, 60 a minute) |
 
 Settings → Logs reads it through `GET /api/logs` (counts, recurring warnings/errors grouped by message without ids and
 numbers), `GET /api/logs/entries?level=&search=&limit=` and `GET /api/logs/report[?full=1]`: Markdown for an AI with
-the environment, recurring problems, a run summary, slow spots, the tail of `desktop.log` and the newest entries that fit
-in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
+the environment (with the build's commit), recurring problems, a run summary (cost by agent, runs that took far longer
+by the clock than Claude worked), memory and sleep, slow spots (requests, by-design waits apart, tool calls, queries,
+stalls and what blocked them), the tail of `desktop.log` and the newest entries that fit in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
 
 ## WebSocket (`/api/ws`)
 
 Server → UI events are defined in `packages/shared/src/events.ts`. The UI keeps React Query caches in sync
 (`apps/desktop/src/lib/realtime.ts`). Browser live view frames are only sent to subscribed clients.
+
+`run.delta` counts up per stretch of a run (`stream`, `seq`: a paused run continues in a new stretch). A client that
+says `deltas.patch` gets only what changed (`patch`: `[index, block]` pairs, `length`: how long the list is afterwards)
+and applies it with `applyRunDelta`; when a delta doesn't fit what it has (one was missed), it asks for the whole list
+with `run.resync`. A client that connects, or a phone that
+opens a chat, is sent the whole list of what runs there. Clients that don't ask for patches (older phone apps) get the
+whole list, at most once a second per run.
 
 ## Browser
 
@@ -404,16 +541,22 @@ Each model screenshot remembers the screen area it shows (`Shot`), so image pixe
 * **Window** — [Cua Driver](https://github.com/trycua/cua) (`libs/cua-driver`, MIT), run as `cua-driver mcp --direct`
   (Godmode is its MCP client; `--direct` keeps the TCC grants of the app running Godmode). The pinned build comes from
   PyPI (`cua-driver`, bundles the native binary) via `uvx`, with telemetry and update checks off and its state under
-  `<data>/cua-driver`. Its pixel coordinates refer to its last screenshot of the window, so all calls go through one
-  queue and that size is tracked. Element tokens that a newer driver snapshot made stale are re-resolved by
-  role/label/position. On macOS the native helper backs it up: window capture for the live view, scrolling (through the
-  scroll area's accessibility scroll bars — posted wheel events don't reach background windows), and pointer/keyboard
-  delivery with `CGEventPostToPid` + `AXPress` when the driver refuses a window it can't match in the accessibility tree.
+  `<data>/cua-driver`; it is downloaded in the background on first use — an agent's action or opening the share picker
+  starts it; the macOS helper acts meanwhile, elsewhere an action waits up to 20 s and the picker says it is under way;
+  status checks never start one, also in place of an installed
+  `cua-driver` older than the pin (which is used only without uv, and flagged in the system check). Its pixel coordinates refer to its last screenshot
+  of the window, so all calls go through one queue and that size is tracked. Element tokens that a newer driver
+  snapshot made stale are re-resolved by role/label/position. On macOS the native helper backs it up: window capture
+  for the live view, scrolling (through the scroll area's accessibility scroll bars — posted wheel events don't reach
+  background windows), and pointer/keyboard delivery with `CGEventPostToPid` + `AXPress` when the driver refuses a
+  window it can't match in the accessibility tree.
 * **Desktop / display** — the native helper, every monitor: macOS `native/macos/GodmodeComputer.swift` (ScreenCaptureKit,
   global CGEvents; embedded into the compiled core by `scripts/build.ts`, extracted to `<data>/bin`, compiled with
   `swiftc` when running from source), Windows a PowerShell-hosted C# class (`helpers/windowsHelper.ts`: `Screen.AllScreens`,
   `CopyFromScreen`, `SendInput`), Linux/X11 `xrandr` + ImageMagick `import` + `xdotool`. Without one, Cua Driver's
-  desktop target covers the primary display. Desktop runs take turns (one mouse); window/tab shares only lock themselves.
+  desktop target covers the primary display (the driver scales desktop pixels by how much its last desktop screenshot
+  was downsized, so the client sends them at that size). Desktop runs take turns (one mouse); window/tab shares only
+  lock themselves.
 * **Tab** — CDP on Godmode's Chromium (`Page.captureScreenshot`, `Input.dispatch*`), background tabs included.
 
 Live view: `computer.subscribe { view }` over the WebSocket (`display:<id>`, `window:<pid>:<windowId>`,
@@ -473,7 +616,7 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   it can't change, delete or schedule agents that work on the host. Ending a run aborts its in-flight VM calls.
 * **`vm` MCP tools** (`vm/tools.ts`): `shell` (`tart exec <id> /bin/zsh -l -c …`, exit code + stdout/stderr, timeout),
   `read_file` / `write_file` / `edit_file` (through the same channel, content via stdin; non-UTF-8 files are refused
-  for edits), `info`, and `screen` — the computer-use action vocabulary (screenshot, clicks, drag, scroll, type, key,
+  for edits), `info`, `permissions` (below) and `screen` — the computer-use action vocabulary (screenshot, clicks, drag, scroll, type, key,
   zoom) over the guest's macOS Screen Sharing on the VM's NAT address (`vm/vnc.ts`: RFB 3.8/3.889 client with Apple
   Remote Desktop authentication, raw 32-bit updates, pointer/key events; `vm/raster.ts`: crop, area-average downscale,
   PNG). Long or non-ASCII text is pasted through the guest clipboard. Screenshots remember their frame, so model
@@ -481,6 +624,21 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   network interface.) `fill_login` / `fill_totp` type vault secrets into the focused field (optionally clicking a
   `coordinate` first) when `settings.vm.vaultFill` allows it; a password needs `kCGSSessionSecureInputPID` in the guest's
   `ioreg` (the app that owns it is named in the result and the audit entry). The value is never in a tool result.
+* **Privacy permissions in the guest** (`vm/permissions.ts`): the `permissions` tool (`grant` / `revoke` / `list` /
+  `denied`) lets the agent set macOS's privacy permissions (TCC) for the VM's software itself, so no dialog waits for a
+  human. The Cirrus Labs images run with System Integrity Protection off, so an entry is a row in a SQLite database:
+  the system one (`/Library/Application Support/com.apple.TCC/TCC.db`, through `sudo`: Accessibility, Screen Recording,
+  Input Monitoring, Full Disk Access, Developer Tools) or the guest user's (everything else — Automation, Camera,
+  Microphone, Contacts, folders, …); which daemon answers for a service was measured on macOS 26. A client is an
+  app's bundle id or the real path of a bare program, resolved in the guest from a name, bundle id or path; `"shell"`
+  is the Tart guest agent, which macOS holds responsible for everything `tart exec` starts. Entries are written without
+  a code requirement (like the image's own) and replace a stored refusal — one transaction per database, the system one
+  first, so a failure there changes nothing; tccd reads the database on every request, so they apply at once. Automation is per controlled app
+  (`target`); revoking Accessibility also removes the PostEvent entry macOS would turn back into it. `denied` reads
+  tccd's `AUTHREQ_*` log lines (`log show`) for requests that weren't allowed (Automation requests aren't logged
+  that way). Grants and revocations made with the tool are audited, failed attempts included
+  (`vm.permission.grant` / `.revoke`). An image with System Integrity Protection on answers with why it can't be done.
+  Nothing dismisses dialogs: closing one without "Allow" makes macOS store a refusal over the entry.
 * **Godmode's agent in the VM** (`vm/guest.ts`): the browser and computer use of a VM run live in the guest. Claude
   Code starts two stdio MCP servers as `tart exec -i <vm> /bin/zsh -f -c …` (stdio through the Tart guest agent, which
   runs in the guest user's GUI session; no startup files, so nothing the agent puts there can print into the JSON-RPC
@@ -489,7 +647,9 @@ Agents can work in isolated macOS VMs instead of on the host (`packages/core/src
   in `~/.godmode/browser-profile`, DevTools on the guest's `127.0.0.1:9322`, visible on the VM's screen, downloads in
   `~/Downloads`), started again when it was closed — and `cua` — Cua Driver (`cua-driver mcp --direct`), which controls
   the guest's apps and windows; the Cirrus Labs images grant the guest agent (and so everything `tart exec` starts)
-  Accessibility and Screen Recording. Everything is installed on first use, shared by concurrent runs: uv is copied
+  Accessibility and Screen Recording. `prepareGuest` restores what is missing of that on every run (`ensureAgentAccess`:
+  the image's entries name one version of the agent's binary and are lost when Homebrew upgrades it), plus Automation of
+  System Events and Finder, so an `osascript` from the shell doesn't wait at a dialog. Everything is installed on first use, shared by concurrent runs: uv is copied
   from the host (the official installer as fallback), Chrome comes from Google's disk image, browser-use and Cua Driver
   are fetched through uv (`uv tool run --from <pinned spec> python …` records the program's path in
   `~/.godmode/stamps`). A tool that failed isn't retried for 10 minutes (or until the VM stops). Vault fills
@@ -640,33 +800,85 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   without one when it can't be created (with a notification). Deleting a task removes its worktree and prunes it from
   the repository; its branch stays (while the worktree exists, the branch can't be checked out elsewhere — merge it).
 * **Coding tasks** publish their branch: when a run succeeds, Godmode commits what the agent left uncommitted (new
-  `.env`/key files are left out), refuses to push when the branch adds such files or its diff contains a secret from
-  the vault, merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks the task),
+  `.env`/key files are left out), takes secrets out of the commits the remote doesn't have yet (see the next point),
+  merges commits someone else pushed to the branch since Godmode's last push (a conflict blocks the task),
   and pushes with an explicit lease on what it saw — so nothing pushed meanwhile is overwritten. It then opens a pull
-  request with `gh pr create` (body: the agent's summary, redacted); without `gh`, or for GitLab, the task links to the
+  request with `gh pr create` (body: the agent's summary, redacted — saved secrets are taken out of the title and body
+  even with redaction off); without `gh`, or for GitLab, the task links to the
   page that opens one. A branch without commits on top of its base goes to review without a pull request; a local
   repository without a remote keeps the commits on the task's branch. Restarting fast-forwards the worktree to the
   remote branch first; only the task's branch is fetched and pushed (nothing is written to the repository's config).
   When a `general` or `research` task's run ends, what it changed is committed on its branch, which isn't pushed.
+* **Secrets never stop a push and never go along**: before a task's branch is pushed (when a run ends, or from the
+  board), Godmode checks the commits that are neither on the base nor on the remote yet, and only what they add: files
+  that look like secrets (`.env`, keys), and secrets saved in the vault in an added line, a file name, any version of
+  a binary file those commits add (read whole, up to 20 MB) or a commit message. Lines a change removes or merely surrounds don't
+  count, a moved file adds only what changed, and what the remote already has isn't checked again. A value counts
+  when it is stored as a secret (passwords, 2FA secrets, API keys, tokens; of a custom MCP server's env variables and
+  headers the ones whose name says so, like `API_KEY`, `signingKey`, `SENTRY_DSN`, `SLACK_WEBHOOK_URL` or
+  `Authorization` — not public keys like `STRIPE_PUBLISHABLE_KEY`, nor a snake_case identifier under a key's name like
+  `SORT_KEY=created_at` —, plus bearer tokens and passwords inside URLs) and isn't a single plain word or number — a
+  server's other settings (`NODE_ENV=production`, URLs) are only masked in
+  transcripts. When something is found, Godmode fixes the branch instead of blocking the task: such files are left out
+  (they stay in the worktree; one the branch already had keeps the version the remote has), the secret is replaced
+  with `GODMODE_REMOVED_SECRET` in text files (a file that can't be rewritten safely — binary, not UTF-8, a link, not
+  writable — is left out too), and the unpushed commits become one commit on top of what the remote has (the branch's
+  own last commit as its first parent), so no pushed commit or commit message carries the secret and nothing on the
+  remote is rewritten. Exactly the commit that was checked is pushed: when a turn that started meanwhile stages or
+  commits something during the fix (or before a merge with someone else's push), nothing is pushed now and that
+  turn's end pushes the branch. The branch as the agent left it stays in the worktree as
+  `refs/worktree/godmode/with-secrets/<commit>` (never pushed; its reflog keeps the commits for git's 90 days even
+  when the repository is cleaned up from another checkout), a notification names the files, and the agent's brief
+  tells it to read secrets from the environment. With a locked vault only the file names are checked.
 * **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
   `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
   `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
   blocked task back to `in_progress`; for coding tasks the next push updates the open pull request. The run's answer
   becomes the task's result: images it names by path in the agent's folders or the temp folder (checked by their
-  bytes, resolved symlinks included, at most 20) are copied into the task's files and the result shows them; the
-  previous result's copies go. The pull request body keeps the paths.
+  bytes, resolved symlinks included, at most 20) are copied into the task's files and the result shows them; earlier
+  results keep theirs (they stay readable on the timeline) until the task is deleted. The pull request body keeps the
+  paths. The kind of block is stored with it (`Task.blockedKind`): `failed`, `interrupted` (the run was cut off by a
+  restart), `stopped` (the human stopped it — a follow-up it set is cancelled), `needs_input` (`task_report_blocked`),
+  `publish` (pushing or the pull request failed — *Publish again* from the task moves it to review once it works),
+  `setup` (agent gone or switched off, no repository, worktree failed) and `manual` (the human moved it to Blocked, with
+  an optional `blockedReason` only they can change). Starting a blocked task again opens the prompt with why: "Godmode
+  restarted while you were working…" or "Your last run … failed: <reason>". Handing a blocked task to another agent
+  turns `needs_input`, `failed`, `stopped` and `interrupted` into `manual` (the new agent starts again).
+* **Tickets**: `priority` (urgent, high, medium, low, none), `dueDate` (a calendar day) and up to 10 `labels`; the agent
+  is told them in the prompt. Queued ticket runs (triggers `task` and `followup`) start in priority order, then by the
+  earliest due day (`ticketOrder()` in the runner shares out only the queue places ticket runs hold — the human's chat,
+  an automation or a continued run keeps its turn); Todo tickets are started in that order after a restart.
+* **Timeline** (`task_events`, `TaskEvent`, `GET /api/tasks/:id/events`, WS `task.event`): append-only, oldest first —
+  assignments, status moves by the human, starts, every delivery with its full result, blocks with their reason, the
+  human's messages (from the sheet, the phone or the ticket's chat) with the status they were sent in, notes agents
+  leave (`task_note`, at most 20 per run), pull requests opened / merged / closed, and questions asked and answered.
+  `createdBy` says who filed the ticket. Rows a run causes once (started, waiting, delivered, blocked) are unique per
+  run; the rows go with the task.
+* **Waiting**: when the agent set itself a follow-up and its run succeeds, the ticket stays `in_progress` with
+  `Task.followup` — "Waiting — continues <when>" — instead of going to review, without a "ready for review" notice;
+  what it changed is committed (and pushed, for coding tickets). When the follow-up runs, the ticket goes on; when the
+  human cancels it, the ticket goes to review quietly; when it can't start because the agent is off or gone, the ticket
+  is blocked (`setup`). Moving, reassigning, archiving or deleting a waiting ticket cancels its follow-up; a restart
+  leaves it waiting. The follow-up's own "got back to" notice isn't sent for tickets: they report themselves.
+* **Cost and time**: `costUsd`, `workMs` and `runCount` add up every run that ended in the ticket's conversations
+  (with the work it delegated), and survive reassignment and the chat being deleted.
 * **Moving on the board**: away from `in_progress` cancels the run (the UI asks first); into `todo` (or
   `in_progress`) with an agent starts it. Every 5 minutes, tasks in review with an open pull request are checked with
   `gh pr view`: merged → `done`, closed → noted on the task.
 * **Races**: one start or publish per task at a time; a start the board asks for meanwhile runs once the task is free,
   and a run that ended meanwhile is handled then. Moves caused by the work (to In review, Blocked, Done) only apply
   from the status the work expects — a move the human made meanwhile wins — and put the task at the top of its column.
-* **Agents managing the board**: `task_create` / `task_update` follow the delegation rules (no reveal-mode or unattended
+* **Agents managing the board**: `task_get` reads one ticket in full (result, timeline, cost; by id or `#12`), `tasks_list`
+  filters by agent, `task_message` sends feedback into a ticket (it arrives marked as coming from that agent, not the
+  human, is on the timeline, and is refused for the caller's own ticket and for a ticket whose run stands still — only
+  the human continues those), `task_note` leaves a note (a working agent on its own ticket, managers on any).
+  `task_create` / `task_update` follow the delegation rules (no reveal-mode or unattended
   computer agents from callers that couldn't use them, VM-kept runs stay off the host); coding tasks created by agents
   use the workspace's repositories; and a run working on a task — or delegated from one — can't start a manager agent
   (itself included), so tasks can't spawn tasks without end. Follow-ups wait while Godmode prepares or publishes a task. Task numbers are never reused.
-* **Restart**: tasks left `in_progress` without a live run are blocked ("Interrupted"), tasks waiting in `todo` with an
-  agent are started. Deleting a task cancels its run and removes the worktree (the conversation and the branch stay); deleting a
+* **Restart**: tasks left `in_progress` without a live run or a pending follow-up are blocked (`interrupted`; the board's
+  Blocked column offers *Continue all*), tasks waiting in `todo` with an agent are started. Restoring a backup does the
+  same for the restored tickets. Deleting a task cancels its run and removes the worktree (the conversation and the branch stay); deleting a
   workspace counts its tasks as dependents.
 
 ## Integrations
@@ -748,16 +960,17 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
 * **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
   allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents and their slash commands, the model catalog,
-  conversations, messages (with attachments) and the message queue (edit, remove, send now), runs (cancel),
-  routines (run, enable), browser profiles (launch, input), computer input, VMs (list, screenshot, start/stop), notifications,
-  missing logins and `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are
-  restricted too: a phone may pick a chat's model and effort but can't set its folder, VM, browser, shared screen or
-  instructions, or change an automation beyond switching it on or off, and it only watches and controls screens that
-  are shared in a chat
-  (`computer.subscribe` and `/api/computer/input`). The listener checks the decoded path, so `/api/%61uth/…` is refused
+  conversations, messages (with attachments) and the message queue (edit, remove, send now), questions (list, answer
+  without files), runs (cancel), routines (run, enable), browser profiles (launch, input), computer input, VMs (list,
+  screenshot, start/stop, input), notifications, missing logins and `GET/DELETE /api/mobile/me`; everything else answers
+  403 `device_forbidden`. Bodies are restricted too: a phone may pick a chat's model, effort and Ultracode but can't set its
+  folder, VM, browser, shared screen or instructions, or change an automation beyond switching it on or off, and it only
+  watches and controls screens that are shared in a chat (`computer.subscribe` and `/api/computer/input`); Godmode's VMs
+  it may always take over (`POST /api/vms/:id/input`, the computer input events on a picture of the whole screen, sent
+  over the VM's Screen Sharing and never booting it). The listener checks the decoded path, so `/api/%61uth/…` is refused
   like `/api/auth/…`.
 * **Key hygiene.** The app only sends its key over plain HTTP to a Tailscale address (100.64.0.0/10 or `*.ts.net`;
-  https anywhere, for a future gateway — `isPhoneUrlAllowed`), and first asks the address's `/api/health`, which on
+  https anywhere, which is how the Godmode Cloud gateway is reached — `isPhoneUrlAllowed`), and first asks the address's `/api/health`, which on
   the phones' listener returns the instance id; an address that answers as another instance never gets the key.
   Writes are sent once (no retry on another address), so a slow network never duplicates a message or a run.
 * **Realtime.** Phone sockets get every event except `run.delta`, which only goes to conversations they subscribed to
@@ -770,7 +983,172 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   URL that answered last and falls back to the others, and treats 401 as "removed". It opens its WebSocket only in the
   foreground. An optional Face ID lock covers the app in the app switcher.
 
-A hosted gateway can later be added as another URL in the pairing link.
+* **Through Godmode Cloud.** When the computer is linked to a cloud with an https address and both phone switches are
+  on (`settings.mobile.enabled`, `settings.cloud.phoneAccess`), the pairing link and `GET /api/mobile/me` also carry
+  the gateway URL `https://<cloud>/gw/<deviceId>`, last; the app tries it after the Tailscale addresses. Those requests
+  arrive through the cloud link on channel `mobile` and pass the same device-token and scope checks as on the
+  phones' listener. See [Godmode Cloud](#godmode-cloud).
+
+## Godmode Cloud
+
+An optional, self-hosted service (`apps/cloud`; deployment and operation in
+[apps/cloud/README.md](../apps/cloud/README.md)). It gives people accounts, lets them open a linked computer's
+dashboard in any browser and reach it from the phone app without Tailscale, and bills plans through Stripe. A Godmode
+that was never linked never talks to a cloud; nothing leaves the computer unless it is linked.
+
+### Components
+
+* **The cloud** (`apps/cloud`): one Node.js process. A custom HTTP server (`server/main.ts`, bundled with esbuild to
+  `dist/server.mjs`) answers `/api/health`, serves the dashboard build under `/ui`, owns the relay paths
+  (`/relay/v1/connect`, `/d/<deviceId>/…`, `/gw/<deviceId>/…`) and hands everything else to Next.js (App Router):
+  sign-in, the setup wizard, the user and admin pages, the link and device APIs and the Stripe webhook. Data lives in
+  PostgreSQL (Drizzle; migrations run at start). Configuration is the domain only; everything else is a setting in the
+  admin dashboard. Docker Compose with `init` (generates the database password and app secret), `db` and `cloud`.
+* **The cloud link in the core** (`packages/core/src/cloud`): linking (`link.ts`), the outbound socket (`client.ts`),
+  running relayed requests and sockets through the core's own Hono app (`dispatch.ts`), the classification of every
+  route for relayed requests (`scope.ts`), the link state (`state.ts`), and `/api/cloud*` for the desktop.
+* **The dashboard in cloud mode** (`apps/desktop`): Settings → Cloud and Billing on the computer. The same UI, built
+  with `--base=/ui/` (`build:cloud`), is served by the cloud for `/d/<deviceId>/*` with a
+  `<meta name="godmode-cloud">` tag (`CloudUiContext`); with it the UI sends its API calls and WebSocket to
+  `/d/<deviceId>/api/…`. The cloud serves its own copy of the build from the same commit, never files from a computer.
+* **The phone app** (`apps/mobile`): treats the gateway URL as one more address of the computer.
+* **The contract** (`packages/shared/src/cloud.ts`): settings, link and device API payloads, the frame codec, header
+  lists, close codes and error codes.
+
+### Link protocol (summary)
+
+1. **Linking.** The computer makes a link secret (`gml_…`) and sends `POST /api/link/v1/start` with its instance id,
+   name, platform, version and the secret's SHA-256. The cloud returns a request id, a short user code and
+   `verifyUrl` (`<cloud>/link?code=…`), which Godmode opens in the browser. A signed-in person approves there (within
+   the plan's computer limit; audited and e-mailed to the account). Meanwhile the computer polls
+   `POST /api/link/v1/poll` with the secret as bearer and receives its `deviceId` and the account. The cloud only ever
+   stores the hash.
+2. **Connection.** The computer keeps one WebSocket to `/relay/v1/connect` with
+   `Authorization: Bearer <deviceId>.<secret>`. Its first frame is Hello (protocol version, app version, instance id,
+   name, platform, the browser and phone switches); the cloud answers Welcome (device id, account, plan, public URL,
+   limits). One live link per computer: a newer one replaces the older.
+3. **Frames.** Every message is binary: one byte frame type, a 32-bit stream id, the payload. The cloud opens streams:
+   an HTTP request is ReqHead, ReqBody…, ReqEnd, answered by ResHead, ResBody… and exactly one ResEnd; a WebSocket is
+   WsOpen, WsAccept or WsReject, then WsText / WsBinary both ways and WsClose; Abort ends a stream from either side.
+   Bodies travel in 64 KiB chunks under a 1 MiB window per stream, and the reader grants more (Window) only after it
+   handed bytes on, so a slow browser or computer slows the sender instead of filling memory. A Ping goes out after
+   20 s of silence; 60 s without any frame ends the link.
+4. **Channels.** `/d/<deviceId>/api/*` is for signed-in cloud users: the cloud checks the session, the person's role
+   on that computer and the plan, drops cookies and `authorization`, and sends `channel: "cloud"` with the user's id,
+   e-mail, name and role. `/gw/<deviceId>/api/*` is for phones: no cloud session, the phone's own `Authorization`
+   passes through, `channel: "mobile"`. On the computer the channel alone decides the kind of caller (`cloud` or
+   `device`); access tokens and dashboard cookies are never looked at on relayed requests.
+5. **Close codes** tell the computer what to show: 4401 revoked (stop), 4402 plan required and 4403 turned off (retry
+   slowly), 4409 replaced by another connection, 4429 rate limited, 4400 protocol or version mismatch.
+6. **Device API** (`/api/device/v1/*`, same bearer): the computer's account and plan, the owner's billing overview,
+   cancel or resume at the end of the period, and unlink. Checkout, payment methods and sign-in happen only in the
+   browser.
+
+### Trust model: what the cloud can see
+
+* The cloud terminates TLS, so everything relayed passes through it in the clear: the dashboard's requests and
+  responses (chats, files, agent output, screenshots and live views), WebSocket messages and phones' requests. It
+  stores none of it; it counts bytes and requests per computer and day (`usage_daily`).
+* The admin area has no way to open someone else's computer. Whoever operates the cloud (server, database, sign-in
+  e-mail) is trusted and technically can.
+* A computer can be opened by its owner and by the people the owner shared it with (operator: everything; viewer:
+  read only). Admins see metadata: names, versions, online state, traffic.
+* The computer decides what the cloud may do: `settings.cloud.browserAccess`, `phoneAccess` and `allowSecrets`
+  (unlocking the vault, revealing passwords and keys, backups; off by default). Some routes are never served to a
+  relayed request (dashboard sign-in, phone pairing management, cloud link management, vault setup, revealing a file
+  or opening a VM on the computer's own screen, computer permissions); `scope.ts` classifies every route and refuses
+  new ones until someone decides. The first use
+  per person and day is audited and shown as a notification on the computer.
+* Browser side: the cloud session cookie is never forwarded to a computer; a computer's responses pass through a
+  header allow-list and always get `content-security-policy: default-src 'none'; sandbox` and `nosniff`, so they can
+  never set cookies or run as a page on the cloud's origin; unsafe methods and sockets on `/d` need the cloud's own
+  Origin. Redirects from a computer are refused (502).
+* Phones: the cloud is a gateway. The phone's `gmd_` key is checked by the computer, and the cloud never answers 401 on
+  `/gw` itself (the app forgets its pairing on a 401).
+
+### Where state lives
+
+* **Cloud, PostgreSQL** (`apps/cloud/src/server/db/schema.ts`): people, roles, invites, sessions and sign-in tokens
+  (hashes only), settings (the SMTP password and Stripe keys encrypted with the app secret), computers (hash of the
+  link secret, switches, last seen), shares, pending link requests, daily usage, plans, prices and subscriptions
+  mirrored from Stripe, processed Stripe events, and the audit log.
+* **Cloud, volumes:** `secrets` (database password and app secret, written once by `init`) and `/data`
+  (`setup-code.txt` until the instance is claimed).
+* **Cloud, memory:** the live links (the relay hub), rate-limit buckets and the settings cache. One process per
+  database; replicas would not see each other's links.
+* **Computer:** meta keys `cloud.url`, `cloud.device_id`, `cloud.account`, `cloud.linked_at` (plus `cloud.revoked`,
+  `cloud.plan`) in `godmode.db`, kept out of backups, and the link secret in `<dataDir>/cloud-link` (0600): not in
+  Settings, which paired phones can read, and not in the vault, because the link must come up while the vault is
+  locked. The switches are `settings.cloud`.
+* **Browser:** the cloud session cookie (`__Host-gmc_session` on https, HttpOnly, SameSite=Lax, 365 days by default,
+  renewed while used). **Phone:** its device token and the computer's addresses, including the gateway URL, in the
+  Keychain / Keystore.
+
+## Remote runners
+
+A **runner** is a headless Godmode core on another computer (macOS for now) that works for the human's Godmode — the
+**controller** — so chats go on while the controller's lid is closed. Everything lives in `packages/core/src/remote/`
+(not `runner/`, which is the Claude run executor); shared types are in `packages/shared/src/remote.ts`.
+
+* **Role and process.** `godmode runner serve` (or the LaunchAgent `dev.codext.godmode.runner` that `godmode runner
+  install` writes, `RunAtLoad`, `KeepAlive` on failure, `LimitLoadToSessionType Aqua` because agents need the desktop
+  session) starts the core with `config().role = "runner"` and data dir `~/.godmode-runner` (`GODMODE_RUNNER_HOME`).
+  A runner keeps its API on loopback (random port; the MCP gateway needs it), doesn't run schedules, dreaming,
+  automations, messaging, the task board or phone access, holds `caffeinate -i -m -s -w <pid>` (plus `-d` while runs
+  work, `keepAwake.ts`), writes `runner.json` (pid, ports) while it serves and refuses a second instance on the same
+  data dir. On its first start it installs what is missing (Claude Code, uv, browser-use, Chromium) through the
+  doctor's installers (`bootstrapDependencies`; `GODMODE_RUNNER_BOOTSTRAP=0` turns that off). Agents on a runner get no
+  tools that change the setup, automations or the board (`managesSetup` in `mcp/tools.ts`): their setup is a copy.
+* **The link.** The runner listens on every interface at its link port (meta `link.port`, default 7788, next free one
+  if taken, written back) and serves only `GET /` and the WebSocket `/link` (`linkServer.ts`, 30 handshakes per IP
+  and minute). Each socket gets a `SecureChannel` (`channel.ts`, `crypto.ts`): X25519 ephemeral + static keys,
+  HKDF-SHA256 over the transcript, one AES-256-GCM key per direction, frames numbered (replays, losses and reordering
+  end the link), 1 MiB per frame, binary streams up to 256 MiB. In a session the keys depend on both static keys (the
+  runner pins the controller's in `link_controllers`, the controller pins the runner's in `runners`); while pairing on
+  the runner's static key and the code's one-time secret. Every installation has one static key pair in
+  `<data dir>/link-key` (0600). Over the link the controller sends requests (`req` → the runner's own API with the master
+  token, tagged `c.env.channel = "runner-link"`, only `/api/*` and never `/api/auth/*`) and live-view subscriptions
+  (`client`); the runner sends answers and, through a virtual client of the event hub, every event a local UI would get
+  (frames and streaming text are dropped while the socket is backed up). The controller's `RemoteLink`
+  (`linkClient.ts`) dials each known address in turn (LAN, Tailscale, `.local`), pings every 20 s and reconnects with
+  backoff (5 minutes for a version mismatch). `/api/link/*` (`server/routes/link.ts`) exists only on that channel:
+  info, setup sync, health and fixes, agent memory, cookies, `exec` (for the autofix chat; audited) and `forget`.
+* **Pairing.** `godmode runner pair` (and the end of `runner install`) stores a one-time code in meta `link.pairing`
+  (10 minutes) and prints `gmr1.<base64url JSON>`: name, addresses, port, static key, pairing id and secret. Pasting it
+  in Godmode (`POST /api/runners`) runs the pair handshake: the runner stores the controller's key and drops the code
+  before it answers. Or Godmode makes an offer (`POST /api/runners/pairing`): a temporary listener on every interface
+  and `gmo1.<…>` with its URLs and a token, inside an install command — `curl …/godmode` from this computer with the
+  binary's SHA-256 pinned (compiled builds only) or `godmode.codext.de/runner.sh` with the license key — that ends in
+  `godmode runner install --pair <offer>`. The runner then posts its code to the offer's `POST /pair`, sealed with a
+  key derived from the token (which never crosses the network), and the controller pairs with it; the listener stops.
+* **Setup copy** (`snapshot.ts`). Before a chat starts on a runner, before every message to it, and 5 s after the
+  setup changes while it is connected, the controller compares its digest with the one the runner reported and sends
+  the snapshot when they differ: workspaces, agents, logins, 2FA, app secrets, MCP servers, Composio connections, API
+  tools, SSH servers, browser profiles, git sources and VM records with the same ids, settings except the machine's own
+  (`server`, `mobile`, `diagnostics`) and the fields that name programs, and the vault's wrapped key, canary and — when
+  the controller's vault is open — the data key, which the runner adopts (verified against the canary, remembered in
+  its keychain). The runner upserts by primary key, keeps its own columns (paths, last use, status), never deletes an
+  agent with an active run and rewrites changed agents' CLAUDE.md. Agent memory is merged three ways after each run and
+  before each start (`memorySync.ts`, base in `runner_memory`; no line is dropped), and the chat's browser profile's
+  cookies are copied when they changed (`runners.sync_browser`).
+* **Chats on a runner.** `POST /api/chat` with `runnerId` syncs, forwards the start to the runner (without folders,
+  shared screens and VMs, which are this computer's) and adopts the answer. The chat keeps `conversations.runner_id`;
+  its messages and runs are copies under the runner's ids. `mirror.ts` applies the runner's events — only for chats
+  whose `runner_id` is that runner's, field by field — and re-emits them, so the UI renders a runner's chat like any
+  other; `activeRuns.ts` knows which of its runs work. After every connect `catchUp` adopts and refreshes what changed
+  meanwhile. `routing.ts` forwards requests about a runner's chat (messages, queue, pause, continue, follow-ups, files,
+  its runs, its browser tab's input, `runner:<id>:<view>` screen input, `/api/runners/:id/proxy/*`); `pinned` and
+  `archived` stay local, and reading works from the copy while the runner is offline (`409 runner_offline` for
+  everything else). Live views: the hub hands subscriptions to a runner's chat tab and to `runner:` views to the link
+  (`setRemoteViewHandlers`) and re-sends them after a reconnect; the frames come back through the mirror.
+* **Health** (`health.ts`): software (doctor), macOS permissions (Accessibility, Screen Recording, Full Disk Access),
+  access (vault, setup copied), system (service, keep-awake, desktop session, disk, firewall), each with a fix kind
+  (`install`, `request`, `open-settings`, `sync`, `restart`, `manual` + hint) and `installing` for what is on its way.
+  `godmode runner status` asks the serving runner (`/api/runner/health` on loopback) for its own view. **Fix with
+  Claude** starts a chat on this computer with `conversations.runner_tools_id`: its agent gets `runner_health`,
+  `runner_fix` and `runner_exec` (a login shell on the runner, in its data dir) and the health report and log tail.
+* **Removing a runner** tells it to forget this computer, fails its working runs and turns its chats into chats of this
+  computer. Backups carry no runners, controllers or `link.*` meta, and restored chats lose their runner.
 
 ## Memory
 

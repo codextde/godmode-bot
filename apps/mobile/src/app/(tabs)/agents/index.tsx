@@ -14,7 +14,18 @@ export default function Agents() {
   const agents = useAgents();
   const { id: workspaceId } = useWorkspace();
   const runs = useLive((s) => s.runs);
-  const busy = useMemo(() => new Set(Object.values(runs).map((r) => r.run.agentId)), [runs]);
+  // Working means running; a run waiting for a free slot is only queued.
+  const counts = useMemo(() => {
+    const m = new Map<string, { running: number; queued: number }>();
+    for (const { run } of Object.values(runs)) {
+      const n = m.get(run.agentId) ?? { running: 0, queued: 0 };
+      if (run.status === "running") n.running++;
+      else if (run.status === "queued") n.queued++;
+      m.set(run.agentId, n);
+    }
+    return m;
+  }, [runs]);
+  const busy = useMemo(() => new Set([...counts].flatMap(([id, n]) => (n.running ? [id] : []))), [counts]);
   const pull = usePullRefresh(agents.refetch);
   const data = useMemo(
     () =>
@@ -39,7 +50,8 @@ export default function Agents() {
           {i > 0 && <Hairline inset={78} />}
           <AgentRow
             agent={agent}
-            running={busy.has(agent.id)}
+            running={counts.get(agent.id)?.running ?? 0}
+            queued={counts.get(agent.id)?.queued ?? 0}
             onPress={() => {
               tap();
               router.push({ pathname: "/agent/[id]", params: { id: agent.id } });

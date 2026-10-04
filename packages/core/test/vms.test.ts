@@ -1,11 +1,12 @@
 /**
  * macOS VMs against a fake `tart` (fixtures/fake-tart.ts): lifecycle (create → start → stop, suspend, reset,
  * duplicate, delete), the two-VM limit, assignments (chat → agent → workspace), the runner's `vm` MCP server,
- * Godmode's agent in the VM (browser and computer use inside the guest) and the HTTP routes. The fake's `exec` stands
- * in for the guest on the host (made safe, see the fixture).
+ * Godmode's agent in the VM (browser and computer use inside the guest), the macOS privacy permissions of the guest's
+ * software and the HTTP routes. The fake's `exec` stands in for the guest on the host (made safe, see the fixture).
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, lstatSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, ServerEvent, Vm } from "@godmode/shared";
 import { argValue, captureEvents, fills, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
@@ -43,7 +44,8 @@ import { callVmTool, guestPathWord } from "../src/vm/tools";
 import { __setRegistryForTests, templateName } from "../src/vm/images";
 import { startFakeRegistry, type FakeRegistry } from "./fixtures/fake-registry";
 import { __setScreenEndpointForTests, attachVm, detachVm } from "../src/vm/service";
-import { __setGuestCdpForTests, __setHostUvForTests } from "../src/vm/guest";
+import { __setGuestCdpForTests, __setHostUvForTests, prepareGuest } from "../src/vm/guest";
+import { PermissionError, ensureAgentAccess, parseDenied, resolveClients } from "../src/vm/permissions";
 import { BROWSER_USE_SPEC } from "../src/browser/browserUse";
 import { CUA_DRIVER_SPEC } from "../src/computer/cua";
 import { run as sql } from "../src/db";
@@ -157,7 +159,7 @@ describe("VM lifecycle", () => {
     const status = await vmStatus();
     expect(status.supported).toBe(true);
     expect(status.tart.installed).toBe(true);
-    expect(status.tart.version).toBe("2.40.0");
+    expect(status.tart.version).toBe("2.40.1");
     expect(status.maxRunning).toBe(2);
     expect(status.images.find((i) => i.recommended)?.downloaded).toBe(false);
   });
@@ -574,7 +576,7 @@ describe("runs in a VM", () => {
     const summary = JSON.parse(done.result!.replace(/^VM /, ""));
     expect(summary.server).toBe("vm");
     expect(summary.sameToken).toBe(true);
-    expect(summary.tools).toEqual(["shell", "read_file", "write_file", "edit_file", "info", "screen", "fill_login", "fill_totp"]);
+    expect(summary.tools).toEqual(["shell", "read_file", "write_file", "edit_file", "info", "permissions", "screen", "fill_login", "fill_totp"]);
     expect(summary.shell.isError).toBe(true);
     expect(summary.shell.text).toContain("Exit code: 3");
     expect(summary.shell.text).toContain("hello-from-vm");
@@ -591,6 +593,10 @@ describe("runs in a VM", () => {
     expect(prompt).toContain('**Agent Mac**');
     expect(prompt).toContain(sharedDirOf(vm.id));
     expect(prompt).toContain('turn on "Logins and 2FA codes" in Settings → Virtual machines');
+    // Permissions inside the VM are the agent's to set.
+    expect(prompt).toContain('`permissions({ action: "grant", app, permissions })`');
+    // Only claimed when the guest agent's permissions were found in place (this guest has no privacy database).
+    expect(prompt).not.toContain("System Events and Finder are already allowed");
     expect(argValue(inv, "--disallowedTools")).toContain("Bash");
     // Kept off the host: no bypass (file tools only reach cwd + --add-dir), the VM tools are allowed.
     expect(inv.args).not.toContain("--dangerously-skip-permissions");
@@ -627,7 +633,8 @@ describe("runs in a VM", () => {
     }
     await stopVm(vm.id);
     await deleteVm(vm.id);
-  });
+    // A boot and four runs, each with its calls into the guest: more than the default five seconds on a busy machine.
+  }, 30_000);
 
   test("a VM that can't be used fails the run with a clear message", async () => {
     const vm = await createVm({ name: "Not yet", image: "ghcr.io/example/does-not-exist:latest" });
@@ -884,6 +891,49 @@ describe("the VM screen", () => {
   });
 });
 
+describe("taking over the VM screen from a live view", () => {
+  test("clicks, scrolls and keys land on the screen, scaled from the picture", async () => {
+    const vm = await createVm({ name: "Takeover Mac" });
+    await waitState(vm.id, "stopped");
+    const app = createApp();
+    const input = (body: unknown) =>
+      app.request(`/api/vms/${vm.id}/input`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAccessToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const frame = { width: 64, height: 48 }; // the fake screen is 128×96
+    expect((await input({ event: { type: "click", x: 1, y: 1 }, frame })).status).toBe(409);
+    expect((await getVm(vm.id)).state).toBe("stopped");
+
+    await startVm(vm.id);
+    const eventsFile = join(tartHome(), "vnc-events.jsonl");
+    const events = () =>
+      existsSync(eventsFile)
+        ? readFileSync(eventsFile, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { vm: string; type: string; x?: number; y?: number; buttons?: number; key?: number; down?: boolean }).filter((e) => e.vm === vm.id)
+        : [];
+
+    expect((await input({ event: { type: "click", x: 10, y: 5, button: "right" }, frame })).status).toBe(200);
+    await until(() => events().some((e) => e.type === "pointer" && e.buttons === 4), 5000, "right click");
+    const press = events().find((e) => e.type === "pointer" && e.buttons === 4)!;
+    expect([press.x, press.y]).toEqual([20, 10]);
+
+    expect((await input({ event: { type: "scroll", x: 32, y: 24, deltaY: 120 }, frame })).status).toBe(200);
+    await until(() => events().filter((e) => e.type === "pointer" && e.buttons === 16).length === 2, 5000, "two notches down");
+
+    expect((await input({ event: { type: "key", key: "Enter", modifiers: ["cmd"] }, frame })).status).toBe(200);
+    await until(() => events().filter((e) => e.type === "key").length >= 4, 5000, "keys");
+    expect(events().filter((e) => e.type === "key").map((e) => `${e.down ? "+" : "-"}${e.key!.toString(16)}`)).toEqual(["+ffeb", "+ff0d", "-ff0d", "-ffeb"]);
+
+    expect((await input({ event: { type: "click", x: 100, y: 5 }, frame })).status).toBe(400);
+    expect((await input({ event: { type: "key", key: "Hyper_Meta_Q" }, frame })).status).toBe(400);
+    expect((await input({ event: { type: "click", x: 1, y: 1 } })).status).toBe(400);
+
+    await stopVm(vm.id);
+    await deleteVm(vm.id);
+  }, 60_000);
+});
+
 describe("logins and 2FA codes in the VM", () => {
   const PASSPHRASE = "vm vault passphrase";
   const openVault = async () => {
@@ -1039,6 +1089,323 @@ describe("logins and 2FA codes in the VM", () => {
     expect((await put({ vm: { vaultFill: false } })).status).toBe(200);
     expect((await put({ vm: { vaultFill: "yes" } })).status).toBe(400);
   });
+});
+
+describe("macOS privacy permissions in the VM", () => {
+  // macOS 26's table, without the link to its policies table.
+  const ACCESS_TABLE =
+    "CREATE TABLE access (service TEXT NOT NULL, client TEXT NOT NULL, client_type INTEGER NOT NULL, auth_value INTEGER NOT NULL, auth_reason INTEGER NOT NULL, auth_version INTEGER NOT NULL, " +
+    "csreq BLOB, policy_id INTEGER, indirect_object_identifier_type INTEGER, indirect_object_identifier TEXT NOT NULL DEFAULT 'UNUSED', indirect_object_code_identity BLOB, flags INTEGER, " +
+    "last_modified INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)), pid INTEGER, pid_version INTEGER, boot_uuid TEXT NOT NULL DEFAULT 'UNUSED', " +
+    "last_reminded INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER)), PRIMARY KEY (service, client, client_type, indirect_object_identifier))";
+  const guestHome = () => join(tartHome(), "guest-home");
+  const dbPath = (db: "user" | "system") =>
+    db === "user" ? join(guestHome(), "Library", "Application Support", "com.apple.TCC", "TCC.db") : join(tartHome(), "guest-system-tcc", "TCC.db");
+  function inDb<T>(db: "user" | "system", fn: (d: Database) => T): T {
+    const d = new Database(dbPath(db));
+    try {
+      return fn(d);
+    } finally {
+      d.close();
+    }
+  }
+  const entries = (db: "user" | "system", client: string) =>
+    inDb(db, (d) =>
+      d.query("SELECT service, client_type AS type, auth_value AS value, indirect_object_identifier AS target, csreq FROM access WHERE client = ? ORDER BY service, target").all(client),
+    ) as { service: string; type: number; value: number; target: string; csreq: Uint8Array | null }[];
+  const put = (db: "user" | "system", service: string, client: string, type: number, value: number, target = "UNUSED") =>
+    inDb(db, (d) =>
+      d.run("INSERT OR REPLACE INTO access (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier) VALUES (?, ?, ?, ?, 2, 1, x'fade0c00', ?)", [service, client, type, value, target]),
+    );
+  const textOf = (r: { content: unknown[] }) => (r.content[0] as { text: string }).text;
+  const PROBE = "dev.godmode.probe";
+
+  test("tccd's log: the latest answer per program and permission, allowed ones left out", () => {
+    const line = (time: string, rest: string) => `2026-10-04 ${time} Df tccd[192:2ec9] [com.apple.TCC:access] ${rest}`;
+    const request = (time: string, id: string, service: string, subject: string, value: number) => [
+      line(time, `AUTHREQ_CTX: msgID=${id}, function=<private>, service=${service}, preflight=yes, query=1, client_dict=(null), daemon_dict=<private>`),
+      line(time, `AUTHREQ_ATTRIBUTION: msgID=${id}, attribution={requesting={TCCDProcess: identifier=${subject}, pid=1610, auid=501, euid=501, binary_path=/x}, },`),
+      line(time, `AUTHREQ_SUBJECT: msgID=${id}, subject=${subject},`),
+      line(time, `AUTHREQ_RESULT: msgID=${id}, authValue=${value}, authReason=4, authVersion=1, desired_auth=0, error=(null),`),
+    ];
+    const log = [
+      "Timestamp               Ty Process[PID:TID]",
+      ...request("13:38:56.099", "1610.1", "kTCCServiceAccessibility", PROBE, 0),
+      ...request("13:38:56.103", "1610.3", "kTCCServiceScreenCapture", PROBE, 1),
+      ...request("13:38:56.106", "1610.4", "kTCCServiceMicrophone", PROBE, 2),
+      ...request("13:38:58.178", "1613.1", "kTCCServiceListenEvent", "/opt/homebrew/Cellar/tart-guest-agent/0.14.1/bin/tart-guest-agent", 2),
+      ...request("13:39:02.500", "1700.1", "kTCCServiceCamera", "/Applications/My App, Pro.app/Contents/MacOS/app", 1),
+      // Allowed later: no longer refused.
+      ...request("13:39:10.000", "1720.1", "kTCCServiceScreenCapture", PROBE, 2),
+      // A request whose answer never came.
+      line("13:39:11.000", "AUTHREQ_CTX: msgID=1730.1, function=<private>, service=kTCCServiceCamera, preflight=no, query=0,"),
+      // Limited access (3) is access; a request that is refused again counts with its latest time.
+      ...request("13:39:12.000", "1740.1", "kTCCServicePhotos", PROBE, 3),
+      ...request("13:39:20.000", "1750.1", "kTCCServiceAccessibility", PROBE, 0),
+    ].join("\n");
+    expect(parseDenied(log)).toEqual([
+      { subject: PROBE, service: "kTCCServiceAccessibility", value: 0, at: "13:39:20" },
+      { subject: "/Applications/My App, Pro.app/Contents/MacOS/app", service: "kTCCServiceCamera", value: 1, at: "13:39:02" },
+    ]);
+    expect(parseDenied("")).toEqual([]);
+  });
+
+  test("the guest's answers are read past whatever its login files print", async () => {
+    const answering = (stdout: string) => async () => ({ exitCode: 0, stdout, stderr: "", timedOut: false });
+    expect(await resolveClients(answering("Welcome back, admin!\nok\t1\t/opt/agent\tshell\n\nok\t0\tcom.example.App\tApp\n"), ["shell", "App"])).toEqual([
+      { client: "/opt/agent", type: 1, label: "shell", shell: true },
+      { client: "com.example.App", type: 0, label: "App", shell: false },
+    ]);
+    // A program that happens to be called "shell" is not the guest agent.
+    expect((await resolveClients(answering("ok\t1\t/usr/local/bin/shell\tshell\n"), ["/usr/local/bin/shell"]))[0]).toMatchObject({ shell: false });
+    await expect(resolveClients(answering("motd\nnotcc\n"), ["shell"])).rejects.toThrow("no macOS privacy settings");
+    await expect(resolveClients(answering("motd\nerr\tNo app named \"X\" was found in the VM.\n"), ["X"])).rejects.toThrow(new PermissionError('No app named "X" was found in the VM.'));
+    // An answer is missing: not a guess.
+    await expect(resolveClients(answering("ok\t0\tcom.example.App\tApp\n"), ["App", "Other"])).rejects.toThrow("Could not look up the app in the VM");
+  });
+
+  test("an agent grants, lists and revokes the permissions of the VM's software itself", async () => {
+    const vm = await createVm({ name: "Privacy Mac" });
+    await waitState(vm.id, "stopped");
+    const ctx = { runId: "run_permissions_test", agentId: agent.id, conversationId: "cnv_x", workspaceId: null, depth: 0 };
+    const call = (args: Record<string, unknown>) => callVmTool(ctx, "permissions", args);
+    for (const file of ["processes", "tcc-log", "sip-on"]) rmSync(join(tartHome(), file), { force: true });
+    await attachVm(ctx.runId, vm.id);
+    try {
+      // A guest without macOS's privacy databases (a Linux image, a user who never logged in).
+      const none = await call({ action: "list" });
+      expect(none.isError).toBe(true);
+      expect(textOf(none)).toContain("no macOS privacy settings");
+
+      for (const db of ["user", "system"] as const) {
+        mkdirSync(join(dbPath(db), ".."), { recursive: true });
+        inDb(db, (d) => d.run(ACCESS_TABLE));
+      }
+      // An app in the guest's Applications folder, and the Tart guest agent the way Homebrew installs it.
+      const app = join(guestHome(), "Applications", "Godmode Probe.app");
+      mkdirSync(join(app, "Contents", "MacOS"), { recursive: true });
+      writeFileSync(join(app, "Contents", "MacOS", "Probe"), "#!/bin/sh\n");
+      writeFileSync(
+        join(app, "Contents", "Info.plist"),
+        `<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>\n<key>CFBundleIdentifier</key>\n<string>${PROBE}</string>\n<key>CFBundleName</key><string>Probe</string>\n</dict></plist>\n`,
+      );
+      const cellar = join(guestHome(), "homebrew", "Cellar", "tart-guest-agent", "0.14.1", "bin");
+      mkdirSync(cellar, { recursive: true });
+      mkdirSync(join(guestHome(), "homebrew", "bin"), { recursive: true });
+      writeFileSync(join(cellar, "tart-guest-agent"), "#!/bin/sh\n");
+      chmodSync(join(cellar, "tart-guest-agent"), 0o755);
+      rmSync(join(guestHome(), "homebrew", "bin", "tart-guest-agent"), { force: true });
+      symlinkSync("../Cellar/tart-guest-agent/0.14.1/bin/tart-guest-agent", join(guestHome(), "homebrew", "bin", "tart-guest-agent"));
+      writeFileSync(join(tartHome(), "processes"), `/sbin/launchd\n${join(guestHome(), "homebrew", "bin", "tart-guest-agent")}\n/usr/libexec/logd\n`);
+      // macOS names the agent by the real path of its binary.
+      const agentPath = join(realpathSync(cellar), "tart-guest-agent");
+
+      // By name: each permission lands in the database macOS reads it from — and only there.
+      const granted = await call({ action: "grant", app: "Godmode Probe", permissions: ["accessibility", "microphone", "automation", "accessibility"], target: "com.apple.finder" });
+      expect(granted.isError).toBeUndefined();
+      expect(textOf(granted)).toContain(`Granted in the VM — Godmode Probe (${PROBE}): Accessibility, Microphone and Automation of com.apple.finder.`);
+      expect(textOf(granted)).toContain('click "Allow"');
+      expect(entries("system", PROBE)).toEqual([{ service: "kTCCServiceAccessibility", type: 0, value: 2, target: "UNUSED", csreq: null }]);
+      expect(entries("user", PROBE)).toEqual([
+        { service: "kTCCServiceAppleEvents", type: 0, value: 2, target: "com.apple.finder", csreq: null },
+        { service: "kTCCServiceMicrophone", type: 0, value: 2, target: "UNUSED", csreq: null },
+      ]);
+
+      // By path (the app, or its program): a refusal macOS stored — with a code requirement — is replaced.
+      put("system", "kTCCServiceScreenCapture", PROBE, 0, 0);
+      expect(entries("system", PROBE).find((e) => e.service === "kTCCServiceScreenCapture")).toMatchObject({ value: 0 });
+      const byPath = await call({ action: "grant", app: "/Users/admin/Applications/Godmode Probe.app/Contents/MacOS/Probe", permissions: ["screen_recording"] });
+      expect(textOf(byPath)).toContain(`Godmode Probe (${PROBE}): Screen Recording.`);
+      expect(entries("system", PROBE).find((e) => e.service === "kTCCServiceScreenCapture")).toEqual({ service: "kTCCServiceScreenCapture", type: 0, value: 2, target: "UNUSED", csreq: null });
+
+      // "shell": whatever runs through `tart exec` is the guest agent, named by the path behind Homebrew's link.
+      const shell = await call({ action: "grant", app: "shell", permissions: ["automation"], target: "~/Applications/Godmode Probe.app" });
+      expect(textOf(shell)).toContain(`your shell commands (the Tart guest agent, ${agentPath}): Automation of Godmode Probe (${PROBE}).`);
+      expect(entries("user", agentPath)).toEqual([{ service: "kTCCServiceAppleEvents", type: 1, value: 2, target: PROBE, csreq: null }]);
+      // A bundle id needs no installed app; a bare program is named by its path.
+      const asGiven = textOf(await call({ action: "grant", app: "com.example.Editor", permissions: ["full_disk_access"] }));
+      expect(asGiven).toContain("com.example.Editor: Full Disk Access.");
+      expect(asGiven).toContain("com.example.Editor was used as a bundle id as given, without checking that an app with it is installed");
+      expect(textOf(shell)).not.toContain("was used as a bundle id");
+      // Names are matched in any capitalisation, a folder deeper too, and literally — quotes and brackets included.
+      const tools = join(guestHome(), "Applications", "Tools");
+      mkdirSync(join(tools, "Bob's [v2] Tool.app", "Contents"), { recursive: true });
+      writeFileSync(join(tools, "Bob's [v2] Tool.app", "Contents", "Info.plist"), "<plist><dict><key>CFBundleIdentifier</key><string>dev.godmode.bobs-tool</string></dict></plist>\n");
+      writeFileSync(join(tools, "it's a tool"), "#!/bin/sh\n");
+      expect(textOf(await call({ action: "grant", app: "bob's [V2] tool", permissions: ["camera"] }))).toContain("Bob's [v2] Tool (dev.godmode.bobs-tool): Camera.");
+      expect(entries("user", "dev.godmode.bobs-tool")).toMatchObject([{ service: "kTCCServiceCamera", type: 0, value: 2 }]);
+      const quoted = join(realpathSync(tools), "it's a tool");
+      expect(textOf(await call({ action: "grant", app: "~/Applications/Tools/it's a tool", permissions: ["microphone", "input_monitoring"] }))).toContain(`it's a tool (${quoted}): Microphone and Input Monitoring.`);
+      expect(entries("user", quoted)).toMatchObject([{ service: "kTCCServiceMicrophone", type: 1, value: 2 }]);
+      expect(entries("system", quoted)).toMatchObject([{ service: "kTCCServiceListenEvent", type: 1, value: 2 }]);
+      expect(entries("system", "com.example.Editor")).toMatchObject([{ service: "kTCCServiceSystemPolicyAllFiles", type: 0, value: 2 }]);
+      expect(textOf(await call({ action: "grant", app: "~/homebrew/bin/tart-guest-agent", permissions: ["camera"] }))).toContain(`tart-guest-agent (${agentPath}): Camera.`);
+
+      // What can't work says why.
+      for (const [args, message] of [
+        [{ action: "grant", app: "Godmode Probe", permissions: ["automation"] }, "Automation is granted per controlled app: pass target"],
+        [{ action: "grant", app: "Godmode Probe", permissions: ["camera"], target: "Finder" }, "target only goes with"],
+        [{ action: "grant", app: "No Such App", permissions: ["camera"] }, 'No app named "No Such App" was found in the VM'],
+        // An app that isn't there is not a bundle id, whatever its name looks like.
+        [{ action: "grant", app: "Slack.app", permissions: ["camera"] }, 'No app named "Slack.app" was found in the VM'],
+        [{ action: "grant", app: "bob's [v3] tool", permissions: ["camera"] }, "No app named"],
+        [{ action: "grant", app: "/Users/admin/nothing.app", permissions: ["camera"] }, "There is nothing at"],
+        [{ action: "grant", app: "~/Applications", permissions: ["camera"] }, "is a folder, not an app or a program"],
+        [{ action: "grant", app: "shell", permissions: ["automation"], target: "~/homebrew/bin/tart-guest-agent" }, "The automation target must be an app"],
+        [{ action: "grant", permissions: ["camera"] }, "grant needs app"],
+        [{ action: "revoke", app: "Godmode Probe" }, "revoke needs permissions"],
+        [{ action: "grant", app: "Godmode Probe", permissions: ["everything"] }, "Invalid arguments"],
+        [{ action: "grant", app: "a\tb", permissions: ["camera"] }, "can't be part of an app's name or path"],
+      ] as const) {
+        const refused = await call(args);
+        expect(refused.isError).toBe(true);
+        expect(textOf(refused)).toContain(message);
+      }
+
+      put("user", "kTCCServiceUbiquity", PROBE, 0, 2);
+      const listed = await call({ action: "list", app: "Godmode Probe" });
+      expect(textOf(listed)).toBe(
+        `Privacy permissions in the VM:\n\nGodmode Probe (${PROBE})\n- Accessibility: allowed\n- Automation of com.apple.finder: allowed\n- Microphone: allowed\n- Screen Recording: allowed`,
+      );
+      // Entries in the database macOS doesn't read a permission from (the images write both) don't count.
+      put("user", "kTCCServiceAccessibility", "org.python.python", 0, 2);
+      put("system", "kTCCServiceAccessibility", "org.python.python", 0, 0);
+      const all = textOf(await call({ action: "list" }));
+      expect(all).toContain(`your shell commands (the Tart guest agent, ${agentPath}) — app: "shell"\n- Automation of ${PROBE}: allowed\n- Camera: allowed`);
+      expect(all).toContain("org.python.python\n- Accessibility: refused");
+      expect(all).not.toContain("org.python.python\n- Accessibility: allowed");
+      expect(textOf(await call({ action: "list", app: "com.example.Nothing" }))).toBe("com.example.Nothing has no privacy permissions in the VM yet.");
+
+      // Revoking Accessibility also removes "sending input", which macOS would turn back into Accessibility.
+      put("system", "kTCCServicePostEvent", PROBE, 0, 2);
+      put("user", "kTCCServiceAppleEvents", PROBE, 0, 2, "com.apple.systemevents");
+      const revoked = await call({ action: "revoke", app: PROBE, permissions: ["accessibility", "automation"] });
+      expect(textOf(revoked)).toBe(`Removed in the VM — ${PROBE}: Accessibility, Automation of com.apple.finder and Automation of com.apple.systemevents. macOS asks again when it is needed.`);
+      expect(entries("system", PROBE).map((e) => e.service)).toEqual(["kTCCServiceScreenCapture"]);
+      expect(entries("user", PROBE).map((e) => e.service)).toEqual(["kTCCServiceMicrophone", "kTCCServiceUbiquity"]);
+      // Nothing left — except a refusal macOS stored, which is cleared so that it asks again.
+      put("system", "kTCCServiceAccessibility", PROBE, 0, 0);
+      const again = await call({ action: "revoke", app: PROBE, permissions: ["accessibility"] });
+      expect(textOf(again)).toBe(`${PROBE} wasn't allowed Accessibility in the VM — nothing to remove. (A refusal macOS had stored was cleared, so it asks again.)`);
+      expect(entries("system", PROBE).map((e) => e.service)).toEqual(["kTCCServiceScreenCapture"]);
+      // One automation target only.
+      await call({ action: "grant", app: PROBE, permissions: ["automation"], target: "com.apple.finder" });
+      await call({ action: "grant", app: PROBE, permissions: ["automation"], target: "com.apple.Safari" });
+      await call({ action: "revoke", app: PROBE, permissions: ["automation"], target: "com.apple.Safari" });
+      expect(entries("user", PROBE).filter((e) => e.service === "kTCCServiceAppleEvents").map((e) => e.target)).toEqual(["com.apple.finder"]);
+
+      // The audit log names who got what.
+      const audited = listAudit(50, "vm.permission").filter((e) => e.target === vm.id);
+      expect(audited.find((e) => e.action === "vm.permission.grant" && e.details.client === agentPath && e.details.target === PROBE)).toMatchObject({
+        actor: `agent:${agent.id}`,
+        details: { runId: ctx.runId, ok: true, permissions: ["automation"], target: PROBE },
+      });
+      // One entry per change that was made…
+      const made = audited.filter((e) => e.details.ok === true);
+      expect(made.filter((e) => e.action === "vm.permission.grant").map((e) => e.details.client).sort()).toEqual(
+        [PROBE, PROBE, PROBE, PROBE, agentPath, agentPath, "com.example.Editor", "dev.godmode.bobs-tool", quoted].sort(),
+      );
+      expect(made.filter((e) => e.action === "vm.permission.revoke").map((e) => e.details)).toEqual([
+        { runId: ctx.runId, permissions: ["automation"], ok: true, client: PROBE, target: "com.apple.Safari" },
+        { runId: ctx.runId, permissions: ["accessibility"], ok: true, client: PROBE },
+        { runId: ctx.runId, permissions: ["accessibility", "automation"], ok: true, client: PROBE },
+      ]);
+      // …and one per attempt that failed in the VM, with what was asked for — none for a call missing its arguments.
+      const failed = audited.filter((e) => e.details.ok === false);
+      expect(failed.find((e) => e.details.app === "No Such App")).toMatchObject({
+        action: "vm.permission.grant",
+        details: { runId: ctx.runId, permissions: ["camera"], error: expect.stringContaining('No app named "No Such App"') },
+      });
+      expect(failed.map((e) => e.details.app).sort()).toEqual(
+        ["Godmode Probe", "Godmode Probe", "No Such App", "Slack.app", "bob's [v3] tool", "/Users/admin/nothing.app", "~/Applications", "shell", "a\tb"].sort(),
+      );
+      expect(Bun.spawnSync(["grep", "-c", "Slack", dbPath("user"), dbPath("system")]).stdout.toString()).toMatch(/:0\n.*:0\n/);
+
+      // What macOS refused lately, from tccd's log; its own programs apart.
+      const line = (id: string, rest: string) => `2026-10-04 13:38:56.099 Df tccd[192:2ec9] [com.apple.TCC:access] AUTHREQ_${rest.replace("ID", `msgID=${id}`)}`;
+      const request = (id: string, service: string, subject: string, value: number) =>
+        [line(id, `CTX: ID, function=<private>, service=${service}, preflight=yes,`), line(id, `SUBJECT: ID, subject=${subject},`), line(id, `RESULT: ID, authValue=${value}, authReason=4,`)].join("\n");
+      writeFileSync(
+        join(tartHome(), "tcc-log"),
+        [
+          request("1.1", "kTCCServiceScreenCapture", PROBE, 1),
+          request("1.2", "kTCCServiceListenEvent", agentPath, 0),
+          request("1.3", "kTCCServiceListenEvent", "com.apple.FolderActionsDispatcher", 1),
+          request("1.4", "kTCCServiceLiverpool", "com.example.Sync", 0),
+          request("1.5", "kTCCServiceCamera", "com.example.Allowed", 2),
+          request("1.6", "kTCCServiceAppleEvents", "com.example.Scripter", 0),
+        ].join("\n"),
+      );
+      const denied = textOf(await call({ action: "denied", minutes: 5 }));
+      expect(denied).toContain("Permission requests macOS didn't allow in the last 5 minutes (newest first):");
+      expect(denied).toContain(`- 13:38:56  "shell" (${agentPath}) — input_monitoring: refused`);
+      expect(denied).toContain(`- 13:38:56  ${PROBE} — screen_recording: not decided`);
+      expect(denied).toContain("macOS's own programs that were not allowed something (usually nothing to fix): com.apple.FolderActionsDispatcher (input_monitoring).");
+      expect(denied).not.toContain("com.example.Sync");
+      expect(denied).not.toContain("com.example.Allowed");
+      expect(denied).not.toContain("com.example.Scripter");
+      writeFileSync(join(tartHome(), "tcc-log"), request("2.1", "kTCCServiceCamera", "com.example.Allowed", 2));
+      expect(textOf(await call({ action: "denied" }))).toContain("macOS logged no refused permission request from installed software in the last 10 minutes.");
+
+      // The system's database out of reach: the answer gives sqlite's reason, and the user's database stays untouched.
+      const systemDb = dbPath("system");
+      const aside = `${systemDb}.aside`;
+      Bun.spawnSync(["mv", systemDb, aside]);
+      const unreachable = await call({ action: "grant", app: PROBE, permissions: ["camera", "accessibility"] });
+      rmSync(systemDb, { force: true });
+      Bun.spawnSync(["mv", aside, systemDb]);
+      expect(unreachable.isError).toBe(true);
+      expect(textOf(unreachable)).toMatch(/^macOS refused \(.*no such table: access.*\)\.$/);
+      expect(entries("user", PROBE).some((e) => e.service === "kTCCServiceCamera")).toBe(false);
+      expect(listAudit(5, "vm.permission")[0]).toMatchObject({ action: "vm.permission.grant", details: { ok: false, app: PROBE, permissions: ["camera", "accessibility"] } });
+
+      // An image with System Integrity Protection: macOS doesn't let the databases be changed.
+      writeFileSync(join(tartHome(), "sip-on"), "");
+      const protectedGuest = await call({ action: "grant", app: PROBE, permissions: ["camera"] });
+      rmSync(join(tartHome(), "sip-on"));
+      expect(protectedGuest.isError).toBe(true);
+      expect(textOf(protectedGuest)).toContain("System Integrity Protection is on in this VM");
+      expect(entries("user", PROBE).some((e) => e.service === "kTCCServiceCamera")).toBe(false);
+    } finally {
+      detachVm(ctx.runId);
+    }
+
+    try {
+      // Every run: Godmode's own way into the guest gets back what its tools rely on.
+      const agentPath = join(realpathSync(join(guestHome(), "homebrew", "Cellar", "tart-guest-agent", "0.14.1", "bin")), "tart-guest-agent");
+      for (const db of ["user", "system"] as const) inDb(db, (d) => d.run("DELETE FROM access WHERE client = ?", [agentPath]));
+      expect((await prepareGuest(vm.id, { browser: false })).shellAutomation).toBe(true);
+      expect(entries("system", agentPath)).toEqual([
+        { service: "kTCCServiceAccessibility", type: 1, value: 2, target: "UNUSED", csreq: null },
+        { service: "kTCCServiceScreenCapture", type: 1, value: 2, target: "UNUSED", csreq: null },
+      ]);
+      expect(entries("user", agentPath)).toEqual([
+        { service: "kTCCServiceAppleEvents", type: 1, value: 2, target: "com.apple.finder", csreq: null },
+        { service: "kTCCServiceAppleEvents", type: 1, value: 2, target: "com.apple.systemevents", csreq: null },
+      ]);
+      // Nothing is rewritten while it is in place; a refusal (a dialog closed the wrong way) is repaired.
+      const exec = (script: string, opts?: { timeoutMs?: number }) => execInVm(vm.id, script, opts);
+      const stamp = () => inDb("system", (d) => d.query("SELECT group_concat(rowid) AS ids FROM access WHERE client = ?").get(agentPath)) as { ids: string };
+      const before = stamp();
+      expect(await ensureAgentAccess(exec, vm.id)).toBe(0);
+      expect(stamp()).toEqual(before);
+      put("user", "kTCCServiceAppleEvents", agentPath, 1, 0, "com.apple.systemevents");
+      expect(await ensureAgentAccess(exec, vm.id)).toBe(1);
+      expect(entries("user", agentPath).every((e) => e.value === 2 && e.csreq === null)).toBe(true);
+      // A guest it can't be done in is left alone, without failing the run.
+      writeFileSync(join(tartHome(), "sip-on"), "");
+      put("user", "kTCCServiceAppleEvents", agentPath, 1, 0, "com.apple.finder");
+      expect(await ensureAgentAccess(exec, vm.id)).toBeNull();
+      expect((await prepareGuest(vm.id, { browser: false })).shellAutomation).toBe(false);
+    } finally {
+      // The fake's VMs share one guest: later tests get it back without privacy databases.
+      for (const file of ["processes", "tcc-log", "sip-on"]) rmSync(join(tartHome(), file), { force: true });
+      rmSync(join(tartHome(), "guest-system-tcc"), { recursive: true, force: true });
+      for (const dir of ["Library", "homebrew", join("Applications", "Tools"), join("Applications", "Godmode Probe.app")]) rmSync(join(guestHome(), dir), { recursive: true, force: true });
+    }
+    await stopVm(vm.id);
+    await deleteVm(vm.id);
+  }, 120_000);
 });
 
 describe("HTTP routes", () => {

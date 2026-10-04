@@ -12,7 +12,7 @@ export async function notifyDesktop(title: string, body?: string) {
     }
     if (typeof Notification === "undefined") return;
     if (Notification.permission === "default") await Notification.requestPermission();
-    if (Notification.permission === "granted") new Notification(title, { body, icon: "/logo.svg" });
+    if (Notification.permission === "granted") new Notification(title, { body, icon: `${import.meta.env.BASE_URL}logo.svg` });
   } catch {
     /* ignore */
   }
@@ -48,6 +48,27 @@ export function installExternalLinks() {
     },
     true,
   );
+}
+
+/**
+ * Whatever is dropped where nothing takes it would be opened by the webview (or the browser tab) in place of the app:
+ * a file, or a link dragged over from a browser. Drop zones take theirs first, text and links still go into fields,
+ * the rest is refused.
+ */
+export function installDropGuard() {
+  const refuse = (e: DragEvent) => {
+    if (e.defaultPrevented || !e.dataTransfer) return;
+    const el = e.target instanceof Element ? e.target : null;
+    const input = el instanceof HTMLInputElement ? el.type : "";
+    // Date and time inputs count as writable, but take no dropped text.
+    const taken = e.dataTransfer.types.includes("Files") ? input === "file" : !!el?.matches(":read-write") && !/^(date|datetime-local|month|week|time)$/.test(input);
+    if (taken) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "none";
+  };
+  // On window: listeners on the document (a dialog that takes drops anywhere) come first.
+  window.addEventListener("dragover", refuse);
+  window.addEventListener("drop", refuse);
 }
 
 /** Save a blob to disk (native dialog in Tauri, download in browser). */

@@ -51,6 +51,12 @@ export function hasQueued(conversationId: string): boolean {
   return get<{ id: string }>("SELECT id FROM queued_messages WHERE conversation_id = ? LIMIT 1", conversationId) !== null;
 }
 
+/** A message waits that the running agent would get between two steps (a slash command waits for the next turn). */
+export function hasDeliverable(conversationId: string): boolean {
+  const first = rows(conversationId)[0];
+  return !!first && !isCommand(first);
+}
+
 function emitQueue(conversationId: string) {
   bus.emit({ type: "queue.updated", conversationId, queue: listQueue(conversationId) });
 }

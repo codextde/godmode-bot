@@ -24,7 +24,7 @@ import {
 import type { Run } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAgent } from "@/lib/hooks";
+import { useAgent, useQuestions } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/common";
 import { Orb } from "@/components/aicss/Orb";
@@ -36,7 +36,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { formatCost, formatDuration, formatElapsed, formatTokens, RunStatusBadge, TriggerBadge, useModelLabel } from "./run-status";
-import { useRunLiveState } from "./run-row";
+import { RunRow, useRunLiveState } from "./run-row";
 import { RunLogViewer } from "./run-log-viewer";
 
 export function useCancelRun() {
@@ -137,6 +137,9 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
     onError: (err) => toast.error("Couldn't continue", { description: errorMessage(err) }),
   });
   const when = run.startedAt ?? run.createdAt;
+  // A paused run may wait for the human's answer: that, not Continue, is the way on.
+  const { data: open = [] } = useQuestions("open");
+  const asked = status === "paused" ? open.find((q) => q.runId === run.id) : undefined;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -146,7 +149,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
           <div className="min-w-0">
             <SheetTitle className="truncate text-lg font-medium tracking-[-0.02em]">{agent?.name ?? "Run"}</SheetTitle>
             <SheetDescription className="flex flex-wrap items-center gap-1.5">
-              <RunStatusBadge status={status} />
+              <RunStatusBadge status={status} waitingFor={asked ? (asked.kind === "approval" ? "approval" : "answer") : null} />
               <TriggerBadge trigger={run.trigger} />
               <span className="tabular-nums" title={format(new Date(when), "PPpp")}>{formatDistanceToNowStrict(new Date(when), { addSuffix: true })}</span>
             </SheetDescription>
@@ -165,11 +168,16 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
               </Link>
             </Button>
           )}
-          {status === "paused" && (
-            <Button size="sm" className="ml-auto" onClick={() => resume.mutate()} disabled={resume.isPending}>
-              {resume.isPending ? <Spinner /> : <Play className="fill-current" />} Continue
-            </Button>
-          )}
+          {status === "paused" &&
+            (asked ? (
+              <Button asChild size="sm" className="ml-auto">
+                <Link to={asked.taskId ? `/tasks?task=${asked.taskId}` : `/chat/${run.conversationId}`}>Answer in {asked.taskId ? "the task" : "chat"}</Link>
+              </Button>
+            ) : (
+              <Button size="sm" className="ml-auto" onClick={() => resume.mutate()} disabled={resume.isPending}>
+                {resume.isPending ? <Spinner /> : <Play className="fill-current" />} Continue
+              </Button>
+            ))}
           {cancellable && (
             <Button
               size="sm"
@@ -185,6 +193,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
       </SheetHeader>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+        {agent?.failedRunId === run.id && <FailureNotice agentId={agent.id} agentName={agent.name} />}
         {running && (
           <motion.div
             initial={{ opacity: 0, y: 6 }}
@@ -221,15 +230,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
 
         {(run.parentRunId || run.routineId) && (
           <div className="flex flex-wrap gap-2 text-xs">
-            {run.parentRunId && (
-              <button
-                type="button"
-                onClick={() => onOpenRun(run.parentRunId!)}
-                className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-muted-foreground shadow-card transition hover:border-foreground/15 hover:text-foreground"
-              >
-                <Share2 className="size-3" /> Delegated from another run <ChevronRight className="size-3" />
-              </button>
-            )}
+            {run.parentRunId && <HandedOverBy parentRunId={run.parentRunId} onOpenRun={onOpenRun} />}
             {run.routineId && (
               <Link
                 to={`/agents/${run.agentId}/routines`}
@@ -240,6 +241,8 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
             )}
           </div>
         )}
+
+        <HandedOn runId={run.id} onOpenRun={onOpenRun} />
 
         <Block title="Prompt" actions={<CopyButton text={run.prompt} label="Copy prompt" />}>
           <p className="max-h-60 overflow-y-auto text-sm leading-relaxed whitespace-pre-wrap">{run.prompt || <span className="text-muted-foreground">(empty)</span>}</p>
@@ -324,5 +327,75 @@ function Block({ title, actions, children }: { title: ReactNode; actions?: React
       </div>
       {children}
     </section>
+  );
+}
+
+/** "Handed over by [face] Lena" — opens the run that handed this one over. */
+function HandedOverBy({ parentRunId, onOpenRun }: { parentRunId: string; onOpenRun: (id: string) => void }) {
+  const parent = useQuery({ queryKey: qk.run(parentRunId), queryFn: () => api.runs.get(parentRunId), retry: false });
+  const { data: from } = useAgent(parent.data?.agentId);
+  const chip = "inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-muted-foreground shadow-card";
+  if (parent.isLoading) return <Skeleton className="h-7 w-44 rounded-md" />;
+  if (!parent.data) {
+    return (
+      <span className={chip}>
+        <Share2 className="size-3" /> Handed over by an agent that no longer exists
+      </span>
+    );
+  }
+  return (
+    <button type="button" onClick={() => onOpenRun(parentRunId)} className={cn(chip, "transition hover:border-foreground/15 hover:text-foreground")}>
+      <Share2 className="size-3" /> Handed over by
+      {from ? (
+        <>
+          <AgentAvatar agent={from} size="sm" still className="size-4 rounded-[4px] text-[9px]" />
+          <span className="font-medium text-foreground">{from.name}</span>
+        </>
+      ) : (
+        "another agent"
+      )}
+      <ChevronRight className="size-3" />
+    </button>
+  );
+}
+
+/** The runs this one handed over to teammates, oldest first. */
+function HandedOn({ runId, onOpenRun }: { runId: string; onOpenRun: (id: string) => void }) {
+  const children = useQuery({ queryKey: qk.runChildren(runId), queryFn: () => api.runs.list({ parentRunId: runId, limit: 100 }) });
+  if (children.isLoading) return <Skeleton className="h-12 w-full rounded-lg" />;
+  if (children.isError) return <p className="text-xs text-muted-foreground">Couldn't load what it handed on: {errorMessage(children.error)}</p>;
+  const list = [...(children.data ?? [])].reverse();
+  if (!list.length) return null;
+  return (
+    <section aria-label="Handed on" className="space-y-1.5">
+      <h3 className="eyebrow text-[10.5px]">Handed on</h3>
+      <div className="space-y-0.5 rounded-xl border bg-card p-1 shadow-card">
+        {list.map((r) => (
+          <RunRow key={r.id} run={r} onSelect={(x) => onOpenRun(x.id)} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** This run is why the agent says "Last run failed": the human can let that go. */
+function FailureNotice({ agentId, agentName }: { agentId: string; agentName: string }) {
+  const qc = useQueryClient();
+  const dismiss = useMutation({
+    mutationFn: () => api.agents.dismissFailure(agentId),
+    onSuccess: (agent) => {
+      qc.setQueryData(qk.agent(agent.id), agent);
+      qc.invalidateQueries({ queryKey: qk.agents });
+    },
+    onError: (err) => toast.error("Couldn't dismiss it", { description: errorMessage(err) }),
+  });
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-destructive/25 bg-destructive/[0.04] px-4 py-2.5 text-[13px]">
+      <TriangleAlert className="size-4 shrink-0 text-destructive" aria-hidden />
+      <span className="min-w-0 flex-1">This is why {agentName} shows “Last run failed”.</span>
+      <Button size="xs" variant="ghost" onClick={() => dismiss.mutate()} disabled={dismiss.isPending}>
+        {dismiss.isPending && <Spinner />} Dismiss
+      </Button>
+    </div>
   );
 }

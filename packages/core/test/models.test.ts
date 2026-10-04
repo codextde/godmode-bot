@@ -33,6 +33,7 @@ describe("parseModels", () => {
       label: "Opus 5.5",
       description: "Most capable for ambitious work",
       efforts: ["low", "medium", "high", "xhigh", "max"],
+      ultracode: false,
       latest: true,
     });
     expect(findModel(models, "haiku")!.efforts).toEqual([]);
@@ -41,9 +42,17 @@ describe("parseModels", () => {
 
   test("CLIs without effort info accept every level; junk is ignored", () => {
     const models = parseModels([{ value: "opus", displayName: "Opus" }, null, 42, { value: "" }, { value: "--evil" }, { value: "a&b" }, { value: "opus" }]);
-    expect(models).toEqual([{ id: "opus", resolvedModel: "opus", label: "Opus", description: "", efforts: ["low", "medium", "high", "xhigh", "max"], latest: true }]);
+    expect(models).toEqual([{ id: "opus", resolvedModel: "opus", label: "Opus", description: "", efforts: ["low", "medium", "high", "xhigh", "max"], ultracode: false, latest: true }]);
     expect(parseModels(undefined)).toEqual([]);
     expect(parseModels({ models: [] })).toEqual([]);
+  });
+
+  test("with dynamic workflows, the models that have the xhigh level get Ultracode", () => {
+    expect(parseModels(CLAUDE_CODE_MODELS).some((m) => m.ultracode)).toBe(false);
+    const models = parseModels(CLAUDE_CODE_MODELS, true);
+    expect(models.filter((m) => m.ultracode).map((m) => m.id)).toEqual(["opus", "claude-fable-5-1", "sonnet", "opus[1m]", "claude-opus-5"]);
+    expect(findModel(models, "haiku")!.ultracode).toBe(false);
+    expect(findModel(models, "claude-opus-4-6")!.ultracode).toBe(false);
   });
 
   test("findModel matches aliases and resolved ids; effortForModel clamps to supported levels", () => {
@@ -175,7 +184,7 @@ describe("catalog from the Claude Code CLI", () => {
   test("a stale cache is served at once and refreshed in the background", async () => {
     __resetModelCatalogForTests();
     const stale: ModelCatalog = {
-      models: [{ id: "claude-opus-1", resolvedModel: "claude-opus-1", label: "Opus 1", description: "", efforts: [], latest: true }],
+      models: [{ id: "claude-opus-1", resolvedModel: "claude-opus-1", label: "Opus 1", description: "", efforts: [], ultracode: false, latest: true }],
       source: "claude",
       claudeVersion: "1.0.0",
       fetchedAt: new Date(Date.now() - 24 * 3600_000).toISOString(),

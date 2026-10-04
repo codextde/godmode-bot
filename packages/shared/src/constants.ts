@@ -22,6 +22,8 @@ export const BUILTIN_MODELS: ClaudeModel[] = MODEL_OPTIONS.map((m) => ({
   label: m.label,
   description: m.hint,
   efforts: [...EFFORT_OPTIONS],
+  // Only the installed Claude Code knows whether it has dynamic workflows.
+  ultracode: false,
   latest: true,
 }));
 
@@ -32,6 +34,12 @@ export const EFFORT_LABELS: Record<Effort, string> = {
   xhigh: "Extra high",
   max: "Max",
 };
+
+/** Ultracode needs a model with this effort level (Claude Code's rule). */
+export const ULTRACODE_EFFORT: Effort = "xhigh";
+export const ULTRACODE_HINT = "Dynamic workflows on every task: Claude plans the work and runs several agents on it. Thorough, but slower and far more tokens.";
+/** The Claude Code tool that runs a workflow. */
+export const WORKFLOW_TOOL = "Workflow";
 
 const MODEL_ID = /^[A-Za-z0-9][\w.:@/[\]-]{0,199}$/;
 

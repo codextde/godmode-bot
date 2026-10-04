@@ -117,12 +117,18 @@ function checkDue(due: Date) {
   if (delta > MAX_DELAY_MS) throw badRequest("A follow-up can be at most a year ahead.");
 }
 
-/** Follow-up runs of the chat since anything else (the human, an automation) last started one. */
+/**
+ * Follow-up runs of the chat since anything else (the human, an automation) last started one, or the human last
+ * answered a question in it.
+ */
 export function unattendedRuns(conversationId: string): number {
   return (
     get<{ n: number }>(
       `SELECT COUNT(*) AS n FROM runs WHERE conversation_id = ? AND trigger = 'followup'
-         AND created_at > COALESCE((SELECT MAX(created_at) FROM runs WHERE conversation_id = ? AND trigger NOT IN ('followup', 'check', 'dream')), '')`,
+         AND created_at > MAX(
+           COALESCE((SELECT MAX(created_at) FROM runs WHERE conversation_id = ? AND trigger NOT IN ('followup', 'check', 'dream')), ''),
+           COALESCE((SELECT MAX(answered_at) FROM questions WHERE conversation_id = ?), ''))`,
+      conversationId,
       conversationId,
       conversationId,
     )?.n ?? 0
@@ -249,9 +255,13 @@ async function report(r: FollowupRow, runId: string): Promise<void> {
     if (await deliverFollowup(r.conversation_id, runId)) return;
     const run = await waitForRun(runId);
     if (run.status === "cancelled") return;
-    const blocks = all<{ blocks: string }>("SELECT blocks FROM messages WHERE run_id = ? AND role = 'assistant'", runId).flatMap((m) =>
-      parseJson<MessageBlock[]>(m.blocks, []),
-    );
+    // A board ticket reports its own outcome ("ready for review", "blocked", or waiting again).
+    if (get<{ id: string }>("SELECT id FROM tasks WHERE conversation_id = ?", r.conversation_id)) return;
+    // Only a message that mentions the tool is read: a run's blocks hold megabytes of tool output and screenshots.
+    const blocks = all<{ blocks: string }>(
+      "SELECT blocks FROM messages WHERE run_id = ? AND role = 'assistant' AND instr(blocks, 'notify_user') > 0",
+      runId,
+    ).flatMap((m) => parseJson<MessageBlock[]>(m.blocks, []));
     if (blocks.some((b) => b.type === "tool_use" && b.name.endsWith("notify_user"))) return;
     const agentName = get<{ name: string }>("SELECT name FROM agents WHERE id = ?", r.agent_id)?.name ?? "An agent";
     const text = (run.status === "succeeded" ? run.result : run.error)?.replace(/\s+/g, " ").trim() ?? "";

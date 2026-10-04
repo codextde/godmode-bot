@@ -2,6 +2,8 @@ import * as Device from "expo-device";
 import Constants from "expo-constants";
 import type {
   Agent,
+  AnswerQuestionResult,
+  AgentQuestion,
   AppNotification,
   Bootstrap,
   BrowserProfile,
@@ -10,8 +12,8 @@ import type {
   Conversation,
   ConversationWithMessages,
   MissingLogin,
-  MobilePairingPayload,
   MobilePairResult,
+  MobilePairingPayload,
   MobileSession,
   ModelCatalog,
   QueuedMessage,
@@ -27,9 +29,9 @@ import type {
   Vm,
   Workspace,
 } from "@godmode/shared";
-import { isPhoneUrlAllowed } from "@godmode/shared";
+import { CloudErrorCode, isPhoneUrlAllowed } from "@godmode/shared";
 import { withPending } from "./pending-queue";
-import { addressOrder, useSession, type Connection } from "./session";
+import { addressOrder, baseUrl, useSession, type Connection } from "./session";
 
 const TIMEOUT_MS = 12_000;
 const PROBE_TIMEOUT_MS = 5000;
@@ -44,7 +46,8 @@ export class ApiError extends Error {
   }
 }
 
-export const OFFLINE_MESSAGE = "Can't reach your computer. Check that it's awake and Tailscale is on.";
+export const OFFLINE_MESSAGE = "Can't reach your computer. Check that it's awake and connected to Tailscale or Godmode Cloud.";
+const NO_ANSWER_MESSAGE = "No answer from your computer. Check whether it went through before trying again.";
 
 async function send(url: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
@@ -56,13 +59,42 @@ async function send(url: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Pro
   }
 }
 
-async function errorFrom(res: Response): Promise<ApiError> {
+/** The `{ error, code }` body the computer and the cloud gateway answer errors with; empty when there is none. */
+async function failure(res: Response): Promise<{ error?: string; code?: string }> {
   try {
-    const body = (await res.json()) as { error?: string; code?: string };
-    return new ApiError(res.status, body.error ?? `Request failed (${res.status})`, body.code);
+    const body = (await res.json()) as { error?: unknown; code?: unknown } | null;
+    return { error: typeof body?.error === "string" ? body.error : undefined, code: typeof body?.code === "string" ? body.code : undefined };
   } catch {
-    return new ApiError(res.status, `Request failed (${res.status})`);
+    return {};
   }
+}
+
+async function errorFrom(res: Response): Promise<ApiError> {
+  const { error, code } = await failure(res);
+  return new ApiError(res.status, error ?? `Request failed (${res.status})`, code);
+}
+
+/** Only Godmode on the computer answers this; it means the phone's key is no longer accepted. */
+const isRemoved = (status: number, code?: string) => status === 401 && code === "unauthorized";
+
+const GATEWAY_CODES = new Set<string>([
+  CloudErrorCode.DeviceOffline,
+  CloudErrorCode.DeviceNotFound,
+  CloudErrorCode.LinkLost,
+  CloudErrorCode.BadResponse,
+  CloudErrorCode.PlanLimit,
+  CloudErrorCode.RateLimited,
+]);
+
+/**
+ * The address couldn't pass the request on: the cloud gateway's own answers (computer offline, link lost, plan limit,
+ * rate limit), a proxy's error without a code, or any other 401. The computer is out of reach there; the phone stays
+ * paired.
+ */
+function isUnreachable(status: number, code?: string): boolean {
+  if (status === 401) return !isRemoved(status, code);
+  if (code) return GATEWAY_CODES.has(code);
+  return status === 402 || status === 429 || (status >= 502 && status <= 504);
 }
 
 type Query = Record<string, string | number | boolean | undefined | null>;
@@ -78,38 +110,50 @@ function qs(query?: Query): string {
 const verified = new Set<string>();
 
 /**
- * Does this address answer as the paired computer? Asked (without the key) before the key goes to an address, so a
- * network that isn't Tailscale can't collect it.
+ * Does this address answer as the paired computer? Asked (without the key) before the key goes to an address, so an
+ * address that isn't the computer can't collect it. True when it does; else the cloud gateway's own sentence on why the
+ * computer is out of reach there (offline, plan limit), when it gave one.
  */
-async function isInstance(base: string, instanceId: string): Promise<boolean> {
+async function isInstance(base: string, instanceId: string): Promise<true | ApiError | null> {
   const key = `${instanceId} ${base}`;
   if (verified.has(key)) return true;
-  if (!isPhoneUrlAllowed(base)) return false;
+  if (!isPhoneUrlAllowed(base)) return null;
   try {
     const res = await send(`${base}/api/health`, { method: "GET" }, PROBE_TIMEOUT_MS);
-    const ok = res.ok && ((await res.json()) as { instance?: string }).instance === instanceId;
-    if (ok) verified.add(key);
-    return ok;
+    if (!res.ok) {
+      const { error, code } = await failure(res);
+      return error && isUnreachable(res.status, code) ? new ApiError(res.status, error, code) : null;
+    }
+    if (((await res.json()) as { instance?: string }).instance !== instanceId) return null;
+    verified.add(key);
+    return true;
   } catch {
-    return false;
+    return null;
   }
 }
 
-/** The address to use right now: the one that worked last, else the first other one that answers as the computer. */
-export async function reachableBase(connection: Connection): Promise<string | null> {
+/**
+ * The address to use right now: the one that worked last, else the first other one that answers as the computer.
+ * Otherwise the cloud gateway's reason when it gave one, else null.
+ */
+export async function reachableBase(connection: Connection): Promise<string | ApiError | null> {
+  let refused: ApiError | null = null;
   for (const base of addressOrder(connection)) {
-    if (await isInstance(base, connection.instance.id)) return base;
+    const found = await isInstance(base, connection.instance.id);
+    if (found === true) return base;
+    refused ??= found;
   }
-  return null;
+  return refused;
 }
 
-function forget(base: string) {
+/** Asks this address for the computer again before its next use. */
+export function forget(base: string) {
   for (const key of verified) if (key.endsWith(` ${base}`)) verified.delete(key);
 }
 
 /**
  * Calls the paired computer. Reads fall through to its other addresses; writes are sent once, so a slow answer never
- * turns into a second message or run.
+ * turns into a second message or run. A write moves on only when the answer shows it never reached the computer.
  */
 export async function request<T>(method: string, path: string, body?: unknown, timeoutMs = TIMEOUT_MS): Promise<T> {
   const connection = useSession.getState().connection;
@@ -117,26 +161,41 @@ export async function request<T>(method: string, path: string, body?: unknown, t
   const headers: Record<string, string> = { authorization: `Bearer ${connection.token}`, accept: "application/json" };
   if (body !== undefined) headers["content-type"] = "application/json";
   const payload = body === undefined ? undefined : JSON.stringify(body);
+  let refused: ApiError | null = null;
   for (const base of addressOrder(connection)) {
-    if (!(await isInstance(base, connection.instance.id))) continue;
+    const found = await isInstance(base, connection.instance.id);
+    if (found !== true) {
+      refused ??= found;
+      continue;
+    }
     let res: Response;
     try {
       res = await send(base + path, { method, headers, body: payload }, timeoutMs);
     } catch {
       forget(base);
       if (method === "GET") continue;
-      throw new ApiError(0, "No answer from your computer. Check whether it went through before trying again.", "timeout");
+      throw new ApiError(0, NO_ANSWER_MESSAGE, "timeout");
     }
-    useSession.getState().setActiveUrl(base);
-    if (res.status === 401) {
+    if (res.ok) {
+      useSession.getState().setActiveUrl(base);
+      const type = res.headers.get("content-type") ?? "";
+      return (type.includes("application/json") ? await res.json() : await res.text()) as T;
+    }
+    const { error, code } = await failure(res);
+    if (isRemoved(res.status, code)) {
       await useSession.getState().disconnect("removed");
       throw new ApiError(401, "This phone was removed from Godmode.", "unauthorized");
     }
-    if (!res.ok) throw await errorFrom(res);
-    const type = res.headers.get("content-type") ?? "";
-    return (type.includes("application/json") ? await res.json() : await res.text()) as T;
+    if (!isUnreachable(res.status, code)) {
+      useSession.getState().setActiveUrl(base);
+      throw new ApiError(res.status, error ?? `Request failed (${res.status})`, code);
+    }
+    forget(base);
+    // 502/504: the request may have reached the computer (the link dropped on the way back, or it answered oddly).
+    if (method !== "GET" && (res.status === 502 || res.status === 504)) throw new ApiError(res.status, error ?? NO_ANSWER_MESSAGE, code ?? "timeout");
+    if (error) refused ??= new ApiError(res.status, error, code);
   }
-  throw new ApiError(0, OFFLINE_MESSAGE, "offline");
+  throw refused ?? new ApiError(0, OFFLINE_MESSAGE, "offline");
 }
 
 const get = <T>(path: string, query?: Query) => request<T>("GET", path + qs(query));
@@ -158,11 +217,16 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
     model: Device.modelName ?? null,
     appVersion: Constants.expoConfig?.version ?? null,
   });
-  const urls = payload.urls.filter(isPhoneUrlAllowed);
+  const urls = [...new Set(payload.urls.filter(isPhoneUrlAllowed).map(baseUrl))];
   if (!urls.length) throw new ApiError(400, "This code points somewhere Godmode doesn't send your phone's key.", "pairing_invalid");
   let offline = true;
+  let refused: ApiError | null = null;
   for (const base of urls) {
-    if (!(await isInstance(base, payload.id))) continue;
+    const found = await isInstance(base, payload.id);
+    if (found !== true) {
+      refused ??= found;
+      continue;
+    }
     let res: Response;
     try {
       res = await send(`${base}/api/mobile/pair`, { method: "POST", headers: { "content-type": "application/json" }, body });
@@ -183,13 +247,18 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
       pairedAt: result.device.createdAt,
     };
   }
-  throw new ApiError(0, offline ? "Can't reach your computer. Turn on Tailscale on this phone and sign in with the same account." : OFFLINE_MESSAGE, "offline");
+  if (refused) throw refused;
+  throw new ApiError(
+    0,
+    offline ? "Can't reach your computer. Turn on Tailscale on this phone with the computer's account, or link the computer to Godmode Cloud." : OFFLINE_MESSAGE,
+    "offline",
+  );
 }
 
 /** Files take a while over a phone's connection. */
 const uploadTimeout = (input: { attachments?: unknown[] }) => (input.attachments?.length ? 120_000 : TIMEOUT_MS);
 
-export type ModelChoicePatch = { model?: string | null; effort?: Effort | null };
+export type ModelChoicePatch = { model?: string | null; effort?: Effort | null; ultracode?: boolean | null };
 
 export type BrowserInput =
   | { type: "click"; x: number; y: number }
@@ -222,7 +291,7 @@ export const api = {
     },
     /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
     send: (id: string, input: Pick<SendMessageInput, "content" | "attachments" | "queueId">) =>
-      post<SendMessageOutcome>(`/api/conversations/${id}/messages`, { ...input, queue: true }, uploadTimeout(input)),
+      post<SendMessageOutcome | AnswerQuestionResult>(`/api/conversations/${id}/messages`, { ...input, queue: true }, uploadTimeout(input)),
     update: (id: string, input: { title?: string; pinned?: boolean; archived?: boolean } & ModelChoicePatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     queue: {
       edit: (id: string, messageId: string, content: string) => patch<QueuedMessage>(`/api/conversations/${id}/queue/${messageId}`, { content }),
@@ -284,6 +353,7 @@ export const api = {
     screenshot: (id: string, size = 960) => get<{ data: string; mime: string; width: number; height: number }>(`/api/vms/${id}/screenshot`, { size }),
     start: (id: string) => post<Vm>(`/api/vms/${id}/start`),
     stop: (id: string) => post<Vm>(`/api/vms/${id}/stop`),
+    input: (id: string, event: ComputerInputEvent, frame: { width: number; height: number }) => post<{ ok: true }>(`/api/vms/${id}/input`, { event, frame }),
   },
 
   notifications: {
@@ -292,6 +362,11 @@ export const api = {
 
   missingLogins: {
     open: () => get<MissingLogin[]>("/api/missing-logins", { status: "open" }),
+  },
+
+  questions: {
+    /** What agents asked and wait for; answered by writing into the chat (or with optionId / decision). */
+    open: () => get<AgentQuestion[]>("/api/questions", { status: "open" }),
   },
 };
 

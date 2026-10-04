@@ -67,8 +67,10 @@ export default function Chat() {
   const pause = conversation.data?.paused;
   const paused = (pause && pause.runId !== run?.run.id && pause) || null;
   const queue = conversation.data?.queue ?? [];
+  // The run waits for the human's answer to a question: the next message is that answer.
+  const waiting = paused?.reason === "question";
   // While the agent works, is paused or older messages still wait, a new message joins the queue.
-  const queueing = !!run || !!paused || queue.length > 0;
+  const queueing = !waiting && (!!run || !!paused || queue.length > 0);
 
   const send = async ({ content, attachments }: ComposerInput) => {
     const key = qk.conversation(id);
@@ -101,6 +103,13 @@ export default function Chat() {
           return { ...old, messages, queue: shown ? old.queue.map((m) => (m.id === queueId ? result.queued : m)) : [...old.queue, result.queued] };
         });
         // Also settles the queue when the agent took the message before this answer arrived.
+        void queryClient.invalidateQueries({ queryKey: key });
+        return;
+      }
+      if ("question" in result) {
+        // It answered the agent's question: the run that asked continues with it.
+        queryClient.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, messages: old.messages.filter((m) => m.id !== tempId) } : old));
+        useLive.getState().runStarted(result.run);
         void queryClient.invalidateQueries({ queryKey: key });
         return;
       }
@@ -170,7 +179,11 @@ export default function Chat() {
           getItemType={(item) => item.role}
         />
         {run && primary ? <LiveStrip screen={primary} activity={run.activity} /> : null}
-        {paused ? <PausedStrip limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null} auto={paused.auto} onContinue={resume} /> : null}
+        {paused?.reason === "question" ? (
+          <AskingStrip agentName={agent?.name ?? "The agent"} approval={paused.question?.kind === "approval"} />
+        ) : paused ? (
+          <PausedStrip limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null} auto={paused.auto} onContinue={resume} />
+        ) : null}
         <QueueTray
           conversationId={id}
           queue={queue}
@@ -188,22 +201,28 @@ export default function Chat() {
             onSend={send}
             onStop={stop}
             running={!!run && !paused}
-            sendLabel={paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : queueing ? "Queue message" : null}
+            sendLabel={waiting ? "Send answer" : paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : queueing ? "Queue message" : null}
             placeholder={
               !agent
                 ? "Message"
-                : paused?.reason === "user"
-                  ? `Tell ${agent.name} how to go on`
-                  : paused
-                    ? `Message ${agent.name} — goes along after the reset`
-                    : run
-                      ? `Queue a message for ${agent.name}`
-                      : `Message ${agent.name}, or / for commands`
+                : waiting
+                  ? `Answer ${agent.name}`
+                  : paused?.reason === "user"
+                    ? `Tell ${agent.name} how to go on`
+                    : paused
+                      ? `Message ${agent.name} — goes along after the reset`
+                      : run
+                        ? `Queue a message for ${agent.name}`
+                        : `Message ${agent.name}, or / for commands`
             }
             disabled={agent ? !agent.enabled : false}
             trailing={
               conversation.data ? (
-                <ModelButton agent={agent} conversationId={id} choice={{ model: conversation.data.model ?? null, effort: conversation.data.effort ?? null }} />
+                <ModelButton
+                  agent={agent}
+                  conversationId={id}
+                  choice={{ model: conversation.data.model ?? null, effort: conversation.data.effort ?? null, ultracode: conversation.data.ultracode ?? null }}
+                />
               ) : null
             }
           />
@@ -211,6 +230,19 @@ export default function Chat() {
         <View style={{ height: keyboardOpen ? space.sm : Math.max(insets.bottom, space.md) }} />
       </KeyboardAvoidingView>
     </>
+  );
+}
+
+/** Above the composer while the chat's run waits for the human's answer: the reply in the composer is the answer. */
+function AskingStrip({ agentName, approval }: { agentName: string; approval: boolean }) {
+  const c = useColors();
+  return (
+    <View style={[styles.paused, { backgroundColor: c.warningSoft, borderColor: c.warning }]}>
+      <Icon name="warning" size={15} color={c.warning} />
+      <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
+        {approval ? `${agentName} needs your OK — reply below` : `${agentName} is waiting for your answer — reply below`}
+      </T>
+    </View>
   );
 }
 

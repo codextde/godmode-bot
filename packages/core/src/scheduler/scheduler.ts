@@ -17,6 +17,8 @@ import { automationConversation } from "../automations/conversation";
 import { runConditionCheck } from "../automations/conditions";
 import { activeMainRun, ensureRunListener, recordEvent, settleIfFinished } from "../automations/events";
 import { HttpError, badRequest, conflict, now } from "../util";
+import { pausedRun } from "../services/pauses";
+import { remindWaitingAutomation } from "../services/questions";
 
 const log = logger("scheduler");
 
@@ -103,9 +105,17 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean } =
   const agent = getAgent(routine.agentId);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   if (opts.scheduled && !routine.enabled) throw conflict(`Routine "${routine.name}" is disabled`);
-  if (triggering.has(id) || activeMainRun(id)) {
+  const active = triggering.has(id) ? null : activeMainRun(id);
+  if (triggering.has(id) || active) {
     if (opts.scheduled) {
-      recordEvent(id, { source: "schedule", title: "Scheduled time reached", status: "skipped", note: "The previous run was still in progress" });
+      const waits = !!active && pausedRun(active)?.reason === "question";
+      recordEvent(id, {
+        source: "schedule",
+        title: "Scheduled time reached",
+        status: "skipped",
+        note: waits ? "The previous run is waiting for your answer" : "The previous run was still in progress",
+      });
+      if (waits) remindWaitingAutomation(id);
     }
     throw conflict(`Routine "${routine.name}" is already running`);
   }
@@ -119,7 +129,7 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean } =
       nextRunAt(routine),
       id,
     );
-    const { run } = await sendMessage(conversationId, { content: routine.prompt, trigger: "routine", routineId: routine.id });
+    const { run } = await sendMessage(conversationId, { content: routine.prompt, trigger: "routine", routineId: routine.id, source: "automation" });
     recordEvent(id, {
       source: opts.scheduled ? "schedule" : "manual",
       title: opts.scheduled ? "Scheduled time reached" : "Started manually",

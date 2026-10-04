@@ -185,6 +185,7 @@
   --animate-twinkle: twinkle 3.6s ease-in-out infinite;
   --animate-dream-halo: dream-halo 3.2s ease-in-out infinite;
   --animate-dream-dot: dream-dot 2s ease-out infinite;
+  --animate-march: march 0.6s linear infinite;
 
   @keyframes shimmer {
     0% { background-position: 200% 0; }
@@ -214,6 +215,10 @@
   @keyframes dream-dot {
     0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--dream) 55%, transparent); }
     80%, 100% { box-shadow: 0 0 0 6px transparent; }
+  }
+  /* Dashes travel along a stroke: one dash plus one gap (8 + 7) per round. */
+  @keyframes march {
+    to { stroke-dashoffset: -15; }
   }
 }
 

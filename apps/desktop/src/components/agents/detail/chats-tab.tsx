@@ -24,8 +24,8 @@ import { PLATFORMS } from "@/components/messaging/platform";
 const ORIGIN: Record<ConversationOrigin, { icon: ComponentType<{ className?: string }>; label: string }> = {
   chat: { icon: MessageSquare, label: "Chat" },
   routine: { icon: Workflow, label: "Automation" },
-  delegation: { icon: Share2, label: "Delegation" },
-  api: { icon: Plug, label: "API" },
+  delegation: { icon: Share2, label: "Handed over" },
+  api: { icon: Plug, label: "Chat" },
   dream: { icon: Moon, label: "Dreams" },
   slack: { icon: PLATFORMS.slack.glyph, label: "Slack" },
   telegram: { icon: PLATFORMS.telegram.glyph, label: "Telegram" },
@@ -51,7 +51,7 @@ export function ChatsTab({ agent }: { agent: Agent }) {
   const chat = useStartAgentChat();
   const { setArchived } = useArchiveChat();
   const { askDelete, deleteDialog } = useDeleteChat();
-  const runningConversations = useLive((s) => Object.values(s.runs).map((r) => r.conversationId).join(","));
+  const runningConversations = useLive((s) => Object.values(s.runs).flatMap((r) => (r.status === "running" ? [r.conversationId] : [])).join(","));
 
   const list = ((showArchived ? archived.data : active.data) ?? [])
     .filter((c) => showArchived || !c.archived)
@@ -80,7 +80,7 @@ export function ChatsTab({ agent }: { agent: Agent }) {
             Archived
           </Label>
         </div>
-        <Button className="ml-auto" onClick={() => chat.mutate(agent.id)} disabled={chat.isPending}>
+        <Button className="ml-auto" onClick={() => chat.mutate(agent)} disabled={chat.isPending}>
           {chat.isPending ? <Spinner /> : <Plus />} New chat
         </Button>
       </div>
@@ -100,7 +100,7 @@ export function ChatsTab({ agent }: { agent: Agent }) {
           description={q ? `Nothing found for “${q}”.` : showArchived ? undefined : "Start one — it keeps the context across messages."}
           action={
             !q && !showArchived ? (
-              <Button onClick={() => chat.mutate(agent.id)} disabled={chat.isPending}>
+              <Button onClick={() => chat.mutate(agent)} disabled={chat.isPending}>
                 <Plus /> New chat
               </Button>
             ) : undefined

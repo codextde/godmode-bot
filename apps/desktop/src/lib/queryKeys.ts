@@ -10,6 +10,9 @@ export const qk = {
   logEntries: (level: string, search: string) => ["logs", "entries", level, search],
   doctor: ["doctor"] as unknown[],
   claudeUpdate: ["doctor", "claude-update"] as unknown[],
+  permissions: ["doctor", "permissions"] as unknown[],
+  toolUpdates: ["doctor", "updates"] as unknown[],
+  maintenance: ["doctor", "maintenance"] as unknown[],
   models: ["models"] as unknown[],
   vaultStatus: ["vault", "status"] as unknown[],
   appSecrets: ["vault", "secrets"] as unknown[],
@@ -23,6 +26,8 @@ export const qk = {
   tasks: ["tasks"] as unknown[],
   taskList: (workspaceId: string) => ["tasks", "list", workspaceId],
   archivedTaskList: (workspaceId: string) => ["tasks", "archived", workspaceId],
+  /** Its own root: updaters assume every query under ["tasks"] holds Task[]. */
+  taskEvents: (id: string) => ["task-events", id],
   agents: ["agents"] as unknown[],
   agentList: (workspaceId: string) => ["agents", "list", workspaceId],
   agent: (id: string) => ["agents", "detail", id],
@@ -52,9 +57,12 @@ export const qk = {
   /** Times agents set to continue their chats on their own. */
   followups: ["followups"] as unknown[],
   runs: ["runs"] as unknown[],
+  /** Runs handed over by a run (under `runs`, so run events refresh them). */
+  runChildren: (runId: string) => ["runs", "children", runId] as const,
   runList: (agentId: string, status: string) => ["runs", "list", agentId, status],
   run: (id: string) => ["runs", "detail", id],
   missingLogins: ["missing-logins"] as unknown[],
+  questions: ["questions"] as unknown[],
   mcpServers: ["mcp-servers"] as unknown[],
   apiTools: ["api-tools"] as unknown[],
   composio: ["composio"] as unknown[],
@@ -82,6 +90,16 @@ export const qk = {
   sshLocalKeys: ["ssh-local-keys"] as unknown[],
   /** Phone access: Tailscale status and paired phones. */
   mobile: ["mobile"] as unknown[],
+  /** Runners (other computers that work for this one); the list is patched in place by `runner.updated` events. */
+  runners: ["runners"] as unknown[],
+  /** Not under ["runners"]: refreshing the list must not re-run a runner's checks. */
+  runnerHealth: (id: string) => ["runner-health", id],
+  runnerSources: (id: string) => ["runner-sources", id],
+  /** Godmode Cloud link status; billing sits under it, so invalidating `cloud` refreshes both. */
+  cloud: ["cloud"] as unknown[],
+  cloudBilling: ["cloud", "billing"] as unknown[],
+  /** What agents used on this computer over the last `days` days. */
+  usage: (days: number) => ["usage", days],
   chromeProfiles: ["chrome-profiles"] as unknown[],
   folders: ["folders"] as unknown[],
   folderList: (path: string, hidden: boolean) => ["folders", "list", path, hidden],

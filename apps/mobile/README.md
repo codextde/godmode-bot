@@ -2,7 +2,7 @@
 
 The phone app for Godmode: hand over tasks, follow answers as they stream, stop runs, run automations, and watch an
 agent's browser, shared screen or VM live (tap to take control). The chat input works like the desktop's: photos and
-files, Claude Code's slash commands, a queue for messages sent while the agent works, and the model and effort. It controls the Godmode running on your computer and
+files, Claude Code's slash commands, a queue for messages sent while the agent works, and the model, effort and Ultracode. It controls the Godmode running on your computer and
 nothing else.
 
 Built with [Expo](https://expo.dev) SDK 57 and Expo Router: native tabs and headers (Liquid Glass on iOS 26),
@@ -11,7 +11,9 @@ Built with [Expo](https://expo.dev) SDK 57 and Expo Router: native tabs and head
 
 ## Connecting
 
-1. Tailscale on the computer and the phone, same account.
+1. Tailscale on the computer and the phone, same account, or the computer linked to Godmode Cloud (Settings → Cloud)
+   with phone access on. The app tries every address the computer lists and learns new ones (such as the gateway
+   `https://<cloud>/gw/<id>`) from `GET /api/mobile/me`.
 2. On the computer: Godmode → **Settings → Phone → Connect a phone**.
 3. In the app: **Scan QR code**. The camera app works too (`godmode://pair?d=…` opens the app).
 

@@ -2,7 +2,7 @@
  * What a paired phone may call. The app controls Godmode — chats (with files from the phone, the model and the queue),
  * tasks, runs, automations and the screens agents work on — but never reaches secrets, backups, settings, integrations or
  * this computer's files, can't change what a chat, a task or an automation is allowed to do, and only controls screens
- * the human shared in a chat.
+ * the human shared in a chat and Godmode's VMs.
  */
 import { computerView, type ComputerTarget } from "@godmode/shared";
 import { all } from "../db";
@@ -17,6 +17,9 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", /^\/api\/workspaces$/],
   ["GET", /^\/api\/notifications$/],
   ["GET", /^\/api\/missing-logins$/],
+  // Questions and approvals agents wait for: listed and answered (no files from the phone).
+  ["GET", /^\/api\/questions$/],
+  ["POST", new RegExp(`^/api/questions/${ID}/answer$`)],
 
   ["GET", /^\/api\/agents$/],
   ["GET", new RegExp(`^/api/agents/${ID}$`)],
@@ -36,6 +39,7 @@ const ROUTES: [method: string, path: RegExp][] = [
 
   ["GET", /^\/api\/tasks$/],
   ["GET", new RegExp(`^/api/tasks/${ID}$`)],
+  ["GET", new RegExp(`^/api/tasks/${ID}/events$`)],
   ["POST", /^\/api\/tasks$/],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`)],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`)],
@@ -54,22 +58,24 @@ const ROUTES: [method: string, path: RegExp][] = [
 
   ["GET", /^\/api\/vms$/],
   ["GET", new RegExp(`^/api/vms/${ID}/screenshot$`)],
-  ["POST", new RegExp(`^/api/vms/${ID}/(start|stop)$`)],
+  ["POST", new RegExp(`^/api/vms/${ID}/(start|stop|input)$`)],
 ];
 
 /** Requests whose JSON body may only carry these fields when a phone sends them. */
 const BODIES: [method: string, path: RegExp, keys: string[]][] = [
-  ["PATCH", new RegExp(`^/api/conversations/${ID}$`), ["title", "pinned", "archived", "model", "effort"]],
+  ["PATCH", new RegExp(`^/api/conversations/${ID}$`), ["title", "pinned", "archived", "model", "effort", "ultracode"]],
   ["POST", new RegExp(`^/api/conversations/${ID}/messages$`), ["content", "attachments", "queue", "queueId"]],
   ["PATCH", new RegExp(`^/api/conversations/${ID}/queue/${ID}$`), ["content"]],
-  ["POST", /^\/api\/chat$/, ["agentId", "content", "workspaceId", "attachments", "model", "effort"]],
+  ["POST", /^\/api\/chat$/, ["agentId", "content", "workspaceId", "attachments", "model", "effort", "ultracode"]],
   // A task's repository and branch are picked on the computer: the phone never points an agent at another repository.
   ["POST", /^\/api\/tasks$/, ["workspaceId", "title", "description", "type", "status", "agentId"]],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`), ["title", "description", "status", "agentId", "archived"]],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content"]],
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
+  ["POST", new RegExp(`^/api/questions/${ID}/answer$`), ["optionId", "decision", "note", "text"]],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],
   ["POST", /^\/api\/computer\/input$/, ["view", "event", "frame"]],
+  ["POST", new RegExp(`^/api/vms/${ID}/input$`), ["event", "frame"]],
 ];
 
 export function deviceMayCall(method: string, path: string): boolean {
