@@ -26,6 +26,7 @@ import {
 } from "@godmode/shared";
 import { browserAccess, header, phoneAccess, type Grant } from "./access";
 import type { RelayHub } from "./hub";
+import { addressKey } from "./limits";
 import { ProtocolError, type Link, type RelayStream } from "./link";
 import { RELAY_SECURITY_HEADERS, denial, writeDenial, type Denial } from "./respond";
 
@@ -70,16 +71,21 @@ function endAfterBody(req: IncomingMessage, res: ServerResponse): void {
     res.end();
     return;
   }
+  // A keep-alive connection carries many requests: the listener must go with this one.
+  const socket = req.socket;
+  const onClose = () => clearTimeout(timer);
   const timer = setTimeout(() => {
+    socket.off("close", onClose);
     res.end();
     cutAfter(req, res);
   }, LINGER_MS);
   timer.unref();
   req.once("end", () => {
     clearTimeout(timer);
+    socket.off("close", onClose);
     res.end();
   });
-  req.socket.once("close", () => clearTimeout(timer));
+  socket.once("close", onClose);
   req.resume();
 }
 
@@ -223,6 +229,12 @@ class HttpRelayStream implements RelayStream {
         return;
       }
       if (next === IDLE) {
+        if (this.over) {
+          // The answer is complete and only waits for the rest of the body: send it, then cut the connection.
+          this.flushEnd();
+          cutAfter(this.req, this.res);
+          return;
+        }
         this.abortComputer("The client stopped sending");
         this.res.destroy();
         this.finish();
@@ -280,7 +292,7 @@ class HttpRelayStream implements RelayStream {
     this.noBody = this.method === "HEAD" || status === 204;
     // Node holds the head back until the first body chunk; an event stream must reach the client at once.
     if (headers["content-type"]?.startsWith("text/event-stream")) this.res.flushHeaders();
-    if (this.channel === "mobile" && status === 401) this.hub.gatewayUnauthorized.strike(this.grant.ip);
+    if (this.channel === "mobile" && status === 401) this.hub.gatewayUnauthorized.strike(addressKey(this.grant.ip));
   }
 
   private responseHeaders(list: unknown[]): Record<string, string> {
@@ -373,8 +385,9 @@ class HttpRelayStream implements RelayStream {
     this.over = true;
     this.window.close();
     this.link.end(this.id);
-    // A phone the computer turned away (401) costs its owner nothing: strangers can't burn the allowance.
-    if (!(this.channel === "mobile" && this.status === 401)) this.link.count(this.bytesIn, this.bytesOut, 1);
+    // A phone the computer turned away (401), or one without a phone token (health check, pairing), costs its owner
+    // nothing: strangers who only know the address can't burn the allowance.
+    if (!(this.channel === "mobile" && (this.status === 401 || this.grant.anonymous))) this.link.count(this.bytesIn, this.bytesOut, 1);
   }
 }
 

@@ -9,7 +9,18 @@ import { newId } from "../crypto";
 import { db, invites, roles, users, type Role, type Tx } from "../db";
 import { badRequest, conflict, forbidden, notFound } from "../errors";
 import { getSettings } from "../settings";
-import { can, canGrantRole, isOwner, isPermission, OWNER_ROLE_ID, OWNER_ROLE_KEY, PERMISSION_KEYS, SYSTEM_ROLES, type Permission } from "./permissions";
+import {
+  can,
+  canGrantRole,
+  isOwner,
+  isPermission,
+  OWNER_ROLE_ID,
+  OWNER_ROLE_KEY,
+  PERMISSION_KEYS,
+  PERSONAL_PERMISSIONS,
+  SYSTEM_ROLES,
+  type Permission,
+} from "./permissions";
 
 export * from "./permissions";
 
@@ -130,10 +141,10 @@ export async function updateRole(
     if (!isOwner(ctx) && added.some((p) => !ctx.role.permissions.includes(p))) {
       throw forbidden("You can only add permissions you have yourself.");
     }
-    if (added.includes("admin.access")) {
+    if (added.some((p) => !PERSONAL_PERMISSIONS.includes(p))) {
       const { defaultRoleKey } = await getSettings("auth");
       if (defaultRoleKey === role.key) {
-        throw badRequest("People who sign up on their own get this role, so it can't open the admin area. Choose another default role first.");
+        throw badRequest("People who sign up on their own get this role, so it can only have the Personal permissions. Choose another default role first.");
       }
     }
     set.permissions = next;

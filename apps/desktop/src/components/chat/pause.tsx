@@ -1,7 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceStrict, isToday } from "date-fns";
 import type { ConversationWithMessages, MessageBlock, RunPause } from "@godmode/shared";
-import { ArrowUp, Hourglass, MessageCircleQuestion, Pause, Play, ShieldCheck, Square } from "lucide-react";
+import { budgetPauseTitle } from "@godmode/shared";
+import { Link } from "react-router";
+import { ArrowUp, Coins, Hourglass, MessageCircleQuestion, Pause, Play, ShieldCheck, Square } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -58,6 +60,7 @@ export function usePauseActions(conversationId: string) {
 /** Above the composer while the chat's run stands still: what it waits for, and the way on. */
 export function PauseBar({ conversationId, pause, agentName, queued }: { conversationId: string; pause: RunPause; agentName: string; queued: number }) {
   if (pause.reason === "question") return <QuestionBar conversationId={conversationId} pause={pause} agentName={agentName} />;
+  if (pause.reason === "budget") return <HeldBar conversationId={conversationId} pause={pause} agentName={agentName} queued={queued} />;
   return <StandStillBar conversationId={conversationId} pause={pause} agentName={agentName} queued={queued} />;
 }
 
@@ -106,6 +109,43 @@ function QuestionBar({ conversationId, pause, agentName }: { conversationId: str
           </TooltipTrigger>
           <TooltipContent side="top">Stop for good — the question is withdrawn</TooltipContent>
         </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+/** Held because a monthly budget is used up: it goes on next month or when the budget has room — or now, if the human says so. */
+function HeldBar({ conversationId, pause, agentName, queued }: { conversationId: string; pause: RunPause; agentName: string; queued: number }) {
+  const { resume, stop } = usePauseActions(conversationId);
+  const team = pause.budget?.scope === "team";
+  const along = queued > 0 ? ` Your ${queued > 1 ? `${queued} messages go` : "message goes"} along.` : "";
+  return (
+    <div className="mb-2 flex items-center gap-3 rounded-xl border border-warning/30 bg-card py-2 pr-2 pl-2.5 shadow-card" role="status">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-warning/30 bg-warning/[0.08] text-warning">
+        <Coins className="size-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1 leading-snug">
+        <p className="truncate text-[13px] font-medium">{pause.budget ? budgetPauseTitle(pause.budget, agentName, pause.pausedAt) : "Held — a monthly budget is used up"}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {pause.auto && pause.resumeAt ? `Continues by itself ${followupWhen(pause.resumeAt)}, or when you raise the budget.` : "Raise the budget or let it run."}
+          {along}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button size="xs" variant="ghost" asChild className="hidden @lg:inline-flex">
+          <Link to={team ? "/settings/ai" : "/agents"}>Raise budget</Link>
+        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="xs" disabled={resume.isPending} onClick={() => resume.mutate()}>
+              {resume.isPending ? <Spinner /> : <Play className="fill-current" />} Let it run
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Run it although the budget is used up</TooltipContent>
+        </Tooltip>
+        <Button size="xs" variant="ghost" className="text-muted-foreground hover:text-destructive" disabled={stop.isPending} onClick={() => stop.mutate(pause.runId)}>
+          {stop.isPending ? <Spinner /> : <Square className="size-2.5 fill-current" />} Stop
+        </Button>
       </div>
     </div>
   );
@@ -191,14 +231,15 @@ type PauseBlock = Extract<MessageBlock, { type: "pause" }>;
 /** Where a run stood still, inside the turn it belongs to. */
 export function PauseMarker({ block }: { block: PauseBlock }) {
   const limit = block.reason === "limit";
-  const Icon = limit ? Hourglass : Pause;
+  const held = block.reason === "budget";
+  const Icon = limit ? Hourglass : held ? Coins : Pause;
   const time = (iso: string) => format(new Date(iso), "HH:mm");
   return (
     <div role="note" className="flex items-center gap-3 py-0.5 text-[11px] text-muted-foreground">
       <span className="h-px flex-1 bg-border" />
       <span className="inline-flex items-center gap-1.5 tabular-nums">
-        <Icon className={cn("size-3.5", limit ? "text-warning" : "fill-current text-foreground/70")} aria-hidden />
-        <span className="font-medium text-foreground">{limit ? `${limitTitle(block.limit)} reached` : "Paused"}</span>
+        <Icon className={cn("size-3.5", limit || held ? "text-warning" : "fill-current text-foreground/70")} aria-hidden />
+        <span className="font-medium text-foreground">{limit ? `${limitTitle(block.limit)} reached` : held ? "Held · budget used up" : "Paused"}</span>
         <time dateTime={block.at}>{time(block.at)}</time>
         {block.resumedAt ? (
           <span>

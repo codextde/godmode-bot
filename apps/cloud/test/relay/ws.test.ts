@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import type { WebSocket } from "ws";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
-import { CLOUD_WS_WINDOW, CloudFrame, encodeCloudFrame } from "@godmode/shared";
-import { db, deviceAccess, sessions } from "@/server/db";
+import { CLOUD_WS_WINDOW, CloudClose, CloudFrame, encodeCloudFrame } from "@godmode/shared";
+import { db, deviceAccess, sessions, usageDaily } from "@/server/db";
 import { closeDatabase, resetDatabase, truncateAll } from "../helpers/db";
 import {
   FakeComputer,
@@ -133,16 +133,33 @@ describe("messages", () => {
     expect(computer.framesOf(CloudFrame.Window, sock.id).length).toBeGreaterThanOrEqual(3);
   });
 
-  test("a client that does not read is closed with 1013 once its backlog passes the limit", async () => {
+  test("a computer may run ahead of a client that does not read up to the backlog limit, not beyond", async () => {
     const { ws } = await dashboardSocket();
     const sock = await computer.socket();
     ws.pause();
     const chunk = Buffer.alloc(1024 * 1024, 2);
-    for (let i = 0; i < 64; i++) computer.send(CloudFrame.WsBinary, sock.id, chunk);
-    await until(() => sock.closed, 10_000, "WsClose to the computer");
-    expect(sock.closed!.code).toBe(1013);
+    // Above CLOUD_WS_WINDOW the computer only skips live frames; everything else still goes out.
+    for (let i = 0; i < 4; i++) computer.send(CloudFrame.WsBinary, sock.id, chunk);
+    await sleep(200);
+    expect(computer.closeEvent).toBeNull();
+    // Past CLOUD_WS_BACKLOG_MAX it should have closed the socket (1013) itself; the cloud doesn't buffer the rest.
+    for (let i = 0; i < 60; i++) computer.send(CloudFrame.WsBinary, sock.id, chunk);
+    expect((await computer.closed()).code).toBe(CloudClose.Protocol);
     // Credit was only given for what actually reached the client.
     expect(sock.granted).toBeLessThan(64 * chunk.byteLength);
+  });
+
+  test("many sockets together cannot make the cloud hold more than the link's limit", async () => {
+    const chunk = Buffer.alloc(1024 * 1024, 3);
+    const socks = [];
+    for (let i = 0; i < 5; i++) {
+      const { ws } = await dashboardSocket();
+      ws.pause();
+      socks.push(await computer.socket(i));
+    }
+    // 14 MiB each stays under the per-socket backlog limit; five of them pass the 64 MiB a link may hold.
+    for (const sock of socks) for (let i = 0; i < 14; i++) computer.send(CloudFrame.WsBinary, sock.id, chunk);
+    expect(await computer.closed()).toEqual({ code: CloudClose.Protocol, reason: "WebSocket messages beyond the link's limit." });
   });
 
   test("a client message above the size limit closes that socket", async () => {
@@ -279,6 +296,22 @@ describe("phone sockets (/gw)", () => {
     const closed = new Promise<number>((resolve) => ws.on("close", (code) => resolve(code)));
     computer.ws.send(encodeCloudFrame(CloudFrame.WsClose, sock.id, { code: 4003, reason: "Removed" }));
     expect(await closed).toBe(4003);
+  });
+
+  test("WsReject 401 counts toward the address's lock-out like a 401 answer, and costs no usage", async () => {
+    computer.onSocket = (sock) => computer.send(CloudFrame.WsReject, sock.id, { status: 401, message: "Unknown phone" });
+    const from = { authorization: "Bearer gmd_guess", "x-forwarded-for": "198.51.100.30" };
+    const statuses: (number | null)[] = [];
+    for (let i = 0; i < 25; i++) {
+      const { ws, status } = await openClient(cloud.port, `/gw/${device.id}/api/ws`, from);
+      clients.push(ws);
+      statuses.push(status);
+    }
+    expect(statuses).toEqual([...Array<number>(20).fill(401), ...Array<number>(5).fill(429)]);
+    expect(computer.sockets.size).toBe(20);
+    await cloud.hub.flushUsage();
+    const rows = await db.select().from(usageDaily);
+    expect(rows.reduce((n, r) => n + r.requests, 0)).toBe(0);
   });
 
   test("a WsReject 401 from the computer is passed, the cloud never makes one up", async () => {

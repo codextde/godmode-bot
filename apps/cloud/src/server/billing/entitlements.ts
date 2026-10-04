@@ -11,7 +11,7 @@ import { db, devices, plans, roles, subscriptions, users, type Subscription } fr
 import { badRequest } from "../errors";
 import { OWNER_ROLE_KEY } from "../rbac/permissions";
 import { relayHub } from "../relay-bridge";
-import { getSettingsWithSecrets, updateSettings } from "../settings";
+import { getSettings, getSettingsWithSecrets, updateSettings } from "../settings";
 import { getFreePlan, planSummary, UNLIMITED_PLAN } from "./plans";
 
 export interface Entitlements {
@@ -26,12 +26,22 @@ export const LIVE_STATUSES = ["active", "trialing", "past_due"] as const;
 
 const DAY_MS = 86_400_000;
 
-/** The person's current subscription: a running one first, otherwise the newest that is not incomplete_expired. */
+/**
+ * The person's current subscription: a running one first, otherwise the newest that is not incomplete_expired. Only
+ * subscriptions of the Stripe mode the stored key belongs to count: test subscriptions grant nothing once the key is live.
+ */
 export async function getSubscription(userId: string): Promise<Subscription | null> {
+  const { livemode } = await getSettings("billing");
   const [row] = await db
     .select()
     .from(subscriptions)
-    .where(and(eq(subscriptions.userId, userId), ne(subscriptions.status, "incomplete_expired")))
+    .where(
+      and(
+        eq(subscriptions.userId, userId),
+        ne(subscriptions.status, "incomplete_expired"),
+        livemode === null ? undefined : eq(subscriptions.livemode, livemode),
+      ),
+    )
     .orderBy(
       sql`case when ${subscriptions.status} in ('active', 'trialing', 'past_due') then 0 else 1 end`,
       desc(subscriptions.createdAt),
@@ -48,10 +58,13 @@ export async function billingEnabled(): Promise<boolean> {
 
 /**
  * Whether a subscription still grants its plan. Stripe moves `current_period_end` forward at renewal even when the
- * payment fails, so the grace period of a past_due subscription counts from the start of the unpaid period.
+ * payment fails, so the grace period of a past_due subscription counts from the start of the unpaid period. An active
+ * or trialing one whose period ended (plus the grace days) is a mirror that missed its update and grants nothing.
  */
 function subscriptionGrants(sub: Pick<Subscription, "status" | "currentPeriodStart" | "currentPeriodEnd">, graceDays: number, now: number): boolean {
-  if (sub.status === "active" || sub.status === "trialing") return true;
+  if (sub.status === "active" || sub.status === "trialing") {
+    return sub.currentPeriodEnd === null || sub.currentPeriodEnd.getTime() + graceDays * DAY_MS > now;
+  }
   if (sub.status !== "past_due") return false;
   const due = sub.currentPeriodStart ?? sub.currentPeriodEnd;
   return due !== null && now <= due.getTime() + graceDays * DAY_MS;
@@ -142,7 +155,12 @@ export async function previewBillingEnable(): Promise<{ people: number; computer
   for (const person of people) {
     if (person.roleKey === OWNER_ROLE_KEY) continue;
     const paying = live.some(
-      (s) => s.userId === person.id && s.planId !== null && known.has(s.planId) && subscriptionGrants(s, settings.pastDueGraceDays, now),
+      (s) =>
+        s.userId === person.id &&
+        (settings.livemode === null || s.livemode === settings.livemode) &&
+        s.planId !== null &&
+        known.has(s.planId) &&
+        subscriptionGrants(s, settings.pastDueGraceDays, now),
     );
     const granted = overrideValid(person, now) && known.has(person.planOverrideId!);
     if (paying || granted) continue;

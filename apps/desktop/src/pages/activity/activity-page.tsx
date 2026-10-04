@@ -9,6 +9,7 @@ import { errorMessage } from "@/lib/api";
 import { useLive, type LiveRun } from "@/stores/live";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
+import { SpendStrip } from "@/components/runs/spend-strip";
 import { Orb } from "@/components/aicss/Orb";
 import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
 import { Button } from "@/components/ui/button";
@@ -114,7 +115,7 @@ export default function ActivityPage() {
       <PageHeader
         icon={<Activity />}
         title="Activity"
-        description="Every run across your agents — live, automated and delegated."
+        description="Every run across your agents — and what it cost."
         actions={
           <Button variant="outline" size="icon" onClick={() => runsQ.refetch()} aria-label="Refresh" disabled={runsQ.isFetching}>
             <RefreshCw className={cn(runsQ.isFetching && "animate-spin")} />
@@ -122,6 +123,13 @@ export default function ActivityPage() {
         }
       />
       <PageBody className="space-y-6">
+        <SpendStrip
+          period={(["today", "week", "month", "all"] as const).find((p) => p === params.get("period")) ?? "week"}
+          onPeriod={(p) => setParam("period", p === "week" ? null : p)}
+          agentId={agentFilter === "all" ? null : agentFilter}
+          agentById={agentById}
+          onAgent={(id) => setParam("agent", id)}
+        />
         <AnimatePresence>
           {liveList.length > 0 && statusFilter !== "succeeded" && statusFilter !== "failed" && statusFilter !== "cancelled" && statusFilter !== "paused" && (
             <motion.section

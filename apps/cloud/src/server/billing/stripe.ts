@@ -5,11 +5,11 @@
  * configuration) is ever changed.
  */
 import Stripe from "stripe";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { actorOf, audit, SYSTEM } from "../audit";
 import type { SessionContext } from "../auth/sessions";
 import { config } from "../config";
-import { db, planPrices, plans, type Plan } from "../db";
+import { db, planPrices, plans, users, type Plan } from "../db";
 import { AppError, badRequest, notFound } from "../errors";
 import { getSettings, getSettingsWithSecrets, writeSettings } from "../settings";
 import { assertCanManageBilling, PRODUCT_TAG } from "./plans";
@@ -144,7 +144,12 @@ export async function checkStripeKey(
     }
   }
   const livemode = key.includes("_live_");
+  const previous = (await getSettings("billing")).livemode;
   await writeSettings("billing", { stripeAccountName: accountName, livemode }, SYSTEM);
+  // Customers exist in one Stripe mode only: after switching between test and live, everyone gets a new one at checkout.
+  if (previous !== null && previous !== livemode) {
+    await db.update(users).set({ stripeCustomerId: null, updatedAt: new Date() }).where(isNotNull(users.stripeCustomerId));
+  }
   return { ok: true, livemode, accountName, defaultCurrency };
 }
 

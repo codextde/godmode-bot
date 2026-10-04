@@ -96,6 +96,8 @@ export interface AgentFormValues {
   delegateTo: string[];
   canManageAgents: boolean;
   maxBudgetUsd: string;
+  /** What it may cost per calendar month; "" = no budget. */
+  monthlyBudgetUsd: string;
   browserEnabled: boolean;
   browserProfileId: string | null;
   headless: boolean | null;
@@ -136,6 +138,7 @@ export function agentToValues(
     delegateTo: source?.permissions?.delegateTo ?? [],
     canManageAgents: source?.permissions?.canManageAgents ?? false,
     maxBudgetUsd: source?.permissions?.maxBudgetUsd != null ? String(source.permissions.maxBudgetUsd) : "",
+    monthlyBudgetUsd: source?.permissions?.monthlyBudgetUsd != null ? String(source.permissions.monthlyBudgetUsd) : "",
     browserEnabled: source?.browser?.enabled ?? true,
     browserProfileId: source?.browser?.profileId ?? null,
     headless: source?.browser?.headless ?? null,
@@ -152,6 +155,7 @@ export function agentToValues(
 
 export function valuesToInput(v: AgentFormValues): AgentInput {
   const budget = v.maxBudgetUsd.trim() ? Number(v.maxBudgetUsd) : null;
+  const monthly = v.monthlyBudgetUsd.trim() ? Number(v.monthlyBudgetUsd) : null;
   return {
     workspaceId: v.workspaceId,
     name: v.name.trim(),
@@ -172,6 +176,7 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
       delegateTo: v.allowDelegation ? v.delegateTo : [],
       canManageAgents: v.canManageAgents,
       maxBudgetUsd: budget != null && Number.isFinite(budget) && budget > 0 ? budget : null,
+      monthlyBudgetUsd: monthly != null && Number.isFinite(monthly) && monthly > 0 ? monthly : null,
     },
     browser: { enabled: v.browserEnabled, profileId: v.browserProfileId, headless: v.headless },
     computer: { enabled: v.computerEnabled, target: v.computerDisplayId ? { kind: "display", displayId: v.computerDisplayId } : null },
@@ -200,6 +205,10 @@ function validate(v: AgentFormValues): Record<string, string> {
   if (v.maxBudgetUsd.trim()) {
     const n = Number(v.maxBudgetUsd);
     if (!Number.isFinite(n) || n <= 0) errors.maxBudgetUsd = "Enter a positive amount, or leave empty for no limit";
+  }
+  if (v.monthlyBudgetUsd.trim()) {
+    const n = Number(v.monthlyBudgetUsd);
+    if (!Number.isFinite(n) || n <= 0) errors.monthlyBudgetUsd = "Enter a positive amount, or leave empty for no budget";
   }
   const names = new Set<string>();
   v.subagents.forEach((s, i) => {
@@ -295,7 +304,7 @@ export function AgentForm({
     if (hasErrors) {
       setShowErrors(true);
       const first = Object.keys(errors)[0];
-      document.getElementById(first === "name" ? "agent-name" : first.startsWith("subagent") ? "subagents-list" : "agent-budget")?.focus();
+      document.getElementById(first === "name" ? "agent-name" : first.startsWith("subagent") ? "subagents-list" : first === "monthlyBudgetUsd" ? "agent-month-budget" : "agent-budget")?.focus();
       return;
     }
     onSubmit(valuesToInput(values));
@@ -645,6 +654,28 @@ export function AgentForm({
                   <p className="text-xs text-destructive">{err("maxBudgetUsd")}</p>
                 ) : (
                   <p className="text-xs text-muted-foreground">A run stops when it would cost more than this.</p>
+                )}
+              </div>
+              <div className="grid gap-1.5 @md:max-w-xs">
+                <Label htmlFor="agent-month-budget">Monthly budget</Label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                  <Input
+                    id="agent-month-budget"
+                    inputMode="decimal"
+                    value={values.monthlyBudgetUsd}
+                    onChange={(e) => set("monthlyBudgetUsd", e.target.value.replace(",", "."))}
+                    placeholder="No budget"
+                    aria-invalid={!!err("monthlyBudgetUsd")}
+                    className="pl-7"
+                  />
+                </div>
+                {err("monthlyBudgetUsd") ? (
+                  <p className="text-xs text-destructive">{err("monthlyBudgetUsd")}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    What {values.name.trim() || "it"} may cost in a calendar month. When it's used up, its automations, follow-ups and board tickets wait for you — chats you start still run.
+                  </p>
                 )}
               </div>
             </div>

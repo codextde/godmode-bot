@@ -1,4 +1,8 @@
 import type {
+  BudgetOverview,
+  BudgetReleaseInput,
+  SpendPeriod,
+  SpendReport,
   Agent,
   AgentFileEntry,
   AgentInput,
@@ -394,6 +398,17 @@ export const api = {
       form.set("file", file, file.name || "file");
       return request<TaskAttachment>("POST", "/api/tasks/attachments", form);
     },
+  },
+
+  spend: {
+    /** What the team (or one agent) cost, booked when it was spent: four period totals and the chosen period per agent and kind of work. */
+    report: (period: SpendPeriod, agentId?: string | null) => get<SpendReport>("/api/spend", { period, agentId: agentId ?? undefined }),
+  },
+
+  budgets: {
+    get: () => get<BudgetOverview>("/api/budgets"),
+    /** Let held work run although its budget is used up. */
+    release: (input: BudgetReleaseInput) => post<{ continued: number }>("/api/budgets/release", input),
   },
 
   agents: {
