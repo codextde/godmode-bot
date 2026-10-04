@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent, AwaySummary } from "@godmode/shared";
 import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
-import { insert } from "../src/db";
+import { all, insert } from "../src/db";
+import { startRunNotices, stopRunNotices } from "../src/services/runNotices";
 import { getAccessToken } from "../src/server/auth";
 import { deviceMayCall } from "../src/mobile/scope";
 import { waitForRun } from "../src/runner/runner";
@@ -19,9 +20,12 @@ beforeAll(async () => {
   env = await setupEnv("godmode-away-");
   mia = await makeAgent({ name: "Mia" });
   bo = await makeAgent({ name: "Bo" });
+  // Chats nobody looked at are unread: only those are news in the summary.
+  startRunNotices();
 });
 
 afterAll(async () => {
+  stopRunNotices();
   await env.close();
 });
 
@@ -54,6 +58,23 @@ describe("while you were away", () => {
     ]);
     expect(away.highlights[3]!.link).toBe(`/chat/${replied.conversation.id}`);
 
+    // Only until the human came back: what happened after that isn't "while you were away".
+    const back = new Date().toISOString();
+    await new Promise((r) => setTimeout(r, 20));
+    const later = await startChat({ agentId: mia.id, content: "Say hello", title: "After I came back" });
+    await waitForRun(later.run.id, 20_000);
+    const bounded = awaySummary(before, back);
+    expect(bounded.finished).toBe(3);
+    expect(bounded.highlights.map((h) => h.text)).not.toContain("Mia replied in “After I came back”");
+    expect(awaySummary(before).highlights.map((h) => h.text)).toContain("Mia replied in “After I came back”");
+    // A chat read since (here or on the phone) isn't news.
+    const { markConversationsRead } = await import("../src/services/conversations");
+    markConversationsRead([replied.conversation.id]);
+    expect(awaySummary(before).highlights.map((h) => h.text)).not.toContain("Mia replied in “Q4 plan”");
+    // Cheap however long the history: what ended is found through its index.
+    const plan = all<{ detail: string }>("EXPLAIN QUERY PLAN SELECT COUNT(*) FROM runs r WHERE r.finished_at >= ? AND r.finished_at <= ? AND +r.status IN ('succeeded', 'failed') AND r.trigger != 'check'", before, back);
+    expect(plan.map((p) => p.detail).join(" ")).toContain("idx_runs_finished");
+
     // Nothing happened since.
     const after = new Date(Date.now() + 1).toISOString();
     await new Promise((r) => setTimeout(r, 20));
@@ -68,6 +89,8 @@ describe("while you were away", () => {
     expect(((await ok.json()) as AwaySummary).finished).toBeGreaterThanOrEqual(3);
     expect((await get("yesterday-ish")).status).toBe(400);
     expect((await get(new Date(Date.now() + 60_000).toISOString())).status).toBe(400);
+    const until = await fetch(`${env.baseUrl}/api/away?since=${encodeURIComponent(new Date(Date.now() - 3_600_000).toISOString())}&until=${encodeURIComponent(new Date(Date.now() - 7_200_000).toISOString())}`, { headers: { Authorization: `Bearer ${getAccessToken()}` } });
+    expect(until.status).toBe(400);
     expect(deviceMayCall("GET", "/api/away")).toBe(false);
   });
 });

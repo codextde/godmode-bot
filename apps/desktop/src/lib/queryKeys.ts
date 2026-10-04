@@ -3,7 +3,7 @@ export const qk = {
   bootstrap: ["bootstrap"] as unknown[],
   /** "Needs you" — under `bootstrap`, so whatever refreshes the counts refreshes the list. */
   attention: ["bootstrap", "attention"] as unknown[],
-  away: (since: string) => ["away", since],
+  away: (since: string, until: string) => ["away", since, until],
   authStatus: ["auth-status"] as unknown[],
   settings: ["settings"] as unknown[],
   notifications: ["notifications"] as unknown[],

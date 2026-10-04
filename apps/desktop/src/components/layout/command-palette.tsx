@@ -76,11 +76,19 @@ const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[]
   { id: "about", label: "About", icon: Info, words: "version updates" },
 ];
 
+/** Matches ignore case and accents: "cafe" finds "Café", "istanbul" finds "İstanbul". */
+const fold = (s: string) => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
+/** Scripts written without spaces between words: there a word may start anywhere. */
+const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}]/u;
+/** Keeps two items with the same text apart (two automations may share a name); never searched. */
+const ID_MARK = "\u2063";
+const unique = (text: string, id: string) => `${text}${ID_MARK}${id}`;
+
 /** Every word typed starts a word somewhere — no stray letters: "invoice" doesn't find "Voice", "sign in" not "redesign". */
 function wordFilter(value: string, search: string, keywords?: string[]): number {
-  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
-  const text = `${value} ${keywords?.join(" ") ?? ""}`.toLowerCase();
-  return words.every((w) => new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "u").test(text)) ? 1 : 0;
+  const words = fold(search).split(/\s+/).filter(Boolean);
+  const text = fold(`${value.split(ID_MARK)[0]} ${keywords?.join(" ") ?? ""}`);
+  return words.every((w) => (UNSPACED.test(w) ? text.includes(w) : new RegExp(`(^|[^\\p{L}\\p{N}])${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "u").test(text))) ? 1 : 0;
 }
 
 export function CommandPalette() {
@@ -98,16 +106,16 @@ export function CommandPalette() {
   // What the core finds in chats (message text too), a moment after typing stops.
   const [deferred, setDeferred] = useState("");
   useEffect(() => {
-    const t = setTimeout(() => setDeferred(q.trim()), 200);
+    const t = setTimeout(() => setDeferred(q.trim()), 250);
     return () => clearTimeout(t);
   }, [q]);
   useEffect(() => {
     if (!open) setQ("");
   }, [open]);
-  const { data: found } = useQuery({
+  const { data: found, isPlaceholderData: foundBefore } = useQuery({
     queryKey: qk.conversations("all", deferred),
     queryFn: () => api.conversations.list({ search: deferred, limit: 20 }),
-    enabled: open && deferred.length >= 2,
+    enabled: open && deferred.length >= 3,
     placeholderData: keepPreviousData,
   });
   const { data: waiting = [] } = useQuery({ queryKey: qk.attention, queryFn: api.attention, enabled: open, staleTime: 2_000 });
@@ -122,10 +130,15 @@ export function CommandPalette() {
   // Tickets by number ("#12", "12") or title; automations by name or what they do. Capped: the list stays short.
   const number = /^#?(\d+)$/.exec(query)?.[1];
   const ticketHits = searching
-    ? tasks.filter((t) => (number ? String(t.number).startsWith(number) : wordFilter(`${t.title} ${t.description ?? ""}`, q) > 0)).slice(0, 8)
+    ? number
+      ? tasks.filter((t) => String(t.number).startsWith(number)).sort((a, b) => a.number - b.number).slice(0, 8)
+      : tasks.filter((t) => wordFilter(`${t.title} ${t.description ?? ""}`, q) > 0).slice(0, 8)
     : [];
   const routineHits = searching ? routines.filter((r) => wordFilter(`${r.name} ${r.prompt}`, q) > 0).slice(0, 6) : [];
-  const chats = searching && deferred.length >= 2 && found ? found : conversations.slice(0, 50);
+  // Chats whose title or preview match here, then what the core found in their messages (for this very search).
+  const chats = searching ? conversations.filter((c) => wordFilter(`${c.title} ${c.preview ?? ""}`, q) > 0) : conversations.slice(0, 50);
+  const fresh = searching && deferred === q.trim() && !foundBefore ? (found ?? []) : [];
+  const inMessages = fresh.filter((c) => !chats.some((l) => l.id === c.id));
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} filter={wordFilter} title="Search" description="Find what waits for you, chats, tickets, automations, agents, settings and actions">
@@ -138,7 +151,7 @@ export function CommandPalette() {
               {(searching ? waiting : waiting.slice(0, 5)).map((item) => {
                 const Icon = ATTENTION_ICON[item.kind];
                 return (
-                  <CommandItem key={item.id} value={`waiting ${item.title} ${item.detail}`} onSelect={() => go(item.link)}>
+                  <CommandItem key={item.id} value={unique(`waiting ${item.title} ${item.detail}`, item.id)} onSelect={() => go(item.link)}>
                     <Icon className="text-warning" />
                     <span className="truncate">{item.title}</span>
                     {item.detail && <span className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">{item.detail}</span>}
@@ -153,7 +166,8 @@ export function CommandPalette() {
         {ticketHits.length > 0 && (
           <CommandGroup heading="Tickets">
             {ticketHits.map((t) => (
-              <CommandItem key={t.id} value={`ticket #${t.number} ${t.title}`} keywords={[q]} onSelect={() => go(`/tasks?task=${t.id}`)}>
+              // Keyed by the search: cmdk reads `keywords` only when an item mounts, and these were matched here already.
+              <CommandItem key={`${t.id}:${q}`} value={unique(`ticket #${t.number} ${t.title}`, t.id)} keywords={[q]} onSelect={() => go(`/tasks?task=${t.id}`)}>
                 <SquareKanban className="opacity-60" />
                 <span className="shrink-0 font-mono text-xs text-muted-foreground">#{t.number}</span>
                 <span className="truncate">{t.title}</span>
@@ -164,7 +178,7 @@ export function CommandPalette() {
         {routineHits.length > 0 && (
           <CommandGroup heading="Automations">
             {routineHits.map((r) => (
-              <CommandItem key={r.id} value={`automation ${r.name}`} keywords={[q]} onSelect={() => go(`/automations?edit=${r.id}`)}>
+              <CommandItem key={`${r.id}:${q}`} value={unique(`automation ${r.name}`, r.id)} keywords={[q]} onSelect={() => go(`/automations?edit=${r.id}`)}>
                 <Workflow className="opacity-60" />
                 <span className="truncate">{r.name}</span>
                 {!r.enabled && <span className="ml-2 text-xs text-muted-foreground">off</span>}
@@ -211,7 +225,7 @@ export function CommandPalette() {
             agents.map((a) => (
               <CommandItem
                 key={`chat-${a.id}`}
-                value={`new chat with ${a.name} talk to ${a.role ?? ""}`}
+                value={unique(`new chat with ${a.name} talk to ${a.role ?? ""}`, a.id)}
                 onSelect={() => {
                   setOpen(false);
                   startChat.mutate(a);
@@ -305,7 +319,7 @@ export function CommandPalette() {
             <CommandSeparator />
             <CommandGroup heading="Agents">
               {agents.map((a) => (
-                <CommandItem key={a.id} value={`agent ${a.name} ${a.description}`} onSelect={() => go(`/agents/${a.id}`)}>
+                <CommandItem key={a.id} value={unique(`agent ${a.name} ${a.description}`, a.id)} onSelect={() => go(`/agents/${a.id}`)}>
                   <AgentAvatar agent={a} size="sm" still className="size-5" />
                   {a.name}
                   <span className="ml-2 truncate text-xs text-muted-foreground">{a.description}</span>
@@ -314,20 +328,21 @@ export function CommandPalette() {
             </CommandGroup>
           </>
         )}
-        {chats.length > 0 && (
+        {chats.length + inMessages.length > 0 && (
           <>
             <CommandSeparator />
             <CommandGroup heading="Chats">
               {chats.map((c) => (
-                <CommandItem
-                  key={c.id}
-                  value={`chat ${c.title} ${c.preview ?? ""}`}
-                  // The core found it, maybe in a message: keep it whatever the title says.
-                  keywords={chats === found ? [q] : undefined}
-                  onSelect={() => go(`/chat/${c.id}`)}
-                >
+                <CommandItem key={c.id} value={unique(`chat ${c.title} ${c.preview ?? ""}`, c.id)} onSelect={() => go(`/chat/${c.id}`)}>
                   <MessageCircle className="opacity-50" /> <span className="truncate">{c.title}</span>
                   {c.preview && <span className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">{c.preview}</span>}
+                </CommandItem>
+              ))}
+              {inMessages.map((c) => (
+                // Found by the core in its messages: kept whatever the title says (keyed by the search, see Tickets).
+                <CommandItem key={`${c.id}:${q}`} value={unique(`chat ${c.title}`, c.id)} keywords={[q]} onSelect={() => go(`/chat/${c.id}`)}>
+                  <MessageCircle className="opacity-50" /> <span className="truncate">{c.title}</span>
+                  <span className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">mentioned in a message</span>
                 </CommandItem>
               ))}
             </CommandGroup>

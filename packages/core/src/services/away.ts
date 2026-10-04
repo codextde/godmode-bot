@@ -1,6 +1,6 @@
 /**
- * "While you were away": what the team did since the human was last at the computer — computed from what is stored
- * (runs that ended, the spend ledger, ticket events), so it is right however long they were gone.
+ * "While you were away": what the team did while the human was gone — from `since` until they came back — computed
+ * from what is stored (runs that ended, the spend ledger, ticket events), so it is right however long they were gone.
  */
 import type { AwayHighlight, AwaySummary } from "@godmode/shared";
 import { all, get } from "../db";
@@ -10,17 +10,25 @@ import { badRequest } from "../util";
 const HUMAN_ORIGINS = ["chat", "api"];
 const HUMAN_TRIGGERS = ["chat", "manual", "api", "followup"];
 const MAX_HIGHLIGHTS = 6;
+/** Looked at for highlights, newest first: enough for six lines, however busy the team was. */
+const MAX_CANDIDATES = 300;
+/** Further back than this, a summary isn't news anymore (and stays cheap). */
+const MAX_WINDOW_MS = 31 * 86_400_000;
 const RANK: Record<AwayHighlight["kind"], number> = { delivered: 0, failed: 1, automation: 1, replied: 2 };
+/** Runs that ended in the window; `+` keeps SQLite on the finished_at index. Condition checks aren't work to report. */
+const ENDED = "r.finished_at >= ? AND r.finished_at <= ? AND +r.status IN ('succeeded', 'failed') AND r.trigger != 'check'";
 
-export function awaySummary(since: string): AwaySummary {
-  const t = Date.parse(since);
-  if (!Number.isFinite(t) || t >= Date.now()) throw badRequest("since must be a date and time in the past");
-  const from = new Date(t).toISOString();
+export function awaySummary(since: string, until?: string): AwaySummary {
+  const end = until ? Date.parse(until) : Date.now();
+  const start = Date.parse(since);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end || start >= Date.now()) throw badRequest("since must be a date and time in the past, before until");
+  const from = new Date(Math.max(start, end - MAX_WINDOW_MS)).toISOString();
+  const to = new Date(Math.min(end, Date.now())).toISOString();
   const names = new Map(all<{ id: string; name: string }>("SELECT id, name FROM agents").map((a) => [a.id, a.name]));
   const nameOf = (id: string | null) => (id ? (names.get(id) ?? "An agent") : "An agent");
 
+  const counts = get<{ n: number; failed: number | null }>(`SELECT COUNT(*) AS n, SUM(r.status = 'failed') AS failed FROM runs r WHERE ${ENDED}`, from, to);
   const runs = all<{
-    id: string;
     agent_id: string;
     status: string;
     trigger: string;
@@ -28,29 +36,33 @@ export function awaySummary(since: string): AwaySummary {
     conversation_id: string;
     title: string | null;
     origin: string | null;
+    unread: number;
+    routine_id: string | null;
     routine: string | null;
     task_id: string | null;
   }>(
-    `SELECT r.id, r.agent_id, r.status, r.trigger, r.finished_at, r.conversation_id, c.title, c.origin, rt.name AS routine, t.id AS task_id
+    `SELECT r.agent_id, r.status, r.trigger, r.finished_at, r.conversation_id, c.title, c.origin, c.unread_run_id IS NOT NULL AS unread,
+       r.routine_id, rt.name AS routine, t.id AS task_id
      FROM runs r LEFT JOIN conversations c ON c.id = r.conversation_id LEFT JOIN routines rt ON rt.id = r.routine_id
      LEFT JOIN tasks t ON t.conversation_id = r.conversation_id
-     WHERE r.finished_at >= ? AND r.status IN ('succeeded', 'failed') AND r.trigger != 'check'
-     ORDER BY r.finished_at DESC`,
+     WHERE ${ENDED} ORDER BY r.finished_at DESC LIMIT ${MAX_CANDIDATES}`,
     from,
+    to,
   );
 
   const highlights: AwayHighlight[] = [];
   // One line per chat (its latest turn) and per automation, so a busy chat doesn't fill the list.
   const seen = new Set<string>();
   for (const r of runs) {
-    if (r.trigger === "routine" && r.routine) {
-      if (r.status !== "failed" || seen.has(`routine:${r.routine}`)) continue;
-      seen.add(`routine:${r.routine}`);
-      highlights.push({ kind: "automation", agentId: r.agent_id, text: `“${r.routine}” failed`, link: `/chat/${r.conversation_id}`, at: r.finished_at });
+    if (r.trigger === "routine" && r.routine_id) {
+      if (r.status !== "failed" || seen.has(`routine:${r.routine_id}`)) continue;
+      seen.add(`routine:${r.routine_id}`);
+      highlights.push({ kind: "automation", agentId: r.agent_id, text: `“${r.routine ?? "An automation"}” failed`, link: `/chat/${r.conversation_id}`, at: r.finished_at });
       continue;
     }
-    // Tickets show as delivered (below); dreams, delegated and platform chats aren't the human's conversations.
-    if (r.task_id || !r.origin || !HUMAN_ORIGINS.includes(r.origin) || !HUMAN_TRIGGERS.includes(r.trigger) || seen.has(r.conversation_id)) continue;
+    // Tickets show as delivered (below); dreams, delegated and platform chats aren't the human's conversations, and a
+    // chat they read since (here, on the phone, in another window) isn't news.
+    if (r.task_id || !r.origin || !HUMAN_ORIGINS.includes(r.origin) || !HUMAN_TRIGGERS.includes(r.trigger) || !r.unread || seen.has(r.conversation_id)) continue;
     seen.add(r.conversation_id);
     const failed = r.status === "failed";
     highlights.push({
@@ -62,39 +74,39 @@ export function awaySummary(since: string): AwaySummary {
     });
   }
 
-  // The latest delivery per ticket (SQLite takes the other columns from the row with the MAX).
+  // The latest delivery per ticket (SQLite takes the other columns from the row with the MAX), by who delivered it.
   const delivered = all<{ task_id: string; number: number; title: string; agent_id: string | null; actor_name: string; created_at: string }>(
     `SELECT e.task_id, t.number, t.title, t.agent_id, e.actor_name, MAX(e.created_at) AS created_at FROM task_events e JOIN tasks t ON t.id = e.task_id
-     WHERE e.kind = 'delivered' AND e.created_at >= ? GROUP BY e.task_id ORDER BY created_at DESC`,
+     WHERE e.kind = 'delivered' AND e.created_at >= ? AND e.created_at <= ? GROUP BY e.task_id ORDER BY created_at DESC`,
     from,
+    to,
   );
   for (const d of delivered) {
-    const who = d.agent_id ? nameOf(d.agent_id) : d.actor_name || "An agent";
+    const who = d.actor_name || nameOf(d.agent_id);
     highlights.push({ kind: "delivered", agentId: d.agent_id, text: `${who} delivered #${d.number} ${d.title}`, link: `/tasks?task=${d.task_id}`, at: d.created_at });
   }
 
-  // Who worked: the runs that ended (as counted above) and what each agent's work cost since (also unfinished work).
+  // Who worked: the runs that ended (as counted above), and what each agent's work cost (checks included, as the total).
   const byAgent = new Map<string, { name: string; runs: number; cost: number }>();
-  for (const r of runs) {
-    const a = byAgent.get(r.agent_id) ?? { name: nameOf(r.agent_id), runs: 0, cost: 0 };
-    a.runs++;
-    byAgent.set(r.agent_id, a);
+  for (const row of all<{ agent_id: string; runs: number }>(`SELECT r.agent_id, COUNT(*) AS runs FROM runs r WHERE ${ENDED} GROUP BY r.agent_id`, from, to)) {
+    byAgent.set(row.agent_id, { name: nameOf(row.agent_id), runs: row.runs, cost: 0 });
   }
   for (const row of all<{ agent_id: string; agent_name: string; cost: number }>(
-    "SELECT agent_id, MAX(agent_name) AS agent_name, SUM(cost_usd) AS cost FROM spend WHERE at >= ? AND trigger != 'check' GROUP BY agent_id",
+    "SELECT agent_id, MAX(agent_name) AS agent_name, SUM(cost_usd) AS cost FROM spend WHERE at >= ? AND at <= ? GROUP BY agent_id",
     from,
+    to,
   )) {
     const a = byAgent.get(row.agent_id) ?? { name: names.get(row.agent_id) ?? row.agent_name, runs: 0, cost: 0 };
     a.cost = row.cost ?? 0;
     byAgent.set(row.agent_id, a);
   }
-  const cost = get<{ cost: number | null }>("SELECT SUM(cost_usd) AS cost FROM spend WHERE at >= ?", from)?.cost ?? 0;
+  const cost = [...byAgent.values()].reduce((sum, a) => sum + a.cost, 0);
   const round = (usd: number) => Math.round(usd * 10_000) / 10_000;
 
   return {
     since: from,
-    finished: runs.length,
-    failed: runs.filter((r) => r.status === "failed").length,
+    finished: counts?.n ?? 0,
+    failed: counts?.failed ?? 0,
     delivered: delivered.length,
     costUsd: round(cost),
     agents: [...byAgent]

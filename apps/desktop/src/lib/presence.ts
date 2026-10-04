@@ -28,7 +28,7 @@ export function startPresence(): () => void {
     const now = Date.now();
     // Another window may have seen the human since.
     if (last !== null && now - last >= AWAY_MS) last = Math.max(last, stored() ?? 0);
-    if (last !== null && now - last >= AWAY_MS) useUi.getState().setAwaySince(new Date(last).toISOString());
+    if (last !== null && now - last >= AWAY_MS) useUi.getState().setAway({ since: new Date(last).toISOString(), until: new Date(now).toISOString() });
     last = now;
     if (now - written < WRITE_MS) return;
     written = now;
@@ -38,7 +38,8 @@ export function startPresence(): () => void {
       /* private window: only this session notices */
     }
   };
-  const events = ["pointerdown", "keydown", "wheel"] as const;
+  // On release, not press: the summary appearing mid-click would move what the click was meant for.
+  const events = ["pointerup", "keyup", "wheel"] as const;
   for (const e of events) window.addEventListener(e, onInput, { passive: true, capture: true });
   return () => {
     for (const e of events) window.removeEventListener(e, onInput, { capture: true });
