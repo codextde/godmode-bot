@@ -55,6 +55,14 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
   Godmode's own windows and dashboard tabs can't be shared. Unattended desktop access for routines is a human-only
   agent setting; agents without it can't hand work to agents that have it, and backups never restore it. Shares and
   their first use per run are audited (`computer.share`, `computer.unshare`, `computer.control`).
+- **Mods are code you switch on**: a mod runs inside Claude Code in every turn of the agents it is for and can reach
+  whatever its code asks for, so only you switch one on. Godmode keeps a mod's files in its database and writes them out
+  before each run — what a run changed in the folder is gone by the next one. Claude Code's validator checks every
+  change; the mod's page lists what it hooks and what it reaches outside the conversation (files, programs, the network,
+  environment variables). A mod an agent wrote arrives switched off and marked for review, an agent can't change a mod
+  that is on, and a backup brings mods back switched off. The gallery's guardrails (*Protect files*, *Command guard*,
+  *Secret scrubber*) match patterns in tool calls and output: they catch mistakes and the obvious cases, not an agent
+  that is determined to get around them — isolation is what VMs and permissions are for.
 - **SSH servers are assigned by you**: an agent only reaches the servers you give its chat or the agent itself — agents
   can't assign servers to themselves or others, and delegated work doesn't inherit a chat's servers. Godmode signs in
   with the password or key sealed in the vault; they are never part of the prompt, and tool results mask them (the

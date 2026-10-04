@@ -140,9 +140,14 @@ export interface Invocation {
   args: string[];
   prompt: string;
   cwd: string;
-  /** Content of the run's `--settings` file (the hooks, and `ultracode` when on); null without one. */
-  settings: { hooks?: unknown; ultracode?: boolean } | null;
-  env: { ANTHROPIC_API_KEY: string | null; GODMODE_TOKEN: string | null; CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: string | null };
+  /** Content of the run's `--settings` file (the hooks, `ultracode` when on, the mods' options); null without one. */
+  settings: { hooks?: unknown; ultracode?: boolean; pluginConfigs?: Record<string, { options: Record<string, unknown> }> } | null;
+  env: {
+    ANTHROPIC_API_KEY: string | null;
+    GODMODE_TOKEN: string | null;
+    CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: string | null;
+    CLAUDE_CODE_PLUGIN_DIR_WATCH: string | null;
+  };
 }
 
 export function invocations(env: TestEnv): Invocation[] {

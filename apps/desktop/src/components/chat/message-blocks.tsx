@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Credential, MessageBlock, ToolTaskAgent } from "@godmode/shared";
 import { WORKFLOW_TOOL } from "@godmode/shared";
-import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Loader2, Lock, ShieldAlert, Square, SquareSlash, TriangleAlert, Workflow, XCircle } from "lucide-react";
+import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Loader2, Lock, Puzzle, ShieldAlert, Square, SquareSlash, TriangleAlert, Workflow, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentAvatar } from "@/components/common";
 import { ThinkingState } from "@/components/aicss/ThinkingState";
@@ -17,7 +17,7 @@ import { Orb } from "@/components/aicss/Orb";
 import { formatDuration, formatTokens } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents } from "@/lib/hooks";
+import { useAllAgents, useMods } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
 import { Markdown } from "./markdown";
@@ -40,7 +40,7 @@ type Item =
   | { kind: "text"; key: string; text: string }
   | { kind: "thinking"; key: string; text: string }
   | { kind: "error"; key: string; text: string }
-  | { kind: "notice"; key: string; level: "info" | "warning" | "success"; text: string }
+  | { kind: "notice"; key: string; level: "info" | "warning" | "success"; text: string; mod?: string }
   | { kind: "command"; key: string; name: string; args: string; output: string }
   | { kind: "user-message"; key: string; block: UserMessageBlock }
   | { kind: "pause"; key: string; block: PauseBlock }
@@ -120,7 +120,7 @@ function buildItems(blocks: MessageBlock[]): Item[] {
     if (b.type === "text") {
       if (b.text.trim()) items.push({ kind: "text", key, text: b.text });
     } else if (b.type === "error") items.push({ kind: "error", key, text: b.text });
-    else if (b.type === "notice") items.push({ kind: "notice", key, level: b.level, text: b.text });
+    else if (b.type === "notice") items.push({ kind: "notice", key, level: b.level, text: b.text, mod: b.mod });
     else if (b.type === "command") items.push({ kind: "command", key, name: b.name, args: b.args, output: b.output });
     else if (b.type === "user_message") items.push({ kind: "user-message", key: b.id, block: b });
     // A run that stands still for a question: the card says so.
@@ -194,7 +194,11 @@ export function MessageBlocks({
               </div>
             );
           case "notice":
-            return <NoticeItem key={item.key} level={item.level} text={item.text} />;
+            return item.mod ? (
+              <ModNote key={item.key} level={item.level} text={item.text} name={item.mod} />
+            ) : (
+              <NoticeItem key={item.key} level={item.level} text={item.text} />
+            );
           case "command":
             return <CommandOutput key={item.key} name={item.name} args={item.args} output={item.output} />;
           case "user-message":
@@ -252,17 +256,50 @@ function PickedUpMessage({ block }: { block: UserMessageBlock }) {
   );
 }
 
+const NOTICE = {
+  info: { icon: Info, cls: "border-border bg-card text-muted-foreground" },
+  warning: { icon: TriangleAlert, cls: "border-warning/30 bg-warning/[0.07] text-warning" },
+  success: { icon: CheckCircle2, cls: "border-success/25 bg-success/[0.07] text-success" },
+} as const;
+
 function NoticeItem({ level, text }: { level: "info" | "warning" | "success"; text: string }) {
-  const meta = {
-    info: { icon: Info, cls: "border-border bg-card text-muted-foreground" },
-    warning: { icon: TriangleAlert, cls: "border-warning/30 bg-warning/[0.07] text-warning" },
-    success: { icon: CheckCircle2, cls: "border-success/25 bg-success/[0.07] text-success" },
-  }[level];
+  const meta = NOTICE[level];
   const Icon = meta.icon;
   return (
     <div className={cn("flex items-start gap-2 rounded-lg border px-3 py-2 text-[13px]", meta.cls)}>
       <Icon className="mt-0.5 size-3.5 shrink-0" />
       <span className="min-w-0 break-words">{text}</span>
+    </div>
+  );
+}
+
+/** A note a Claude Code mod posted: who says it comes first, as a chip that leads to the mod. */
+function ModNote({ level, text, name }: { level: "info" | "warning" | "success"; text: string; name: string }) {
+  const { data: mods } = useMods();
+  const mod = mods?.find((m) => m.name === name);
+  const chip = "inline-flex h-5 max-w-[14rem] shrink-0 items-center gap-1 rounded-[5px] border border-border bg-card px-1.5 text-[11px] font-medium text-foreground";
+  const label = (
+    <>
+      <Puzzle className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="truncate">{mod?.title ?? name}</span>
+    </>
+  );
+  return (
+    <div className={cn("flex flex-wrap items-start gap-x-2 gap-y-1 rounded-lg border px-3 py-2 text-[13px]", NOTICE[level].cls)}>
+      {mod ? (
+        <Link
+          to={`/mods?mod=${mod.id}`}
+          title={`Note from the mod “${mod.title}”`}
+          className={cn(chip, "transition outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50")}
+        >
+          {label}
+        </Link>
+      ) : (
+        <span className={chip} title={`Note from the mod “${name}”`}>
+          {label}
+        </span>
+      )}
+      <span className="min-w-0 flex-1 basis-40 break-words whitespace-pre-wrap">{text}</span>
     </div>
   );
 }

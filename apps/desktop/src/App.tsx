@@ -23,6 +23,7 @@ const AgentsPage = lazy(() => import("@/pages/agents/agents-page"));
 const AgentNewPage = lazy(() => import("@/pages/agents/agent-new"));
 const AgentDetailPage = lazy(() => import("@/pages/agents/agent-detail"));
 const AutomationsPage = lazy(() => import("@/pages/automations/automations-page"));
+const ModsPage = lazy(() => import("@/pages/mods/mods-page"));
 const ActivityPage = lazy(() => import("@/pages/activity/activity-page"));
 const WorkspacesPage = lazy(() => import("@/pages/workspaces/workspaces-page"));
 const TasksPage = lazy(() => import("@/pages/tasks/tasks-page"));
@@ -162,6 +163,7 @@ export function App() {
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/automations" element={<AutomationsPage />} />
           <Route path="/routines" element={<Navigate to="/automations" replace />} />
+          <Route path="/mods" element={<ModsPage />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/workspaces" element={<WorkspacesPage />} />
           <Route path="/vault" element={<Navigate to="/vault/logins" replace />} />

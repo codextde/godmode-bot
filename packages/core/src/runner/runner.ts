@@ -39,6 +39,7 @@ import type {
   TaskPriority,
 } from "@godmode/shared";
 import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, TASK_PRIORITY_RANK, WORKFLOW_TOOL, isModelId, parseSlashCommand } from "@godmode/shared";
+import { config } from "../config";
 import { all, get, insert, run as sql, tx } from "../db";
 import { bus } from "../events/bus";
 import { setRunSnapshots, setWelcomeEvents } from "../server/ws";
@@ -79,6 +80,7 @@ import {
 import { MAX_RETRIES, dropPause, limitReached, pauseOf, pausedConversations, pausedRun, savePause, stopContinuing, toPause, type LimitPause, type PausedRow } from "../services/pauses";
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
+import { modsForRun } from "../mods/service";
 import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
@@ -1694,6 +1696,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // and condition checks are small jobs with a fixed shape: never.
   const wantsUltracode = (conv.ultracode === null ? null : conv.ultracode === 1) ?? agent.ultracode ?? settings.runner.ultracode;
   const ultracode = !dreaming && job.trigger !== "check" && ultracodeFor(model, wantsUltracode === true);
+  // The human's mods (Mods page). Dreams and condition checks are small jobs with a fixed shape: they load none.
+  const mods = dreaming || job.trigger === "check" ? null : await modsForRun(agent, (text) => job.acc.addNotice("warning", text));
   // Between two steps Claude Code asks for the messages waiting in the chat's queue. Dreams and condition checks run in
   // chats nobody writes to.
   const hooksPath =
@@ -1708,8 +1712,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
                 { hooks: [{ type: "http", url: `${gatewayUrl()}/hooks/post-tool-batch`, timeout: 10, headers: { Authorization: `Bearer ${res.token}` } }] },
               ],
             },
-            // Claude Code honours one --settings value: the session's Ultracode goes with the hooks.
+            // Claude Code honours one --settings value: the session's Ultracode and the mods' options go with the hooks.
             ...(ultracode ? { ultracode: true } : {}),
+            ...(mods && Object.keys(mods.configs).length ? { pluginConfigs: mods.configs } : {}),
           }),
         );
   job.hooked = !!hooksPath;
@@ -1766,6 +1771,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         // Delegated work reports to the run that handed it over; checks only observe.
         asking: job.trigger !== "check" && !job.parentRunId,
         delegated: !!job.parentRunId,
+        mods: config().role !== "runner",
         team: teamFor(agent),
       });
   const memoryNow = memoryDigest(agent.repoPath);
@@ -1851,9 +1857,13 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       );
     }
   }
+  for (const dir of mods?.dirs ?? []) baseArgs.push("--plugin-dir", dir);
   const extraArgs = (settings.runner.extraArgs ?? []).filter((a) => typeof a === "string" && a.length > 0);
 
   const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
+  // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
+  // doesn't load. With it they reach the chat as notes from the mod.
+  if (mods?.dirs.length) env.CLAUDE_CODE_PLUGIN_DIR_WATCH = "1";
   const logPath = runLogPath(agent, getRun(job.runId));
   mkdirSync(join(logPath, ".."), { recursive: true });
   const logSink: RunLog = job.resumed ? createWriteStream(logPath, { flags: "a" }) : Bun.file(logPath).writer();

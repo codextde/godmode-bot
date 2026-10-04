@@ -1,0 +1,57 @@
+import type { Register } from 'claude-code'
+
+function duration(ms: number): string {
+  const seconds = Math.round(ms / 1000)
+  if (seconds < 60) {
+    return `${seconds}s`
+  }
+  const minutes = Math.floor(seconds / 60)
+
+  return minutes < 60 ? `${minutes}m ${seconds % 60}s` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+}
+
+export const register: Register = (on, options) => {
+  const minMs = Number(options.minSeconds) * 1000
+  let tools = new Map<string, number>()
+  let failed = 0
+
+  on('turn.start', ($, e, next) => {
+    tools = new Map()
+    failed = 0
+
+    return next(e)
+  })
+
+  on('tool.call', async ($, e, next) => {
+    const name = String(e.tool).replace(/^mcp__.+?__/, '')
+    tools.set(name, (tools.get(name) ?? 0) + 1)
+    const ran = await next(e)
+    if (ran.deny !== undefined || ran.isError === true) {
+      failed += 1
+    }
+
+    return ran
+  })
+
+  on('turn.complete', ($, e, next) => {
+    if (e.agentId !== undefined || e.durationMs < minMs) {
+      return next(e)
+    }
+    const total = [...tools.values()].reduce((sum, count) => sum + count, 0)
+    const top = [...tools.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([name, count]) => `${name} ${count}`)
+      .join(', ')
+    const parts = [`Turn took ${duration(e.durationMs)}`]
+    if (total > 0) {
+      parts.push(`${total} tool call${total === 1 ? '' : 's'} (${top})`)
+    }
+    if (failed > 0) {
+      parts.push(`${failed} failed or refused`)
+    }
+    $.ui.log(parts.join(' · '))
+
+    return next(e)
+  })
+}

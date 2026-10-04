@@ -498,7 +498,8 @@ export type MessageBlock =
       parentToolUseId?: string | null;
     }
   | { type: "error"; text: string }
-  | { type: "notice"; level: "info" | "warning" | "success"; text: string }
+  /** `mod`: the note comes from a Claude Code mod (its plugin name), not from Godmode. */
+  | { type: "notice"; level: "info" | "warning" | "success"; text: string; mod?: string }
   /** Output of a Claude Code slash command that ran locally (e.g. /context, /usage, /model). */
   | { type: "command"; name: string; args: string; output: string }
   /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */

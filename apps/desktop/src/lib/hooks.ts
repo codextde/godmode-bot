@@ -196,6 +196,15 @@ export function useSshServers() {
   return useQuery({ queryKey: qk.sshServers, queryFn: api.ssh.list });
 }
 
+/** Installed Claude Code mods (kept current by `entity.changed` "mods"). */
+export function useMods() {
+  return useQuery({ queryKey: qk.mods, queryFn: api.mods.list });
+}
+
+export function useModTemplates() {
+  return useQuery({ queryKey: qk.modTemplates, queryFn: api.mods.templates, staleTime: 5 * 60_000 });
+}
+
 /** Runners: other computers that work for this one. Kept live by `runner.updated` events in realtime.ts. */
 export function useRunners() {
   return useQuery({ queryKey: qk.runners, queryFn: api.runners.list });

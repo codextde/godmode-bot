@@ -59,6 +59,8 @@
  *              invocation that resumes it), with the tokens and turns of this invocation only
  *   TWO_RESULTS  end twice in one process, like Claude Code does when a background task finishes after its answer:
  *              the second ending counts its own time, turns and tokens, and reports the running total of the cost
+ *   MOD_NOTES   for every --plugin-dir plugin, post what a mod posts: a log line with the options the --settings file
+ *              gives it, a status (twice, then cleared) and a toast; MOD_NOTES_FLOOD adds 300 log lines of one mod
  *   SLOW_STREAM  stream "one two three four five six" word by word as partial messages, 120 ms apart
  *   SLOW_TASK   a tool call whose background task reports progress three times, 150 ms apart, then completes
  *   SHOTS:<n>   run <n> tool steps that each answer with a screenshot and a line of text, then answer "shots done".
@@ -93,6 +95,56 @@ mkdirSync(join(stateDir, "sessions"), { recursive: true });
 if (args.includes("--version")) {
   process.stdout.write("9.9.9 (Claude Code)\n");
   process.exit(0);
+}
+
+/**
+ * `plugin validate <dir> --json`: a report shaped like the validator's. Hooks are the module's `on('<event>'` calls
+ * (with a `{ key: 'value' }` matcher), calls its `$.noun.verb(`; an event Claude Code doesn't have is an error, as is a
+ * manifest that isn't a JSON object or declares an option without a title. Each validation goes to validations.jsonl.
+ */
+if (args[0] === "plugin" && args[1] === "validate") {
+  const dir = args[2]!;
+  const events = /^(tool\.(call|check|describe)|prompt\.(submit|compose|context)|session\.(start|end|append|compact)|turn\.(start|step|complete)|ui\.render|command\.run)$/;
+  const problem = (path: string, message: string) => ({ path, message, code: null });
+  const manifestFile = join(dir, ".claude-plugin", "plugin.json");
+  const manifest = { file: manifestFile, type: "plugin", errors: [] as unknown[], warnings: [] as unknown[], notes: [] as string[] };
+  let name = "plugin";
+  try {
+    const parsed = JSON.parse(readFileSync(manifestFile, "utf8")) as { name?: string; author?: unknown; userConfig?: Record<string, { title?: unknown }> };
+    name = parsed.name ?? name;
+    if (!parsed.author) manifest.warnings.push(problem("author", "No author information provided. Consider adding author details for plugin attribution"));
+    for (const [key, field] of Object.entries(parsed.userConfig ?? {})) {
+      if (typeof field?.title !== "string") manifest.errors.push(problem(`userConfig.${key}.title`, "Invalid input: expected string, received undefined"));
+    }
+  } catch {
+    manifest.errors.push(problem("", "plugin.json is not valid JSON"));
+  }
+  const contents: unknown[] = [];
+  const hooksFile = join(dir, "hooks", "hooks.json");
+  if (existsSync(hooksFile)) {
+    const part = { file: hooksFile, type: "hooks", errors: [] as unknown[], warnings: [] as unknown[], notes: [] as string[] };
+    const modules = (JSON.parse(readFileSync(hooksFile, "utf8")) as { modules?: string[] }).modules ?? [];
+    for (const module of modules) {
+      const file = join(dir, "hooks", module);
+      if (!existsSync(file)) {
+        part.errors.push(problem(`modules.${module}`, `${name}: ${file} does not exist`));
+        continue;
+      }
+      const source = readFileSync(file, "utf8");
+      const hooks: string[] = [];
+      for (const m of source.matchAll(/\bon\(\s*['"]([\w.]+)['"](?:\s*,\s*\{\s*(\w+):\s*['"]([^'"]+)['"]\s*\})?/g)) {
+        if (events.test(m[1]!)) hooks.push(m[2] ? `${m[1]}{${m[2]}=${m[3]}}` : m[1]!);
+        else part.errors.push(problem(`modules.${module}`, `${name}: ${file}, compiled line 1 \`on("${m[1]}", …)\`: "${m[1]}" is not an event`));
+      }
+      const calls = [...new Set([...source.matchAll(/\$\.([a-z]+)\.([a-zA-Z]+)\(/g)].map((m) => `$.${m[1]}.${m[2]}`))];
+      part.notes.push(`${module} hooks: ${hooks.join(", ")}`, `${module} calls: ${calls.length ? calls.join(", ") : "nothing on $"}`);
+    }
+    contents.push(part);
+  }
+  const success = manifest.errors.length === 0 && contents.every((c) => (c as { errors: unknown[] }).errors.length === 0);
+  appendFileSync(join(stateDir, "validations.jsonl"), JSON.stringify({ dir, name, success }) + "\n");
+  if (args.includes("--json")) process.stdout.write(JSON.stringify({ success, strict: false, target: manifestFile, manifest, contents }, null, 2) + "\n");
+  process.exit(success ? 0 : 1);
 }
 
 const ultracodeMode = process.env.FAKE_CLAUDE_ULTRACODE ?? "";
@@ -195,6 +247,7 @@ appendFileSync(
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? null,
       GODMODE_TOKEN: process.env.GODMODE_TOKEN ?? null,
       CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: process.env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD ?? null,
+      CLAUDE_CODE_PLUGIN_DIR_WATCH: process.env.CLAUDE_CODE_PLUGIN_DIR_WATCH ?? null,
     },
   }) + "\n",
 );
@@ -900,6 +953,24 @@ if (slash?.[1] === "clear") {
   }
   textTurn("shots done");
   result("shots done");
+} else if (prompt.includes("MOD_NOTES")) {
+  out(init);
+  const configs = (sessionSettings as { pluginConfigs?: Record<string, { options?: unknown }> } | null)?.pluginConfigs ?? {};
+  const note = (subtype: string, plugin: string, text: string | undefined) => out({ type: "system", subtype, plugin, text, session_id: sessionId });
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] !== "--plugin-dir") continue;
+    const manifest = join(args[i + 1]!, ".claude-plugin", "plugin.json");
+    if (!existsSync(manifest)) continue;
+    const plugin = (JSON.parse(readFileSync(manifest, "utf8")) as { name: string }).name;
+    note("ui_log", plugin, `loaded with ${JSON.stringify(configs[plugin]?.options ?? {})}`);
+    note("ui_status", plugin, "watching");
+    note("ui_status", plugin, "watching");
+    note("ui_status", plugin, undefined);
+    note("ui_toast", plugin, "done");
+  }
+  if (prompt.includes("MOD_NOTES_FLOOD")) for (let i = 0; i < 300; i++) note("ui_log", "flood", `line ${i}`);
+  textTurn("mods ran");
+  result("mods ran");
 } else if (prompt.includes("USE_TOOL")) {
   await replay("stream-tooluse.jsonl");
 } else {

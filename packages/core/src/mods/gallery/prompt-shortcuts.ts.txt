@@ -1,0 +1,24 @@
+import type { Register } from 'claude-code'
+
+export const register: Register = (on, options) => {
+  const shortcuts = new Map<string, string>()
+
+  for (const row of options.shortcuts as readonly string[]) {
+    const at = row.indexOf('=')
+    const name = row.slice(0, at).trim().replace(/^!/, '').toLowerCase()
+    const text = row.slice(at + 1).trim()
+    if (at > 0 && /^[a-z0-9_-]+$/.test(name) && text !== '') {
+      shortcuts.set(name, text)
+    }
+  }
+
+  on('prompt.submit', ($, e, next) => {
+    const text = e.text.replace(/(^|\s)!([a-z0-9_-]+)(?=$|[\s.,;:!?])/gi, (whole, before: string, name: string) => {
+      const expansion = shortcuts.get(name.toLowerCase())
+
+      return expansion === undefined ? whole : before + expansion
+    })
+
+    return text === e.text ? next(e) : next({ ...e, text })
+  })
+}

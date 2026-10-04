@@ -314,6 +314,10 @@ describe("untrusted backup contents", () => {
       const server = { workspace_id: null, agent_id: null, description: "", source: "custom", args: "[]", url: "", env_keys: "[]", header_keys: "[]", created_at: ts, updated_at: ts };
       mcp.push({ ...server, id: "mcp_stdio", name: "evil-stdio", transport: "stdio", command: "/tmp/evil", enabled: 1 });
       mcp.push({ ...server, id: "mcp_http", name: "remote", transport: "http", url: "https://mcp.example", enabled: 1 });
+      const mods = (dump.tables.mods ??= []);
+      const mod = { title: "Guard", files: "{}", enabled: 1, check_report: '{"ok":true}', check_key: "theirs", created_at: ts, updated_at: ts };
+      mods.push({ ...mod, id: "mod_guard", name: "guard" });
+      mods.push({ ...mod, id: "mod_escape", name: "../escape", title: "Escape" });
     });
 
     const result = await importBackup(evil, BACKUP_PASSPHRASE);
@@ -345,6 +349,12 @@ describe("untrusted backup contents", () => {
     expect(get<{ enabled: number }>("SELECT enabled FROM mcp_servers WHERE id = 'mcp_stdio'")!.enabled).toBe(0);
     expect(get<{ enabled: number }>("SELECT enabled FROM mcp_servers WHERE id = 'mcp_http'")!.enabled).toBe(1);
     expect(warnings.some((w) => w.includes("evil-stdio"))).toBe(true);
+
+    // A mod is code: it comes back switched off and unchecked; one whose name is no folder name doesn't come back.
+    expect(get<Record<string, unknown>>("SELECT enabled, check_report, check_key FROM mods WHERE id = 'mod_guard'")).toEqual({ enabled: 0, check_report: null, check_key: null });
+    expect(get("SELECT id FROM mods WHERE id = 'mod_escape'")).toBeNull();
+    expect(warnings.some((w) => w.includes("Switched off 1 mod(s)") && w.includes("Guard"))).toBe(true);
+    expect(warnings.some((w) => w.includes("1 mod(s) with an unsafe name"))).toBe(true);
   });
 
   test("turns off unattended computer use, clears shared screens and the Cua Driver command", async () => {

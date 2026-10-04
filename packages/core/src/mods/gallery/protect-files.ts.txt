@@ -1,0 +1,43 @@
+import type { Register } from 'claude-code'
+
+// "*" matches within a name, "**" across folders; a folder protects everything in it.
+function pathPattern(glob: string): RegExp {
+  const body = glob
+    .trim()
+    .replace(/^\.?\//, '')
+    .replace(/\/+$/, '')
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*\//g, '\u0001')
+    .replace(/\*\*/g, '\u0002')
+    .replace(/\*/g, '[^/]*')
+    .replace(/\?/g, '[^/]')
+    .replace(/\u0001/g, '(?:[^/]+/)*')
+    .replace(/\u0002/g, '.*')
+
+  return new RegExp(`(?:^|/)${body}(?:/.*)?$`)
+}
+
+export const register: Register = (on, options) => {
+  const patterns = (options.paths as readonly string[]).filter(glob => glob.trim() !== '').map(pathPattern)
+  const isProtected = (path: string) => patterns.some(pattern => pattern.test(path.replace(/\\/g, '/')))
+  const refusal = (path: string) => ({
+    deny: `${path} is protected by the "Protect files" mod. Leave it as it is and tell the human what you wanted to do with it.`,
+  })
+
+  on('tool.call', { tool: 'Edit' }, ($, e, next) => (isProtected(e.file_path) ? refusal(e.file_path) : next(e)))
+  on('tool.call', { tool: 'Write' }, ($, e, next) => (isProtected(e.file_path) ? refusal(e.file_path) : next(e)))
+  on('tool.call', { tool: 'NotebookEdit' }, ($, e, next) =>
+    isProtected(e.notebook_path) ? refusal(e.notebook_path) : next(e),
+  )
+
+  if (options.mode !== 'everything') {
+    return
+  }
+
+  on('tool.call', { tool: 'Read' }, ($, e, next) => (isProtected(e.file_path) ? refusal(e.file_path) : next(e)))
+  on('tool.call', { tool: 'Bash' }, ($, e, next) => {
+    const named = e.command.split(/[\s;|&<>()'"`=]+/).find(word => word !== '' && isProtected(word))
+
+    return named === undefined ? next(e) : refusal(named)
+  })
+}

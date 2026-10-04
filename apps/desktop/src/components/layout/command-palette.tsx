@@ -20,6 +20,7 @@ import {
   Moon,
   Plug,
   Plus,
+  Puzzle,
   ScrollText,
   Server,
   Settings,
@@ -112,6 +113,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem value="automations routines schedules triggers webhooks" onSelect={() => go("/automations")}>
             <Workflow /> Automations
+          </CommandItem>
+          <CommandItem value="mods claude code plugins hooks guardrails" onSelect={() => go("/mods")}>
+            <Puzzle /> Mods
           </CommandItem>
           <CommandItem onSelect={() => go("/activity")}>
             <Activity /> Activity

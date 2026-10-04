@@ -253,6 +253,17 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/ssh/local-keys", S],
   ["POST", "/api/ssh/keys", S],
 
+  // A mod is code that runs inside every turn and reaches whatever the run reaches.
+  ["GET", "/api/mods", A],
+  ["GET", "/api/mods/templates", A],
+  ["POST", "/api/mods", S],
+  ["POST", "/api/mods/check", S],
+  ["POST", "/api/mods/import", refused(COMPUTER_ONLY)],
+  ["GET", "/api/mods/:id", A],
+  ["PATCH", "/api/mods/:id", S],
+  ["DELETE", "/api/mods/:id", A],
+  ["POST", "/api/mods/:id/check", A],
+
   ["POST", "/api/backup/export", S],
   ["POST", "/api/backup/import", S],
   ["POST", "/api/voice/transcribe", A],

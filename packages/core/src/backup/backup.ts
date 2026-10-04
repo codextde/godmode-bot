@@ -20,7 +20,7 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync,
 import { dirname, join, resolve, sep } from "node:path";
 import { strFromU8, strToU8, unzipSync, zipSync, type Zippable } from "fflate";
 import type { BackupExportInput, BackupImportResult, BackupManifest, EntityName } from "@godmode/shared";
-import { isValidBranch, parseGitUrl } from "@godmode/shared";
+import { isValidBranch, MOD_NAME_RE, parseGitUrl } from "@godmode/shared";
 import { config, VERSION } from "../config";
 import { all, get, getDb, run as exec } from "../db";
 import { recoverInterruptedRuns } from "../runner/runner";
@@ -107,6 +107,7 @@ const ALL_ENTITIES: EntityName[] = [
   "runs",
   "vms",
   "ssh-servers",
+  "mods",
   "messaging",
   "followups",
   "tasks",
@@ -532,6 +533,23 @@ function sanitizeDump(dump: DbDump): string[] {
     warnings.push(
       `Disabled ${disabled.length} command-line MCP server(s) from the backup (${disabled.join(", ")}). Check their commands under Integrations before turning them back on.`,
     );
+  }
+
+  // Mods are code that runs inside every turn: they come back switched off, for the human to read first. Their names
+  // become folder names, and what this computer's Claude Code says about them is found out again.
+  const mods = rowsOf("mods");
+  const safeMods = mods.filter((row) => typeof row.name === "string" && MOD_NAME_RE.test(row.name));
+  if (safeMods.length !== mods.length) {
+    tables.mods = safeMods;
+    warnings.push(`Skipped ${mods.length - safeMods.length} mod(s) with an unsafe name.`);
+  }
+  const modsOff: string[] = [];
+  for (const row of safeMods) {
+    if (row.enabled !== 0) modsOff.push(String(row.title ?? row.name));
+    Object.assign(row, { enabled: 0, check_report: null, check_key: null });
+  }
+  if (modsOff.length) {
+    warnings.push(`Switched off ${modsOff.length} mod(s) from the backup (${modsOff.join(", ")}). Read their code under Mods before switching them back on.`);
   }
 
   // A bot answers from one place: the machine the backup came from may still be running it.

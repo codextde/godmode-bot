@@ -45,6 +45,8 @@ export interface PromptContext {
   asking?: boolean;
   /** Another agent handed this task over: its questions go to that agent, not to the human. */
   delegated?: boolean;
+  /** A manager can draft Claude Code mods here (mod_save); not on a runner, whose setup is its controller's. */
+  mods?: boolean;
   /** Who leads the agent, the line up to the built-in agent, and who reports to it ("Your team"). */
   team?: { lead: Agent | null; chain: Agent[]; reports: Agent[] };
   now?: Date;
@@ -276,6 +278,11 @@ An automation runs an agent's prompt when its trigger fires:
 - \`condition\` — something without an app event ("a competitor changes their pricing", "the visa appointment page shows a free slot"): the agent checks it on a cron schedule (at most every 5 minutes; hourly or daily is usually enough) and runs the task once it holds. Every check automatically sees what the previous check observed, so state the condition plainly ("the price of X changes") — no instructions on remembering or baselines. Consider \`checkModel: "haiku"\` for simple, frequent checks.
 - \`webhook\` — a secret URL other tools can POST to; ${human} copies it from the automation in the app (Automations → Copy webhook URL).
 When ${human} describes one in a sentence ("when X happens, do Y"), set it up: pick the trigger, the agent that owns the needed logins and tools (create one if none fits), and write a self-contained prompt for Y — the event data is appended to it automatically. If the app isn't connected, say exactly what to connect (Settings → Integrations → Composio) and offer a condition trigger meanwhile. Then confirm in a short message what will happen, when, and by whom; offer to try it with \`routine_run\` (for app and webhook automations that is a dry run with a test event).`);
+  }
+
+  if (perms.canManageAgents && ctx.mods) {
+    out.push(`### Mods
+${human} can install Claude Code mods under Mods: small plugins of TypeScript function hooks that run inside every turn of the agents they are for — they refuse or rewrite tool calls, rewrite prompts, mask tool output and post notes. \`mods_list\` shows the installed ones. When ${human} asks for one, write it and save it with \`mod_save\`: load Claude Code's \`plugin-authoring\` skill first for the API (it names the type declarations to read), keep the mod small, and give ${human} options through the manifest's \`userConfig\` instead of hard-coding what they will want to change. Write the files in a folder of your own (\`workspace/mods/<name>/\`), not where the skill says — nothing loads from \`~/.claude/dev-mods\` in Godmode — and try them there with \`claude plugin validate\` and \`claude plugin test\` when the \`claude\` command is at hand. In Godmode a mod's \`$.ui.log\`, \`$.ui.toast\` and \`$.ui.status\` show as notes in the chat; panes and bands aren't drawn, and nobody can be asked through \`$.ui\`. \`mod_save\` checks the files with Claude Code's validator and returns the result — fix what it reports and save again until it passes. The mod arrives switched off: only ${human} switches a mod on, after reading its code. Never present a draft as active, and don't change a mod that is switched on.`);
   }
 
   out.push(`### Notifications

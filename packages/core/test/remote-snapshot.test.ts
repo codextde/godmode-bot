@@ -33,6 +33,7 @@ const MIRRORED = [
   "composio_connections",
   "api_tools",
   "ssh_servers",
+  "mods",
   "browser_profiles",
   "workspace_sources",
   "vms",
@@ -207,6 +208,16 @@ beforeAll(async () => {
     last_error: "timed out",
     ...stamps,
   });
+  insert("mods", {
+    id: "mod_guard",
+    name: "guard",
+    title: "Guard",
+    files: '{".claude-plugin/plugin.json":"{\\"name\\":\\"guard\\"}"}',
+    enabled: 1,
+    check_report: '{"ok":true}',
+    check_key: "this computer's Claude Code",
+    ...stamps,
+  });
   insert("browser_profiles", {
     id: "bp_main",
     name: "Default",
@@ -263,6 +274,10 @@ describe("building a snapshot", () => {
     expect(helper).toMatchObject({ slug: "helper", instructions: "Answer briefly.", working_directory: shared });
     for (const column of ["repo_path", "status", "last_run_at"]) expect(helper).not.toHaveProperty(column);
     expect(snapshot.tables.credentials![0]).not.toHaveProperty("last_used_at");
+    // What a computer's own Claude Code says about a mod stays with that computer.
+    expect(snapshot.tables.mods![0]).toMatchObject({ name: "guard", enabled: 1 });
+    expect(snapshot.tables.mods![0]).not.toHaveProperty("check_report");
+    expect(snapshot.tables.mods![0]).not.toHaveProperty("check_key");
     expect(snapshot.tables.browser_profiles![0]).not.toHaveProperty("user_data_dir");
     expect(snapshot.tables.browser_profiles![0]).not.toHaveProperty("cookie_count");
     // Folders are paths on this computer; repositories can be cloned anywhere.
@@ -354,6 +369,7 @@ describe("applying a snapshot on a runner", () => {
     });
     expect(row("credentials", "cred_github").last_used_at).toBeNull();
     expect(row("ssh_servers", "ssh_box")).toMatchObject({ last_connected_at: null, last_error: null });
+    expect(row("mods", "mod_guard")).toMatchObject({ name: "guard", enabled: 1, check_report: null, check_key: null });
     expect(row("vms", "vm_abcd1234").provisioned_at).toBeNull();
     expect(row("workspace_sources", "src_site")).toMatchObject({ commit_sha: null, synced_at: null });
     expect(exists("workspace_sources", "src_folder")).toBe(false);
@@ -585,17 +601,20 @@ describe("applying a snapshot on a runner", () => {
   test("unsafe ids are skipped with a warning and nothing is written outside the data directory", async () => {
     use(controller);
     const snapshot = buildSnapshot();
-    const { agents, browser_profiles: profiles, vms, mcp_servers: servers } = snapshot.tables;
+    const { agents, browser_profiles: profiles, vms, mcp_servers: servers, mods } = snapshot.tables;
     agents!.push({ ...agents![0]!, id: "agt_evil", name: "Evil", slug: "../evil", is_default: 0 });
     // An agent's id names the folder of its browser files.
     agents!.push({ ...agents![0]!, id: "../../agt_escape", name: "Escape artist", slug: "escape-artist", is_default: 0 });
     profiles!.push({ ...profiles![0]!, id: "../../outside", name: "Outside", is_default: 0 });
     vms!.push({ ...vms![0]!, id: "vm_../../x", name: "Escape" });
     servers!.push({ ...servers![0]!, id: "mcp_evil", agent_id: "agt_evil" });
+    // A mod's name names the folder its files are written to.
+    mods!.push({ ...mods![0]!, id: "mod_evil", name: "../evil" });
 
     use(runnerDir);
     const result = await applySnapshot(snapshot);
-    expect(result.warnings).toHaveLength(5);
+    expect(result.warnings).toHaveLength(6);
+    expect(result.warnings.join("\n")).toContain('mod "../evil"');
     expect(result.warnings.join("\n")).toContain('agent "Evil"');
     expect(result.warnings.join("\n")).toContain('agent "Escape artist"');
     expect(result.warnings.join("\n")).toContain('browser profile "Outside"');
@@ -608,6 +627,8 @@ describe("applying a snapshot on a runner", () => {
     expect(exists("browser_profiles", "../../outside")).toBe(false);
     expect(exists("vms", "vm_../../x")).toBe(false);
     expect(exists("mcp_servers", "mcp_evil")).toBe(false);
+    expect(exists("mods", "mod_evil")).toBe(false);
+    expect(exists("mods", "mod_guard")).toBe(true);
     expect(existsSync(join(runnerDir, "evil"))).toBe(false);
     // Everything else arrived.
     expect(exists("agents", "agt_helper")).toBe(true);
