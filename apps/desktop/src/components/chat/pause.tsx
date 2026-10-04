@@ -58,9 +58,21 @@ export function usePauseActions(conversationId: string) {
 }
 
 /** Above the composer while the chat's run stands still: what it waits for, and the way on. */
-export function PauseBar({ conversationId, pause, agentName, queued }: { conversationId: string; pause: RunPause; agentName: string; queued: number }) {
+export function PauseBar({
+  conversationId,
+  pause,
+  agentName,
+  agentId,
+  queued,
+}: {
+  conversationId: string;
+  pause: RunPause;
+  agentName: string;
+  agentId?: string;
+  queued: number;
+}) {
   if (pause.reason === "question") return <QuestionBar conversationId={conversationId} pause={pause} agentName={agentName} />;
-  if (pause.reason === "budget") return <HeldBar conversationId={conversationId} pause={pause} agentName={agentName} queued={queued} />;
+  if (pause.reason === "budget") return <HeldBar conversationId={conversationId} pause={pause} agentName={agentName} agentId={agentId} queued={queued} />;
   return <StandStillBar conversationId={conversationId} pause={pause} agentName={agentName} queued={queued} />;
 }
 
@@ -115,7 +127,7 @@ function QuestionBar({ conversationId, pause, agentName }: { conversationId: str
 }
 
 /** Held because a monthly budget is used up: it goes on next month or when the budget has room — or now, if the human says so. */
-function HeldBar({ conversationId, pause, agentName, queued }: { conversationId: string; pause: RunPause; agentName: string; queued: number }) {
+function HeldBar({ conversationId, pause, agentName, agentId, queued }: { conversationId: string; pause: RunPause; agentName: string; agentId?: string; queued: number }) {
   const { resume, stop } = usePauseActions(conversationId);
   const team = pause.budget?.scope === "team";
   const along = queued > 0 ? ` Your ${queued > 1 ? `${queued} messages go` : "message goes"} along.` : "";
@@ -133,7 +145,7 @@ function HeldBar({ conversationId, pause, agentName, queued }: { conversationId:
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <Button size="xs" variant="ghost" asChild className="hidden @lg:inline-flex">
-          <Link to={team ? "/settings/ai" : "/agents"}>Raise budget</Link>
+          <Link to={team ? "/settings/ai" : agentId ? `/agents/${agentId}/settings#permissions` : "/agents"}>Raise budget</Link>
         </Button>
         <Tooltip>
           <TooltipTrigger asChild>

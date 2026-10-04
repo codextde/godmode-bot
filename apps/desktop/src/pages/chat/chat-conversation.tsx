@@ -501,7 +501,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                     className="overflow-hidden"
                   >
-                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} queued={queue.length} />
+                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} agentId={agent?.id} queued={queue.length} />
                   </motion.div>
                 )}
                 {runnerAway && (

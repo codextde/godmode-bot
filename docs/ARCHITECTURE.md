@@ -366,13 +366,19 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
   agent's change is ignored), audited as `budget.set`. `services/budgets.ts` tells the human once per budget, month and
   amount at 80 % and at 100 % (`checkThresholds` on `run.finished` / `run.paused`; meta `budget.told.*`).
 * **Held, not failed.** While the team's or the agent's budget is used up, `pump()` holds queued unattended runs —
-  automations, follow-ups, board tickets (`HELD_TRIGGERS`) — as a pause with reason `budget` (`paused_runs.budget_scope`,
-  `budget_usd`), `resume_at` the 1st of next month and `auto = 1`: the pause timer continues them then, and a raise
-  (settings or agent change) continues those with room again (`releaseHeld("auto")`). The human lets them run from the
+  automations, follow-ups, board tickets (`HELD_TRIGGERS`), and messages from Slack, Telegram or Teams (anyone in such a
+  channel could otherwise spend past the owner's budget; they're told the chat is on hold, no amounts) — as a pause with
+  reason `budget` (`paused_runs.budget_scope`, `budget_usd`), `resume_at` the 1st of next month and `auto = 1`. A run is
+  held only when it would start now (its chat has nothing working or standing still), so the hold is the chat's one
+  pause. The pause timer continues held runs on the 1st, and a changed budget amount continues those with room again
+  (`releaseHeld("auto")`; a run still held by the other budget gets its scope updated). The human lets them run from the
   chat's bar, the budget meter or `POST /api/budgets/release` (audited `budget.release`/`budget.continue`; the run is
-  then exempt). The agent's Continue and messages into the chat don't release a hold (a message waits and goes along).
-  Runs the human starts — chats, *Run now* (`byHuman`) — still run, and a chat says once a month that a budget is used
-  up. Unattended work can't hand work to an agent whose budget is used up (`agent_delegate` refuses); scheduled
+  then exempt; `paused_runs.exempt`, migration 55, keeps that through later pauses). The human continuing any paused
+  run lets it run past a budget too. The agent's Continue and messages into the chat don't release a hold (a message
+  waits and goes along; *Send now* in the queue says it lets the run past the budget).
+  Runs the human starts — chats, *Run now*, a test event, a follow-up's *Continue now* (`byHuman`) — still run, and a
+  chat says once a month that a budget is used up. What such a run hands over is exempt too (`runExempt`). Unattended
+  work can't hand work to an agent whose budget is used up (`agent_delegate` refuses); scheduled
   condition checks and dreams don't start. Automations skip their ticks meanwhile (recorded once). Checks happen when
   work starts: a run already working finishes under its own per-run cap.
 

@@ -301,7 +301,7 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post("/api/routines/:id/test-event", async (c) => {
     const { payload } = await body(c, z.object({ payload: z.unknown().optional() }));
-    const { event } = await sendTestEvent(c.req.param("id"), payload);
+    const { event } = await sendTestEvent(c.req.param("id"), payload, { byHuman: true });
     return c.json(event);
   });
 

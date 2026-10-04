@@ -507,7 +507,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
     parentRunId: input.parentRunId ?? null,
     depth: input.depth ?? 0,
     voice: input.voice ?? false,
-    exempt: input.byHuman === true,
+    exempt: input.byHuman === true || (!!input.parentRunId && runExempt(input.parentRunId)),
     status: "queued",
     acc: new StreamAccumulator(),
     proc: null,
@@ -735,11 +735,9 @@ export function resumeRun(
     deltaTimer: null,
     done: null,
   };
-  // Let through by the human: a used-up budget doesn't hold it again.
-  if (p.reason === "budget" && by === "user") {
-    job.exempt = true;
-    audit("user", "budget.continue", row.id, { scope: p.budget_scope ?? null });
-  }
+  // The human continuing a run lets it run past a used-up budget; so does an earlier "Let it run" or "Run now".
+  if (by === "user" || p.exempt === 1) job.exempt = true;
+  if (p.reason === "budget" && by === "user") audit("user", "budget.continue", row.id, { scope: p.budget_scope ?? null });
   if (!p.delivered && kept === undefined && /•{4,}/.test(job.resumed!.redo ?? "")) {
     job.acc.addNotice("warning", "Godmode restarted while this was paused, so the message is sent again with its saved secrets masked.");
   }
@@ -927,15 +925,6 @@ function pump() {
       queue.splice(queue.indexOf(runId), 1);
       continue;
     }
-    // Unattended work waits while a monthly budget is used up (what the human starts or lets run still goes).
-    if (!job.exempt && !job.pause && !job.cancelReason && HELD_TRIGGERS.has(job.trigger)) {
-      const stop = budgetStopFor(job.agentId);
-      if (stop) {
-        held.push({ job, stop });
-        blocked.add(job.conversationId);
-        continue;
-      }
-    }
     const convBusy = [...jobs.values()].some((j) => j.status === "running" && j.conversationId === job.conversationId);
     if (convBusy || blocked.has(job.conversationId)) {
       blocked.add(job.conversationId);
@@ -946,6 +935,16 @@ function pump() {
       emitActivity(job, pauseOf(job.conversationId)?.reason === "question" ? "Waiting — this chat waits for your answer" : "Waiting — this chat is paused");
       blocked.add(job.conversationId);
       continue;
+    }
+    // Unattended work waits while a monthly budget is used up (what the human starts or lets run still goes). Only a
+    // run that would start now is held: its chat has nothing working or standing still, so the hold is the chat's pause.
+    if (!job.exempt && !job.pause && !job.cancelReason && (HELD_TRIGGERS.has(job.trigger) || platformChat(job))) {
+      const stop = budgetStopFor(job.agentId);
+      if (stop) {
+        held.push({ job, stop });
+        blocked.add(job.conversationId);
+        continue;
+      }
     }
     // A delegated run whose parent is running (and typically waiting for it) may exceed the limit — otherwise
     // a parent holding the last slot would deadlock on its own child.
@@ -990,8 +989,9 @@ function pump() {
       });
   }
   // After the loop: suspending takes the run out of the queue and pumps again.
+  const stillFree = held.length ? pausedConversations() : null;
   for (const { job, stop } of held) {
-    if (jobs.get(job.runId) !== job || job.pause || job.status !== "queued") continue;
+    if (jobs.get(job.runId) !== job || job.pause || job.status !== "queued" || stillFree?.has(job.conversationId)) continue;
     job.pause = { reason: "budget", applied: true, budget: { scope: stop.scope, limitUsd: stop.budgetUsd }, resumeAt: nextMonthStart().toISOString() };
     void suspend(job, null, Date.now());
   }
@@ -999,6 +999,21 @@ function pump() {
 
 /** Automations, follow-ups and board tickets: work nobody waits for at the screen, held while a budget is used up. */
 const HELD_TRIGGERS: ReadonlySet<RunTrigger> = new Set(["routine", "followup", "task"]);
+
+/** A message from Slack, Telegram or Teams: anyone in that channel could spend past the owner's budget. */
+function platformChat(job: Job): boolean {
+  if (job.trigger !== "chat") return false;
+  const origin = get<{ origin: string }>("SELECT origin FROM conversations WHERE id = ?", job.conversationId)?.origin;
+  return origin === "slack" || origin === "telegram" || origin === "teams";
+}
+
+/** The human started this run or let it run (or it is a chat they lead): a used-up budget doesn't stop it or its handoffs. */
+export function runExempt(runId: string): boolean {
+  const job = jobs.get(runId);
+  if (job?.exempt) return true;
+  const trigger = job?.trigger ?? get<{ trigger: string }>("SELECT trigger FROM runs WHERE id = ?", runId)?.trigger;
+  return trigger === "chat" || trigger === "manual" || trigger === "api";
+}
 
 function budgetStopFor(agentId: string): BudgetStop | null {
   try {
@@ -2179,6 +2194,8 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
     auto: (pause.reason === "limit" && !!pause.resumeAt && retries < MAX_RETRIES && wanted) || pause.reason === "budget" ? 1 : 0,
     budget_scope: pause.budget?.scope ?? null,
     budget_usd: pause.budget?.limitUsd ?? null,
+    // The human let it run (or started it): that holds after this pause too.
+    exempt: job.exempt ? 1 : 0,
     choice: choice === null ? null : choice ? 1 : 0,
     delivered: delivered ? 1 : 0,
     redo: unsent === null ? null : redact(unsent),
@@ -2218,7 +2235,6 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
     );
     updateMessage(job.messageId, { content: text, blocks });
     saveConversation(job, agent, false, ts);
-    if (wasRunning) bookStretch(job, spent, false);
     // What Claude never got is sent again when the run continues.
     if (unsent === null) unanswered.delete(job.runId);
     else unanswered.set(job.runId, unsent);
@@ -2241,6 +2257,8 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
   }
 
   if (wasRunning) {
+    // Booked once the pause is saved: a pause that couldn't be saved ends as a failed run, which books it then.
+    safely("book the spend", () => bookStretch(job, spent, false));
     const others = [...jobs.values()].some((j) => j.agentId === job.agentId && j.status === "running");
     if (!others) safely("set agent status", () => setAgentStatus(job.agentId, "idle"));
     safely("touch agent", () => touchAgentRun(job.agentId));
