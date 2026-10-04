@@ -27,10 +27,16 @@ export async function retryRun(conversationId: string, runId: string): Promise<S
     throw new HttpError(409, "This chat lives on a chat platform — ask there to try again, so the answer reaches the person.", "platform_chat");
   }
   if (run.status !== "failed" && run.status !== "cancelled") throw new HttpError(409, "That turn didn't stop early — there's nothing to pick up.", "not_retryable");
+  // An automation's run is tried again by the automation (its busy check, its events and "Needs you" follow it).
+  if (run.trigger === "routine") throw new HttpError(409, "This was the automation's run — run the automation again instead.", "automation");
   const latest = get<{ id: string }>("SELECT id FROM runs WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1", conversationId)?.id;
   if (latest !== runId) throw new HttpError(409, "Something new happened in this chat since — scroll down to see it.", "stale");
   if (activeRunForConversation(conversationId)) throw new HttpError(409, "The agent is already working in this chat.", "busy");
   if (pauseOf(conversationId)) throw new HttpError(409, "This chat stands still — continue it from the bar above the message box.", "busy");
+  // Held messages would go along unasked: the human sends or removes them first.
+  if (get("SELECT 1 FROM queued_messages WHERE conversation_id = ? LIMIT 1", conversationId)) {
+    throw new HttpError(409, "Messages wait in this chat — send them now or remove them first.", "queued");
+  }
   const end = runEndOf(run.error ?? "");
   if (!retryHelps(end)) throw new HttpError(409, "This chat is too long to go on — start a new chat to continue the work.", "not_retryable");
 

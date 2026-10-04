@@ -4,12 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Agent, ConversationWithMessages, Message, RetryMode } from "@godmode/shared";
 import { needsFix, retryHelps, retryModeOf, runEndOf, type RunEnd } from "@godmode/shared";
-import { ArrowUpRight, MessageSquarePlus, Play, RotateCcw } from "lucide-react";
+import { ArrowUpRight, MessageSquarePlus, Play, RotateCcw, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useStartAgentChat } from "@/components/agents/agent-actions";
+import { useRunRoutine } from "@/components/agents/routine-item";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
-import { useTasks } from "@/lib/hooks";
+import { useRoutines, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 
 const PLATFORM_ORIGINS = new Set(["slack", "telegram", "teams"]);
@@ -22,7 +23,9 @@ function fixFor(end: RunEnd, agentName: string): { text: string; to?: string; la
     case "cli":
       return { text: "Install Claude Code, then try again.", to: "/settings/system", label: "Open System" };
     case "vm":
-      return { text: "Turn virtual machines on, or pick no VM below, then try again.", to: "/settings/vms", label: "VM settings" };
+      return end.off
+        ? { text: "Turn virtual machines on, or pick no VM below, then try again.", to: "/settings/vms", label: "VM settings" }
+        : { text: "The VM couldn't be started — check it, or pick no VM below, then try again.", to: "/vms", label: "Open VMs" };
     case "folder":
       return { text: `Pick another folder for ${agentName} below, then try again.` };
     default:
@@ -44,7 +47,9 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
     retry: false,
   });
   const { data: tasks = [] } = useTasks("all");
+  const { data: routines = [] } = useRoutines();
   const chat = useStartAgentChat();
+  const runRoutine = useRunRoutine();
   const name = agent?.name ?? "The agent";
   const retry = useMutation({
     mutationFn: () => api.conversations.retry(conversation.id, message.runId!),
@@ -70,16 +75,38 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
   if (!run || (run.status !== "failed" && run.status !== "cancelled")) return null;
   if (run.trigger === "dream" || run.trigger === "check" || PLATFORM_ORIGINS.has(conversation.origin)) return null;
 
-  const task = tasks.find((t) => t.conversationId === conversation.id);
-  if (task) {
+  // A ticket's chat (also one whose ticket is archived) goes on from the ticket.
+  if (conversation.origin === "task") {
+    const task = tasks.find((t) => t.conversationId === conversation.id);
     return (
       <Row>
-        <span className="min-w-0">This chat works on ticket #{task.number} — continue it from there.</span>
+        <span className="min-w-0">{task ? `This chat works on ticket #${task.number} — continue it from there.` : "This chat works on a ticket — continue it from there."}</span>
         <Button size="xs" variant="outline" asChild>
-          <Link to={`/tasks?task=${task.id}`}>
+          <Link to={task ? `/tasks?task=${task.id}` : "/tasks?view=archived"}>
             Open ticket <ArrowUpRight />
           </Link>
         </Button>
+      </Row>
+    );
+  }
+
+  // An automation's run is run again by the automation, so its own checks and history follow it.
+  if (run.trigger === "routine") {
+    const routine = routines.find((r) => r.id === run.routineId);
+    if (!routine) return null;
+    return (
+      <Row>
+        <span className="min-w-0">This was “{routine.name}” — run the automation again.</span>
+        <span className="flex shrink-0 items-center gap-1">
+          <Button size="xs" variant="outline" disabled={runRoutine.isPending || !routine.enabled} aria-busy={runRoutine.isPending} onClick={() => runRoutine.mutate(routine)}>
+            {runRoutine.isPending ? <Spinner /> : <Play className="fill-current" />} Run now
+          </Button>
+          <Button size="xs" variant="ghost" asChild>
+            <Link to={`/automations?edit=${routine.id}`}>
+              <Workflow /> Open automation
+            </Link>
+          </Button>
+        </span>
       </Row>
     );
   }
@@ -101,7 +128,7 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
   const mode: RetryMode = retryModeOf(message.blocks) === "continue" && conversation.claudeSessionId ? "continue" : "again";
   const label = mode === "continue" ? "Continue" : "Try again";
   const action = (variant: "outline" | "ghost") => (
-    <Button size="xs" variant={variant} disabled={retry.isPending} onClick={() => retry.mutate()} title={mode === "continue" ? `${name} picks up where it stopped` : `Sends the message to ${name} again`}>
+    <Button size="xs" variant={variant} disabled={retry.isPending} aria-busy={retry.isPending} onClick={() => retry.mutate()} title={mode === "continue" ? `${name} picks up where it stopped` : `Sends the message to ${name} again`}>
       {retry.isPending ? <Spinner /> : mode === "continue" ? <Play className="fill-current" /> : <RotateCcw />} {label}
     </Button>
   );
@@ -143,7 +170,7 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
 
 function Row({ children }: { children: ReactNode }) {
   return (
-    <div role="group" aria-label="This turn ended early" className="-mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 pl-11 text-xs text-muted-foreground">
+    <div role="group" aria-label="This turn ended early" aria-live="polite" className="-mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 pl-11 text-xs text-muted-foreground">
       {children}
     </div>
   );

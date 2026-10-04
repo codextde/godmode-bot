@@ -184,6 +184,17 @@ describe("a runner, end to end", () => {
     expect(viaApi.messages.map((m) => m.id)).toContain(started.message.id);
   }, 60_000);
 
+  test("a turn that failed on the runner is tried again there, from here", async () => {
+    const res = await api("/api/chat", { method: "POST", body: JSON.stringify({ content: "CRASH on the runner", agentId, runnerId }) });
+    const { conversation, run } = (await res.json()) as StartChatResult;
+    await until(() => get<{ status: string }>("SELECT status FROM runs WHERE id = ?", run.id)?.status === "failed", 30_000, "the run to fail");
+    const retried = await api(`/api/conversations/${conversation.id}/retry`, { method: "POST", body: JSON.stringify({ runId: run.id }) });
+    expect(retried.status).toBe(201);
+    const again = (await retried.json()) as { mode: string; run: { id: string } };
+    expect(again.mode).toBe("again");
+    await until(() => !!get<{ status: string }>("SELECT status FROM runs WHERE id = ? AND status IN ('failed', 'succeeded')", again.run.id), 30_000, "the retry to end");
+  }, 60_000);
+
   test("the fix-with-Claude chat runs here, gets the runner tools, and runner_exec runs on the runner", async () => {
     const started = await startAutofix(runnerId, { note: "It seems stuck" });
     expect(started.conversation.runnerId).toBeNull();
