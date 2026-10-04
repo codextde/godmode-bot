@@ -35,11 +35,12 @@ export class CdpClient {
   private handlers = new Map<string, Set<EventHandler>>();
   private closeHandlers = new Set<() => void>();
   private _closed = false;
+  private _closeReason: string | null = null;
 
   private constructor(private ws: WebSocket) {
     ws.addEventListener("message", (ev) => this.onMessage(ev.data));
-    ws.addEventListener("close", () => this.onClosed());
-    ws.addEventListener("error", () => this.onClosed());
+    ws.addEventListener("close", (ev) => this.onClosed(`closed with code ${ev.code}${ev.reason ? ` (${String(ev.reason).slice(0, 100)})` : ""}`));
+    ws.addEventListener("error", (ev) => this.onClosed(`socket error${"message" in ev && ev.message ? `: ${String(ev.message).slice(0, 200)}` : ""}`));
   }
 
   /** Connect to a DevTools WebSocket URL (browser or page target). */
@@ -143,7 +144,12 @@ export class CdpClient {
     } catch {
       /* ignore */
     }
-    this.onClosed();
+    this.onClosed("closed by Godmode");
+  }
+
+  /** How the connection ended (the WebSocket's close code, or its error), for the diagnostic log; null while it is open. */
+  get closeReason(): string | null {
+    return this._closeReason;
   }
 
   private onMessage(data: unknown) {
@@ -175,9 +181,10 @@ export class CdpClient {
     }
   }
 
-  private onClosed() {
+  private onClosed(reason: string) {
     if (this._closed) return;
     this._closed = true;
+    this._closeReason = reason;
     for (const [, p] of this.pending) {
       clearTimeout(p.timer);
       p.reject(new Error(`${p.method}: CDP connection closed`));

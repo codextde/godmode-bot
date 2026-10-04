@@ -32,8 +32,23 @@ export type ServerEvent =
       runId: ID;
       conversationId: ID;
       messageId: ID;
-      /** Full, current block list of the in-flight assistant message (UI replaces its copy). */
-      blocks: MessageBlock[];
+      /**
+       * Counts the deltas of a stretch of the run from 1. A paused run continues in a new stretch (`stream`), which
+       * counts from 1 again. Older cores send neither.
+       */
+      stream?: string;
+      seq?: number;
+      /**
+       * Full, current block list of the in-flight assistant message (the client replaces its copy). Sent to clients
+       * that didn't ask for patches, and as the answer to `run.resync`.
+       */
+      blocks?: MessageBlock[];
+      /**
+       * Only what changed since the last delta, as `[index, block]` pairs; the list is `length` blocks long afterwards.
+       * Sent instead of `blocks` to clients that asked for it (`deltas.patch`) — see `applyRunDelta`.
+       */
+      patch?: [number, MessageBlock][];
+      length?: number;
       /** Incremental text appended since the last delta (for TTS / typing effects). */
       textDelta?: string;
     }
@@ -131,7 +146,8 @@ export type EntityName =
   | "messaging"
   | "tasks"
   | "followups"
-  | "mobile";
+  | "mobile"
+  | "system";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =
@@ -149,4 +165,36 @@ export type ClientEvent =
    * Phones only get `run.delta` (the streaming reply) for conversations they have open; other clients get all of them.
    */
   | { type: "conversation.subscribe"; conversationId: ID }
-  | { type: "conversation.unsubscribe"; conversationId: ID };
+  | { type: "conversation.unsubscribe"; conversationId: ID }
+  /** This client applies `run.delta` patches (`applyRunDelta`): send it what changed instead of the whole list. */
+  | { type: "deltas.patch" }
+  /** The client missed a delta of this run (or joined while it ran): send its whole block list once. */
+  | { type: "run.resync"; runId: ID };
+
+export type RunDelta = Extract<ServerEvent, { type: "run.delta" }>;
+
+/** What a client holds of a run's in-flight message: its blocks and the last delta it applied. */
+export interface RunDeltaState {
+  blocks: MessageBlock[];
+  seq: number;
+  stream?: string;
+}
+
+/**
+ * The client's copy after a `run.delta`, or null when the delta can't be applied to it (one was missed, or the client
+ * joined mid-run): the client then asks for the whole list with `run.resync` and keeps what it shows meanwhile.
+ */
+export function applyRunDelta(have: RunDeltaState | null | undefined, delta: RunDelta): RunDeltaState | null {
+  if (delta.blocks) return { blocks: delta.blocks, seq: delta.seq ?? 0, stream: delta.stream };
+  if (!delta.patch || delta.seq === undefined || delta.length === undefined) return null;
+  // What the client has of another stretch counts for nothing: the first delta of a stretch carries every block.
+  const base = have && have.stream === delta.stream ? have : null;
+  if (delta.seq !== (base?.seq ?? 0) + 1) return null;
+  const blocks = (base?.blocks ?? []).slice(0, delta.length);
+  for (const [index, block] of delta.patch) {
+    if (index < delta.length) blocks[index] = block;
+  }
+  if (blocks.length !== delta.length) return null;
+  for (let i = 0; i < blocks.length; i++) if (!blocks[i]) return null;
+  return { blocks, seq: delta.seq, stream: delta.stream };
+}

@@ -21,6 +21,7 @@ import {
   TriangleAlert,
   UserRound,
   Users,
+  Workflow,
   Wrench,
 } from "lucide-react";
 import type { Agent, AgentCharacter, AgentInput, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
@@ -29,6 +30,7 @@ import {
   EFFORT_LABELS,
   EFFORT_OPTIONS,
   MAX_AGENT_ROLE_LENGTH,
+  ULTRACODE_HINT,
   characterGreeting,
   defaultCharacter,
   effortForModel,
@@ -87,6 +89,8 @@ export interface AgentFormValues {
   workspaceId: string | null;
   model: string;
   effort: Effort | null;
+  /** null = the global default. */
+  ultracode: boolean | null;
   secretAccess: SecretAccessMode;
   allowDelegation: boolean;
   delegateTo: string[];
@@ -126,6 +130,7 @@ export function agentToValues(
     workspaceId: source?.workspaceId !== undefined ? source.workspaceId : (defaults.workspaceId ?? null),
     model: source?.model ?? "",
     effort: source?.effort ?? null,
+    ultracode: source?.ultracode ?? null,
     secretAccess: source?.permissions?.secretAccess ?? defaults.secretAccess ?? "fill",
     allowDelegation: source?.permissions?.allowDelegation ?? true,
     delegateTo: source?.permissions?.delegateTo ?? [],
@@ -160,6 +165,7 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
     reportsTo: v.reportsTo,
     model: v.model,
     effort: v.effort,
+    ultracode: v.ultracode,
     permissions: {
       secretAccess: v.secretAccess,
       allowDelegation: v.allowDelegation,
@@ -264,6 +270,9 @@ export function AgentForm({
   const dirty = JSON.stringify(values) !== JSON.stringify(seed);
   const effectiveModel = findModel(catalog.models, values.model || boot?.settings.runner.model || DEFAULT_MODEL);
   const efforts: readonly Effort[] = effectiveModel?.efforts ?? EFFORT_OPTIONS;
+  // A custom model id: possible whenever this Claude Code has Ultracode at all.
+  const anyUltracode = catalog.models.some((m) => m.ultracode);
+  const ultracodeAvailable = effectiveModel ? effectiveModel.ultracode : anyUltracode;
 
   const errors = validate(values);
   const hasErrors = Object.keys(errors).length > 0;
@@ -498,6 +507,36 @@ export function AgentForm({
                 {efforts.length
                   ? "Higher effort thinks longer — better for tricky multi-step work, slower and pricier."
                   : `${effectiveModel?.label ?? "This model"} doesn't use effort levels.`}
+              </p>
+            </div>
+            <div className="mt-4 space-y-1.5">
+              <span id="agent-ultracode-label" className="flex items-center gap-1.5 text-sm font-medium">
+                <Workflow className="size-4 text-muted-foreground" /> Ultracode
+              </span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                value={values.ultracode === null ? "default" : values.ultracode ? "on" : "off"}
+                onValueChange={(v) => v && set("ultracode", v === "default" ? null : v === "on")}
+                aria-labelledby="agent-ultracode-label"
+                className="w-full"
+              >
+                <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
+                  Default
+                </ToggleGroupItem>
+                <ToggleGroupItem value="on" disabled={!ultracodeAvailable} className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
+                  On
+                </ToggleGroupItem>
+                <ToggleGroupItem value="off" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
+                  Off
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <p className="text-xs text-muted-foreground">
+                {ultracodeAvailable
+                  ? ULTRACODE_HINT
+                  : anyUltracode
+                    ? `${effectiveModel?.label ?? "This model"} doesn't support Ultracode.`
+                    : "The installed Claude Code doesn't offer Ultracode."}
               </p>
             </div>
           </FormSection>

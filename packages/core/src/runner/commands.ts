@@ -11,23 +11,48 @@ import { HttpError } from "../util";
 import { killTree, resolveClaudeCommand } from "./claude";
 import { CLAUDE_NOT_FOUND, buildEnv } from "./runner";
 
+/** A list this old is looked up again — in the background: whoever asks meanwhile gets the one at hand. */
 const TTL_MS = 5 * 60_000;
+/** A list this old isn't handed out any more: the request waits for a new one (skills may have been added meanwhile). */
+const MAX_AGE_MS = 30 * 60_000;
 const TIMEOUT_MS = 30_000;
 const REQUEST_ID = "godmode-commands";
 /** Terminal-UI-only or internal commands that do nothing useful in a Godmode chat. */
 const HIDDEN = new Set(["color", "focus", "reload-plugins", "heapdump", "workflow-launch-exec"]);
 
-const cache = new Map<string, { at: number; commands: Promise<SlashCommand[]> }>();
+const cache = new Map<string, { at: number; commands: Promise<SlashCommand[]>; fresh?: Promise<SlashCommand[]> }>();
 
-export function listSlashCommands(agent: Agent): Promise<SlashCommand[]> {
-  const hit = cache.get(agent.id);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.commands;
+function lookUp(agent: Agent): Promise<SlashCommand[]> {
   const commands = probe(agent);
   cache.set(agent.id, { at: Date.now(), commands });
   commands.catch(() => {
     if (cache.get(agent.id)?.commands === commands) cache.delete(agent.id);
   });
   return commands;
+}
+
+/**
+ * Asking Claude Code takes a second or two (it starts the CLI), so only the first request for an agent waits for it:
+ * later ones get the list at hand, and one that has grown old is looked up again behind them. One that is very old
+ * is no answer any more: the request waits for the new one.
+ */
+export function listSlashCommands(agent: Agent): Promise<SlashCommand[]> {
+  const hit = cache.get(agent.id);
+  if (!hit) return lookUp(agent);
+  const age = Date.now() - hit.at;
+  if (age >= TTL_MS && !hit.fresh) {
+    const fresh = (hit.fresh = probe(agent));
+    fresh.then(
+      () => {
+        if (cache.get(agent.id) === hit) cache.set(agent.id, { at: Date.now(), commands: fresh });
+      },
+      () => {
+        // The list at hand stays; the next request tries again.
+        if (hit.fresh === fresh) hit.fresh = undefined;
+      },
+    );
+  }
+  return age >= MAX_AGE_MS && hit.fresh ? hit.fresh : hit.commands;
 }
 
 export function __clearSlashCommandCache() {

@@ -21,8 +21,8 @@ import { childEnv, sleep, which } from "../util";
 
 const log = logger("vm");
 
-export const TART_VERSION = "2.40.0";
-const TART_SHA256 = "be0e525ea0aa40e6f1c14f9374df255238d6c05c83e9f01e8d400d245cef7b0c";
+export const TART_VERSION = "2.40.1";
+const TART_SHA256 = "363e2701154a8155cbc1bb6d845430c9b42697d2a186bc49574471ca2877db46";
 const TART_URL = `https://github.com/cirruslabs/tart/releases/download/${TART_VERSION}/tart.tar.gz`;
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
 const DEFAULT_TIMEOUT_MS = 2 * 60_000;

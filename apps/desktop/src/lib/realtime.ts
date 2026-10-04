@@ -25,6 +25,17 @@ export function sendClientEvent(event: ClientEvent) {
   else pendingSends.push(event);
 }
 
+/** A delta didn't fit what this client has of the run (it missed one): ask for the whole list, once a second at most. */
+const resyncAsked = new Map<string, number>();
+
+function resync(runId: string) {
+  const now = Date.now();
+  if (now - (resyncAsked.get(runId) ?? 0) < 1000) return;
+  if (resyncAsked.size > 100) resyncAsked.clear();
+  resyncAsked.set(runId, now);
+  sendClientEvent({ type: "run.resync", runId });
+}
+
 const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   workspaces: [qk.workspaces],
   agents: [qk.agents],
@@ -53,6 +64,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
   followups: [qk.followups],
+  // The background upkeep repaired or updated a tool: system check, permissions, updates.
+  system: [qk.doctor],
 };
 
 export function startRealtime(queryClient: QueryClient) {
@@ -80,6 +93,8 @@ async function connect(queryClient: QueryClient) {
   ws.onopen = () => {
     retry = 0;
     useLive.getState().setConnected(true);
+    // Streaming replies as what changed instead of the whole block list every time.
+    ws.send(JSON.stringify({ type: "deltas.patch" } satisfies ClientEvent));
     while (pendingSends.length) ws.send(JSON.stringify(pendingSends.shift()));
     // Resubscribe live views
     for (const viewers of browserViewers.values()) ws.send(JSON.stringify(subscribeEvent(viewers)));
@@ -134,7 +149,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries({ queryKey: qk.bootstrap });
       break;
     case "run.delta":
-      live.runDelta(event.runId, event.conversationId, event.messageId, event.blocks);
+      if (!live.runDelta(event)) resync(event.runId);
       break;
     case "run.activity":
       live.runActivity(event.runId, event.label);

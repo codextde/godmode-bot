@@ -25,7 +25,7 @@ import { getSettings } from "../../services/settings";
 import { sleep } from "../../util";
 import { fitSize, type Point, type Rect } from "../geometry";
 import { getHelper, NativeHelper } from "../helper";
-import { CuaError, cuaKeyName, cuaModifier, getCuaDriver, scrubSummary, type CuaDriverClient, type CuaResult, type Delivery } from "../cua";
+import { CuaError, cuaKeyName, cuaModifier, getCuaDriver, scrubSummary, type CuaDownload, type CuaDriverClient, type CuaResult, type Delivery } from "../cua";
 import type { KeyCombo } from "../keys";
 import {
   EngineError,
@@ -76,11 +76,13 @@ export class WindowEngine implements ComputerEngine {
   /** Elements handed to the model, so a token made stale by a newer driver snapshot can be found again. */
   private known = new Map<string, { role: string; label: string; frame: Rect | null }>();
   private cuaDisabledReason: string | null = null;
+  /** Cua Driver is being downloaded: asked again by the next action (on macOS the native helper acts meanwhile). */
+  private cuaPending: string | null = null;
   private cursorShown = false;
 
   constructor(
     readonly target: WindowTarget,
-    private opts: { useCua: boolean; allowForeground: boolean; agentCursor?: boolean },
+    private opts: { useCua: boolean; allowForeground: boolean; agentCursor?: boolean; download?: CuaDownload },
   ) {
     this.name = opts.useCua ? "cua" : "native";
     if (!opts.useCua) this.cuaDisabledReason = "Cua Driver is turned off in Settings → Computer.";
@@ -93,8 +95,14 @@ export class WindowEngine implements ComputerEngine {
   private async cua(): Promise<CuaDriverClient | null> {
     if (this.cuaDisabledReason) return null;
     try {
-      return await getCuaDriver();
+      const cua = await getCuaDriver({ download: this.opts.download ?? "never" });
+      this.cuaPending = null;
+      return cua;
     } catch (err) {
+      if (err instanceof CuaError && err.code === "downloading") {
+        this.cuaPending = err.message;
+        return null;
+      }
       this.cuaDisabledReason = errorMessage(err);
       log.info(`window share without Cua Driver: ${this.cuaDisabledReason}`);
       return null;
@@ -110,6 +118,12 @@ export class WindowEngine implements ComputerEngine {
     } catch {
       return null;
     }
+  }
+
+  /** Why Cua Driver can't do it (being downloaded, turned off, missing…). */
+  private noCua(fallback: string, suffix = ""): EngineError {
+    if (!this.cuaDisabledReason && this.cuaPending) return new EngineError(`${this.cuaPending}${suffix}`, "downloading");
+    return new EngineError(`${this.cuaDisabledReason ?? fallback}${suffix}`, "unsupported");
   }
 
   private label(): string {
@@ -139,7 +153,7 @@ export class WindowEngine implements ComputerEngine {
       this.onScreen = w.onScreen;
     } else {
       const cua = await this.cua();
-      if (!cua) throw new EngineError(this.cuaDisabledReason ?? "Cua Driver is not available.", "unsupported");
+      if (!cua) throw this.noCua("Cua Driver is not available.");
       const list = await cua.listWindows(this.target.pid).catch((e) => {
         throw engineErrorFrom(e);
       });
@@ -219,7 +233,7 @@ export class WindowEngine implements ComputerEngine {
       }
     }
     const cua = await this.cua();
-    if (!cua) throw new EngineError(this.cuaDisabledReason ?? "Window capture is not available on this computer.", "unsupported");
+    if (!cua) throw this.noCua("Window capture is not available on this computer.");
     if (opts.region) throw new EngineError("Zooming into a window needs Godmode's native helper (macOS).", "unsupported");
     try {
       const s = await cua.windowShot(this.target.pid, this.target.windowId, opts.maxEdge);
@@ -276,7 +290,7 @@ export class WindowEngine implements ComputerEngine {
         "refused",
       );
     }
-    throw new EngineError(this.cuaDisabledReason ?? `Can't ${action} in a background window on this computer.`, "unsupported");
+    throw this.noCua(`Can't ${action} in a background window on this computer.`);
   }
 
   private helperPointer(h: NativeHelper, params: Record<string, unknown>) {
@@ -328,11 +342,10 @@ export class WindowEngine implements ComputerEngine {
     };
     const viaCua = async (cua: CuaDriverClient) => {
       await this.pointAt(p, true);
-      const kind = opts.count === 2 && opts.button === "left" ? "double_click" : opts.button === "right" && opts.count === 1 ? "right_click" : "click";
-      const r = await cua.pointer(kind, this.ref, p, {
+      const r = await cua.pointer("click", this.ref, p, {
         button: opts.button,
         count: opts.count,
-        modifiers: opts.modifiers.map(cuaModifier),
+        modifiers: opts.modifiers.map((m) => cuaModifier(m)),
         delivery: this.delivery(opts.foreground),
         maxDimension,
         size: await this.size(),
@@ -369,7 +382,7 @@ export class WindowEngine implements ComputerEngine {
         await this.pointAt(from, false);
         const r = await cua.drag(this.ref, from, to, {
           button: opts.button,
-          modifiers: opts.modifiers.map(cuaModifier),
+          modifiers: opts.modifiers.map((m) => cuaModifier(m)),
           delivery: this.delivery(opts.foreground),
           maxDimension,
           size: await this.size(),
@@ -441,7 +454,7 @@ export class WindowEngine implements ComputerEngine {
       const outcome = await this.route(
         "press keys",
         key
-          ? async (cua) => describe(await cua.pressKeys(this.ref, key, c.modifiers.map(cuaModifier), { delivery: this.delivery(opts.foreground) }), "Pressed")
+          ? async (cua) => describe(await cua.pressKeys(this.ref, key, c.modifiers.map((m) => cuaModifier(m)), { delivery: this.delivery(opts.foreground) }), "Pressed")
           : !c.modifiers.length && [...c.key].length === 1
             ? async (cua) => describe(await cua.typeText(this.ref, c.key, { delivery: this.delivery(opts.foreground) }), "Typed")
             : null,
@@ -478,7 +491,7 @@ export class WindowEngine implements ComputerEngine {
 
   async elements(query?: string): Promise<{ elements: UiElement[]; note: string | null }> {
     const cua = await this.cua();
-    if (!cua) throw new EngineError(`${this.cuaDisabledReason ?? "Cua Driver is not available."} Use screenshots and coordinates instead.`, "unsupported");
+    if (!cua) throw this.noCua("Cua Driver is not available.", " Use screenshots and coordinates instead.");
     try {
       const s = await cua.windowState(this.target.pid, this.target.windowId, { screenshot: false, maxDimension: 0, query, maxElements: 600 });
       const b = await this.bounds(true);
@@ -532,7 +545,7 @@ export class WindowEngine implements ComputerEngine {
 
   private async withElement(token: string, fn: (cua: CuaDriverClient, token: string) => Promise<CuaResult>, fallback: string): Promise<Outcome> {
     const cua = await this.cua();
-    if (!cua) throw new EngineError(this.cuaDisabledReason ?? "Cua Driver is not available.", "unsupported");
+    if (!cua) throw this.noCua("Cua Driver is not available.");
     try {
       return { detail: describe(await fn(cua, token), fallback) };
     } catch (err) {
@@ -578,8 +591,13 @@ export class WindowEngine implements ComputerEngine {
   }
 }
 
-/** `agent`: the run's engine — its pointer input shows the agent cursor (when turned on in Settings). */
+/**
+ * `agent`: the run's engine — its pointer input shows the agent cursor (when turned on in Settings), and it downloads
+ * Cua Driver when that is missing: in the background on macOS, where the native helper acts meanwhile, else waiting
+ * for it a little.
+ */
 export function windowEngine(target: WindowTarget, opts: { agent?: boolean } = {}): WindowEngine {
   const s = getSettings().computer;
-  return new WindowEngine(target, { useCua: s.useCuaDriver, allowForeground: s.allowForeground, agentCursor: !!opts.agent && s.agentCursor });
+  const download: CuaDownload = !opts.agent ? "never" : process.platform === "darwin" ? "background" : "wait";
+  return new WindowEngine(target, { useCua: s.useCuaDriver, allowForeground: s.allowForeground, agentCursor: !!opts.agent && s.agentCursor, download });
 }

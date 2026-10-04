@@ -226,7 +226,8 @@ export function createServer(input: SshServerInput): SshServer {
     created_at: ts,
     updated_at: ts,
   });
-  log.info("SSH server added", { server: id, host: addressOf(fields), auth });
+  // "method", not "auth": the log masks the value of anything named like a credential.
+  log.info("SSH server added", { server: id, host: addressOf(fields), method: auth });
   audit("user", "ssh.create", id, { name: fields.name, host: addressOf(fields), username: fields.username, auth });
   bus.changed("ssh-servers");
   return getServer(id);

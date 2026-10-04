@@ -1,10 +1,9 @@
-import { Fragment, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { Fragment, useRef, type ReactNode } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Conversation, Message } from "@godmode/shared";
-import { ArrowDown, Paperclip } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 import type { LiveRun } from "@/stores/live";
-import { cn } from "@/lib/utils";
 import { AssistantMessage, LiveAssistantMessage, StartedMessage, SystemMessage, UserMessage } from "./messages";
 import { useStickToBottom } from "./use-stick-to-bottom";
 
@@ -105,61 +104,6 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
             <ArrowDown className="size-3.5" />
             {inflight ? "Jump to live" : "Jump to latest"}
           </motion.button>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/** Full-area file drop target with a friendly overlay. */
-export function ChatDropZone({ onFiles, children, className }: { onFiles: (files: File[]) => void; children: ReactNode; className?: string }) {
-  const [over, setOver] = useState(false);
-  const depth = useRef(0);
-  const hasFiles = (e: DragEvent) => e.dataTransfer.types.includes("Files");
-  return (
-    <div
-      className={cn("relative", className)}
-      onDragEnter={(e) => {
-        if (!hasFiles(e)) return;
-        e.preventDefault();
-        depth.current += 1;
-        setOver(true);
-      }}
-      onDragOver={(e) => {
-        if (hasFiles(e)) e.preventDefault();
-      }}
-      onDragLeave={(e) => {
-        if (!hasFiles(e)) return;
-        depth.current = Math.max(0, depth.current - 1);
-        if (depth.current === 0) setOver(false);
-      }}
-      onDrop={(e) => {
-        if (!hasFiles(e)) return;
-        depth.current = 0;
-        setOver(false);
-        // The composer handles drops on itself (and marks the event handled)
-        if (e.defaultPrevented) return;
-        e.preventDefault();
-        onFiles(Array.from(e.dataTransfer.files));
-      }}
-    >
-      {children}
-      <AnimatePresence>
-        {over && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="pointer-events-none absolute inset-0 z-50 grid place-items-center bg-background/70 p-6 backdrop-blur-md"
-          >
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-foreground/25 bg-card px-12 py-10 text-center shadow-float">
-              <span className="grid size-11 place-items-center rounded-lg border bg-secondary text-foreground">
-                <Paperclip className="size-5" />
-              </span>
-              <div className="text-base font-medium">Drop files to attach</div>
-              <div className="text-sm text-muted-foreground">Images, PDFs, spreadsheets… up to 25 MB each</div>
-            </div>
-          </motion.div>
         )}
       </AnimatePresence>
     </div>

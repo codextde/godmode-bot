@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: Settings = {
     model: DEFAULT_MODEL,
     fallbackModel: "claude-sonnet-5",
     effort: "high",
+    ultracode: false,
     bypassPermissions: true,
     maxConcurrentRuns: 3,
     runTimeoutMinutes: 60,
@@ -97,6 +98,10 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   diagnostics: {
     verbose: false,
+  },
+  maintenance: {
+    autoFix: true,
+    autoUpdate: true,
   },
   mobile: {
     enabled: false,

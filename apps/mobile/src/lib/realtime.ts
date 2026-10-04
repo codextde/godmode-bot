@@ -93,7 +93,8 @@ function handle(event: ServerEvent) {
       live.runActivity(event.runId, event.label);
       break;
     case "run.delta":
-      live.delta(event.conversationId, { runId: event.runId, messageId: event.messageId, blocks: event.blocks });
+      // The whole list: this app doesn't ask for patches.
+      if (event.blocks) live.delta(event.conversationId, { runId: event.runId, messageId: event.messageId, blocks: event.blocks });
       break;
     case "run.paused":
       // It stands still: nothing works in the chat until it continues.

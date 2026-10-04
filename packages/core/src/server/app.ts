@@ -18,7 +18,7 @@ import { registerBackupRoutes } from "./routes/backup";
 import { registerVoiceRoutes } from "./routes/voice";
 import { registerFileRoutes } from "./routes/files";
 import { registerFolderRoutes } from "./routes/folders";
-import { registerMcpRoutes } from "../mcp/http";
+import { isExpectedSlow, registerMcpRoutes } from "../mcp/http";
 import { registerComputerRoutes } from "./routes/computer";
 import { registerVmRoutes } from "./routes/vms";
 import { registerSshRoutes } from "./routes/ssh";
@@ -77,7 +77,8 @@ export function createApp() {
     if (!isApiPath(c.req.path)) return;
     const ms = Math.round(performance.now() - started);
     const details = { method: c.req.method, route: c.req.routePath, status: c.res.status, ms };
-    if (ms >= SLOW_REQUEST_MS) log.info("slow request", details);
+    // `expected`: the route waits for something by design (see `expectSlow`), so it says nothing about the core.
+    if (ms >= SLOW_REQUEST_MS) log.info("slow request", isExpectedSlow(c) ? { ...details, expected: true } : details);
     else if (!c.req.path.startsWith("/api/logs")) log.debug("request", details);
   });
 

@@ -3,3 +3,10 @@ packages:
   - "packages/*"
   # The phone app has its own toolchain (Expo, bun); see apps/mobile/README.md.
   - "!apps/mobile"
+
+# Dependencies whose install scripts may run. ssh2 works without its optional native crypto addon.
+allowBuilds:
+  esbuild: true
+  workerd: true
+  ssh2: false
+  cpu-features: false

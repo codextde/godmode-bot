@@ -4,8 +4,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, Credential, MessageBlock } from "@godmode/shared";
-import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Loader2, Lock, ShieldAlert, Square, SquareSlash, TriangleAlert } from "lucide-react";
+import type { Agent, Credential, MessageBlock, ToolTaskAgent } from "@godmode/shared";
+import { WORKFLOW_TOOL } from "@godmode/shared";
+import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Loader2, Lock, ShieldAlert, Square, SquareSlash, TriangleAlert, Workflow, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentAvatar } from "@/components/common";
 import { ThinkingState } from "@/components/aicss/ThinkingState";
@@ -13,6 +14,7 @@ import { ThinkingReasoning } from "@/components/aicss/ThinkingReasoning";
 import { FileDiff, diffLines, type DiffRow } from "@/components/aicss/FileDiff";
 import { DrawCheck } from "@/components/aicss/Motion";
 import { Orb } from "@/components/aicss/Orb";
+import { formatDuration, formatTokens } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
@@ -46,6 +48,7 @@ type Item =
   | { kind: "tools"; key: string; steps: Step[] }
   | { kind: "missing-login"; key: string; block: ToolUseBlock }
   | { kind: "delegate"; key: string; block: ToolUseBlock }
+  | { kind: "workflow"; key: string; block: ToolUseBlock }
   | { kind: "subagent"; key: string; block: ToolUseBlock; children: MessageBlock[] };
 
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);
@@ -60,10 +63,11 @@ function bareName(name: string): string {
   return name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : name;
 }
 
-function isStandaloneTool(name: string): "missing-login" | "delegate" | "subagent" | null {
+function isStandaloneTool(name: string): "missing-login" | "delegate" | "workflow" | "subagent" | null {
   const bare = name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : name;
   if (bare === "report_missing_login") return "missing-login";
   if (bare === "agent_delegate") return "delegate";
+  if (name === WORKFLOW_TOOL) return "workflow";
   if (SUBAGENT_TOOLS.has(name)) return "subagent";
   return null;
 }
@@ -205,6 +209,8 @@ export function MessageBlocks({
             return <MissingLoginCard key={item.key} block={item.block} />;
           case "delegate":
             return <DelegateCard key={item.key} block={item.block} streaming={streaming} parentRunId={runId} />;
+          case "workflow":
+            return <WorkflowCard key={item.key} block={item.block} streaming={streaming} />;
           case "subagent":
             return <SubagentCard key={item.key} block={item.block} ctx={ctx} childBlocks={item.children} streaming={streaming && !item.block.result} />;
         }
@@ -591,7 +597,7 @@ function DiffStat({ rows }: { rows: DiffRow[] }) {
   );
 }
 
-function ToolDetails({ block, edit }: { block: ToolUseBlock; edit?: { file: string; rows: DiffRow[] } | null }) {
+function ToolDetails({ block, edit, inputLabel = "Input" }: { block: ToolUseBlock; edit?: { file: string; rows: DiffRow[] } | null; inputLabel?: string }) {
   const [full, setFull] = useState(false);
   if (edit) {
     return (
@@ -628,7 +634,7 @@ function ToolDetails({ block, edit }: { block: ToolUseBlock; edit?: { file: stri
       ) : (
         input &&
         input !== "{}" && (
-          <DetailPanel label="Input" text={input} />
+          <DetailPanel label={inputLabel} text={input} />
         )
       )}
       {block.result !== undefined && (
@@ -898,6 +904,150 @@ function SubagentCard({ block, ctx, childBlocks, streaming }: { block: ToolUseBl
           )}
         </div>
       </Collapse>
+    </div>
+  );
+}
+
+const AGENT_STATE_LABEL: Record<ToolTaskAgent["state"], string> = { queued: "Queued", running: "Running", done: "Done", failed: "Failed" };
+
+/** Agents of a workflow by phase, phases in the order their first agent was queued. */
+function agentPhases(agents: ToolTaskAgent[]): { phase: string; agents: ToolTaskAgent[] }[] {
+  const phases = new Map<string, ToolTaskAgent[]>();
+  for (const a of agents) phases.set(a.phase, [...(phases.get(a.phase) ?? []), a]);
+  return Array.from(phases, ([phase, list]) => ({ phase, agents: list }));
+}
+
+function WorkflowAgent({ agent, live }: { agent: ToolTaskAgent; live: boolean }) {
+  // An agent still queued or running when its workflow ended never finished.
+  const running = live && agent.state === "running";
+  const label = live || agent.state === "done" || agent.state === "failed" ? AGENT_STATE_LABEL[agent.state] : "Not finished";
+  return (
+    <li className="flex items-center gap-2 text-[13px]">
+      {agent.state === "done" ? (
+        <span aria-hidden className="grid size-3.5 shrink-0 place-items-center rounded-full bg-brand text-white dark:text-black">
+          <DrawCheck className="size-2.5" />
+        </span>
+      ) : agent.state === "failed" ? (
+        <XCircle aria-hidden className="size-3.5 shrink-0 text-destructive" />
+      ) : running ? (
+        <CircleDot aria-hidden className="size-3.5 shrink-0 animate-pulse text-foreground" />
+      ) : (
+        <Circle aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+      )}
+      <span className={cn("min-w-0 flex-1 truncate", agent.state === "done" && "text-muted-foreground", agent.state === "failed" && "text-destructive")}>
+        {agent.label}
+        <span className="sr-only"> — {label}</span>
+      </span>
+      {running && agent.lastTool ? (
+        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{agent.lastTool}</span>
+      ) : (
+        !!agent.tokens && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{formatTokens(agent.tokens)} tokens</span>
+      )}
+    </li>
+  );
+}
+
+/** A Claude Code workflow: the agents it runs, by phase, kept up to date while it works. */
+function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: boolean }) {
+  const [open, setOpen] = useState<boolean | null>(null);
+  const [details, setDetails] = useState(false);
+  const task = block.task;
+  const input = (block.input ?? {}) as { name?: unknown; script?: unknown };
+  const name = task?.description || (typeof input.name === "string" ? input.name : "");
+  const title = name || "Workflow";
+  // A workflow still running on a turn that has ended was cut off with its run.
+  const status = task ? (task.status === "running" && !streaming ? "stopped" : task.status) : null;
+  const running = status ? status === "running" : stepRunning(block, streaming);
+  const failed = status === "failed" || !!block.isError;
+  const expanded = open ?? running;
+  const agents = task?.agents ?? [];
+  const phases = agentPhases(agents);
+  const done = agents.filter((a) => a.state === "done").length;
+  const state = failed
+    ? "Failed"
+    : status === "running"
+      ? task?.activity || "Running…"
+      : status === "completed"
+        ? "Completed"
+        : status === "stopped"
+          ? "Stopped"
+          : running
+            ? "Starting…"
+            : block.result === undefined
+              ? "No result"
+              : "";
+  const stats = [
+    agents.length > 0 && `${done}/${agents.length} agents`,
+    !!task?.totalTokens && `${formatTokens(task.totalTokens)} tokens`,
+    !!task?.durationMs && formatDuration(task.durationMs),
+  ].filter(Boolean);
+  const script = typeof input.script === "string" ? input.script : "";
+
+  return (
+    <div className={cn("rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "glow-border")}>
+      <button
+        type="button"
+        onClick={() => setOpen(!expanded)}
+        aria-expanded={expanded}
+        disabled={agents.length === 0}
+        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition enabled:hover:bg-accent/40"
+      >
+        <span
+          className={cn(
+            "grid size-[27px] shrink-0 place-items-center rounded-full border",
+            failed ? "border-destructive/30 bg-destructive/10 text-destructive" : toneFor("subagent"),
+          )}
+        >
+          {running ? <Orb variant="B5" size={15} label={title} /> : <Workflow className="size-3.5" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={cn("block truncate text-sm font-medium", running && "text-shimmer")}>{title}</span>
+          {(name || state) && (
+            <span className="block truncate text-xs text-muted-foreground">
+              {name && "Workflow"}
+              {name && state && " · "}
+              {state && <span className={cn(failed && "text-destructive")}>{state}</span>}
+            </span>
+          )}
+        </span>
+        {agents.length > 0 && <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")} />}
+      </button>
+      {block.isError && block.result && (
+        <p className="line-clamp-4 px-3 pb-2.5 font-mono text-xs break-words whitespace-pre-wrap text-destructive">{block.result}</p>
+      )}
+      <Collapse open={expanded && agents.length > 0}>
+        <div className="max-h-64 space-y-2.5 overflow-y-auto border-t px-3.5 py-3">
+          {phases.map(({ phase, agents: list }) => (
+            <div key={phase}>
+              {phase && <div className="mb-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">{phase}</div>}
+              <ul className="space-y-1.5">
+                {list.map((a, i) => (
+                  <WorkflowAgent key={i} agent={a} live={status === "running"} />
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Collapse>
+      <div className="border-t">
+        <div className="flex items-center gap-3 pr-3.5 text-xs text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setDetails((d) => !d)}
+            aria-expanded={details}
+            className="flex flex-1 items-center gap-1.5 py-2 pl-3.5 text-left font-medium transition hover:text-foreground"
+          >
+            <ChevronRight className={cn("size-3.5 shrink-0 transition-transform", details && "rotate-90")} />
+            Details
+          </button>
+          {stats.length > 0 && <span className="min-w-0 truncate tabular-nums">{stats.join(" · ")}</span>}
+        </div>
+        <Collapse open={details}>
+          <div className="px-3 pb-1">
+            <ToolDetails block={script ? { ...block, input: script } : block} inputLabel={script ? "Script" : undefined} />
+          </div>
+        </Collapse>
+      </div>
     </div>
   );
 }

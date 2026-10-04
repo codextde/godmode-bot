@@ -26,23 +26,25 @@ import type {
   ComputerTarget,
   Effort,
   Message,
+  MessageBlock,
   PauseReason,
   QuestionAnswer,
   QuestionStatus,
   Run,
+  RunDelta,
   RunStatus,
   RunTrigger,
   RunUsage,
   ServerEvent,
   TaskPriority,
 } from "@godmode/shared";
-import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, TASK_PRIORITY_RANK, isModelId, parseSlashCommand } from "@godmode/shared";
+import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, TASK_PRIORITY_RANK, WORKFLOW_TOOL, isModelId, parseSlashCommand } from "@godmode/shared";
 import { all, get, insert, run as sql, tx } from "../db";
 import { bus } from "../events/bus";
-import { setWelcomeEvents } from "../server/ws";
+import { setRunSnapshots, setWelcomeEvents } from "../server/ws";
 import { excerpt, logger } from "../log";
 import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson } from "../util";
-import { isUnlocked, redact } from "../vault/vault";
+import { isUnlocked, redact, redactionEpoch } from "../vault/vault";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentFailedRun, setAgentStatus, teamOf, touchAgentRun } from "../agents/service";
 import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
@@ -79,7 +81,7 @@ import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memor
 import { memoryDigest, memoryForPrompt } from "../memory/files";
 import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
-import { effortFor } from "./models";
+import { effortFor, ultracodeFor } from "./models";
 import {
   buildDreamSystemPrompt,
   buildSystemPrompt,
@@ -100,7 +102,8 @@ import { resolveVmId } from "../vm/assignments";
 import { runSshServerIds } from "../ssh/assignments";
 import { attachSsh, detachSsh, promptServers } from "../ssh/service";
 import { parseComputerTarget } from "../computer/targets";
-import { StreamAccumulator, detectLoginFailure, redactBlocks } from "./stream";
+import { timedSync } from "../diagnostics/slow";
+import { StreamAccumulator, addUsage, detectLoginFailure, redactBlock } from "./stream";
 
 const log = logger("runner");
 
@@ -126,8 +129,15 @@ export const INTERRUPTED = "Interrupted (Godmode restarted)";
 const TERMINAL: ReadonlySet<RunStatus> = new Set(["succeeded", "failed", "cancelled"]);
 const STDERR_TAIL_BYTES = 8 * 1024;
 const DELTA_INTERVAL_MS = 100;
-const DELTA_INTERVAL_HEAVY_MS = 1000;
-const PERSIST_INTERVAL_MS = 2000;
+let persistIntervalMs = 2000;
+/** Saving the in-flight message takes longer the longer a run gets: it never takes more than 1/50 of the time. */
+let persistBackoff = 50;
+
+/** Tests: save the in-flight message on every delta (0, 0), or as usual (2000, 50). */
+export function __setPersistForTests(intervalMs: number, backoff: number) {
+  persistIntervalMs = intervalMs;
+  persistBackoff = backoff;
+}
 const KILL_GRACE_MS = 5000;
 /** A pause lets the step in progress finish for this long before it cuts it off. */
 const PAUSE_GRACE_MS = 8000;
@@ -324,11 +334,22 @@ interface Job {
   /** Claude Code asks Godmode between two steps of this run (PostToolBatch hook). */
   hooked?: boolean;
   spent: Spent;
+  /**
+   * What Claude Code had counted for the Claude session before this stretch (null = a new session, or unknown): it
+   * reports the total of the whole session, earlier runs of the chat included.
+   */
+  sessionCostBefore?: number | null;
   timedOut: boolean;
   lastLabel: string;
   lastDeltaAt: number;
   lastPersistAt: number;
+  /** Wait between two saves of the in-flight message (see persistBackoff). */
+  persistEveryMs?: number;
+  /** The slowest save of the in-flight message, for the diagnostic log. */
+  slowestPersistMs?: number;
   deltaTimer: ReturnType<typeof setTimeout> | null;
+  /** The blocks as clients and the database get them (see LiveView). */
+  live?: LiveView;
   done: Promise<void> | null;
   /**
    * The browser this run drives (undefined = not resolved yet, null = no browser): the browser profile, or `vm:<id>`
@@ -1134,47 +1155,166 @@ setWelcomeEvents(() =>
   }),
 );
 
-function emitActivity(job: Job, label: string) {
+function emitActivity(job: Job, text: string) {
+  // A workflow's label quotes what the model wrote, like the blocks do.
+  const label = redact(text);
   if (label === job.lastLabel) return;
   job.lastLabel = label;
   bus.emit({ type: "run.activity", runId: job.runId, agentId: job.agentId, label });
 }
 
-function imageBytes(job: Job): number {
-  let n = 0;
-  for (const b of job.acc.blocks) if (b.type === "tool_use" && b.image) n += b.image.length;
-  return n;
+/* ------------------------------------------------------------------ */
+/* The in-flight message                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A block as clients and the database get it: saved secrets masked. A long run has hundreds of blocks and megabytes of
+ * tool output and screenshots, and all but the last few never change again — so each is masked and serialized once,
+ * and made again only when it changed.
+ */
+interface LiveBlock {
+  /**
+   * The block's fields when this was made, objects among them copied one level down: blocks are changed in place, and
+   * so is a tool call's `task` (its progress). Any difference means it changed.
+   */
+  seen: Record<string, unknown>;
+  redacted: MessageBlock;
+  /** `redacted` as JSON, for the row saved while the run works; made when first saved. */
+  json: string | null;
 }
 
+interface LiveView {
+  /** Tells this job's deltas from those of another stretch of the run (a paused run continues in a new job). */
+  stream: string;
+  /** `redactionEpoch` the blocks were masked under. */
+  epoch: string;
+  blocks: WeakMap<MessageBlock, LiveBlock>;
+  /** What the clients have after the last delta, by index. */
+  sent: MessageBlock[];
+  /** Deltas sent so far. */
+  seq: number;
+}
+
+function liveOf(job: Job): LiveView {
+  return (job.live ??= { stream: newId("str"), epoch: redactionEpoch(), blocks: new WeakMap(), sent: [], seq: 0 });
+}
+
+function isPlain(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function shallowEqual(x: Record<string, unknown>, y: Record<string, unknown>): boolean {
+  const keys = Object.keys(x);
+  if (keys.length !== Object.keys(y).length) return false;
+  for (const k of keys) if (x[k] !== y[k]) return false;
+  return true;
+}
+
+function snapshotOf(block: MessageBlock): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...block };
+  for (const [k, v] of Object.entries(out)) if (isPlain(v)) out[k] = { ...v };
+  return out;
+}
+
+function unchanged(seen: Record<string, unknown>, block: MessageBlock): boolean {
+  const now = block as Record<string, unknown>;
+  const keys = Object.keys(seen);
+  if (keys.length !== Object.keys(now).length) return false;
+  for (const k of keys) {
+    const a = seen[k];
+    const b = now[k];
+    if (a === b) continue;
+    if (!isPlain(a) || !isPlain(b) || !shallowEqual(a, b)) return false;
+  }
+  return true;
+}
+
+/** The run's blocks with saved secrets masked; only the ones that changed since the last call are masked again. */
+function liveBlocks(job: Job): LiveBlock[] {
+  const live = liveOf(job);
+  const epoch = redactionEpoch();
+  // A secret was saved or the vault locked meanwhile: what was masked before may read differently now.
+  if (live.epoch !== epoch) {
+    live.epoch = epoch;
+    live.blocks = new WeakMap();
+  }
+  return job.acc.blocks.map((block) => {
+    const known = live.blocks.get(block);
+    if (known && unchanged(known.seen, block)) return known;
+    const redacted = redactBlock(block, redact);
+    // Never the block itself: a later change in place must show as a different object.
+    const made: LiveBlock = { seen: snapshotOf(block), redacted: redacted === block ? { ...block } : redacted, json: null };
+    live.blocks.set(block, made);
+    return made;
+  });
+}
+
+/** For the row that is saved while the run works: each block is serialized once (screenshots are megabytes). */
+function storedJson(b: LiveBlock): string {
+  return (b.json ??= JSON.stringify(b.redacted));
+}
+
+/** The run's blocks as they are stored and shown, secrets masked. */
+function redactedBlocks(job: Job): MessageBlock[] {
+  return liveBlocks(job).map((b) => b.redacted);
+}
+
+/** Tell the clients what changed in the in-flight message since the last delta, and save it every few seconds. */
 function emitDelta(job: Job) {
   if (job.deltaTimer) {
     clearTimeout(job.deltaTimer);
     job.deltaTimer = null;
   }
   job.lastDeltaAt = Date.now();
-  const blocks = redactBlocks(job.acc.blocks, redact);
-  const textDelta = redact(job.acc.takeTextDelta());
-  bus.emit({
-    type: "run.delta",
-    runId: job.runId,
-    conversationId: job.conversationId,
-    messageId: job.messageId,
-    blocks,
-    ...(textDelta ? { textDelta } : {}),
-  });
-  if (Date.now() - job.lastPersistAt >= PERSIST_INTERVAL_MS) {
+  timedSync("run delta", () => {
+    const live = liveOf(job);
+    const view = liveBlocks(job);
+    const patch: [number, MessageBlock][] = [];
+    for (let i = 0; i < view.length; i++) if (live.sent[i] !== view[i]!.redacted) patch.push([i, view[i]!.redacted]);
+    const textDelta = redact(job.acc.takeTextDelta());
+    if (patch.length || live.sent.length !== view.length || textDelta) {
+      live.sent = view.map((b) => b.redacted);
+      live.seq++;
+      bus.emit({
+        type: "run.delta",
+        runId: job.runId,
+        conversationId: job.conversationId,
+        messageId: job.messageId,
+        stream: live.stream,
+        seq: live.seq,
+        patch,
+        length: view.length,
+        ...(textDelta ? { textDelta } : {}),
+      });
+    }
+    if (Date.now() - job.lastPersistAt < (job.persistEveryMs ?? persistIntervalMs)) return;
     job.lastPersistAt = Date.now();
-    safely("persist in-flight message", () => updateMessage(job.messageId, { blocks }, { emit: false }));
-  }
+    const started = performance.now();
+    safely("persist in-flight message", () => sql("UPDATE messages SET blocks = ? WHERE id = ?", `[${view.map(storedJson).join(",")}]`, job.messageId));
+    const ms = performance.now() - started;
+    job.slowestPersistMs = Math.max(job.slowestPersistMs ?? 0, ms);
+    job.persistEveryMs = Math.max(persistIntervalMs, Math.round(ms * persistBackoff));
+  });
 }
 
 function scheduleDelta(job: Job) {
   if (job.deltaTimer) return;
-  // Screenshots make every delta heavy: slow down instead of flooding the WebSocket.
-  const interval = imageBytes(job) > 1_000_000 ? DELTA_INTERVAL_HEAVY_MS : DELTA_INTERVAL_MS;
-  const wait = Math.max(0, interval - (Date.now() - job.lastDeltaAt));
+  const wait = Math.max(0, DELTA_INTERVAL_MS - (Date.now() - job.lastDeltaAt));
   job.deltaTimer = setTimeout(() => emitDelta(job), wait);
 }
+
+/** The whole in-flight message of running jobs, for a client that joins while they run or missed a delta. */
+setRunSnapshots((want) => {
+  const out: RunDelta[] = [];
+  for (const job of jobs.values()) {
+    const live = job.live;
+    // A paused run that continues has sent its blocks while it waits for its turn.
+    if (!live?.seq) continue;
+    if ((want.runId && want.runId !== job.runId) || (want.conversationId && want.conversationId !== job.conversationId)) continue;
+    out.push({ type: "run.delta", runId: job.runId, conversationId: job.conversationId, messageId: job.messageId, stream: live.stream, seq: live.seq, blocks: live.sent });
+  }
+  return out;
+});
 
 async function* chunksOf(stream: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array> {
   const reader = stream.getReader();
@@ -1371,14 +1511,16 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 
   const conv = get<{
     claude_session_id: string | null;
+    claude_session_cost_usd: number | null;
     working_directory: string | null;
     model: string | null;
     effort: Effort | null;
+    ultracode: number | null;
     instructions: string | null;
     instructions_digest: string | null;
     memory_digest: string | null;
   }>(
-    "SELECT claude_session_id, working_directory, model, effort, instructions, instructions_digest, memory_digest FROM conversations WHERE id = ?",
+    "SELECT claude_session_id, claude_session_cost_usd, working_directory, model, effort, ultracode, instructions, instructions_digest, memory_digest FROM conversations WHERE id = ?",
     job.conversationId,
   );
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
@@ -1432,6 +1574,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       guest = await prepareGuest(vm.id, { browser, onActivity, signal: cancelled.signal }).catch((err: unknown) => ({
         browser: null,
         cua: null,
+        shellAutomation: false,
         problems: [`The VM's browser and computer-use tools are unavailable in this run: ${errorText(err)}`],
       }));
       const stopped = halted(job);
@@ -1451,6 +1594,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         hostShellOff: settings.vm.isolateHostShell,
         browser: !!guest?.browser,
         cua: !!guest?.cua,
+        shellAutomation: !!guest?.shellAutomation,
         vaultFill: settings.vm.vaultFill,
       }
     : null;
@@ -1496,6 +1640,11 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
+  const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
+  // Ultracode: the chat's choice, else the agent's, else the setting — with a model this Claude Code has it for. Dreams
+  // and condition checks are small jobs with a fixed shape: never.
+  const wantsUltracode = (conv.ultracode === null ? null : conv.ultracode === 1) ?? agent.ultracode ?? settings.runner.ultracode;
+  const ultracode = !dreaming && job.trigger !== "check" && ultracodeFor(model, wantsUltracode === true);
   // Between two steps Claude Code asks for the messages waiting in the chat's queue. Dreams and condition checks run in
   // chats nobody writes to.
   const hooksPath =
@@ -1510,6 +1659,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
                 { hooks: [{ type: "http", url: `${gatewayUrl()}/hooks/post-tool-batch`, timeout: 10, headers: { Authorization: `Bearer ${res.token}` } }] },
               ],
             },
+            // Claude Code honours one --settings value: the session's Ultracode goes with the hooks.
+            ...(ultracode ? { ultracode: true } : {}),
           }),
         );
   job.hooked = !!hooksPath;
@@ -1570,7 +1721,6 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       });
   const memoryNow = memoryDigest(agent.repoPath);
 
-  const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
   const effort = effortFor(model, conv.effort || agent.effort || settings.runner.effort || null);
   job.model = model;
   if (!isModelId(model)) return { status: "failed", error: `Invalid model id "${model}"` };
@@ -1589,8 +1739,11 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     baseArgs.push("--permission-mode", "default", "--allowedTools", ...DREAM_ALLOWED);
   } else if (settings.runner.bypassPermissions && !hostLocked) baseArgs.push("--dangerously-skip-permissions");
   else {
-    // Non-bypass mode: allow Godmode-provided MCP tools without prompts (print mode cannot ask).
-    baseArgs.push("--permission-mode", "acceptEdits", "--allowedTools", Object.keys(mcp.mcpServers).map((n) => `mcp__${n}`).join(","));
+    // Non-bypass mode: allow Godmode-provided MCP tools without prompts (print mode cannot ask). Ultracode runs on
+    // workflows, which Claude Code wants reviewed before each one runs: allowed too, or it would refuse them all.
+    const allowed = Object.keys(mcp.mcpServers).map((n) => `mcp__${n}`);
+    if (ultracode) allowed.push(WORKFLOW_TOOL);
+    baseArgs.push("--permission-mode", "acceptEdits", "--allowedTools", allowed.join(","));
   }
   baseArgs.push("--mcp-config", mcpPath, "--strict-mcp-config");
   if (hooksPath) baseArgs.push("--settings", hooksPath);
@@ -1675,6 +1828,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest, memoryDigest: memoryNow });
     }
     job.memorySeen = memoryNow;
+    job.sessionCostBefore = resuming ? conv.claude_session_cost_usd : null;
     const stop = halted(job);
     if (stop) return stop;
     const sessionArgs = resuming ? ["--resume", sessionId] : ["--session-id", sessionId];
@@ -1712,6 +1866,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       job.acc = new StreamAccumulator(job.acc.blocks.filter((b, i) => i < kept || b.type === "notice"));
       if (command) job.keepSessionId = sessionId;
       sessionId = randomUUID();
+      job.sessionCostBefore = null;
       setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest, memoryDigest: memoryNow });
       attempt = await spawnClaude(
         job,
@@ -1761,6 +1916,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 async function execute(job: Job): Promise<void> {
   const startedMs = Date.now();
   sql("UPDATE runs SET status = 'running', started_at = COALESCE(started_at, ?) WHERE id = ?", now(), job.runId);
+  log.info("run started", { runId: job.runId, agentId: job.agentId, conversationId: job.conversationId, trigger: job.trigger, ...(job.resumed ? { continues: job.resumed.reason } : {}), ...(job.parentRunId ? { parentRunId: job.parentRunId } : {}) });
   bus.emit({ type: "run.started", run: getRun(job.runId) });
   emitConversationUpdated(job.conversationId);
   emitActivity(job, "Starting…");
@@ -1798,24 +1954,30 @@ function sum(a: number | null | undefined, b: number | null | undefined): number
   return a == null && b == null ? null : (a ?? 0) + (b ?? 0);
 }
 
+/**
+ * What this stretch of the run cost. Claude Code reports the total of the whole Claude session: on a resumed one the
+ * chat's earlier runs are in it, so what the session had counted before comes off. (A total below that is no running
+ * total — an older Claude Code, or a session that started over — and is taken as it is.)
+ */
+function stretchCost(job: Job): number | null {
+  const total = job.acc.final?.costUsd ?? null;
+  const before = job.sessionCostBefore ?? null;
+  if (total === null || before === null || total < before) return total;
+  return Math.round((total - before) * 1e6) / 1e6;
+}
+
 /** Cost, time and turns of the run so far: the stretches before a pause plus the one that just ended. */
 function spentBy(job: Job, startedMs: number): Spent {
   const { final } = job.acc;
   const before = job.spent;
-  const usage = final?.usage ?? null;
+  // Claude Code times each result's own turn. With several (a workflow outlived its turn) the wait for the workflow
+  // between them is in none: the clock counts then.
+  const ownMs = job.acc.results > 1 ? null : final?.durationMs;
   return {
-    costUsd: sum(before.costUsd, final?.costUsd),
-    durationMs: sum(before.durationMs, final?.durationMs ?? (job.status === "running" ? Date.now() - startedMs : null)),
+    costUsd: sum(before.costUsd, stretchCost(job)),
+    durationMs: sum(before.durationMs, ownMs ?? (job.status === "running" ? Date.now() - startedMs : null)),
     numTurns: sum(before.numTurns, final?.numTurns),
-    usage:
-      usage && before.usage
-        ? {
-            inputTokens: usage.inputTokens + before.usage.inputTokens,
-            outputTokens: usage.outputTokens + before.usage.outputTokens,
-            cacheReadTokens: usage.cacheReadTokens + before.usage.cacheReadTokens,
-            cacheWriteTokens: usage.cacheWriteTokens + before.usage.cacheWriteTokens,
-          }
-        : (usage ?? before.usage),
+    usage: addUsage(before.usage, final?.usage ?? null),
   };
 }
 
@@ -1834,7 +1996,8 @@ function saveConversation(job: Job, agent: Agent | null, succeeded: boolean, ts:
       : job.keepSessionId
         ? { claudeSessionId: job.keepSessionId }
         : acc.sessionId
-          ? { claudeSessionId: acc.sessionId }
+          ? // With what the session has cost so far (a stretch that ended without saying keeps the count from before).
+            { claudeSessionId: acc.sessionId, claudeSessionCostUsd: acc.final?.costUsd ?? job.sessionCostBefore ?? null }
           : {}),
     lastMessageAt: ts,
     ...(digest !== null && digest !== row?.instructions_digest ? { instructionsDigest: digest } : {}),
@@ -1902,7 +2065,7 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
   const asked = pause.reason === "question" ? pause.question : undefined;
   acc.markPause({ type: "pause", reason: pause.reason, at: ts, ...(pause.reason === "limit" ? { limit: row.limit_name, resumeAt: row.resume_at } : {}) });
   const text = redact(acc.lastTurnText());
-  const blocks = redactBlocks(acc.blocks, redact);
+  const blocks = redactedBlocks(job);
   if (job.deltaTimer) clearTimeout(job.deltaTimer);
   job.deltaTimer = null;
   jobs.delete(job.runId);
@@ -1973,7 +2136,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   const text = redact(acc.finalText());
   // A question the run asked but never stood still for (it was stopped, timed out or broke off right after) is gone.
   if (job.pause?.question) acc.blocks.splice(0, acc.blocks.length, ...withdrawOpenBlocks(acc.blocks, "Stopped before it could wait for your answer."));
-  const blocks = redactBlocks(acc.blocks, redact);
+  const blocks = redactedBlocks(job);
   const error = outcome.error ? redact(outcome.error) : null;
   if (outcome.status === "failed" && error) blocks.push({ type: "error", text: error });
   if (outcome.status === "cancelled") blocks.push({ type: "notice", level: "info", text: error ?? "Cancelled" });
@@ -2065,11 +2228,34 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   }
 }
 
+/** Why a tool call failed: its first line (the exit code) and its end — an error message closes the output. */
+function failureExcerpt(result: string): string {
+  const text = result.trim();
+  if (text.length <= 320) return excerpt(text, 320);
+  const first = text.split("\n", 1)[0]!.slice(0, 100);
+  return `${excerpt(first, 100)} … ${excerpt(text.slice(-220), 220)}`;
+}
+
 /** One line per run in the diagnostic log: what it cost, how long it took and waited, which tools failed. */
 function logRunFinished(job: Job, run: Run, agent: Agent | null, status: Outcome["status"], error: string | null) {
   const tools = job.acc.blocks.flatMap((b) => (b.type === "tool_use" ? [b] : []));
   const byName = new Map<string, number>();
-  for (const t of tools) byName.set(t.name, (byName.get(t.name) ?? 0) + 1);
+  const failedByName = new Map<string, number>();
+  let resultChars = 0;
+  let imageChars = 0;
+  let images = 0;
+  for (const t of tools) {
+    byName.set(t.name, (byName.get(t.name) ?? 0) + 1);
+    if (t.isError) failedByName.set(t.name, (failedByName.get(t.name) ?? 0) + 1);
+    resultChars += t.result?.length ?? 0;
+    if (t.image) {
+      images++;
+      imageChars += t.image.length;
+    }
+  }
+  const usage = run.usage;
+  const top = (counts: Map<string, number>) => [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, n]) => `${name}×${n}`);
+  const sessionCost = job.acc.final?.costUsd ?? null;
   const details = {
     runId: run.id,
     agent: agent?.name ?? job.agentId,
@@ -2077,13 +2263,26 @@ function logRunFinished(job: Job, run: Run, agent: Agent | null, status: Outcome
     status,
     model: run.model,
     ms: run.durationMs,
+    // From start to end by the clock: more than `ms` when the computer slept or Claude Code waited for a background task.
+    wallMs: run.startedAt && run.finishedAt ? Date.parse(run.finishedAt) - Date.parse(run.startedAt) : null,
     queuedMs: run.startedAt ? Date.parse(run.startedAt) - Date.parse(run.createdAt) : null,
     costUsd: run.costUsd,
     turns: run.numTurns,
-    tokens: run.usage,
+    tokens: usage,
+    // What the model read per turn: a chat that grew large makes every turn expensive.
+    contextTokens: usage && run.numTurns ? Math.round((usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens) / run.numTurns) : null,
+    ...(job.sessionCostBefore != null ? { resumedSession: true, sessionCostUsd: sessionCost } : {}),
+    ...(job.acc.results > 1 ? { results: job.acc.results } : {}),
     toolCalls: tools.length,
-    topTools: [...byName.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, n]) => `${name}×${n}`),
-    failedTools: tools.filter((t) => t.isError).slice(0, 8).map((t) => ({ name: t.name, error: excerpt(t.result ?? "", 300) })),
+    topTools: top(byName),
+    ...(failedByName.size ? { failedToolCounts: top(failedByName) } : {}),
+    failedTools: tools.filter((t) => t.isError).slice(0, 8).map((t) => ({ name: t.name, error: failureExcerpt(t.result ?? "") })),
+    // How heavy the message got: its blocks, tool output and screenshots, and what sending and saving it took.
+    blocks: job.acc.blocks.length,
+    resultKb: Math.round(resultChars / 1024),
+    ...(images ? { images, imageKb: Math.round(imageChars / 1024) } : {}),
+    deltas: job.live?.seq ?? 0,
+    ...(job.slowestPersistMs && job.slowestPersistMs >= 20 ? { slowestSaveMs: Math.round(job.slowestPersistMs) } : {}),
     ...(job.depth ? { depth: job.depth } : {}),
     ...(job.timedOut ? { timedOut: true } : {}),
     ...(error ? { error: excerpt(error, 1000) } : {}),
@@ -2102,11 +2301,11 @@ function editedMemory(blocks: StreamAccumulator["blocks"]): boolean {
 }
 
 /**
- * Session settings from local slash commands. Claude Code keeps `/model` and `/effort` for its process only,
- * but every Godmode turn is a new process — so they are stored on the conversation. `/rename` renames the chat.
- * Only what Claude Code confirmed is stored: a rejected model would break every later turn of the chat.
+ * Session settings from local slash commands. Claude Code keeps `/model` and `/effort` (with `/effort ultracode`) for
+ * its process only, but every Godmode turn is a new process — so they are stored on the conversation. `/rename` renames
+ * the chat. Only what Claude Code confirmed is stored: a rejected model would break every later turn of the chat.
  */
-function commandOverrides(cmd: StreamAccumulator["localCommand"]): { model?: string | null; effort?: Effort | null; title?: string } {
+function commandOverrides(cmd: StreamAccumulator["localCommand"]): { model?: string | null; effort?: Effort | null; ultracode?: boolean; title?: string } {
   const arg = cmd?.args.trim();
   if (!cmd || !arg) return {};
   switch (cmd.name) {
@@ -2114,9 +2313,12 @@ function commandOverrides(cmd: StreamAccumulator["localCommand"]): { model?: str
       if (!/^Set model to /.test(cmd.output)) return {};
       return { model: arg.toLowerCase() === "default" ? null : arg };
     case "effort": {
+      // "Ultracode on (this session only): …", "Ultracode off. Effort stays high." — and a new level ends it: "… · Ultracode off".
+      const switched = /(?:^| · )Ultracode (on|off)\b/.exec(cmd.output)?.[1];
+      const ultracode = switched ? { ultracode: switched === "on" } : {};
       const level = /effort level (?:set )?to (\w+)/i.exec(cmd.output)?.[1]?.toLowerCase();
-      if (level === "auto") return { effort: null };
-      return level && (EFFORT_OPTIONS as readonly string[]).includes(level) ? { effort: level as Effort } : {};
+      if (level === "auto") return { effort: null, ...ultracode };
+      return level && (EFFORT_OPTIONS as readonly string[]).includes(level) ? { effort: level as Effort, ...ultracode } : ultracode;
     }
     case "rename":
       return { title: redact(arg).slice(0, 200) };

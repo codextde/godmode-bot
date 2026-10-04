@@ -4,7 +4,8 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LogEntry, LogOverview } from "@godmode/shared";
 import { loadConfig } from "../src/config";
-import { closeDb, openDb } from "../src/db";
+import { all, closeDb, getDb, openDb } from "../src/db";
+import { noteSync, takeSlowSync, timedSync } from "../src/diagnostics/slow";
 import { LOG_FILE, MAX_LOG_FILE_BYTES, ROTATED_LOG_FILE, excerpt, logger, setFileLogLevel, setLogDir, setLogLevel, setSecretMasker } from "../src/log";
 import { buildLogReport, clearLogs, fingerprint, listLogEntries, logOverview } from "../src/diagnostics/logs";
 import { getAccessToken } from "../src/server/auth";
@@ -186,6 +187,43 @@ describe("reading the log", () => {
   });
 });
 
+describe("slow synchronous work", () => {
+  test("is added up per kind, the longest first, and forgotten once taken", () => {
+    takeSlowSync();
+    noteSync("run delta", 120);
+    noteSync("run delta", 380);
+    noteSync("db: SELECT 1", 60);
+    noteSync("quick", 4);
+    expect(takeSlowSync()).toEqual([
+      { what: "run delta", times: 2, totalMs: 500, worstMs: 380 },
+      { what: "db: SELECT 1", times: 1, totalMs: 60, worstMs: 60 },
+    ]);
+    expect(takeSlowSync()).toEqual([]);
+  });
+
+  test("times what it runs and passes its result and its error on", () => {
+    takeSlowSync();
+    expect(timedSync("answer", () => 42)).toBe(42);
+    expect(() =>
+      timedSync("boom", () => {
+        Bun.sleepSync(40);
+        throw new Error("no");
+      }),
+    ).toThrow("no");
+    expect(takeSlowSync().map((s) => s.what)).toEqual(["boom"]);
+  });
+
+  test("a slow database statement names itself", () => {
+    takeSlowSync();
+    getDb().run("CREATE TABLE IF NOT EXISTS slow_probe (n INTEGER)");
+    all("WITH RECURSIVE c(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM c WHERE n < 3000000) SELECT count(*) AS n FROM c");
+    const slow = takeSlowSync();
+    expect(slow.length).toBe(1);
+    expect(slow[0]!.what).toStartWith("db: WITH RECURSIVE c(n)");
+    expect(lines().some((e) => e.scope === "db" && e.msg === "slow database query")).toBe(true);
+  });
+});
+
 describe("report", () => {
   test("summarizes problems, runs and slow spots for an AI", () => {
     const runner = logger("runner");
@@ -218,6 +256,36 @@ describe("report", () => {
     expect(report).toContain("## Entries (all, oldest first)");
     const body = report.slice(report.indexOf("```jsonl"));
     expect(body.indexOf('"run_a"')).toBeLessThan(body.indexOf('"run_b"'));
+  });
+
+  test("says who spent what, what blocked the event loop, how the memory stood and which waits are by design", () => {
+    const runner = logger("runner");
+    runner.info("run finished", { runId: "run_a", agent: "Researcher", trigger: "chat", status: "succeeded", ms: 40_000, wallMs: 41_000, costUsd: 0.5, contextTokens: 120_000 });
+    runner.info("run finished", { runId: "run_b", agent: "Researcher", trigger: "routine", status: "succeeded", ms: 60_000, wallMs: 3_000_000, costUsd: 1.5, contextTokens: 400_000 });
+    runner.info("run finished", { runId: "run_c", agent: "Writer", trigger: "chat", status: "succeeded", ms: 5_000, wallMs: 5_100, costUsd: 0.25 });
+    const perf = logger("perf");
+    perf.warn("event loop blocked", { ms: 900, times: 3, totalMs: 2100, running: 2, queued: 0, during: [{ what: "run delta", times: 4, totalMs: 1500, worstMs: 800 }, { what: "db: UPDATE messages SET blocks = ? WHERE id = ?", times: 1, totalMs: 260, worstMs: 260 }] });
+    perf.warn("event loop blocked", { ms: 400, times: 1, totalMs: 400, running: 1, queued: 0, during: [{ what: "run delta", times: 1, totalMs: 400, worstMs: 400 }] });
+    perf.info("resources", { rssMb: 300, heapUsedMb: 60, uptimeMin: 30, running: 0, queued: 0, dbMb: 120, walMb: 4, clients: 1 });
+    perf.warn("high memory use", { rssMb: 2500, heapUsedMb: 86, uptimeMin: 60, running: 3, queued: 0, dbMb: 140, walMb: 9, clients: 1, sleeps: 4, sleptMin: 52 });
+    perf.info("resumed after the computer slept", { pausedMs: 900_000, sleptAt: "2026-10-01T05:00:00.000Z", awakeMin: 42, running: 1, queued: 0 });
+    logger("http").info("slow request", { method: "POST", route: "/api/vms/:id/stop", status: 200, ms: 6600, expected: true });
+    logger("http").info("slow request", { method: "GET", route: "/api/agents", status: 200, ms: 1400 });
+
+    const report = buildLogReport();
+    expect(report).toContain("- Cost by agent: Researcher $2.00 in 2 runs, ~260k tokens read per turn · Writer $0.25 in 1 run");
+    expect(report).toContain("1 run took much longer by the clock than Claude worked");
+    expect(report).toContain("run_b 50 min 0 s vs 1 min 0 s");
+    expect(report).toContain("| run delta | 5 | 1.9 s | 800 ms |");
+    expect(report).toContain("| db: UPDATE messages SET blocks = ? WHERE id = ? | 1 | 260 ms | 260 ms |");
+    expect(report).toContain("- Memory: highest 2500 MB");
+    expect(report).toContain("3 running; JavaScript heap 86 MB");
+    expect(report).toContain("database 140 MB, its write-ahead log 9 MB");
+    expect(report).toContain("- Sleep: the computer slept 4 times, 1 of them while a run was working");
+    const unexpected = report.slice(report.indexOf("**Requests slower than 1 s**"), report.indexOf("**Requests that wait by design"));
+    expect(unexpected).toContain("GET /api/agents");
+    expect(unexpected).not.toContain("/api/vms/:id/stop");
+    expect(report.slice(report.indexOf("**Requests that wait by design"))).toContain("| POST /api/vms/:id/stop | 1 | 6.6 s | 6.6 s |");
   });
 
   test("masks again with what the vault knows when the report is made", () => {

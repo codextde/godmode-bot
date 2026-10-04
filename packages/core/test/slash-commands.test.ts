@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
-import { argValue, invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { getConversation, sendMessage, startChat } from "../src/services/conversations";
 import { waitForRun } from "../src/runner/runner";
 import { __clearSlashCommandCache, listSlashCommands } from "../src/runner/commands";
@@ -159,6 +159,26 @@ describe("slash command catalog", () => {
     const before = invocations(env).length;
     await listSlashCommands(agent);
     expect(invocations(env).length).toBe(before);
+  });
+
+  test("a list that has grown old is answered at once and looked up again behind the request", async () => {
+    const before = invocations(env).length;
+    const realNow = Date.now;
+    Date.now = () => realNow() + 6 * 60_000;
+    try {
+      const stale = await listSlashCommands(agent);
+      expect(stale.map((c) => c.name)).toEqual(["goal", "clear", "hello"]);
+      // Asked again while that lookup runs: no second one.
+      await listSlashCommands(agent);
+      await until(() => invocations(env).length > before, 10_000, "the lookup behind the request");
+      await Bun.sleep(300);
+      expect(invocations(env).length).toBe(before + 1);
+      // The new list is the one at hand now.
+      await listSlashCommands(agent);
+      expect(invocations(env).length).toBe(before + 1);
+    } finally {
+      Date.now = realNow;
+    }
   });
 
   test("is served over HTTP", async () => {

@@ -43,6 +43,7 @@ function agentModel(p: Partial<Agent> & { id: string }): Agent {
     failedRunId: null,
     model: "",
     effort: null,
+    ultracode: null,
     isDefault: false,
     enabled: true,
     status: "idle",

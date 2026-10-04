@@ -98,6 +98,11 @@ export function profilesFromLocalState(browser: string, root: string, localState
 
 const permissionWarned = new Set<string>();
 
+/** Browser data folders the system refused to let Godmode read (macOS privacy protection). */
+export function blockedProfileRoots(): string[] {
+  return [...permissionWarned];
+}
+
 export async function listLocalChromeProfiles(opts: DetectOptions = {}): Promise<LocalChromeProfile[]> {
   const out: LocalChromeProfile[] = [];
   for (const src of browserSources(opts)) {

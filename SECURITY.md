@@ -76,6 +76,10 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
   never goes into a VM. Claude Code itself, the Godmode gateway and your Claude login stay on the host, so a VM strongly
   contains the agent's work but is not a boundary against a deliberately malicious model that can still use the tools
   Godmode gives it — the agent's shell shares the guest with its browser (it could read what a fill typed into a page
-  there, as with Bash on the host), and a VM's `admin` can change its own firewall.
+  there, as with Bash on the host), and a VM's `admin` can change its own firewall. Inside its VM an agent also decides
+  macOS privacy permissions (Accessibility, Screen Recording, Automation, …) for the software there: the `permissions`
+  tool writes the guest's own privacy database, which the guest's `admin` could do from the shell anyway (the images run
+  with System Integrity Protection off). What an agent grants or revokes with the tool — and what it tried to — is in
+  the audit log (`vm.permission.*`); none of it reaches this Mac's permissions.
 - Backups (`*.godmode-backup`) are encrypted with the backup passphrase you choose; secrets inside remain encrypted
   with your vault key. Only import backups you created.

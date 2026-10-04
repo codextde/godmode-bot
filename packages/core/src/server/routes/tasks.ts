@@ -5,6 +5,7 @@ import { archiveTasks, createTask, deleteTask, getTask, listTaskEvents, listTask
 import { readTaskAttachment, saveTaskAttachment } from "../../tasks/attachments";
 import { HttpError, badRequest } from "../../util";
 import { body, z } from "../validate";
+import { expectSlow } from "../../mcp/http";
 
 /** Shown in the app (images, PDFs, plain text); anything else is only downloaded. */
 const INLINE = /^(image\/(png|jpe?g|gif|webp|avif|bmp)|application\/pdf|text\/plain)$/i;
@@ -127,7 +128,13 @@ export function registerTaskRoutes(app: Hono): void {
     return c.json(await sendTaskMessage(c.req.param("id"), content, attachments, { actor: "user", via: requestDevice(c) ? "phone" : "task" }));
   });
 
-  app.post("/api/tasks/:id/push", async (c) => c.json(await pushTaskBranch(c.req.param("id"), { pullRequest: false })));
+  app.post("/api/tasks/:id/push", async (c) => {
+    expectSlow(c);
+    return c.json(await pushTaskBranch(c.req.param("id"), { pullRequest: false }));
+  });
 
-  app.post("/api/tasks/:id/pull-request", async (c) => c.json(await pushTaskBranch(c.req.param("id"), { pullRequest: true })));
+  app.post("/api/tasks/:id/pull-request", async (c) => {
+    expectSlow(c);
+    return c.json(await pushTaskBranch(c.req.param("id"), { pullRequest: true }));
+  });
 }

@@ -34,13 +34,35 @@ export function compareVersions(a: string, b: string): number {
   return preA ? -1 : 1;
 }
 
-export function claudeChannel(): ClaudeReleaseChannel {
-  const dir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+/** Where Claude Code keeps its settings, sign-in and sessions. */
+export function claudeConfigDir(): string {
+  return process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+}
+
+function claudeSettings(): { autoUpdatesChannel?: unknown; env?: Record<string, unknown> } {
   try {
-    const settings = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8")) as { autoUpdatesChannel?: unknown };
-    return settings.autoUpdatesChannel === "stable" ? "stable" : "latest";
+    return JSON.parse(readFileSync(join(claudeConfigDir(), "settings.json"), "utf8")) as { autoUpdatesChannel?: unknown; env?: Record<string, unknown> };
   } catch {
-    return "latest";
+    return {};
+  }
+}
+
+export function claudeChannel(): ClaudeReleaseChannel {
+  return claudeSettings().autoUpdatesChannel === "stable" ? "stable" : "latest";
+}
+
+/**
+ * Did the human turn off Claude Code's own auto-updater — `DISABLE_AUTOUPDATER`, or the older `autoUpdates: false`
+ * in its state file? Then it isn't updated unasked.
+ */
+export function claudeAutoUpdatesDisabled(): boolean {
+  const off = (v: unknown) => typeof v === "string" && v !== "" && v !== "0" && v.toLowerCase() !== "false";
+  if (off(process.env.DISABLE_AUTOUPDATER) || off(claudeSettings().env?.DISABLE_AUTOUPDATER)) return true;
+  try {
+    const state = process.env.CLAUDE_CONFIG_DIR ? join(claudeConfigDir(), ".claude.json") : join(homedir(), ".claude.json");
+    return (JSON.parse(readFileSync(state, "utf8")) as { autoUpdates?: unknown }).autoUpdates === false;
+  } catch {
+    return false;
   }
 }
 

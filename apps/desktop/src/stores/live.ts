@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { MessageBlock, Run } from "@godmode/shared";
+import { applyRunDelta, type MessageBlock, type Run, type RunDelta } from "@godmode/shared";
 
 export interface LiveRun {
   runId: string;
@@ -7,6 +7,9 @@ export interface LiveRun {
   conversationId: string;
   messageId: string | null;
   blocks: MessageBlock[];
+  /** The last `run.delta` applied to `blocks` (0 = none yet), and the stretch of the run it belongs to. */
+  seq: number;
+  stream?: string;
   status: Run["status"];
   /** Unknown for a run first seen through its stream. */
   trigger?: Run["trigger"];
@@ -67,7 +70,8 @@ interface LiveState {
   /** On connect: only these runs are active; the rest ended while the app was away (their streams are kept). */
   retainRuns: (ids: string[]) => void;
   runStarted: (run: Run) => void;
-  runDelta: (runId: string, conversationId: string, messageId: string, blocks: MessageBlock[]) => void;
+  /** False when the delta doesn't fit what is here (one was missed): the whole list has to be asked for. */
+  runDelta: (delta: RunDelta) => boolean;
   runActivity: (runId: string, label: string) => void;
   runFinished: (run: Run) => void;
   /** The run stands still: nothing streams, and it has not ended. */
@@ -80,7 +84,7 @@ interface LiveState {
 }
 
 /** Realtime state fed by the WebSocket (in-flight runs, streaming blocks, browser frames). */
-export const useLive = create<LiveState>((set) => ({
+export const useLive = create<LiveState>((set, get) => ({
   connected: false,
   runs: {},
   finished: {},
@@ -110,6 +114,8 @@ export const useLive = create<LiveState>((set) => ({
             conversationId: run.conversationId,
             messageId: known?.messageId ?? null,
             blocks: known?.blocks ?? [],
+            seq: known?.seq ?? 0,
+            stream: known?.stream,
             status: run.status,
             trigger: run.trigger,
             parentRunId: run.parentRunId ?? null,
@@ -120,18 +126,23 @@ export const useLive = create<LiveState>((set) => ({
         },
       };
     }),
-  runDelta: (runId, conversationId, messageId, blocks) =>
+  runDelta: (delta) => {
+    const have = get().runs[delta.runId];
+    const next = applyRunDelta(have, delta);
+    if (!next) return false;
     set((s) => {
-      const prev = s.runs[runId];
+      const prev = s.runs[delta.runId];
       return {
         runs: {
           ...s.runs,
-          [runId]: {
-            runId,
+          [delta.runId]: {
+            runId: delta.runId,
             agentId: prev?.agentId ?? "",
-            conversationId,
-            messageId,
-            blocks,
+            conversationId: delta.conversationId,
+            messageId: delta.messageId,
+            blocks: next.blocks,
+            seq: next.seq,
+            stream: next.stream,
             status: "running",
             trigger: prev?.trigger,
             parentRunId: prev?.parentRunId,
@@ -140,7 +151,9 @@ export const useLive = create<LiveState>((set) => ({
           },
         },
       };
-    }),
+    });
+    return true;
+  },
   runActivity: (runId, label) =>
     set((s) => (s.runs[runId] ? { runs: { ...s.runs, [runId]: { ...s.runs[runId], activity: label } } } : s)),
   runFinished: (run) =>

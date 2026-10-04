@@ -3,7 +3,8 @@
  * the run works in (see vm/service.ts `attachVm`). Commands run through `tart exec` as the guest user in a fresh login
  * shell; files are read and written through the same channel, so nothing on the host is reachable except the VM's
  * shared folder. `screen` sees and controls the VM's display over VNC with the computer-use action vocabulary;
- * `fill_login` / `fill_totp` type vault secrets into it without the model seeing them (when settings.vm.vaultFill).
+ * `fill_login` / `fill_totp` type vault secrets into it without the model seeing them (when settings.vm.vaultFill);
+ * `permissions` sets the macOS privacy permissions of the software in the VM (see ./permissions.ts).
  */
 import { z } from "zod";
 import { getAgent } from "../agents/service";
@@ -16,6 +17,7 @@ import type { RunContext } from "../types";
 import { HttpError, sleep } from "../util";
 import { credentialsForAgent, getCredential, markCredentialUsed, revealForAgent } from "../vault/credentials";
 import { codeForAgent, totpForAgent } from "../vault/totp";
+import { PERMISSION_NAMES, PermissionError, deniedRequests, grantPermissions, listPermissions, revokePermissions, type GuestExec } from "./permissions";
 import { GUEST_SHARED_DIR, GUEST_USER, execInVm, getVm, guestPathWord, runSignal, vmOfRun } from "./service";
 import { TYPABLE_SECRET, captureScreen, click, drag, eraseTyped, move, pressKeys, scroll, secureInputOwner, typeSecret, typeText, type Button } from "./screen";
 import { VncError } from "./vnc";
@@ -32,7 +34,7 @@ const MAX_READ_BYTES = 2_000_000;
 const DEFAULT_READ_LINES = 2000;
 
 export const VM_INSTRUCTIONS =
-  "Tools for the macOS virtual machine this task runs in: run shell commands, read, write and edit files, see and control its screen, and type saved logins and 2FA codes into it. " +
+  "Tools for the macOS virtual machine this task runs in: run shell commands, read, write and edit files, see and control its screen, give its software the macOS permissions it needs, and type saved logins and 2FA codes into it. " +
   "Each shell call is a fresh login shell (zsh) as the guest user; pass cwd instead of relying on an earlier cd.";
 
 function text(t: string, isError = false): VmToolResult {
@@ -286,7 +288,8 @@ const TOOLS: VmTool[] = [
       `Run a shell command in the macOS VM (zsh login shell as user "${GUEST_USER}", passwordless sudo, Homebrew on PATH). ` +
       "Returns the exit code, stdout and stderr. Each call starts a fresh shell: pass cwd (default: the home folder) instead of relying on an earlier cd. " +
       "The call returns when the command's output closes — start servers and other long-running processes in the background with nohup and redirect their output to a file " +
-      "(e.g. `nohup npm run dev > /tmp/dev.log 2>&1 &`). Commands must not wait for interactive input.",
+      "(e.g. `nohup npm run dev > /tmp/dev.log 2>&1 &`). Commands must not wait for interactive input — one that controls another app (osascript, Apple events) waits for " +
+      'a macOS dialog unless you granted it first: permissions {action: "grant", app: "shell", permissions: ["automation"], target: "<the app>"}.',
     schema: z.object({
       command: z.string().min(1).max(100_000).describe("Shell command(s) to run"),
       cwd: z.string().max(4096).optional().describe("Directory to run in (absolute, ~/… or relative to the home folder)"),
@@ -391,6 +394,41 @@ const TOOLS: VmTool[] = [
           2,
         ),
       );
+    },
+  }),
+  defineTool({
+    name: "permissions",
+    description: [
+      "macOS privacy permissions of the software in the VM (the switches under System Settings → Privacy & Security), set directly — nobody has to answer a dialog. In the VM these are yours to decide.",
+      'grant / revoke: app + permissions. app is the app\'s name ("Google Chrome"), its bundle id ("com.google.Chrome") or a path (an app, or a bare program like /opt/homebrew/bin/node); "shell" stands for the commands you run with the shell tool. ' +
+        "The automation permission (controlling another app with AppleScript or Apple events) also takes target: the app that is controlled.",
+      "list: the permissions of app — of every app when app is left out. denied: what macOS refused lately; look there when an app can't see the screen, click, type or reach files.",
+      "Grant before you start an app or a script that needs a permission. An app that already runs may need to be quit and reopened.",
+    ].join("\n"),
+    schema: z.object({
+      action: z.enum(["grant", "revoke", "list", "denied"]),
+      app: z.string().max(1024).optional().describe('App name, bundle id or path; "shell" = the commands you run with the shell tool. Needed for grant and revoke'),
+      permissions: z.array(z.enum(PERMISSION_NAMES)).min(1).max(PERMISSION_NAMES.length).optional().describe("grant / revoke: the permissions"),
+      target: z.string().max(1024).optional().describe('automation: the app that is controlled (name, bundle id or path), e.g. "System Events"'),
+      minutes: z.number().int().min(1).max(120).optional().describe("denied: how many minutes to look back (default 10)"),
+    }),
+    run: async (vmId, args, env) => {
+      const exec: GuestExec = (script, opts) => execInVm(vmId, script, { ...opts, signal: env.signal });
+      if (args.action === "list") return text(await listPermissions(exec, args.app));
+      if (args.action === "denied") return text(await deniedRequests(exec, args.minutes ?? 10));
+      if (!args.app?.trim()) return text(`${args.action} needs app: the app's name, bundle id or path, or "shell" for the commands you run with the shell tool.`, true);
+      if (!args.permissions?.length) return text(`${args.action} needs permissions, e.g. ["accessibility", "screen_recording"].`, true);
+      const change = { app: args.app, permissions: [...new Set(args.permissions)], target: args.target };
+      const record = (details: Record<string, unknown>) => audit(`agent:${env.agentId}`, `vm.permission.${args.action}`, vmId, { runId: env.runId, permissions: change.permissions, ...details });
+      try {
+        const done = args.action === "grant" ? await grantPermissions(exec, change) : await revokePermissions(exec, change);
+        record({ ok: true, client: done.client.client, ...(done.target ? { target: done.target.client } : {}) });
+        return text(done.text);
+      } catch (err) {
+        // Also when it failed: the system's database may have been changed before the user's refused.
+        record({ ok: false, app: args.app, ...(args.target ? { target: args.target } : {}), error: err instanceof Error ? err.message : String(err) });
+        throw err;
+      }
     },
   }),
   defineTool({
@@ -537,7 +575,7 @@ export async function callVmTool(ctx: RunContext, name: string, args: unknown): 
     return await tool.run(vmId, parsed as never, { vmId, runId: ctx.runId, agentId: ctx.agentId, signal: runSignal(ctx.runId) });
   } catch (err) {
     if (err instanceof z.ZodError) return text(`Invalid arguments: ${err.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`, true);
-    if (err instanceof VncError || err instanceof KeyError) return text(err.message, true);
+    if (err instanceof VncError || err instanceof KeyError || err instanceof PermissionError) return text(err.message, true);
     if (err instanceof HttpError) return text(err.status === 423 ? "The vault is locked; ask the human to unlock Godmode." : err.message, true);
     log.warn(`vm tool ${name} failed`, err);
     return text(`The VM tool failed: ${err instanceof Error ? err.message : String(err)}`, true);

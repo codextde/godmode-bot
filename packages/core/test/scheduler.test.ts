@@ -142,6 +142,7 @@ describe("triggering", () => {
         claudeSessionId: null,
         model: null,
         effort: null,
+        ultracode: null,
         workingDirectory: null,
         computerTarget: null,
         vmId: null,

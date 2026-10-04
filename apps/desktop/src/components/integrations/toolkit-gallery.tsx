@@ -189,7 +189,7 @@ function ToolkitCard({ toolkit: t, index, connected, onConnect }: { toolkit: Com
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index % 24, 12) * 0.03 }}
-      className="group flex flex-col rounded-xl border bg-card p-4 shadow-card transition hover:border-foreground/15 hover:shadow-float"
+      className="group flex flex-col rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-float"
     >
       <div className="flex items-start gap-3">
         <ToolkitLogo src={t.logo} name={t.name} />

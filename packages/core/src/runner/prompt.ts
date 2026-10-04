@@ -76,6 +76,8 @@ export interface PromptVm {
   browser: boolean;
   /** The `cua` tools (Cua Driver in the VM) control the VM's apps and windows. */
   cua: boolean;
+  /** Shell commands may already script System Events and Finder (vm/permissions.ts `ensureAgentAccess`). */
+  shellAutomation: boolean;
   /** Saved logins and 2FA codes may be typed into the VM (settings.vm.vaultFill). */
   vaultFill: boolean;
 }
@@ -394,6 +396,7 @@ This task runs in a dedicated macOS virtual machine, **${vm.name}** — not on $
 - Use the \`vm\` MCP tools: \`shell\` runs a command (a fresh zsh login shell as user \`${vm.guestUser}\` with passwordless sudo and Homebrew; pass \`cwd\`), \`read_file\` / \`write_file\` / \`edit_file\` work on files in the VM, \`screen\` sees and controls its whole display (mouse and keyboard, like computer use), \`info\` describes the VM.${vm.hostShellOff ? ` Claude Code's own Bash tool is turned off in this run because it would run on ${human}'s computer, and your other file tools only reach your repository, the chat's folder and the shared folder.` : ` Claude Code's own Bash tool still runs on ${human}'s computer — only use it for your own repository.`}
 - Websites: ${vm.browser ? `the \`browser\` tools drive Google Chrome inside the VM (it is on the VM's screen too). Downloads land in \`${home}/Downloads\` in the VM.` : browserOn ? "no browser could be set up in the VM for this run." : "the browser is turned off for you."}
 ${apps}
+- Permissions: the macOS privacy permissions of the software in the VM are yours to set — never ask ${human} for them. \`permissions({ action: "grant", app, permissions })\` from the \`vm\` server gives an app Accessibility, Screen Recording, Full Disk Access, Automation, Camera, Microphone and the like without a dialog (\`app\`: its name, bundle id or path — or \`"shell"\` for the commands you run with \`shell\`, which need \`permissions: ["automation"], target: "<app>"\` before they script another app${vm.shellAutomation ? "; System Events and Finder are already allowed" : ""}). Grant before you start something that needs a permission. When an app can't see the screen, click, type or reach files, \`{ action: "denied" }\` shows what macOS refused. If a permission dialog is already on the VM's screen, click Allow.
 - The VM keeps its disk between tasks: tools you install, repositories you clone and files you create stay until ${human} resets the VM. Keep your work in the home folder (\`/Users/${vm.guestUser}\`).
 - Shared folder: \`${vm.guestSharedDir}\` in the VM is \`${vm.hostSharedDir}\` on ${human}'s computer. Put results ${human} should get (reports, builds, exports) there; you can also read and write it with your normal file tools.
 - Your own repository (CLAUDE.md, MEMORY.md) stays on ${human}'s computer — keep using your normal file tools for it.
@@ -474,7 +477,7 @@ export function resumeContextPrefix(
     : "";
   // The VM can be assigned or changed between turns: always restate where the work happens.
   const machine = vm
-    ? `\nYou work in the macOS VM "${vm.name}" — everything happens inside it: use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen)${vm.browser ? ", the `browser` tools (Chrome in the VM)" : ""}${vm.cua ? " and the `cua` tools (the VM's apps)" : ""}. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""} ${vm.vaultFill ? `Saved logins and 2FA codes can be typed into the VM with ${vm.browser ? "vault_fill_login / vault_fill_totp (in its Chrome) and " : ""}fill_login / fill_totp.` : "Typing saved logins and 2FA codes into the VM is turned off."}`
+    ? `\nYou work in the macOS VM "${vm.name}" — everything happens inside it: use the \`vm\` MCP tools (shell, read_file, write_file, edit_file, screen, permissions)${vm.browser ? ", the `browser` tools (Chrome in the VM)" : ""}${vm.cua ? " and the `cua` tools (the VM's apps)" : ""}. Shared folder: \`${vm.guestSharedDir}\` in the VM = \`${vm.hostSharedDir}\` on the host.${vm.hostShellOff ? " Claude Code's Bash tool is off in this run." : ""} ${vm.vaultFill ? `Saved logins and 2FA codes can be typed into the VM with ${vm.browser ? "vault_fill_login / vault_fill_totp (in its Chrome) and " : ""}fill_login / fill_totp.` : "Typing saved logins and 2FA codes into the VM is turned off."}`
     : "";
   // Folders and repositories can be attached or removed between turns.
   const attached = sources?.items.length ? `\nWorkspace folders and repositories (added to this session): ${sources.items.map(sourceLine).join(", ")}.` : "";

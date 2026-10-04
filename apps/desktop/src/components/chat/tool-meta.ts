@@ -488,6 +488,8 @@ function builtinMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "too
         detail: who && who !== "general-purpose" ? who : undefined,
       };
     }
+    case "Workflow":
+      return { kind: "subagent", icon: Workflow, title: str(input.name) ? `Ran the workflow ${str(input.name)}` : "Ran a workflow" };
     case "TodoWrite":
     case "TaskCreate":
     case "TaskUpdate":

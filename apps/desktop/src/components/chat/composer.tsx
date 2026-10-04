@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
-  type DragEvent,
   type KeyboardEvent,
   type ReactNode,
   type Ref,
@@ -105,7 +104,6 @@ export function Composer({
   const [text, setText, textDraft] = useDraft(textKey, "");
   const [attachments, setAttachments, filesDraft] = useDraft(filesKey, NO_ATTACHMENTS, { persist: false });
   const [focused, setFocused] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef(false);
@@ -321,13 +319,6 @@ export function Composer({
     void addFiles(files);
   };
 
-  const onDrop = (e: DragEvent) => {
-    if (!e.dataTransfer.types.includes("Files")) return;
-    e.preventDefault();
-    setDragOver(false);
-    void addFiles(Array.from(e.dataTransfer.files));
-  };
-
   const toggleDictation = () => {
     if (!voiceEnabled) {
       navigate("/settings/voice");
@@ -367,18 +358,8 @@ export function Composer({
         "@container/composer relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200",
         focused && "border-foreground/20 ring-4 ring-foreground/[0.035] dark:border-foreground/25 dark:ring-foreground/[0.05]",
         working && "glow-border",
-        dragOver && "border-foreground/40 ring-4 ring-foreground/[0.06]",
         className,
       )}
-      onDragOver={(e) => {
-        if (!e.dataTransfer.types.includes("Files")) return;
-        e.preventDefault();
-        setDragOver(true);
-      }}
-      onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(false);
-      }}
-      onDrop={onDrop}
     >
       <AnimatePresence>
         {menuOpen && (
