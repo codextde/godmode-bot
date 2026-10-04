@@ -122,7 +122,8 @@ export type EntityName =
   | "messaging"
   | "tasks"
   | "followups"
-  | "mobile";
+  | "mobile"
+  | "system";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =

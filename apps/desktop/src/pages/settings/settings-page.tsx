@@ -100,7 +100,7 @@ export default function SettingsPage() {
       security: () => <SecuritySection settings={s} />,
       backup: () => <BackupSection />,
       phone: () => <PhoneSection settings={s} />,
-      system: () => <SystemSection bootstrap={boot} />,
+      system: () => <SystemSection bootstrap={boot} settings={settings.data} />,
       logs: () => <LogsSection settings={s} />,
       about: () => <AboutSection version={boot?.version} />,
     }[active]();

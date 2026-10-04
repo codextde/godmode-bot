@@ -887,6 +887,14 @@ export interface DiagnosticsSettings {
   verbose: boolean;
 }
 
+/** Keeping the tools Godmode relies on working and current (Settings → System). */
+export interface MaintenanceSettings {
+  /** Repair in the background what Godmode can repair by itself: file permissions and missing required tools. */
+  autoFix: boolean;
+  /** Install updates of the installed tools in the background, while no agent is working. */
+  autoUpdate: boolean;
+}
+
 export interface GeneralSettings {
   theme: "dark" | "light" | "system";
   accent: string;
@@ -1066,6 +1074,7 @@ export interface Settings {
   server: ServerSettings;
   memory: MemorySettings;
   diagnostics: DiagnosticsSettings;
+  maintenance: MaintenanceSettings;
   mobile: MobileSettings;
   onboardingComplete: boolean;
 }
@@ -1138,6 +1147,103 @@ export interface ClaudeUpdateResult {
   previous: string | null;
   version: string | null;
   output: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Permissions, repairs and tool updates (Settings → System)            */
+/* ------------------------------------------------------------------ */
+
+export type PermissionId = "data-dir" | "data-private" | "tool-binaries" | "claude-config" | "accessibility" | "screen-recording" | "full-disk-access";
+
+export interface PermissionStatus {
+  id: PermissionId;
+  name: string;
+  ok: boolean;
+  detail: string;
+  /** File or folder the check is about. */
+  path: string | null;
+  /** Godmode can't work without it; false = only a feature is limited. */
+  required: boolean;
+  /**
+   * How a problem gets solved: "auto" = Godmode repairs it itself, "request" = Godmode asks the system and the human
+   * allows it there, "manual" = only the human can (see fixHint).
+   */
+  fix: "auto" | "request" | "manual";
+  fixHint: string;
+}
+
+export interface PermissionReport {
+  ok: boolean;
+  checkedAt: ISODate;
+  permissions: PermissionStatus[];
+}
+
+/** What a repair did: "pending" = the system now waits for the human, "manual" = Godmode can't do it. */
+export type FixOutcome = "fixed" | "pending" | "failed" | "manual";
+
+export interface FixResult {
+  kind: "dependency" | "permission";
+  id: DependencyId | PermissionId;
+  name: string;
+  outcome: FixOutcome;
+  output: string;
+}
+
+export interface FixReport {
+  /** Nothing that Godmode needs is still broken. */
+  ok: boolean;
+  startedAt: ISODate;
+  finishedAt: ISODate;
+  results: FixResult[];
+}
+
+export type ToolId = Exclude<DependencyId, "claude-auth"> | "tart";
+
+/**
+ * How a tool is kept current: "release" follows its own releases, "pinned" is the version this Godmode release was
+ * tested with, "external" is updated by the system or a package manager.
+ */
+export type UpdateTrack = "release" | "pinned" | "external";
+
+export interface ToolUpdateStatus {
+  id: ToolId;
+  name: string;
+  installed: boolean;
+  current: string | null;
+  /** Version an update would install; null = unknown. */
+  latest: string | null;
+  updateAvailable: boolean;
+  /** Godmode can install updates of it. */
+  updatable: boolean;
+  track: UpdateTrack;
+  detail: string;
+}
+
+export interface UpdateReport {
+  checkedAt: ISODate;
+  tools: ToolUpdateStatus[];
+}
+
+export interface ToolUpdateResult {
+  id: ToolId;
+  name: string;
+  ok: boolean;
+  /** Nothing was installed: it already was up to date. */
+  upToDate: boolean;
+  previous: string | null;
+  version: string | null;
+  output: string;
+}
+
+/** The background upkeep (settings.maintenance) and what its last pass did. */
+export interface MaintenanceStatus {
+  running: boolean;
+  lastRunAt: ISODate | null;
+  nextRunAt: ISODate | null;
+  /** Why the last pass left updates for later, e.g. agents were working. */
+  postponed: string | null;
+  fixes: FixResult[];
+  updates: ToolUpdateResult[];
 }
 
 /* ------------------------------------------------------------------ */

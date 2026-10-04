@@ -98,6 +98,10 @@ export const DEFAULT_SETTINGS: Settings = {
   diagnostics: {
     verbose: false,
   },
+  maintenance: {
+    autoFix: true,
+    autoUpdate: true,
+  },
   mobile: {
     enabled: false,
     port: MOBILE_DEFAULT_PORT,

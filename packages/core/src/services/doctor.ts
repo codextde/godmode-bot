@@ -23,8 +23,8 @@ const REPORT_TTL_MS = 5 * 60_000;
 const BROWSER_USE_CHECK_TIMEOUT_MS = 180_000;
 const INSTALL_TIMEOUT_MS = 15 * 60_000;
 
-const isWin = () => process.platform === "win32";
-const exe = (name: string) => (isWin() ? `${name}.exe` : name);
+export const isWin = () => process.platform === "win32";
+export const exe = (name: string) => (isWin() ? `${name}.exe` : name);
 
 /* ------------------------------------------------------------------ */
 /* Process helper                                                       */
@@ -106,7 +106,7 @@ export async function runCommand(
 /* Binary resolution                                                    */
 /* ------------------------------------------------------------------ */
 
-function isFile(path: string): boolean {
+export function isFile(path: string): boolean {
   try {
     return statSync(path).isFile();
   } catch {
@@ -154,8 +154,16 @@ export function resolveClaudeBinary(): string | null {
   ]);
 }
 
+let uvxOverride: string | null | undefined;
+
+/** Tests: use this uvx (null = pretend uv isn't installed); undefined = auto-detect. */
+export function __setUvxForTests(path: string | null | undefined) {
+  uvxOverride = path;
+}
+
 /** Absolute path to uvx (for browser-use), or null. */
 export function resolveUvx(): string | null {
+  if (uvxOverride !== undefined) return uvxOverride;
   const home = homedir();
   const profile = process.env.USERPROFILE || home;
   return firstExisting([
@@ -306,7 +314,7 @@ async function checkBrowserUse(uvx: string | null, refresh: boolean): Promise<Ch
   return check;
 }
 
-function chromeVersion(path: string): Promise<string | null> | string | null {
+export function chromeVersion(path: string): Promise<string | null> | string | null {
   if (process.platform === "darwin") {
     // …/X.app/Contents/MacOS/X → …/X.app/Contents/Info.plist (no process spawn needed).
     try {
@@ -402,9 +410,16 @@ function installHint(id: DependencyId): string {
 
 let cachedReport: { at: number; report: DoctorReport } | null = null;
 let inflight: Promise<DoctorReport> | null = null;
+let generation = 0;
 
 export function resetDoctorCache() {
   cachedReport = null;
+  generation++;
+}
+
+/** Changes whenever something was installed or updated: what was derived from an older report is out of date. */
+export function doctorGeneration(): number {
+  return generation;
 }
 
 export async function runDoctor(refresh = false): Promise<DoctorReport> {
@@ -500,26 +515,32 @@ export async function installDependency(id: DependencyId): Promise<{ ok: boolean
   if (!valid.includes(id)) return { ok: false, output: `Unknown dependency: ${String(id)}` };
   if (id === "claude-mem") {
     const result = await installClaudeMem();
-    cachedReport = null;
+    resetDoctorCache();
     return result;
   }
   if (id === "cua-driver") {
     const result = await installCuaDriver();
-    cachedReport = null;
+    resetDoctorCache();
     return result;
   }
   const cmd = installCommand(id);
   if (!Array.isArray(cmd)) return { ok: false, output: cmd.error };
   log.info(`installing ${id}: ${cmd.join(" ")}`);
-  const res = await runCommand(cmd, {
+  const result = await runInstaller(cmd);
+  resetDoctorCache();
+  if (id === "browser-use" || id === "uv") browserUseCache = null;
+  if (!result.ok) log.warn(`install ${id} failed`);
+  return result;
+}
+
+/** Run an installer or updater to the end and hand back what it printed. */
+export async function runInstaller(argv: string[]): Promise<{ ok: boolean; output: string }> {
+  const res = await runCommand(argv, {
     timeoutMs: INSTALL_TIMEOUT_MS,
     env: childEnv({ PATH: toolPath(), ANONYMIZED_TELEMETRY: "false", BROWSER_USE_VERSION_CHECK: "false", CI: "1" }),
     maxOutput: 20_000,
   });
-  cachedReport = null;
-  if (id === "browser-use" || id === "uv") browserUseCache = null;
   const output = stripAnsi(`${res.stdout}${res.stderr ? `\n${res.stderr}` : ""}`).trim();
   if (res.timedOut) return { ok: false, output: `${output}\n\nTimed out after ${INSTALL_TIMEOUT_MS / 60_000} minutes.`.trim() };
-  if (res.code !== 0) log.warn(`install ${id} failed (exit ${res.code})`);
   return { ok: res.code === 0, output: output || (res.code === 0 ? "Done." : `Failed with exit code ${res.code}`) };
 }

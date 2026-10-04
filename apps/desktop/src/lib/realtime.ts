@@ -52,6 +52,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
   followups: [qk.followups],
+  // The background upkeep repaired or updated a tool: system check, permissions, updates.
+  system: [qk.doctor],
 };
 
 export function startRealtime(queryClient: QueryClient) {

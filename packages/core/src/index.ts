@@ -5,7 +5,8 @@
  *   godmode serve [--host 127.0.0.1] [--port 7777] [--data-dir ~/.godmode] [--ui ./dist] [--token-stdin]
  *   godmode token            print the access token for the web dashboard
  *   godmode password <pw>    set the web dashboard password
- *   godmode doctor           check dependencies (claude, uv, chrome)
+ *   godmode doctor           check dependencies (claude, uv, chrome) and permissions; --fix repairs what it can
+ *   godmode update           update the installed tools
  *   godmode version
  */
 import { parseArgs } from "node:util";
@@ -34,6 +35,9 @@ import { closeAllConnections } from "./ssh/client";
 import { closeGuestTunnels } from "./vm/guest";
 import { startTasks, stopTasks } from "./tasks/service";
 import { runDoctor } from "./services/doctor";
+import { checkPermissions } from "./services/permissions";
+import { fixAll, installUpdates, startMaintenance, stopMaintenance } from "./services/maintenance";
+import { checkUpdates } from "./services/updates";
 import { resourceSnapshot, startDiagnostics, stopDiagnostics } from "./diagnostics/monitor";
 import { getModelCatalog } from "./runner/models";
 import { refreshMobileAccess, startMobileAccess, stopMobileAccess } from "./mobile/access";
@@ -51,6 +55,7 @@ function parseCli() {
       ui: { type: "string" },
       mode: { type: "string" },
       "token-stdin": { type: "boolean" },
+      fix: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
     allowPositionals: true,
@@ -201,6 +206,7 @@ async function serve(values: Record<string, unknown>) {
   // Background doctor check so the UI has fresh dependency info.
   runDoctor(true).catch((err) => log.warn("doctor failed", err));
   getModelCatalog().catch((err) => log.warn("model catalog failed", err));
+  startMaintenance();
 
   let stopping = false;
   const shutdown = async (signal: string) => {
@@ -208,6 +214,7 @@ async function serve(values: Record<string, unknown>) {
     stopping = true;
     log.info(`received ${signal}, shutting down`, resourceSnapshot());
     stopDiagnostics();
+    stopMaintenance();
     stopScheduler();
     stopFollowups();
     stopPauses();
@@ -246,7 +253,8 @@ Usage:
   godmode serve [--host 127.0.0.1] [--port 7777] [--data-dir ~/.godmode] [--ui <dir>] [--token-stdin]
   godmode token              Print the dashboard access token
   godmode password <new>     Set the web dashboard password
-  godmode doctor             Check dependencies
+  godmode doctor [--fix]     Check dependencies and permissions (--fix repairs what it can)
+  godmode update             Update the installed tools
   godmode version`);
     return;
   }
@@ -276,11 +284,29 @@ Usage:
     case "doctor": {
       const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
       openDb(cfg.dbPath);
+      if (values.fix) {
+        for (const r of (await fixAll()).results) console.log(`${r.outcome === "fixed" ? "🔧" : "✋"} ${r.name}: ${r.outcome === "fixed" ? "fixed" : r.output}`);
+      }
       const report = await runDoctor(true);
       for (const d of report.dependencies) {
         console.log(`${d.ok ? "✅" : d.required ? "❌" : "⚠️ "} ${d.name.padEnd(22)} ${d.version ?? ""} ${d.ok ? "" : "— " + d.installHint}`);
       }
-      process.exit(report.ok ? 0 : 1);
+      const permissions = await checkPermissions({ privacy: false });
+      for (const p of permissions.permissions) {
+        console.log(`${p.ok ? "✅" : p.required ? "❌" : "⚠️ "} ${p.name.padEnd(22)} ${p.detail}${p.ok || !p.fixHint ? "" : ` — ${p.fixHint}`}`);
+      }
+      process.exit(report.ok && permissions.ok ? 0 : 1);
+    }
+    case "update": {
+      const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
+      openDb(cfg.dbPath);
+      const results = await installUpdates();
+      // `installUpdates` just asked the release feeds; a tool without an answer isn't known to be current.
+      const unknown = (await checkUpdates()).tools.filter((t) => t.installed && t.updatable && t.track === "release" && t.latest === null);
+      if (unknown.length) console.log(`Couldn't check ${unknown.map((t) => t.name).join(", ")} for a newer version — are you online?`);
+      else if (!results.length) console.log("Everything is up to date.");
+      for (const r of results) console.log(`${r.ok ? "✅" : "❌"} ${r.name.padEnd(22)} ${!r.ok ? r.output.split("\n").pop() : r.upToDate ? "already up to date" : `${r.previous ?? "?"} → ${r.version ?? "?"}`}`);
+      process.exit(results.every((r) => r.ok) ? 0 : 1);
     }
     default:
       console.error(`Unknown command: ${cmd}`);

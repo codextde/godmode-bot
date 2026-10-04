@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
-import { FolderOpen, HeartPulse, RotateCcw, ScrollText, Server } from "lucide-react";
-import type { Bootstrap } from "@godmode/shared";
+import { CircleArrowDown, FolderOpen, HeartPulse, RotateCcw, ScrollText, Server, ShieldCheck, WandSparkles, Wrench } from "lucide-react";
+import { toast } from "sonner";
+import type { Bootstrap, Settings } from "@godmode/shared";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,22 +17,40 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { DoctorChecklist } from "@/components/onboarding/doctor-checklist";
+import { DoctorChecklist, useDoctor } from "@/components/onboarding/doctor-checklist";
 import { CopyButton } from "@/components/vault/copy-button";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
 import { isTauri } from "@/lib/core";
 import { qk } from "@/lib/queryKeys";
 import { InfoRow, SectionHeading, SettingRow, SettingsGroup } from "./settings-kit";
+import { PermissionsChecklist, fixablePermissions, toastFix, usePermissions } from "./system-permissions";
+import { ToolUpdateList, UpdateActions, UpkeepSettings, useToolUpdates } from "./system-updates";
 
 function joinPath(dir: string, ...parts: string[]) {
   const sep = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
   return [dir.replace(/[\\/]+$/, ""), ...parts].join(sep);
 }
 
-export function SystemSection({ bootstrap }: { bootstrap: Bootstrap | undefined }) {
+/** Renders without the settings document too (see STANDALONE in the settings page): only the upkeep switches need it. */
+export function SystemSection({ bootstrap, settings }: { bootstrap: Bootstrap | undefined; settings: Settings | undefined }) {
   const qc = useQueryClient();
   const [confirmOnboarding, setConfirmOnboarding] = useState(false);
+  const doctor = useDoctor();
+  const permissions = usePermissions();
+  const updates = useToolUpdates();
+  // What "Fix all" takes care of: required tools Godmode can install, and its own files.
+  const fixable = (doctor.data?.dependencies.filter((d) => !d.ok && d.required && d.installable).length ?? 0) + fixablePermissions(permissions.data);
+  const fixAll = useMutation({
+    mutationFn: api.doctor.fixAll,
+    onSuccess: (report) => {
+      if (!report.results.length) toast.info("Nothing to fix");
+      else if (report.results.every((r) => r.outcome === "fixed")) toast.success(`Fixed ${report.results.map((r) => r.name).join(", ")}`);
+      else report.results.forEach(toastFix);
+      void qc.invalidateQueries({ queryKey: qk.doctor });
+    },
+    onError: (e) => toastApiError(e, "Could not fix the problems", qc),
+  });
   const rerun = useMutation({
     mutationFn: () => api.settings.update({ onboardingComplete: false }),
     onSuccess: () => {
@@ -48,9 +67,41 @@ export function SystemSection({ bootstrap }: { bootstrap: Bootstrap | undefined 
     <div className="space-y-5">
       <SectionHeading title="System" description="Health of the tools Godmode relies on, and where your data lives." />
 
-      <SettingsGroup title="System check" icon={<HeartPulse />} description="Everything agents need to work. Missing pieces can be installed with one click." bodyClassName="py-4">
+      <SettingsGroup
+        title="System check"
+        icon={<HeartPulse />}
+        description="Everything agents need to work. Missing pieces can be installed with one click."
+        bodyClassName="py-4"
+        actions={
+          fixable > 0 && (
+            <Button size="sm" onClick={() => fixAll.mutate()} disabled={fixAll.isPending}>
+              {fixAll.isPending ? <Spinner /> : <Wrench />}
+              {fixAll.isPending ? "Fixing…" : "Fix all"}
+            </Button>
+          )
+        }
+      >
         <DoctorChecklist ids={["claude", "claude-auth", "uv", "browser-use", "chrome", "git"]} />
       </SettingsGroup>
+
+      <SettingsGroup
+        title="Permissions"
+        icon={<ShieldCheck />}
+        description="What Godmode may do on this computer: its own files, its tools, and what the system lets it see and control."
+        bodyClassName="py-4"
+      >
+        <PermissionsChecklist />
+      </SettingsGroup>
+
+      <SettingsGroup title="Updates" icon={<CircleArrowDown />} description="The tools Godmode has installed, and their versions." actions={<UpdateActions updates={updates} />}>
+        <ToolUpdateList updates={updates} />
+      </SettingsGroup>
+
+      {settings && (
+        <SettingsGroup title="Automatic upkeep" icon={<WandSparkles />} description="Let Godmode look after its tools in the background.">
+          <UpkeepSettings settings={settings} />
+        </SettingsGroup>
+      )}
 
       <SettingsGroup title="Installation" icon={<Server />}>
         <InfoRow label="Version">
