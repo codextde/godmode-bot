@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { existsSync, readFileSync } from "node:fs";
-import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, isModelId } from "@godmode/shared";
+import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, RUN_STOPPED_BY_USER, isModelId } from "@godmode/shared";
 import {
   createConversation,
   deleteConversation,
@@ -247,7 +247,7 @@ export function registerChatRoutes(app: Hono): void {
   });
 
   app.post("/api/runs/:id/cancel", async (c) => {
-    await cancelRun(c.req.param("id"), "Cancelled by user", { byHuman: true });
+    await cancelRun(c.req.param("id"), RUN_STOPPED_BY_USER, { byHuman: true });
     return c.json({ ok: true as const });
   });
 

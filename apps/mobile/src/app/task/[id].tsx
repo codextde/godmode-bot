@@ -224,7 +224,7 @@ export default function TaskScreen() {
       {canFollowUp && (
         <View>
           <SectionTitle title={t.status === "blocked" ? "Help it along" : "Ask for changes"} />
-          <Composer onSend={followUp} attachments placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
+          <Composer draftKey={`task:${id}`} onSend={followUp} attachments placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
         </View>
       )}
     </ScrollView>
