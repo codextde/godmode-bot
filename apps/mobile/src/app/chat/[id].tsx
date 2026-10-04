@@ -1,7 +1,7 @@
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
-import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useRef } from "react";
+import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -17,7 +17,7 @@ import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useConversationRun, useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
-import { subscribeConversation } from "@/lib/realtime";
+import { subscribeConversation, viewConversation } from "@/lib/realtime";
 import { screenHref, useChatScreens } from "@/lib/screens";
 import { radius, space, useColors } from "@/lib/theme";
 
@@ -39,6 +39,13 @@ export default function Chat() {
   const screens = useChatScreens(conversation.data, agent);
 
   useEffect(() => subscribeConversation(id), [id]);
+  // Read while it is the screen in front (not while another screen covers it).
+  useFocusEffect(
+    useCallback(() => {
+      viewConversation(id);
+      return () => viewConversation(null);
+    }, [id]),
+  );
 
   const items = useMemo<Item[]>(() => {
     const messages = conversation.data?.messages ?? [];

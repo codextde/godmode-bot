@@ -354,20 +354,23 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
 * **The list.** `GET /api/attention` (`services/attention.ts`) computes everything that waits for the human from live
   state on every read — never from notifications, so an item leaves the moment the thing is handled anywhere: open
   questions and approvals, open missing logins (linked to the chat or ticket of the run that reported them), tickets
-  to review and blocked ones, chats paused by the human or past a usage limit with nothing continuing them, budget
-  holds (one row per budget), chats whose latest run failed while nobody looked, automations whose own last run failed
-  or whose own trigger is broken (not the shared app-event connection), and people asking a bot for access. Each item
+  to review and blocked ones, chats paused by the human or past a usage limit with nothing continuing them (on a runner:
+  from what it last said, `runner_state`), budget holds (one row per budget), chats whose latest run failed while
+  nobody looked, automations whose own last run failed or that couldn't start (`last_status`), or whose own trigger is
+  broken (not the shared app-event connection), and people asking a bot for access. Each item
   has a stable id (`<kind>:<id>`), who, what, since when, a link and its one action. Bootstrap carries
   `counts.attention` (per kind and total) and `counts.unreadChats`; the Inbox badge counts what waits (updates only when
   nothing does), Tasks counts review + blocked, Automations the failing ones. Cloud: allowed; phone: closed.
 * **Unread.** `conversations.unread_run_id` (migration 54) marks a chat the human talks in (origin chat/api) whose
   chat, manual, api or follow-up run ended while no window showed it. A window says which chat it shows while visible
-  and focused (`conversation.view` on the socket); showing it, or `POST /api/conversations/read` (`ids` or `"all"`),
+  and focused, the phone while the chat is its screen in front and the app is active (`conversation.view` on the
+  socket); showing it, or `POST /api/conversations/read` (`ids` or `"all"`),
   reads it — and reading a chat whose run failed clears the agent's "Last run failed". Automation, task, delegation and
   platform chats are never unread.
 * **Notices** (`services/runNotices.ts`). Such a run that nobody watched notifies once — "Mia replied in “Q4 plan”" /
-  "Mia ran into a problem in “…”" — unless the agent called `notify_user` itself or the run reported a missing login
-  (that has its own notice). Automations follow `routines.notify`: `failures` (default; a failure is told once until a
+  "Mia ran into a problem in “…”" — unless the agent called `notify_user` itself (the tool call, not the word) or the
+  run reported a missing login (that has its own notice). Only the computer the human uses tells: a runner's runs
+  arrive there as its own. Automations follow `routines.notify`: `failures` (default; a failure is told once until a
   run succeeds again), `always`, or `never`; nothing when its chat is on screen. Toasts carry *Open* to the thing, and a
   notification about what is already on screen is marked read instead of popping up.
 

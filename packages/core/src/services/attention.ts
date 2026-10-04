@@ -5,6 +5,7 @@
 import type { AttentionItem, RunPause } from "@godmode/shared";
 import { formatUsd, monthName } from "@godmode/shared";
 import { all, get } from "../db";
+import { parseJson } from "../util";
 import { listQuestions } from "./questions";
 import { listTasks } from "../tasks/service";
 import { listRoutines } from "./routines";
@@ -49,7 +50,8 @@ export function listAttention(): AttentionItem[] {
       title: `${nameOf(m.agent_id)} ${m.kind === "invalid_credential" ? "couldn't log in to" : m.kind === "missing_totp" ? "needs a 2FA code for" : "needs a login for"} ${m.service}`,
       detail: shorten(m.reason),
       since: m.updated_at,
-      link: m.task_id ? `/tasks?task=${m.task_id}` : m.conversation_id ? `/chat/${m.conversation_id}` : "/logins",
+      // Without its chat (deleted), the Inbox card adds the login.
+      link: m.task_id ? `/tasks?task=${m.task_id}` : m.conversation_id ? `/chat/${m.conversation_id}` : "/inbox",
       action: "Add login",
       conversationId: m.conversation_id,
     });
@@ -91,6 +93,27 @@ export function listAttention(): AttentionItem[] {
       action: "Continue",
       pause,
       conversationId: p.conversation_id,
+    });
+  }
+
+  // Chats on a runner stand still there: this computer knows it from what the runner last said (`runner_state`).
+  for (const c of all<{ id: string; agent_id: string; title: string; runner_state: string | null }>(
+    `SELECT id, agent_id, title, runner_state FROM conversations
+     WHERE runner_id IS NOT NULL AND archived = 0 AND json_extract(runner_state, '$.paused.reason') IN ('user', 'limit')`,
+  )) {
+    const pause = parseJson<{ paused?: RunPause | null }>(c.runner_state, {}).paused;
+    if (!pause || (pause.reason === "limit" && pause.auto)) continue;
+    items.push({
+      id: `paused:${pause.runId}`,
+      kind: "paused",
+      agentId: c.agent_id,
+      title: pause.reason === "limit" ? `${nameOf(c.agent_id)} waits for you after Claude's ${pause.limit ?? "usage limit"}` : `${nameOf(c.agent_id)} is paused`,
+      detail: shorten(c.title),
+      since: pause.pausedAt,
+      link: `/chat/${c.id}`,
+      action: "Continue",
+      pause,
+      conversationId: c.id,
     });
   }
 
@@ -141,12 +164,16 @@ export function listAttention(): AttentionItem[] {
     const agentOn = get<{ enabled: number }>("SELECT enabled FROM agents WHERE id = ?", r.agentId)?.enabled === 1;
     if (!agentOn) continue;
     const ownError = r.trigger.type !== "app" && r.triggerStatus.state === "error";
-    // Its latest finished run decides; without one, whether it could start at all.
-    const latest = get<{ status: string }>(
-      "SELECT status FROM runs WHERE routine_id = ? AND trigger = 'routine' AND status IN ('succeeded', 'failed') ORDER BY created_at DESC LIMIT 1",
-      r.id,
-    );
-    const failing = latest ? latest.status === "failed" : r.lastStatus === "failed";
+    // Its last outcome: a failed run, or a failed start (that leaves no run). While a newer run is still on its way,
+    // the latest finished run decides.
+    const pending = r.lastStatus === "queued" || r.lastStatus === "running" || r.lastStatus === "paused";
+    const latest = pending
+      ? get<{ status: string }>(
+          "SELECT status FROM runs WHERE routine_id = ? AND trigger = 'routine' AND status IN ('succeeded', 'failed') ORDER BY created_at DESC LIMIT 1",
+          r.id,
+        )
+      : undefined;
+    const failing = r.lastStatus === "failed" || latest?.status === "failed";
     if (!failing && !ownError) continue;
     items.push({
       id: `automation:${r.id}`,
