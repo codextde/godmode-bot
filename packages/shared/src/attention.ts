@@ -49,3 +49,28 @@ export function countAttention(items: readonly Pick<AttentionItem, "kind">[]): A
   counts.total = items.length;
   return counts;
 }
+
+/** One thing worth a look in the "while you were away" summary. */
+export interface AwayHighlight {
+  kind: "delivered" | "failed" | "replied" | "automation";
+  agentId: ID | null;
+  text: string;
+  link: string;
+  at: ISODate;
+}
+
+/** What the team did while the human was away (`GET /api/away?since=`). */
+export interface AwaySummary {
+  since: ISODate;
+  /** Runs that ended since (condition checks left out), and how many of them failed. */
+  finished: number;
+  failed: number;
+  /** Tickets an agent delivered for review since. */
+  delivered: number;
+  /** What the work since cost (booked when it was spent). */
+  costUsd: number;
+  /** Who worked, most runs first. */
+  agents: { agentId: ID; name: string; runs: number; costUsd: number }[];
+  /** At most six things worth a look, newest first within: delivered tickets, problems, replies, failed automations. */
+  highlights: AwayHighlight[];
+}

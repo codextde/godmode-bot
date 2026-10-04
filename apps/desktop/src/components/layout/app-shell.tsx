@@ -65,6 +65,7 @@ import { cloudContext, isTauri, storageKey } from "@/lib/core";
 import { useLive, useRunningCount } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { startPresence } from "@/lib/presence";
 
 interface NavItem {
   to: string;
@@ -91,6 +92,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const attention = boot?.counts.attention;
   const waiting = attention?.total ?? (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0);
   const inboxCount = waiting || (boot?.counts.unreadNotifications ?? 0);
+
+  // Notices when the human comes back after a while (Home then sums up what happened).
+  useEffect(() => startPresence(), []);
 
   // Global shortcuts
   useEffect(() => {
