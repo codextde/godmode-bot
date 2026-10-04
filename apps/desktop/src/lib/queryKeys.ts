@@ -43,6 +43,8 @@ export const qk = {
   agentCommands: (id: string) => ["agents", "commands", id],
   agentTemplates: ["agent-templates"] as unknown[],
   teamTemplates: ["team-templates"] as unknown[],
+  goals: ["goals"] as unknown[],
+  goalList: (workspaceId: string) => ["goals", "list", workspaceId],
   /** Dreams (memory consolidation); invalidating the root refreshes every overview and detail. */
   dreams: ["dreams"] as unknown[],
   agentDreams: (agentId: string) => ["dreams", "agent", agentId],

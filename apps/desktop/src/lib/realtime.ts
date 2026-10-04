@@ -66,7 +66,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   "ssh-servers": [qk.sshServers],
   // Bot status, access requests and chats (the sidebar badge counts requests).
   messaging: [qk.messaging, qk.bootstrap],
-  tasks: [qk.tasks],
+  tasks: [qk.tasks, qk.goals],
+  goals: [qk.goals],
   // A phone was paired, removed, or connected.
   mobile: [qk.mobile],
   // A runner was paired, removed, or its chats changed.
@@ -241,6 +242,8 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "task.updated":
       upsertTask(qc, event.task);
+      // Goals count their tickets.
+      refreshSoon(qc, qk.goals);
       // Tickets to review and blocked ones are on "Needs you".
       refreshSoon(qc, qk.bootstrap);
       break;

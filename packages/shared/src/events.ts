@@ -151,6 +151,8 @@ export type EntityName =
   | "ssh-servers"
   | "messaging"
   | "tasks"
+  /** Goals: added, changed, deleted (their progress follows the tickets). */
+  | "goals"
   | "followups"
   | "mobile"
   | "system"

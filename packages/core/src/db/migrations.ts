@@ -1047,4 +1047,24 @@ UPDATE tasks SET parts_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
   WHERE parts_seen_at IS NULL AND status != 'in_progress' AND id IN (SELECT parent_id FROM tasks WHERE parent_id IS NOT NULL);
 `,
   },
+  {
+    id: 62,
+    name: "goals",
+    sql: /* sql */ `
+-- What the work is for: tickets serve a goal (its agent is told why), and the board shows how far each goal is.
+CREATE TABLE IF NOT EXISTS goals (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT,
+  title TEXT NOT NULL,
+  why TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',
+  target_date TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+ALTER TABLE tasks ADD COLUMN goal_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_tasks_goal ON tasks(goal_id) WHERE goal_id IS NOT NULL;
+`,
+  },
 ];

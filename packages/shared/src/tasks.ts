@@ -227,6 +227,8 @@ export interface Task {
   /** The bigger ticket this one is part of (it waits for this one), and its number. */
   parentId: ID | null;
   parentNumber: number | null;
+  /** The goal this ticket serves (its agent is told why), or null. */
+  goalId: ID | null;
   /** Its own sub-tickets: how many, how many are still open (not delivered, done, cancelled or archived), and how many
    *  of those are blocked. null = none. */
   subtasks: { total: number; open: number; blocked: number } | null;
@@ -251,9 +253,13 @@ export interface TaskInput {
   labels?: string[];
   /** Make it a sub-ticket of this ticket (it waits for it). */
   parentId?: ID | null;
+  /** The goal it serves (a part serves its ticket's goal). */
+  goalId?: ID | null;
 }
 
 export interface TaskPatch {
+  /** The goal it serves; null = none. */
+  goalId?: ID | null;
   title?: string;
   description?: string;
   type?: TaskType;
@@ -409,3 +415,35 @@ export function taskEventText(e: TaskEvent, o: { you: string; youObject: string;
       return e.data.status === "approved" ? `${a} approved` : e.data.status === "declined" ? `${a} declined` : `${a} answered`;
   }
 }
+
+export type GoalStatus = "active" | "achieved" | "dropped";
+
+/** What the work is for: tickets serve a goal; its agent is told why, and the board shows how far it is. */
+export interface Goal {
+  id: ID;
+  /** null = a goal across all workspaces. */
+  workspaceId: ID | null;
+  title: string;
+  /** Why it matters, or how to tell it is reached (the agents get it with every ticket that serves it). */
+  why: string;
+  status: GoalStatus;
+  /** A calendar day, YYYY-MM-DD. */
+  targetDate: string | null;
+  /** Tickets serving it (archived ones left out), and how many are done. */
+  tickets: { total: number; done: number; open: number };
+  /** What the work on its tickets cost so far. */
+  costUsd: number;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
+export interface GoalInput {
+  title: string;
+  why?: string;
+  workspaceId?: ID | null;
+  targetDate?: string | null;
+  status?: GoalStatus;
+}
+
+export const MAX_GOAL_TITLE_LENGTH = 200;
+export const MAX_GOAL_WHY_LENGTH = 2000;

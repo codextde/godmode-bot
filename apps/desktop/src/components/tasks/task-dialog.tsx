@@ -55,6 +55,7 @@ export function TaskDialog({
   defaultStatus,
   onCreated,
   parent,
+  defaultGoalId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -65,6 +66,8 @@ export function TaskDialog({
   onCreated?: (task: Task) => void;
   /** A part of this ticket (it waits for it). */
   parent?: Pick<Task, "id" | "number"> | null;
+  /** The goal the new ticket serves (the board is filtered by it). */
+  defaultGoalId?: string | null;
 }) {
   const qc = useQueryClient();
   const editor = useRef<DescriptionEditorHandle>(null);
@@ -133,7 +136,7 @@ export function TaskDialog({
         priority,
         dueDate,
         labels,
-        ...(parent ? { parentId: parent.id } : {}),
+        ...(parent ? { parentId: parent.id } : defaultGoalId ? { goalId: defaultGoalId } : {}),
         ...(type !== "coding"
           ? {}
           : picked?.kind === "folder"

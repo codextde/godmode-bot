@@ -58,6 +58,8 @@ import type {
   FolderListing,
   Followup,
   FollowupPatch,
+  Goal,
+  GoalInput,
   GitCommit,
   LocalChromeProfile,
   LogEntry,
@@ -473,6 +475,14 @@ export const api = {
     testEvent: (id: string, input: TestEventInput = {}) => post<AutomationEvent>(`/api/routines/${id}/test-event`, input),
     /** Webhook automations: issue a new secret URL; the old one stops working. */
     rotateWebhook: (id: string) => post<WebhookRotateResult>(`/api/routines/${id}/webhook/rotate`),
+  },
+
+  /** What the work is for: tickets serve a goal; the board shows how far each is. */
+  goals: {
+    list: (q: { workspaceId?: ScopeFilter } = {}) => get<Goal[]>("/api/goals", q),
+    create: (input: GoalInput) => post<Goal>("/api/goals", input),
+    update: (id: string, input: Partial<GoalInput>) => patch<Goal>(`/api/goals/${id}`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/goals/${id}`),
   },
 
   automationEvents: {

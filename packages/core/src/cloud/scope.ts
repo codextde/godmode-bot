@@ -219,6 +219,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/vms/:id/screenshot", A],
 
   ["GET|POST", "/api/tasks", A],
+  ["GET|POST", "/api/goals", A],
+  ["PATCH|DELETE", "/api/goals/:id", A],
   ["GET", "/api/tasks/:id/events", A],
   // Questions agents ask before they act: reading and answering them is ordinary use of the dashboard.
   // Runners: seeing them is fine from anywhere. Pairing, copying the setup (logins, 2FA, sessions) to them, fixing
