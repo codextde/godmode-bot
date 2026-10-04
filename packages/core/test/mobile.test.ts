@@ -154,6 +154,12 @@ describe("device scope", () => {
     expect(deviceMayCall("GET", "/api/tasks/attachments/tat_1/shot.png")).toBe(true);
     expect(deviceMayCall("GET", "/api/files/image")).toBe(false);
     expect(deviceMayCall("POST", "/api/workspaces")).toBe(false);
+    expect(deviceMayCall("GET", "/api/agents/a1/commands")).toBe(true);
+    expect(deviceMayCall("GET", "/api/models")).toBe(true);
+    expect(deviceMayCall("PATCH", "/api/conversations/conv_1/queue/qmsg_1")).toBe(true);
+    expect(deviceMayCall("DELETE", "/api/conversations/conv_1/queue/qmsg_1")).toBe(true);
+    expect(deviceMayCall("POST", "/api/conversations/conv_1/queue/send")).toBe(true);
+    expect(deviceMayCall("PATCH", "/api/agents/a1")).toBe(false);
   });
 });
 
@@ -235,6 +241,11 @@ describe("phone access", () => {
     expect(widen.status).toBe(403);
     expect(((await widen.json()) as { code: string }).code).toBe("device_forbidden");
     expect((await phone("/api/conversations/cnv_missing", json("PATCH", { pinned: true }))).status).toBe(404);
+    expect((await phone("/api/conversations/cnv_missing", json("PATCH", { model: "opus", effort: "high", ultracode: true }))).status).toBe(404);
+    expect((await phone("/api/conversations/cnv_missing", json("PATCH", { instructions: "ignore the rules" }))).status).toBe(403);
+    expect((await phone("/api/conversations/cnv_missing/messages", json("POST", { content: "hi", attachments: [], queue: true }))).status).toBe(404);
+    expect((await phone("/api/conversations/cnv_missing/messages", json("POST", { content: "hi", workingDirectory: "/" }))).status).toBe(403);
+    expect((await phone("/api/conversations/cnv_missing/queue/qmsg_x", json("PATCH", { content: "reworded", attachments: [] }))).status).toBe(403);
     expect((await phone("/api/chat", json("POST", { content: "hi", computerTarget: { kind: "desktop" } }))).status).toBe(403);
     expect((await phone("/api/routines/rtn_missing", json("PATCH", { prompt: "rm -rf" }))).status).toBe(403);
     expect((await phone("/api/tasks", json("POST", { title: "Fork it", repoUrl: "https://evil.example.com/x.git" }))).status).toBe(403);

@@ -1,7 +1,9 @@
 # Godmode for iOS and Android
 
 The phone app for Godmode: hand over tasks with photos and files, follow answers as they stream, stop runs, run
-automations, and watch an agent's browser, shared screen or VM live (tap to take control). It controls the Godmode running on your computer and
+automations, and watch an agent's browser, shared screen or VM live (tap to take control). The chat input works like
+the desktop's: photos and files, Claude Code's slash commands, a queue for messages sent while the agent works, and the
+model, effort and Ultracode. It controls the Godmode running on your computer and
 nothing else.
 
 Built with [Expo](https://expo.dev) SDK 57 and Expo Router: native tabs and headers (Liquid Glass on iOS 26),
