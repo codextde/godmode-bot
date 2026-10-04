@@ -226,8 +226,9 @@ export interface Task {
   /** The bigger ticket this one is part of (it waits for this one), and its number. */
   parentId: ID | null;
   parentNumber: number | null;
-  /** Its own sub-tickets: how many, and how many are still open (not done, cancelled or archived). null = none. */
-  subtasks: { total: number; open: number } | null;
+  /** Its own sub-tickets: how many, how many are still open (not delivered, done, cancelled or archived), and how many
+   *  of those are blocked. null = none. */
+  subtasks: { total: number; open: number; blocked: number } | null;
   createdAt: ISODate;
   updatedAt: ISODate;
 }

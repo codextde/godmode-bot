@@ -179,7 +179,10 @@ export const BLOCKED_META: Record<TaskBlockedKind, { title: (agent: string) => s
 
 /** "Waiting — continues tomorrow at 10:00" for a ticket that waits for the time its agent set. */
 export function waitingLabel(task: Task): string | null {
-  if (waitsForSubtasks(task)) return `Waiting for ${task.subtasks!.open === 1 ? "1 part" : `${task.subtasks!.open} parts`}`;
+  if (waitsForSubtasks(task)) {
+    const { open, blocked } = task.subtasks!;
+    return `Waiting for ${open === 1 ? "1 part" : `${open} parts`}${blocked ? ` · ${blocked} blocked` : ""}`;
+  }
   return isWaiting(task) && task.followup ? `Waiting — continues ${followupWhen(task.followup.dueAt)}` : null;
 }
 
