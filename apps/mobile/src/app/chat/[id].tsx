@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { characterGreeting, type Agent, type ConversationWithMessages, type Message, type MessageBlock, budgetPauseTitle } from "@godmode/shared";
+import { characterGreeting, type Agent, type ConversationWithMessages, type Message, type MessageBlock, type RetryMode, budgetPauseTitle, retryHelps, retryModeOf, runEndOf } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { Composer, ComposerDock } from "@/components/composer";
 import { HeaderActions } from "@/components/header-actions";
@@ -87,6 +87,22 @@ export default function Chat() {
       .catch((err) => Alert.alert("Couldn't continue", errorText(err)));
   };
 
+  // The latest turn ended early (failed, stopped, cut off): one tap picks it up.
+  const ended = !run && !paused && conversation.data ? endedTurn(conversation.data) : null;
+  const retry = () => {
+    if (!ended) return;
+    tap();
+    api.conversations
+      .retry(id, ended.runId)
+      .then((result) => {
+        queryClient.setQueryData<ConversationWithMessages>(qk.conversation(id), (old) =>
+          old && !old.messages.some((m) => m.id === result.message.id) ? { ...old, messages: [...old.messages, result.message] } : old,
+        );
+        useLive.getState().runStarted(result.run);
+      })
+      .catch((err) => Alert.alert("Couldn't pick this up", errorText(err)));
+  };
+
   const title = conversation.data?.title || "Chat";
   const primary = screens[0];
 
@@ -126,6 +142,8 @@ export default function Chat() {
             auto={paused.auto}
             onContinue={resume}
           />
+        ) : ended ? (
+          <EndedStrip mode={ended.mode} onRetry={retry} />
         ) : null}
         <ComposerDock>
           <Composer
@@ -171,6 +189,35 @@ function PausedStrip({ limit, held, auto, onContinue }: { limit: string | null; 
       <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel={held ? "Let it run" : "Continue"}>
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
           {held ? "Let it run" : limit ? "Try now" : "Continue"}
+        </T>
+      </Pressable>
+    </View>
+  );
+}
+
+/** The chat's last turn, when it ended early and trying again can help (not in a ticket's or a chat platform's chat). */
+function endedTurn(conv: ConversationWithMessages): { runId: string; mode: RetryMode } | null {
+  if (conv.origin === "task" || conv.origin === "dream" || conv.origin === "slack" || conv.origin === "telegram" || conv.origin === "teams") return null;
+  const last = conv.messages[conv.messages.length - 1];
+  if (last?.role !== "assistant" || !last.runId) return null;
+  const end = last.blocks[last.blocks.length - 1];
+  const text = end?.type === "error" ? end.text : end?.type === "notice" && runEndOf(end.text) ? end.text : null;
+  if (text === null || !retryHelps(runEndOf(text))) return null;
+  return { runId: last.runId, mode: retryModeOf(last.blocks) === "continue" && conv.claudeSessionId ? "continue" : "again" };
+}
+
+/** Above the composer when the last turn ended early. */
+function EndedStrip({ mode, onRetry }: { mode: RetryMode; onRetry: () => void }) {
+  const c = useColors();
+  return (
+    <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
+      <Icon name="warning" size={15} color={c.textMuted} />
+      <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
+        {mode === "continue" ? "Stopped before it was done" : "Didn't get through"}
+      </T>
+      <Pressable onPress={onRetry} hitSlop={10} accessibilityRole="button" accessibilityLabel={mode === "continue" ? "Continue" : "Try again"}>
+        <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
+          {mode === "continue" ? "Continue" : "Try again"}
         </T>
       </Pressable>
     </View>

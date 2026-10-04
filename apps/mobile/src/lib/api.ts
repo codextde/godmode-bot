@@ -13,6 +13,7 @@ import type {
   MobilePairResult,
   MobilePairingPayload,
   MobileSession,
+  RetryMode,
   Routine,
   Run,
   SendMessageResult,
@@ -274,6 +275,8 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     /** Continue the chat's paused run where it stopped. */
     continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
+    /** Pick up the chat's latest turn that ended early: continue where it stopped, or send it again. */
+    retry: (id: string, runId: string) => post<SendMessageResult & { mode: RetryMode }>(`/api/conversations/${id}/retry`, { runId }),
   },
 
   chat: {

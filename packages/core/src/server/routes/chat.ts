@@ -21,6 +21,7 @@ import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } fro
 import { conflict, notFound } from "../../util";
 import { getAgent } from "../../agents/service";
 import { listAttention } from "../../services/attention";
+import { retryRun } from "../../services/retries";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
 import { validateTarget } from "../../computer/service";
@@ -107,6 +108,12 @@ export function registerChatRoutes(app: Hono): void {
   app.post("/api/conversations/read", async (c) => {
     const { ids } = await body(c, z.object({ ids: z.union([z.literal("all"), z.array(z.string().min(1).max(100)).max(500)]) }));
     return c.json({ read: markConversationsRead(ids) });
+  });
+
+  // Pick up a turn that ended early: continue where it stopped, or send it again.
+  app.post("/api/conversations/:id/retry", async (c) => {
+    const { runId } = await body(c, z.object({ runId: z.string().min(1).max(100) }));
+    return c.json(await retryRun(c.req.param("id"), runId), 201);
   });
 
   // Everything that waits for the human, from live state.

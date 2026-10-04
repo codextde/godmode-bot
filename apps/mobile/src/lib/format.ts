@@ -1,3 +1,4 @@
+import { gatewayDone } from "@godmode/shared";
 import { format, isThisYear, isToday, isYesterday } from "date-fns";
 import type { MessageBlock } from "@godmode/shared";
 import type { IconName } from "@/components/icon";
@@ -102,7 +103,7 @@ export function toolLabel(block: Extract<MessageBlock, { type: "tool_use" }>): T
     if (tool === "task_message") return { icon: "tasks", title: "Sent a message into a task", detail: clip(str(input.content)) || undefined };
     if (tool === "task_note") return { icon: "pencil", title: "Left a note on the task", detail: clip(str(input.text)) || undefined };
     if (tool === "task_report_blocked") return { icon: "warning", title: "Reported what it needs", detail: clip(str(input.reason)) || undefined };
-    return { icon: "bolt", title: humanize(tool) };
+    return { icon: "bolt", title: gatewayDone(tool) };
   }
   switch (tool) {
     case "Bash":
@@ -159,7 +160,8 @@ const DOING: [RegExp, string][] = [
 /** The core says "Using browser_navigate"; people read "Opening a page". */
 export function activityText(label: string | null | undefined): string {
   if (!label) return "Thinking";
-  const tool = /^Using (.+)$/.exec(label)?.[1];
-  if (!tool) return label.replace(/…$/, "");
+  // An older core sends "Using <tool id>"; a current one sends plain words ("Using Linear…" among them).
+  const tool = /^Using ([\w.-]+)$/.exec(label)?.[1];
+  if (!tool || !/[_.]/.test(tool)) return label.replace(/…$/, "");
   return DOING.find(([re]) => re.test(tool))?.[1] ?? "Working";
 }

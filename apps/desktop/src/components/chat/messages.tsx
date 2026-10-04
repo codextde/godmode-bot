@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { motion } from "motion/react";
 import { Link } from "react-router";
 import type { Agent, Conversation, Message, MessageBlock } from "@godmode/shared";
-import { ArrowUpRight, Coins, Cpu, Info, KanbanSquare, Loader2, Pause, Square, Timer, Volume2, Workflow } from "lucide-react";
+import { ArrowUpRight, Coins, Cpu, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
@@ -161,9 +161,30 @@ export function StartedMessage({ message, delegatedFrom }: { message: Message; d
 export function SystemMessage({ message }: { message: Message }) {
   const followup = followupBlock(message);
   if (followup) return <FollowupMarker block={followup} />;
+  const retry = message.blocks.find((b) => b.type === "retry");
+  if (retry) return <RetryMarker block={retry} at={message.createdAt} />;
   return (
     <div className="flex justify-center">
       <span className="max-w-[80%] rounded-md border bg-card px-3 py-1 text-center text-xs text-muted-foreground">{message.content}</span>
+    </div>
+  );
+}
+
+/** Where the human picked up a turn that ended early. */
+function RetryMarker({ block, at }: { block: Extract<MessageBlock, { type: "retry" }>; at: string }) {
+  const Icon = block.mode === "continue" ? Play : RotateCcw;
+  return (
+    <div role="note" className="flex w-full items-center gap-3 text-[11px] text-muted-foreground">
+      <span className="h-px flex-1 bg-border" />
+      <span className="inline-flex items-center gap-1.5">
+        <Icon className={cn("size-3", block.mode === "continue" && "fill-current")} aria-hidden />
+        <span className="font-medium text-foreground">{block.mode === "continue" ? "Continued where it stopped" : "Tried again"}</span>
+        <time dateTime={at} className="tabular-nums">
+          · {timeOf(at)}
+        </time>
+        {block.masked && <span>· saved secrets stay masked</span>}
+      </span>
+      <span className="h-px flex-1 bg-border" />
     </div>
   );
 }

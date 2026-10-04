@@ -28,7 +28,7 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["PATCH", new RegExp(`^/api/conversations/${ID}$`)],
   ["DELETE", new RegExp(`^/api/conversations/${ID}$`)],
   ["POST", new RegExp(`^/api/conversations/${ID}/messages$`)],
-  ["POST", new RegExp(`^/api/conversations/${ID}/(pause|continue)$`)],
+  ["POST", new RegExp(`^/api/conversations/${ID}/(pause|continue|retry)$`)],
   ["POST", /^\/api\/chat$/],
 
   ["GET", /^\/api\/tasks$/],
