@@ -16,6 +16,7 @@ import {
   HeartPulse,
   Inbox,
   Info,
+  Keyboard,
   KeyRound,
   Layers,
   Lock,
@@ -207,6 +208,15 @@ export function CommandPalette() {
             }}
           >
             <Lock /> Lock vault
+          </CommandItem>
+          <CommandItem
+            value="keyboard shortcuts keys hotkeys"
+            onSelect={() => {
+              setOpen(false);
+              useUi.getState().setShortcutsOpen(true);
+            }}
+          >
+            <Keyboard /> Keyboard shortcuts <CommandShortcut>?</CommandShortcut>
           </CommandItem>
           <CommandItem
             onSelect={() => {

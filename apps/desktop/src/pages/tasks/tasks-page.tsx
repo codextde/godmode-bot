@@ -166,7 +166,8 @@ export default function TasksPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "c" || e.metaKey || e.ctrlKey || e.altKey || typingIn(e.target)) return;
+      // A key the app already used ("G then C" goes to Chat) isn't "new ticket".
+      if (e.key.toLowerCase() !== "c" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || typingIn(e.target)) return;
       e.preventDefault();
       setCreating(true);
     };
