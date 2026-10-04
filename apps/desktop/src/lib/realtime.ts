@@ -38,7 +38,7 @@ function resync(runId: string) {
 
 const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   workspaces: [qk.workspaces],
-  agents: [qk.agents],
+  agents: [qk.agents, qk.spend],
   routines: [qk.routines],
   credentials: [qk.credentials],
   totp: [qk.totp],
@@ -49,7 +49,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   "missing-logins": [qk.missingLogins, qk.bootstrap],
   questions: [qk.questions, qk.bootstrap],
   notifications: [qk.notifications, qk.bootstrap],
-  settings: [qk.settings, qk.bootstrap],
+  settings: [qk.settings, qk.bootstrap, qk.spend],
   runs: [qk.runs],
   models: [qk.models],
   computer: [qk.computer],
@@ -164,6 +164,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
+      qc.invalidateQueries({ queryKey: qk.spend });
       break;
     case "run.finished":
       live.runFinished(event.run);
@@ -171,6 +172,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
+      qc.invalidateQueries({ queryKey: qk.spend });
       qc.invalidateQueries({ queryKey: qk.bootstrap });
       break;
     case "message.created":

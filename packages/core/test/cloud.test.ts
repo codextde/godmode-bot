@@ -51,8 +51,8 @@ import { setTailscaleOverride } from "../src/mobile/tailscale";
 import { claimPairing, createPairingOffer } from "../src/mobile/devices";
 import { sha256 } from "../src/vault/crypto";
 import { cloudLinkClient, cloudStatus, setCloudTransportOverride, startCloudLink, stopCloudLink } from "../src/cloud/link";
-import { LINK_REPLACED, LINK_REVOKED, VERSION_MISMATCH, retryDelay, type CloudWebSocketCtor } from "../src/cloud/client";
-import { BROWSER_ACCESS_OFF } from "../src/cloud/dispatch";
+import { CloudClient, LINK_REPLACED, LINK_REVOKED, VERSION_MISMATCH, retryDelay, type CloudWebSocketCtor } from "../src/cloud/client";
+import { BROWSER_ACCESS_OFF, CloudConnection } from "../src/cloud/dispatch";
 import { SECRETS_OFF } from "../src/cloud/scope";
 import { saveLink, writeLinkSecret } from "../src/cloud/state";
 
@@ -942,5 +942,114 @@ describe("pairing through the gateway", () => {
     await desktop("PUT", "/api/cloud", { phoneAccess: false });
     expect((await desktop<{ urls: string[] }>("GET", "/api/mobile")).data.urls).toEqual([]);
     await desktop("PUT", "/api/cloud", { phoneAccess: true });
+  });
+});
+
+describe("Hello and Welcome", () => {
+  /** A WebSocket the test opens and answers by hand. */
+  class HeldSocket {
+    static last: HeldSocket | null = null;
+    readyState = 0;
+    binaryType = "";
+    readonly sent: CloudFrameData[] = [];
+    onopen: (() => void) | null = null;
+    onmessage: ((ev: { data: unknown }) => void) | null = null;
+    onclose: ((ev: { code: number; reason: string }) => void) | null = null;
+    onerror: (() => void) | null = null;
+
+    constructor() {
+      HeldSocket.last = this;
+    }
+
+    send(data: Uint8Array) {
+      this.sent.push(decodeCloudFrame(new Uint8Array(data))!);
+    }
+
+    close() {
+      this.readyState = 3;
+    }
+
+    open() {
+      this.readyState = 1;
+      this.onopen?.();
+    }
+
+    receive(frame: Uint8Array<ArrayBuffer>) {
+      this.onmessage?.({ data: frame.buffer });
+    }
+
+    hellos(): CloudHello[] {
+      return this.sent.filter((f) => f.type === CloudFrame.Hello).map((f) => cloudFrameJson<CloudHello>(f)!);
+    }
+  }
+
+  test("a change before Welcome is not sent as a second Hello, but right after Welcome", () => {
+    let current: CloudHello = { protocol: 1, version: "1.0.0", instanceId: "gm_held", name: "First", platform: "darwin", browserAccess: false, phoneAccess: true };
+    const client = new CloudClient({
+      url: "http://cloud.example.test",
+      deviceId: DEVICE_ID,
+      secret: "gml_held",
+      handler: { app: { fetch: () => new Response("ok") }, websocket: { open() {}, message() {}, close() {} } },
+      hello: () => current,
+      onWelcome: () => {},
+      onNotice: () => {},
+      onState: () => {},
+      WebSocketImpl: HeldSocket as unknown as CloudWebSocketCtor,
+    });
+    client.start();
+    try {
+      const socket = HeldSocket.last!;
+      socket.open();
+      expect(socket.hellos().map((h) => h.name)).toEqual(["First"]);
+      current = { ...current, name: "Second", browserAccess: true };
+      client.refreshHello();
+      expect(socket.hellos()).toHaveLength(1);
+
+      const welcome: CloudWelcome = {
+        deviceId: DEVICE_ID,
+        account: { email: "owner@example.com", name: null },
+        plan: PLAN,
+        publicUrl: "http://cloud.example.test",
+        limits: { maxBodyBytes: 1024 },
+        serverTime: new Date().toISOString(),
+      };
+      socket.receive(encodeCloudFrame(CloudFrame.Welcome, 0, welcome));
+      expect(socket.hellos().map((h) => [h.name, h.browserAccess])).toEqual([
+        ["First", false],
+        ["Second", true],
+      ]);
+      client.refreshHello();
+      expect(socket.hellos()).toHaveLength(2);
+    } finally {
+      client.stop();
+    }
+  });
+});
+
+describe("dispatch failures", () => {
+  test("a failure outside the handler ends the request, and refuses the socket, instead of leaving them unanswered", async () => {
+    expect(getSettings().cloud.browserAccess).toBe(true);
+    const frames: CloudFrameData[] = [];
+    const conn = new CloudConnection({
+      handler: { app: { fetch: () => new Response("ok") }, websocket: { open() {}, message() {}, close() {} } },
+      send: (frame) => void frames.push(decodeCloudFrame(frame)!),
+      onCloudUse: () => {
+        throw new Error("The audit log can't be written.");
+      },
+    });
+    const head: CloudReqHead = { method: "GET", path: "/api/health", headers: [], channel: "cloud", user: OWNER, ip: null, hasBody: false };
+    conn.handle(decodeCloudFrame(encodeCloudFrame(CloudFrame.ReqHead, 7, head))!);
+    await until(() => frames.some((f) => f.stream === 7), 2000, "an answer");
+    expect(frames.filter((f) => f.stream === 7).map((f) => f.type)).toEqual([CloudFrame.Abort]);
+    expect(cloudFrameJson<CloudAbort>(frames.find((f) => f.stream === 7)!)!.reason).toBe("The computer could not answer.");
+    expect(conn.size.streams).toBe(0);
+
+    const open: CloudWsOpen = { path: "/api/ws", headers: [], channel: "cloud", user: OWNER, ip: null };
+    conn.handle(decodeCloudFrame(encodeCloudFrame(CloudFrame.WsOpen, 8, open))!);
+    const reply = frames.filter((f) => f.stream === 8);
+    expect(reply.map((f) => f.type)).toEqual([CloudFrame.WsReject]);
+    expect(cloudFrameJson<CloudWsReject>(reply[0]!)).toEqual({ status: 500, message: "The computer could not answer." });
+    expect(conn.size.sockets).toBe(0);
+    conn.close();
   });
 });

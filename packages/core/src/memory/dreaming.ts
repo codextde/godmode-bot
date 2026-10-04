@@ -35,6 +35,8 @@ import { onSettingsApplied } from "../services/runtime";
 import { audit } from "../services/audit";
 import { describeNow } from "../runner/prompt";
 import { MEMORY_PROMPT_LIMIT, canRestore, currentMemoryFile, diffSnapshots, parseSnapshot, readMemory, restoreFiles, snapshotMemory } from "./files";
+import { exhaustedBudget } from "../services/budgets";
+
 
 const log = logger("dreaming");
 
@@ -708,6 +710,8 @@ async function dreamIfIdle(agent: Agent, settings: Settings, at: Date): Promise<
     return false;
   }
   deferred.delete(agent.id);
+  // Dreams cost money too: none on schedule while a monthly budget is used up (Dream now still works).
+  if (exhaustedBudget(agent)) return false;
   await startDream(agent.id, "schedule");
   return true;
 }

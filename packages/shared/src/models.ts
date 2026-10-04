@@ -105,6 +105,8 @@ export interface AgentPermissions {
   totpIds: ID[] | null;
   /** Hard cost cap per run in USD (passed to claude --max-budget-usd). null = unlimited */
   maxBudgetUsd: number | null;
+  /** What the agent may cost per calendar month in USD; used up = its unattended work waits. null = no budget. Human-only. */
+  monthlyBudgetUsd?: number | null;
 }
 
 export interface AgentBrowserConfig {
@@ -166,6 +168,8 @@ export interface Agent {
   pausedRuns?: number;
   /** Runs of the agent that wait for the human's answer (see AgentQuestion). They are not part of `pausedRuns`. */
   openQuestions?: number;
+  /** Runs of the agent held because a monthly budget is used up. They are not part of `pausedRuns`. */
+  heldRuns?: number;
   lastRunAt: ISODate | null;
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -359,9 +363,17 @@ export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt"
 
 /**
  * `user`: the human paused the run · `limit`: Claude's usage limit was reached mid-run · `question`: the run asked the
- * human something and waits for the answer (see AgentQuestion).
+ * human something and waits for the answer (see AgentQuestion) · `budget`: unattended work held because a monthly budget
+ * is used up (see PauseBudget).
  */
-export type PauseReason = "user" | "limit" | "question";
+export type PauseReason = "user" | "limit" | "question" | "budget";
+
+/** Whose monthly budget holds a run: the agent's own, or the whole team's. */
+export interface PauseBudget {
+  scope: "agent" | "team";
+  /** The monthly budget in USD when the run was held. */
+  limitUsd: number;
+}
 
 /** A run that stands still. Continuing it picks the work up where it stopped, in the same run and Claude session. */
 export interface RunPause {
@@ -376,6 +388,9 @@ export interface RunPause {
   auto: boolean;
   /** Question pauses: what the human is asked. Answering it is the only way to continue the run. */
   question?: Pick<AgentQuestion, "id" | "kind" | "title"> | null;
+  /** Budget pauses: which budget holds it. It continues by itself on the 1st of next month (`resumeAt`) or once the
+   *  budget has room again, or now when the human lets it run. */
+  budget?: PauseBudget | null;
 }
 
 /** `question`: the agent asks something, with suggested answers · `approval`: it asks for an OK before one specific step. */
@@ -506,7 +521,7 @@ export type MessageBlock =
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */
-  | { type: "pause"; reason: PauseReason; at: ISODate; limit?: string | null; resumeAt?: ISODate | null; resumedAt?: ISODate }
+  | { type: "pause"; reason: PauseReason; at: ISODate; limit?: string | null; resumeAt?: ISODate | null; resumedAt?: ISODate; budget?: PauseBudget | null }
   /**
    * What the agent asked the human at this point of the turn (see AgentQuestion; `id` is the question's). A snapshot
    * that needs no lookup: it is `open` from the moment the agent asks — the run stands still for it a moment later,
@@ -1081,6 +1096,8 @@ export interface RunnerSettings {
   /** A run that hit Claude's usage limit continues by itself once the limit has reset. */
   autoContinueOnLimit: boolean;
   defaultMaxBudgetUsd: number | null;
+  /** What the whole team may cost per calendar month in USD; used up = unattended work waits. null = no budget. */
+  monthlyBudgetUsd: number | null;
   extraArgs: string[];
   /** Global instructions: included in every run of every agent. */
   appendSystemPrompt: string;

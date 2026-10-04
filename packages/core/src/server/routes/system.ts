@@ -78,6 +78,10 @@ export function registerSystemRoutes(app: Hono) {
       throw badRequest(`Instructions for every agent can be at most ${MAX_INSTRUCTIONS_LENGTH.toLocaleString("en-US")} characters`);
     }
     if (runner?.ultracode !== undefined && typeof runner.ultracode !== "boolean") throw badRequest("runner.ultracode must be true or false");
+    const budget = (runner as { monthlyBudgetUsd?: unknown } | undefined)?.monthlyBudgetUsd;
+    if (budget !== undefined && budget !== null && !(typeof budget === "number" && Number.isFinite(budget) && budget > 0 && budget <= 1_000_000)) {
+      throw badRequest("The monthly budget must be an amount above 0, or empty for no budget");
+    }
     const memory = patch.memory as { dreaming?: unknown } | undefined;
     if (memory !== undefined && (typeof memory !== "object" || memory === null || Array.isArray(memory))) throw badRequest("Invalid memory settings");
     if (memory?.dreaming !== undefined && (typeof memory.dreaming !== "object" || memory.dreaming === null || Array.isArray(memory.dreaming))) {
@@ -140,9 +144,11 @@ export function registerSystemRoutes(app: Hono) {
         if (typeof value !== "boolean") throw badRequest(`cloud.${key} must be true or false`);
       }
     }
+    const before = getSettings().runner.monthlyBudgetUsd ?? null;
     const next = updateSettings(patch as never);
     applyRuntimeSettings(next);
     if (cloud) audit("user", "cloud.settings", null, cloud);
+    if ((next.runner.monthlyBudgetUsd ?? null) !== before) audit("user", "budget.set", null, { scope: "team", from: before, to: next.runner.monthlyBudgetUsd ?? null });
     return c.json(next);
   });
 

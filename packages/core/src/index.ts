@@ -30,6 +30,7 @@ import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
 import { startPauses, stopPauses } from "./services/pauses";
+import { startBudgets, stopBudgets } from "./services/budgets";
 import { startAutomationEvents, stopAutomationEvents } from "./automations/events";
 import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
 import { startMessaging, stopMessaging } from "./messaging/service";
@@ -166,6 +167,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   else startScheduler();
   startFollowups();
   startPauses();
+  startBudgets();
   if (!runner) {
     startDreaming();
     startAutomationEvents();
@@ -280,6 +282,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     if (!runner) stopScheduler();
     stopFollowups();
     stopPauses();
+    stopBudgets();
     if (runner) {
       stopLinkServer();
       stopKeepAwake();

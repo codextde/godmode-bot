@@ -16,7 +16,7 @@ import { rateLimit } from "@/server/ratelimit";
 import { getSettings } from "@/server/settings";
 import { relayAllowed } from "@/server/usage";
 import type { StreamSession } from "./link";
-import type { Strikes } from "./limits";
+import { addressKey, type Strikes } from "./limits";
 import { denial, type Denial } from "./respond";
 
 const MiB = 1024 * 1024;
@@ -31,6 +31,8 @@ export interface Grant {
   session: StreamSession | null;
   maxBodyBytes: number;
   ip: string;
+  /** A phone request without a phone token (health check, pairing): it costs the computer's owner no usage. */
+  anonymous: boolean;
 }
 
 export type AccessResult = { ok: true; grant: Grant } | { ok: false; denial: Denial };
@@ -143,6 +145,7 @@ export async function browserAccess(req: IncomingMessage, ip: string, deviceId: 
       session: { token: session.token, userId: ctx.user.id, deviceId, role },
       maxBodyBytes: relay.maxBodyMb * MiB,
       ip,
+      anonymous: false,
     },
   };
 }
@@ -161,7 +164,8 @@ export async function phoneAccess(
   if (!fetchDestOk(headers, kind)) return deny(403, "cloud_forbidden", "This address only answers the Godmode app.");
   if (!pathname.startsWith("/api/") || pathname.startsWith("/api/auth/")) return deny(404, "not_found", "Not found.");
 
-  const locked = unauthorizedStrikes.lockedFor(ip);
+  const key = addressKey(ip);
+  const locked = unauthorizedStrikes.lockedFor(key);
   if (locked) return deny(429, "rate_limited", "Too many failed attempts from this address. Try again later.", locked);
 
   // Strangers who only know a device id must not be able to stream bodies through the link or use up the owner's
@@ -171,10 +175,10 @@ export async function phoneAccess(
   const health = kind === "http" && method === "GET" && pathname === "/api/health";
   if (!hasToken && !pairing && !health) return deny(404, "not_found", "Not found.");
 
-  const perIp = rateLimit(`relay:gw:${ip}`, 300, 60_000);
+  const perIp = rateLimit(`relay:gw:${key}`, 300, 60_000);
   if (!perIp.ok) return deny(429, "rate_limited", "Too many requests. Try again in a moment.", perIp.retryAfterMs);
   if (pairing) {
-    const pair = rateLimit(`relay:gw-pair:${ip}`, 10, 15 * 60_000);
+    const pair = rateLimit(`relay:gw-pair:${key}`, 10, 15 * 60_000);
     if (!pair.ok) return deny(429, "rate_limited", "Too many pairing attempts. Try again later.", pair.retryAfterMs);
   }
 
@@ -201,6 +205,7 @@ export async function phoneAccess(
       session: null,
       maxBodyBytes: hasToken ? relay.maxBodyMb * MiB : PAIR_BODY_MAX,
       ip,
+      anonymous: !hasToken,
     },
   };
 }

@@ -328,6 +328,32 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
   agent is checking with the owner. An answer given in Godmode is followed back into the platform chat. Agents have no
   tool that answers.
 
+## Spend and budgets
+
+* **Ledger.** `spend` (migration 52) has one row per stretch of a run — booked in `suspend` and `finalize` when the
+  stretch ends, with that stretch's own cost (`stretchCost`) and time — so money counts in the day and month it was
+  spent, also for a run that continues next month. No foreign keys: rows keep the agent's name and stay when an agent,
+  chat or run is deleted. `SPEND_BACKFILL_SQL` books older runs once (runs from before migration 30 count only what
+  they added to their chat's session) and runs again after a restore.
+* **Report.** `GET /api/spend?period=today|week|month|all&agentId=` (`services/spend.ts`): the four period totals (runs,
+  failed, cost, working time) and, for the chosen period, per agent (deleted ones by their stored name) and per kind of
+  work (`SPEND_KIND_OF`: chats, automations incl. checks, board tasks, handed-over work, follow-ups, dreams). Periods
+  start at local midnight, Monday and the 1st. `GET /api/usage` (Cloud billing) is separate. Managers read it through
+  `spend_overview`.
+* **Budgets.** `settings.runner.monthlyBudgetUsd` (team) and `permissions.monthlyBudgetUsd` (agent; human-only — an
+  agent's change is ignored), audited as `budget.set`. `services/budgets.ts` tells the human once per budget, month and
+  amount at 80 % and at 100 % (`checkThresholds` on `run.finished` / `run.paused`; meta `budget.told.*`).
+* **Held, not failed.** While the team's or the agent's budget is used up, `pump()` holds queued unattended runs —
+  automations, follow-ups, board tickets (`HELD_TRIGGERS`) — as a pause with reason `budget` (`paused_runs.budget_scope`,
+  `budget_usd`), `resume_at` the 1st of next month and `auto = 1`: the pause timer continues them then, and a raise
+  (settings or agent change) continues those with room again (`releaseHeld("auto")`). The human lets them run from the
+  chat's bar, the budget meter or `POST /api/budgets/release` (audited `budget.release`/`budget.continue`; the run is
+  then exempt). The agent's Continue and messages into the chat don't release a hold (a message waits and goes along).
+  Runs the human starts — chats, *Run now* (`byHuman`) — still run, and a chat says once a month that a budget is used
+  up. Unattended work can't hand work to an agent whose budget is used up (`agent_delegate` refuses); scheduled
+  condition checks and dreams don't start. Automations skip their ticks meanwhile (recorded once). Checks happen when
+  work starts: a run already working finishes under its own per-run cap.
+
 ## Team
 
 Agents form a team with the built-in agent on top (it reports to the human). `shared/team.ts` holds the rules, used by

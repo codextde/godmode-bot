@@ -137,6 +137,43 @@ describe("createCheckout", () => {
     expect(stripe.callsOf("checkout.sessions.create")).toHaveLength(0);
   });
 
+  test("a running subscription of the other Stripe mode does not block a checkout", async () => {
+    const { user, price } = await subscriber();
+    await writeSettings("billing", { livemode: true }, SYSTEM);
+    expect(await getSubscription(user.id)).toBeNull();
+    await createCheckout(user, price.id);
+    expect(stripe.callsOf("checkout.sessions.create")).toHaveLength(1);
+  });
+
+  test("a stored customer Stripe doesn't know is replaced by a new one, once", async () => {
+    await connectStripe();
+    const { price } = await paidPlan();
+    const user = await createUser("buyer@example.com", "member", { stripeCustomerId: "cus_stale" });
+    const create = stripe.client.checkout.sessions.create.bind(stripe.client.checkout.sessions);
+    let refused = 0;
+    stripe.client.checkout.sessions.create = (async (params: Stripe.Checkout.SessionCreateParams) => {
+      if (params.customer === "cus_stale") {
+        refused++;
+        throw new Stripe.errors.StripeInvalidRequestError({ message: "No such customer: 'cus_stale'", code: "resource_missing", param: "customer" });
+      }
+      return create(params);
+    }) as typeof stripe.client.checkout.sessions.create;
+
+    const { url } = await createCheckout(user, price.id);
+    expect(url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
+    expect(refused).toBe(1);
+    const [, options] = stripe.callsOf("customers.create")[0]!.args as [unknown, { idempotencyKey: string }];
+    expect(options.idempotencyKey).toBe(`godmode-cloud-customer-${user.id}-cus_stale`);
+    const stored = await reloadUser(user.id);
+    expect(stored.stripeCustomerId).toMatch(/^cus_fake/);
+    expect(stripe.lastParams<Stripe.Checkout.SessionCreateParams>("checkout.sessions.create").customer).toBe(stored.stripeCustomerId);
+
+    // Any other missing object is not retried.
+    stripe.fail.set("checkout.sessions.create", missing("price: price_gone"));
+    await expect(createCheckout(stored, price.id)).rejects.toMatchObject({ code: "stripe_error" });
+    expect(stripe.callsOf("customers.create")).toHaveLength(1);
+  });
+
   test("a Stripe failure becomes a calm AppError", async () => {
     await connectStripe();
     const { price } = await paidPlan();

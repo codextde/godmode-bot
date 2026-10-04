@@ -181,10 +181,12 @@ describe("linking", () => {
     await expectAppError(approveLink(started.userCode, await ctxOf(reader)), 403);
   });
 
-  test("the same computer again replaces its secret, but not while it is online", async () => {
+  test("the same computer again becomes a new computer without the old shares, but not while it is online", async () => {
     const first = newSecret();
     const a = await startLink(linkBody(first), "198.51.100.1");
     const { device } = await approveLink(a.userCode, await ctxOf(owner));
+    const friend = await makeUser("friend@example.com");
+    await shareDevice(device.id, "friend@example.com", "operator", await ctxOf(owner));
 
     const hub = fakeHub(new Set([device.id]));
     const second = newSecret();
@@ -192,12 +194,17 @@ describe("linking", () => {
     const refused = await expectAppError(approveLink(b.userCode, await ctxOf(owner)), 409, "device_online");
     expect(refused.message).toContain("Unlink it on the computer first.");
 
+    // Whoever knows the instance id (the gateway's health check names it) gets a fresh computer, not the old one.
     hub.online.clear();
     const { device: again } = await approveLink(b.userCode, await ctxOf(owner));
-    expect(again.id).toBe(device.id);
+    expect(again.id).not.toBe(device.id);
+    expect(again.instanceId).toBe(device.instanceId);
     expect(await authenticateDevice(cloudBearer(device.id, first))).toBeNull();
-    expect(await authenticateDevice(cloudBearer(device.id, second))).not.toBeNull();
-    expect(await db.select().from(devices).where(eq(devices.userId, owner.id))).toHaveLength(1);
+    expect(await authenticateDevice(cloudBearer(again.id, second))).not.toBeNull();
+    expect(await getDeviceForUser(again.id, friend.id)).toBeNull();
+    expect(await getDeviceForUser(device.id, friend.id)).toBeNull();
+    expect((await db.select().from(devices).where(eq(devices.userId, owner.id))).map((d) => d.id)).toEqual([again.id]);
+    expect(hub.disconnects).toEqual([[device.id, CloudClose.BadCredential, "Linked again as a new computer"]]);
   });
 
   test("the plan's computer limit refuses with a sentence and plan_limit", async () => {
@@ -351,6 +358,23 @@ describe("routes", () => {
     expect((await resumeRoute(new Request("http://cloud.local/api/device/v1/billing/resume", init))).status).toBe(200);
     expect(billingCalls.resume).toHaveLength(1);
     expect((await cancelRoute(new Request("http://cloud.local/api/device/v1/billing/cancel", { method: "POST" }))).status).toBe(401);
+  });
+
+  test("a computer turned off in the cloud can't use the device API, but can still unlink itself", async () => {
+    fakeHub();
+    const device = await makeDevice(owner.id, { status: "disabled" });
+    const auth = { authorization: `Bearer ${device.bearer}` };
+    const me = await meRoute(new Request("http://cloud.local/api/device/v1/me", { headers: auth }));
+    expect(me.status).toBe(403);
+    expect(await me.json()).toEqual({ error: "This computer is turned off in Godmode Cloud.", code: "device_disabled" });
+    expect((await billingRoute(new Request("http://cloud.local/api/device/v1/billing", { headers: auth }))).status).toBe(403);
+    expect((await cancelRoute(new Request("http://cloud.local/api/device/v1/billing/cancel", { method: "POST", headers: auth }))).status).toBe(403);
+    expect((await resumeRoute(new Request("http://cloud.local/api/device/v1/billing/resume", { method: "POST", headers: auth }))).status).toBe(403);
+    expect(billingCalls.cancel).toHaveLength(0);
+    expect(billingCalls.resume).toHaveLength(0);
+    const self = await selfRoute(new Request("http://cloud.local/api/device/v1/self", { method: "DELETE", headers: auth }));
+    expect(self.status).toBe(200);
+    expect(await db.select().from(devices).where(eq(devices.id, device.id))).toHaveLength(0);
   });
 
   test("a computer unlinks itself", async () => {

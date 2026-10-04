@@ -18,13 +18,17 @@ export async function authenticateDevice(bearer: string): Promise<Device | null>
   return safeEqual(sha256(parsed.secret), device.secretHash) ? device : null;
 }
 
-/** The device API's guard: the computer behind the Authorization header and its owner, or a 401/403 AppError. */
-export async function requireDevice(authorization: string | null): Promise<{ device: Device; owner: User }> {
+/**
+ * The device API's guard: the computer behind the Authorization header and its owner, or a 401/403 AppError. A
+ * computer turned off in the cloud may only unlink itself (`allowDisabled`).
+ */
+export async function requireDevice(authorization: string | null, opts: { allowDisabled?: boolean } = {}): Promise<{ device: Device; owner: User }> {
   const device = authorization ? await authenticateDevice(authorization) : null;
   if (!device) throw unauthorized("This computer is not linked to this cloud. Link it again.");
   const [owner] = await db.select().from(users).where(eq(users.id, device.userId)).limit(1);
   if (!owner) throw unauthorized("This computer is not linked to this cloud. Link it again.");
   if (owner.status !== "active") throw forbidden("The account this computer is linked to is suspended.", "account_suspended");
+  if (device.status !== "active" && !opts.allowDisabled) throw forbidden("This computer is turned off in Godmode Cloud.", "device_disabled");
   return { device, owner };
 }
 

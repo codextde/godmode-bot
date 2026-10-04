@@ -112,14 +112,17 @@ export async function syncSubscription(stripeSubscriptionId: string): Promise<Su
 /* For the person                                                       */
 /* ------------------------------------------------------------------ */
 
-/** The person's own Stripe customer, created on first use. Customers are never looked up by e-mail. */
-async function ensureCustomer(stripe: Stripe, user: User): Promise<string> {
+/**
+ * The person's own Stripe customer, created on first use. Customers are never looked up by e-mail. `replacing` is a
+ * stored customer Stripe no longer knows; it gives the new one its own idempotency key.
+ */
+async function ensureCustomer(stripe: Stripe, user: User, replacing?: string): Promise<string> {
   if (user.stripeCustomerId) return user.stripeCustomerId;
   const customer = await stripeCall("create your billing account", () =>
     stripe.customers.create(
       { email: user.email, name: user.name ?? undefined, metadata: { product: PRODUCT_TAG, user_id: user.id } },
       // Two quick clicks on Subscribe must not make two customers.
-      { idempotencyKey: `godmode-cloud-customer-${user.id}` },
+      { idempotencyKey: `godmode-cloud-customer-${user.id}${replacing ? `-${replacing}` : ""}` },
     ),
   );
   const [stored] = await db
@@ -166,7 +169,19 @@ export async function createCheckout(user: User, priceId: string): Promise<{ url
     customer_update: { address: "auto", name: "auto" },
     consent_collection: billing.requireTermsConsent && general.termsUrl ? { terms_of_service: "required" } : undefined,
   };
-  const session = await stripeCall("start the checkout", () => stripe.checkout.sessions.create(params));
+  let session: Stripe.Checkout.Session;
+  try {
+    session = await stripe.checkout.sessions.create(params);
+  } catch (err) {
+    // A customer of the other Stripe mode, or one deleted in the Dashboard: make a new one and try once more.
+    if (!isStripeMissing(err) || (err as Stripe.errors.StripeError).param !== "customer") throw asAppError(err, "start the checkout");
+    await db
+      .update(users)
+      .set({ stripeCustomerId: null, updatedAt: new Date() })
+      .where(and(eq(users.id, user.id), eq(users.stripeCustomerId, customer)));
+    const fresh = await ensureCustomer(stripe, { ...user, stripeCustomerId: null }, customer);
+    session = await stripeCall("start the checkout", () => stripe.checkout.sessions.create({ ...params, customer: fresh }));
+  }
   if (!session.url) throw new AppError("Stripe did not return a checkout page. Try again in a minute.", "stripe_error", 503);
   await audit(userActor(user), "subscription.checkout", { type: "user", id: user.id }, { plan: plan.id, price: price.id });
   return { url: session.url };

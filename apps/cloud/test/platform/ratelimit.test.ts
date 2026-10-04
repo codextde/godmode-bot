@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { clientIp, PEER_HEADER, rateLimit, resetRateLimits, setProxyTrust } from "@/server/ratelimit";
+import { clientIp, PEER_HEADER, RATE_LIMIT_KEYS_MAX, rateLimit, resetRateLimits, setProxyTrust } from "@/server/ratelimit";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -17,6 +17,23 @@ describe("rateLimit", () => {
     expect(rateLimit("other", 3, 60_000).ok).toBe(true);
     vi.advanceTimersByTime(60_000);
     expect(rateLimit("k", 3, 60_000).ok).toBe(true);
+  });
+
+  test(`past ${RATE_LIMIT_KEYS_MAX} keys finished windows go first, then the oldest`, () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    for (let i = 0; i < RATE_LIMIT_KEYS_MAX - 1; i++) rateLimit(`short:${i}`, 1, 1_000);
+    rateLimit("live", 1, 3_600_000);
+    expect(rateLimit("live", 1, 3_600_000).ok).toBe(false);
+    vi.advanceTimersByTime(2_000);
+    // Full: the finished short windows make room, the running one is kept.
+    rateLimit("new:1", 1, 3_600_000);
+    rateLimit("new:2", 1, 3_600_000);
+    expect(rateLimit("live", 1, 3_600_000).ok).toBe(false);
+
+    for (let i = 0; i < RATE_LIMIT_KEYS_MAX; i++) rateLimit(`flood:${i}`, 1, 3_600_000);
+    // Nothing finished: the oldest running windows were dropped to stay within the cap.
+    expect(rateLimit("live", 1, 3_600_000).ok).toBe(true);
+    expect(rateLimit(`flood:${RATE_LIMIT_KEYS_MAX - 1}`, 1, 3_600_000).ok).toBe(false);
   });
 });
 

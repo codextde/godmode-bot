@@ -104,6 +104,7 @@ const BASE_PERMISSIONS: AgentPermissions = {
   credentialIds: null,
   totpIds: null,
   maxBudgetUsd: null,
+  monthlyBudgetUsd: null,
 };
 
 const DEFAULT_BROWSER: AgentBrowserConfig = { profileId: null, enabled: true, headless: null };
@@ -189,7 +190,8 @@ function toModel(r: AgentRow): Agent {
     sshServerIds: parseServerIds(r.ssh_server_ids),
     // Derived from the slug so the data dir can move (backup restore, GODMODE_HOME change).
     repoPath: repoPathFor(r.slug),
-    pausedRuns: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason != 'question'", r.id)?.n ?? 0,
+    pausedRuns: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason NOT IN ('question', 'budget')", r.id)?.n ?? 0,
+    heldRuns: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason = 'budget'", r.id)?.n ?? 0,
     openQuestions: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason = 'question'", r.id)?.n ?? 0,
     lastRunAt: r.last_run_at,
     createdAt: r.created_at,
@@ -249,7 +251,8 @@ function existingMcpServerIds(ids: string[]): string[] {
 }
 
 function normalizePermissions(p: AgentPermissions): AgentPermissions {
-  const budget = typeof p.maxBudgetUsd === "number" && Number.isFinite(p.maxBudgetUsd) && p.maxBudgetUsd > 0 ? p.maxBudgetUsd : null;
+  const positive = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
+  const budget = positive(p.maxBudgetUsd);
   return {
     canManageAgents: p.canManageAgents === true,
     allowDelegation: p.allowDelegation !== false,
@@ -258,6 +261,7 @@ function normalizePermissions(p: AgentPermissions): AgentPermissions {
     credentialIds: Array.isArray(p.credentialIds) ? stringList(p.credentialIds) : null,
     totpIds: Array.isArray(p.totpIds) ? stringList(p.totpIds) : null,
     maxBudgetUsd: budget,
+    monthlyBudgetUsd: positive(p.monthlyBudgetUsd),
   };
 }
 
@@ -349,6 +353,8 @@ function lockHumanOnlyPermissions(p: AgentPermissions, current: AgentPermissions
     canManageAgents: current?.canManageAgents ?? false,
     credentialIds: current ? current.credentialIds : null,
     totpIds: current ? current.totpIds : null,
+    // The monthly budget is the human's alone.
+    monthlyBudgetUsd: current?.monthlyBudgetUsd ?? null,
   };
 }
 
@@ -364,6 +370,9 @@ function uniqueSlug(base: string): string {
 }
 
 function auditPermissions(actor: string, before: AgentPermissions | null, after: AgentPermissions, agentId: string) {
+  if ((before?.monthlyBudgetUsd ?? null) !== (after.monthlyBudgetUsd ?? null)) {
+    audit(actor, "budget.set", agentId, { scope: "agent", from: before?.monthlyBudgetUsd ?? null, to: after.monthlyBudgetUsd ?? null });
+  }
   const changed =
     (before?.secretAccess ?? "fill") !== after.secretAccess || (before?.canManageAgents ?? false) !== after.canManageAgents;
   if (!changed) return;

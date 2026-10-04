@@ -71,10 +71,11 @@ async function deliverLoginEmail(p: { email: string; token: string; code: string
 export async function requestLogin(email: string, meta: LoginMeta & { next?: string | null }): Promise<{ loginId: string }> {
   const address = normalizeEmail(email);
   const security = await getSettings("security");
-  // Limits apply to every address alike, so hitting one reveals nothing about accounts.
-  const byEmail = rateLimit(`login:email:${address}`, security.loginPerEmail, WINDOW_MS);
-  const byIp = rateLimit(`login:ip:${meta.ip}`, security.loginPerIp, WINDOW_MS);
-  if (!byEmail.ok || !byIp.ok) throw tooMany("Too many sign-in requests. Wait a few minutes and try again.");
+  // Limits apply to every address alike, so hitting one reveals nothing about accounts. The e-mail address is only
+  // counted for requests its sender's IP may make: a flood from one IP must not lock someone out of their account.
+  if (!rateLimit(`login:ip:${meta.ip}`, security.loginPerIp, WINDOW_MS).ok || !rateLimit(`login:email:${address}`, security.loginPerEmail, WINDOW_MS).ok) {
+    throw tooMany("Too many sign-in requests. Wait a few minutes and try again.");
+  }
   const [auth, decision, attempts] = await Promise.all([getSettings("auth"), loginPolicy(address), addressAttempts(address)]);
   const id = newId("lgn");
   const token = randomToken(32);

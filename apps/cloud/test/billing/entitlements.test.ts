@@ -24,7 +24,10 @@ beforeEach(async () => {
   fakeStripe().install();
 });
 
-async function addSubscription(userId: string, p: { planId: string | null; status: string; periodStart?: Date; periodEnd?: Date; createdAt?: Date }) {
+async function addSubscription(
+  userId: string,
+  p: { planId: string | null; status: string; periodStart?: Date; periodEnd?: Date; createdAt?: Date; livemode?: boolean },
+) {
   await db.insert(subscriptions).values({
     id: newId("sub"),
     userId,
@@ -35,6 +38,7 @@ async function addSubscription(userId: string, p: { planId: string | null; statu
     currentPeriodStart: p.periodStart ?? new Date(Date.now() - DAY_MS),
     currentPeriodEnd: p.periodEnd ?? new Date(Date.now() + 29 * DAY_MS),
     createdAt: p.createdAt ?? new Date(),
+    livemode: p.livemode ?? false,
   });
 }
 
@@ -110,6 +114,40 @@ describe("getEntitlements", () => {
     const unknownPrice = await createUser("u@example.com");
     await addSubscription(unknownPrice.id, { planId: null, status: "active" });
     expect(await getEntitlements(unknownPrice.id)).toMatchObject({ source: "free", plan: { id: free.id } });
+  });
+
+  test("only subscriptions of the key's Stripe mode count; without a known mode both do", async () => {
+    await connectStripe({ patch: { livemode: true } });
+    const free = await freePlan();
+    const { plan } = await paidPlan();
+    const tester = await createUser("t@example.com");
+    await addSubscription(tester.id, { planId: plan.id, status: "active", livemode: false });
+    expect(await getEntitlements(tester.id)).toMatchObject({ source: "free", plan: { id: free.id }, subscription: null });
+    const payer = await createUser("p@example.com");
+    await addSubscription(payer.id, { planId: plan.id, status: "active", livemode: true });
+    expect(await getEntitlements(payer.id)).toMatchObject({ source: "subscription", plan: { id: plan.id } });
+    expect((await previewBillingEnable()).people).toBe(1);
+
+    await connectStripe({ patch: { livemode: null } });
+    expect((await getEntitlements(tester.id)).source).toBe("subscription");
+  });
+
+  test("an active or trialing subscription whose period ended beyond the grace days grants nothing", async () => {
+    await connectStripe({ patch: { pastDueGraceDays: 3 } });
+    const free = await freePlan();
+    const { plan } = await paidPlan();
+    const cases: [string, number, string][] = [
+      ["active", -2, plan.id],
+      ["active", -4, free.id],
+      ["trialing", -2, plan.id],
+      ["trialing", -4, free.id],
+    ];
+    for (const [status, days, expected] of cases) {
+      const user = await createUser(`${status}${days}@example.com`);
+      const periodEnd = new Date(Date.now() + days * DAY_MS);
+      await addSubscription(user.id, { planId: plan.id, status, periodStart: new Date(periodEnd.getTime() - 30 * DAY_MS), periodEnd });
+      expect([status, days, (await getEntitlements(user.id)).plan.id]).toEqual([status, days, expected]);
+    }
   });
 
   test("the newest running subscription is used, not an older canceled one", async () => {

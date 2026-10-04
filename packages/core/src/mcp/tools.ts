@@ -70,6 +70,8 @@ import { createConversation, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
+import { spendReport } from "../services/spend";
+import { budgetOverview, budgetSentence, exhaustedBudget } from "../services/budgets";
 import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun } from "../runner/runner";
 import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow } from "../runner/prompt";
@@ -1060,6 +1062,15 @@ const TOOLS: ToolDef[] = [
       }
       const refusal = revealTargetRefusal(agent, target, "hand it tasks");
       if (refusal) return fail(refusal);
+      // Unattended work doesn't spend past a used-up monthly budget by handing work on (a chat the human leads may).
+      const callerTrigger = get<{ trigger: string }>("SELECT trigger FROM runs WHERE id = ?", ctx.runId)?.trigger;
+      const stop = callerTrigger && !["chat", "manual", "api"].includes(callerTrigger) ? exhaustedBudget(target) : null;
+      if (stop) {
+        const human = getSettings().general.userName.trim() || "the human";
+        return fail(
+          `${target.name} can't take work right now: ${budgetSentence(stop)} Don't hand it to another agent to get around the budget — tell ${human}; only they can raise it or let work through.`,
+        );
+      }
       // From a VM, work for an agent without its own VM stays in the caller's VM.
       const vmId = lockedVm(ctx) && !resolveVmId(null, target) ? lockedVm(ctx) : null;
       // Work stays in the caller's workspace, and for an agent without its own profile in the browser profile picked for
@@ -1543,6 +1554,38 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
+    name: "spend_overview",
+    description:
+      "What the team cost: runs, cost in USD and working time for today, this week, this month or all time — in total, per agent and per kind of work (chat, automation, task, delegation, followup, memory) — plus the monthly budgets with what is spent and how many runs are held. Use it when the human asks what the agents cost or why work is waiting. Budgets are set by the human only.",
+    schema: z.object({
+      period: z.enum(["today", "week", "month", "all"]).optional().describe("Default: month (the calendar month budgets count)"),
+      agentId: z.string().optional().describe("Only this agent"),
+    }),
+    when: isManager,
+    run: ({ period, agentId }) => {
+      const report = spendReport(period ?? "month", agentId);
+      const budgets = budgetOverview();
+      const names = new Map(listAgents().map((a) => [a.id, a.name]));
+      const usd = (n: number) => Math.round(n * 100) / 100;
+      return json({
+        period: report.period,
+        timeZone: report.timeZone,
+        totals: Object.fromEntries(
+          Object.entries(report.periods).map(([p, t]) => [p, { runs: t.runs, failed: t.failed, costUsd: usd(t.costUsd), workingMinutes: Math.round(t.durationMs / 60_000) }]),
+        ),
+        byAgent: report.byAgent.map((a) => ({ agent: a.name, agentId: a.agentId, deleted: a.deleted, runs: a.runs, failed: a.failed, costUsd: usd(a.costUsd), workingMinutes: Math.round(a.durationMs / 60_000) })),
+        byKind: report.byKind.map((k) => ({ kind: k.kind, runs: k.runs, costUsd: usd(k.costUsd) })),
+        budgets: {
+          month: budgets.month,
+          resetsAt: budgets.resetsAt,
+          team: { budgetUsd: budgets.team.budgetUsd, spentUsd: usd(budgets.team.spentUsd), heldRuns: budgets.team.held },
+          agents: budgets.agents.map((b) => ({ agent: names.get(b.agentId!) ?? b.agentId, agentId: b.agentId, budgetUsd: b.budgetUsd, spentUsd: usd(b.spentUsd), heldRuns: b.held })),
+        },
+      });
+    },
+  }),
+
+  defineTool({
     name: "runs_list",
     description:
       "Recent runs of all agents (or one agent) with status, result snippet and error — use it to check what every agent did and what failed.",
@@ -1559,6 +1602,8 @@ const TOOLS: ToolDef[] = [
       const waiting = new Map(
         listQuestions({ status: "open", limit: 500 }).map((q) => [q.runId, q.kind === "approval" ? `the human's OK: ${q.title}` : `the human's answer: ${q.title}`]),
       );
+      // Runs held because a monthly budget is used up: only the human raises it or lets them run.
+      for (const r of runs) if (r.pause?.reason === "budget") waiting.set(r.id, "a monthly budget (the human decides)");
       return json(
         runs.map((r) => ({
           id: r.id,
