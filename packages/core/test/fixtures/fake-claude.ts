@@ -30,6 +30,7 @@
  *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
  *   TASK_FOLLOWUP call the gateway's followup_schedule (in 60 minutes, "Check the reply") and answer "Waiting for the reply"
  *   TASK_NOTE   call the gateway's task_note ("Halfway") and answer "NOTE {json}"
+ *   SPLIT_TO:<agent id>  split the ticket into two parts for that agent with task_split and answer "SPLIT <reply>"
  *   DELEGATE_TO:<agent id>  hand "Say hello" to that agent with agent_delegate (wait: false) as a tool step and answer
  *              "DELEGATED <tool result>"
  *   CRASH       print to stderr and exit 3 without a result
@@ -508,6 +509,25 @@ if (slash?.[1] === "clear") {
     textTurn(text);
     result(text);
   }
+} else if (/SPLIT_TO:(\S+)/.test(prompt)) {
+  out(init);
+  const agentId = /SPLIT_TO:(\S+)/.exec(prompt)![1]!;
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  const input = { parts: [{ title: "Write the copy", agentId }, { title: "Pick the images", agentId }] };
+  const call = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "task_split", arguments: input } });
+  const reply = call.result.content[0].text as string;
+  const text = `SPLIT ${reply}`;
+  textTurn(text);
+  result(text);
 } else if (/DELEGATE_TO:(\S+)/.test(prompt)) {
   // Hand "Say hello" to that agent without waiting, shown like Claude Code shows the tool step.
   out(init);

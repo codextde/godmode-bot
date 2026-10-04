@@ -1012,4 +1012,13 @@ CREATE INDEX IF NOT EXISTS idx_runs_routine ON runs(routine_id, trigger, created
 ALTER TABLE paused_runs ADD COLUMN exempt INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    id: 57,
+    name: "sub_tickets",
+    sql: /* sql */ `
+-- A sub-ticket: part of a bigger ticket (its parent waits until its sub-tickets are done, then continues with them).
+ALTER TABLE tasks ADD COLUMN parent_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id) WHERE parent_id IS NOT NULL;
+`,
+  },
 ];

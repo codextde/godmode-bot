@@ -45,6 +45,8 @@ const createSchema = z.object({
   repoUrl: z.string().max(1000).optional(),
   repoPath: z.string().max(4096).optional(),
   baseBranch: z.string().max(200).optional(),
+  /** A part of this ticket (it waits for it). */
+  parentId: id.nullable().optional(),
   ...ticket,
 });
 
