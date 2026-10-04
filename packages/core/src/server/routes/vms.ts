@@ -20,9 +20,12 @@ import {
   updateVm,
   vmStatus,
 } from "../../vm/service";
-import { captureScreen } from "../../vm/screen";
+import { captureScreen, dispatchVmInput } from "../../vm/screen";
+import { VncError } from "../../vm/vnc";
+import { KeyError } from "../../computer/keys";
 import { badRequest, conflict, sleep } from "../../util";
 import { body, z } from "../validate";
+import { inputEvent } from "./computer";
 import { disableIdleTimeout } from "../../mcp/http";
 
 const name = z.string().trim().min(1, "Name is required").max(60);
@@ -150,6 +153,21 @@ export function registerVmRoutes(app: Hono): void {
     if (vm.state !== "running") throw conflict("The VM isn't running");
     const shot = await captureScreen(id, { maxEdge: size, fast: true, boot: false });
     return c.json({ data: shot.data, mime: "image/png", width: shot.width, height: shot.height });
+  });
+
+  /** Human takeover from a live view: mouse and keyboard on the running VM's screen (never boots it). */
+  app.post("/api/vms/:id/input", async (c) => {
+    const input = await body(c, z.object({ event: inputEvent, frame: z.object({ width: z.number().positive(), height: z.number().positive() }) }));
+    const id = c.req.param("id");
+    if ((await getVm(id)).state !== "running") throw conflict("The VM isn't running");
+    try {
+      await dispatchVmInput(id, input.event, input.frame);
+    } catch (err) {
+      if (err instanceof KeyError) throw badRequest(err.message);
+      if (err instanceof VncError) throw conflict(err.message);
+      throw err;
+    }
+    return c.json({ ok: true as const });
   });
 
   app.post("/api/vms/:id/assign", async (c) => {

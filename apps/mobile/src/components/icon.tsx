@@ -51,6 +51,7 @@ const ICONS = {
   copy: ["doc.on.doc", "content_copy"],
   sparkles: ["sparkles", "smart_toy"],
   down: ["chevron.down", "expand_more"],
+  up: ["chevron.up", "expand_less"],
   wifi: ["wifi.slash", "wifi_off"],
   pin: ["pin.fill", "push_pin"],
   phone: ["iphone", "smartphone"],

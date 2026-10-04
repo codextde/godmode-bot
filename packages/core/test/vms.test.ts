@@ -884,6 +884,49 @@ describe("the VM screen", () => {
   });
 });
 
+describe("taking over the VM screen from a live view", () => {
+  test("clicks, scrolls and keys land on the screen, scaled from the picture", async () => {
+    const vm = await createVm({ name: "Takeover Mac" });
+    await waitState(vm.id, "stopped");
+    const app = createApp();
+    const input = (body: unknown) =>
+      app.request(`/api/vms/${vm.id}/input`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAccessToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    const frame = { width: 64, height: 48 }; // the fake screen is 128×96
+    expect((await input({ event: { type: "click", x: 1, y: 1 }, frame })).status).toBe(409);
+    expect((await getVm(vm.id)).state).toBe("stopped");
+
+    await startVm(vm.id);
+    const eventsFile = join(tartHome(), "vnc-events.jsonl");
+    const events = () =>
+      existsSync(eventsFile)
+        ? readFileSync(eventsFile, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { vm: string; type: string; x?: number; y?: number; buttons?: number; key?: number; down?: boolean }).filter((e) => e.vm === vm.id)
+        : [];
+
+    expect((await input({ event: { type: "click", x: 10, y: 5, button: "right" }, frame })).status).toBe(200);
+    await until(() => events().some((e) => e.type === "pointer" && e.buttons === 4), 5000, "right click");
+    const press = events().find((e) => e.type === "pointer" && e.buttons === 4)!;
+    expect([press.x, press.y]).toEqual([20, 10]);
+
+    expect((await input({ event: { type: "scroll", x: 32, y: 24, deltaY: 120 }, frame })).status).toBe(200);
+    await until(() => events().filter((e) => e.type === "pointer" && e.buttons === 16).length === 2, 5000, "two notches down");
+
+    expect((await input({ event: { type: "key", key: "Enter", modifiers: ["cmd"] }, frame })).status).toBe(200);
+    await until(() => events().filter((e) => e.type === "key").length >= 4, 5000, "keys");
+    expect(events().filter((e) => e.type === "key").map((e) => `${e.down ? "+" : "-"}${e.key!.toString(16)}`)).toEqual(["+ffeb", "+ff0d", "-ff0d", "-ffeb"]);
+
+    expect((await input({ event: { type: "click", x: 100, y: 5 }, frame })).status).toBe(400);
+    expect((await input({ event: { type: "key", key: "Hyper_Meta_Q" }, frame })).status).toBe(400);
+    expect((await input({ event: { type: "click", x: 1, y: 1 } })).status).toBe(400);
+
+    await stopVm(vm.id);
+    await deleteVm(vm.id);
+  }, 60_000);
+});
+
 describe("logins and 2FA codes in the VM", () => {
   const PASSPHRASE = "vm vault passphrase";
   const openVault = async () => {

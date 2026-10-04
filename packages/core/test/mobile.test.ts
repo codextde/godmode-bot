@@ -131,6 +131,7 @@ describe("device scope", () => {
     expect(deviceMayCall("POST", "/api/runs/run_1/cancel")).toBe(true);
     expect(deviceMayCall("GET", "/api/vms/vm_1/screenshot")).toBe(true);
     expect(deviceMayCall("POST", "/api/vms/vm_1/start")).toBe(true);
+    expect(deviceMayCall("POST", "/api/vms/vm_1/input")).toBe(true);
     expect(deviceMayCall("POST", "/api/browser/profiles/bp_1/launch")).toBe(true);
     expect(deviceMayCall("POST", "/api/browser/profiles/bp_1/stop")).toBe(false);
     expect(deviceMayCall("POST", "/api/vms/vm_1/exec")).toBe(false);
@@ -241,6 +242,7 @@ describe("phone access", () => {
     const screen = await phone("/api/computer/input", json("POST", { view: "display:1", event: { type: "click", x: 1, y: 1 } }));
     expect(screen.status).toBe(403);
     expect(((await screen.json()) as { error: string }).error).toMatch(/shared in a chat/);
+    expect((await phone("/api/vms/vm_missing/input", json("POST", { event: { type: "text", text: "hi" }, frame: { width: 1, height: 1 }, cwd: "/" }))).status).toBe(403);
   });
 
   test("phones create and follow tasks in a workspace", async () => {
