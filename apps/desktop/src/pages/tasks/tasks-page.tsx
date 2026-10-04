@@ -52,7 +52,10 @@ const ARCHIVED = "archived";
 
 function typingIn(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
-  return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || !!el.closest("[role=dialog]"));
+  return (
+    !!el &&
+    (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || !!el.closest("[role=dialog],[role=alertdialog],[role=application],[role=listbox],[role=menu]"))
+  );
 }
 
 /** Where a moved card lands in the cached list until the server answers (same rule as the core). */

@@ -1488,7 +1488,14 @@ const TOOLS: ToolDef[] = [
         }
         // An id, or a report's name (a lead may know its team by name only).
         const wanted = p.agentId.trim().toLowerCase();
-        const target = everyone.find((a) => a.id === p.agentId) ?? reports.find((a) => a.name.toLowerCase() === wanted) ?? everyone.find((a) => a.name.toLowerCase() === wanted);
+        // By name: its reports first, then agents of the ticket's workspace, then global ones.
+        const named = (a: { name: string }) => a.name.toLowerCase() === wanted;
+        const target =
+          everyone.find((a) => a.id === p.agentId) ??
+          reports.find(named) ??
+          everyone.find((a) => named(a) && a.workspaceId === parent.workspaceId) ??
+          everyone.find((a) => named(a) && !a.workspaceId) ??
+          everyone.find(named);
         if (!target) return fail(`There is no agent "${p.agentId}".`);
         if (target.id === agent.id) return fail("Do your own part yourself — split off only what others should do.");
         if (!isManager(agent) && !reports.some((r) => r.id === target.id)) return fail(`${target.name} doesn't report to you — give parts to your reports, or leave agentId out for the human to assign.`);

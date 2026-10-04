@@ -68,10 +68,23 @@ import { cn } from "@/lib/utils";
 import { startPresence } from "@/lib/presence";
 import { GO_TO, ShortcutsDialog } from "@/components/layout/shortcuts-dialog";
 
-/** Typing in a field, or in a dialog: plain keys belong to it. */
+/**
+ * Typing in a field, a dialog, an open list or menu (typeahead), or a remote screen the human controls
+ * (`role=application`): plain keys belong to it.
+ */
 function typingIn(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
-  return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || !!el.closest("[role=dialog]"));
+  return (
+    !!el &&
+    (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || !!el.closest("[role=dialog],[role=alertdialog],[role=application],[role=listbox],[role=menu]"))
+  );
+}
+
+/** The letter a key stands for, also on layouts without Latin letters (G is the G key wherever it is labelled). */
+function letterOf(e: KeyboardEvent): string {
+  const key = e.key.toLowerCase();
+  if (/^[a-z]$/.test(key) || key.length !== 1) return key;
+  return /^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : key;
 }
 
 interface NavItem {
@@ -109,9 +122,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     let goAt = 0;
     const onKey = (e: KeyboardEvent) => {
       const mod = isMac ? e.metaKey : e.ctrlKey;
-      // Plain keys only outside text fields and dialogs (there they are typing).
-      if (!mod && !e.altKey && !typingIn(e.target)) {
-        const key = e.key.toLowerCase();
+      // Plain keys only outside text fields and dialogs (there they are typing), and only keys nothing else took.
+      if (!mod && !e.altKey && !e.defaultPrevented && !typingIn(e.target)) {
+        const key = letterOf(e);
         if (e.key === "?") {
           e.preventDefault();
           useUi.getState().setShortcutsOpen(true);

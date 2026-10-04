@@ -349,28 +349,31 @@ export function TaskDialog({
               <span className="flex h-8 items-center rounded-full border border-border/80 pr-1 pl-2">
                 <DueDateField value={dueDate} status={status} onChange={(d) => set("dueDate", d)} />
               </span>
-              <Pill
-                value={workspaceId ?? GLOBAL}
-                label="Workspace"
-                onChange={(v) => {
-                  const next = v === GLOBAL ? null : v;
-                  setForm((f) => ({
-                    ...f,
-                    workspaceId: next,
-                    agentId: f.agentId && agentsInReach(agents, next).some((a) => a.id === f.agentId) ? f.agentId : null,
-                  }));
-                }}
-              >
-                <SelectItem value={GLOBAL}>
-                  <Globe2 className="size-4" /> Global
-                </SelectItem>
-                {workspaces.length > 0 && <SelectSeparator />}
-                {workspaces.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>
-                    <span>{w.icon}</span> {w.name}
+              {/* A part is always in its ticket's workspace. */}
+              {!parent && (
+                <Pill
+                  value={workspaceId ?? GLOBAL}
+                  label="Workspace"
+                  onChange={(v) => {
+                    const next = v === GLOBAL ? null : v;
+                    setForm((f) => ({
+                      ...f,
+                      workspaceId: next,
+                      agentId: f.agentId && agentsInReach(agents, next).some((a) => a.id === f.agentId) ? f.agentId : null,
+                    }));
+                  }}
+                >
+                  <SelectItem value={GLOBAL}>
+                    <Globe2 className="size-4" /> Global
                   </SelectItem>
-                ))}
-              </Pill>
+                  {workspaces.length > 0 && <SelectSeparator />}
+                  {workspaces.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      <span>{w.icon}</span> {w.name}
+                    </SelectItem>
+                  ))}
+                </Pill>
+              )}
             </div>
             <div className="rounded-xl border border-border/80 px-2.5">
               <LabelsInput value={labels} onChange={(l) => set("labels", l)} />

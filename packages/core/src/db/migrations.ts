@@ -1038,4 +1038,13 @@ CREATE INDEX IF NOT EXISTS idx_task_events_kind ON task_events(kind, created_at)
 ALTER TABLE tasks ADD COLUMN parts_seen_at TEXT;
 `,
   },
+  {
+    id: 61,
+    name: "parts_seen_backfill",
+    sql: /* sql */ `
+-- Tickets with parts from before parts_seen_at: their agent saw those parts already (they aren't news on its next run).
+UPDATE tasks SET parts_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE parts_seen_at IS NULL AND status != 'in_progress' AND id IN (SELECT parent_id FROM tasks WHERE parent_id IS NOT NULL);
+`,
+  },
 ];

@@ -689,18 +689,22 @@ export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "use
 }
 
 /**
- * The whole ticket is settled, so are its parts: approved (done) — its delivered parts are done with it; cancelled — its
- * unfinished parts are cancelled (their agents stop).
+ * The whole ticket is settled, so are its parts: approved (done) — its delivered parts are done with it, and parts still
+ * open are cancelled (nobody continues the ticket they work for); cancelled — its unfinished parts are cancelled (their
+ * agents stop).
  */
 function closeParts(id: string, status: "done" | "cancelled", actor: TaskActor) {
-  const which = status === "done" ? "c.status = 'in_review' AND c.archived_at IS NULL" : OPEN_SUBTASK;
-  for (const part of all<{ id: string }>(`SELECT c.id FROM tasks c WHERE c.parent_id = ? AND ${which}`, id)) {
-    try {
-      updateTask(part.id, { status }, actor);
-    } catch (err) {
-      log.warn(`task ${part.id}: could not settle it with its ticket`, err);
+  const settle = (which: string, to: "done" | "cancelled") => {
+    for (const part of all<{ id: string }>(`SELECT c.id FROM tasks c WHERE c.parent_id = ? AND ${which}`, id)) {
+      try {
+        updateTask(part.id, { status: to }, actor);
+      } catch (err) {
+        log.warn(`task ${part.id}: could not settle it with its ticket`, err);
+      }
     }
-  }
+  };
+  if (status === "done") settle("c.status = 'in_review' AND c.archived_at IS NULL", "done");
+  settle(OPEN_SUBTASK, "cancelled");
 }
 
 /** Archive (or bring back) several tasks at once, e.g. a whole column. */
@@ -788,6 +792,10 @@ export async function sendTaskMessage(
   if (busy.has(id)) throw conflict(`Godmode is ${activity.get(id)?.replace(/…$/, "").toLowerCase() ?? "preparing the task"} — send it again in a moment`);
   const human = getSettings().general.userName.trim() || "the human";
   if (from !== "user") {
+    // What the human cancelled or archived stays that way: only they bring it back.
+    if (task.archived_at || task.status === "cancelled") {
+      throw conflict(`Task #${task.number} was ${task.archived_at ? "archived" : "cancelled"} — only ${human} can bring it back`);
+    }
     // Only the human continues a run that stands still (paused, waiting for the limit or for their answer).
     if (pauseOf(task.conversation_id)) throw conflict(`Task #${task.number} stands still — only ${human} can continue it`);
     const name = actorName(from) || "another agent";
@@ -1086,6 +1094,8 @@ export async function dispatch(id: string, resume?: Resume): Promise<void> {
     // The conversation shows the files attached to the message; Claude gets the description with their local copies.
     const staged = stageTaskAttachments(agent, task.number, task.description);
     activity.delete(id);
+    // Taken before the brief lists the parts: one that closes meanwhile is still news afterwards.
+    const seen = seenMark(id);
     await sendMessage(conversationId!, {
       content: taskPrompt(task, worktree, restarted, withFileNames(task.description), staged, resume),
       prompt: taskPrompt(task, worktree, restarted, withLocalPaths(task.description, staged.paths), staged, resume),
@@ -1094,7 +1104,7 @@ export async function dispatch(id: string, resume?: Resume): Promise<void> {
       source: "task",
     });
     // Its brief listed its parts with their results so far.
-    sql("UPDATE tasks SET parts_seen_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id = ?)", now(), id, id);
+    sql("UPDATE tasks SET parts_seen_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM tasks c WHERE c.parent_id = ?)", seen, id, id);
     emit(id);
   } catch (err) {
     log.warn(`task ${id} could not start`, err);
@@ -1359,12 +1369,27 @@ function partNews(id: string, since: string | null): boolean {
   return false;
 }
 
-/** The ticket has parts and its latest run ended waiting (for them, or for a follow-up that is gone since). */
+/**
+ * The ticket's latest run ended waiting for its parts (also when they were deleted since: then it delivers), or waiting
+ * for a follow-up that is gone since while it has parts.
+ */
 function waitsForParts(t: TaskRow): boolean {
   if (t.status !== "in_progress" || !t.conversation_id) return false;
-  if (!get("SELECT 1 FROM tasks WHERE parent_id = ? LIMIT 1", t.id) || getFollowup(t.conversation_id)) return false;
   const runId = latestRunId(t.conversation_id);
-  return !!runId && !!get("SELECT 1 FROM task_events WHERE task_id = ? AND kind = 'waiting' AND run_id = ?", t.id, runId);
+  const wait = runId ? get<{ parts: number }>("SELECT json_extract(data, '$.subtasks') IS NOT NULL AS parts FROM task_events WHERE task_id = ? AND kind = 'waiting' AND run_id = ?", t.id, runId) : null;
+  if (!wait) return false;
+  if (wait.parts) return true;
+  return !getFollowup(t.conversation_id) && !!get("SELECT 1 FROM tasks WHERE parent_id = ? LIMIT 1", t.id);
+}
+
+/**
+ * The mark for "its agent has seen its parts' results up to here": now, or the latest event of a part when that is
+ * later (a clock set back must not make the same results news again and again).
+ */
+function seenMark(id: string): string {
+  const latest = get<{ at: string | null }>("SELECT MAX(e.created_at) AS at FROM task_events e JOIN tasks c ON c.id = e.task_id WHERE c.parent_id = ?", id)?.at;
+  const mark = now();
+  return latest && latest > mark ? latest : mark;
 }
 
 /** One of a ticket's parts closed: when that was the last open one and the ticket waits for them, it continues. */
@@ -1387,9 +1412,9 @@ function partLines(parts: TaskRow[]): string[] {
         : p.status === "done"
           ? "done"
           : p.status === "cancelled"
-            ? "cancelled"
+            ? "cancelled — leave it that way"
             : p.archived_at
-              ? "archived, left unfinished"
+              ? "archived, left unfinished — leave it that way"
               : p.status.replace("_", " ");
     const open = !p.archived_at && !["in_review", "done", "cancelled"].includes(p.status);
     const result = open ? "" : stripNoteTags(p.summary ?? "").trim();
@@ -1454,7 +1479,7 @@ async function continueWithParts(id: string): Promise<void> {
   waking.add(id);
   try {
     const numbers = parts.map((p) => p.number);
-    const seen = now();
+    const seen = seenMark(id);
     await sendMessage(task.conversation_id, {
       content: `${ticketList(numbers)} ${numbers.length === 1 ? "is" : "are"} finished — continue the ticket with ${numbers.length === 1 ? "its result" : "their results"}.`,
       prompt: partsNote(task, parts),

@@ -6,7 +6,9 @@ import { join } from "node:path";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { callTool, listToolsFor } from "../src/mcp/tools";
 import { listActiveRuns } from "../src/runner/runner";
-import { createTask, getTask, listTaskEvents, listTasks, startTasks, stopTasks, updateTask } from "../src/tasks/service";
+import { createTask, deleteTask, getTask, listTaskEvents, listTasks, startTasks, stopTasks, updateTask } from "../src/tasks/service";
+import { get, run as sql } from "../src/db";
+import { MIGRATIONS } from "../src/db/migrations";
 
 let env: TestEnv;
 let lead: Agent;
@@ -128,4 +130,51 @@ describe("a lead splits its ticket into parts for its team", () => {
     // The stopped run winds down before the database closes.
     await until(() => listActiveRuns().length === 0, 15_000, "the runs to end");
   }, 30_000);
+
+  test("a lead whose waiting-for parts are deleted delivers what it did; what the human cancelled stays cancelled", async () => {
+    const finish = join(env.stateDir, "finish");
+    const parent = createTask({ title: "Write the newsletter", description: "WAIT_TO_FINISH", agentId: lead.id });
+    await until(() => getTask(parent.id).runStatus === "running", 20_000, "the lead to work");
+    const part = createTask({ title: "Find a cover photo", parentId: parent.id });
+    const cancelled = createTask({ title: "Proofread", agentId: writer.id, parentId: parent.id });
+    await until(() => getTask(cancelled.id).status === "in_review", 20_000, "the part to be delivered");
+    updateTask(cancelled.id, { status: "cancelled" });
+    // The lead may not bring back what the human cancelled.
+    const p = getTask(parent.id);
+    const ctx = { runId: p.runId!, agentId: lead.id, conversationId: p.conversationId!, workspaceId: null, depth: 0 };
+    const revived = await callTool(ctx as never, "task_message", { taskId: `#${cancelled.number}`, content: "Do it again" });
+    expect(revived.isError).toBe(true);
+    expect(getTask(cancelled.id).status).toBe("cancelled");
+
+    writeFileSync(finish, "");
+    try {
+      await until(() => listTaskEvents(parent.id).some((e) => e.kind === "waiting"), 20_000, "the lead to wait for its part");
+    } finally {
+      rmSync(finish, { force: true });
+    }
+    // Woken with the cancelled part's news, it finishes; then it waits for the open part again.
+    await until(() => getTask(parent.id).runStatus === "succeeded" && listActiveRuns().length === 0, 20_000, "the lead's runs to end");
+    await deleteTask(part.id);
+    await until(() => getTask(parent.id).status === "in_review", 20_000, "the ticket to be delivered");
+  }, 60_000);
+
+  test("a part event dated ahead of the clock wakes the lead once, not again and again", async () => {
+    const parent = createTask({ title: "Clock check", agentId: lead.id, status: "backlog" });
+    const part = createTask({ title: "Count the stock", agentId: writer.id, parentId: parent.id });
+    await until(() => getTask(part.id).status === "in_review", 20_000, "the part to be delivered");
+    sql("UPDATE task_events SET created_at = ? WHERE task_id = ? AND kind = 'delivered'", new Date(Date.now() + 8_000).toISOString(), part.id);
+    updateTask(parent.id, { status: "todo" });
+    await until(() => getTask(parent.id).status === "in_review", 20_000, "the lead to deliver");
+    await new Promise((r) => setTimeout(r, 1_500));
+    expect(getTask(parent.id).status).toBe("in_review");
+    expect(invocations(env).filter((i) => i.prompt.includes(`The parts of ticket #${parent.number} are finished`)).length).toBeLessThanOrEqual(1);
+  }, 60_000);
+
+  test("tickets with parts from before parts_seen_at count them as seen after the upgrade", () => {
+    const parent = createTask({ title: "Old ticket", status: "in_review" });
+    createTask({ title: "Old part", parentId: parent.id });
+    sql("UPDATE tasks SET parts_seen_at = NULL WHERE id = ?", parent.id);
+    sql(MIGRATIONS.find((m) => m.name === "parts_seen_backfill")!.sql);
+    expect(get<{ at: string | null }>("SELECT parts_seen_at AS at FROM tasks WHERE id = ?", parent.id)?.at).toMatch(/^\d{4}-\d\d-\d\dT/);
+  });
 });
