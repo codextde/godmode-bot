@@ -1,29 +1,23 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { motion } from "motion/react";
-import { formatDistanceToNowStrict } from "date-fns";
-import { Activity, ArrowRight, CircleStop, Coins, Gauge, Pencil, Timer } from "lucide-react";
+import { Activity, ArrowRight, Coins, Gauge, Pencil, Timer } from "lucide-react";
 import type { Agent, Run } from "@godmode/shared";
-import { useRoutines, useRuns } from "@/lib/hooks";
+import { useRuns } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Orb } from "@/components/aicss/Orb";
-import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
-import { RunRow, useNow } from "@/components/runs/run-row";
-import { RunDetailSheet, useCancelRun } from "@/components/runs/run-detail-sheet";
-import { formatCost, formatDuration, formatElapsed } from "@/components/runs/run-status";
-import { useAgentLiveRun } from "../agent-actions";
-import { cronToHuman, scheduleToHuman } from "../cron";
-import { lowerFirst, TRIGGER_TYPES } from "@/components/automations/trigger-meta";
+import { RunRow } from "@/components/runs/run-row";
+import { RunDetailSheet } from "@/components/runs/run-detail-sheet";
+import { formatCost, formatDuration } from "@/components/runs/run-status";
+import { RunTaskDialog } from "../agent-actions";
+import { Plate } from "./plate";
 
 export function OverviewTab({ agent }: { agent: Agent }) {
   const runsQ = useRuns(agent.id);
-  const { data: routines = [] } = useRoutines(agent.id);
   const [selected, setSelected] = useState<Run | null>(null);
+  const [runTask, setRunTask] = useState(false);
   const runs = runsQ.data ?? [];
 
   const stats = useMemo(() => {
@@ -53,14 +47,10 @@ export function OverviewTab({ agent }: { agent: Agent }) {
     };
   }, [runs]);
 
-  const upcoming = routines
-    .filter((r) => r.enabled && r.nextRunAt)
-    .sort((a, b) => (a.nextRunAt ?? "").localeCompare(b.nextRunAt ?? ""))
-    .slice(0, 4);
-
   return (
     <div className="space-y-6">
-      <LiveCard agent={agent} />
+      <Plate agent={agent} onRunTask={() => setRunTask(true)} />
+      <RunTaskDialog agent={agent} open={runTask} onOpenChange={setRunTask} />
 
       <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
         <Kpi
@@ -113,45 +103,6 @@ export function OverviewTab({ agent }: { agent: Agent }) {
 
         <div className="space-y-6">
           <section className="rounded-xl border bg-card p-4 shadow-card">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-medium tracking-[-0.01em]">Up next</h2>
-              <Button variant="ghost" size="xs" asChild className="text-muted-foreground">
-                <Link to={`/agents/${agent.id}/routines`}>Automations</Link>
-              </Button>
-            </div>
-            {upcoming.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nothing coming up.{" "}
-                <Link to={`/agents/${agent.id}/routines`} className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
-                  Add an automation
-                </Link>{" "}
-                to put it to work on its own.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {upcoming.map((r) => {
-                  const Icon = TRIGGER_TYPES[r.trigger.type].icon;
-                  return (
-                    <li key={r.id} className="flex items-start gap-2.5">
-                      <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">{r.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {r.trigger.type === "condition"
-                            ? `Checks ${lowerFirst(cronToHuman(r.cron))}`
-                            : scheduleToHuman(r.cron, r.trigger.type === "schedule" ? r.trigger.startWindowMinutes : 0)}{" "}
-                          ·{" "}
-                          {formatDistanceToNowStrict(new Date(r.nextRunAt!), { addSuffix: true })}
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
-          <section className="rounded-xl border bg-card p-4 shadow-card">
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-sm font-medium tracking-[-0.01em]">Instructions</h2>
               <Button variant="ghost" size="icon-xs" asChild className="text-muted-foreground">
@@ -173,46 +124,6 @@ export function OverviewTab({ agent }: { agent: Agent }) {
 
       <RunDetailSheet runId={selected?.id ?? null} run={selected} onOpenChange={(o) => !o && setSelected(null)} />
     </div>
-  );
-}
-
-function LiveCard({ agent }: { agent: Agent }) {
-  const live = useAgentLiveRun(agent.id);
-  const now = useNow(!!live);
-  const cancel = useCancelRun();
-  if (!live) return null;
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="glow-border flex flex-wrap items-center gap-4 rounded-xl border bg-card p-4 shadow-card"
-    >
-      <Orb variant="B3" size={32} label="Working" />
-      <div className="min-w-0 flex-1">
-        <div className="eyebrow flex items-center gap-2">
-          <LiveDot /> Working right now
-        </div>
-        <div className="text-shimmer mt-0.5 truncate font-medium">{live.activity ?? "Thinking…"}</div>
-      </div>
-      <span className="flex items-center gap-2.5">
-        <WorkingTicks count={8} className="text-brand-strong" />
-        <span className="font-mono text-sm text-muted-foreground tabular-nums">{formatElapsed(now - live.startedAt)}</span>
-      </span>
-      <div className="flex gap-2">
-        <Button size="sm" variant="secondary" asChild>
-          <Link to={`/chat/${live.conversationId}`}>Watch live</Link>
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="text-destructive hover:text-destructive"
-          onClick={() => cancel.mutate(live.runId)}
-          disabled={cancel.isPending}
-        >
-          {cancel.isPending ? <Spinner /> : <CircleStop />} Stop
-        </Button>
-      </div>
-    </motion.div>
   );
 }
 

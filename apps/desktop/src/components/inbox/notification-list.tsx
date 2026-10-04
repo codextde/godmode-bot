@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { Bell, BellOff, Bot, CheckCheck, ChevronRight, CircleCheck, CircleX, Info, KeyRound, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
+import { Bell, BellOff, Bot, CheckCheck, ChevronRight, CircleCheck, CircleX, Info, KeyRound, MessageCircleQuestion, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import type { AppNotification, NotificationKind } from "@godmode/shared";
 import {
   AlertDialog,
@@ -32,6 +32,7 @@ const KIND_ICON: Record<NotificationKind, { icon: typeof Info; className: string
   error: { icon: CircleX, className: "bg-destructive/10 text-destructive" },
   missing_login: { icon: KeyRound, className: "bg-warning/12 text-warning" },
   run: { icon: Bot, className: "border bg-card text-foreground shadow-card" },
+  question: { icon: MessageCircleQuestion, className: "bg-warning/12 text-warning" },
 };
 
 const PAGE = 30;

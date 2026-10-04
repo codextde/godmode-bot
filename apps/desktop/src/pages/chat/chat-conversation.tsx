@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, SshServer, Vm } from "@godmode/shared";
 import { characterGreeting, computerTargetLabel } from "@godmode/shared";
-import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Sparkles, Wand2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Power, PowerOff, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,7 +14,7 @@ import { SpeechBubble } from "@/components/character";
 import { BrowserFocus, BrowserPanel, BrowserToggle, agentBrowserProfile, useChatBrowser, useChatTab, type BrowserFocusMode } from "@/components/chat/browser-panel";
 import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { ComputerFocus, ComputerPanel, ComputerShareChip, ComputerToggle, type ComputerFocusMode } from "@/components/computer/computer-panel";
-import { useStartAgentChat } from "@/components/agents/agent-actions";
+import { useStartAgentChat, useToggleAgent } from "@/components/agents/agent-actions";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { QueueTray, type QueueTrayHandle } from "@/components/chat/queue-tray";
 import { useArchiveChat } from "@/components/chat/chat-actions";
@@ -22,6 +22,7 @@ import { ConversationHeader } from "@/components/chat/conversation-header";
 import { useConversationMood } from "@/components/chat/conversation-mood";
 import { FollowupBar } from "@/components/chat/followup";
 import { PauseBar, usePauseActions } from "@/components/chat/pause";
+import { QuestionScopeProvider } from "@/components/chat/question-card";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { InstructionsChip } from "@/components/instructions/instructions";
@@ -109,9 +110,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   // The chat's run stands still (one that continues is live again before the chat says so). Runs that came after it wait.
   const paused = (conv?.paused && conv.paused.runId !== activeRunId && conv.paused) || null;
   const liveMood = useConversationMood(conversationId, messages, live);
-  const mood = paused ? { mood: "idle" as const, label: paused.reason === "limit" ? "Waiting for the limit to reset" : "Paused" } : liveMood;
+  // The run waits for the human's answer to a question or an approval (the card in the thread asks it).
+  const waiting = paused?.reason === "question" ? paused : null;
+  const approval = waiting?.question?.kind === "approval";
+  const mood = waiting
+    ? { mood: "attention" as const, label: approval ? "Needs your OK" : "Needs your answer" }
+    : paused
+      ? { mood: "idle" as const, label: paused.reason === "limit" ? "Waiting for the limit to reset" : "Paused" }
+      : liveMood;
   const { pause } = usePauseActions(conversationId);
-  const pausing = pause.isPending || live?.activity === "Pausing…";
+  const pausing = pause.isPending || live?.activity === "Pausing…" || live?.activity === "Asking you…";
+  const answeringRef = useRef(false);
+  answeringRef.current = !!waiting;
   const busyRef = useRef(false);
   busyRef.current = !!activeRunId;
   // While the agent works, is paused or older messages still wait, a new message joins the queue.
@@ -155,6 +165,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       const tempId = `pending-${id}`;
       const attachments = (input.attachments ?? []).map((a) => ({ name: a.name, mime: a.mime, path: "", size: Math.round((a.data.length * 3) / 4) }));
       const draft = { conversationId, content: input.content, attachments, createdAt: new Date().toISOString() };
+      // A message to a chat that waits for an answer is the answer: no queue chip, no bubble — the card shows it.
+      if (answeringRef.current && !input.content.trim().startsWith("/")) return { id, tempId: null };
       const queueing = queueingRef.current;
       if (queueing) pendingQueued.set(id, { ...draft, id });
       qc.setQueryData<ConversationWithMessages>(key, (old) =>
@@ -187,6 +199,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         };
       });
       if ("run" in res && input.voice) markVoiceRun(res.run.id);
+      // It was the answer to a question: the card in the thread shows it now.
+      if ("question" in res && res.question) qc.invalidateQueries({ queryKey: key });
       // Also settles the queue when the agent took the message before this answer arrived.
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
     },
@@ -403,23 +417,26 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         />
 
         <ChatFilesScope conversationId={conversationId}>
-          <Thread
-            messages={visibleMessages}
-            agent={agent}
-            inflight={inflight}
-            onStop={() => activeRunId && cancel.mutate(activeRunId)}
-            stopping={cancel.isPending}
-            onPause={conv.origin === "dream" || live?.trigger === "dream" || live?.trigger === "check" || paused ? undefined : () => pause.mutate()}
-            pausing={pausing}
-            empty={
-              <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
-            }
-          />
+          <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? "The agent", openId: waiting?.question?.id ?? null }}>
+            <Thread
+              messages={visibleMessages}
+              agent={agent}
+              delegatedFrom={conv.delegatedFrom}
+              inflight={inflight}
+              onStop={() => activeRunId && cancel.mutate(activeRunId)}
+              stopping={cancel.isPending}
+              onPause={conv.origin === "dream" || live?.trigger === "dream" || live?.trigger === "check" || paused ? undefined : () => pause.mutate()}
+              pausing={pausing}
+              empty={
+                <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
+              }
+            />
+          </QuestionScopeProvider>
         </ChatFilesScope>
 
         {dreamLog ? (
           <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
-            <DreamLogNote agentId={conv.agentId} agentName={agent?.name ?? "The agent"} />
+            <DreamLogNote agent={agent ?? { id: conv.agentId, name: "The agent", enabled: true }} />
           </div>
         ) : (
           <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
@@ -443,6 +460,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                         <ArchiveRestore /> Unarchive
                       </Button>
                     </div>
+                  </motion.div>
+                )}
+                {agent && !agent.enabled && conv.origin !== "dream" && (
+                  <motion.div
+                    key="off"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <SwitchedOffBar agent={agent} />
                   </motion.div>
                 )}
                 {paused && (
@@ -486,6 +515,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 agentId={conv.agentId}
                 autoFocus
                 running={!!activeRunId && !paused}
+                blocked={agent && !agent.enabled ? `Switch ${agent.name} on to send` : undefined}
                 onRecall={() => queueRef.current?.editLast() ?? false}
                 leading={
                   <>
@@ -534,10 +564,16 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     />
                   </>
                 }
-                sendHint={paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : undefined}
+                sendHint={waiting ? "Send answer" : paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : undefined}
                 placeholder={
                   !agent
                     ? "Message…"
+                    : !agent.enabled
+                      ? `${agent.name} is switched off — your message waits here as a draft`
+                    : waiting
+                      ? approval
+                        ? `Reply to ${agent.name} — or use Approve / Decline above`
+                        : `Answer ${agent.name}…`
                     : paused?.reason === "user"
                       ? `Message ${agent.name} to continue with new instructions…`
                       : paused
@@ -619,8 +655,28 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   );
 }
 
+/** A switched-off agent answers nothing: say so where the human types, with the way back. */
+function SwitchedOffBar({ agent }: { agent: Agent }) {
+  const toggle = useToggleAgent();
+  return (
+    <div className="mb-2 flex items-center gap-3 rounded-xl border bg-card py-2 pr-2 pl-2.5 shadow-card" role="status">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-muted text-muted-foreground">
+        <PowerOff className="size-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1 leading-snug">
+        <p className="truncate text-[13px] font-medium">{agent.name} is switched off</p>
+        <p className="text-xs text-muted-foreground">It doesn't answer, run its automations or take handoffs until you switch it on.</p>
+      </div>
+      <Button size="sm" variant="outline" className="shrink-0" disabled={toggle.isPending} onClick={() => toggle.mutate({ id: agent.id, enabled: true })}>
+        {toggle.isPending ? <Spinner /> : <Power />} Switch on
+      </Button>
+    </div>
+  );
+}
+
 /** Footer of an agent's dream log: nothing to send here — point to a fresh chat instead. */
-function DreamLogNote({ agentId, agentName }: { agentId: string; agentName: string }) {
+function DreamLogNote({ agent }: { agent: Pick<Agent, "id" | "name" | "enabled"> }) {
+  const agentName = agent.name;
   const chat = useStartAgentChat();
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card px-4 py-3 text-[13px] text-muted-foreground shadow-card">
@@ -630,7 +686,7 @@ function DreamLogNote({ agentId, agentName }: { agentId: string; agentName: stri
       <span className="min-w-0 flex-1 basis-56">
         This is where <span className="font-medium text-foreground">{agentName}</span> dreams — start a new chat to talk to it.
       </span>
-      <Button size="sm" variant="outline" disabled={chat.isPending} onClick={() => chat.mutate(agentId)}>
+      <Button size="sm" variant="outline" disabled={chat.isPending} onClick={() => chat.mutate(agent)}>
         {chat.isPending ? <Spinner /> : <MessageSquarePlus />} New chat
       </Button>
     </div>

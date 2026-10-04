@@ -2,28 +2,12 @@ import { useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import {
-  ArrowLeft,
-  Bot,
-  Brain,
-  Cpu,
-  Ellipsis,
-  FolderOpen,
-  GitCommitHorizontal,
-  Globe,
-  LayoutGrid,
-  MessageSquare,
-  MessagesSquare,
-  Pause,
-  Play,
-  Settings2,
-  StepForward,
-  Trash2,
-  Workflow,
-} from "lucide-react";
+import { ArrowLeft, Bot, Brain, Copy, Cpu, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
+import { leadOf, reportsOf } from "@godmode/shared";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { useAllAgents } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { isTauri } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
@@ -44,6 +28,7 @@ import {
   useAgentLiveRun,
   useAgentMood,
   useAgentPause,
+  useDuplicateAgent,
   useStartAgentChat,
   useToggleAgent,
 } from "@/components/agents/agent-actions";
@@ -130,6 +115,10 @@ function AgentHeader({ agent }: { agent: Agent }) {
   const navigate = useNavigate();
   const chat = useStartAgentChat();
   const toggle = useToggleAgent();
+  const duplicate = useDuplicateAgent();
+  const { data: allAgents = [] } = useAllAgents();
+  const lead = leadOf(agent, allAgents);
+  const reports = reportsOf(agent, allAgents);
   const mood = useAgentMood(agent);
   const running = !!useAgentLiveRun(agent.id) || agent.status === "running";
   const { pause, resume } = useAgentPause();
@@ -152,9 +141,32 @@ function AgentHeader({ agent }: { agent: Agent }) {
                 <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Built-in</span>
               )}
             </div>
+            {agent.role ? (
+              <p className="mt-0.5 text-sm font-medium text-foreground/80">{agent.role}</p>
+            ) : (
+              !agent.isDefault && (
+                <Link to={`/agents/${agent.id}/settings#identity`} className="mt-0.5 inline-block text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+                  Add a role
+                </Link>
+              )
+            )}
             {agent.description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{agent.description}</p>}
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-              <AgentStatus agent={agent} />
+              <AgentStatus agent={agent} interactive />
+              {agent.isDefault ? (
+                <span>Reports to you</span>
+              ) : (
+                lead && (
+                  <Link to={`/agents/${lead.id}`} className="flex items-center gap-1.5 underline-offset-2 hover:text-foreground hover:underline">
+                    Reports to <AgentAvatar agent={lead} size="sm" still className="size-4 rounded-[4px] text-[9px]" /> {lead.name}
+                  </Link>
+                )
+              )}
+              {reports.length > 0 && (
+                <Link to="/agents?view=chart" className="underline-offset-2 hover:text-foreground hover:underline">
+                  Leads {reports.length}
+                </Link>
+              )}
               <ScopeBadge workspaceId={agent.workspaceId} />
               <span className="flex items-center gap-1">
                 <Cpu className="size-3.5" /> {agent.model ? modelLabel(agent.model) : "Default model"}
@@ -181,13 +193,21 @@ function AgentHeader({ agent }: { agent: Agent }) {
                     checked={agent.enabled}
                     onCheckedChange={(enabled) => toggle.mutate({ id: agent.id, enabled })}
                     disabled={toggle.isPending}
-                    aria-label={agent.enabled ? "Disable agent" : "Enable agent"}
+                    aria-label={agent.enabled ? `Switch ${agent.name} off` : `Switch ${agent.name} on`}
                   />
-                  <span className="@max-md:sr-only">{agent.enabled ? "Enabled" : "Disabled"}</span>
+                  <span className="@max-md:sr-only">{agent.enabled ? "On" : "Off"}</span>
                 </label>
               </TooltipTrigger>
-              <TooltipContent>{agent.enabled ? "Disable: automations and delegations stop" : "Enable this agent"}</TooltipContent>
+              <TooltipContent>{agent.enabled ? "Switch off: it stops answering, and its automations and handoffs wait" : "Switch on"}</TooltipContent>
             </Tooltip>
+            {(agent.openQuestions ?? 0) > 0 && (
+              <Button asChild variant="outline" className="border-warning/40">
+                <Link to="/inbox">
+                  <MessageCircleQuestion className="text-warning" />
+                  {(agent.openQuestions ?? 0) > 1 ? `Answer ${agent.openQuestions} questions` : "Answer"}
+                </Link>
+              </Button>
+            )}
             {(agent.pausedRuns ?? 0) > 0 && (
               <Button variant="outline" onClick={() => resume.mutate(agent)} disabled={resume.isPending || !agent.enabled}>
                 {resume.isPending ? <Spinner /> : <StepForward />} Continue
@@ -206,7 +226,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
             <Button variant="outline" onClick={() => setRunTask(true)} disabled={!agent.enabled}>
               <Play /> Run task
             </Button>
-            <Button onClick={() => chat.mutate(agent.id)} disabled={chat.isPending}>
+            <Button onClick={() => chat.mutate(agent)} disabled={chat.isPending}>
               {chat.isPending ? <Spinner /> : <MessageSquare />} Chat
             </Button>
             {!agent.isDefault && (
@@ -219,6 +239,9 @@ function AgentHeader({ agent }: { agent: Agent }) {
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/settings`)}>
                     <Settings2 /> Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => duplicate.mutate(agent)} disabled={duplicate.isPending}>
+                    <Copy /> Duplicate
                   </DropdownMenuItem>
                   <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
                     <Trash2 /> Delete agent

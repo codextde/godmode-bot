@@ -291,6 +291,7 @@ function TemplateCard({ template, index, onPick }: { template: AgentTemplate; in
     >
       <AgentAvatar agent={{ id: template.id, avatar: template.avatar, color: template.color, character: template.character }} size="lg" />
       <span className="mt-4 block font-medium tracking-[-0.01em]">{template.name}</span>
+      {template.role && <span className="block text-xs text-muted-foreground">{template.role}</span>}
       <span className="mt-1 line-clamp-3 block flex-1 text-sm text-muted-foreground">{template.description}</span>
       {template.routine && (
         <span className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -327,6 +328,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
             personality: template.personality,
             description: template.description,
             instructions: template.instructions,
+            role: template.role,
           }
         : isScratch
           ? { ...randomLook(), personality: "buddy" }

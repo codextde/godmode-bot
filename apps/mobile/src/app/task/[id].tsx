@@ -1,3 +1,4 @@
+import { reopenStatus, type TaskBlockedKind } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -97,13 +98,28 @@ export default function TaskScreen() {
         {agent && <Icon name="chevron" size={13} color={c.textFaint} />}
       </Card>
 
-      {t.status === "blocked" && t.blockedReason ? (
+      {t.status === "blocked" && (t.blockedReason || t.blockedKind) ? (
         <Card style={[styles.notice, { backgroundColor: c.dangerSoft, borderColor: "transparent" }]}>
           <Icon name="warning" size={16} color={c.danger} />
-          <T variant="subhead" style={{ flex: 1 }}>
-            {t.blockedReason}
-          </T>
+          <View style={{ flex: 1, gap: 2 }}>
+            {t.blockedKind && t.blockedKind !== "manual" ? (
+              <T variant="subhead" style={{ fontWeight: "600" }}>
+                {BLOCKED_TITLE[t.blockedKind]}
+              </T>
+            ) : null}
+            {t.blockedReason ? <T variant="subhead">{t.blockedReason}</T> : null}
+            {t.blockedKind === "publish" ? (
+              <T variant="footnote" muted>
+                Publishing failed — publish it again on your computer.
+              </T>
+            ) : null}
+          </View>
         </Card>
+      ) : null}
+      {t.runCount > 0 ? (
+        <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
+          {agent?.name ?? "The agent"} worked {Math.max(1, Math.round(t.workMs / 60_000))}m in {t.runCount} run{t.runCount === 1 ? "" : "s"} · ${t.costUsd.toFixed(2)}
+        </T>
       ) : null}
 
       <Actions
@@ -223,14 +239,18 @@ function Actions({
       buttons.push({ title: "Stop", icon: "stop", status: "backlog" });
       break;
     case "in_review":
-      buttons.push({ title: "Mark done", icon: "check", status: "done", primary: true });
+      buttons.push({ title: "Approve", icon: "check", status: "done", primary: true });
       break;
     case "blocked":
-      if (hasAgent) buttons.push({ title: "Try again", icon: "refresh", status: "todo", primary: true });
+      // When the agent asked for something, the answer goes in the message box below.
+      if (hasAgent && task.blockedKind !== "needs_input") {
+        const title = task.blockedKind === "interrupted" ? "Continue" : task.blockedKind === "stopped" || task.blockedKind === "manual" || task.blockedKind === "publish" ? "Start again" : "Try again";
+        buttons.push({ title, icon: "refresh", status: "todo", primary: true });
+      }
       break;
     case "done":
     case "cancelled":
-      buttons.push({ title: "Reopen", icon: "refresh", status: "backlog" });
+      buttons.push({ title: "Reopen", icon: "refresh", status: reopenStatus(task) });
       break;
   }
   if (onOpenChat) buttons.push({ title: "Open chat", icon: "chats", onPress: onOpenChat });
@@ -238,6 +258,16 @@ function Actions({
   if (task.status !== "done" && task.status !== "cancelled") buttons.push({ title: "Cancel task", icon: "close", status: "cancelled" });
   return <ActionButtons buttons={buttons} busy={busy} onMove={onMove} onArchive={onArchive} />;
 }
+
+const BLOCKED_TITLE: Record<TaskBlockedKind, string> = {
+  needs_input: "It needs something from you",
+  failed: "The run failed",
+  stopped: "Stopped",
+  interrupted: "Interrupted by a restart",
+  publish: "Couldn't publish the work",
+  setup: "Couldn't set it up",
+  manual: "Blocked",
+};
 
 function ActionButtons({
   buttons,

@@ -12,10 +12,13 @@ import {
   updateConversation,
 } from "../../services/conversations";
 import { editQueued, removeQueued, sendQueuedNow, submitMessage } from "../../services/messageQueue";
+import { answerByMessage } from "../../services/questions";
+import { answererOf } from "./questions";
 import { continueConversation, pauseConversation, setAutoContinue } from "../../services/pauses";
 import { cancelRun, findRunLog, getRun, listRuns } from "../../runner/runner";
 import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } from "../../services/followups";
-import { notFound } from "../../util";
+import { conflict, notFound } from "../../util";
+import { getAgent } from "../../agents/service";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
 import { validateTarget } from "../../computer/service";
@@ -89,6 +92,9 @@ export function registerChatRoutes(app: Hono): void {
       c,
       z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, workspaceId, sshServerIds, instructions, ...modelChoice }),
     );
+    // A switched-off agent answers nothing: don't leave an empty chat behind.
+    const agent = getAgent(input.agentId);
+    if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
     return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
@@ -124,6 +130,9 @@ export function registerChatRoutes(app: Hono): void {
     const id = c.req.param("id");
     getConversationSummary(id); // 404 early, before parsing a potentially large body
     const { queue, queueId, ...input } = await body(c, sendSchema);
+    // The chat waits for the human's answer: this message is that answer, and the run that asked continues with it.
+    const answered = answerByMessage(id, input, answererOf(c));
+    if (answered) return c.json(answered, 201);
     if (!queue) return c.json(await sendMessage(id, { ...input, trigger: "chat" }), 201);
     const outcome = await submitMessage(id, { ...input, queueId });
     return c.json(outcome, "queued" in outcome ? 202 : 201);
@@ -199,6 +208,7 @@ export function registerChatRoutes(app: Hono): void {
         agentId: c.req.query("agentId") || undefined,
         status: c.req.query("status") || undefined,
         conversationId: c.req.query("conversationId") || undefined,
+        parentRunId: c.req.query("parentRunId") || undefined,
         limit: num(c.req.query("limit")),
       }),
     ),

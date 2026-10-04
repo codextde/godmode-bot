@@ -22,15 +22,22 @@ import {
   EFFORT_OPTIONS,
   MASCOT_CHARACTER,
   MASCOT_COLOR,
+  chainOf,
   defaultCharacter,
+  leadOf,
+  leadProblem,
   normalizeCharacter,
+  normalizeRole,
   parseCharacter,
+  reportsOf,
+  withinReach,
 } from "@godmode/shared";
 import { config } from "../config";
 import { all, bool, get, getMeta, insert, int, json, run, setMeta, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
+import { redact } from "../vault/vault";
 import { normalizeWorkingDirectory } from "../services/folders";
 import { onSettingsApplied } from "../services/runtime";
 import { getSettings } from "../services/settings";
@@ -65,6 +72,9 @@ interface AgentRow {
   personality: string | null;
   description: string;
   instructions: string;
+  role: string;
+  reports_to: string | null;
+  failed_run_id: string | null;
   model: string;
   effort: string | null;
   ultracode: number | null;
@@ -105,7 +115,8 @@ const DEFAULT_AGENT_INSTRUCTIONS = `You are the human's main assistant and the o
 - When the human describes recurring work ("every morning…", "each month…", "keep an eye on…"), propose a dedicated agent and, once the details are clear, create it with focused instructions and a routine (cron + the human's timezone). Confirm the name, the schedule and what the agent should report.
 - Supervise the team: when asked for status, check agents_list and runs_list for failed runs, stuck agents and missing logins, and suggest concrete fixes (clearer instructions, a missing login, a better schedule).
 - Keep agents lean: one clear responsibility each and least privilege — only grant secret reveal access or agent management when truly needed.
-- Remember the human's preferences, projects, tools and people in MEMORY.md so every agent you set up benefits from them.`;
+- Remember the human's preferences, projects, tools and people in MEMORY.md so every agent you set up benefits from them.
+- You lead the team: every agent reports to you unless it has a lead of its own. Give each agent a role when you create it.`;
 
 const DEFAULT_AGENT_INPUT: AgentInput = {
   name: "Godmode",
@@ -115,6 +126,7 @@ const DEFAULT_AGENT_INPUT: AgentInput = {
   personality: "buddy",
   description: "Your main AI coworker. Ask it anything — it can also create, configure and supervise your other agents.",
   instructions: DEFAULT_AGENT_INSTRUCTIONS,
+  role: "Chief of staff",
   permissions: { canManageAgents: true, allowDelegation: true },
 };
 
@@ -144,6 +156,8 @@ function normalizePersonality(value: string | null | undefined): string {
 
 function toModel(r: AgentRow): Agent {
   const enabled = bool(r.enabled);
+  // The status column holds idle/running; "error" is derived from the failed run so a restart can't erase it.
+  const status: AgentStatus = !enabled ? "disabled" : r.status === "running" ? "running" : r.failed_run_id ? "error" : "idle";
   return {
     id: r.id,
     workspaceId: r.workspace_id,
@@ -155,12 +169,15 @@ function toModel(r: AgentRow): Agent {
     personality: r.personality ?? "",
     description: r.description,
     instructions: r.instructions,
+    role: r.role ?? "",
+    reportsTo: bool(r.is_default) ? null : (r.reports_to ?? null),
+    failedRunId: r.failed_run_id ?? null,
     model: r.model,
     effort: (EFFORT_OPTIONS as readonly string[]).includes(r.effort ?? "") ? (r.effort as Effort) : null,
     ultracode: r.ultracode == null ? null : bool(r.ultracode),
     isDefault: bool(r.is_default),
     enabled,
-    status: enabled ? (r.status as AgentStatus) : "disabled",
+    status,
     permissions: normalizePermissions({ ...BASE_PERMISSIONS, ...parseJson<Partial<AgentPermissions>>(r.permissions, {}) }),
     browser: normalizeBrowser({ ...DEFAULT_BROWSER, ...parseJson<Partial<AgentBrowserConfig>>(r.browser, {}) }),
     computer: normalizeAgentComputer(parseJson<unknown>(r.computer, {})),
@@ -172,7 +189,8 @@ function toModel(r: AgentRow): Agent {
     sshServerIds: parseServerIds(r.ssh_server_ids),
     // Derived from the slug so the data dir can move (backup restore, GODMODE_HOME change).
     repoPath: repoPathFor(r.slug),
-    pausedRuns: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ?", r.id)?.n ?? 0,
+    pausedRuns: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason != 'question'", r.id)?.n ?? 0,
+    openQuestions: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason = 'question'", r.id)?.n ?? 0,
     lastRunAt: r.last_run_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -191,6 +209,9 @@ function toRow(a: Agent): Record<string, string | number | null> {
     personality: a.personality,
     description: a.description,
     instructions: a.instructions,
+    role: a.role,
+    reports_to: a.reportsTo,
+    failed_run_id: a.failedRunId,
     model: a.model,
     effort: a.effort,
     ultracode: a.ultracode === null ? null : int(a.ultracode)!,
@@ -286,6 +307,35 @@ function defaultPermissions(settings: Settings): AgentPermissions {
 
 /** Changes made by an agent (MCP tools, actor "agent:<id>") rather than the human. */
 const isAgentActor = (actor: string) => actor.startsWith("agent:");
+
+/** A job title as stored; one written by an agent can't carry a saved secret into its teammates' prompts. */
+function roleFrom(value: string | null | undefined, actor: string): string {
+  const role = normalizeRole(value);
+  return isAgentActor(actor) ? normalizeRole(redact(role)) : role;
+}
+
+type LeadSubject = Pick<Agent, "id" | "workspaceId" | "isDefault" | "reportsTo" | "name">;
+
+/** The stored lead for `agent` (null = the built-in agent), or a 400 saying why `leadId` can't lead it. */
+function resolveLead(leadId: string | null | undefined, agent: LeadSubject): string | null {
+  if (!leadId) return null;
+  const agents = listAgents();
+  const lead = agents.find((a) => a.id === leadId);
+  if (agent.isDefault) throw badRequest("Godmode leads the team and reports to you");
+  if (!lead) throw badRequest("That agent doesn't exist anymore");
+  if (lead.isDefault) return null;
+  // Judge the cycle against the team as it will be: the subject with its new workspace.
+  const team = agents.map((a) => (a.id === agent.id ? { ...a, workspaceId: agent.workspaceId } : a));
+  switch (leadProblem(agent, lead, team)) {
+    case "self":
+      throw badRequest("An agent can't report to itself");
+    case "workspace":
+      throw badRequest(`${lead.name} works in another workspace — pick a global agent or one from the same workspace`);
+    case "cycle":
+      throw badRequest(`${lead.name} already reports to ${agent.name}`);
+  }
+  return lead.id;
+}
 
 /**
  * Permissions an agent may never grant or change: secret access, agent management and the login/2FA allow-lists
@@ -461,17 +511,20 @@ export function getAgent(id: string): Agent {
 
 /** Agents visible to `agent` for delegation (same workspace + global), excluding itself, respecting delegateTo. */
 export function peersFor(agent: Agent): Agent[] {
-  // Agent managers (the default orchestrator) can reach every agent; others their workspace + global agents.
-  const rows = agent.permissions.canManageAgents
-    ? all<AgentRow>(`SELECT * FROM agents WHERE enabled = 1 AND id != ? ${ORDER}`, agent.id)
-    : all<AgentRow>(
-        `SELECT * FROM agents WHERE enabled = 1 AND id != ? AND (workspace_id IS NULL OR workspace_id IS ?) ${ORDER}`,
-        agent.id,
-        agent.workspaceId,
-      );
+  // Agent managers (the default orchestrator) can reach every agent; others their workspace + global agents. The
+  // same rule (withinReach) drives the "Can hand work to" field, so the form and the core can't disagree.
+  const reach = { id: agent.id, workspaceId: agent.workspaceId, canManageAgents: agent.permissions.canManageAgents };
+  const peers = all<AgentRow>(`SELECT * FROM agents WHERE enabled = 1 AND id != ? ${ORDER}`, agent.id)
+    .map(toModel)
+    .filter((p) => withinReach(reach, p));
   const allowed = agent.permissions.delegateTo;
-  const peers = rows.map(toModel);
   return allowed.length ? peers.filter((p) => allowed.includes(p.id)) : peers;
+}
+
+/** Who leads the agent, the line up to the built-in agent, and who reports to it. */
+export function teamOf(agent: Agent): { lead: Agent | null; chain: Agent[]; reports: Agent[] } {
+  const agents = listAgents();
+  return { lead: leadOf(agent, agents) ?? null, chain: chainOf(agent, agents), reports: reportsOf(agent, agents) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -499,6 +552,7 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
   if (isAgentActor(actor)) permissions = lockHumanOnlyPermissions(permissions, null);
   const ts = now();
   const id = newId("agt");
+  const reportsTo = isDefault ? null : resolveLead(input.reportsTo, { id, workspaceId, isDefault, reportsTo: null, name });
   const agent: Agent = {
     id,
     workspaceId,
@@ -511,6 +565,9 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     personality: normalizePersonality(input.personality),
     description: input.description?.trim() ?? "",
     instructions: input.instructions?.trim() ?? "",
+    role: roleFrom(input.role, actor),
+    reportsTo,
+    failedRunId: null,
     model: input.model?.trim() ?? "",
     effort: validateEffort(input.effort),
     ultracode: input.ultracode ?? null,
@@ -579,6 +636,13 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   if (patch.personality !== undefined) next.personality = normalizePersonality(patch.personality);
   if (patch.description !== undefined) next.description = patch.description.trim();
   if (patch.instructions !== undefined) next.instructions = patch.instructions.trim();
+  if (patch.role !== undefined) next.role = roleFrom(patch.role, actor);
+  if (patch.reportsTo !== undefined) next.reportsTo = resolveLead(patch.reportsTo, next);
+  else if (next.workspaceId !== current.workspaceId && next.reportsTo) {
+    // Moved away from its lead's workspace: it reports to the built-in agent again.
+    const lead = get<{ workspace_id: string | null }>("SELECT workspace_id FROM agents WHERE id = ?", next.reportsTo);
+    if (!lead || (lead.workspace_id && lead.workspace_id !== next.workspaceId)) next.reportsTo = null;
+  }
   if (patch.model !== undefined) next.model = patch.model.trim();
   if (patch.effort !== undefined) next.effort = validateEffort(patch.effort);
   if (patch.ultracode !== undefined) next.ultracode = patch.ultracode;
@@ -609,11 +673,19 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   if (patch.vmId !== undefined && (patch.vmId || !isAgentActor(actor))) next.vmId = normalizeVmId(patch.vmId) ?? null;
   if (patch.sshServerIds !== undefined && !isAgentActor(actor)) next.sshServerIds = normalizeSshServerIds(patch.sshServerIds) ?? [];
 
-  next.status = !next.enabled ? "disabled" : current.status === "disabled" ? "idle" : current.status;
   next.updatedAt = now();
 
-  const { id: _id, created_at: _created, slug: _slug, last_run_at: _lastRun, ...row } = toRow(next);
-  update("agents", current.id, row);
+  // Runtime columns (status, last run, failed run) belong to the runner; switching on or off is the one status change.
+  const { id: _id, created_at: _created, slug: _slug, last_run_at: _lastRun, failed_run_id: _failed, status: _status, ...row } = toRow(next);
+  const statusRow = next.enabled === current.enabled ? {} : { status: next.enabled ? "idle" : "disabled" };
+  let detached = 0;
+  tx(() => {
+    update("agents", current.id, { ...row, ...statusRow });
+    // Moved into a workspace: agents of other workspaces can't report to it anymore.
+    if (next.workspaceId && next.workspaceId !== current.workspaceId) {
+      detached = run("UPDATE agents SET reports_to = NULL WHERE reports_to = ? AND workspace_id IS NOT ?", current.id, next.workspaceId).changes;
+    }
+  });
   auditPermissions(actor, current.permissions, next.permissions, current.id);
 
   try {
@@ -625,6 +697,7 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
 
   const agent = getAgent(current.id);
   bus.emit({ type: "agent.updated", agent });
+  if (detached) bus.changed("agents");
   if (current.vmId !== agent.vmId) assignmentsChanged();
   if (JSON.stringify(current.sshServerIds) !== JSON.stringify(agent.sshServerIds)) bus.changed("ssh-servers");
   if (current.enabled !== agent.enabled || current.workspaceId !== agent.workspaceId) {
@@ -639,7 +712,10 @@ export async function deleteAgent(id: string): Promise<void> {
   if (agent.isDefault) throw badRequest("The default Godmode agent cannot be deleted");
   await stopAgentRuns(agent.id);
   const routines = get<{ c: number }>("SELECT COUNT(*) AS c FROM routines WHERE agent_id = ?", agent.id)?.c ?? 0;
+  let moved = 0;
   tx(() => {
+    // Its reports move up one level, to its own lead (read here, not before the await above).
+    moved = run("UPDATE agents SET reports_to = (SELECT reports_to FROM agents WHERE id = ?1) WHERE reports_to = ?1", agent.id).changes;
     run("DELETE FROM agents WHERE id = ?", agent.id);
     removeFromDelegateLists([agent.id]);
   });
@@ -650,6 +726,7 @@ export async function deleteAgent(id: string): Promise<void> {
     log.error(`failed to move repository of deleted agent ${agent.slug} to trash`, err);
   }
   bus.emit({ type: "agent.deleted", id: agent.id });
+  if (moved) bus.changed("agents");
   if (routines) bus.changed("routines");
   bus.changed("runs");
   reloadSchedules();
@@ -713,6 +790,7 @@ export function ensureDefaultAgent(): Promise<Agent> {
 async function ensureDefaultAgentOnce(): Promise<Agent> {
   registerSettingsHook();
   const agent = await ensureDefaultRecord();
+  repairReportingLines();
   // Startup repair for every other agent too, e.g. after a backup was restored without agent repositories.
   for (const other of listAgents()) {
     if (other.id === agent.id) continue;
@@ -764,6 +842,102 @@ export function setAgentStatus(id: string, status: AgentStatus): void {
   if (row.status === effective) return;
   run("UPDATE agents SET status = ? WHERE id = ?", effective, id);
   bus.emit({ type: "agent.updated", agent: toModel({ ...row, status: effective }) });
+}
+
+/**
+ * Remember (runId) or forget (null) that the agent's latest real run failed; its status reads "error" meanwhile.
+ * Emits agent.updated. Unknown agents and unchanged values are ignored.
+ */
+export function setAgentFailedRun(id: string, runId: string | null): void {
+  const row = get<AgentRow>("SELECT * FROM agents WHERE id = ?", id);
+  if (!row || (row.failed_run_id ?? null) === runId) return;
+  run("UPDATE agents SET failed_run_id = ? WHERE id = ?", runId, id);
+  bus.emit({ type: "agent.updated", agent: toModel({ ...row, failed_run_id: runId }) });
+}
+
+/** The human has seen the failure: the agent stops saying "Last run failed". */
+export function dismissFailedRun(id: string): Agent {
+  const agent = getAgent(id);
+  setAgentFailedRun(agent.id, null);
+  return getAgent(agent.id);
+}
+
+/**
+ * Fix reporting lines that can't be right: a lead that is gone, itself, out of the agent's workspace, part of a loop,
+ * or set on the built-in agent (or pointing at it — null means that). Also forgets failed runs that no longer exist.
+ * Runs at startup and after a restore. Returns how many rows changed.
+ */
+export function repairReportingLines(): number {
+  let changed = 0;
+  tx(() => {
+    changed += run(
+      `UPDATE agents SET reports_to = NULL WHERE reports_to IS NOT NULL AND (
+         is_default = 1 OR reports_to = id
+         OR reports_to NOT IN (SELECT id FROM agents)
+         OR reports_to IN (SELECT id FROM agents WHERE is_default = 1))`,
+    ).changes;
+    changed += run(
+      `UPDATE agents SET reports_to = NULL WHERE reports_to IS NOT NULL AND EXISTS (
+         SELECT 1 FROM agents l WHERE l.id = agents.reports_to AND l.workspace_id IS NOT NULL AND l.workspace_id IS NOT agents.workspace_id)`,
+    ).changes;
+    // Loops: an agent whose chain comes back to itself reports to the built-in agent again (one per loop is enough).
+    const agents = listAgents();
+    for (const a of agents) {
+      const chain = chainOf(a, agents);
+      const last = chain[chain.length - 1];
+      if (!last || last.isDefault || leadOf(last, agents)?.id !== a.id) continue;
+      changed += run("UPDATE agents SET reports_to = NULL WHERE id = ?", a.id).changes;
+      a.reportsTo = null;
+    }
+    changed += run("UPDATE agents SET failed_run_id = NULL WHERE failed_run_id IS NOT NULL AND failed_run_id NOT IN (SELECT id FROM runs)").changes;
+  });
+  if (changed) {
+    log.info(`repaired ${changed} reporting line(s) or failed run(s)`);
+    bus.changed("agents");
+  }
+  return changed;
+}
+
+/**
+ * A copy of the agent's setup under "<Name> copy" (then "copy 2", …): look, personality, role, lead, instructions,
+ * model, permissions, tools and folders. Not its memory, chats or automations — it starts fresh.
+ */
+export async function duplicateAgent(id: string, actor = "user"): Promise<Agent> {
+  const source = getAgent(id);
+  if (source.isDefault) throw badRequest("The built-in agent can't be duplicated");
+  const names = new Set(listAgents().map((a) => a.name.toLowerCase()));
+  let name = `${source.name} copy`;
+  for (let i = 2; names.has(name.toLowerCase()); i++) name = `${source.name} copy ${i}`;
+  const created = await createAgentRecord(
+    {
+      workspaceId: source.workspaceId,
+      name,
+      avatar: source.avatar,
+      color: source.color,
+      character: source.character,
+      personality: source.personality,
+      description: source.description,
+      instructions: source.instructions,
+      role: source.role,
+      reportsTo: source.reportsTo,
+      model: source.model,
+      effort: source.effort,
+      enabled: true,
+      permissions: source.permissions,
+      browser: source.browser,
+      computer: source.computer,
+      mcpServerIds: source.mcpServerIds,
+      inheritMcp: source.inheritMcp,
+      subagents: source.subagents,
+      workingDirectory: source.workingDirectory,
+      vmId: source.vmId,
+      sshServerIds: source.sshServerIds,
+    },
+    false,
+    actor,
+  );
+  audit(actor, "agent.duplicate", created.id, { from: source.id });
+  return created;
 }
 
 /** Set lastRunAt = now. */

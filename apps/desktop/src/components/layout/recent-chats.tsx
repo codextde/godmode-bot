@@ -1,7 +1,8 @@
 import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
-import { AlarmClock, Archive, Hourglass, Pause, Pin, Trash2 } from "lucide-react";
+import type { Agent, Conversation } from "@godmode/shared";
+import { AlarmClock, Archive, Hourglass, MessageCircleQuestion, Pause, Pin, Trash2 } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -34,7 +35,8 @@ export function RecentChats() {
   const conversationId = useMatch("/chat/:conversationId")?.params.conversationId;
   const { pathname } = useLocation();
   const liveRuns = useLive((s) => s.runs);
-  const runningConversations = new Set(Object.values(liveRuns).map((r) => r.conversationId));
+  const runningConversations = new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.conversationId] : [])));
+  const queuedConversations = new Set(Object.values(liveRuns).flatMap((r) => (r.status === "queued" ? [r.conversationId] : [])));
   const { setArchived } = useArchiveChat();
   const navigate = useNavigate();
   const { askDelete, deleteDialog } = useDeleteChat((id) => id === conversationId && navigate("/", { replace: true }));
@@ -53,7 +55,8 @@ export function RecentChats() {
         <SidebarMenu>
           {items.map((c) => {
             const agent = agents.find((a) => a.id === c.agentId);
-            const running = runningConversations.has(c.id) || c.running;
+            const running = runningConversations.has(c.id) || (c.running && !queuedConversations.has(c.id));
+            const queued = !running && queuedConversations.has(c.id);
             return (
               <SidebarMenuItem key={c.id}>
                 <SidebarMenuButton
@@ -71,6 +74,16 @@ export function RecentChats() {
                       <span className="block truncate text-[11px] text-muted-foreground">
                         {running && !c.paused ? (
                           <span className="text-shimmer font-medium">Working…</span>
+                        ) : queued && !c.paused ? (
+                          <span>Queued — waiting for a free slot</span>
+                        ) : c.paused?.reason === "question" ? (
+                          <span className="flex items-center gap-1 text-foreground" title={c.paused.question?.title}>
+                            <MessageCircleQuestion className="size-3 shrink-0 text-warning" aria-hidden />
+                            <span className="truncate">
+                              {c.paused.question?.kind === "approval" ? "Needs your OK" : "Needs your answer"}
+                              {c.paused.question?.title ? ` · ${c.paused.question.title}` : ""}
+                            </span>
+                          </span>
                         ) : c.paused ? (
                           <span className="flex items-center gap-1">
                             {c.paused.reason === "limit" ? (
@@ -89,7 +102,7 @@ export function RecentChats() {
                           </span>
                         ) : (
                           <>
-                            {agent?.name ?? "Agent"} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false })}
+                            {originLine(c, agents) ?? agent?.name ?? "Agent"} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false })}
                           </>
                         )}
                       </span>
@@ -145,4 +158,14 @@ export function RecentChats() {
       {deleteDialog}
     </SidebarGroup>
   );
+}
+
+/** Where a chat came from when it wasn't the human's own: "From Lena" (handed over), "Automation". */
+function originLine(c: Conversation, agents: Agent[]): string | null {
+  if (c.origin === "delegation") {
+    const from = c.delegatedFrom ? agents.find((a) => a.id === c.delegatedFrom!.agentId) : undefined;
+    return from ? `From ${from.name}` : "Handed over";
+  }
+  if (c.origin === "routine") return "Automation";
+  return null;
 }

@@ -1,12 +1,15 @@
 import type {
   Agent,
   AgentFileEntry,
+  AgentInput,
+  AgentQuestion,
+  AgentTemplate,
+  AnswerQuestionInput,
+  AnswerQuestionResult,
+  ApiError,
   ApiTool,
   ApiToolInput,
   ApiToolTestResult,
-  AgentInput,
-  AgentTemplate,
-  ApiError,
   AppNotification,
   AuditEntry,
   AutomationEvent,
@@ -17,13 +20,13 @@ import type {
   BrowserProfile,
   ChatFiles,
   ChromeImportInput,
-  ClientLogInput,
   ChromeImportResult,
   ClaudeUpdateResult,
   ClaudeUpdateStatus,
+  ClientLogInput,
   ComposioConnectInput,
-  ComposioConnectResult,
   ComposioConnection,
+  ComposioConnectResult,
   ComposioStatus,
   ComposioToolkit,
   ComposioTriggerType,
@@ -68,13 +71,15 @@ import type {
   MobilePairingOffer,
   MobileStatus,
   ModelCatalog,
+  PasswordImportPreview,
+  PasswordImportResult,
+  QueuedMessage,
   PermissionId,
   PermissionReport,
   Routine,
   RoutineInput,
   Run,
   RunPause,
-  QueuedMessage,
   SendMessageInput,
   SendMessageOutcome,
   Settings,
@@ -94,17 +99,16 @@ import type {
   StartChatResult,
   Task,
   TaskAttachment,
+  TaskEvent,
   TaskInput,
   TaskPatch,
+  TestEventInput,
   ToolId,
   ToolUpdateResult,
   TotpCode,
   TotpEntry,
   TotpImportInput,
   TotpImportResult,
-  PasswordImportPreview,
-  PasswordImportResult,
-  TestEventInput,
   TotpInput,
   UpdateReport,
   VaultStatus,
@@ -337,6 +341,8 @@ export const api = {
     list: (q: { workspaceId?: ScopeFilter; archived?: boolean } = {}) =>
       get<Task[]>("/api/tasks", { workspaceId: q.workspaceId, archived: q.archived ? 1 : undefined }),
     get: (id: string) => get<Task>(`/api/tasks/${id}`),
+    /** The ticket's timeline, oldest first. */
+    events: (id: string) => get<TaskEvent[]>(`/api/tasks/${id}/events`),
     /** With an agent and status todo (the default then), the agent starts right away. */
     create: (input: TaskInput) => post<Task>("/api/tasks", input),
     /** Moving to todo starts the agent; moving away from in_progress stops it. */
@@ -377,6 +383,10 @@ export const api = {
     /** Pause everything the agent works on (409 when it isn't working); `continue` resumes all of it. */
     pause: (id: string) => post<{ paused: number }>(`/api/agents/${id}/pause`),
     continue: (id: string) => post<{ continued: number }>(`/api/agents/${id}/continue`),
+    /** Same setup under "<Name> copy", with a fresh memory and no chats or automations. */
+    duplicate: (id: string, grant?: string) => request<Agent>("POST", `/api/agents/${id}/duplicate`, {}, withGrant(grant)),
+    /** Stop showing "Last run failed". */
+    dismissFailure: (id: string) => del<Agent>(`/api/agents/${id}/failed-run`),
   },
 
   dreams: {
@@ -531,10 +541,17 @@ export const api = {
   },
 
   runs: {
-    list: (q: { agentId?: string; status?: string; limit?: number } = {}) => get<Run[]>("/api/runs", q),
+    list: (q: { agentId?: string; status?: string; conversationId?: string; parentRunId?: string; limit?: number } = {}) => get<Run[]>("/api/runs", q),
     get: (id: string) => get<Run>(`/api/runs/${id}`),
     cancel: (id: string) => post<{ ok: true }>(`/api/runs/${id}/cancel`),
     log: (id: string) => get<string>(`/api/runs/${id}/log`),
+  },
+
+  questions: {
+    /** `status`: open, resolved (answered, approved or declined), withdrawn, one status, or all. */
+    list: (q: { status?: string; conversationId?: string; agentId?: string; limit?: number } = {}) => get<AgentQuestion[]>("/api/questions", q),
+    /** The run that asked continues with the answer. */
+    answer: (id: string, input: AnswerQuestionInput) => post<AnswerQuestionResult>(`/api/questions/${id}/answer`, input),
   },
 
   missingLogins: {
@@ -569,6 +586,8 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/messaging/${id}`),
     users: (id: string) => get<MessagingUser[]>(`/api/messaging/${id}/users`),
     setUser: (id: string, userId: string, status: MessagingUserStatus) => patch<MessagingUser>(`/api/messaging/${id}/users/${userId}`, { status }),
+    /** "This is me": the owner's own account answers agents' questions there. */
+    setOwner: (id: string, userId: string, isOwner: boolean) => patch<MessagingUser>(`/api/messaging/${id}/users/${userId}`, { isOwner }),
     removeUser: (id: string, userId: string) => del<{ ok: true }>(`/api/messaging/${id}/users/${userId}`),
     chats: (id: string) => get<MessagingChat[]>(`/api/messaging/${id}/chats`),
     /** Teams app package (zip) to upload in Teams. */

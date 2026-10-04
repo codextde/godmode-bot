@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Cpu, Ellipsis, History, MessageSquare, Pause, Pencil, Play, Power, PowerOff, StepForward, Trash2, Workflow } from "lucide-react";
+import { Copy, Cpu, Ellipsis, History, MessageSquare, Pause, Pencil, Play, Power, PowerOff, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { AgentAvatar, ScopeBadge } from "@/components/common";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { AgentStatus, useAgentLiveRun, useAgentMood, useAgentPause, useStartAgentChat, useToggleAgent } from "./agent-actions";
+import { AgentStatus, useAgentLiveRun, useAgentMood, useAgentPause, useDuplicateAgent, useStartAgentChat, useToggleAgent } from "./agent-actions";
 
 export function AgentCard({
   agent,
@@ -35,9 +35,10 @@ export function AgentCard({
   const mood = useAgentMood(agent);
   const chat = useStartAgentChat();
   const toggle = useToggleAgent();
+  const duplicate = useDuplicateAgent();
   const { pause, resume } = useAgentPause();
   const paused = (agent.pausedRuns ?? 0) > 0;
-  const chatting = chat.isPending && chat.variables === agent.id;
+  const chatting = chat.isPending && chat.variables?.agent.id === agent.id;
 
   return (
     <div
@@ -62,7 +63,12 @@ export function AgentCard({
               <span className="shrink-0 rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">Built-in</span>
             )}
           </div>
-          <AgentStatus agent={agent} className="mt-0.5 max-w-full" />
+          {agent.role && (
+            <p className="truncate text-[12.5px] text-muted-foreground" title={agent.role}>
+              {agent.role}
+            </p>
+          )}
+          <AgentStatus agent={agent} interactive className="mt-0.5 max-w-full" />
         </div>
         {running && <WorkingTicks count={6} className="mt-1 h-3 shrink-0 text-brand-strong" />}
         <DropdownMenu>
@@ -72,7 +78,7 @@ export function AgentCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => chat.mutate(agent.id)}>
+            <DropdownMenuItem onClick={() => chat.mutate(agent)}>
               <MessageSquare /> New chat
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onRunTask(agent)} disabled={!agent.enabled}>
@@ -94,9 +100,14 @@ export function AgentCard({
             <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/settings`)}>
               <Pencil /> Edit
             </DropdownMenuItem>
+            {!agent.isDefault && (
+              <DropdownMenuItem onClick={() => duplicate.mutate(agent)} disabled={duplicate.isPending}>
+                <Copy /> Duplicate
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => toggle.mutate({ id: agent.id, enabled: !agent.enabled })}>
-              {agent.enabled ? <PowerOff /> : <Power />} {agent.enabled ? "Disable" : "Enable"}
+              {agent.enabled ? <PowerOff /> : <Power />} {agent.enabled ? "Switch off" : "Switch on"}
             </DropdownMenuItem>
             {!agent.isDefault && (
               <DropdownMenuItem variant="destructive" onClick={() => onDelete(agent)}>
@@ -126,7 +137,7 @@ export function AgentCard({
       </div>
 
       <div className="relative z-10 mt-4 flex gap-2 border-t pt-3">
-        <Button size="sm" variant="secondary" className="flex-1" onClick={() => chat.mutate(agent.id)} disabled={chatting}>
+        <Button size="sm" variant="secondary" className="flex-1" onClick={() => chat.mutate(agent)} disabled={chatting}>
           {chatting ? <Spinner /> : <MessageSquare />} Chat
         </Button>
         {paused ? (

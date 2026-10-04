@@ -2,6 +2,7 @@ import * as Device from "expo-device";
 import Constants from "expo-constants";
 import type {
   Agent,
+  AgentQuestion,
   AppNotification,
   Bootstrap,
   BrowserProfile,
@@ -9,8 +10,8 @@ import type {
   Conversation,
   ConversationWithMessages,
   MissingLogin,
-  MobilePairingPayload,
   MobilePairResult,
+  MobilePairingPayload,
   MobileSession,
   Routine,
   Run,
@@ -265,6 +266,11 @@ export const api = {
 
   missingLogins: {
     open: () => get<MissingLogin[]>("/api/missing-logins", { status: "open" }),
+  },
+
+  questions: {
+    /** What agents asked and wait for; answered by writing into the chat (or with optionId / decision). */
+    open: () => get<AgentQuestion[]>("/api/questions", { status: "open" }),
   },
 };
 

@@ -27,16 +27,26 @@ function group(blocks: MessageBlock[]): Part[] {
   return parts;
 }
 
+const SOURCE_CAPTION = { automation: "Automation", delegation: "From another agent", task: "Board ticket" } as const;
+
 export const UserMessage = memo(function UserMessage({ message }: { message: Message }) {
   const c = useColors();
+  // A turn the human didn't write keeps the neutral surface and says who it came from.
+  const caption = message.source ? SOURCE_CAPTION[message.source] : null;
+  const fg = caption ? c.text : c.onPrimary;
   return (
-    <View style={styles.userWrap}>
-      <Pressable onLongPress={() => copy(message.content)} style={[styles.user, { backgroundColor: c.primary }]}>
-        <T variant="body" color={c.onPrimary} selectable>
+    <View style={[styles.userWrap, caption ? { alignItems: "flex-start" } : null]}>
+      {caption ? (
+        <T variant="caption" muted style={{ marginBottom: 4 }}>
+          {caption}
+        </T>
+      ) : null}
+      <Pressable onLongPress={() => copy(message.content)} style={[styles.user, { backgroundColor: caption ? c.sunken : c.primary }]}>
+        <T variant="body" color={fg} selectable>
           {message.content}
         </T>
         {message.attachments.length > 0 && (
-          <T variant="caption" color={c.onPrimary} style={{ opacity: 0.7, marginTop: 4 }}>
+          <T variant="caption" color={fg} style={{ opacity: 0.7, marginTop: 4 }}>
             {message.attachments.map((a) => a.name).join(", ")}
           </T>
         )}
@@ -114,7 +124,58 @@ function Block({ block }: { block: MessageBlock }) {
           </View>
         </View>
       );
+    case "question": {
+      // Answered by writing into the chat: a suggested answer by its number or its words.
+      const open = block.status === "open";
+      const approval = block.kind === "approval";
+      const status =
+        block.status === "open"
+          ? approval
+            ? "Reply “approve” or “decline” below — or what to do instead."
+            : block.options.length
+              ? "Reply below with a number or your own answer."
+              : "Reply below to answer."
+          : block.status === "approved"
+            ? `Approved${block.answer?.text ? ` — ${block.answer.text}` : ""}`
+            : block.status === "declined"
+              ? `Declined${block.answer?.text ? ` — ${block.answer.text}` : ""}`
+              : block.status === "answered"
+                ? `Answered: ${block.answer?.text ?? ""}`
+                : "Withdrawn — the run was stopped before this was answered.";
+      return (
+        <View style={[styles.question, { backgroundColor: open ? c.warningSoft : c.sunken, borderColor: open ? c.warning : c.border }]}>
+          <T variant="caption" color={open ? c.warning : c.textMuted} style={{ fontWeight: "600" }}>
+            {approval ? "NEEDS YOUR OK" : "QUESTION"}
+          </T>
+          <T variant="body" style={{ fontWeight: "600" }} selectable>
+            {block.title}
+          </T>
+          {block.body ? (
+            <T variant="footnote" muted selectable>
+              {approval ? `Why: ${block.body}` : block.body}
+            </T>
+          ) : null}
+          {approval && block.affects ? (
+            <T variant="footnote" muted selectable>
+              Affects: {block.affects}
+            </T>
+          ) : null}
+          {block.options.map((o, i) => (
+            <T key={o.id} variant="subhead" style={{ opacity: !open && block.answer?.optionId !== o.id ? 0.55 : 1 }}>
+              {i + 1}. {o.label}
+              {o.recommended ? " (recommended)" : ""}
+              {o.description ? ` — ${o.description}` : ""}
+            </T>
+          ))}
+          <T variant="footnote" muted>
+            {status}
+          </T>
+        </View>
+      );
+    }
     case "pause": {
+      // The question card says why a run stands still for an answer.
+      if (block.reason === "question") return null;
       const limit = block.reason === "limit";
       const what = limit ? `${block.limit ?? "Usage limit"} reached` : "Paused";
       return (
@@ -269,6 +330,13 @@ const styles = StyleSheet.create({
   assistant: {
     gap: 12,
     paddingRight: 8,
+  },
+  question: {
+    gap: 6,
+    padding: space.md,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
   },
   callout: {
     flexDirection: "row",

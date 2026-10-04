@@ -58,7 +58,7 @@ import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { isMac, modKey } from "@/lib/desktop";
 import { isTauri } from "@/lib/core";
-import { useLive } from "@/stores/live";
+import { useLive, useRunningCount } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 
@@ -76,14 +76,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const setCommandOpen = useUi((s) => s.setCommandOpen);
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const setCollapsed = useUi((s) => s.setSidebarCollapsed);
-  const runningCount = useLive((s) => Object.keys(s.runs).length);
+  const runningCount = useRunningCount();
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const location = useLocation();
   // 768–1023px: icon rail by default; expanding it is a temporary peek that folds back on navigation.
   const compact = useMediaQuery("(width >= 768px) and (width < 1024px)");
   const [peek, setPeek] = useState(false);
   useEffect(() => setPeek(false), [compact, location.key]);
-  const inboxCount = (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.unreadNotifications ?? 0);
+  const inboxCount = (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.unreadNotifications ?? 0);
 
   // Global shortcuts
   useEffect(() => {

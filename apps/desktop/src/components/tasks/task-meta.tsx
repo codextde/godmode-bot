@@ -1,16 +1,18 @@
 import type { ComponentType } from "react";
 import { ClipboardList, CodeXml, Telescope } from "lucide-react";
-import type { Task, TaskStatus, TaskType, Workspace, WorkspaceSource } from "@godmode/shared";
+import type { Task, TaskBlockedKind, TaskPriority, TaskStatus, TaskType, Workspace, WorkspaceSource } from "@godmode/shared";
+import { isWaiting } from "@godmode/shared";
+import { followupWhen } from "@/components/chat/followup";
 import { cn } from "@/lib/utils";
 
 export const BOARD_COLUMNS: TaskStatus[] = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 
 export const STATUS_META: Record<TaskStatus, { label: string; hint: string; tone: string }> = {
   backlog: { label: "Backlog", hint: "Parked. Assigning an agent here never starts it.", tone: "text-muted-foreground" },
-  todo: { label: "Todo", hint: "Queued. A task here with an agent starts that agent.", tone: "text-foreground/70" },
+  todo: { label: "Todo", hint: "Queued. A task here with an agent starts that agent — the most urgent first.", tone: "text-foreground/70" },
   in_progress: { label: "In progress", hint: "The agent is working on it.", tone: "text-amber-500" },
   in_review: { label: "In review", hint: "Delivered — waiting for your review.", tone: "text-emerald-500" },
-  blocked: { label: "Blocked", hint: "Stalled: the run failed, was stopped, or the agent needs something.", tone: "text-rose-500" },
+  blocked: { label: "Blocked", hint: "Stalled: the agent needs something, the run failed or was stopped, or publishing didn't work.", tone: "text-rose-500" },
   done: { label: "Done", hint: "Completed. Set automatically when the pull request merges.", tone: "text-sky-500" },
   cancelled: { label: "Cancelled", hint: "Decided not to do it.", tone: "text-muted-foreground" },
 };
@@ -89,6 +91,10 @@ export function isWorking(task: Task): boolean {
 /** The agent's work stands still: "Paused", or what it waits for. */
 export function pauseLabel(task: Task): string | null {
   if (task.status !== "in_progress" || !task.pause) return null;
+  if (task.pause.reason === "question") {
+    const title = task.pause.question?.title ?? "";
+    return `${task.pause.question?.kind === "approval" ? "Needs your OK" : "Needs your answer"}${title ? `: ${title}` : ""}`;
+  }
   return task.pause.reason === "limit" ? `Waiting — Claude's ${task.pause.limit ?? "usage limit"} is reached` : "Paused";
 }
 
@@ -118,4 +124,120 @@ export function taskRepoLabel(task: Task, fallback: WorkspaceSource | undefined)
   if (task.repoPath) return task.repoPath.split(/[\\/]/).filter(Boolean).at(-1) ?? task.repoPath;
   if (task.repoUrl) return repoLabel(task.repoUrl);
   return fallback ? sourceLabel(fallback) : "";
+}
+
+export const PRIORITY_META: Record<TaskPriority, { label: string; tone: string }> = {
+  urgent: { label: "Urgent", tone: "text-rose-600 dark:text-rose-400" },
+  high: { label: "High", tone: "text-foreground/80" },
+  medium: { label: "Medium", tone: "text-foreground/70" },
+  low: { label: "Low", tone: "text-muted-foreground" },
+  none: { label: "No priority", tone: "text-muted-foreground" },
+};
+
+/** Linear-style priority glyph: a filled square with "!" for urgent, three / two / one bars, three dots for none. */
+export function PriorityIcon({ priority, className }: { priority: TaskPriority; className?: string }) {
+  const common = { viewBox: "0 0 16 16", className: cn("size-3.5 shrink-0", PRIORITY_META[priority].tone, className), "aria-hidden": true } as const;
+  if (priority === "urgent") {
+    return (
+      <svg {...common} fill="currentColor">
+        <rect x="1.5" y="1.5" width="13" height="13" rx="3" />
+        <path d="M8 4.5v4.5" stroke="var(--background, white)" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="8" cy="11.4" r="1" fill="var(--background, white)" />
+      </svg>
+    );
+  }
+  if (priority === "none") {
+    return (
+      <svg {...common} fill="currentColor">
+        <circle cx="3.5" cy="8" r="1.2" />
+        <circle cx="8" cy="8" r="1.2" />
+        <circle cx="12.5" cy="8" r="1.2" />
+      </svg>
+    );
+  }
+  const bars = priority === "high" ? 3 : priority === "medium" ? 2 : 1;
+  return (
+    <svg {...common} fill="currentColor">
+      {[0, 1, 2].map((i) => (
+        <rect key={i} x={2 + i * 4.5} y={10 - i * 3.5} width="3" height={4 + i * 3.5} rx="1" opacity={i < bars ? 1 : 0.25} />
+      ))}
+    </svg>
+  );
+}
+
+/** What each kind of block tells the human, and the way on it offers. */
+export const BLOCKED_META: Record<TaskBlockedKind, { title: (agent: string) => string; cardPrefix: string }> = {
+  needs_input: { title: (agent) => `${agent} needs something from you`, cardPrefix: "Needs you:" },
+  failed: { title: () => "The run failed", cardPrefix: "Failed:" },
+  stopped: { title: () => "Stopped", cardPrefix: "Stopped:" },
+  interrupted: { title: () => "Interrupted by a restart", cardPrefix: "Interrupted:" },
+  publish: { title: () => "Couldn't publish the work", cardPrefix: "Publishing failed:" },
+  setup: { title: () => "Couldn't set it up", cardPrefix: "Setup:" },
+  manual: { title: () => "Blocked", cardPrefix: "" },
+};
+
+/** "Waiting — continues tomorrow at 10:00" for a ticket that waits for the time its agent set. */
+export function waitingLabel(task: Task): string | null {
+  return isWaiting(task) && task.followup ? `Waiting — continues ${followupWhen(task.followup.dueAt)}` : null;
+}
+
+/** Moving the ticket away from In progress would end something: a run working, standing still, or a follow-up. */
+export function needsConfirm(task: Task): boolean {
+  return task.status === "in_progress" && (isWorking(task) || !!task.pause || !!task.followup);
+}
+
+const DAY = 86_400_000;
+
+function dayOf(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
+  return new Date(y, m - 1, d);
+}
+
+/** Days from today to a YYYY-MM-DD day (negative = past). */
+export function daysUntil(day: string, now = new Date()): number {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((dayOf(day).getTime() - today.getTime()) / DAY);
+}
+
+/** "Today", "Tomorrow", "Yesterday", "Fri 9 Oct", "9 Oct 2027". */
+export function dueLabel(day: string, now = new Date()): string {
+  const n = daysUntil(day, now);
+  if (n === 0) return "Today";
+  if (n === 1) return "Tomorrow";
+  if (n === -1) return "Yesterday";
+  const d = dayOf(day);
+  return d.getFullYear() === now.getFullYear()
+    ? d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "")
+    : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+const LABEL_TONES = [
+  "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  "bg-amber-500/12 text-amber-700 dark:text-amber-300",
+  "bg-rose-500/10 text-rose-700 dark:text-rose-300",
+  "bg-teal-500/10 text-teal-700 dark:text-teal-300",
+];
+
+/** A label's colour: always the same for the same word. */
+export function labelTone(label: string): string {
+  let h = 0;
+  for (const c of label.toLowerCase()) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return LABEL_TONES[h % LABEL_TONES.length]!;
+}
+
+/** "45s", "12m", "1h 04m". */
+export function formatWork(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+}
+
+/** "$0.84", "<$0.01". */
+export function formatCost(usd: number): string {
+  if (usd > 0 && usd < 0.01) return "<$0.01";
+  return `$${usd.toFixed(2)}`;
 }

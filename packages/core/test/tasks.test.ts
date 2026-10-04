@@ -16,7 +16,10 @@ import {
   checkoutDir,
   createTask,
   deleteTask,
+  addTaskNote,
+  findTask,
   getTask,
+  listTaskEvents,
   listTasks,
   pushTaskBranch,
   sendTaskMessage,
@@ -1250,18 +1253,22 @@ describe("attachments", () => {
     expect(summary).toContain(`\`\`\`sh\nopen ${dir}/light.png\n\`\`\``);
     expect(readTaskAttachment(light!.id).data).toEqual(Buffer.from(png));
 
-    // A new result brings its own copies; the earlier ones go.
+    // A new result brings its own copies; the earlier ones stay with the earlier result on the timeline.
     rmSync(join(dir, "dark mode.png"));
     await sendTaskMessage(task.id, `TASK_SHOTS:${dir}`);
     await until(() => !getTask(task.id).summary!.includes(light!.id), 10_000, "the new result");
     await settled(task.id, ["in_review"]);
-    expect(pictures().map((p) => p.name)).toEqual(["light.png"]);
-    expect(getTask(task.id).summary).toContain(`- ![light.png](${url(pictures()[0]!)})`);
+    expect(pictures().map((p) => p.name)).toEqual(["dark mode.png", "light.png", "light.png"]);
+    const fresh = pictures().find((p) => p.name === "light.png" && p.id !== light!.id)!;
+    expect(getTask(task.id).summary).toContain(`- ![light.png](${url(fresh)})`);
     expect(getTask(task.id).summary).toContain(`- ![Dark mode](<${dir}/dark mode.png>)`);
-    expect(existsSync(join(env.dataDir, "attachments", "tasks", light!.id))).toBe(false);
+    expect(existsSync(join(env.dataDir, "attachments", "tasks", light!.id))).toBe(true);
+    const delivered = listTaskEvents(task.id).filter((e) => e.kind === "delivered");
+    expect(delivered).toHaveLength(2);
+    expect(delivered[0]!.body).toContain(light!.id);
 
     // A picture the human copied into the description outlives the result it came from.
-    const kept = pictures()[0]!;
+    const kept = fresh;
     updateTask(task.id, { description: `Like this: ![light](${url(kept)})` });
     await sendTaskMessage(task.id, "Thanks");
     await until(() => !getTask(task.id).summary!.includes(kept.id), 10_000, "a result without pictures");

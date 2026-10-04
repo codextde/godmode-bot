@@ -17,6 +17,7 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
   routines: [qk.routines],
   "browser-profiles": [qk.browserProfiles],
   "missing-logins": [qk.missingLogins, qk.bootstrap],
+  questions: [qk.questions, qk.bootstrap],
   notifications: [qk.notifications, qk.bootstrap],
   runs: [qk.runs],
   vms: [qk.vms],
@@ -168,6 +169,14 @@ function handle(event: ServerEvent) {
       break;
     case "notification":
       void queryClient.invalidateQueries({ queryKey: qk.notifications });
+      break;
+    case "question.created":
+    case "question.updated":
+      void queryClient.invalidateQueries({ queryKey: qk.questions });
+      void queryClient.invalidateQueries({ queryKey: qk.bootstrap });
+      void queryClient.invalidateQueries({ queryKey: qk.agents });
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.question.conversationId) });
+      void queryClient.invalidateQueries({ queryKey: qk.conversations });
       break;
     case "missing-login.created":
     case "missing-login.updated":

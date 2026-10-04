@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Play } from "lucide-react";
-import type { Agent, CharacterMood } from "@godmode/shared";
+import type { Agent, AgentPresence, CharacterMood } from "@godmode/shared";
+import { agentPresence, presenceLabel } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useMissingLogins, useScopeWorkspace } from "@/lib/hooks";
@@ -36,36 +37,88 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 
-/** The live run of an agent, if it is working right now. */
-export function useAgentLiveRun(agentId: string | undefined): LiveRun | null {
-  return useLive((s) => (agentId ? (Object.values(s.runs).find((r) => r.agentId === agentId) ?? null) : null));
+/** The agent's live runs: the working ones first, then the queued ones, oldest first. */
+export function useAgentLiveRuns(agentId: string | undefined): LiveRun[] {
+  const ids = useLive((s) =>
+    agentId
+      ? Object.values(s.runs)
+          .filter((r) => r.agentId === agentId)
+          .sort((a, b) => Number(a.status !== "running") - Number(b.status !== "running") || a.startedAt - b.startedAt)
+          .map((r) => r.runId)
+          .join(",")
+      : "",
+  );
+  const runs = useLive((s) => s.runs);
+  return useMemo(() => (ids ? ids.split(",").flatMap((id) => (runs[id] ? [runs[id]] : [])) : []), [ids, runs]);
 }
 
-/** The agent's character mood outside a chat: busy while it runs, waving while a login it needs is missing. */
+/** The agent's first run that is working right now (a queued one isn't). */
+export function useAgentLiveRun(agentId: string | undefined): LiveRun | null {
+  return useLive((s) => (agentId ? (Object.values(s.runs).find((r) => r.agentId === agentId && r.status === "running") ?? null) : null));
+}
+
+/** What the agent is doing right now, the same everywhere it shows (card, chart, header, picker). */
+export function useAgentPresence(agent: Agent): AgentPresence {
+  const runs = useAgentLiveRuns(agent.id);
+  const { data: missing = [] } = useMissingLogins("open");
+  return agentPresence(agent, {
+    running: runs.filter((r) => r.status === "running").length,
+    queued: runs.filter((r) => r.status === "queued").length,
+    needsLogin: missing.some((m) => m.agentId === agent.id),
+  });
+}
+
+/** The agent's character mood outside a chat: busy while it works, waving while it needs the human. */
 export function useAgentMood(agent: Agent): CharacterMood {
   const live = useAgentLiveRun(agent.id);
-  const { data: missing = [] } = useMissingLogins("open");
+  const presence = useAgentPresence(agent);
   if (live) return liveMood(live).mood;
-  if (!agent.enabled) return "sleeping";
-  if (missing.some((m) => m.agentId === agent.id)) return "attention";
-  if (agent.status === "error") return "error";
-  return "idle";
+  switch (presence.state) {
+    case "off":
+      return "sleeping";
+    case "waiting":
+      return "attention";
+    case "failed":
+      return "error";
+    default:
+      return "idle";
+  }
 }
 
-/** Start a fresh conversation with an agent and open it. */
+type ChatTarget = Pick<Agent, "id" | "name" | "enabled">;
+
+/** Start a fresh conversation with an agent and open it. A switched-off agent gets a "Switch on and chat" offer instead. */
 export function useStartAgentChat() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const workspace = useScopeWorkspace();
-  return useMutation({
-    mutationFn: (agentId: string) => api.conversations.create({ agentId, workspaceId: workspace?.id }),
+  const mutation = useMutation({
+    mutationFn: async ({ agent, switchOn }: { agent: ChatTarget; switchOn?: boolean }) => {
+      if (switchOn) {
+        const updated = await api.agents.update(agent.id, { enabled: true });
+        qc.setQueryData(qk.agent(updated.id), updated);
+        qc.invalidateQueries({ queryKey: qk.agents });
+      }
+      return api.conversations.create({ agentId: agent.id, workspaceId: workspace?.id });
+    },
     onSuccess: (conversation) => {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${conversation.id}`);
     },
     onError: (err) => toast.error("Couldn't start a chat", { description: errorMessage(err) }),
   });
+  return {
+    ...mutation,
+    mutate: (agent: ChatTarget) => {
+      if (agent.enabled) return mutation.mutate({ agent });
+      toast(`${agent.name} is switched off`, {
+        description: "It doesn't answer until you switch it on.",
+        action: { label: "Switch on and chat", onClick: () => mutation.mutate({ agent, switchOn: true }) },
+      });
+    },
+  };
 }
 
 export function useToggleAgent() {
@@ -75,11 +128,29 @@ export function useToggleAgent() {
     onSuccess: (agent) => {
       qc.setQueryData(qk.agent(agent.id), agent);
       qc.invalidateQueries({ queryKey: qk.agents });
-      toast.success(agent.enabled ? `${agent.name} enabled` : `${agent.name} disabled`, {
-        description: agent.enabled ? undefined : "Its automations won't run until you enable it again.",
+      toast.success(agent.enabled ? `${agent.name} is switched on` : `${agent.name} is switched off`, {
+        description: agent.enabled ? undefined : "Its automations won't run until you switch it on again.",
       });
     },
     onError: (err) => toast.error("Couldn't update agent", { description: errorMessage(err) }),
+  });
+}
+
+/** Copy an agent's setup (the passphrase first when it may read secrets) and open the copy's settings. */
+export function useDuplicateAgent() {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (agent: Agent) =>
+      agent.permissions.secretAccess === "reveal" ? withGrant((grant) => api.agents.duplicate(agent.id, grant), `Copy ${agent.name}, which may read secrets`) : api.agents.duplicate(agent.id),
+    onSuccess: (copy, source) => {
+      qc.invalidateQueries({ queryKey: qk.agents });
+      toast.success(`${copy.name} is ready`, { description: `Same setup as ${source.name}, with a fresh memory. Give it its own name and role.` });
+      navigate(`/agents/${copy.id}/settings`);
+    },
+    onError: (err, source) => {
+      if (!isGrantCancelled(err)) toast.error(`Couldn't duplicate ${source.name}`, { description: errorMessage(err) });
+    },
   });
 }
 
@@ -269,56 +340,65 @@ export function DeleteAgentDialog({
   );
 }
 
-/** Status dot + label, live-aware ("Browsing github.com…" while running). */
-export function AgentStatus({ agent, className, showActivity = true }: { agent: Agent; className?: string; showActivity?: boolean }) {
+/**
+ * Status dot + label, live-aware ("Browsing github.com…" while one run works). With `interactive`, "Last run failed"
+ * opens that run and a single working run links to its chat.
+ */
+export function AgentStatus({
+  agent,
+  className,
+  showActivity = true,
+  interactive = false,
+}: {
+  agent: Agent;
+  className?: string;
+  showActivity?: boolean;
+  interactive?: boolean;
+}) {
   const live = useAgentLiveRun(agent.id);
-  const { data: missing = [] } = useMissingLogins("open");
-  const running = !!live || agent.status === "running";
-  const needsLogin = missing.some((m) => m.agentId === agent.id);
-  const paused = agent.pausedRuns ?? 0;
-  const state = !agent.enabled
-    ? "disabled"
-    : running
-      ? "running"
-      : paused
-        ? "paused"
-        : needsLogin
-          ? "attention"
-          : agent.status === "error"
-            ? "error"
-            : "idle";
-  const label =
-    state === "running"
-      ? showActivity && live?.activity
-        ? live.activity
-        : "Working…"
-      : state === "disabled"
-        ? "Disabled"
-        : state === "paused"
-          ? paused > 1
-            ? `Paused · ${paused} chats`
-            : "Paused"
-          : state === "attention"
-            ? "Needs a login"
-            : state === "error"
-              ? "Last run failed"
-              : "Idle";
+  const presence = useAgentPresence(agent);
+  const { state } = presence;
+  const label = state === "working" && presence.running === 1 && showActivity && live?.activity ? live.activity : presenceLabel(presence);
+  const text = (
+    <span className={cn("truncate", state === "working" ? "text-shimmer font-medium" : state === "waiting" ? "text-foreground" : state === "failed" ? "text-destructive" : "text-muted-foreground")}>
+      {label}
+    </span>
+  );
+  const dot =
+    state === "working" ? (
+      <LiveDot className="shrink-0" />
+    ) : (
+      <span
+        className={cn(
+          "size-1.5 shrink-0 rounded-full",
+          state === "idle" && "bg-success",
+          (state === "waiting" || state === "paused") && "bg-warning",
+          state === "failed" && "bg-destructive",
+          (state === "off" || state === "queued") && "bg-muted-foreground/50",
+        )}
+      />
+    );
+  const linkClass = cn("relative z-10 inline-flex min-w-0 items-center gap-1.5 rounded-sm text-xs underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none", className);
+  if (interactive && state === "failed" && agent.failedRunId) {
+    return (
+      <Link to={`/activity?run=${agent.failedRunId}`} className={linkClass} title="Open the run that failed" onClick={(e) => e.stopPropagation()}>
+        {dot}
+        {text}
+      </Link>
+    );
+  }
+  if (interactive && state === "working" && presence.running === 1 && live) {
+    return (
+      <Link to={`/chat/${live.conversationId}`} className={linkClass} aria-label={`Watch ${agent.name} work: ${label}`} onClick={(e) => e.stopPropagation()}>
+        {dot}
+        {text}
+      </Link>
+    );
+  }
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5 text-xs", className)}>
-      {state === "running" ? (
-        <LiveDot className="shrink-0" />
-      ) : (
-        <span
-          className={cn(
-            "size-1.5 shrink-0 rounded-full",
-            state === "idle" && "bg-success",
-            (state === "attention" || state === "paused") && "bg-warning",
-            state === "error" && "bg-destructive",
-            state === "disabled" && "bg-muted-foreground/50",
-          )}
-        />
-      )}
-      <span className={cn("truncate", state === "running" ? "text-shimmer font-medium" : "text-muted-foreground")}>{label}</span>
+      {dot}
+      {text}
     </span>
   );
 }

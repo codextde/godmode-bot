@@ -305,7 +305,7 @@ function StatusLines({
         )}
       </p>
       {!agent.enabled ? (
-        <p>{agent.name} is disabled — enable it to let it dream.</p>
+        <p>{agent.name} is switched off — switch it on to let it dream.</p>
       ) : exchanges > 0 ? (
         <p className="flex items-center gap-1.5">
           <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-dream" />

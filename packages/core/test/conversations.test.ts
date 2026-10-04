@@ -182,7 +182,8 @@ describe("HTTP routes", () => {
       const res = await api("POST", `/api/agents/${agent.id}/run`, body);
       expect(res.status).toBe(200);
       const { conversation, run, message } = (await res.json()) as StartChatResult;
-      expect(conversation.origin).toBe("api");
+      // The human clicked "Run task": it's their chat, not an API call.
+      expect(conversation.origin).toBe("chat");
       expect(message.content).toBe("Carry out your instructions and report back what you did.");
       expect(conversation.title).toBe(message.content);
       await waitForRun(run.id, 20_000);

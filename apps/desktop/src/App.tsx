@@ -37,6 +37,7 @@ const SettingsPage = lazy(() => import("@/pages/settings/settings-page"));
 
 export function App() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [coreReady, setCoreReady] = useState(false);
   const [coreError, setCoreError] = useState<string | null>(null);
 
@@ -73,6 +74,31 @@ export function App() {
   useEffect(() => {
     if (!authed) return;
     return onServerEvent((event) => {
+      // A question that was answered or withdrawn (here, in another window, on the phone) takes its toast along.
+      if (event.type === "question.updated" && event.question.status !== "open") {
+        const q = event.question;
+        toast.dismiss(`question:${q.taskId ? `/tasks?task=${q.taskId}` : `/chat/${q.conversationId}`}`);
+        return;
+      }
+      if (event.type === "notification" && event.notification.kind === "question") {
+        // An agent waits for the human: a toast that leads to the question, unless it is on screen already.
+        const n = event.notification;
+        const here = n.link && `${location.pathname}${location.search}` === n.link && document.hasFocus();
+        if (here) {
+          void api.notifications.read([n.id]).catch(() => undefined);
+          return;
+        }
+        toast.warning(n.title, {
+          id: n.link ? `question:${n.link}` : undefined,
+          description: n.body || undefined,
+          duration: 20_000,
+          action: n.link ? { label: "Answer", onClick: () => navigate(n.link!) } : undefined,
+        });
+        const desktopOn = qc.getQueryData<{ settings?: { general?: { desktopNotifications?: boolean } } }>(qk.bootstrap)?.settings?.general
+          ?.desktopNotifications;
+        if (desktopOn !== false && !document.hasFocus()) void notifyDesktop(n.title, n.body);
+        return;
+      }
       if (event.type === "notification") {
         const n = event.notification;
         const fn = n.kind === "error" ? toast.error : n.kind === "warning" || n.kind === "missing_login" ? toast.warning : n.kind === "success" ? toast.success : toast;
@@ -82,7 +108,7 @@ export function App() {
         if (desktopOn !== false && !document.hasFocus()) void notifyDesktop(n.title, n.body);
       }
     });
-  }, [authed, qc]);
+  }, [authed, qc, navigate]);
 
   if (coreError) return <SplashScreen error={coreError} />;
   if (!coreReady || auth.isLoading) return <SplashScreen />;

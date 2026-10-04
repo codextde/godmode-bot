@@ -19,23 +19,54 @@
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Agent, PauseReason, PullRequestState, Run, RunStatus, ServerEvent, Task, TaskInput, TaskMessageInput, TaskPatch, TaskStatus, TaskType } from "@godmode/shared";
-import { MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_STATUSES, TASK_TYPES, isValidBranch, parseGitUrl } from "@godmode/shared";
+import type {
+  Agent,
+  PauseReason,
+  PullRequestState,
+  Run,
+  RunStatus,
+  ServerEvent,
+  Task,
+  TaskActor,
+  TaskBlockedKind,
+  TaskEvent,
+  TaskEventData,
+  TaskEventKind,
+  TaskInput,
+  TaskMessageInput,
+  TaskPatch,
+  TaskPriority,
+  TaskStatus,
+  TaskType,
+} from "@godmode/shared";
+import {
+  MAX_TASK_DESCRIPTION_LENGTH,
+  MAX_TASK_LABELS,
+  MAX_TASK_NOTE_LENGTH,
+  MAX_TASK_TITLE_LENGTH,
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+  TASK_TYPES,
+  cleanTaskLabel,
+  isValidBranch,
+  parseGitUrl,
+} from "@godmode/shared";
 import { config } from "../config";
 import { all, get, getMeta, insert, run as sql, setMeta, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
-import { HttpError, badRequest, conflict, newId, notFound, now, slugify } from "../util";
+import { HttpError, badRequest, conflict, newId, notFound, now, parseJson, slugify } from "../util";
 import { SECRET_PLACEHOLDER, redact, withoutSecrets } from "../vault/vault";
 import { getAgent } from "../agents/service";
-import { activeRunForConversation, cancelRun, getRun, listActiveRuns, waitForRun } from "../runner/runner";
-import { pauseOf, toPause } from "../services/pauses";
+import { INTERRUPTED, activeRunForConversation, cancelRun, getRun, listActiveRuns, waitForRun } from "../runner/runner";
+import { answerByMessage, type Answerer } from "../services/questions";
+import { pauseOf, PAUSE_QUESTION_JOIN, PAUSE_QUESTION_SQL, toPause, type PauseQuestionCols } from "../services/pauses";
 import { submitMessage } from "../services/messageQueue";
 import { conversationExists, createConversation, sendMessage } from "../services/conversations";
-import { cancelFollowup } from "../services/followups";
+import { cancelFollowup, getFollowup } from "../services/followups";
+import { getSettings } from "../services/settings";
 import {
   claimTaskAttachments,
-  removeStaleResultImages,
   removeTaskAttachments,
   stageTaskAttachments,
   sweepTaskAttachments,
@@ -70,7 +101,7 @@ const TERMINAL: ReadonlySet<RunStatus> = new Set(["succeeded", "failed", "cancel
 const WORKING: readonly TaskStatus[] = ["in_progress"];
 const STARTABLE: readonly TaskStatus[] = ["todo", "in_progress"];
 
-interface TaskRow {
+interface TaskRow extends PauseQuestionCols {
   id: string;
   workspace_id: string | null;
   number: number;
@@ -91,6 +122,14 @@ interface TaskRow {
   pushed_sha: string | null;
   summary: string | null;
   blocked_reason: string | null;
+  blocked_kind: TaskBlockedKind | null;
+  priority: TaskPriority;
+  due_date: string | null;
+  labels: string;
+  created_by: TaskActor;
+  cost_usd: number;
+  work_ms: number;
+  run_count: number;
   started_at: string | null;
   completed_at: string | null;
   archived_at: string | null;
@@ -98,6 +137,10 @@ interface TaskRow {
   updated_at: string;
   run_id?: string | null;
   run_status?: RunStatus | null;
+  run_started_at?: string | null;
+  followup_due_at?: string | null;
+  followup_note?: string | null;
+  followup_set_at?: string | null;
   paused_run_id?: string | null;
   paused_reason?: PauseReason | null;
   paused_limit?: string | null;
@@ -115,11 +158,15 @@ const again = new Set<string>();
 let unsubscribe: (() => void) | null = null;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 
-const SELECT = `SELECT t.*, r.id AS run_id, r.status AS run_status, p.run_id AS paused_run_id, p.reason AS paused_reason,
-    p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at
+const SELECT = `SELECT t.*, r.id AS run_id, r.status AS run_status, r.started_at AS run_started_at,
+    p.run_id AS paused_run_id, p.reason AS paused_reason,
+    p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at, ${PAUSE_QUESTION_SQL},
+    f.due_at AS followup_due_at, f.note AS followup_note, f.created_at AS followup_set_at
   FROM tasks t
   LEFT JOIN runs r ON r.id = (SELECT id FROM runs WHERE conversation_id = t.conversation_id ORDER BY created_at DESC, rowid DESC LIMIT 1)
-  LEFT JOIN paused_runs p ON p.conversation_id = t.conversation_id`;
+  LEFT JOIN paused_runs p ON p.conversation_id = t.conversation_id
+  ${PAUSE_QUESTION_JOIN}
+  LEFT JOIN followups f ON f.conversation_id = t.conversation_id`;
 
 function toModel(r: TaskRow): Task {
   return {
@@ -137,7 +184,7 @@ function toModel(r: TaskRow): Task {
     runStatus: r.run_status ?? null,
     pause:
       r.paused_run_id && r.paused_reason && r.paused_at
-        ? toPause({ run_id: r.paused_run_id, reason: r.paused_reason, limit_name: r.paused_limit ?? null, resume_at: r.paused_resume_at ?? null, auto: r.paused_auto ?? 0, created_at: r.paused_at })
+        ? toPause({ run_id: r.paused_run_id, reason: r.paused_reason, limit_name: r.paused_limit ?? null, resume_at: r.paused_resume_at ?? null, auto: r.paused_auto ?? 0, created_at: r.paused_at }, r)
         : null,
     repoUrl: r.repo_url,
     repoPath: r.repo_path,
@@ -149,6 +196,16 @@ function toModel(r: TaskRow): Task {
     summary: r.summary,
     blockedReason: r.blocked_reason,
     activity: activity.get(r.id) ?? null,
+    priority: r.priority ?? "none",
+    dueDate: r.due_date ?? null,
+    labels: parseJson<string[]>(r.labels, []),
+    createdBy: r.created_by ?? "user",
+    blockedKind: r.status === "blocked" ? (r.blocked_kind ?? null) : null,
+    followup: r.followup_due_at ? { note: r.followup_note ?? "", dueAt: r.followup_due_at, createdAt: r.followup_set_at ?? r.followup_due_at } : null,
+    costUsd: r.cost_usd ?? 0,
+    workMs: r.work_ms ?? 0,
+    runCount: r.run_count ?? 0,
+    runStartedAt: r.run_started_at ?? null,
     startedAt: r.started_at,
     completedAt: r.completed_at,
     archivedAt: r.archived_at,
@@ -254,6 +311,140 @@ function cleanBranch(branch: string | undefined): string {
   return b;
 }
 
+function cleanPriority(p: string | undefined): TaskPriority {
+  if (p === undefined) return "none";
+  if (!(TASK_PRIORITIES as readonly string[]).includes(p)) throw badRequest(`Unknown priority "${p}"`);
+  return p as TaskPriority;
+}
+
+/** A calendar day YYYY-MM-DD, or null. */
+function cleanDueDate(d: string | null | undefined): string | null {
+  const v = (d ?? "").trim();
+  if (!v) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  const day = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
+  if (!m || !day || day.getUTCMonth() !== Number(m[2]) - 1 || day.getUTCDate() !== Number(m[3])) throw badRequest(`"${v}" isn't a date — use YYYY-MM-DD`);
+  return v;
+}
+
+/** Cleaned, without repeats (the first spelling wins), at most MAX_TASK_LABELS. Saved secrets masked. */
+function cleanLabels(list: string[] | undefined): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of list ?? []) {
+    const label = cleanTaskLabel(redact(raw));
+    const key = label.toLowerCase();
+    if (!label || seen.has(key)) continue;
+    seen.add(key);
+    out.push(label);
+  }
+  if (out.length > MAX_TASK_LABELS) throw badRequest(`A task can have up to ${MAX_TASK_LABELS} labels`);
+  return out;
+}
+
+/** A task by its id, or by its number ("#12" or "12"). */
+export function findTask(ref: string): Task {
+  const r = ref.trim();
+  const byNumber = /^#?(\d+)$/.exec(r);
+  const found = byNumber ? get<TaskRow>(`${SELECT} WHERE t.number = ?`, Number(byNumber[1])) : row(r);
+  if (!found) throw notFound("Task");
+  return toModel(found);
+}
+
+/* ------------------------------------------------------------------ */
+/* Timeline                                                            */
+/* ------------------------------------------------------------------ */
+
+interface EventRow {
+  id: string;
+  task_id: string;
+  kind: TaskEventKind;
+  actor: TaskActor;
+  actor_name: string;
+  body: string;
+  data: string;
+  run_id: string | null;
+  created_at: string;
+}
+
+function toEvent(r: EventRow): TaskEvent {
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    kind: r.kind,
+    actor: r.actor,
+    actorName: r.actor_name,
+    body: r.body,
+    data: parseJson<Record<string, unknown>>(r.data, {}),
+    runId: r.run_id,
+    createdAt: r.created_at,
+  } as TaskEvent;
+}
+
+function actorName(actor: TaskActor): string {
+  if (!actor.startsWith("agent:")) return "";
+  return get<{ name: string }>("SELECT name FROM agents WHERE id = ?", actor.slice(6))?.name ?? "";
+}
+
+function agentActor(agentId: string | null | undefined): TaskActor {
+  return agentId ? `agent:${agentId}` : "system";
+}
+
+/**
+ * Add a row to a ticket's timeline and tell the clients. Rows a run causes once (started, waiting, delivered, blocked)
+ * are written once per run. Never throws: a timeline row must not break a move.
+ */
+function record<K extends TaskEventKind>(
+  taskId: string,
+  kind: K,
+  actor: TaskActor,
+  opts: { body?: string; data?: TaskEventData[K]; runId?: string | null } = {},
+): TaskEvent | null {
+  try {
+    const r: EventRow = {
+      id: newId("tev"),
+      task_id: taskId,
+      kind,
+      actor,
+      actor_name: actorName(actor),
+      body: redact(opts.body ?? "").slice(0, SUMMARY_MAX),
+      data: JSON.stringify(opts.data ?? {}),
+      run_id: opts.runId ?? null,
+      created_at: now(),
+    };
+    const changed = sql(
+      "INSERT OR IGNORE INTO task_events (id, task_id, kind, actor, actor_name, body, data, run_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      r.id,
+      r.task_id,
+      r.kind,
+      r.actor,
+      r.actor_name,
+      r.body,
+      r.data,
+      r.run_id,
+      r.created_at,
+    );
+    if (!changed.changes) return null;
+    const event = toEvent(r);
+    bus.emit({ type: "task.event", event });
+    return event;
+  } catch (err) {
+    log.warn(`task ${taskId}: could not record ${kind}`, err);
+    return null;
+  }
+}
+
+/** A ticket's timeline: the newest `limit` rows, oldest first. */
+export function listTaskEvents(taskId: string, limit = 300): TaskEvent[] {
+  requireRow(taskId);
+  const n = Math.min(Math.max(1, Math.floor(limit)), 1000);
+  return all<EventRow>(
+    "SELECT * FROM (SELECT *, rowid AS rid FROM task_events WHERE task_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?) ORDER BY created_at ASC, rid ASC",
+    taskId,
+    n,
+  ).map(toEvent);
+}
+
 /** Agents a task may be assigned to: its workspace's and global ones. */
 function checkAgent(agentId: string | null | undefined, workspaceId: string | null): string | null {
   if (!agentId) return null;
@@ -303,7 +494,7 @@ function topPosition(workspaceId: string | null, status: TaskStatus, selfId: str
 /* Mutations                                                           */
 /* ------------------------------------------------------------------ */
 
-export function createTask(input: TaskInput): Task {
+export function createTask(input: TaskInput, actor: TaskActor = "user"): Task {
   const workspaceId = checkWorkspace(input.workspaceId);
   const agentId = checkAgent(input.agentId, workspaceId);
   const status = input.status ? cleanStatus(input.status) : agentId ? "todo" : "backlog";
@@ -329,17 +520,22 @@ export function createTask(input: TaskInput): Task {
     repo_url: cleanRepoUrl(input.repoUrl),
     repo_path: cleanRepoPath(input.repoPath, workspaceId),
     base_branch: cleanBranch(input.baseBranch),
+    priority: cleanPriority(input.priority),
+    due_date: cleanDueDate(input.dueDate),
+    labels: JSON.stringify(cleanLabels(input.labels)),
+    created_by: actor,
     completed_at: status === "done" || status === "cancelled" ? ts : null,
     created_at: ts,
     updated_at: ts,
   });
   claimTaskAttachments(id, description);
+  if (agentId) record(id, "assigned", actor, { data: { from: null, to: agentId, fromName: "", toName: actorName(`agent:${agentId}`) } });
   emit(id);
   if (agentId && (status === "todo" || status === "in_progress")) void dispatch(id);
   return getTask(id);
 }
 
-export function updateTask(id: string, patch: TaskPatch): Task {
+export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "user"): Task {
   const current = requireRow(id);
   const agentId = patch.agentId !== undefined ? checkAgent(patch.agentId, current.workspace_id) : current.agent_id;
   let status = patch.status !== undefined ? cleanStatus(patch.status) : current.status;
@@ -352,6 +548,30 @@ export function updateTask(id: string, patch: TaskPatch): Task {
   const moved = status !== current.status || patch.beforeId !== undefined;
   const finished = status === "done" || status === "cancelled";
   const description = patch.description !== undefined ? cleanDescription(patch.description) : undefined;
+  // Why it is blocked: set by the human when they move it to Blocked; only a reason they set can be changed later.
+  const reassigned = agentId !== current.agent_id;
+  let blockedReason: string | null | undefined;
+  let blockedKind: TaskBlockedKind | null | undefined;
+  if (patch.blockedReason !== undefined && status !== "blocked") throw badRequest("A reason only goes with Blocked");
+  if (status !== current.status) {
+    if (status === "blocked") {
+      blockedReason = redact(patch.blockedReason ?? "").trim().slice(0, 2000) || null;
+      blockedKind = "manual";
+    } else {
+      blockedReason = null;
+      blockedKind = null;
+    }
+  } else if (status === "blocked") {
+    if (patch.blockedReason !== undefined) {
+      if (current.blocked_kind !== "manual") throw conflict("Only a reason you set yourself can be changed");
+      blockedReason = redact(patch.blockedReason).trim().slice(0, 2000) || null;
+    }
+    // Another agent can't answer or continue what the previous one started: it starts again.
+    if (reassigned && ["needs_input", "failed", "stopped", "interrupted"].includes(current.blocked_kind ?? "")) blockedKind = "manual";
+  } else if (reassigned) {
+    // The old agent's report is void.
+    blockedReason = null;
+  }
   update("tasks", id, {
     title: patch.title !== undefined ? cleanTitle(patch.title) : undefined,
     description,
@@ -359,6 +579,9 @@ export function updateTask(id: string, patch: TaskPatch): Task {
     repo_url: patch.repoUrl !== undefined ? cleanRepoUrl(patch.repoUrl) : undefined,
     repo_path: patch.repoPath !== undefined ? cleanRepoPath(patch.repoPath, current.workspace_id) : undefined,
     base_branch: patch.baseBranch !== undefined ? cleanBranch(patch.baseBranch) : undefined,
+    priority: patch.priority !== undefined ? cleanPriority(patch.priority) : undefined,
+    due_date: patch.dueDate !== undefined ? cleanDueDate(patch.dueDate) : undefined,
+    labels: patch.labels !== undefined ? JSON.stringify(cleanLabels(patch.labels)) : undefined,
     status,
     agent_id: agentId,
     position:
@@ -369,33 +592,43 @@ export function updateTask(id: string, patch: TaskPatch): Task {
           : undefined,
     completed_at: status === current.status ? undefined : finished ? now() : null,
     archived_at: archived === !!current.archived_at ? undefined : archived ? now() : null,
-    blocked_reason: (status !== current.status && status !== "blocked") || agentId !== current.agent_id ? null : undefined,
+    blocked_reason: blockedReason,
+    blocked_kind: blockedKind,
     updated_at: now(),
   });
   if (description !== undefined) claimTaskAttachments(id, description);
-  // A follow-up the agent scheduled would wake it up again.
-  if (archived && !current.archived_at && current.conversation_id) cancelFollowup(current.conversation_id);
 
   const wasWorking = current.status === "in_progress";
-  const reassigned = agentId !== current.agent_id;
   const starts =
     !archived &&
     !!agentId &&
     ((status !== current.status && (status === "todo" || (status === "in_progress" && !wasWorking))) ||
       ((status === "todo" || status === "in_progress") && (reassigned || restored)));
   // Start first: the restart owns the task before the old run's end is reported.
-  if (starts) void dispatch(id);
+  if (starts) void dispatch(id, current.status === "blocked" ? { kind: current.blocked_kind, reason: current.blocked_reason } : undefined);
   if (wasWorking && (status !== "in_progress" || reassigned)) void stopWork(current);
+  // A follow-up the agent scheduled would wake it up again (after dispatch, which already owns a task it restarts).
+  if (current.conversation_id && ((archived && !current.archived_at) || (status !== current.status && status !== "in_progress") || reassigned)) {
+    cancelFollowup(current.conversation_id);
+  }
+
+  if (status !== current.status) record(id, "status", actor, { body: status === "blocked" ? (blockedReason ?? "") : "", data: { from: current.status, to: status } });
+  if (reassigned) {
+    record(id, "assigned", actor, {
+      data: { from: current.agent_id, to: agentId, fromName: actorName(agentActor(current.agent_id)), toName: actorName(agentActor(agentId)) },
+    });
+  }
+  if (archived !== !!current.archived_at) record(id, "archived", actor, { data: { archived } });
   emit(id);
   return getTask(id);
 }
 
 /** Archive (or bring back) several tasks at once, e.g. a whole column. */
-export function archiveTasks(ids: string[], archived: boolean): Task[] {
+export function archiveTasks(ids: string[], archived: boolean, actor: TaskActor = "user"): Task[] {
   const unique = [...new Set(ids)];
   unique.forEach(requireRow);
   // Each restored task goes on top of its column: the last one first, so the column keeps its order.
-  const updated = new Map((archived ? unique : [...unique].reverse()).map((id) => [id, updateTask(id, { archived })]));
+  const updated = new Map((archived ? unique : [...unique].reverse()).map((id) => [id, updateTask(id, { archived }, actor)]));
   return unique.map((id) => updated.get(id)!);
 }
 
@@ -427,6 +660,8 @@ async function stopWork(task: TaskRow) {
 
 export async function deleteTask(id: string): Promise<void> {
   const task = requireRow(id);
+  // The agent would come back to a ticket that no longer exists.
+  if (task.conversation_id) cancelFollowup(task.conversation_id);
   sql("DELETE FROM tasks WHERE id = ?", id);
   activity.delete(id);
   bus.emit({ type: "task.deleted", id });
@@ -438,6 +673,7 @@ export async function deleteTask(id: string): Promise<void> {
 /** Stop and clean up every task of a workspace that is being deleted (its rows go with the workspace). */
 export async function removeWorkspaceTasks(workspaceId: string): Promise<void> {
   for (const t of all<TaskRow>("SELECT * FROM tasks WHERE workspace_id = ?", workspaceId)) {
+    if (t.conversation_id) cancelFollowup(t.conversation_id);
     await stopWork(t);
     await removeCheckout(checkoutDir(t.id)).catch((err) => log.warn(`could not remove the worktree of task ${t.id}`, err));
     removeTaskAttachments(t.id);
@@ -445,17 +681,49 @@ export async function removeWorkspaceTasks(workspaceId: string): Promise<void> {
 }
 
 /** A follow-up from the human in the task's conversation (e.g. review feedback); the task goes back to work. */
-export async function sendTaskMessage(id: string, content: string, attachments: TaskMessageInput["attachments"] = []): Promise<Task> {
+export async function sendTaskMessage(
+  id: string,
+  content: string,
+  attachments: TaskMessageInput["attachments"] = [],
+  by: Answerer = { actor: "user", via: "task" },
+  from: TaskActor = "user",
+): Promise<Task> {
   const task = requireRow(id);
   if (!content.trim() && !attachments.length) throw badRequest("Message is empty");
   if (!task.conversation_id || !conversationExists(task.conversation_id)) throw conflict("The task hasn't started yet — move it to Todo to start it");
   const owner = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", task.conversation_id)?.agent_id;
   if (!task.agent_id || owner !== task.agent_id) throw conflict("Move the task to Todo to hand it to its agent");
   if (busy.has(id)) throw conflict(`Godmode is ${activity.get(id)?.replace(/…$/, "").toLowerCase() ?? "preparing the task"} — send it again in a moment`);
-  // A task that stands still takes the message along: it continues with it, or once Claude's limit has reset.
-  if (pauseOf(task.conversation_id)) await submitMessage(task.conversation_id, { content, attachments });
-  else await sendMessage(task.conversation_id, { content, attachments, trigger: "task" });
+  const human = getSettings().general.userName.trim() || "the human";
+  if (from !== "user") {
+    // Only the human continues a run that stands still (paused, waiting for the limit or for their answer).
+    if (pauseOf(task.conversation_id)) throw conflict(`Task #${task.number} stands still — only ${human} can continue it`);
+    const name = actorName(from) || "another agent";
+    await sendMessage(task.conversation_id, { content: `[From ${name}, another agent — not from ${human}]\n\n${content}`, attachments, trigger: "task", source: "delegation" });
+  } else if (answerByMessage(task.conversation_id, { content, attachments }, by)) {
+    // The task's run waited for the human's answer: this message was it, and the run continues with it (the
+    // timeline records the answer itself).
+    return getTask(id);
+  } else if (pauseOf(task.conversation_id)) {
+    // A task that stands still takes the message along: it continues with it, or once Claude's limit has reset.
+    await submitMessage(task.conversation_id, { content, attachments });
+  } else await sendMessage(task.conversation_id, { content, attachments, trigger: "task" });
+  record(id, "feedback", from, { body: content, data: { on: task.status, files: attachments.map((a) => a.name) } });
   return getTask(id);
+}
+
+/** A progress note on a ticket (an agent at a milestone): on the timeline, nobody is notified. */
+export function addTaskNote(taskId: string, text: string, actor: TaskActor, runId: string | null): TaskEvent {
+  requireRow(taskId);
+  const note = text.trim();
+  if (!note || note.length > MAX_TASK_NOTE_LENGTH) throw badRequest(`Write the note (up to ${MAX_TASK_NOTE_LENGTH} characters)`);
+  if (runId && (get<{ n: number }>("SELECT COUNT(*) AS n FROM task_events WHERE kind = 'note' AND run_id = ?", runId)?.n ?? 0) >= 20) {
+    throw conflict("That's enough notes for one run — put the rest in your summary.");
+  }
+  const event = record(taskId, "note", actor, { body: note, runId });
+  if (!event) throw new HttpError(500, "The note couldn't be saved");
+  emit(taskId);
+  return event;
 }
 
 /** The agent working on a task reports it can't finish (it moves to Blocked when its run ends). */
@@ -475,17 +743,34 @@ export function reportBlocked(conversationId: string, reason: string): Task {
  * Move a task because of its work (not the human): only from `from` — a move the human made meanwhile wins. A task
  * that changes columns goes to the top, where the latest activity is. Returns whether it moved.
  */
-function transition(id: string, status: TaskStatus, from: readonly TaskStatus[], blockedReason: string | null = null): boolean {
+function transition(id: string, status: TaskStatus, from: readonly TaskStatus[], blocked: { reason: string; kind: TaskBlockedKind } | null = null): boolean {
   const t = get<{ workspace_id: string | null; status: TaskStatus; position: number }>("SELECT workspace_id, status, position FROM tasks WHERE id = ?", id);
   if (!t || !from.includes(t.status)) return false;
   const position = t.status === status ? t.position : topPosition(t.workspace_id, status, id);
-  sql("UPDATE tasks SET status = ?, position = ?, blocked_reason = ?, updated_at = ? WHERE id = ?", status, position, blockedReason, now(), id);
+  sql(
+    "UPDATE tasks SET status = ?, position = ?, blocked_reason = ?, blocked_kind = ?, updated_at = ? WHERE id = ?",
+    status,
+    position,
+    blocked?.reason ?? null,
+    blocked?.kind ?? null,
+    now(),
+    id,
+  );
   return true;
 }
 
-function block(id: string, reason: string, from: readonly TaskStatus[] = WORKING) {
+/** Block a ticket because of its work, saying what kind of block it is (the board offers the matching way on). */
+function block(id: string, reason: string, opts: { kind: TaskBlockedKind; from?: readonly TaskStatus[]; runId?: string | null; actor?: TaskActor }) {
   activity.delete(id);
-  transition(id, "blocked", from, redact(reason).slice(0, 2000));
+  const text = redact(reason).slice(0, 2000);
+  if (transition(id, "blocked", opts.from ?? WORKING, { reason: text, kind: opts.kind })) {
+    record(id, "blocked", opts.actor ?? "system", { body: text, data: { kind: opts.kind }, runId: opts.runId ?? null });
+    // The human stopped it: the agent mustn't come back on its own.
+    if (opts.kind === "stopped" && opts.actor === "user") {
+      const conv = get<{ conversation_id: string | null }>("SELECT conversation_id FROM tasks WHERE id = ?", id)?.conversation_id;
+      if (conv) cancelFollowup(conv);
+    }
+  }
   emit(id);
 }
 
@@ -559,25 +844,59 @@ function attachmentsBrief(staged: StagedAttachments): string[] {
 }
 
 /** `description`: the task's, or with its attachments pointing at their local copies (what Claude gets). */
-function taskPrompt(task: TaskRow, worktree: Worktree | null, restarted: boolean, description: string, staged: StagedAttachments): string {
+/** "Friday, October 9, 2026 (in 5 days)" — what the agent is told about a due day. */
+function dueText(day: string): string {
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const due = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((due.getTime() - today.getTime()) / 86_400_000);
+  const when = days === 0 ? "today" : days === 1 ? "tomorrow" : days > 1 ? `in ${days} days` : `${-days} day${days === -1 ? "" : "s"} ago — overdue`;
+  return `${due.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })} (${when})`;
+}
+
+function firstLine(task: TaskRow, restarted: boolean, resume?: Resume): string {
+  if (!restarted) return `You were assigned task #${task.number} on the task board.`;
+  if (resume?.kind === "interrupted") {
+    return `Godmode restarted while you were working on task #${task.number}. Pick the work up where you stopped — check what is already done before you repeat a step. Here is the task again (it may have changed):`;
+  }
+  if (resume?.kind === "failed") {
+    const why = (resume.reason ?? "it failed").replace(/\s+/g, " ").trim().slice(0, 300);
+    return `Your last run on task #${task.number} failed: ${why}. Try again — check what is already done before you repeat a step. Here is the task again (it may have changed):`;
+  }
+  return `The task #${task.number} was restarted from the board — here it is again (it may have changed):`;
+}
+
+function taskPrompt(task: TaskRow, worktree: Worktree | null, restarted: boolean, description: string, staged: StagedAttachments, resume?: Resume): string {
+  const labels = parseJson<string[]>(task.labels, []);
   const lines = [
-    restarted ? `The task #${task.number} was restarted from the board — here it is again (it may have changed):` : `You were assigned task #${task.number} on the task board.`,
+    firstLine(task, restarted, resume),
     "",
     `# ${task.title}`,
     "",
     description.trim() || "_No description._",
     "",
     "---",
+    ...(task.priority && task.priority !== "none" ? [`Priority: ${task.priority}.`] : []),
+    ...(task.due_date ? [`Due: ${dueText(task.due_date)}. If you can't make it, say so in your summary instead of cutting corners.`] : []),
+    ...(labels.length ? [`Labels: ${labels.join(", ")}.`] : []),
     ...attachmentsBrief(staged),
     ...(worktree ? [worktreeBrief(task, worktree)] : []),
     TYPE_BRIEF[task.type],
-    "If you can't finish because something is missing (access, information, a decision), call the `task_report_blocked` tool with what you need, then stop.",
+    "If you need a decision or an OK to go on, ask with `ask_human` or `request_approval` — the task waits and continues with the answer. If you can't finish at all because something is missing (access, an account, information nobody can give you now), call `task_report_blocked` with what you need, then stop.",
+    "On long work, leave a short progress note with the `task_note` tool at milestones — the human reads it on the task. If you have to wait for something (a reply, a build, office hours), schedule a follow-up: the task shows when you continue, and it goes to review once you finish.",
   ];
   return lines.join("\n");
 }
 
 /** Start (or restart) the agent on a task in Todo / In progress. Never throws; problems block the task. */
-export async function dispatch(id: string): Promise<void> {
+/** Why a ticket that is started again was blocked: the agent's opening line says so. */
+interface Resume {
+  kind: TaskBlockedKind | null;
+  reason: string | null;
+}
+
+export async function dispatch(id: string, resume?: Resume): Promise<void> {
   if (busy.has(id)) {
     again.add(id);
     return;
@@ -590,9 +909,9 @@ export async function dispatch(id: string): Promise<void> {
     try {
       agent = getAgent(task.agent_id);
     } catch {
-      return block(id, "The assigned agent doesn't exist anymore.", STARTABLE);
+      return block(id, "The assigned agent doesn't exist anymore.", { kind: "setup", from: STARTABLE });
     }
-    if (!agent.enabled) return block(id, `${agent.name} is disabled — turn it on or assign another agent.`, STARTABLE);
+    if (!agent.enabled) return block(id, `${agent.name} is disabled — turn it on or assign another agent.`, { kind: "setup", from: STARTABLE });
 
     const previous = openRuns(task.conversation_id);
     if (previous.length) await stopRuns(previous, "Restarted from the task board");
@@ -604,7 +923,7 @@ export async function dispatch(id: string): Promise<void> {
     let worktree: Worktree | null = null;
     let workDir: string | null = null;
     const source = taskRepo(task);
-    if (!source && task.type === "coding") return block(id, "Coding tasks need a git repository — add one to the workspace (or the task).", STARTABLE);
+    if (!source && task.type === "coding") return block(id, "Coding tasks need a git repository — add one to the workspace (or the task).", { kind: "setup", from: STARTABLE });
     if (source) {
       workDir = checkoutDir(id);
       try {
@@ -623,7 +942,7 @@ export async function dispatch(id: string): Promise<void> {
         worktree = { repo: repoPath || prepared.url, base: prepared.base, branch: prepared.branch };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        if (task.type === "coding") return block(id, `Couldn't create the task's worktree: ${message}`);
+        if (task.type === "coding") return block(id, `Couldn't create the task's worktree: ${message}`, { kind: "setup" });
         // Other tasks can do without one: they work next to the workspace's folders, as chats do.
         log.warn(`task ${id} runs without a worktree: ${message}`);
         notify("warning", `Task #${task.number} works without its own worktree`, `Couldn't create it: ${message}`, `/tasks?task=${id}`);
@@ -659,15 +978,16 @@ export async function dispatch(id: string): Promise<void> {
     const staged = stageTaskAttachments(agent, task.number, task.description);
     activity.delete(id);
     await sendMessage(conversationId!, {
-      content: taskPrompt(task, worktree, restarted, withFileNames(task.description), staged),
-      prompt: taskPrompt(task, worktree, restarted, withLocalPaths(task.description, staged.paths), staged),
+      content: taskPrompt(task, worktree, restarted, withFileNames(task.description), staged, resume),
+      prompt: taskPrompt(task, worktree, restarted, withLocalPaths(task.description, staged.paths), staged, resume),
       files: staged.files,
       trigger: "task",
+      source: "task",
     });
     emit(id);
   } catch (err) {
     log.warn(`task ${id} could not start`, err);
-    block(id, err instanceof Error ? err.message : String(err), STARTABLE);
+    block(id, err instanceof Error ? err.message : String(err), { kind: "setup", from: STARTABLE });
   } finally {
     release(id);
   }
@@ -696,11 +1016,50 @@ function latestRunId(conversationId: string): string | null {
   return get<{ id: string }>("SELECT id FROM runs WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1", conversationId)?.id ?? null;
 }
 
+/** What a ticket's chat last showed of its pause and follow-up: a change is worth telling the board about. */
+const chatState = new Map<string, string>();
+
 function onBusEvent(event: ServerEvent) {
-  // The pause of a task's run changed (e.g. whether it continues by itself).
-  if (event.type === "conversation.updated" && event.conversation.paused) {
+  if (event.type === "entity.changed" && event.entity === "followups") return sweepWaiting();
+  // The pause or the follow-up of a ticket's chat changed (whether it continues by itself, when it continues).
+  if (event.type === "conversation.updated") {
     const id = get<{ id: string }>("SELECT id FROM tasks WHERE conversation_id = ?", event.conversation.id)?.id;
-    if (id) emit(id);
+    if (!id) return;
+    const c = event.conversation;
+    const state = `${c.paused?.runId ?? ""}|${c.paused?.auto ?? ""}|${c.followup?.dueAt ?? ""}`;
+    if (chatState.get(id) !== state) {
+      chatState.set(id, state);
+      emit(id);
+    }
+    return;
+  }
+  // The ticket's chat is gone: the agent can't continue a ticket that waited.
+  if (event.type === "conversation.deleted") {
+    const t = get<TaskRow>("SELECT * FROM tasks WHERE conversation_id = ?", event.id);
+    if (t && t.status === "in_progress" && !busy.has(t.id) && !openRuns(event.id).length) {
+      block(t.id, "The task's chat was deleted, so the agent can't continue it. Start it again to work in a new chat.", { kind: "stopped", actor: "user" });
+    }
+    return;
+  }
+  // Its agent was deleted: a ticket that waited for it is parked, as when the human takes the agent off.
+  if (event.type === "agent.deleted") {
+    for (const t of all<TaskRow>("SELECT * FROM tasks WHERE status = 'in_progress' AND agent_id IS NULL")) {
+      if (busy.has(t.id) || openRuns(t.conversation_id).length) continue;
+      if (transition(t.id, "backlog", ["in_progress"])) record(t.id, "status", "system", { data: { from: "in_progress", to: "backlog" } });
+      emit(t.id);
+    }
+    return;
+  }
+  // What the agent asked the human on a ticket, and the answer.
+  if (event.type === "question.created" || event.type === "question.updated") {
+    const q = event.question;
+    if (!q.taskId || !get<{ id: string }>("SELECT id FROM tasks WHERE id = ?", q.taskId)) return;
+    if (event.type === "question.created") {
+      record(q.taskId, "asked", `agent:${q.agentId}`, { body: q.title, data: { questionId: q.id, kind: q.kind } });
+    } else if (q.answer) {
+      const said = q.status === "approved" ? "Approved" : q.status === "declined" ? "Declined" : "";
+      record(q.taskId, "answered", "user", { body: [said, q.answer.text].filter(Boolean).join(" — "), data: { questionId: q.id, status: q.status } });
+    }
     return;
   }
   if (event.type !== "run.started" && event.type !== "run.finished" && event.type !== "run.paused") return;
@@ -708,11 +1067,41 @@ function onBusEvent(event: ServerEvent) {
   if (!task) return;
   // A paused run has not ended: the task stays where it is and shows that its work stands still.
   if (event.type !== "run.finished") {
-    if (event.type === "run.started" && event.run.status === "queued" && !busy.has(task.id)) backToWork(task.id);
+    if (event.type === "run.started" && event.run.status === "queued") {
+      const before = task.status;
+      if (!busy.has(task.id)) backToWork(task.id);
+      // A new run (a run that continues after a pause started before). One the human's message from the sheet
+      // started is on the timeline as that message already.
+      if (!event.run.startedAt) {
+        if (event.run.trigger === "chat") {
+          // Written in the ticket's chat: on the timeline like a message from the sheet.
+          record(task.id, "feedback", "user", { body: event.run.prompt, data: { on: before, files: [] } });
+        } else if (busy.has(task.id) || event.run.trigger !== "task") {
+          const again = !!get<{ id: string }>("SELECT id FROM task_events WHERE task_id = ? AND kind = 'started' LIMIT 1", task.id);
+          record(task.id, "started", agentActor(event.run.agentId), { runId: event.run.id, data: { trigger: event.run.trigger, again } });
+        }
+      }
+    }
     emit(task.id);
     return;
   }
+  account(task.id, event.run);
   void finished(task.id, event.run).catch((err) => log.warn(`task ${task.id}: could not handle the end of run ${event.run.id}`, err));
+}
+
+/** What a run that ended cost and how long the agent worked on it, with the work it delegated. */
+function account(taskId: string, run: Run) {
+  try {
+    const cost =
+      get<{ c: number | null }>(
+        `WITH RECURSIVE d(id) AS (SELECT ? UNION ALL SELECT r.id FROM runs r JOIN d ON r.parent_run_id = d.id)
+         SELECT SUM(cost_usd) AS c FROM runs WHERE id IN (SELECT id FROM d)`,
+        run.id,
+      )?.c ?? 0;
+    sql("UPDATE tasks SET cost_usd = cost_usd + ?, work_ms = work_ms + ?, run_count = run_count + 1 WHERE id = ?", cost, run.durationMs ?? 0, taskId);
+  } catch (err) {
+    log.warn(`task ${taskId}: could not add up run ${run.id}`, err);
+  }
 }
 
 /** A follow-up (review feedback, a question) puts a delivered or blocked task back to work — and on the board. */
@@ -728,19 +1117,41 @@ async function finished(id: string, run: Run): Promise<void> {
   // Another turn is already queued in the conversation, or the board moved the task away meanwhile.
   if (latestRunId(run.conversationId) !== run.id || task.status !== "in_progress") return emit(id);
   const link = `/tasks?task=${id}`;
-  if (run.status === "cancelled") return block(id, "Stopped before it finished.");
+  const agent = agentActor(run.agentId);
+  if (run.status === "cancelled") return block(id, "Stopped before it finished.", { kind: "stopped", runId: run.id, actor: "user" });
   if (run.status === "failed") {
-    block(id, run.error || "The run failed.");
+    block(id, run.error || "The run failed.", { kind: run.error === INTERRUPTED ? "interrupted" : "failed", runId: run.id });
     notify("error", `Task #${task.number} is blocked`, run.error ?? "", link);
     return;
   }
   const summary = run.result ? run.result.slice(0, SUMMARY_MAX) : null;
+  // Earlier results stay on the timeline with their pictures: only a deleted task takes its pictures along.
   const shown = summary && withResultImages(id, summary, resultFolders(task, run.conversationId));
   sql("UPDATE tasks SET summary = ? WHERE id = ?", shown, id);
-  removeStaleResultImages(id, task.summary, shown);
   if (task.blocked_reason) {
-    block(id, task.blocked_reason);
+    block(id, task.blocked_reason, { kind: "needs_input", runId: run.id, actor: agent });
     notify("warning", `Task #${task.number} needs you`, task.blocked_reason, link);
+    return;
+  }
+  // The agent set itself a time to continue: the ticket waits (In progress, nothing running) instead of going to
+  // review. What it did so far is kept on its branch (and pushed, for coding tickets) so nothing is out of reach.
+  const followup = getFollowup(run.conversationId);
+  if (followup) {
+    if (task.branch) {
+      busy.add(id);
+      try {
+        if (task.type === "coding" && task.repo_url) await pushWork(requireRow(id)).catch((err) => log.warn(`task ${id}: could not push while it waits`, err));
+        else await commitLeftovers(requireRow(id)).catch((err) => log.warn(`task ${id}: could not commit while it waits`, err));
+      } finally {
+        activity.delete(id);
+        busy.delete(id);
+      }
+    }
+    record(id, "waiting", agent, { body: shown ?? "", runId: run.id, data: { dueAt: followup.dueAt, note: followup.note } });
+    activity.delete(id);
+    emit(id);
+    // A turn that started while it was committing is handled when it ends.
+    if (again.delete(id)) void dispatch(id);
     return;
   }
   if (task.branch) {
@@ -754,6 +1165,39 @@ async function finished(id: string, run: Run): Promise<void> {
     return;
   }
   if (deliver(id, run.id)) notify("success", `Task #${task.number} is ready for review`, task.title, link);
+}
+
+/**
+ * Tickets that waited for a follow-up that is gone: the human cancelled it (the ticket goes to review with what the
+ * agent delivered so far, without a notification — they did it themselves) or it couldn't start because the agent is
+ * switched off or gone (the ticket is blocked, saying so).
+ */
+function sweepWaiting() {
+  const waiting = all<TaskRow>(
+    `SELECT * FROM tasks WHERE status = 'in_progress' AND archived_at IS NULL AND conversation_id IS NOT NULL
+       AND conversation_id NOT IN (SELECT conversation_id FROM followups)`,
+  );
+  for (const t of waiting) {
+    if (busy.has(t.id) || openRuns(t.conversation_id).length) continue;
+    const last = get<{ kind: string; run_id: string }>(
+      "SELECT kind, run_id FROM task_events WHERE task_id = ? AND run_id IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 1",
+      t.id,
+    );
+    if (last?.kind !== "waiting" || latestRunId(t.conversation_id!) !== last.run_id) continue;
+    let usable: Agent | null = null;
+    try {
+      usable = t.agent_id ? getAgent(t.agent_id) : null;
+    } catch {
+      usable = null;
+    }
+    if (!usable || !usable.enabled) {
+      block(t.id, usable ? `${usable.name} is disabled, so it couldn't continue — turn it on or assign another agent.` : "Its agent is gone, so nobody continues it.", {
+        kind: "setup",
+      });
+      continue;
+    }
+    deliver(t.id, last.run_id);
+  }
 }
 
 /** Where the agent keeps the screenshots its result names: the folders it works in, and the temp folders. */
@@ -803,8 +1247,19 @@ async function commitLeftovers(task: TaskRow): Promise<void> {
 /** In review — unless a newer turn (a follow-up) started meanwhile; its end decides then. */
 function deliver(id: string, runId: string): boolean {
   activity.delete(id);
-  const conv = get<{ conversation_id: string | null }>("SELECT conversation_id FROM tasks WHERE id = ?", id)?.conversation_id;
-  const moved = !!conv && latestRunId(conv) === runId && transition(id, "in_review", WORKING);
+  const t = get<{ conversation_id: string | null; summary: string | null; pr_number: number | null; agent_id: string | null }>(
+    "SELECT conversation_id, summary, pr_number, agent_id FROM tasks WHERE id = ?",
+    id,
+  );
+  const moved = !!t?.conversation_id && latestRunId(t.conversation_id) === runId && transition(id, "in_review", WORKING);
+  if (moved && t) {
+    const run = get<{ cost_usd: number | null; duration_ms: number | null; agent_id: string }>("SELECT cost_usd, duration_ms, agent_id FROM runs WHERE id = ?", runId);
+    record(id, "delivered", agentActor(run?.agent_id ?? t.agent_id), {
+      body: t.summary ?? "",
+      runId,
+      data: { costUsd: run?.cost_usd ?? null, durationMs: run?.duration_ms ?? null, pullRequest: t.pr_number },
+    });
+  }
   emit(id);
   return moved;
 }
@@ -887,12 +1342,14 @@ async function publish(task: TaskRow, summary: string | null, runId: string): Pr
       return;
     }
     const { pullRequest, problem } = await openTaskPullRequest(task, summary);
+    const opened = requireRow(id);
+    if (opened.pr_url) record(id, "pr_opened", "system", { data: { number: opened.pr_number, url: opened.pr_url } });
     if (!deliver(id, runId)) return;
     if (pullRequest?.number) notify("success", `Task #${task.number}: pull request #${pullRequest.number} is open`, title, link);
     else notify("warning", `Task #${task.number}: open the pull request`, `The branch ${task.branch} was pushed. ${problem ?? ""}`.trim(), link);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    block(id, `Couldn't push the branch: ${message}`);
+    block(id, `Couldn't push the branch: ${message}`, { kind: "publish", runId });
     notify("error", `Task #${task.number} is blocked`, message, link);
   }
 }
@@ -907,7 +1364,9 @@ export async function pushTaskBranch(id: string, opts: { pullRequest: boolean })
   if (!existsSync(checkoutDir(id))) throw conflict("The task's worktree is gone — move the task to Todo to set it up again");
   if (!task.repo_url) throw conflict(`${task.repo_path || "The repository"} has no remote Godmode can push to — merge ${task.branch} there.`);
   if (busy.has(id)) throw conflict(`Godmode is ${activity.get(id)?.replace(/…$/, "").toLowerCase() ?? "preparing the task"} — try again in a moment`);
-  if (task.status === "in_progress" || (task.conversation_id && activeRunForConversation(task.conversation_id))) {
+  // A ticket that waits for its follow-up can be pushed; one whose run works or stands still can't.
+  const waiting = task.status === "in_progress" && !!task.conversation_id && !!getFollowup(task.conversation_id);
+  if (openRuns(task.conversation_id).length || (task.status === "in_progress" && !waiting)) {
     throw conflict("The task is in progress — push it once the agent is done");
   }
   const lastRun = task.conversation_id ? latestRunId(task.conversation_id) : null;
@@ -919,8 +1378,15 @@ export async function pushTaskBranch(id: string, opts: { pullRequest: boolean })
     if (opts.pullRequest && !(current.pr_number && current.pr_state === "open")) {
       const { pullRequest, problem } = await openTaskPullRequest(current, current.summary && withFileNames(current.summary));
       if (!pullRequest) throw conflict(`${task.branch} was pushed. ${problem ?? ""}`.trim());
+      const opened = requireRow(id);
+      record(id, "pr_opened", "user", { data: { number: opened.pr_number, url: opened.pr_url ?? pullRequest.url } });
       // Handed over for review: a task blocked on its push is unblocked, and moves to Done when it's merged.
-      transition(id, "in_review", ["blocked"]);
+      if (transition(id, "in_review", ["blocked"]) && lastRun) {
+        record(id, "delivered", agentActor(current.agent_id), { body: current.summary ?? "", runId: lastRun, data: { costUsd: null, durationMs: null, pullRequest: opened.pr_number } });
+      }
+    } else if (current.status === "blocked" && current.blocked_kind === "publish" && transition(id, "in_review", ["blocked"]) && lastRun) {
+      // Publishing failed before and works now: delivered.
+      record(id, "delivered", agentActor(current.agent_id), { body: current.summary ?? "", runId: lastRun, data: { costUsd: null, durationMs: null, pullRequest: current.pr_number } });
     }
   } catch (err) {
     if (err instanceof HttpError) throw err;
@@ -937,11 +1403,13 @@ export async function pushTaskBranch(id: string, opts: { pullRequest: boolean })
 
 /** Move tasks whose pull request was merged to Done (and note closed ones). */
 export async function checkPullRequests(): Promise<void> {
-  const open = all<TaskRow>("SELECT * FROM tasks WHERE status = 'in_review' AND pr_number IS NOT NULL AND pr_state = 'open' AND pr_url IS NOT NULL");
+  // Approved tickets too: their pull request may be merged after the human marked them done.
+  const open = all<TaskRow>("SELECT * FROM tasks WHERE status IN ('in_review', 'done') AND pr_number IS NOT NULL AND pr_state = 'open' AND pr_url IS NOT NULL");
   for (const task of open) {
     const state = await pullRequestState(checkoutDir(task.id), task.pr_url!).catch(() => null);
     if (!state || state === "open") continue;
     sql("UPDATE tasks SET pr_state = ?, updated_at = ? WHERE id = ?", state, now(), task.id);
+    record(task.id, state === "merged" ? "pr_merged" : "pr_closed", "system", { data: { number: task.pr_number!, url: task.pr_url! } });
     if (state === "merged" && transition(task.id, "done", ["in_review"])) {
       sql("UPDATE tasks SET completed_at = ? WHERE id = ?", now(), task.id);
       log.info(`task #${task.number}: pull request merged — done`);
@@ -961,13 +1429,14 @@ export function startTasks(): void {
   } catch (err) {
     log.warn("could not sweep task attachments", err);
   }
-  // Work that was going on when Godmode stopped: its runs were marked interrupted. A paused run is still there.
-  for (const t of all<TaskRow>("SELECT * FROM tasks WHERE status = 'in_progress'")) {
-    if (!openRuns(t.conversation_id).length) {
-      sql("UPDATE tasks SET status = 'blocked', blocked_reason = ?, updated_at = ? WHERE id = ?", "Interrupted (Godmode restarted).", now(), t.id);
-    }
+  reconcileTasks("Interrupted (Godmode restarted).");
+  // The most urgent first, then the earliest due.
+  for (const t of all<{ id: string }>(
+    `SELECT id FROM tasks WHERE status = 'todo' AND agent_id IS NOT NULL AND archived_at IS NULL
+     ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'low' THEN 3 ELSE 2 END, due_date IS NULL, due_date, position`,
+  )) {
+    void dispatch(t.id);
   }
-  for (const t of all<{ id: string }>("SELECT id FROM tasks WHERE status = 'todo' AND agent_id IS NOT NULL AND archived_at IS NULL ORDER BY position")) void dispatch(t.id);
   if (!watchTimer) {
     watchTimer = setInterval(() => {
       void checkPullRequests().catch((err) => log.warn("could not check pull requests", err));
@@ -978,6 +1447,17 @@ export function startTasks(): void {
       }
     }, PR_WATCH_INTERVAL_MS);
     watchTimer.unref?.();
+  }
+}
+
+/**
+ * Work that was going on when Godmode stopped (or in a restored backup): its runs were marked interrupted. A paused run
+ * is still there, and a ticket that waits for its follow-up keeps waiting; the others are blocked, to be continued.
+ */
+export function reconcileTasks(reason: string): void {
+  for (const t of all<TaskRow>("SELECT * FROM tasks WHERE status = 'in_progress'")) {
+    if (openRuns(t.conversation_id).length || (t.conversation_id && getFollowup(t.conversation_id))) continue;
+    block(t.id, reason, { kind: "interrupted", from: ["in_progress"] });
   }
 }
 

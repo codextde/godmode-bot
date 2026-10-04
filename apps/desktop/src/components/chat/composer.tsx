@@ -56,6 +56,8 @@ interface ComposerProps {
   running?: boolean;
   /** What sending does right now, when it isn't a plain send (e.g. "Send and continue"). */
   sendHint?: string;
+  /** Sending isn't possible right now; says why (typing and the draft keep working). */
+  blocked?: string;
   /** ↑ in the empty box: edit the newest queued message instead (true = taken). */
   onRecall?: () => boolean;
   /** Rendered in a context tray below the toolbar (e.g. agent picker, folder) */
@@ -86,6 +88,7 @@ export function Composer({
   busy,
   running,
   sendHint,
+  blocked,
   onRecall,
   leading,
   trailing,
@@ -205,7 +208,7 @@ export function Composer({
     [addFiles],
   );
 
-  const canSend = (text.trim().length > 0 || attachments.length > 0) && !busy;
+  const canSend = (text.trim().length > 0 || attachments.length > 0) && !busy && !blocked;
 
   // Slash commands: the menu lists matches while only the command name is typed; afterwards a hint shows its arguments.
   const slashToken = /^\/([\w:.-]*)$/.exec(text)?.[1] ?? null;
@@ -511,14 +514,18 @@ export function Composer({
                 size="icon"
                 onClick={() => void submit()}
                 disabled={!canSend}
-                aria-label={sendHint ?? (running ? "Queue message" : "Send message")}
+                aria-label={blocked ?? sendHint ?? (running ? "Queue message" : "Send message")}
                 className="ml-0.5 size-8 rounded-lg transition-[background-color,transform] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-[18px]" strokeWidth={2.4} />}
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {sendHint ?? (running ? "Queue message" : "Send")} <Kbd>↵</Kbd>
+              {blocked ?? (
+                <>
+                  {sendHint ?? (running ? "Queue message" : "Send")} <Kbd>↵</Kbd>
+                </>
+              )}
             </TooltipContent>
           </Tooltip>
         </div>

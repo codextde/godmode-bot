@@ -245,8 +245,9 @@ bridge, older clients — a message still gets a run of its own behind the runni
 A run can stand still and continue later (`services/pauses.ts`, `runner.ts`). It has not ended: its status is `paused`,
 it keeps its row, its assistant message and its Claude session, and nothing that waits for its end (a task, an
 automation's events, a delegating agent, a platform chat) is told anything — there is no `run.finished`, only
-`run.paused`. Table `paused_runs` holds what continuing needs (one per chat); `Conversation.paused`, `Task.pause` and
-`Agent.pausedRuns` carry it to the UI.
+`run.paused`. Table `paused_runs` holds what continuing needs (one per chat) and why it stands still: paused by the
+human (`user`), Claude's usage limit (`limit`) or a question for the human (`question`, see Questions and approvals —
+only an answer continues it); `Conversation.paused`, `Task.pause` and `Agent.pausedRuns` carry it to the UI.
 
 * **Pausing** (`POST /api/conversations/:id/pause`, `POST /api/agents/:id/pause` for everything an agent works on):
   while a step runs, the `PostToolBatch` hook answers `{ "continue": false }` when Claude Code asks between two steps,
@@ -278,6 +279,91 @@ automation's events, a delegating agent, a platform chat) is told anything — t
   progress) ends it as `cancelled`, like a run stopped while it worked. Backups carry paused runs; after a restore none
   continues by itself.
 
+### Questions and approvals
+
+An agent that needs the human asks and waits, instead of ending its turn with a question in prose
+(`services/questions.ts`, table `questions`, `AgentQuestion`):
+
+* **Asking.** `ask_human({ question, context?, options? })` asks for a decision (2–4 suggested answers, at most one
+  `recommended`; the human can always answer in their own words), `request_approval({ action, reason, affects })` asks
+  for an OK before one specific step. Every run gets them except condition checks, dreams and delegated runs (their
+  system prompt tells them to name what needs deciding in their answer, so the agent that handed the task over can ask).
+  The system prompt's "Asking" section says when asking is right; Claude Code's own `AskUserQuestion` is disallowed.
+  Text is redacted and loses Godmode's note tags. Refused: a second question in the same step, a question while a
+  message from the human waits in the chat's queue (it may already answer it), more than 10 per run, and asking while
+  the run is being stopped or paused.
+* **Standing still.** The question goes on the job and as a `question` block into the turn; the run is paused with
+  reason `question` at its next step (the PostToolBatch hook answers `{ continue: false, stopReason: "Waiting for the
+  human's answer" }`, else after the pause grace). A run that asked stands still however its process ended — also
+  when it ended by itself or hit the usage limit — unless it was stopped, timed out or broke off. The `questions` row
+  and the `paused_runs` row are written in one transaction, so an open question always has a run that waits for it;
+  `startPauses` repairs what doesn't fit after a restart or restore (an open question without its pause is withdrawn, a
+  question pause without its question becomes reason `user`). Then the human is told: a `question` notification
+  (toast with *Answer*, OS notification), `question.created`, audit `question.ask`. `Conversation.paused.question`,
+  `Task.pause.question` and `Agent.openQuestions` carry it to the UI; `Agent.pausedRuns` doesn't count it.
+* **Answering.** `POST /api/questions/:id/answer` with exactly one of `optionId`, `decision` (`approve` | `decline`,
+  optional `note`) or `text` (with files). A message to the chat (`POST /api/conversations/:id/messages`, also with
+  `queue`) or to its task (`POST /api/tasks/:id/messages`) is the answer: an option's label or number picks it, a few
+  plain words approve or decline, anything else is the human's own words; slash commands are not answers. The answer is
+  stored redacted on the question and in its block, and the same run continues in the same Claude session with a
+  `<godmode-continue>` note: the decision in Godmode's own words (built from the stored status), the question in
+  `<your-question>` and the answer in `<answer-from-human>` tags, both stripped of note tags. Continuing without an answer
+  is refused (409 `needs_answer` — the chat's Continue, Send now, the agent's Continue). An answer the agent hasn't read
+  (the continued run was paused again before it started, or broke off) is kept: re-sent on continue, or put in front of
+  the chat's next run (`answer_owed`). Audit `question.answer`; the notification is marked read.
+* **Withdrawing.** Stopping the run (`POST /api/runs/:id/cancel`, deleting the chat, agent or task, moving the task off
+  In progress) withdraws the question; deleting the chat removes it. A question asked by an automation keeps the
+  automation busy: skipped ticks say so and remind the human at most once a day.
+* **Who may answer.** Only the human: the API (desktop, dashboard, a paired phone — no files), the chat and the task.
+  In Slack, Telegram and Teams only the person the human marked as themselves (*This is me* on the bot's people,
+  `messaging_users.is_owner`, one per bot, audited) gets the question posted and can answer; everyone else is told the
+  agent is checking with the owner. An answer given in Godmode is followed back into the platform chat. Agents have no
+  tool that answers.
+
+## Team
+
+Agents form a team with the built-in agent on top (it reports to the human). `shared/team.ts` holds the rules, used by
+the core, the desktop and the phone alike.
+
+* **Role and lead.** `agents.role` is a job title (one line, at most 60 characters, no `<`/`>`; agent-written ones pass
+  `redact()`). `agents.reports_to` is the agent's lead; NULL = the built-in agent, whose own `reports_to` is always NULL
+  (its id given as a lead is stored as NULL). A lead is a global agent or one of the same workspace, never the agent
+  itself or one of its reports (`leadProblem`; `resolveLead` answers 400 with the reason). There is no foreign key:
+  deleting a lead moves its reports up to the deleted agent's lead (read inside the delete transaction), moving an
+  agent into a workspace lets go of reports from other workspaces and resets a lead from elsewhere, and
+  `repairReportingLines()` (startup and after a restore) nulls leads that are gone, self, out of scope, the built-in
+  agent or part of a loop. Reporting lines grant nothing: who an agent can hand work to stays `peersFor` (scope via
+  `withinReach`, enabled, `delegateTo`) plus the reveal/VM/computer refusals and depth 3.
+* **In the prompt.** Every run except dreams gets a "Your team" section in the system prompt (`prompt.ts`
+  `teamSection`): its job, the reporting line up to the human, and — when it may delegate — the teammates it can reach
+  with role and *(your lead)* / *(reports to you)*; otherwise the reports it can reach. Names, roles and descriptions
+  are put on one line with tags removed. Delegated runs are told their answer goes back to the teammate; other runs
+  say in their answer what is above them (or hand that part to their lead when they can reach it). CLAUDE.md is not
+  touched by team changes.
+* **Last run failed.** `agents.failed_run_id` is set in `finalize` when a real run (not a dream or a condition check)
+  fails, and by `recoverInterruptedRuns` for runs that were working when Godmode stopped; it is cleared by a later run
+  that succeeds, a run the human stops, deleting that run's chat, or `DELETE /api/agents/:id/failed-run`. `Agent.status`
+  reads `"error"` while it is set; the status column itself holds only idle/running.
+* **Presence.** `agentPresence()` decides what an agent is doing — switched off, working (running runs only; queued is
+  never working), needs you (an open question or a missing login), last run failed, paused, queued, idle — and
+  `presenceLabel()` words it, so cards, the org chart, the agent page and the phone agree. A new socket's `hello`
+  carries `activeRunIds` and a `run.started` follows for each active run, so the app drops runs that ended while it
+  was away and shows queued runs as queued after a reload.
+* **Who wrote a message.** `messages.source` marks user turns the human didn't write: `automation` (scheduler, app and
+  condition automations), `delegation` (`agent_delegate`, an agent's `task_message`) and `task` (the board's prompt).
+  The human's own messages, including feedback on a ticket, carry none. The thread shows sourced turns as labelled
+  cards, transcripts name the speaker from it, and the recap after a lost session labels them.
+* **Handoffs both ways.** `Conversation.delegatedFrom` is derived (a join through the chat's first run's parent run),
+  so it goes null by itself when the asking agent or chat is deleted. `GET /api/runs?parentRunId=` lists what a run
+  handed over; the handoff card, the run sheet ("Handed on") and the chat header ("From <agent>") use it.
+* **Duplicate.** `POST /api/agents/:id/duplicate` copies an agent's setup under "<Name> copy" — not its memory, chats
+  or automations; a copy that may read secrets needs the passphrase; audited as `agent.duplicate`.
+* **Switched off.** `POST /api/conversations` refuses a switched-off agent (409); its existing chats show a bar with
+  *Switch on* and keep the draft.
+* **Restore.** Migration 53's backfill (`TEAM_BACKFILL_SQL`: the built-in agent's role, message sources of old
+  automation/handoff/board prompts, "Run task" chats from origin `api` to `chat`) runs again after a restore, followed
+  by `repairReportingLines()`.
+
 ## Godmode MCP gateway tools (`/mcp`)
 
 | Tool | Purpose |
@@ -288,11 +374,13 @@ automation's events, a delegating agent, a platform chat) is told anything — t
 | `vault_get_login({ credentialId })` | Reveal username/password — only when `secretAccess = "reveal"` |
 | `vault_get_totp({ totpId })` | Reveal current code — only in reveal mode |
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |
-| `agents_list()`, `agent_get({id})` | Discover peer agents |
-| `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result) |
-| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list`, `tasks_list`, `task_create`, `task_update` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent) |
+| `agents_list()`, `agent_get({id})` | Discover peer agents: role, who they report to (`relation` marks the caller's lead and reports), and for `agent_get` who reports to it (only agents the caller could reach) |
+| `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result). The chat stores the bare task (`source: "delegation"`); the run's prompt starts with `[Delegated by <name> (<role>), your lead. Your final answer goes back to <name>.]` |
+| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo` |
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
-| `task_report_blocked({ reason })` | Only in runs working on a board task: say what's missing; the task moves to Blocked when the run ends (see Tasks) |
+| `task_note({ text, taskId? })` | A progress note on the ticket the run works on (managers: any ticket); on its timeline, nobody is notified |
+| `ask_human({ question, context?, options? })`, `request_approval({ action, reason, affects })` | Ask the human a question or for an OK and stand still until the answer; the run continues with it (see Questions and approvals). Not in condition checks, dreams or delegated runs |
+| `task_report_blocked({ reason })` | Only in runs working on a board task: say what's missing (access, an account, information nobody can give now); the task moves to Blocked when the run ends (see Tasks). Decisions and OKs go through `ask_human` / `request_approval` |
 | `memory_dream_report({ summary, changes })` | Only in dream runs — and the only tool they get: report what a memory consolidation changed (see Dreaming) |
 | `notify_user({ title, body })` | Push a notification to the human |
 | `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
@@ -737,20 +825,50 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
   blocked task back to `in_progress`; for coding tasks the next push updates the open pull request. The run's answer
   becomes the task's result: images it names by path in the agent's folders or the temp folder (checked by their
-  bytes, resolved symlinks included, at most 20) are copied into the task's files and the result shows them; the
-  previous result's copies go. The pull request body keeps the paths.
+  bytes, resolved symlinks included, at most 20) are copied into the task's files and the result shows them; earlier
+  results keep theirs (they stay readable on the timeline) until the task is deleted. The pull request body keeps the
+  paths. The kind of block is stored with it (`Task.blockedKind`): `failed`, `interrupted` (the run was cut off by a
+  restart), `stopped` (the human stopped it — a follow-up it set is cancelled), `needs_input` (`task_report_blocked`),
+  `publish` (pushing or the pull request failed — *Publish again* from the task moves it to review once it works),
+  `setup` (agent gone or switched off, no repository, worktree failed) and `manual` (the human moved it to Blocked, with
+  an optional `blockedReason` only they can change). Starting a blocked task again opens the prompt with why: "Godmode
+  restarted while you were working…" or "Your last run … failed: <reason>". Handing a blocked task to another agent
+  turns `needs_input`, `failed`, `stopped` and `interrupted` into `manual` (the new agent starts again).
+* **Tickets**: `priority` (urgent, high, medium, low, none), `dueDate` (a calendar day) and up to 10 `labels`; the agent
+  is told them in the prompt. Queued ticket runs (triggers `task` and `followup`) start in priority order, then by the
+  earliest due day (`ticketOrder()` in the runner shares out only the queue places ticket runs hold — the human's chat,
+  an automation or a continued run keeps its turn); Todo tickets are started in that order after a restart.
+* **Timeline** (`task_events`, `TaskEvent`, `GET /api/tasks/:id/events`, WS `task.event`): append-only, oldest first —
+  assignments, status moves by the human, starts, every delivery with its full result, blocks with their reason, the
+  human's messages (from the sheet, the phone or the ticket's chat) with the status they were sent in, notes agents
+  leave (`task_note`, at most 20 per run), pull requests opened / merged / closed, and questions asked and answered.
+  `createdBy` says who filed the ticket. Rows a run causes once (started, waiting, delivered, blocked) are unique per
+  run; the rows go with the task.
+* **Waiting**: when the agent set itself a follow-up and its run succeeds, the ticket stays `in_progress` with
+  `Task.followup` — "Waiting — continues <when>" — instead of going to review, without a "ready for review" notice;
+  what it changed is committed (and pushed, for coding tickets). When the follow-up runs, the ticket goes on; when the
+  human cancels it, the ticket goes to review quietly; when it can't start because the agent is off or gone, the ticket
+  is blocked (`setup`). Moving, reassigning, archiving or deleting a waiting ticket cancels its follow-up; a restart
+  leaves it waiting. The follow-up's own "got back to" notice isn't sent for tickets: they report themselves.
+* **Cost and time**: `costUsd`, `workMs` and `runCount` add up every run that ended in the ticket's conversations
+  (with the work it delegated), and survive reassignment and the chat being deleted.
 * **Moving on the board**: away from `in_progress` cancels the run (the UI asks first); into `todo` (or
   `in_progress`) with an agent starts it. Every 5 minutes, tasks in review with an open pull request are checked with
   `gh pr view`: merged → `done`, closed → noted on the task.
 * **Races**: one start or publish per task at a time; a start the board asks for meanwhile runs once the task is free,
   and a run that ended meanwhile is handled then. Moves caused by the work (to In review, Blocked, Done) only apply
   from the status the work expects — a move the human made meanwhile wins — and put the task at the top of its column.
-* **Agents managing the board**: `task_create` / `task_update` follow the delegation rules (no reveal-mode or unattended
+* **Agents managing the board**: `task_get` reads one ticket in full (result, timeline, cost; by id or `#12`), `tasks_list`
+  filters by agent, `task_message` sends feedback into a ticket (it arrives marked as coming from that agent, not the
+  human, is on the timeline, and is refused for the caller's own ticket and for a ticket whose run stands still — only
+  the human continues those), `task_note` leaves a note (a working agent on its own ticket, managers on any).
+  `task_create` / `task_update` follow the delegation rules (no reveal-mode or unattended
   computer agents from callers that couldn't use them, VM-kept runs stay off the host); coding tasks created by agents
   use the workspace's repositories; and a run working on a task — or delegated from one — can't start a manager agent
   (itself included), so tasks can't spawn tasks without end. Follow-ups wait while Godmode prepares or publishes a task. Task numbers are never reused.
-* **Restart**: tasks left `in_progress` without a live run are blocked ("Interrupted"), tasks waiting in `todo` with an
-  agent are started. Deleting a task cancels its run and removes the worktree (the conversation and the branch stay); deleting a
+* **Restart**: tasks left `in_progress` without a live run or a pending follow-up are blocked (`interrupted`; the board's
+  Blocked column offers *Continue all*), tasks waiting in `todo` with an agent are started. Restoring a backup does the
+  same for the restored tickets. Deleting a task cancels its run and removes the worktree (the conversation and the branch stay); deleting a
   workspace counts its tasks as dependents.
 
 ## Integrations
@@ -831,7 +949,8 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   (`gmd_` + 32 random bytes); the row in `mobile_devices` keeps its SHA-256, name, model, last address and last use.
   Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
 * **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
-  allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents, conversations and messages, runs (cancel),
+  allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents, conversations and messages, questions (list,
+  answer without files), runs (cancel),
   routines (run, enable), browser profiles (launch, input), computer input, VMs (list, screenshot, start/stop, input), notifications,
   missing logins and `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are
   restricted too: a phone can't set a chat's folder, VM, browser, shared screen or instructions, or change an

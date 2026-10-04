@@ -1,9 +1,10 @@
 import type { ComputerView } from "./computer";
-import type { Task } from "./tasks";
+import type { Task, TaskEvent } from "./tasks";
 import type { Vm } from "./vm";
 import type { MobileDevice } from "./mobile";
 import type {
   Agent,
+  AgentQuestion,
   AppNotification,
   AutomationEvent,
   BrowserProfile,
@@ -23,7 +24,8 @@ import type {
  * Every event is a JSON object `{ type, ...payload }`.
  */
 export type ServerEvent =
-  | { type: "hello"; version: string; serverTime: string }
+  /** activeRunIds: every queued or running run; a `run.started` for each follows right after. */
+  | { type: "hello"; version: string; serverTime: string; activeRunIds?: ID[] }
   | { type: "run.started"; run: Run }
   | {
       type: "run.delta";
@@ -68,6 +70,10 @@ export type ServerEvent =
   | { type: "automation.event"; event: AutomationEvent }
   | { type: "missing-login.created"; item: MissingLogin }
   | { type: "missing-login.updated"; item: MissingLogin }
+  /** An agent asked the human something and its run stands still for the answer. */
+  | { type: "question.created"; question: AgentQuestion }
+  /** The question was answered or withdrawn. */
+  | { type: "question.updated"; question: AgentQuestion }
   | { type: "notification"; notification: AppNotification }
   | { type: "vault.status"; status: VaultStatus }
   | { type: "browser.updated"; profile: BrowserProfile }
@@ -111,6 +117,8 @@ export type ServerEvent =
   | { type: "vm.deleted"; id: ID }
   | { type: "task.updated"; task: Task }
   | { type: "task.deleted"; id: ID }
+  /** Something was added to a ticket's timeline. */
+  | { type: "task.event"; event: TaskEvent }
   /** A phone was paired (the pairing QR code was used). */
   | { type: "mobile.paired"; device: MobileDevice }
   | { type: "entity.changed"; entity: EntityName };
@@ -126,6 +134,7 @@ export type EntityName =
   | "composio"
   | "browser-profiles"
   | "missing-logins"
+  | "questions"
   | "notifications"
   | "settings"
   | "runs"

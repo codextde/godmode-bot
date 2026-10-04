@@ -7,6 +7,7 @@ import {
   listChats,
   listConnections,
   listUsers,
+  setUserOwner,
   setUserStatus,
   updateConnection,
   verifyCredentials,
@@ -86,8 +87,17 @@ export function registerMessagingRoutes(app: Hono): void {
   app.get("/api/messaging/:id/users", (c) => c.json(listUsers(c.req.param("id"))));
 
   app.patch("/api/messaging/:id/users/:userId", async (c) => {
-    const { status } = await body(c, z.object({ status: z.enum(["pending", "approved", "blocked"]) }));
-    return c.json(await setUserStatus(c.req.param("id"), c.req.param("userId"), status));
+    const patch = await body(
+      c,
+      z
+        .object({ status: z.enum(["pending", "approved", "blocked"]).optional(), isOwner: z.boolean().optional() })
+        .refine((v) => v.status !== undefined || v.isOwner !== undefined, "Nothing to change"),
+    );
+    const id = c.req.param("id");
+    const userId = c.req.param("userId");
+    let user = patch.status !== undefined ? await setUserStatus(id, userId, patch.status) : null;
+    if (patch.isOwner !== undefined && (patch.isOwner ? user?.status !== "blocked" : true)) user = await setUserOwner(id, userId, patch.isOwner);
+    return c.json(user);
   });
 
   app.delete("/api/messaging/:id/users/:userId", (c) => {

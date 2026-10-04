@@ -13,6 +13,8 @@ export interface LiveRun {
   status: Run["status"];
   /** Unknown for a run first seen through its stream. */
   trigger?: Run["trigger"];
+  /** The run that handed this one over (agent_delegate). */
+  parentRunId?: string | null;
   activity: string | null;
   startedAt: number;
 }
@@ -65,6 +67,8 @@ interface LiveState {
   /** Latest agent action per view (drawn as a ripple). */
   computerActions: Record<string, ComputerAction>;
   setConnected: (v: boolean) => void;
+  /** On connect: only these runs are active; the rest ended while the app was away (their streams are kept). */
+  retainRuns: (ids: string[]) => void;
   runStarted: (run: Run) => void;
   /** False when the delta doesn't fit what is here (one was missed): the whole list has to be asked for. */
   runDelta: (delta: RunDelta) => boolean;
@@ -88,6 +92,15 @@ export const useLive = create<LiveState>((set, get) => ({
   computerFrames: {},
   computerActions: {},
   setConnected: (connected) => set({ connected }),
+  retainRuns: (ids) =>
+    set((s) => {
+      const keep = new Set(ids);
+      const gone = Object.keys(s.runs).filter((id) => !keep.has(id));
+      if (!gone.length) return s;
+      const runs = { ...s.runs };
+      for (const id of gone) delete runs[id];
+      return { runs };
+    }),
   runStarted: (run) =>
     set((s) => {
       // Sent twice (queued, then running): what a run that continues after a pause already showed stays.
@@ -105,8 +118,10 @@ export const useLive = create<LiveState>((set, get) => ({
             stream: known?.stream,
             status: run.status,
             trigger: run.trigger,
-            activity: null,
-            startedAt: known?.startedAt ?? Date.now(),
+            parentRunId: run.parentRunId ?? null,
+            activity: known?.activity ?? null,
+            // A run first seen already working (after a reload) keeps its real start for the timer.
+            startedAt: known?.startedAt ?? (run.status === "running" && run.startedAt ? new Date(run.startedAt).getTime() : Date.now()),
           },
         },
       };
@@ -130,6 +145,7 @@ export const useLive = create<LiveState>((set, get) => ({
             stream: next.stream,
             status: "running",
             trigger: prev?.trigger,
+            parentRunId: prev?.parentRunId,
             activity: prev?.activity ?? null,
             startedAt: prev?.startedAt ?? Date.now(),
           },
@@ -204,6 +220,17 @@ export function useConversationFinishedRun(conversationId: string | undefined): 
   return useLive((s) => (conversationId ? (s.finished[conversationId] ?? null) : null));
 }
 
+/** Working right now — a queued run waits for a free slot and isn't working yet. */
 export function useAgentRunning(agentId: string | undefined): boolean {
-  return useLive((s) => (agentId ? Object.values(s.runs).some((r) => r.agentId === agentId) : false));
+  return useLive((s) => (agentId ? Object.values(s.runs).some((r) => r.agentId === agentId && r.status === "running") : false));
+}
+
+/** How many runs work right now (not the queued ones). */
+export function useRunningCount(): number {
+  return useLive((s) => Object.values(s.runs).filter((r) => r.status === "running").length);
+}
+
+/** How many runs wait for a free slot. */
+export function useQueuedCount(): number {
+  return useLive((s) => Object.values(s.runs).filter((r) => r.status === "queued").length);
 }

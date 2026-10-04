@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceStrict, isToday } from "date-fns";
 import type { ConversationWithMessages, MessageBlock, RunPause } from "@godmode/shared";
-import { Hourglass, Pause, Play, Square } from "lucide-react";
+import { ArrowUp, Hourglass, MessageCircleQuestion, Pause, Play, ShieldCheck, Square } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -57,6 +57,61 @@ export function usePauseActions(conversationId: string) {
 
 /** Above the composer while the chat's run stands still: what it waits for, and the way on. */
 export function PauseBar({ conversationId, pause, agentName, queued }: { conversationId: string; pause: RunPause; agentName: string; queued: number }) {
+  if (pause.reason === "question") return <QuestionBar conversationId={conversationId} pause={pause} agentName={agentName} />;
+  return <StandStillBar conversationId={conversationId} pause={pause} agentName={agentName} queued={queued} />;
+}
+
+/** The run waits for the human's answer: the card in the thread asks; this bar says so where the human types. */
+function QuestionBar({ conversationId, pause, agentName }: { conversationId: string; pause: RunPause; agentName: string }) {
+  const now = useNow(30_000);
+  const { stop } = usePauseActions(conversationId);
+  const approval = pause.question?.kind === "approval";
+  const Icon = approval ? ShieldCheck : MessageCircleQuestion;
+  const show = () => {
+    const card = pause.question ? document.getElementById(`question-${pause.question.id}`) : null;
+    card?.scrollIntoView({ behavior: "smooth", block: "center" });
+    card?.querySelector<HTMLElement>("button:not([disabled]), textarea")?.focus({ preventScroll: true });
+  };
+  return (
+    <div className="mb-2 flex items-center gap-3 rounded-xl border border-warning/30 bg-card py-2 pr-2 pl-2.5 shadow-card" role="status">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-warning/30 bg-warning/[0.08] text-warning">
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1 leading-snug">
+        <div className="flex min-w-0 items-baseline gap-1.5 text-[13px]">
+          <span className="truncate font-medium">{approval ? `${agentName} needs your OK` : `${agentName} is waiting for your answer`}</span>
+          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+            {now - new Date(pause.pausedAt).getTime() < 60_000
+              ? "just now"
+              : formatDistanceStrict(new Date(pause.pausedAt), now, { addSuffix: true, roundingMethod: "floor" })}
+          </span>
+        </div>
+        <p className="truncate text-xs text-muted-foreground" title={pause.question?.title}>
+          {approval ? "Approve or decline above — or reply below." : "Pick an answer above or type it below."}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {pause.question && (
+          <Button size="xs" variant="ghost" onClick={show}>
+            <ArrowUp />
+            <span className="hidden @lg:inline">{approval ? "Show request" : "Show question"}</span>
+          </Button>
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button size="xs" variant="ghost" aria-label="Stop" className="text-muted-foreground hover:text-destructive" disabled={stop.isPending} onClick={() => stop.mutate(pause.runId)}>
+              {stop.isPending ? <Spinner /> : <Square className="size-2.5 fill-current" />}
+              <span className="hidden @lg:inline">Stop</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">Stop for good — the question is withdrawn</TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
+
+function StandStillBar({ conversationId, pause, agentName, queued }: { conversationId: string; pause: RunPause; agentName: string; queued: number }) {
   const now = useNow(30_000);
   const { resume, auto, stop } = usePauseActions(conversationId);
   const limit = pause.reason === "limit";

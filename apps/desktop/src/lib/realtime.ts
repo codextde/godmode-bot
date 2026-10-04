@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { browserView, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type EntityName, type ServerEvent, type Task, type Vm } from "@godmode/shared";
+import { browserView, type AgentQuestion, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type EntityName, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { withPending } from "./pending-queue";
@@ -47,6 +47,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   composio: [qk.composio],
   "browser-profiles": [qk.browserProfiles],
   "missing-logins": [qk.missingLogins, qk.bootstrap],
+  questions: [qk.questions, qk.bootstrap],
   notifications: [qk.notifications, qk.bootstrap],
   settings: [qk.settings, qk.bootstrap],
   runs: [qk.runs],
@@ -137,6 +138,10 @@ function scheduleReconnect(queryClient: QueryClient) {
 function handle(qc: QueryClient, event: ServerEvent) {
   const live = useLive.getState();
   switch (event.type) {
+    case "hello":
+      // A run.started for each active run follows; whatever else still looks live ended while we were away.
+      if (event.activeRunIds) live.retainRuns(event.activeRunIds);
+      break;
     case "run.started":
       live.runStarted(event.run);
       qc.invalidateQueries({ queryKey: qk.runs });
@@ -197,6 +202,22 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "task.updated":
       upsertTask(qc, event.task);
       break;
+    case "task.event": {
+      // Merged into the cached timeline; the human's own message replaces its pending row.
+      const e = event.event;
+      qc.setQueryData<TaskEvent[]>(qk.taskEvents(e.taskId), (list) => {
+        if (!Array.isArray(list) || list.some((x) => x.id === e.id)) return list;
+        let rest = list;
+        if (e.kind === "feedback") {
+          const pending = list.findIndex((x) => x.id.startsWith("pending-") && x.body === e.body);
+          if (pending >= 0) rest = list.filter((_, i) => i !== pending);
+        }
+        const real = rest.filter((x) => !x.id.startsWith("pending-"));
+        const pending = rest.filter((x) => x.id.startsWith("pending-"));
+        return [...real, e].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).concat(pending);
+      });
+      break;
+    }
     case "task.deleted":
       qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.filter((t) => t.id !== event.id));
       break;
@@ -205,6 +226,22 @@ function handle(qc: QueryClient, event: ServerEvent) {
       // Pending counts and the trigger's last event live on the routine.
       qc.invalidateQueries({ queryKey: qk.routines });
       break;
+    case "question.created":
+    case "question.updated": {
+      const q = event.question;
+      // Seed the lists from the event so cards don't wait for a refetch.
+      qc.setQueriesData<AgentQuestion[]>({ queryKey: qk.questions }, (list) => {
+        if (!Array.isArray(list)) return list;
+        return list.some((x) => x.id === q.id) ? list.map((x) => (x.id === q.id ? q : x)) : list;
+      });
+      qc.invalidateQueries({ queryKey: qk.questions });
+      qc.invalidateQueries({ queryKey: qk.bootstrap });
+      qc.invalidateQueries({ queryKey: qk.conversation(q.conversationId) });
+      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries({ queryKey: qk.agents });
+      qc.invalidateQueries({ queryKey: qk.tasks });
+      break;
+    }
     case "missing-login.created":
     case "missing-login.updated":
       qc.invalidateQueries({ queryKey: qk.missingLogins });
