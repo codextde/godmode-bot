@@ -33,7 +33,7 @@ const TOOL_GROUPS: { title: string; icon: ReactNode; about: string; match: (name
   { title: "Automations", icon: <Workflow />, about: "Schedules, app events, conditions and webhooks that start an agent.", match: (n) => n.startsWith("routine") || n.startsWith("automation") },
   { title: "Tasks", icon: <SquareKanban />, about: "File tickets, hand them to agents, read results, send feedback.", match: (n) => n.startsWith("task") },
   { title: "Virtual machines", icon: <Box />, about: "Create VMs and put agents to work in them.", match: (n) => n.startsWith("vm") },
-  { title: "Activity", icon: <Activity />, about: "What every agent did, what failed, which logins are missing.", match: () => true },
+  { title: "Activity", icon: <Activity />, about: "What every agent did, what failed, what it cost, which logins are missing.", match: () => true },
 ];
 
 export function ConnectSection() {

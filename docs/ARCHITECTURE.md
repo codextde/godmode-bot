@@ -471,7 +471,7 @@ tasks, and read what was done. `packages/core/src/connect/`.
   `CONNECT_INSTRUCTIONS` instead of the agents' text.
 * **Tools.** `CONNECTOR_TOOLS` in `mcp/tools.ts` is the allowlist, each tool marked `read` or `manage`: `agents_list`,
   `agent_get`, `agent_create`, `agent_update`, `agent_delete`, the `routine_*` and `automation_*` tools, `tasks_list`,
-  `task_get`, `task_create`, `task_update`, `task_message`, `task_note`, `runs_list`, `workspaces_list`,
+  `task_get`, `task_create`, `task_update`, `task_message`, `task_note`, `runs_list`, `spend_overview`, `workspaces_list`,
   `logins_overview` (names, never secrets), `missing_logins_list`, `vms_list`, `vm_create`, `vm_assign`, `vm_power`.
   Nothing that needs a run, a chat or a browser (vault fills, questions, follow-ups, delegation, API tools). `tools/list`
   and `tools/call` both check it; a `read` key is refused on `manage` tools. A read key still sees login names and

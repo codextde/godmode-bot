@@ -567,6 +567,7 @@ const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
   ["tasks_list", "read"],
   ["task_get", "read"],
   ["runs_list", "read"],
+  ["spend_overview", "read"],
   ["workspaces_list", "read"],
   ["logins_overview", "read"],
   ["missing_logins_list", "read"],
