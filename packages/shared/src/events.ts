@@ -153,6 +153,8 @@ export type EntityName =
   | "tasks"
   | "followups"
   | "mobile"
+  /** A connected app (Claude Code, another MCP client) was added, removed or used. */
+  | "connectors"
   | "system"
   | "runners"
   /** The cloud link: state, account, plan or billing changed. */

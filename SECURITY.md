@@ -35,6 +35,13 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
 - **Re-authentication for sensitive actions**: revealing a password, enabling "reveal" for an agent (or as default) and
   turning on "remember this device" need a short-lived grant confirmed with your vault passphrase — a stolen API token
   alone is not enough.
+- **Connected apps** (Settings → Claude Code & MCP): Claude Code and other MCP clients reach Godmode with a key of
+  their own (`gmc_…`, stored as a SHA-256 hash, shown once). The key opens the management tools of the MCP gateway and
+  nothing else: no vault tools, no browser, no settings, no dashboard API. Even a look-only key sees which logins
+  exist (names, domains, usernames — never a password or a code) and the prompts and results of runs and tasks. Calls
+  run as the built-in agent with the limits below, keys are either full or look-only, changes and refused calls are
+  audited as `connector.call`, and keys are left out of backups. Phones and Godmode Cloud can't create or remove keys. A full key can create agents and automations that
+  later act with your saved logins, so it deserves the same care as the app itself.
 - **No privilege escalation through agents**: agents that create or edit agents cannot grant reveal access, change
   workspaces, browser profiles or out-of-scope integrations; fill-only agents cannot delegate to reveal-mode agents.
 - **Redaction**: known secret values (logins, 2FA, API keys, MCP env/header values) are masked in transcripts, run logs

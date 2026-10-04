@@ -8,6 +8,7 @@
  *   godmode doctor           check dependencies (claude, uv, chrome) and permissions; --fix repairs what it can
  *   godmode update           update the installed tools
  *   godmode runner <install|pair|serve|status|uninstall>   work for a Godmode on another computer (see remote/cli.ts)
+ *   godmode mcp | tools | call   the running Godmode for Claude Code and other apps outside it (see connect/cli.ts)
  *   godmode version
  */
 import { rmSync, writeFileSync } from "node:fs";
@@ -49,6 +50,7 @@ import { startRunners, stopRunners } from "./remote/runners";
 import { bootstrapDependencies } from "./remote/health";
 import { startKeepAwake, stopKeepAwake } from "./remote/keepAwake";
 import { startCloudLink, stopCloudLink } from "./cloud/link";
+import { removeCoreFile, runConnectCli, USAGE as CONNECT_USAGE, writeCoreFile } from "./connect/cli";
 import { newId } from "./util";
 
 const log = logger("core");
@@ -242,6 +244,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     // Only a linked computer dials its cloud; it follows settings changes by itself. A runner never does: it works
     // for another computer, which is the one people reach.
     startCloudLink({ app, websocket: websocketHandler });
+    // Where `godmode mcp` and `godmode call` find this core.
+    writeCoreFile(cfg);
   }
 
   const displayHost = isLoopbackHost(cfg.host) ? "127.0.0.1" : cfg.host;
@@ -288,6 +292,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       stopMobileAccess();
       stopRunners();
       stopCloudLink();
+      removeCoreFile(cfg.dataDir);
       await stopMessaging();
       stopTasks();
     }
@@ -324,6 +329,9 @@ Usage:
   godmode update             Update the installed tools
   godmode version
 
+Claude Code and other AI tools (they set up agents, automations and tasks in the running Godmode):
+${CONNECT_USAGE}
+
 Runner (this computer works for a Godmode on another one):
 ${RUNNER_USAGE.replace(/^Usage:\n/, "")}`);
     return;
@@ -344,6 +352,12 @@ ${RUNNER_USAGE.replace(/^Usage:\n/, "")}`);
       if (code !== 0 || !serving) process.exit(code);
       return;
     }
+    case "mcp":
+    case "tools":
+    case "call":
+      // Nothing but the answer on stdout: an MCP client reads every line of it.
+      setLogLevel("error");
+      process.exit(await runConnectCli(cmd, positionals.slice(1), typeof values["data-dir"] === "string" ? values["data-dir"] : undefined));
     case "token": {
       const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
       openDb(cfg.dbPath);

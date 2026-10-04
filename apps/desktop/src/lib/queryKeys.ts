@@ -90,6 +90,7 @@ export const qk = {
   sshLocalKeys: ["ssh-local-keys"] as unknown[],
   /** Phone access: Tailscale status and paired phones. */
   mobile: ["mobile"] as unknown[],
+  connectors: ["connectors"] as unknown[],
   /** Runners (other computers that work for this one); the list is patched in place by `runner.updated` events. */
   runners: ["runners"] as unknown[],
   /** Not under ["runners"]: refreshing the list must not re-run a runner's checks. */

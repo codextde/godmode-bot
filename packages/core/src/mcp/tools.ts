@@ -1,11 +1,12 @@
 /**
  * Tools of the Godmode MCP gateway. Every call runs as the agent that owns the run token (RunContext):
  * vault fills (the model never sees secrets), missing-login reports, notifications, peer agents and
- * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management.
+ * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management. A connected app
+ * (connect/connectors.ts) calls as the built-in agent, and only the tools in CONNECTOR_TOOLS.
  */
 import { join } from "node:path";
 import { z } from "zod";
-import type { Agent, ApiTool, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Task, Vm } from "@godmode/shared";
+import type { Agent, ApiTool, ConnectorAccess, ConnectorTool, Credential, MissingLoginKind, Routine, RoutineTrigger, Run, Task, Vm } from "@godmode/shared";
 import {
   AGENT_COLORS,
   CHARACTER_BODIES,
@@ -75,6 +76,7 @@ import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, 
 import { describeNow } from "../runner/prompt";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { askQuestion, listQuestions } from "../services/questions";
+import { noteConnectorCall } from "../connect/connectors";
 
 const log = logger("mcp");
 
@@ -550,6 +552,48 @@ function isDreamRun(ctx: RunContext): boolean {
 
 const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report"]);
 
+/**
+ * What an app outside Godmode may call, and the access its key needs. Nothing that needs a run, a chat or a browser,
+ * and nothing that touches a secret: an app sets the team up and looks at its work.
+ */
+const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
+  ["agents_list", "read"],
+  ["agent_get", "read"],
+  ["routine_list", "read"],
+  ["automation_triggers_list", "read"],
+  ["automation_events_list", "read"],
+  ["tasks_list", "read"],
+  ["task_get", "read"],
+  ["runs_list", "read"],
+  ["workspaces_list", "read"],
+  ["logins_overview", "read"],
+  ["missing_logins_list", "read"],
+  ["vms_list", "read"],
+  ["agent_create", "manage"],
+  ["agent_update", "manage"],
+  ["agent_delete", "manage"],
+  ["routine_create", "manage"],
+  ["routine_update", "manage"],
+  ["routine_run", "manage"],
+  ["routine_delete", "manage"],
+  ["task_create", "manage"],
+  ["task_update", "manage"],
+  ["task_message", "manage"],
+  ["task_note", "manage"],
+  ["vm_create", "manage"],
+  ["vm_assign", "manage"],
+  ["vm_power", "manage"],
+]);
+
+/** The tool is closed to the caller because it is a connected app: not on the list, or its key only reads. */
+function connectorRefusal(ctx: RunContext, name: string): string | null {
+  if (!ctx.connector) return null;
+  const needs = CONNECTOR_TOOLS.get(name);
+  if (!needs) return `The tool ${name} is not available to connected apps.`;
+  if (needs === "manage" && ctx.connector.access !== "manage") return `${ctx.connector.name} may only look: ${name} changes Godmode. The human can give it full access in Settings → Claude Code & MCP.`;
+  return null;
+}
+
 /** The run works on a board task (its conversation is the task's). */
 function isTaskRun(ctx: RunContext): boolean {
   try {
@@ -612,6 +656,15 @@ function taskAssignRefusal(caller: Agent, ctx: RunContext, agentId: string | nul
     return `${target.id === caller.id ? "You are" : `${target.name} is`} working on tasks already — only the human can start another manager from here. Assign a specialist agent, or leave it in the backlog.`;
   }
   return offHostRefusal(ctx, target, "give it tasks") ?? revealTargetRefusal(caller, target, "give it tasks");
+}
+
+/** Rewriting a task that belongs to an agent the caller couldn't hand work to (it reads secrets, or controls this computer). */
+function taskEditRefusal(caller: Agent, agentId: string): string | null {
+  try {
+    return revealTargetRefusal(caller, getAgent(agentId), "change its tasks");
+  } catch {
+    return null; // the agent is gone
+  }
 }
 
 function localTimezone(): string {
@@ -977,15 +1030,16 @@ const TOOLS: ToolDef[] = [
       "List the other Godmode agents you can work with: id, name, role (job title), who they report to, description, workspace and status. `relation` marks your lead and the agents that report to you.",
     schema: z.object({}),
     when: canDelegate,
-    run: (_args, { agent }) => {
+    run: (_args, { agent, ctx }) => {
       const names = workspaceNames();
       const team = listAgents();
-      const agents = reachableAgents(agent);
+      // A connected app is nobody's teammate: it sees the whole team, the built-in agent included.
+      const agents = ctx.connector ? [agent, ...reachableAgents(agent)] : reachableAgents(agent);
       const lead = leadOf(agent, team);
       return agents.length
         ? json(
             agents.map((a) => {
-              const relation = a.id === lead?.id ? "your lead" : leadOf(a, team)?.id === agent.id ? "reports to you" : null;
+              const relation = ctx.connector ? null : a.id === lead?.id ? "your lead" : leadOf(a, team)?.id === agent.id ? "reports to you" : null;
               return { ...agentSummary(a, names, team), ...(relation ? { relation } : {}) };
             }),
           )
@@ -1165,7 +1219,7 @@ const TOOLS: ToolDef[] = [
     schema: z.object({ agentId: z.string() }),
     when: managesSetup,
     run: async ({ agentId }, { agent, ctx }) => {
-      if (agentId === agent.id) return fail("You cannot delete yourself.");
+      if (agentId === agent.id && !ctx.connector) return fail("You cannot delete yourself.");
       const target = getAgent(agentId);
       if (target.isDefault) return fail("The default Godmode agent cannot be deleted.");
       const offHost = offHostRefusal(ctx, target, "delete it");
@@ -1435,8 +1489,12 @@ const TOOLS: ToolDef[] = [
     }),
     when: managesSetup,
     run: ({ taskId: ref, ...patch }, { agent, ctx }) => {
-      const taskId = findTask(ref).id;
-      const refusal = taskAssignRefusal(agent, ctx, patch.agentId ?? (patch.status || patch.archived === false ? getTask(taskId).agentId : null));
+      const current = findTask(ref);
+      const taskId = current.id;
+      const refusal =
+        taskAssignRefusal(agent, ctx, patch.agentId ?? (patch.status || patch.archived === false ? current.agentId : null)) ??
+        // What a task says is what its agent is told to do: the same rule as handing it the task.
+        (current.agentId && (patch.title !== undefined || patch.description !== undefined || patch.type !== undefined) ? taskEditRefusal(agent, current.agentId) : null);
       if (refusal) return fail(refusal);
       const t = updateTask(taskId, { ...patch, ...(patch.labels ? { labels: patch.labels.map((l) => redact(l)) } : {}) } as Parameters<typeof updateTask>[1], `agent:${agent.id}`);
       audit(`agent:${agent.id}`, "task.update", taskId, { fields: Object.keys(patch) });
@@ -1678,6 +1736,7 @@ const TOOLS: ToolDef[] = [
     when: managesSetup,
     run: async ({ vmId, target, id }, { agent, ctx }) => {
       if (target !== "this_chat" && !id) return fail(`Pass the ${target}'s id.`);
+      if (target === "this_chat" && !ctx.conversationId) return fail("There is no chat here: assign the VM to an agent or a workspace.");
       if (target === "agent") {
         const refusal = id === agent.id ? null : revealTargetRefusal(agent, getAgent(id!), "move it into a VM");
         if (refusal) return fail(refusal);
@@ -1809,10 +1868,15 @@ export function allToolNames(): string[] {
   return TOOLS.map((t) => t.name);
 }
 
+/** What a connected app can call, for the human to read: reading tools first. */
+export function connectorTools(): ConnectorTool[] {
+  return [...CONNECTOR_TOOLS].map(([name, access]) => ({ name, access, description: BY_NAME.get(name)?.description ?? "" }));
+}
+
 /** Tools listed for this agent in this run (permission-filtered). */
 export function listToolsFor(agent: Agent, ctx: RunContext): { name: string; description: string; inputSchema: Record<string, unknown> }[] {
   const dream = isDreamRun(ctx);
-  return TOOLS.filter((t) => (dream ? DREAM_TOOLS.has(t.name) : !t.when || t.when(agent, ctx))).map((t) => {
+  return TOOLS.filter((t) => (dream ? DREAM_TOOLS.has(t.name) : !t.when || t.when(agent, ctx)) && !connectorRefusal(ctx, t.name)).map((t) => {
     let schema = schemaCache.get(t.name);
     if (!schema) {
       schema = inputSchema(t.schema);
@@ -1837,12 +1901,24 @@ export function toolErrorMessage(err: unknown): string {
 export async function callTool(ctx: RunContext, name: string, args: unknown): Promise<ToolCallResult> {
   const tool = BY_NAME.get(name);
   if (!tool) throw new UnknownToolError(`Unknown tool: ${name}`);
+  const out = await runTool(tool, ctx, name, args);
+  if (ctx.connector) {
+    noteConnectorCall(ctx.connector.id, name);
+    // Reading leaves no entry; a change does, and so does everything that was refused or failed.
+    if (CONNECTOR_TOOLS.get(name) !== "read" || out.isError) audit(`connector:${ctx.connector.id}`, "connector.call", name, { app: ctx.connector.name, ok: !out.isError });
+  }
+  return out;
+}
+
+async function runTool(tool: ToolDef, ctx: RunContext, name: string, args: unknown): Promise<ToolCallResult> {
   const result = (text: string, isError = false): ToolCallResult => ({
     content: [{ type: "text", text }],
     ...(isError ? { isError: true } : {}),
   });
   try {
     const agent = getAgent(ctx.agentId);
+    const refusal = connectorRefusal(ctx, name);
+    if (refusal) return result(refusal, true);
     if (tool.when && !tool.when(agent, ctx)) return result(`The tool ${name} is not available to ${agent.name}.`, true);
     if (!DREAM_TOOLS.has(name) && isDreamRun(ctx)) return result(`The tool ${name} is not available while dreaming.`, true);
     const parsed = tool.schema.parse(args ?? {});

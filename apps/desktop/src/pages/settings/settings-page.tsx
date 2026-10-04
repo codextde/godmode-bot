@@ -20,6 +20,7 @@ import {
   SlidersHorizontal,
   Smartphone,
   Sparkles,
+  SquareTerminal,
 } from "lucide-react";
 import { EmptyState, PageBody, PageHeader } from "@/components/common";
 import { AboutSection } from "@/components/settings/about-section";
@@ -29,6 +30,7 @@ import { BillingSection } from "@/components/settings/billing-section";
 import { BrowserSection } from "@/components/settings/browser-section";
 import { CloudSection } from "@/components/settings/cloud-section";
 import { ComputerSection } from "@/components/settings/computer-section";
+import { ConnectSection } from "@/components/settings/connect-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { InstructionsSection } from "@/components/settings/instructions-section";
 import { LogsSection } from "@/components/settings/logs-section";
@@ -56,6 +58,7 @@ const SECTIONS = [
   { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
   { id: "backup", label: "Backup", icon: <DatabaseBackup />, group: "Data & privacy" },
   { id: "phone", label: "Phone", icon: <Smartphone />, group: "App" },
+  { id: "connect", label: "Claude Code & MCP", icon: <SquareTerminal />, group: "App" },
   { id: "cloud", label: "Cloud", icon: <Cloud />, group: "App" },
   { id: "billing", label: "Billing", icon: <CreditCard />, group: "App" },
   { id: "system", label: "System", icon: <HeartPulse />, group: "App" },
@@ -66,7 +69,7 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 /** Sections that render without the settings document (they use their own endpoints). */
-const STANDALONE: SectionId[] = ["backup", "cloud", "billing", "system", "about"];
+const STANDALONE: SectionId[] = ["backup", "connect", "cloud", "billing", "system", "about"];
 
 export default function SettingsPage() {
   const { section } = useParams();
@@ -106,6 +109,7 @@ export default function SettingsPage() {
       security: () => <SecuritySection settings={s} />,
       backup: () => <BackupSection />,
       phone: () => <PhoneSection settings={s} />,
+      connect: () => <ConnectSection />,
       cloud: () => <CloudSection />,
       billing: () => <BillingSection />,
       system: () => <SystemSection bootstrap={boot} settings={settings.data} />,
