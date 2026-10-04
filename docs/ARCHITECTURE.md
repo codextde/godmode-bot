@@ -931,16 +931,21 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   an optional `blockedReason` only they can change). Starting a blocked task again opens the prompt with why: "Godmode
   restarted while you were working…" or "Your last run … failed: <reason>". Handing a blocked task to another agent
   turns `needs_input`, `failed`, `stopped` and `interrupted` into `manual` (the new agent starts again).
-* **Sub-tickets** (migration 57, `tasks.parent_id`; `Task.parentId`, `parentNumber`, `subtasks { total, open }`). A
-  lead on a ticket splits it with `task_split({ parts })` — managers to anyone they may give tasks, other agents to
-  their reports, no agent = backlog for the human — or a manager files one with `task_create({ parentTaskId })`; the
-  human adds one from the ticket (*Add a part*, `POST /api/tasks { parentId }`). At most 3 levels and 20 parts. A part's
-  prompt names what it is part of. When the parent's run ends while parts are open (not delivered, done, cancelled or
-  archived — a delivered part is the lead's to review), the parent waits (`in_progress`, a `waiting` event with
-  `subtasks`) instead of going to review; when the last part closes (or parts closed while it still worked) its agent
-  continues in its chat with `<godmode-subtasks>`: each part's state, agent and result (quoted as data, 1,500 characters
-  each; `task_get` has all). Approving the parent (Done) approves its delivered parts. After a restart a waiting parent
-  keeps waiting (or continues); deleting a parent leaves its parts on their own.
+* **Sub-tickets** (migration 57, `tasks.parent_id`; `Task.parentId`, `parentNumber`, `subtasks { total, open, blocked }`).
+  A lead on a ticket splits it with `task_split({ parts })` — managers to anyone they may give tasks, other agents to
+  their reports (by id or name), no agent = backlog for the human; every part is checked (enabled, workspace, 20 at
+  most) before any is filed — or a manager files one with `task_create({ parentTaskId })` for a ticket it works on or
+  filed; the human adds one from the ticket (*Add a part*, `POST /api/tasks { parentId }`). A part is always in its
+  ticket's workspace; at most 3 levels. A part's prompt names what it is part of; the ticket's own brief lists its parts
+  with their results (so its agent builds on them instead of splitting again). A lead reads and sends back its own parts
+  (`task_get`, `task_message`, manager or not). When the ticket's run ends while parts are open (not delivered, done,
+  cancelled or archived — a delivered part is the lead's to review), it waits (`in_progress`, a `waiting` event with
+  `subtasks`) instead of going to review. When the last part closes — or parts closed that its agent hasn't seen
+  (`tasks.parts_seen_at`, migration 59: set when its brief or a wake-up carried their results; approving a delivered
+  part isn't news) — its agent continues in its chat with `<godmode-subtasks>`: each part's state, agent and result
+  (quoted as data without Godmode's note tags, 1,500 characters each). This holds also after a follow-up, a pause, a
+  retry or a restart. Approving the ticket (Done, also by a merged pull request) approves its delivered parts;
+  cancelling it cancels its unfinished parts; archiving it archives them. Deleting a ticket leaves its parts on their own.
 * **Tickets**: `priority` (urgent, high, medium, low, none), `dueDate` (a calendar day) and up to 10 `labels`; the agent
   is told them in the prompt. Queued ticket runs (triggers `task` and `followup`) start in priority order, then by the
   earliest due day (`ticketOrder()` in the runner shares out only the queue places ticket runs hold — the human's chat,

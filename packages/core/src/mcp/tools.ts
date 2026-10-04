@@ -608,6 +608,22 @@ function taskSummary(t: Task, names: Map<string, string>, agentNames: Map<string
   };
 }
 
+/** The ticket this run works on, when it has parts: its agent leads them (reads them, sends them back). */
+function ledTicket(ctx: RunContext): Task | null {
+  try {
+    const t = taskForConversation(ctx.conversationId);
+    return t?.subtasks ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A part of the ticket this run works on (a lead may read it and send it back, manager or not). */
+function ownPart(ctx: RunContext, t: Task): boolean {
+  const led = ledTicket(ctx);
+  return !!led && t.parentId === led.id;
+}
+
 /**
  * A manager handing a task to an agent follows the same rules as delegating or scheduling work for it. From a task
  * run, work never goes to a manager (itself included): that task could hand out tasks again, without end.
@@ -1420,10 +1436,15 @@ const TOOLS: ToolDef[] = [
     run: ({ start, parentTaskId, ...input }, { agent, ctx }) => {
       const refusal = taskAssignRefusal(agent, ctx, input.agentId);
       if (refusal) return fail(refusal);
+      const parentTask = parentTaskId ? findTask(parentTaskId) : null;
+      // Only the ticket it works on, or one it filed: another agent's running ticket would start waiting for parts it never asked for.
+      if (parentTask && parentTask.conversationId !== ctx.conversationId && parentTask.createdBy !== `agent:${agent.id}`) {
+        return fail(`Add parts only to the ticket you work on or tickets you filed — #${parentTask.number} is neither.`);
+      }
       const t = createTask(
         {
           ...(input as Parameters<typeof createTask>[0]),
-          ...(parentTaskId ? { parentId: findTask(parentTaskId).id } : {}),
+          ...(parentTask ? { parentId: parentTask.id } : {}),
           status: input.agentId && start !== false ? "todo" : "backlog",
         },
         `agent:${agent.id}`,
@@ -1436,7 +1457,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "task_split",
     description:
-      "Split the ticket you are working on into parts for your team: each part becomes a sub-ticket on the board, and an assigned one starts right away. Your ticket then waits (In progress) until every part is done, cancelled or archived, and you continue in this chat with their results to finish the whole ticket. After splitting, end your turn: say briefly how you split the work. Give each part a self-contained title and description (what to do, what to deliver back). agentId: one of your reports (managers: any agent they may give tasks to); without one the part waits in the backlog for the human to assign.",
+      "Split the ticket you are working on into parts for your team: each part becomes a sub-ticket on the board, and an assigned one starts right away. Your ticket then waits (In progress) until every part is delivered (or done, cancelled, archived), and you continue in this chat with their results to finish the whole ticket — a delivered part is yours to review: read it with task_get, send it back with task_message. After splitting, end your turn: say briefly how you split the work. Give each part a self-contained title and description (what to do, what to deliver back). agentId: one of your reports, by id or name (managers: any agent they may give tasks to); without one the part waits in the backlog for the human to assign.",
     schema: z.object({
       parts: z
         .array(
@@ -1453,18 +1474,33 @@ const TOOLS: ToolDef[] = [
     }),
     // A lead on a ticket: a manager, or an agent with reports. Not on a runner (its board is a copy).
     when: (agent, ctx) => config().role !== "runner" && isTaskRun(ctx) && (isManager(agent) || teamOf(agent).reports.length > 0),
-    run: ({ parts }, { agent, ctx }) => {
+    run: ({ parts: asked }, { agent, ctx }) => {
       const parent = taskForConversation(ctx.conversationId);
       if (!parent) return fail("Only the agent working on a ticket can split it.");
-      const reports = new Set(teamOf(agent).reports.map((r) => r.id));
-      for (const p of parts) {
-        if (!p.agentId) continue;
-        if (p.agentId === agent.id) return fail("Do your own part yourself — split off only what others should do.");
-        if (!isManager(agent) && !reports.has(p.agentId)) return fail(`${getAgent(p.agentId).name} doesn't report to you — give parts to your reports, or leave agentId out for the human to assign.`);
-        const refusal = taskAssignRefusal(agent, ctx, p.agentId);
+      const everyone = listAgents({ workspaceId: "all" });
+      const reports = teamOf(agent).reports;
+      // Every part is checked before any is filed: a refusal never leaves half a split behind.
+      const parts: ((typeof asked)[number] & { agentId?: string })[] = [];
+      for (const p of asked) {
+        if (!p.agentId) {
+          parts.push(p);
+          continue;
+        }
+        // An id, or a report's name (a lead may know its team by name only).
+        const wanted = p.agentId.trim().toLowerCase();
+        const target = everyone.find((a) => a.id === p.agentId) ?? reports.find((a) => a.name.toLowerCase() === wanted) ?? everyone.find((a) => a.name.toLowerCase() === wanted);
+        if (!target) return fail(`There is no agent "${p.agentId}".`);
+        if (target.id === agent.id) return fail("Do your own part yourself — split off only what others should do.");
+        if (!isManager(agent) && !reports.some((r) => r.id === target.id)) return fail(`${target.name} doesn't report to you — give parts to your reports, or leave agentId out for the human to assign.`);
+        if (!target.enabled) return fail(`${target.name} is switched off — give that part to someone else, or leave agentId out for the human to assign.`);
+        if (target.workspaceId && target.workspaceId !== parent.workspaceId) return fail(`${target.name} works in another workspace than #${parent.number}.`);
+        const refusal = taskAssignRefusal(agent, ctx, target.id);
         if (refusal) return fail(refusal);
+        parts.push({ ...p, agentId: target.id });
       }
-      const agentNames = new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]));
+      const existing = parent.subtasks?.total ?? 0;
+      if (existing + parts.length > 20) return fail(`#${parent.number} can have 20 parts; it has ${existing}.`);
+      const agentNames = new Map(everyone.map((a) => [a.id, a.name]));
       const created = parts.map((p) =>
         createTask(
           {
@@ -1524,9 +1560,10 @@ const TOOLS: ToolDef[] = [
       taskId: z.string().describe('Task id, or its number like "#12"'),
       history: z.boolean().optional(),
     }),
-    when: isManager,
-    run: ({ taskId, history }) => {
+    when: (agent, ctx) => isManager(agent) || !!ledTicket(ctx),
+    run: ({ taskId, history }, { agent, ctx }) => {
       const t = findTask(taskId);
+      if (!isManager(agent) && !ownPart(ctx, t)) return fail(`#${t.number} isn't one of your ticket's parts — you can read those.`);
       const agentNames = new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]));
       const human = getSettings().general.userName.trim() || "the human";
       const events = listTaskEvents(t.id, 50);
@@ -1559,10 +1596,11 @@ const TOOLS: ToolDef[] = [
       taskId: z.string().describe('Task id, or its number like "#12"'),
       content: z.string().min(1).max(20_000),
     }),
-    when: managesSetup,
+    when: (agent, ctx) => managesSetup(agent) || (config().role !== "runner" && !!ledTicket(ctx)),
     run: async ({ taskId, content }, { agent, ctx }) => {
       const t = findTask(taskId);
       if (t.conversationId && t.conversationId === ctx.conversationId) return fail("That is the task you are working on — do the work, or leave a note with task_note.");
+      if (!managesSetup(agent) && !ownPart(ctx, t)) return fail(`#${t.number} isn't one of your ticket's parts — you can send those back.`);
       const refusal = taskAssignRefusal(agent, ctx, t.agentId);
       if (refusal) return fail(refusal);
       await sendTaskMessage(t.id, redact(content), [], { actor: `agent:${agent.id}`, via: "task" }, `agent:${agent.id}`);

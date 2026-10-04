@@ -1030,4 +1030,12 @@ CREATE INDEX IF NOT EXISTS idx_runs_finished ON runs(finished_at) WHERE finished
 CREATE INDEX IF NOT EXISTS idx_task_events_kind ON task_events(kind, created_at);
 `,
   },
+  {
+    id: 59,
+    name: "parts_seen",
+    sql: /* sql */ `
+-- When the ticket's agent last got its parts' results (in its brief, or woken with them): parts that closed later are news.
+ALTER TABLE tasks ADD COLUMN parts_seen_at TEXT;
+`,
+  },
 ];

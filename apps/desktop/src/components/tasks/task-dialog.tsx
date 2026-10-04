@@ -92,7 +92,9 @@ export function TaskDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [open, defaultWorkspaceId, defaultStatus],
   );
-  const [live, setForm, kept] = useDraft(open ? DRAFT : undefined, base);
+  // A part keeps its own draft (per ticket): it never turns up as a plain new task, or the other way round.
+  const draftKey = parent ? `${DRAFT}:part:${parent.id}` : DRAFT;
+  const [live, setForm, kept] = useDraft(open ? draftKey : undefined, base);
   // While the dialog animates out, keep showing what it had.
   const closing = useRef(live);
   if (open) closing.current = live;
@@ -147,7 +149,7 @@ export function TaskDialog({
         titleRef.current?.focus();
         return;
       }
-      clearDraft(DRAFT);
+      clearDraft(draftKey);
       onOpenChange(false);
       onCreated?.(task);
     },

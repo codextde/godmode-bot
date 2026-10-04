@@ -146,13 +146,17 @@ function PartsSection({ task, board, agents, workspaces }: { task: Task; board: 
   const hidden = (task.subtasks?.total ?? 0) - parts.length;
   const closed = task.status === "done" || task.status === "cancelled" || !!task.archivedAt;
   if (!task.parentNumber && !parts.length && closed) return null;
+  // Where the core would refuse a part: 3 levels deep, 20 parts, or a ticket that won't wait for it (delivered or settled).
+  let depth = 1;
+  for (let up = task.parentId; up && depth < 4; depth++) up = board.find((t) => t.id === up)?.parentId ?? null;
+  const canAdd = !closed && task.status !== "in_review" && depth < 3 && (task.subtasks?.total ?? 0) < 20;
   return (
     <section className="space-y-2" aria-labelledby={`parts-${task.id}`}>
       <div className="flex items-center gap-2">
         <h3 id={`parts-${task.id}`} className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           {parts.length ? `Parts · ${(task.subtasks?.total ?? 0) - (task.subtasks?.open ?? 0)} of ${task.subtasks?.total ?? parts.length} finished` : "Parts"}
         </h3>
-        {!closed && (
+        {canAdd && (
           <Button size="xs" variant="ghost" className="ml-auto text-muted-foreground" onClick={() => setAdding(true)}>
             <ListTree /> Add a part
           </Button>
