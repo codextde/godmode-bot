@@ -4,11 +4,12 @@ import { memo, useEffect, useState } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import type { Attachment, Message, MessageBlock } from "@godmode/shared";
+import { toolActivity } from "@godmode/shared";
 import { FileChip } from "./attachments";
 import { Icon } from "./icon";
 import { Markdown } from "./markdown";
 import { Row, T, tap } from "./ui";
-import { activityText, toolLabel } from "@/lib/format";
+import { toolLabel } from "@/lib/format";
 import { radius, space, useColors } from "@/lib/theme";
 
 type Step = Extract<MessageBlock, { type: "tool_use" | "thinking" }>;
@@ -209,7 +210,7 @@ function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
   const label = latest ? toolLabel(latest) : null;
   const failed = tools.some((t) => t.isError);
   const pending = live && latest && latest.result === undefined;
-  const summary = pending ? activityText(`Using ${latest.name.replace(/^mcp__.+?__/, "")}`) : label ? label.title : "Thought it through";
+  const summary = pending ? toolActivity(latest.name, latest.input).replace(/…$/, "") : label ? label.title : "Thought it through";
   const count = tools.length;
 
   return (

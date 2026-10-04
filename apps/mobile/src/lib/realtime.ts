@@ -60,6 +60,18 @@ export const subscribeComputer = (view: string) =>
 export const subscribeConversation = (conversationId: string) =>
   subscription(`conversation:${conversationId}`, { type: "conversation.subscribe", conversationId }, { type: "conversation.unsubscribe", conversationId });
 
+/** The chat on screen while the app is in front: the computer counts it as read and doesn't notify about it. */
+let viewing: string | null = null;
+
+export function viewConversation(conversationId: string | null) {
+  viewing = conversationId;
+  sendView();
+}
+
+function sendView() {
+  sendEvent({ type: "conversation.view", conversationId: AppState.currentState === "active" ? viewing : null });
+}
+
 function replaySubscriptions() {
   for (const key of counts.keys()) {
     const [kind, ...rest] = key.split(":");
@@ -243,6 +255,7 @@ async function connect() {
     useSession.getState().setActiveUrl(base);
     useLive.getState().setStatus("online");
     replaySubscriptions();
+    if (viewing) sendView();
     void catchUp();
     void queryClient.invalidateQueries();
     pingTimer = setInterval(() => sendEvent({ type: "ping" }), 25_000);
@@ -271,6 +284,8 @@ async function connect() {
 }
 
 function onAppState(state: AppStateStatus) {
+  // Pulled-down notification shade or the app switcher: the chat isn't being read meanwhile.
+  if (viewing) sendView();
   if (state === "active") {
     if (running && !socket) {
       clearTimers();

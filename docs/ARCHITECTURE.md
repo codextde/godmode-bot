@@ -298,9 +298,11 @@ queued, budgeted and reported like a message from the human:
   starting over. **Try again** otherwise: the run's own prompt is sent again (saved secrets stay masked; the marker
   says so). A turn an automation, follow-up or another agent started is answered to the human in this chat.
 * The chat gets a `retry` marker (a system message, `content` "Continue where you stopped" / "Try again").
-* Refused: a run that isn't the chat's latest (`stale`), one that didn't end early, a chat that works, stands still or
-  belongs to a ticket (`task_chat` — continued from the ticket) or a chat platform (`platform_chat` — the person asks
-  there), dreams and condition checks, and a chat too long to go on (`context`). Godmode's own end-of-turn sentences
+* Refused: a run that isn't the chat's latest (`stale`), one that didn't end early, a chat that works, stands still,
+  has messages waiting (`queued` — they would go along unasked) or belongs to a ticket (`task_chat` — continued from the
+  ticket) or a chat platform (`platform_chat` — the person asks there), an automation's run (`automation` — the desktop
+  offers the automation's *Run now*, so its busy check, events and "Needs you" follow), dreams and condition checks, and
+  a chat too long to go on (`context`). A chat on a runner is picked up there (the request is forwarded). Godmode's own end-of-turn sentences
   live in `@godmode/shared` (`runEndOf`); for a sign-in, CLI, VM, folder or model error the desktop links to the fix
   and offers *Try again* next to it.
 
@@ -354,20 +356,28 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
 * **The list.** `GET /api/attention` (`services/attention.ts`) computes everything that waits for the human from live
   state on every read — never from notifications, so an item leaves the moment the thing is handled anywhere: open
   questions and approvals, open missing logins (linked to the chat or ticket of the run that reported them), tickets
-  to review and blocked ones, chats paused by the human or past a usage limit with nothing continuing them, budget
-  holds (one row per budget), chats whose latest run failed while nobody looked, automations whose own last run failed
-  or whose own trigger is broken (not the shared app-event connection), and people asking a bot for access. Each item
+  to review and blocked ones, chats paused by the human or past a usage limit with nothing continuing them (on a runner:
+  from what it last said, `runner_state`), budget holds (one row per budget), chats whose latest run failed while
+  nobody looked, automations whose own last run failed or that couldn't start (`last_status`), or whose own trigger is
+  broken (not the shared app-event connection), and people asking a bot for access. Each item
   has a stable id (`<kind>:<id>`), who, what, since when, a link and its one action. Bootstrap carries
   `counts.attention` (per kind and total) and `counts.unreadChats`; the Inbox badge counts what waits (updates only when
   nothing does), Tasks counts review + blocked, Automations the failing ones. Cloud: allowed; phone: closed.
 * **Unread.** `conversations.unread_run_id` (migration 54) marks a chat the human talks in (origin chat/api) whose
   chat, manual, api or follow-up run ended while no window showed it. A window says which chat it shows while visible
-  and focused (`conversation.view` on the socket); showing it, or `POST /api/conversations/read` (`ids` or `"all"`),
+  and focused, the phone while the chat is its screen in front and the app is active (`conversation.view` on the
+  socket); showing it, or `POST /api/conversations/read` (`ids` or `"all"`),
   reads it — and reading a chat whose run failed clears the agent's "Last run failed". Automation, task, delegation and
   platform chats are never unread.
+* **While you were away** (`services/away.ts`, `GET /api/away?since=<ISO>`, Cloud: allowed; phone: closed). After at
+  least two hours without the human's input (pointer, keys, wheel in a focused window; the last time is kept per computer
+  in `localStorage`, `lib/presence.ts`), Home shows what the team did since: runs that ended (checks left out) and how
+  many failed, tickets delivered, what the work cost (the spend ledger), who worked, and up to six things worth a look —
+  delivered tickets, problems (chats and automations), then replies — one line per chat or automation. Closed with ×.
 * **Notices** (`services/runNotices.ts`). Such a run that nobody watched notifies once — "Mia replied in “Q4 plan”" /
-  "Mia ran into a problem in “…”" — unless the agent called `notify_user` itself or the run reported a missing login
-  (that has its own notice). Automations follow `routines.notify`: `failures` (default; a failure is told once until a
+  "Mia ran into a problem in “…”" — unless the agent called `notify_user` itself (the tool call, not the word) or the
+  run reported a missing login (that has its own notice). Only the computer the human uses tells: a runner's runs
+  arrive there as its own. Automations follow `routines.notify`: `failures` (default; a failure is told once until a
   run succeeds again), `always`, or `never`; nothing when its chat is on screen. Toasts carry *Open* to the thing, and a
   notification about what is already on screen is marked read instead of popping up.
 

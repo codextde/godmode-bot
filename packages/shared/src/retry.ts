@@ -14,6 +14,8 @@ export interface RunEnd {
   kind: RunEndKind;
   minutes?: number;
   byUser?: boolean;
+  /** `vm`: virtual machines are turned off (else the VM couldn't be started or used). */
+  off?: boolean;
 }
 
 /** What one of Godmode's own end-of-turn sentences means; null for any other text (a plain error). */
@@ -25,11 +27,12 @@ export function runEndOf(text: string): RunEnd | null {
   if (timeout) return { kind: "timeout", minutes: Number(timeout[1]) };
   if (t.startsWith(RUN_MAX_TURNS)) return { kind: "turns" };
   if (/prompt is too long|context (?:length|window)|conversation is too long/i.test(t)) return { kind: "context" };
-  if (t.startsWith(RUN_COST_LIMIT) || /^Stopped at its limit of \$[\d.]+ for one run/.test(t)) return { kind: "budget" };
+  if (t.startsWith(RUN_COST_LIMIT)) return { kind: "budget" };
   if (/^Claude Code is not signed in/.test(t) || /^(?:invalid api key|authentication_error|oauth token (?:has )?expired|credit balance is too low)/i.test(t)) return { kind: "auth" };
   if (t.startsWith(RUN_CLI_MISSING)) return { kind: "cli" };
   if (/Pick another folder for this chat\.|Change the default folder in /.test(t)) return { kind: "folder" };
-  if (/virtual machines are turned off|virtual machine can't be used/i.test(t)) return { kind: "vm" };
+  if (/virtual machines are turned off/i.test(t)) return { kind: "vm", off: true };
+  if (/virtual machine can't be used/i.test(t)) return { kind: "vm" };
   if (/^Invalid model id/.test(t)) return { kind: "model" };
   if (t.startsWith(RUN_STOPPED_BY_USER)) return { kind: "stopped", byUser: true };
   if (/^(Cancelled|Stopped)\b/.test(t) || t === "Restarted from the task board" || t.startsWith("Paused, but what it needed")) return { kind: "stopped" };

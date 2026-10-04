@@ -1,7 +1,7 @@
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
-import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,14 +27,14 @@ import { Icon } from "@/components/icon";
 import { ModelButton } from "@/components/model-button";
 import { QueueTray } from "@/components/queue-tray";
 import { EmptyState, T, tap } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { ApiError, api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { setQueue } from "@/lib/composer";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { useAgents } from "@/lib/hooks";
 import { useConversationRun, useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
-import { subscribeConversation } from "@/lib/realtime";
+import { subscribeConversation, viewConversation } from "@/lib/realtime";
 import { screenHref, useChatScreens } from "@/lib/screens";
 import { radius, space, useColors } from "@/lib/theme";
 
@@ -57,6 +57,13 @@ export default function Chat() {
   const composer = useRef<ComposerHandle>(null);
 
   useEffect(() => subscribeConversation(id), [id]);
+  // Read while it is the screen in front (not while another screen covers it).
+  useFocusEffect(
+    useCallback(() => {
+      viewConversation(id);
+      return () => viewConversation(null);
+    }, [id]),
+  );
 
   const items = useMemo<Item[]>(() => {
     const messages = conversation.data?.messages ?? [];
@@ -162,11 +169,13 @@ export default function Chat() {
       .catch((err) => Alert.alert("Couldn't continue", errorText(err)));
   };
 
-  // The latest turn ended early (failed, stopped, cut off): one tap picks it up.
-  const ended = !run && !paused && conversation.data ? endedTurn(conversation.data) : null;
+  // The latest turn ended early (failed, stopped, cut off): one tap picks it up — when nothing else would happen first.
+  const [retrying, setRetrying] = useState(false);
+  const ended = !run && !paused && conversation.data && agent?.enabled !== false ? endedTurn(conversation.data) : null;
   const retry = () => {
-    if (!ended) return;
+    if (!ended || retrying) return;
     tap();
+    setRetrying(true);
     api.conversations
       .retry(id, ended.runId)
       .then((result) => {
@@ -175,7 +184,12 @@ export default function Chat() {
         );
         useLive.getState().runStarted(result.run);
       })
-      .catch((err) => Alert.alert("Couldn't pick this up", errorText(err)));
+      .catch((err) => {
+        // Something else moved the chat on (another tap, the computer): show that instead of an error.
+        if (err instanceof ApiError && err.code === "stale") void queryClient.invalidateQueries({ queryKey: qk.conversation(id) });
+        else Alert.alert("Couldn't pick this up", errorText(err));
+      })
+      .finally(() => setRetrying(false));
   };
 
   const title = conversation.data?.title || "Chat";
@@ -218,7 +232,7 @@ export default function Chat() {
             onContinue={resume}
           />
         ) : ended ? (
-          <EndedStrip mode={ended.mode} onRetry={retry} />
+          <EndedStrip mode={ended.mode} onRetry={retry} busy={retrying} />
         ) : null}
         <QueueTray
           conversationId={id}
@@ -306,9 +320,12 @@ function PausedStrip({ limit, held, auto, onContinue }: { limit: string | null; 
   );
 }
 
-/** The chat's last turn, when it ended early and trying again can help (not in a ticket's or a chat platform's chat). */
+/**
+ * The chat's last turn, when it ended early and trying again can help: not in a ticket's, an automation's or a chat
+ * platform's chat (those go on from there), nor while messages wait in the chat (they'd go along unasked).
+ */
 function endedTurn(conv: ConversationWithMessages): { runId: string; mode: RetryMode } | null {
-  if (conv.origin === "task" || conv.origin === "dream" || conv.origin === "slack" || conv.origin === "telegram" || conv.origin === "teams") return null;
+  if (["task", "routine", "dream", "slack", "telegram", "teams"].includes(conv.origin) || conv.queue.length > 0) return null;
   const last = conv.messages[conv.messages.length - 1];
   if (last?.role !== "assistant" || !last.runId) return null;
   const end = last.blocks[last.blocks.length - 1];
@@ -318,7 +335,7 @@ function endedTurn(conv: ConversationWithMessages): { runId: string; mode: Retry
 }
 
 /** Above the composer when the last turn ended early. */
-function EndedStrip({ mode, onRetry }: { mode: RetryMode; onRetry: () => void }) {
+function EndedStrip({ mode, onRetry, busy }: { mode: RetryMode; onRetry: () => void; busy: boolean }) {
   const c = useColors();
   return (
     <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
@@ -326,7 +343,15 @@ function EndedStrip({ mode, onRetry }: { mode: RetryMode; onRetry: () => void })
       <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
         {mode === "continue" ? "Stopped before it was done" : "Didn't get through"}
       </T>
-      <Pressable onPress={onRetry} hitSlop={10} accessibilityRole="button" accessibilityLabel={mode === "continue" ? "Continue" : "Try again"}>
+      <Pressable
+        onPress={onRetry}
+        disabled={busy}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={mode === "continue" ? "Continue" : "Try again"}
+        accessibilityState={{ busy, disabled: busy }}
+        style={{ opacity: busy ? 0.5 : 1 }}
+      >
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
           {mode === "continue" ? "Continue" : "Try again"}
         </T>
