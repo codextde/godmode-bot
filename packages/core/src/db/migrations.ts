@@ -704,4 +704,13 @@ CREATE TABLE IF NOT EXISTS paused_runs (
 CREATE INDEX IF NOT EXISTS idx_paused_runs_agent ON paused_runs(agent_id);
 `,
   },
+  {
+    id: 31,
+    name: "chat_secret_access",
+    sql: /* sql */ `
+-- 'fill': no raw secrets in this chat, whatever its agent may read — its task came from an agent that could not
+-- read them itself. NULL = the agent's own secret access.
+ALTER TABLE conversations ADD COLUMN secret_access TEXT;
+`,
+  },
 ];

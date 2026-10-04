@@ -55,7 +55,7 @@ import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../in
 import { listSources } from "../services/workspaceSources";
 import { get } from "../db";
 import { loginFillScope } from "../browser/fill";
-import { createConversation, sendMessage } from "../services/conversations";
+import { chatFillOnly, createConversation, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
@@ -106,6 +106,8 @@ export class UnknownToolError extends Error {}
 const isManager = (a: Agent) => a.permissions.canManageAgents;
 const canDelegate = (a: Agent) => a.permissions.allowDelegation || a.permissions.canManageAgents;
 const canReveal = (a: Agent) => a.permissions.secretAccess === "reveal";
+/** Raw secrets in this run: the agent may read them, and its chat's task didn't come from an agent that may not. */
+const revealsHere = (a: Agent, ctx: RunContext) => canReveal(a) && !chatFillOnly(ctx.conversationId);
 
 const json = (v: unknown) => JSON.stringify(v, null, 2);
 const fail = (text: string): ToolOutput => ({ text, isError: true });
@@ -171,20 +173,30 @@ function offHostRefusal(ctx: RunContext, target: Agent, what: string): string | 
   return `This task runs in a virtual machine and is kept off the human's computer, and ${target.name} works on the computer — only the human can ${what}.`;
 }
 
-/**
- * A reveal-mode agent gets plaintext secrets, so it only takes work (tasks, schedules, instructions) from a
- * caller that could reveal them itself — and never from another workspace. Returns the refusal, or null.
- */
-function revealTargetRefusal(caller: Agent, target: Agent, what: string): string | null {
-  // An agent that may control this computer on its own only takes work from callers that may too.
+/** An agent that may control this computer on its own only takes work from callers that may too. Returns the refusal, or null. */
+function computerTargetRefusal(caller: Agent, target: Agent, what: string): string | null {
   if (target.computer.enabled && !caller.computer.enabled && target.id !== caller.id) {
     return `${target.name} can control this computer on its own; only the human can ${what}.`;
   }
-  if (target.permissions.secretAccess !== "reveal") return null;
-  if (caller.permissions.secretAccess !== "reveal") return `Target agent can reveal secrets; only the human can ${what} from here.`;
-  if (target.workspaceId !== null && target.workspaceId !== caller.workspaceId) {
-    return `${target.name} can reveal secrets and belongs to another workspace; only the human can ${what}.`;
-  }
+  return null;
+}
+
+/** The caller's run reads raw secrets itself, and `target` is global or in its workspace (login allow-lists are not compared). */
+function revealsFor(caller: Agent, ctx: RunContext, target: Agent): boolean {
+  return revealsHere(caller, ctx) && (target.workspaceId === null || target.workspaceId === caller.workspaceId);
+}
+
+/**
+ * A reveal-mode agent gets plaintext secrets, so what stays with it or starts it later (schedules, board tasks,
+ * instructions, its VM) only comes from a caller whose run reveals secrets itself — and never from another
+ * workspace. That holds for the agent itself too while it works in a fill-only chat. Returns the refusal, or null.
+ * A delegated task is not refused: it runs without raw secrets (`agent_delegate`).
+ */
+function revealTargetRefusal(caller: Agent, ctx: RunContext, target: Agent, what: string): string | null {
+  const computer = computerTargetRefusal(caller, target, what);
+  if (computer || !canReveal(target)) return computer;
+  if (!revealsHere(caller, ctx)) return `Target agent can reveal secrets; only the human can ${what} from here.`;
+  if (!revealsFor(caller, ctx, target)) return `${target.name} can reveal secrets and belongs to another workspace; only the human can ${what}.`;
   return null;
 }
 
@@ -530,7 +542,7 @@ function taskAssignRefusal(caller: Agent, ctx: RunContext, agentId: string | nul
   if (inTaskChain(ctx) && target.permissions.canManageAgents) {
     return `${target.id === caller.id ? "You are" : `${target.name} is`} working on tasks already — only the human can start another manager from here. Assign a specialist agent, or leave it in the backlog.`;
   }
-  return offHostRefusal(ctx, target, "give it tasks") ?? revealTargetRefusal(caller, target, "give it tasks");
+  return offHostRefusal(ctx, target, "give it tasks") ?? revealTargetRefusal(caller, ctx, target, "give it tasks");
 }
 
 function localTimezone(): string {
@@ -659,7 +671,7 @@ const TOOLS: ToolDef[] = [
     description:
       "Reveal the username and password of a saved login. Only for secrets that must go to an API/CLI and cannot be filled in the browser — every call is audited. Never write the values into files, memory or your answer.",
     schema: z.object({ credentialId: z.string() }),
-    when: canReveal,
+    when: revealsHere,
     run: ({ credentialId }, { agent, ctx }) => {
       const secret = revealForAgent(agent, credentialId);
       audit(`agent:${agent.id}`, "credential.reveal", credentialId, { field: "username+password", runId: ctx.runId });
@@ -672,7 +684,7 @@ const TOOLS: ToolDef[] = [
     name: "vault_get_totp",
     description: "Reveal the current 2FA code of an entry (or of a login's linked 2FA). Audited. Prefer vault_fill_totp for websites.",
     schema: z.object({ totpId: z.string().optional(), credentialId: z.string().optional() }),
-    when: canReveal,
+    when: revealsHere,
     run: ({ totpId, credentialId }, { agent, ctx }) => {
       let id = totpId ?? null;
       if (!id && credentialId) {
@@ -888,7 +900,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "agent_delegate",
     description:
-      "Hand a task to another agent. The task must be self-contained (goal, inputs, expected output). wait:true (default) waits for the result and returns it; wait:false returns immediately with a run id you can check with delegation_status.",
+      "Hand a task to another agent. The task must be self-contained (goal, inputs, expected output). wait:true (default) waits for the result and returns it; wait:false returns immediately with a run id you can check with delegation_status. An agent that can read raw secrets works on your task without them unless you can read them too (Godmode still fills its logins into pages).",
     schema: z.object({
       agentId: z.string(),
       task: z.string().min(1),
@@ -903,12 +915,14 @@ const TOOLS: ToolDef[] = [
       }
       const target = requireReachable(agent, agentId);
       if (!target.enabled) return fail(`${target.name} is disabled.`);
-      // Orchestrators too: only peers (respects delegateTo), and reveal-mode agents only for reveal-mode callers.
+      // Orchestrators too: only peers (respects delegateTo).
       if (!peersFor(agent).some((p) => p.id === target.id)) {
         return fail(`Agent ${agentId} is not one of your peers (use agents_list to see who you can work with).`);
       }
-      const refusal = revealTargetRefusal(agent, target, "hand it tasks");
+      const refusal = computerTargetRefusal(agent, target, "hand it tasks");
       if (refusal) return fail(refusal);
+      // A caller that reads no raw secrets itself gets none through the task: its chat is fill-only, for good.
+      const fillOnly = !revealsFor(agent, ctx, target);
       // From a VM, work for an agent without its own VM stays in the caller's VM.
       const vmId = lockedVm(ctx) && !resolveVmId(null, target) ? lockedVm(ctx) : null;
       // Work stays in the caller's workspace, and for an agent without its own profile in the browser profile picked for
@@ -917,7 +931,7 @@ const TOOLS: ToolDef[] = [
       const inherited = target.browser.profileId ? null : runChatBrowserProfile(ctx.runId);
       const reach = target.workspaceId ?? workspaceId;
       const browserProfileId = inherited && (!inherited.workspaceId || inherited.workspaceId === reach) ? inherited.id : null;
-      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId, workspaceId });
+      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId, workspaceId, fillOnly });
       const { run } = await sendMessage(conversation.id, {
         content: `[Delegated by ${agent.name}]\n\n${task}`,
         trigger: "delegation",
@@ -991,7 +1005,7 @@ const TOOLS: ToolDef[] = [
     when: isManager,
     run: async ({ agentId, ...patch }, { agent, ctx }) => {
       const target = getAgent(agentId);
-      const refusal = offHostRefusal(ctx, target, "change its settings") ?? (target.id === agent.id ? null : revealTargetRefusal(agent, target, "change its settings"));
+      const refusal = offHostRefusal(ctx, target, "change its settings") ?? revealTargetRefusal(agent, ctx, target, "change its settings");
       if (refusal) return fail(refusal);
       assertAgentPatchAllowed(target, patch);
       const updated = await updateAgent(agentId, patch, `agent:${agent.id}`);
@@ -1090,7 +1104,7 @@ const TOOLS: ToolDef[] = [
     when: isManager,
     run: async ({ timezone, trigger, ...input }, { agent, ctx }) => {
       const target = getAgent(input.agentId);
-      const refusal = offHostRefusal(ctx, target, "schedule its tasks") ?? revealTargetRefusal(agent, target, "schedule its tasks");
+      const refusal = offHostRefusal(ctx, target, "schedule its tasks") ?? revealTargetRefusal(agent, ctx, target, "schedule its tasks");
       if (refusal) return fail(refusal);
       const resolved = await resolveAppTrigger(trigger as RoutineTrigger | undefined, input.agentId);
       const r = createRoutine({ ...input, trigger: resolved, timezone: timezone ?? localTimezone() });
@@ -1117,7 +1131,7 @@ const TOOLS: ToolDef[] = [
     run: async ({ routineId, trigger, ...patch }, { agent, ctx }) => {
       const current = getRoutine(routineId);
       const target = getAgent(current.agentId);
-      const refusal = offHostRefusal(ctx, target, "change its automations") ?? revealTargetRefusal(agent, target, "schedule its tasks");
+      const refusal = offHostRefusal(ctx, target, "change its automations") ?? revealTargetRefusal(agent, ctx, target, "schedule its tasks");
       if (refusal) return fail(refusal);
       const resolved = trigger ? await resolveAppTrigger(trigger as RoutineTrigger, current.agentId) : undefined;
       const r = updateRoutine(routineId, { ...patch, ...(resolved ? { trigger: resolved } : {}) });
@@ -1134,7 +1148,7 @@ const TOOLS: ToolDef[] = [
     when: isManager,
     run: async ({ routineId }, { agent, ctx }) => {
       const target = getAgent(getRoutine(routineId).agentId);
-      const refusal = offHostRefusal(ctx, target, "run its tasks") ?? revealTargetRefusal(agent, target, "run its tasks");
+      const refusal = offHostRefusal(ctx, target, "run its tasks") ?? revealTargetRefusal(agent, ctx, target, "run its tasks");
       if (refusal) return fail(refusal);
       const started = await runRoutineNow(routineId);
       audit(`agent:${agent.id}`, "routine.run", routineId, { runId: started.id });
@@ -1422,7 +1436,7 @@ const TOOLS: ToolDef[] = [
     run: async ({ vmId, target, id }, { agent, ctx }) => {
       if (target !== "this_chat" && !id) return fail(`Pass the ${target}'s id.`);
       if (target === "agent") {
-        const refusal = id === agent.id ? null : revealTargetRefusal(agent, getAgent(id!), "move it into a VM");
+        const refusal = revealTargetRefusal(agent, ctx, getAgent(id!), "move it into a VM");
         if (refusal) return fail(refusal);
       }
       const kind = target === "this_chat" ? "conversation" : target;
