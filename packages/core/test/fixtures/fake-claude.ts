@@ -22,6 +22,10 @@
  *   TASK_COMMIT_ENV  write and commit .env.production in the cwd
  *   TASK_ENV    write .env and feature.txt into the cwd
  *   TASK_LEAK:<value>  write config.txt containing <value> into the cwd
+ *   TASK_HISTORY:<value>  commit .env.production and a config.txt containing <value> (also named in the commit message),
+ *              then commit config.txt without it and feature.txt
+ *   TASK_LEAK_BYTES:<value>  write legacy.txt containing <value> in Latin-1 (not UTF-8), and feature.txt, into the cwd
+ *   TASK_TIDY   in settings.txt, remove the `old_token=` line and add plain settings (a region, a base URL, a database)
  *   TASK_SHOTS:<dir>  answer with a summary naming the files in <dir> in every way an agent does (code, links, paths)
  *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
  *   CRASH       print to stderr and exit 3 without a result
@@ -347,6 +351,36 @@ if (slash?.[1] === "clear") {
   out(init);
   writeFileSync(join(process.cwd(), "config.txt"), `token=${/TASK_LEAK:(\S+)/.exec(prompt)![1]}\n`);
   const text = "Wrote the config.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_HISTORY:")) {
+  out(init);
+  const value = /TASK_HISTORY:(\S+)/.exec(prompt)![1]!;
+  const git = (...a: string[]) => Bun.spawnSync(["git", "-c", "user.name=Agent", "-c", "user.email=agent@example.com", ...a], { cwd: process.cwd() });
+  writeFileSync(join(process.cwd(), ".env.production"), "API_TOKEN=abc123\n");
+  writeFileSync(join(process.cwd(), "config.txt"), `token=${value}\n`);
+  git("add", "-f", ".env.production", "config.txt");
+  git("commit", "-qm", `Configure with ${value}`);
+  writeFileSync(join(process.cwd(), "config.txt"), "token=$API_TOKEN\n");
+  writeFileSync(join(process.cwd(), "feature.txt"), "a feature\n");
+  git("add", "config.txt", "feature.txt");
+  git("commit", "-qm", "Read the token from the environment");
+  const text = "Configured it.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_LEAK_BYTES:")) {
+  out(init);
+  const line = `token=${/TASK_LEAK_BYTES:(\S+)/.exec(prompt)![1]}\n`;
+  writeFileSync(join(process.cwd(), "legacy.txt"), Buffer.concat([Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]), Buffer.from(line)]));
+  writeFileSync(join(process.cwd(), "feature.txt"), "a feature\n");
+  const text = "Wrote the legacy config.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("TASK_TIDY")) {
+  out(init);
+  const file = join(process.cwd(), "settings.txt");
+  writeFileSync(file, `${readFileSync(file, "utf8").replace(/^old_token=.*\n/m, "")}region=eu-central-1\nbase=https://api.example.com/v1\ndb=postgres\n`);
+  const text = "Tidied the settings.";
   textTurn(text);
   result(text);
 } else if (prompt.includes("TASK_SHOTS:")) {

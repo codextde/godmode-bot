@@ -26,7 +26,7 @@ import { all, get, getMeta, insert, run as sql, setMeta, tx, update } from "../d
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { HttpError, badRequest, conflict, newId, notFound, now, slugify } from "../util";
-import { containsSecret, redact } from "../vault/vault";
+import { SECRET_PLACEHOLDER, redact, withoutSecrets } from "../vault/vault";
 import { getAgent } from "../agents/service";
 import { activeRunForConversation, cancelRun, getRun, listActiveRuns, waitForRun } from "../runner/runner";
 import { pauseOf, toPause } from "../services/pauses";
@@ -48,7 +48,6 @@ import { notify } from "../services/notifications";
 import { workingDirectoryProblem } from "../services/folders";
 import { isRepoFolder, listSources, reposDir } from "../services/workspaceSources";
 import {
-  branchDiff,
   commitWork,
   commitsAhead,
   needsClone,
@@ -57,7 +56,7 @@ import {
   pullRequestState,
   pushBranch,
   removeCheckout,
-  secretFilesAdded,
+  removeSecrets,
   type TaskRepo,
 } from "./git";
 
@@ -543,6 +542,7 @@ function worktreeBrief(task: TaskRow, w: Worktree): string {
     `You work in your own git worktree of ${w.repo} (your current directory), on the branch \`${w.branch}\` created from \`${w.base}\`. Other tasks and the human's own copy of the repository have their own files, so nothing you do here gets in their way.`,
     "Make every change here — not in other copies of the repository you may see. It's a fresh checkout: install dependencies first if you need to build or run something.",
     "The repository's stash, branches and settings are shared with other tasks (and the human's copy): don't use `git stash` (commit work in progress instead), don't switch or delete other branches, and don't change the git config.",
+    `Keep secrets out of the branch: never write passwords, API keys or tokens into files or commit messages — read them from the environment — and don't commit \`.env\` or key files. Before the branch is pushed, Godmode leaves such files out and replaces saved secrets with ${SECRET_PLACEHOLDER}.`,
     ...(task.type === "coding" ? [] : ["When you finish, Godmode commits what you changed here on this branch (it isn't pushed)."]),
   ].join("\n");
 }
@@ -784,17 +784,19 @@ async function keepWork(task: TaskRow, runId: string): Promise<void> {
     else await commitLeftovers(task);
   } catch (err) {
     log.warn(`task ${task.id}: could not commit or push its changes`, err);
-    if (task.pushed_sha) {
-      const reason = err instanceof SecretInBranch ? `${err.message}, then push it again from the task.` : err instanceof Error ? err.message : String(err);
-      notify("warning", `Task #${task.number}: ${task.branch} wasn't pushed`, redact(reason), link);
-    }
+    if (task.pushed_sha) notify("warning", `Task #${task.number}: ${task.branch} wasn't pushed`, redact(err instanceof Error ? err.message : String(err)), link);
   }
   if (deliver(task.id, runId)) notify("success", `Task #${task.number} is ready for review`, task.title, link);
 }
 
+/** The subject of the commits Godmode makes for a task — never with a secret, also when redaction is off. */
+function commitSubject(task: TaskRow): string {
+  return `${withoutSecrets(redact(task.title))} (#${task.number})`;
+}
+
 /** Commit what was left uncommitted in the task's worktree, except new files that look like secrets. */
 async function commitLeftovers(task: TaskRow): Promise<void> {
-  const { skipped } = await commitWork({ dir: checkoutDir(task.id), message: `${redact(task.title)} (#${task.number})` });
+  const { skipped } = await commitWork({ dir: checkoutDir(task.id), message: commitSubject(task) });
   if (skipped.length) notify("warning", `Task #${task.number}: files left out`, `Not committed because they look like secrets: ${skipped.join(", ")}`, `/tasks?task=${task.id}`);
 }
 
@@ -817,24 +819,27 @@ function prBody(task: TaskRow, summary: string | null): string {
   ].join("\n");
 }
 
-/** The branch carries a secret, so it isn't pushed. The message ends with where to remove it. */
-class SecretInBranch extends Error {}
-
 /**
- * Commit and push the task's branch — never when its changes contain a secret from the vault (new env/key files are
- * left out of the commit). `false` when it has no commits on top of its base.
+ * Commit and push the task's branch. Secrets never go along and never stop the push: new env/key files are left out
+ * of the commit, and what the agent committed itself is taken out first (see removeSecrets) — the human is told what
+ * Godmode changed. `false` when the branch has no commits on top of its base, or a turn that started meanwhile
+ * committed (its end pushes the branch).
  */
 async function pushWork(task: TaskRow): Promise<boolean> {
   const dir = checkoutDir(task.id);
   await commitLeftovers(task);
-  const secretFiles = await secretFilesAdded(dir, task.base_branch);
-  if (secretFiles.length) {
-    throw new SecretInBranch(`The branch ${task.branch} adds files that look like secrets (${secretFiles.join(", ")}), so Godmode didn't push it. Remove them from the branch (the task's worktree is in ${dir})`);
+  const { head, removed } = await removeSecrets({ dir, base: task.base_branch, lastPushed: task.pushed_sha, message: commitSubject(task), clean: withoutSecrets });
+  if (!head) return false;
+  if (removed) {
+    const { left, replaced, kept } = removed;
+    const body = [
+      left.length ? `Left out of the push because they look like secrets or hold one (they stay in the worktree): ${left.join(", ")}.` : "",
+      replaced.length ? `A saved secret was replaced with ${SECRET_PLACEHOLDER} in ${replaced.join(", ")} — make the code read it from the environment.` : "",
+      `The commits that weren't pushed yet were rewritten without the secrets; the branch as the agent left it stays in ${dir} as ${kept}.`,
+    ];
+    notify("warning", `Task #${task.number}: secrets kept out of ${task.branch}`, withoutSecrets(body.filter(Boolean).join(" ")), `/tasks?task=${task.id}`);
   }
-  if (containsSecret(await branchDiff(dir, task.base_branch))) {
-    throw new SecretInBranch(`The changes on ${task.branch} contain a secret saved in the vault, so Godmode didn't push them. Remove it from the branch (the task's worktree is in ${dir})`);
-  }
-  const { pushed, sha } = await pushBranch({ dir, base: task.base_branch, branch: task.branch!, lastPushed: task.pushed_sha });
+  const { pushed, sha } = await pushBranch({ dir, base: task.base_branch, branch: task.branch!, lastPushed: task.pushed_sha, head });
   if (pushed) sql("UPDATE tasks SET pushed_sha = ? WHERE id = ?", sha, task.id);
   return pushed;
 }
@@ -847,8 +852,9 @@ async function openTaskPullRequest(task: TaskRow, summary: string | null) {
     url: task.repo_url,
     base: task.base_branch,
     branch: task.branch!,
-    title: redact(task.title),
-    body: redact(prBody(task, summary)),
+    // Never a secret, also when redaction is off: the summary may quote what the agent wrote into a file.
+    title: withoutSecrets(redact(task.title)),
+    body: withoutSecrets(redact(prBody(task, summary))),
   });
   const pr = result.pullRequest;
   if (pr) sql("UPDATE tasks SET pr_url = ?, pr_number = ?, pr_state = ? WHERE id = ?", pr.url, pr.number, pr.state, task.id);
@@ -872,14 +878,7 @@ async function publish(task: TaskRow, summary: string | null, runId: string): Pr
       return;
     }
     setActivity(id, "Pushing the branch…");
-    let pushed: boolean;
-    try {
-      pushed = await pushWork(task);
-    } catch (err) {
-      if (err instanceof SecretInBranch) return block(id, `${err.message}, then move the task to Todo.`);
-      throw err;
-    }
-    if (!pushed) {
+    if (!(await pushWork(task))) {
       if (deliver(id, runId)) notify("info", `Task #${task.number}: no code changes`, "The agent finished without changing the code.", link);
       return;
     }
@@ -925,7 +924,6 @@ export async function pushTaskBranch(id: string, opts: { pullRequest: boolean })
     }
   } catch (err) {
     if (err instanceof HttpError) throw err;
-    if (err instanceof SecretInBranch) throw conflict(`${err.message}, then try again.`);
     throw new HttpError(502, redact(`Couldn't push ${task.branch}: ${err instanceof Error ? err.message : String(err)}`), "push_failed");
   } finally {
     activity.delete(id);
