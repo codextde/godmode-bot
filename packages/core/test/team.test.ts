@@ -103,6 +103,14 @@ describe("team helpers", () => {
     expect(chainOf(a, [g, a, b]).map((x) => x.id)).toEqual(["b"]);
   });
 
+  test("a loop is found however long the line is", () => {
+    const g = teamAgent("g", null, null, true);
+    const line = Array.from({ length: 18 }, (_, i) => teamAgent(`a${i}`, i ? `a${i - 1}` : null));
+    // a17 → a16 → … → a0 → the built-in agent: a0 can't report to a17.
+    expect(leadProblem(line[0]!, line[17]!, [g, ...line])).toBe("cycle");
+    expect(chainOf(line[17]!, [g, ...line])).toHaveLength(16);
+  });
+
   test("reach: global agents and the own workspace; managers reach everyone", () => {
     const me = { id: "me", workspaceId: "ws1", canManageAgents: false };
     expect(withinReach(me, { id: "g", workspaceId: null })).toBe(true);
@@ -258,6 +266,13 @@ describe("roles and reporting lines", () => {
     expect(list.find((a) => a.id === helperId)).toMatchObject({ relation: "reports to you" });
     const detail = JSON.parse((await callTool(runCtx(getAgent(helperId)), "agent_get", { agentId: summary.id })).content[0]!.text) as { reports: { id: string }[] };
     expect(detail.reports.map((r) => r.id)).toEqual([helperId]);
+    // An agent that reads secrets in plain text can't be made the lead of an agent a fill-only agent controls.
+    const vault = await makeAgent({ name: "Vault keeper", permissions: { secretAccess: "reveal" } });
+    const sneaky = await callTool(ctx, "agent_create", { name: "Auditor", reportsTo: vault.id });
+    expect(sneaky.isError).toBe(true);
+    expect(sneaky.content[0]!.text).toContain("can reveal secrets");
+    expect(listAgents().some((a) => a.name === "Auditor")).toBe(false);
+    expect((await callTool(ctx, "agent_update", { agentId: helperId, reportsTo: vault.id })).isError).toBe(true);
     const refused = await callTool(runCtx(getAgent(helperId)), "agent_update", { agentId: summary.id, role: "Boss" });
     expect(refused.isError).toBe(true);
     expect(getAgent(summary.id).role).toBe("Research analyst");

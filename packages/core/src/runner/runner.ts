@@ -69,13 +69,14 @@ import {
   owedAnswer,
   saveQuestion,
   settleBlock,
+  dropOwedAnswers,
   settleOwed,
   withdrawOpenBlocks,
   withdrawQuestion,
   type PendingQuestion,
   type ResumedAnswer,
 } from "../services/questions";
-import { MAX_RETRIES, dropPause, limitReached, pauseOf, pausedConversations, pausedRun, savePause, stopContinuing, type LimitPause, type PausedRow } from "../services/pauses";
+import { MAX_RETRIES, dropPause, limitReached, pauseOf, pausedConversations, pausedRun, savePause, stopContinuing, toPause, type LimitPause, type PausedRow } from "../services/pauses";
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
 import { memoryDigest, memoryForPrompt } from "../memory/files";
@@ -233,10 +234,22 @@ export function listRuns(opts: { agentId?: string; status?: string; conversation
   }
   const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? 50)), 500);
   params.push(limit);
-  return all<RunRow>(
+  const runs = all<RunRow>(
     `SELECT * FROM runs ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC, rowid DESC LIMIT ?`,
     ...params,
   ).map(toRun);
+  // Why a paused run stands still: paused by the human, waiting for Claude's limit, or for the human's answer.
+  const paused = runs.filter((r) => r.status === "paused");
+  if (paused.length) {
+    const rows = new Map(
+      all<PausedRow>(`SELECT * FROM paused_runs WHERE run_id IN (${paused.map(() => "?").join(", ")})`, ...paused.map((r) => r.id)).map((p) => [p.run_id, p]),
+    );
+    for (const r of paused) {
+      const p = rows.get(r.id);
+      r.pause = p ? toPause(p) : null;
+    }
+  }
+  return runs;
 }
 
 /** Path of the raw (redacted) stream-json log of a run inside its agent repo. */
@@ -329,6 +342,10 @@ interface Job {
   };
   /** An answer the chat's agent hadn't read yet (an earlier run broke off): this run's prompt starts with it. */
   lateAnswer?: string;
+  /** The answers this run carries were settled as soon as Claude started replying. */
+  answersSettled?: boolean;
+  /** The human stopped it (from a chat, the board or a chat platform), not Godmode. */
+  stoppedByHuman?: boolean;
   /** What this stretch of the run sends to Claude. */
   body?: string;
   /** Claude Code asks Godmode between two steps of this run (PostToolBatch hook). */
@@ -500,7 +517,7 @@ export async function startRun(input: StartRunInput): Promise<Run> {
   return getRun(runId);
 }
 
-export async function cancelRun(runId: string, reason = "Cancelled", opts: { thenQueue?: boolean } = {}): Promise<void> {
+export async function cancelRun(runId: string, reason = "Cancelled", opts: { thenQueue?: boolean; byHuman?: boolean } = {}): Promise<void> {
   const job = jobs.get(runId);
   if (!job) {
     const row = get<RunRow>("SELECT * FROM runs WHERE id = ?", runId);
@@ -509,7 +526,7 @@ export async function cancelRun(runId: string, reason = "Cancelled", opts: { the
     if (!TERMINAL.has(row.status) && get<{ id: string }>("SELECT id FROM conversations WHERE id = ? AND runner_id IS NOT NULL", row.conversation_id)) {
       throw new HttpError(409, "The runner this chat works on is offline", "runner_offline");
     }
-    if (row.status === "paused") return closePaused(row, reason);
+    if (row.status === "paused") return closePaused(row, reason, opts.byHuman);
     if (!TERMINAL.has(row.status)) {
       // Stale row (no live job): close it.
       sql("UPDATE runs SET status = 'cancelled', error = ?, finished_at = ? WHERE id = ?", reason, now(), runId);
@@ -522,6 +539,7 @@ export async function cancelRun(runId: string, reason = "Cancelled", opts: { the
   for (const child of delegatedBy(runId)) await cancelRun(child, "Cancelled (parent run was cancelled)");
   job.cancelReason ??= reason;
   job.thenQueue = opts.thenQueue ?? false;
+  if (opts.byHuman) job.stoppedByHuman = true;
   if (job.status === "queued") {
     const idx = queue.indexOf(runId);
     if (idx >= 0) queue.splice(idx, 1);
@@ -724,10 +742,14 @@ export function resumeRun(
 }
 
 /** A paused run is stopped for good: it ends like a run that was stopped while it worked. */
-function closePaused(row: RunRow, reason: string): void {
+function closePaused(row: RunRow, reason: string, byHuman = false): void {
   const p = pausedRun(row.id);
   const ts = now();
   unanswered.delete(row.id);
+  // The human stopped the agent's latest real run: what failed before is behind it.
+  if (byHuman && row.trigger !== "dream" && row.trigger !== "check") safely("forget the failure", () => setAgentFailedRun(row.agent_id, null));
+  // Stopped for good: an answer it never got to read must not reach a later turn as an order.
+  if (!shuttingDown) safely("drop the owed answer", () => dropOwedAnswers(row.conversation_id));
   sql("UPDATE runs SET status = 'cancelled', error = ?, finished_at = ? WHERE id = ?", reason, ts, row.id);
   const convAlive = conversationExists(row.conversation_id);
   let assistant: Message | null = null;
@@ -770,6 +792,15 @@ export function deliverQueued(runId: string): string | null {
   emitDelta(job);
   log.info("queued messages picked up", { runId, count: taken.length });
   return queuedMessagesContext(getSettings().general.userName, taken.map((t) => t.prompt));
+}
+
+/**
+ * A run of the chat is asking the human right now — between its question and standing still for it (a few seconds).
+ * Resolves once it stands still (or ends), so a reply sent meanwhile counts as the answer.
+ */
+export async function untilAsked(conversationId: string, ms = 15_000): Promise<void> {
+  const job = [...jobs.values()].find((j) => j.conversationId === conversationId && j.pause?.reason === "question" && !j.cancelReason);
+  if (job) await waitForRun(job.runId, ms, { orPaused: true }).catch(() => undefined);
 }
 
 /**
@@ -1427,6 +1458,12 @@ async function spawnClaude(
       return;
     }
     if (job.acc.push(event)) scheduleDelta(job);
+    // Claude has read the human's answer the moment it starts replying: settle it now, so a crash later in the run
+    // can't hand the same answer (an approval: "Do it now") to the next turn again.
+    if (job.acc.answered && !job.answersSettled) {
+      job.answersSettled = true;
+      settleAnswers(job);
+    }
     emitActivity(job, job.pause && !job.cancelReason ? (job.pause.reason === "question" ? "Asking you…" : "Pausing…") : job.acc.activityLabel());
   });
   const exitCode = await proc.exited;
@@ -1856,7 +1893,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     // The human answered a question, but the run that took the answer broke off before Claude read it.
     const late = !command && !dreaming && !job.resumed?.answer ? owedAnswer(job.conversationId) : null;
     if (late) job.lateAnswer = late.questionId;
-    const lateNote = late ? lateAnswerContext(settings.general.userName, late) : "";
+    // A run that stood still again before Claude read the answer already carries it in its own note: no second copy.
+    const carried = !!late && !!job.resumed?.redo?.includes("<your-question>");
+    const lateNote = late && !carried ? lateAnswerContext(settings.general.userName, late) : "";
     const prompt =
       resuming && !command
         ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, apiTools, ssh }) +
@@ -1884,7 +1923,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         job,
         cmd,
         [...baseArgs, "--session-id", sessionId, ...extraArgs],
-        command ? body : recapPrefix(job) + body,
+        command ? body : recapPrefix(job) + lateNote + body,
         cwd,
         env,
         logSink,
@@ -2157,6 +2196,9 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   const spent = spentBy(job, startedMs);
   unanswered.delete(job.runId);
   settleAnswers(job);
+  // Stopped before Claude read an answer: it must not reach a later turn as an order. (Not when Godmode shuts down, and
+  // not when the human's queued messages take over: then the answer goes along with them.)
+  if (outcome.status === "cancelled" && !shuttingDown && !job.thenQueue) safely("drop the owed answer", () => dropOwedAnswers(job.conversationId));
 
   safely("update run row", () =>
     sql(
@@ -2188,7 +2230,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
     // a later run succeeds, the human stops one, or the human dismisses it. Set before run.finished goes out.
     if (job.trigger !== "dream" && job.trigger !== "check") {
       if (outcome.status === "failed") safely("remember the failure", () => setAgentFailedRun(job.agentId, job.runId));
-      else if (outcome.status === "succeeded" || job.cancelReason === "Cancelled by user") safely("forget the failure", () => setAgentFailedRun(job.agentId, null));
+      else if (outcome.status === "succeeded" || job.stoppedByHuman) safely("forget the failure", () => setAgentFailedRun(job.agentId, null));
     }
     const others = [...jobs.values()].some((j) => j !== job && j.agentId === job.agentId && j.status === "running");
     if (!others) safely("set agent status", () => setAgentStatus(job.agentId, "idle"));

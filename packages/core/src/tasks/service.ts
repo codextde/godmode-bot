@@ -58,7 +58,7 @@ import { logger } from "../log";
 import { HttpError, badRequest, conflict, newId, notFound, now, parseJson, slugify } from "../util";
 import { SECRET_PLACEHOLDER, redact, withoutSecrets } from "../vault/vault";
 import { getAgent } from "../agents/service";
-import { INTERRUPTED, activeRunForConversation, cancelRun, getRun, listActiveRuns, waitForRun } from "../runner/runner";
+import { INTERRUPTED, activeRunForConversation, cancelRun, getRun, listActiveRuns, untilAsked, waitForRun } from "../runner/runner";
 import { answerByMessage, type Answerer } from "../services/questions";
 import { pauseOf, PAUSE_QUESTION_JOIN, PAUSE_QUESTION_SQL, toPause, type PauseQuestionCols } from "../services/pauses";
 import { submitMessage } from "../services/messageQueue";
@@ -606,7 +606,7 @@ export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "use
       ((status === "todo" || status === "in_progress") && (reassigned || restored)));
   // Start first: the restart owns the task before the old run's end is reported.
   if (starts) void dispatch(id, current.status === "blocked" ? { kind: current.blocked_kind, reason: current.blocked_reason } : undefined);
-  if (wasWorking && (status !== "in_progress" || reassigned)) void stopWork(current);
+  if (wasWorking && (status !== "in_progress" || reassigned)) void stopWork(current, actor === "user");
   // A follow-up the agent scheduled would wake it up again (after dispatch, which already owns a task it restarts).
   if (current.conversation_id && ((archived && !current.archived_at) || (status !== current.status && status !== "in_progress") || reassigned)) {
     cancelFollowup(current.conversation_id);
@@ -644,25 +644,25 @@ function openRuns(conversationId: string | null): string[] {
 }
 
 /** End them all; a paused run that stayed would continue later and pull the task back to work. */
-async function stopRuns(runIds: string[], reason: string) {
+async function stopRuns(runIds: string[], reason: string, byHuman = false) {
   for (const runId of runIds) {
-    await cancelRun(runId, reason).catch((err) => log.warn(`could not stop run ${runId}`, err));
+    await cancelRun(runId, reason, { byHuman }).catch((err) => log.warn(`could not stop run ${runId}`, err));
     await waitForRun(runId, 15_000).catch(() => {});
   }
 }
 
 /** Cancel the run working on a task (the board moved it away from In progress). */
-async function stopWork(task: TaskRow) {
+async function stopWork(task: TaskRow, byHuman = false) {
   // A restart that already owns the task shows its own progress.
   if (!busy.has(task.id)) activity.delete(task.id);
-  await stopRuns(openRuns(task.conversation_id), "Stopped from the task board");
+  await stopRuns(openRuns(task.conversation_id), "Stopped from the task board", byHuman);
 }
 
 export async function deleteTask(id: string): Promise<void> {
   const task = requireRow(id);
-  // The agent would come back to a ticket that no longer exists.
-  if (task.conversation_id) cancelFollowup(task.conversation_id);
   sql("DELETE FROM tasks WHERE id = ?", id);
+  // The agent would come back to a ticket that no longer exists. (After the delete: cancelling sweeps waiting tickets.)
+  if (task.conversation_id) cancelFollowup(task.conversation_id);
   activity.delete(id);
   bus.emit({ type: "task.deleted", id });
   await stopRuns(openRuns(task.conversation_id), "The task was deleted");
@@ -673,7 +673,10 @@ export async function deleteTask(id: string): Promise<void> {
 /** Stop and clean up every task of a workspace that is being deleted (its rows go with the workspace). */
 export async function removeWorkspaceTasks(workspaceId: string): Promise<void> {
   for (const t of all<TaskRow>("SELECT * FROM tasks WHERE workspace_id = ?", workspaceId)) {
+    // Not delivered on the way out: cancelling a follow-up sweeps waiting tickets.
+    busy.add(t.id);
     if (t.conversation_id) cancelFollowup(t.conversation_id);
+    busy.delete(t.id);
     await stopWork(t);
     await removeCheckout(checkoutDir(t.id)).catch((err) => log.warn(`could not remove the worktree of task ${t.id}`, err));
     removeTaskAttachments(t.id);
@@ -700,27 +703,31 @@ export async function sendTaskMessage(
     if (pauseOf(task.conversation_id)) throw conflict(`Task #${task.number} stands still — only ${human} can continue it`);
     const name = actorName(from) || "another agent";
     await sendMessage(task.conversation_id, { content: `[From ${name}, another agent — not from ${human}]\n\n${content}`, attachments, trigger: "task", source: "delegation" });
-  } else if (answerByMessage(task.conversation_id, { content, attachments }, by)) {
+  } else {
+    // A run that is asking right now stands still for it in a moment: then this message is the answer.
+    await untilAsked(task.conversation_id);
     // The task's run waited for the human's answer: this message was it, and the run continues with it (the
     // timeline records the answer itself).
-    return getTask(id);
-  } else if (pauseOf(task.conversation_id)) {
+    if (answerByMessage(task.conversation_id, { content, attachments }, by)) return getTask(id);
     // A task that stands still takes the message along: it continues with it, or once Claude's limit has reset.
-    await submitMessage(task.conversation_id, { content, attachments });
-  } else await sendMessage(task.conversation_id, { content, attachments, trigger: "task" });
+    if (pauseOf(task.conversation_id)) await submitMessage(task.conversation_id, { content, attachments });
+    else await sendMessage(task.conversation_id, { content, attachments, trigger: "task" });
+  }
   record(id, "feedback", from, { body: content, data: { on: task.status, files: attachments.map((a) => a.name) } });
   return getTask(id);
 }
 
 /** A progress note on a ticket (an agent at a milestone): on the timeline, nobody is notified. */
 export function addTaskNote(taskId: string, text: string, actor: TaskActor, runId: string | null): TaskEvent {
-  requireRow(taskId);
+  const task = requireRow(taskId);
   const note = text.trim();
   if (!note || note.length > MAX_TASK_NOTE_LENGTH) throw badRequest(`Write the note (up to ${MAX_TASK_NOTE_LENGTH} characters)`);
-  if (runId && (get<{ n: number }>("SELECT COUNT(*) AS n FROM task_events WHERE kind = 'note' AND run_id = ?", runId)?.n ?? 0) >= 20) {
+  if (runId && (get<{ n: number }>("SELECT COUNT(*) AS n FROM task_events WHERE kind = 'note' AND task_id = ? AND run_id = ?", taskId, runId)?.n ?? 0) >= 20) {
     throw conflict("That's enough notes for one run — put the rest in your summary.");
   }
-  const event = record(taskId, "note", actor, { body: note, runId });
+  // A note a manager leaves from its own chat is about the ticket, not one of the ticket's runs.
+  const own = runId && task.conversation_id && get("SELECT 1 FROM runs WHERE id = ? AND conversation_id = ?", runId, task.conversation_id) ? runId : null;
+  const event = record(taskId, "note", actor, { body: note, runId: own });
   if (!event) throw new HttpError(500, "The note couldn't be saved");
   emit(taskId);
   return event;
@@ -1135,7 +1142,13 @@ async function finished(id: string, run: Run): Promise<void> {
   }
   // The agent set itself a time to continue: the ticket waits (In progress, nothing running) instead of going to
   // review. What it did so far is kept on its branch (and pushed, for coding tickets) so nothing is out of reach.
-  const followup = getFollowup(run.conversationId);
+  let followup = getFollowup(run.conversationId);
+  // A follow-up an earlier run set (before the human answered) is stale once this run finished the work.
+  const setBy = followup ? get<{ run_id: string | null }>("SELECT run_id FROM followups WHERE conversation_id = ?", run.conversationId)?.run_id : null;
+  if (followup && setBy && setBy !== run.id) {
+    cancelFollowup(run.conversationId);
+    followup = null;
+  }
   if (followup) {
     if (task.branch) {
       busy.add(id);
@@ -1179,11 +1192,9 @@ function sweepWaiting() {
   );
   for (const t of waiting) {
     if (busy.has(t.id) || openRuns(t.conversation_id).length) continue;
-    const last = get<{ kind: string; run_id: string }>(
-      "SELECT kind, run_id FROM task_events WHERE task_id = ? AND run_id IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 1",
-      t.id,
-    );
-    if (last?.kind !== "waiting" || latestRunId(t.conversation_id!) !== last.run_id) continue;
+    // Only a ticket whose latest run ended waiting (notes and other rows on the timeline don't change that).
+    const runId = latestRunId(t.conversation_id!);
+    if (!runId || !get("SELECT 1 FROM task_events WHERE task_id = ? AND kind = 'waiting' AND run_id = ?", t.id, runId)) continue;
     let usable: Agent | null = null;
     try {
       usable = t.agent_id ? getAgent(t.agent_id) : null;
@@ -1196,7 +1207,23 @@ function sweepWaiting() {
       });
       continue;
     }
-    deliver(t.id, last.run_id);
+    // Delivered the way a run's end delivers: a coding ticket pushes and opens its pull request, a pushed branch updates.
+    void deliverWaiting(t.id, runId).catch((err) => log.warn(`task ${t.id}: could not deliver after its follow-up was cancelled`, err));
+  }
+}
+
+async function deliverWaiting(id: string, runId: string): Promise<void> {
+  const task = requireRow(id);
+  if (!task.branch) {
+    deliver(id, runId);
+    return;
+  }
+  busy.add(id);
+  try {
+    if (task.type === "coding") await publish(task, task.summary, runId);
+    else await keepWork(task, runId);
+  } finally {
+    release(id);
   }
 }
 
@@ -1343,7 +1370,7 @@ async function publish(task: TaskRow, summary: string | null, runId: string): Pr
     }
     const { pullRequest, problem } = await openTaskPullRequest(task, summary);
     const opened = requireRow(id);
-    if (opened.pr_url) record(id, "pr_opened", "system", { data: { number: opened.pr_number, url: opened.pr_url } });
+    if (opened.pr_url && (opened.pr_url !== task.pr_url || opened.pr_number !== task.pr_number)) record(id, "pr_opened", "system", { data: { number: opened.pr_number, url: opened.pr_url } });
     if (!deliver(id, runId)) return;
     if (pullRequest?.number) notify("success", `Task #${task.number}: pull request #${pullRequest.number} is open`, title, link);
     else notify("warning", `Task #${task.number}: open the pull request`, `The branch ${task.branch} was pushed. ${problem ?? ""}`.trim(), link);
@@ -1422,8 +1449,64 @@ export async function checkPullRequests(): Promise<void> {
 /* Lifecycle                                                           */
 /* ------------------------------------------------------------------ */
 
+/** Meta key: ticket totals were added up again with each run's own cost (the first count took session totals). */
+const TOTALS_KEY = "tasks.totals_own_cost";
+
+/**
+ * Every ticket's cost, working time and run count, added up again from its runs: each finished run of its chat with
+ * what the work it handed over cost. Runs from before migration 30 hold Claude's total for the whole session, so only
+ * what such a run added to its chat's session counts. Returns how many tickets changed.
+ */
+export function recomputeTicketTotals(): number {
+  const since = get<{ applied_at: string }>("SELECT applied_at FROM _migrations WHERE id = 30")?.applied_at ?? "";
+  const runs = all<{ id: string; conversation_id: string; parent_run_id: string | null; status: string; cost_usd: number | null; duration_ms: number | null; created_at: string }>(
+    "SELECT id, conversation_id, parent_run_id, status, cost_usd, duration_ms, created_at FROM runs ORDER BY conversation_id, created_at, rowid",
+  );
+  const own = new Map<string, number>();
+  const children = new Map<string, string[]>();
+  let conversation = "";
+  let previous: number | null = null;
+  for (const r of runs) {
+    if (r.conversation_id !== conversation) {
+      conversation = r.conversation_id;
+      previous = null;
+    }
+    if (r.parent_run_id) children.set(r.parent_run_id, [...(children.get(r.parent_run_id) ?? []), r.id]);
+    if (r.cost_usd == null) continue;
+    const sessionTotal = r.created_at < since && previous !== null && r.cost_usd >= previous;
+    own.set(r.id, Math.max(0, sessionTotal ? r.cost_usd - previous! : r.cost_usd));
+    previous = r.cost_usd;
+  }
+  const withHandedOver = (id: string, seen = new Set<string>()): number => {
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    return (own.get(id) ?? 0) + (children.get(id) ?? []).reduce((sum, c) => sum + withHandedOver(c, seen), 0);
+  };
+  const byConversation = new Map<string, typeof runs>();
+  for (const r of runs) if (["succeeded", "failed", "cancelled"].includes(r.status)) byConversation.set(r.conversation_id, [...(byConversation.get(r.conversation_id) ?? []), r]);
+  let changed = 0;
+  tx(() => {
+    for (const t of all<{ id: string; conversation_id: string }>("SELECT id, conversation_id FROM tasks WHERE conversation_id IS NOT NULL")) {
+      const list = byConversation.get(t.conversation_id) ?? [];
+      const cost = Math.round(list.reduce((sum, r) => sum + withHandedOver(r.id), 0) * 1e6) / 1e6;
+      const work = list.reduce((sum, r) => sum + (r.duration_ms ?? 0), 0);
+      changed += sql("UPDATE tasks SET cost_usd = ?, work_ms = ?, run_count = ? WHERE id = ? AND (cost_usd != ? OR work_ms != ? OR run_count != ?)", cost, work, list.length, t.id, cost, work, list.length).changes;
+    }
+  });
+  return changed;
+}
+
 export function startTasks(): void {
   unsubscribe ??= bus.on(onBusEvent);
+  if (getMeta(TOTALS_KEY) !== "1") {
+    try {
+      const n = recomputeTicketTotals();
+      if (n) log.info(`added up the cost of ${n} ticket(s) again`);
+      setMeta(TOTALS_KEY, "1");
+    } catch (err) {
+      log.warn("could not add up the tickets' cost again", err);
+    }
+  }
   try {
     sweepTaskAttachments();
   } catch (err) {

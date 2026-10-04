@@ -7,7 +7,7 @@ import { all, get, insert, run as sql } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { deviceBodyKeys, deviceMayCall } from "../src/mobile/scope";
 import { getAgent, updateAgent } from "../src/agents/service";
-import { deleteConversation, getConversation, startChat } from "../src/services/conversations";
+import { deleteConversation, getConversation, sendMessage, startChat } from "../src/services/conversations";
 import { submitMessage, clearQueue } from "../src/services/messageQueue";
 import { listNotifications } from "../src/services/notifications";
 import { listAudit } from "../src/services/audit";
@@ -411,6 +411,70 @@ describe("who asks and who answers", () => {
     // "stop" is no decline: the human may mean stop working.
     expect(interpretReply(a, "stop")).toEqual({ text: "stop" });
   });
+});
+
+describe("an answer the agent hasn't read yet", () => {
+  /** An approved step whose answer the chat still owes the agent (its run broke off before Claude read it). */
+  function owe(conversationId: string): string {
+    const id = newId("qst");
+    const ts = now();
+    insert("questions", {
+      id,
+      kind: "approval",
+      agent_id: agent.id,
+      run_id: newId("run"),
+      conversation_id: conversationId,
+      message_id: newId("msg"),
+      title: "Send the payment reminder",
+      status: "approved",
+      answered_at: ts,
+      answer_owed: 1,
+      created_at: ts,
+      updated_at: ts,
+    });
+    return id;
+  }
+  const owed = (id: string) => get<{ answer_owed: number }>("SELECT answer_owed FROM questions WHERE id = ?", id)!.answer_owed;
+
+  test("the human stopping the run that was to read it drops it, so no later turn is told to do the step", async () => {
+    const chat = await startChat({ agentId: agent.id, content: "Say hello" });
+    await waitForRun(chat.run.id, 20_000);
+    const q = owe(chat.conversation.id);
+    // Hold the only slot so the run with the answer never starts.
+    updateSettings({ runner: { maxConcurrentRuns: 1 } });
+    const blocker = await startChat({ agentId: agent.id, content: "SLEEP for a while" });
+    try {
+      await until(() => getRun(blocker.run.id).status === "running", 10_000, "the blocker to run");
+      const { run } = await sendMessage(chat.conversation.id, { content: "Go on" });
+      expect(getRun(run.id).status).toBe("queued");
+      await cancelRun(run.id, "Cancelled by user");
+      await waitForRun(run.id, 10_000);
+      expect(owed(q)).toBe(0);
+    } finally {
+      await cancelRun(blocker.run.id, "Cancelled by user");
+      await waitForRun(blocker.run.id, 10_000);
+      updateSettings({ runner: { maxConcurrentRuns: 3 } });
+    }
+    const next = await sendMessage(chat.conversation.id, { content: "What's on my calendar?" });
+    await waitForRun(next.run.id, 20_000);
+    expect(invocations(env).at(-1)!.prompt).not.toContain("Send the payment reminder");
+  }, 60_000);
+
+  test("it is settled as soon as Claude starts replying, not only when the run ends", async () => {
+    const chat = await startChat({ agentId: agent.id, content: "Say hello" });
+    await waitForRun(chat.run.id, 20_000);
+    const q = owe(chat.conversation.id);
+    const { run } = await sendMessage(chat.conversation.id, { content: "LONG_STEP now" });
+    try {
+      await until(() => owed(q) === 0, 10_000, "the answer to be settled");
+      expect(getRun(run.id).status).toBe("running");
+      expect(invocations(env).at(-1)!.prompt).toContain("Send the payment reminder");
+    } finally {
+      writeFileSync(join(env.stateDir, "step-done"), "");
+      await waitForRun(run.id, 20_000);
+      rmSync(join(env.stateDir, "step-done"), { force: true });
+    }
+  }, 60_000);
 });
 
 /** A bare conversation of the test agent, for runs inserted by hand. */

@@ -1,4 +1,4 @@
-import { reopenStatus, type TaskBlockedKind } from "@godmode/shared";
+import { isWaiting, reopenStatus, waitsForAnswer, type TaskBlockedKind } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -40,17 +40,26 @@ export default function TaskScreen() {
 
   const agent = t.agentId ? byId.get(t.agentId) : undefined;
   const workspace = workspaces.find((w) => w.id === t.workspaceId);
-  const working = t.status === "in_progress";
-  const canFollowUp = !!t.conversationId && !!t.agentId && !t.archivedAt && (t.status === "in_review" || t.status === "blocked" || t.status === "done");
+  // In progress isn't working: the ticket may wait for its follow-up, for an answer, or stand still.
+  const working = t.status === "in_progress" && (t.runStatus === "running" || t.runStatus === "queued" || !!t.activity);
+  const waiting = t.status === "in_progress" && (isWaiting(t) || waitsForAnswer(t) || !!t.pause);
+  const canFollowUp =
+    !!t.conversationId && !!t.agentId && !t.archivedAt && (t.status === "in_review" || t.status === "blocked" || t.status === "done" || isWaiting(t));
   const assignable = agentsFor(agents ?? [], t.workspaceId).filter((a) => a.enabled);
 
   const move = (status: TaskStatus) => {
     tap();
-    if (!working || status === "in_progress") return update.mutate({ status });
-    Alert.alert("Stop the agent?", `${agent?.name ?? "The agent"} is still working on it. Moving it to ${STATUS_META[status].label} stops the run.`, [
-      { text: "Keep working", style: "cancel" },
-      { text: "Stop", style: "destructive", onPress: () => update.mutate({ status }) },
-    ]);
+    if (!(working || waiting) || status === "in_progress") return update.mutate({ status });
+    Alert.alert(
+      "Stop the agent?",
+      working
+        ? `${agent?.name ?? "The agent"} is still working on it. Moving it to ${STATUS_META[status].label} stops the run.`
+        : `It waits to go on. Moving it to ${STATUS_META[status].label} stops that.`,
+      [
+        { text: "Keep working", style: "cancel" },
+        { text: "Stop", style: "destructive", onPress: () => update.mutate({ status }) },
+      ],
+    );
   };
 
   const archive = (archived: boolean) => {
@@ -92,7 +101,23 @@ export default function TaskScreen() {
             {agent?.name ?? "No agent yet"}
           </T>
           <T variant="footnote" muted numberOfLines={2}>
-            {working ? (t.activity ? activityText(t.activity) : "Working on it") : t.status === "todo" ? "About to start" : agent ? "Assigned" : "Pick one below to start"}
+            {working
+              ? t.activity
+                ? activityText(t.activity)
+                : t.runStatus === "queued"
+                  ? "Queued — waiting for a free slot"
+                  : "Working on it"
+              : waitsForAnswer(t)
+                ? "Waiting for your answer"
+                : isWaiting(t)
+                  ? "Waiting for its follow-up"
+                  : t.pause
+                    ? "Paused"
+                    : t.status === "todo"
+                      ? "About to start"
+                      : agent
+                        ? "Assigned"
+                        : "Pick one below to start"}
           </T>
         </View>
         {agent && <Icon name="chevron" size={13} color={c.textFaint} />}

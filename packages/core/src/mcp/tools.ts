@@ -174,6 +174,21 @@ function delegationHeader(from: Agent, to: Agent): string {
   return `[Delegated by ${name}${role ? ` (${role})` : ""}${relation}. Your final answer goes back to ${name}.]`;
 }
 
+/**
+ * A lead the caller may not set: one it couldn't hand work to itself (it reads secrets in plain text and the caller
+ * doesn't). Its reports are introduced to it as its team, so that would put the caller's agent next to it.
+ */
+function protectedLeadRefusal(agent: Agent, leadId: string | null | undefined): string | null {
+  if (!leadId) return null;
+  let lead: Agent;
+  try {
+    lead = getAgent(leadId);
+  } catch {
+    return null;
+  }
+  return lead.id === agent.id ? null : revealTargetRefusal(agent, lead, "make it a lead");
+}
+
 /** Agents the caller may see/delegate to. */
 function reachableAgents(agent: Agent): Agent[] {
   if (isManager(agent)) return listAgents({ workspaceId: "all" }).filter((a) => a.id !== agent.id);
@@ -1109,6 +1124,8 @@ const TOOLS: ToolDef[] = [
     when: managesSetup,
     run: async ({ routine, ...input }, { agent, ctx }) => {
       assertAgentPatchAllowed(null, input);
+      const leadRefusal = protectedLeadRefusal(agent, input.reportsTo);
+      if (leadRefusal) return fail(leadRefusal);
       // Secret access, management rights and login allow-lists stay human-only (enforced by createAgent for agent actors).
       // Agents created from a VM work in that VM.
       const created = await createAgent({ ...input, vmId: lockedVm(ctx) }, `agent:${agent.id}`);
@@ -1130,7 +1147,10 @@ const TOOLS: ToolDef[] = [
     when: managesSetup,
     run: async ({ agentId, ...patch }, { agent, ctx }) => {
       const target = getAgent(agentId);
-      const refusal = offHostRefusal(ctx, target, "change its settings") ?? (target.id === agent.id ? null : revealTargetRefusal(agent, target, "change its settings"));
+      const refusal =
+        offHostRefusal(ctx, target, "change its settings") ??
+        (target.id === agent.id ? null : revealTargetRefusal(agent, target, "change its settings")) ??
+        protectedLeadRefusal(agent, patch.reportsTo);
       if (refusal) return fail(refusal);
       assertAgentPatchAllowed(target, patch);
       const updated = await updateAgent(agentId, patch, `agent:${agent.id}`);

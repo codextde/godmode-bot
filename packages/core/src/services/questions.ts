@@ -604,6 +604,11 @@ export function settleOwed(questionId: string): void {
   sql("UPDATE questions SET answer_owed = 0 WHERE id = ?", questionId);
 }
 
+/** The human stopped the run that was to read the chat's answer: nothing is owed anymore. */
+export function dropOwedAnswers(conversationId: string): void {
+  sql("UPDATE questions SET answer_owed = 0 WHERE conversation_id = ? AND answer_owed = 1", conversationId);
+}
+
 /* ------------------------------------------------------------------ */
 /* Automations that wait                                                */
 /* ------------------------------------------------------------------ */
@@ -624,11 +629,13 @@ export function remindWaitingAutomation(routineId: string): void {
   const skipped =
     get<{ n: number }>("SELECT COUNT(*) AS n FROM automation_events WHERE routine_id = ? AND status = 'skipped' AND created_at >= ?", routineId, r.created_at)?.n ?? 0;
   const name = r.routine_name ?? "An automation";
-  notify(
+  // The reminder takes the place of the earlier notice, so answering the question settles the latest one.
+  if (r.notification_id) markRead([r.notification_id]);
+  const n = notify(
     "question",
     `“${name}” is waiting for your answer`,
     `Asked ${describeNow(new Date(r.created_at))}: ${shorten(r.title, 200)}${skipped ? ` — ${skipped} run${skipped === 1 ? "" : "s"} skipped since` : ""}.`,
     questionLink({ taskId: r.task_id, conversationId: r.conversation_id }),
   );
-  sql("UPDATE questions SET reminded_at = ? WHERE id = ?", now(), r.id);
+  sql("UPDATE questions SET reminded_at = ?, notification_id = ? WHERE id = ?", now(), n.id, r.id);
 }

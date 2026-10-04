@@ -184,7 +184,9 @@ ${lines.length ? `Teammates you can hand work to:\n${lines.join("\n")}` : "There
   } else if (reports.length) {
     out.push(`These agents report to you: ${reports.map(teammate).join(", ")}.`);
   }
-  const leadReachable = !!team.lead && canDelegate && peers.some((p) => p.id === team.lead!.id);
+  // Not towards a lead that manages agents: work steered there (an injected page, an email) would reach a run that can
+  // change agents and automations. Such a decision goes to the human instead.
+  const leadReachable = !!team.lead && canDelegate && peers.some((p) => p.id === team.lead!.id) && !team.lead.permissions.canManageAgents;
   out.push(
     ctx.delegated
       ? `A teammate handed you this task: your final answer goes back to that teammate, not to ${human}. Lead with the result, then say what failed or is still open.`

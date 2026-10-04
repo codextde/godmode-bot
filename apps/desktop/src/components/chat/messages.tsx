@@ -19,7 +19,7 @@ import { MessageBlocks } from "./message-blocks";
 import { CopyButton } from "./copy-button";
 import { UserBubble } from "./user-bubble";
 import { AttachmentChip } from "./attachments";
-import { useAllAgents, useTasks } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useTasks } from "@/lib/hooks";
 import { describeTool } from "./tool-meta";
 import { FollowupMarker, followupBlock } from "./followup";
 import { liveMood } from "./conversation-mood";
@@ -70,11 +70,16 @@ const HANDOFF_PREFIX = /^\[(?:Delegated by ([^\]\n]+?)|From ([^,\]\n]+), another
 export function StartedMessage({ message, delegatedFrom }: { message: Message; delegatedFrom?: Conversation["delegatedFrom"] }) {
   const { data: agents = [] } = useAllAgents();
   const { data: tasks = [] } = useTasks("all");
+  const { data: boot } = useBootstrap();
   const [open, setOpen] = useState(false);
   const prefix = message.source === "delegation" ? HANDOFF_PREFIX.exec(message.content) : null;
   const body = prefix ? message.content.slice(prefix[0].length) : message.content;
-  const named = prefix ? (prefix[1] ?? prefix[2] ?? "").replace(/\s*\(.*$/, "").trim() : "";
-  const from = message.source === "delegation" ? (agents.find((a) => a.id === delegatedFrom?.agentId) ?? agents.find((a) => named && a.name === named)) : undefined;
+  // A name read from the text is the sending agent's own word: never taken for the human, always marked as an agent.
+  const human = boot?.settings.general.userName.trim().toLowerCase() ?? "";
+  const parsed = prefix ? (prefix[1] ?? prefix[2] ?? "").replace(/\s*\(.*$/, "").trim() : "";
+  const named = parsed && parsed.toLowerCase() !== human ? parsed : "";
+  // Who handed the chat over is known to Godmode (delegatedFrom); a name in the text only labels the card.
+  const from = message.source === "delegation" ? agents.find((a) => a.id === delegatedFrom?.agentId) : undefined;
   const task = message.source === "task" ? tasks.find((t) => t.conversationId === message.conversationId) : undefined;
   const long = body.length > 400 || body.split("\n").length > 4;
   const time = timeOf(message.createdAt);
@@ -99,7 +104,15 @@ export function StartedMessage({ message, delegatedFrom }: { message: Message; d
         </span>
       </>
     ) : (
-      <span className="font-medium text-foreground">{named ? `From ${named}` : "Handed over by another agent"}</span>
+      <span className="min-w-0 truncate">
+        {named ? (
+          <>
+            From <span className="font-medium text-foreground">{named}</span>, another agent
+          </>
+        ) : (
+          <span className="font-medium text-foreground">From another agent</span>
+        )}
+      </span>
     );
   const action =
     message.source === "task" && task ? (

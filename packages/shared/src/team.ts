@@ -33,12 +33,12 @@ export function reportsOf<T extends TeamAgent>(agent: TeamAgent, agents: readonl
   return agents.filter((a) => a.id !== agent.id && !a.isDefault && (a.reportsTo ? a.reportsTo === agent.id : !!agent.isDefault));
 }
 
-/** Lead, its lead, … up to the built-in agent. Stops at a loop or an unknown lead, at most 16. */
-export function chainOf<T extends TeamAgent>(agent: TeamAgent, agents: readonly T[]): T[] {
+/** Lead, its lead, … up to the built-in agent. Stops at a loop or an unknown lead, and after `limit` (16: for showing). */
+export function chainOf<T extends TeamAgent>(agent: TeamAgent, agents: readonly T[], limit = 16): T[] {
   const out: T[] = [];
   const seen = new Set([agent.id]);
   let at: TeamAgent = agent;
-  while (out.length < 16) {
+  while (out.length < limit) {
     const lead = leadOf(at, agents);
     if (!lead || seen.has(lead.id)) break;
     seen.add(lead.id);
@@ -57,7 +57,8 @@ export function leadProblem(agent: TeamAgent, lead: TeamAgent, agents: readonly 
   if (agent.isDefault) return "builtin";
   if (lead.id === agent.id) return "self";
   if (lead.workspaceId && lead.workspaceId !== agent.workspaceId) return "workspace";
-  if (chainOf(lead, agents).some((a) => a.id === agent.id)) return "cycle";
+  // The whole line, however long: a loop deeper than what is shown is still a loop.
+  if (chainOf(lead, agents, Infinity).some((a) => a.id === agent.id)) return "cycle";
   return null;
 }
 

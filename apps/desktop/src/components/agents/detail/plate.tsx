@@ -211,10 +211,20 @@ function LiveRow({ run, title }: { run: LiveRun; title: string }) {
 }
 
 function StandingRow({ run, title, waiting }: { run: Run; title: string; waiting: boolean }) {
+  const limit = run.pause?.reason === "limit";
   return (
-    <Row to={`/chat/${run.conversationId}`} icon={waiting ? <MessageCircleQuestion className="size-3.5 text-warning" /> : run.error?.includes("limit") ? <Hourglass className="size-3.5 text-warning" /> : <Pause className="size-3 fill-current" />}>
+    <Row
+      to={`/chat/${run.conversationId}`}
+      icon={waiting ? <MessageCircleQuestion className="size-3.5 text-warning" /> : limit ? <Hourglass className="size-3.5 text-warning" /> : <Pause className="size-3 fill-current" />}
+    >
       <span className="min-w-0 flex-1">
-        <span className={cn("block truncate", waiting && "font-medium")}>{waiting ? "Waiting for your answer" : "Paused"}</span>
+        <span className={cn("block truncate", waiting && "font-medium")}>
+          {waiting
+            ? "Waiting for your answer"
+            : limit
+              ? `Waiting for Claude's ${run.pause?.limit ?? "usage limit"}${run.pause?.auto && run.pause.resumeAt ? ` · continues ${followupWhen(run.pause.resumeAt)}` : ""}`
+              : "Paused"}
+        </span>
         <span className="block truncate text-xs text-muted-foreground">{title}</span>
       </span>
       <span className="shrink-0 text-xs text-muted-foreground">Open chat</span>

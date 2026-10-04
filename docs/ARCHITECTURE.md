@@ -314,7 +314,11 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
   `<your-question>` and the answer in `<answer-from-human>` tags, both stripped of note tags. Continuing without an answer
   is refused (409 `needs_answer` — the chat's Continue, Send now, the agent's Continue). An answer the agent hasn't read
   (the continued run was paused again before it started, or broke off) is kept: re-sent on continue, or put in front of
-  the chat's next run (`answer_owed`). Audit `question.answer`; the notification is marked read.
+  the chat's next run (`answer_owed`). It counts as read the moment Claude starts replying (not when the run ends, so a
+  crash later can't hand an approval over twice), and the human stopping the run drops it (except when queued
+  messages take over: then it goes along with them), so no later turn is told to do a step the human stopped. A reply
+  sent while the agent is still asking (before its run stands still) waits up to 15 s and then counts as the answer.
+  Audit `question.answer`; the notification is marked read.
 * **Withdrawing.** Stopping the run (`POST /api/runs/:id/cancel`, deleting the chat, agent or task, moving the task off
   In progress) withdraws the question; deleting the chat removes it. A question asked by an automation keeps the
   automation busy: skipped ticks say so and remind the human at most once a day.
@@ -337,16 +341,18 @@ the core, the desktop and the phone alike.
   agent into a workspace lets go of reports from other workspaces and resets a lead from elsewhere, and
   `repairReportingLines()` (startup and after a restore) nulls leads that are gone, self, out of scope, the built-in
   agent or part of a loop. Reporting lines grant nothing: who an agent can hand work to stays `peersFor` (scope via
-  `withinReach`, enabled, `delegateTo`) plus the reveal/VM/computer refusals and depth 3.
+  `withinReach`, enabled, `delegateTo`) plus the reveal/VM/computer refusals and depth 3. An agent can't set a lead it
+  couldn't hand work to itself (one that reads secrets in plain text, or controls the computer on its own).
 * **In the prompt.** Every run except dreams gets a "Your team" section in the system prompt (`prompt.ts`
   `teamSection`): its job, the reporting line up to the human, and — when it may delegate — the teammates it can reach
   with role and *(your lead)* / *(reports to you)*; otherwise the reports it can reach. Names, roles and descriptions
   are put on one line with tags removed. Delegated runs are told their answer goes back to the teammate; other runs
-  say in their answer what is above them (or hand that part to their lead when they can reach it). CLAUDE.md is not
-  touched by team changes.
+  say in their answer what is above them (or hand that part to their lead when they can reach it and it doesn't manage
+  agents — a decision steered towards a manager goes to the human instead). CLAUDE.md is not touched by team changes.
 * **Last run failed.** `agents.failed_run_id` is set in `finalize` when a real run (not a dream or a condition check)
   fails, and by `recoverInterruptedRuns` for runs that were working when Godmode stopped; it is cleared by a later run
-  that succeeds, a run the human stops, deleting that run's chat, or `DELETE /api/agents/:id/failed-run`. `Agent.status`
+  that succeeds, a run the human stops (in a chat, on the board, on a chat platform, or a paused one; `cancelRun(…,
+  { byHuman })`), deleting that run's chat, or `DELETE /api/agents/:id/failed-run`. `Agent.status`
   reads `"error"` while it is set; the status column itself holds only idle/running.
 * **Presence.** `agentPresence()` decides what an agent is doing — switched off, working (running runs only; queued is
   never working), needs you (an open question or a missing login), last run failed, paused, queued, idle — and
