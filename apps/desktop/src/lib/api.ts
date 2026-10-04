@@ -108,6 +108,8 @@ import type {
   SshGeneratedKey,
   SshLocalKey,
   SshServer,
+  TeamInstallResult,
+  TeamTemplate,
   SshServerInput,
   SshServerPatch,
   SshTestInput,
@@ -427,6 +429,10 @@ export const api = {
     update: (id: string, input: Partial<AgentInput>, grant?: string) => request<Agent>("PATCH", `/api/agents/${id}`, input, withGrant(grant)),
     delete: (id: string) => del<{ ok: true }>(`/api/agents/${id}`),
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
+    /** Whole teams to start with: a lead and its reports. */
+    teams: () => get<TeamTemplate[]>("/api/team-templates"),
+    installTeam: (id: string, input: { workspaceId?: string | null; automations?: boolean }) =>
+      post<TeamInstallResult>(`/api/team-templates/${id}/install`, input),
     /** Start a fresh task conversation for the agent */
     run: (id: string, prompt?: string, workspaceId?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt, workspaceId }),
     files: (id: string, path = "") => get<AgentFileEntry[]>(`/api/agents/${id}/files`, { path }),

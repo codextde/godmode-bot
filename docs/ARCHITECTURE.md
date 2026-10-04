@@ -940,6 +940,12 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   an optional `blockedReason` only they can change). Starting a blocked task again opens the prompt with why: "Godmode
   restarted while you were working…" or "Your last run … failed: <reason>". Handing a blocked task to another agent
   turns `needs_input`, `failed`, `stopped` and `interrupted` into `manual` (the new agent starts again).
+* **Ready-made teams** (`agents/teams.ts`, `GET /api/team-templates`, `POST /api/team-templates/:id/install
+  { workspaceId?, automations? }`, Cloud: allowed; phone: closed). A team is a lead (its own template, with instructions
+  for leading: split tickets with `task_split`, hand chat work over, review, report) and reports taken from the agent
+  templates. Installing creates the lead (reporting to the built-in agent, delegation on), then each report under it,
+  and — when asked — the reports' scheduled automations from their templates. Offered on *New agent* and, while only the
+  built-in agent exists, on the Agents page; afterwards the org chart opens.
 * **Sub-tickets** (migration 57, `tasks.parent_id`; `Task.parentId`, `parentNumber`, `subtasks { total, open, blocked }`).
   A lead on a ticket splits it with `task_split({ parts })` — managers to anyone they may give tasks, other agents to
   their reports (by id or name), no agent = backlog for the human; every part is checked (enabled, workspace, 20 at
