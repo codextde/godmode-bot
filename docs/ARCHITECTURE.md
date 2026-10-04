@@ -931,8 +931,8 @@ conversation (origin `slack` / `telegram` / `teams`, with standing instructions 
 unverified). Messages of a chat are accepted in order; each starts a normal chat run, the platform shows typing (Slack:
 an 👀 reaction) and the answer is converted (Telegram HTML, Slack mrkdwn, Teams Markdown) and split. Chat commands:
 `/help`, `/agents`, `/agent <name>` (switch; in a Slack thread the channel follows), `/new`, `/stop`; Slack uses
-`/godmode <command>`. Claude Code's own slash commands are not available from chats. Attachments (≤ 25 MB, Telegram ≤ 20 MB)
-are downloaded into the agent's uploads. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
+`/godmode <command>`. Claude Code's own slash commands are not available from chats. Attachments (any number;
+≤ 25 MB each, Telegram ≤ 20 MB, 250 MB per message) are downloaded into the agent's uploads. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
 connections but restore them turned off, so two machines never answer for one bot.
 
 ## Phone app

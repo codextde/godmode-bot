@@ -416,7 +416,7 @@
   background-size: 14px 14px;
 }
 
-/* Soft edges on horizontal strips that scroll; the fade follows the scroll position where supported. */
+/* Soft edges on strips and lists that scroll; the fade follows the scroll position where supported. */
 @property --gm-fade-start {
   syntax: "<length>";
   initial-value: 0px;
@@ -446,6 +446,28 @@
   }
   100% {
     --gm-fade-start: 2rem;
+    --gm-fade-end: 0px;
+  }
+}
+@utility scroll-fade-y {
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--gm-fade-start), #000 calc(100% - var(--gm-fade-end)), transparent);
+  @supports (animation-timeline: scroll()) {
+    animation: gm-scroll-fade-y linear both;
+    animation-timeline: scroll(self block);
+  }
+}
+@keyframes gm-scroll-fade-y {
+  0% {
+    --gm-fade-start: 0px;
+    --gm-fade-end: 1.5rem;
+  }
+  10%,
+  90% {
+    --gm-fade-start: 1.5rem;
+    --gm-fade-end: 1.5rem;
+  }
+  100% {
+    --gm-fade-start: 1.5rem;
     --gm-fade-end: 0px;
   }
 }

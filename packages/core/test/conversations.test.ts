@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import type { Agent, Conversation, ConversationWithMessages, Run, StartChatResult } from "@godmode/shared";
 import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import {
@@ -188,6 +189,21 @@ describe("HTTP routes", () => {
       expect(conversation.title).toBe(message.content);
       await waitForRun(run.id, 20_000);
     }
+  });
+
+  test("a message takes any number of files", async () => {
+    const conv = createConversation({ agentId: agent.id });
+    // Pasted pictures all carry the same name.
+    const attachments = Array.from({ length: 60 }, (_, i) => ({ name: i < 40 ? `photo_${i + 1}.txt` : "image.txt", mime: "text/plain", data: "aGk=" }));
+    const sent = await api("POST", `/api/conversations/${conv.id}/messages`, { content: "All of these", attachments });
+    expect(sent.status).toBe(201);
+    const { run } = (await sent.json()) as { run: Run };
+    await waitForRun(run.id, 20_000);
+    const saved = getConversation(conv.id).messages[0]!.attachments;
+    expect(saved.slice(0, 41).map((a) => a.name)).toEqual(attachments.slice(0, 41).map((a) => a.name));
+    expect(saved.slice(41).map((a) => a.name)).toEqual(Array.from({ length: 19 }, (_, i) => `image-${i + 1}.txt`));
+    expect(new Set(saved.map((a) => a.path)).size).toBe(60);
+    expect(run.prompt).toContain(join(agent.repoPath, saved[59]!.path));
   });
 
   test("create conversation + errors", async () => {

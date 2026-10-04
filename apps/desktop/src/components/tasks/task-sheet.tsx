@@ -42,7 +42,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CopyButton } from "@/components/vault/copy-button";
 import { toastApiError } from "@/components/vault/vault-utils";
-import { AttachmentChip, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, formatBytes, readAttachment, type PendingAttachment } from "@/components/chat/attachments";
+import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } from "@/components/chat/attachments";
 import { api } from "@/lib/api";
 import { modKey, openExternal } from "@/lib/desktop";
 import { draftKeys, saveDraft, useDraft } from "@/lib/drafts";
@@ -1144,22 +1144,8 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
     },
   });
   const add = async (picked: File[]) => {
-    const fitting = picked.filter((f) => {
-      if (f.size <= MAX_ATTACHMENT_BYTES) return true;
-      toast.error(`${f.name} is too large`, { description: `Files can be up to ${formatBytes(MAX_ATTACHMENT_BYTES)}.` });
-      return false;
-    });
-    try {
-      const read = await Promise.all(fitting.map(readAttachment));
-      setFiles((list) => {
-        const next = [...list, ...read];
-        if (next.length > MAX_ATTACHMENTS) toast.error(`Up to ${MAX_ATTACHMENTS} files per message`);
-        next.slice(MAX_ATTACHMENTS).forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
-        return next.slice(0, MAX_ATTACHMENTS);
-      });
-    } catch (err) {
-      toast.error("Could not read the file", { description: err instanceof Error ? err.message : String(err) });
-    }
+    const read = await readAttachments(picked, totalBytes(files), toast.error);
+    if (read.length) setFiles((list) => [...list, ...read]);
   };
   const drop = (f: PendingAttachment) => {
     if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
@@ -1172,18 +1158,14 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
     <div className="shrink-0 border-t bg-paper-2 p-3">
       <div className="rounded-xl border bg-card p-1.5 shadow-card focus-within:ring-[3px] focus-within:ring-ring/40">
         {files.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-1.5 pt-1.5 pb-1">
-            {files.map((f) => (
-              <AttachmentChip
-                key={f.id}
-                name={f.name}
-                mime={f.mime}
-                size={f.size}
-                previewUrl={f.previewUrl}
-                onRemove={() => drop(f)}
-              />
-            ))}
-          </div>
+          <AttachmentTray
+            files={files}
+            onRemove={drop}
+            onClear={() => {
+              files.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
+              setFiles([]);
+            }}
+          />
         )}
         <div className="flex items-end gap-1">
           <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground" aria-label="Attach files" onClick={() => input.current?.click()}>

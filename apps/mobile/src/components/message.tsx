@@ -4,6 +4,7 @@ import { memo, useEffect, useState } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import type { Message, MessageBlock } from "@godmode/shared";
+import { fileNameSummary } from "@godmode/shared";
 import { Icon } from "./icon";
 import { Markdown } from "./markdown";
 import { Row, T, tap } from "./ui";
@@ -47,7 +48,7 @@ export const UserMessage = memo(function UserMessage({ message }: { message: Mes
         </T>
         {message.attachments.length > 0 && (
           <T variant="caption" color={fg} style={{ opacity: 0.7, marginTop: 4 }}>
-            {message.attachments.map((a) => a.name).join(", ")}
+            {fileNameSummary(message.attachments.map((a) => a.name))}
           </T>
         )}
       </Pressable>
@@ -118,7 +119,7 @@ function Block({ block }: { block: MessageBlock }) {
             </T>
             {block.attachments.length > 0 && (
               <T variant="caption" color={c.onPrimary} style={{ opacity: 0.7, marginTop: 4 }}>
-                {block.attachments.map((a) => a.name).join(", ")}
+                {fileNameSummary(block.attachments.map((a) => a.name))}
               </T>
             )}
           </View>
