@@ -234,6 +234,8 @@ async function start(r: FollowupRow, reason: FollowupReason): Promise<Run | null
       prompt: followupPrompt(r, reason),
       marker: [{ type: "followup", note: r.note, dueAt: r.due_at, setAt: r.created_at, reason }],
       trigger: "followup",
+      // "Continue now" is the human's click: a used-up budget doesn't hold it.
+      byHuman: reason === "now",
     });
     void report(r, run.id);
     return run;

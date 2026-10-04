@@ -34,7 +34,12 @@ const refused = (message: string): Rule => ({ refused: message });
 /** Settings groups a cloud user may change. Machine, access and security settings stay on the computer; a new group is refused until it is added here. */
 const CLOUD_SETTINGS_GROUPS = new Set(["general", "runner", "browser", "computer", "vm", "voice", "memory", "diagnostics", "onboardingComplete"]);
 
-const settingsGroups: Rule = (body) => (Object.keys(body).every((k) => CLOUD_SETTINGS_GROUPS.has(k)) ? "allowed" : { refused: SETTINGS_ONLY });
+/** The voice provider's address is where the vault's OpenAI key is sent: pointing it elsewhere needs allowSecrets. */
+const settingsGroups: Rule = (body) => {
+  if (!Object.keys(body).every((k) => CLOUD_SETTINGS_GROUPS.has(k))) return { refused: SETTINGS_ONLY };
+  const baseUrl = asObject(body.voice).openaiBaseUrl;
+  return baseUrl !== undefined && baseUrl !== getSettings().voice.openaiBaseUrl ? "secrets" : "allowed";
+};
 /** What an agent may do (its permissions) widens what reaches secrets: that needs allowSecrets. */
 const agentPermissions: Rule = (body) => (body.permissions !== undefined ? "secrets" : "allowed");
 /** Testing a saved server sends its stored password or key to whatever host the body names. */
@@ -123,6 +128,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
 
   ["GET|POST", "/api/conversations", A],
   ["GET|PATCH|DELETE", "/api/conversations/:id", A],
+  ["POST", "/api/conversations/read", A],
+  ["GET", "/api/attention", A],
   ["POST", "/api/conversations/:id/messages", A],
   ["PATCH|DELETE", "/api/conversations/:id/queue/:messageId", A],
   ["POST", "/api/conversations/:id/queue/send", A],
@@ -277,6 +284,10 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/cloud/billing/cancel", refused(LINK_ONLY)],
   ["POST", "/api/cloud/billing/resume", refused(LINK_ONLY)],
   ["GET", "/api/usage", A],
+  // What the team spent and its monthly budgets; letting held work run is like continuing a paused chat.
+  ["GET", "/api/spend", A],
+  ["GET", "/api/budgets", A],
+  ["POST", "/api/budgets/release", A],
 ];
 
 /** Writes a viewer may make: resolving a chat's files changes nothing. */

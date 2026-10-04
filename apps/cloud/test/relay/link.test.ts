@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net";
 import { eq } from "drizzle-orm";
 import { WebSocket } from "ws";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { CloudClose, CloudFrame, cloudBearer, encodeCloudFrame } from "@godmode/shared";
 import { SYSTEM } from "@/server/audit";
 import { resetConfig } from "@/server/config";
@@ -134,6 +134,18 @@ describe("one link per computer", () => {
     second.ws.close();
   });
 
+  test("an older socket that says Hello late does not push out the newer link", async () => {
+    const older = await FakeComputer.dial(cloud.port, `Bearer ${device.bearer}`);
+    await sleep(5);
+    const newer = await FakeComputer.connect(cloud.port, device);
+    older.hello();
+    expect((await older.closed()).code).toBe(CloudClose.Replaced);
+    expect(older.welcome).toBeNull();
+    expect(newer.closeEvent).toBeNull();
+    expect(relayHub().isOnline(device.id)).toBe(true);
+    newer.ws.close();
+  });
+
   test("a link is only registered after a valid Hello", async () => {
     const live = await FakeComputer.connect(cloud.port, device);
     const silent = await FakeComputer.dial(cloud.port, `Bearer ${device.bearer}`);
@@ -170,6 +182,19 @@ describe("frames", () => {
     computer.send(CloudFrame.Ping, 0);
     await until(() => computer.framesOf(CloudFrame.Pong).length > 0, 2_000, "Pong");
     expect(computer.closeEvent).toBeNull();
+    computer.ws.close();
+  });
+
+  test("a second Hello sent before Welcome is applied right after it", async () => {
+    const computer = await FakeComputer.dial(cloud.port, `Bearer ${device.bearer}`);
+    computer.hello({ name: "First", browserAccess: false });
+    computer.hello({ name: "Second", browserAccess: true });
+    await until(() => computer.welcome, 5_000, "Welcome");
+    await vi.waitFor(async () => {
+      const [row] = await db.select().from(devices).where(eq(devices.id, device.id));
+      expect(row).toMatchObject({ name: "Second", browserAccess: true });
+    });
+    expect(computer.framesOf(CloudFrame.Welcome)).toHaveLength(1);
     computer.ws.close();
   });
 

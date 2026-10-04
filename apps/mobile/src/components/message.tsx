@@ -177,8 +177,8 @@ function Block({ block }: { block: MessageBlock }) {
     case "pause": {
       // The question card says why a run stands still for an answer.
       if (block.reason === "question") return null;
-      const limit = block.reason === "limit";
-      const what = limit ? `${block.limit ?? "Usage limit"} reached` : "Paused";
+      const limit = block.reason === "limit" || block.reason === "budget";
+      const what = block.reason === "budget" ? "Held · budget used up" : limit ? `${block.limit ?? "Usage limit"} reached` : "Paused";
       return (
         <View style={[styles.callout, { backgroundColor: limit ? c.warningSoft : c.sunken }]}>
           <Icon name={limit ? "clock" : "pause"} size={14} color={limit ? c.warning : c.textMuted} />

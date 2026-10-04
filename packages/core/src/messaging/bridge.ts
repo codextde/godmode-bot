@@ -497,6 +497,8 @@ function pausedNote(conn: ConnectionRow, msg: InboundMessage, conversationId: st
     const agentName = agentOrNull(q.agentId)?.name ?? "Your agent";
     return questionText(conn, msg, q, agentName);
   }
+  // No amounts to people on the platform: only that it waits.
+  if (pause?.reason === "budget") return "This chat is on hold in Godmode. I'll answer when it continues.";
   if (pause?.reason !== "limit") return "This chat is paused in Godmode. I'll answer when it continues.";
   const at = pause.resume_at ? new Date(pause.resume_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }) : null;
   return `Claude's ${pause.limit_name ?? "usage limit"} is reached. ${pause.auto && at ? `I'll continue around ${at} and answer then.` : "I'll answer once it has reset."}`;

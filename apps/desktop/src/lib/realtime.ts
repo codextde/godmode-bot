@@ -20,6 +20,14 @@ export function onServerEvent(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
+/** The chat this window shows while it is visible and focused (null = none): it is read, and its runs don't notify. */
+let viewing: string | null = null;
+export function viewConversation(conversationId: string | null) {
+  if (viewing === conversationId) return;
+  viewing = conversationId;
+  sendClientEvent({ type: "conversation.view", conversationId });
+}
+
 export function sendClientEvent(event: ClientEvent) {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event));
   else pendingSends.push(event);
@@ -38,7 +46,7 @@ function resync(runId: string) {
 
 const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   workspaces: [qk.workspaces],
-  agents: [qk.agents],
+  agents: [qk.agents, qk.spend],
   routines: [qk.routines],
   credentials: [qk.credentials],
   totp: [qk.totp],
@@ -49,7 +57,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   "missing-logins": [qk.missingLogins, qk.bootstrap],
   questions: [qk.questions, qk.bootstrap],
   notifications: [qk.notifications, qk.bootstrap],
-  settings: [qk.settings, qk.bootstrap],
+  settings: [qk.settings, qk.bootstrap, qk.spend],
   runs: [qk.runs],
   models: [qk.models],
   computer: [qk.computer],
@@ -100,6 +108,8 @@ async function connect(queryClient: QueryClient) {
     // Streaming replies as what changed instead of the whole block list every time.
     ws.send(JSON.stringify({ type: "deltas.patch" } satisfies ClientEvent));
     while (pendingSends.length) ws.send(JSON.stringify(pendingSends.shift()));
+    // A new socket doesn't know which chat this window shows.
+    if (viewing) ws.send(JSON.stringify({ type: "conversation.view", conversationId: viewing } satisfies ClientEvent));
     // Resubscribe live views
     for (const viewers of browserViewers.values()) ws.send(JSON.stringify(subscribeEvent(viewers)));
     for (const view of computerViewers.keys()) ws.send(JSON.stringify({ type: "computer.subscribe", view } satisfies ClientEvent));
@@ -164,6 +174,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
+      qc.invalidateQueries({ queryKey: qk.spend });
       break;
     case "run.finished":
       live.runFinished(event.run);
@@ -171,6 +182,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
+      qc.invalidateQueries({ queryKey: qk.spend });
       qc.invalidateQueries({ queryKey: qk.bootstrap });
       break;
     case "message.created":
@@ -186,6 +198,8 @@ function handle(qc: QueryClient, event: ServerEvent) {
     }
     case "conversation.updated":
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      // Unread and failed chats are on "Needs you".
+      qc.invalidateQueries({ queryKey: qk.bootstrap });
       qc.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
       // Follow-ups show the chat's title.
       qc.invalidateQueries({ queryKey: qk.followups });
@@ -205,6 +219,8 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "task.updated":
       upsertTask(qc, event.task);
+      // Tickets to review and blocked ones are on "Needs you".
+      qc.invalidateQueries({ queryKey: qk.bootstrap });
       break;
     case "task.event": {
       // Merged into the cached timeline; the human's own message replaces its pending row.
@@ -224,6 +240,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
     }
     case "task.deleted":
       qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.filter((t) => t.id !== event.id));
+      qc.invalidateQueries({ queryKey: qk.bootstrap });
       break;
     case "automation.event":
       void upsertAutomationEvent(qc, event.event);

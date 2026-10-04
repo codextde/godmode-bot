@@ -127,10 +127,13 @@ export class CloudClient {
     return this.conn;
   }
 
-  /** Send Hello again when what it says changed (name, access switches); the cloud updates its record. */
+  /**
+   * Send Hello again when what it says changed (name, access switches); the cloud updates its record. Not before
+   * Welcome: the cloud only takes one Hello until then, and a change in between is sent once Welcome arrives.
+   */
   refreshHello() {
     const ws = this.ws;
-    if (ws && ws.readyState === 1 && JSON.stringify(this.opts.hello()) !== this.helloSent) this.sendHello(ws);
+    if (ws && ws.readyState === 1 && this.welcomedAt && JSON.stringify(this.opts.hello()) !== this.helloSent) this.sendHello(ws);
   }
 
   closeSockets(channel: "cloud" | "mobile", code: number, reason: string) {
@@ -231,6 +234,7 @@ export class CloudClient {
         this.attempts = 0;
         this.opts.onWelcome(welcome);
         this.setState("online", null);
+        this.refreshHello();
         return;
       }
       case CloudFrame.Notice: {

@@ -328,6 +328,60 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
   agent is checking with the owner. An answer given in Godmode is followed back into the platform chat. Agents have no
   tool that answers.
 
+## Needs you
+
+* **The list.** `GET /api/attention` (`services/attention.ts`) computes everything that waits for the human from live
+  state on every read — never from notifications, so an item leaves the moment the thing is handled anywhere: open
+  questions and approvals, open missing logins (linked to the chat or ticket of the run that reported them), tickets
+  to review and blocked ones, chats paused by the human or past a usage limit with nothing continuing them, budget
+  holds (one row per budget), chats whose latest run failed while nobody looked, automations whose own last run failed
+  or whose own trigger is broken (not the shared app-event connection), and people asking a bot for access. Each item
+  has a stable id (`<kind>:<id>`), who, what, since when, a link and its one action. Bootstrap carries
+  `counts.attention` (per kind and total) and `counts.unreadChats`; the Inbox badge counts what waits (updates only when
+  nothing does), Tasks counts review + blocked, Automations the failing ones. Cloud: allowed; phone: closed.
+* **Unread.** `conversations.unread_run_id` (migration 54) marks a chat the human talks in (origin chat/api) whose
+  chat, manual, api or follow-up run ended while no window showed it. A window says which chat it shows while visible
+  and focused (`conversation.view` on the socket); showing it, or `POST /api/conversations/read` (`ids` or `"all"`),
+  reads it — and reading a chat whose run failed clears the agent's "Last run failed". Automation, task, delegation and
+  platform chats are never unread.
+* **Notices** (`services/runNotices.ts`). Such a run that nobody watched notifies once — "Mia replied in “Q4 plan”" /
+  "Mia ran into a problem in “…”" — unless the agent called `notify_user` itself or the run reported a missing login
+  (that has its own notice). Automations follow `routines.notify`: `failures` (default; a failure is told once until a
+  run succeeds again), `always`, or `never`; nothing when its chat is on screen. Toasts carry *Open* to the thing, and a
+  notification about what is already on screen is marked read instead of popping up.
+
+## Spend and budgets
+
+* **Ledger.** `spend` (migration 52) has one row per stretch of a run — booked in `suspend` and `finalize` when the
+  stretch ends, with that stretch's own cost (`stretchCost`) and time — so money counts in the day and month it was
+  spent, also for a run that continues next month. No foreign keys: rows keep the agent's name and stay when an agent,
+  chat or run is deleted. `SPEND_BACKFILL_SQL` books older runs once (runs from before migration 30 count only what
+  they added to their chat's session) and runs again after a restore.
+* **Report.** `GET /api/spend?period=today|week|month|all&agentId=` (`services/spend.ts`): the four period totals (runs,
+  failed, cost, working time) and, for the chosen period, per agent (deleted ones by their stored name) and per kind of
+  work (`SPEND_KIND_OF`: chats, automations incl. checks, board tasks, handed-over work, follow-ups, dreams). Periods
+  start at local midnight, Monday and the 1st. `GET /api/usage` (Cloud billing) is separate. Managers read it through
+  `spend_overview`.
+* **Budgets.** `settings.runner.monthlyBudgetUsd` (team) and `permissions.monthlyBudgetUsd` (agent; human-only — an
+  agent's change is ignored), audited as `budget.set`. `services/budgets.ts` tells the human once per budget, month and
+  amount at 80 % and at 100 % (`checkThresholds` on `run.finished` / `run.paused`; meta `budget.told.*`).
+* **Held, not failed.** While the team's or the agent's budget is used up, `pump()` holds queued unattended runs —
+  automations, follow-ups, board tickets (`HELD_TRIGGERS`), and messages from Slack, Telegram or Teams (anyone in such a
+  channel could otherwise spend past the owner's budget; they're told the chat is on hold, no amounts) — as a pause with
+  reason `budget` (`paused_runs.budget_scope`, `budget_usd`), `resume_at` the 1st of next month and `auto = 1`. A run is
+  held only when it would start now (its chat has nothing working or standing still), so the hold is the chat's one
+  pause. The pause timer continues held runs on the 1st, and a changed budget amount continues those with room again
+  (`releaseHeld("auto")`; a run still held by the other budget gets its scope updated). The human lets them run from the
+  chat's bar, the budget meter or `POST /api/budgets/release` (audited `budget.release`/`budget.continue`; the run is
+  then exempt; `paused_runs.exempt`, migration 55, keeps that through later pauses). The human continuing any paused
+  run lets it run past a budget too. The agent's Continue and messages into the chat don't release a hold (a message
+  waits and goes along; *Send now* in the queue says it lets the run past the budget).
+  Runs the human starts — chats, *Run now*, a test event, a follow-up's *Continue now* (`byHuman`) — still run, and a
+  chat says once a month that a budget is used up. What such a run hands over is exempt too (`runExempt`). Unattended
+  work can't hand work to an agent whose budget is used up (`agent_delegate` refuses); scheduled
+  condition checks and dreams don't start. Automations skip their ticks meanwhile (recorded once). Checks happen when
+  work starts: a run already working finishes under its own per-run cap.
+
 ## Team
 
 Agents form a team with the built-in agent on top (it reports to the human). `shared/team.ts` holds the rules, used by
