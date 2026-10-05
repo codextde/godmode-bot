@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Folder, FolderGit2, Globe2, Maximize2, Minimize2, Paperclip, X } from "lucide-react";
+import { ChevronRight, Folder, FolderGit2, Globe2, Maximize2, Minimize2, Paperclip, Target, X } from "lucide-react";
 import { toast } from "sonner";
 import type { Agent, Task, TaskPriority, TaskStatus, TaskType, Workspace } from "@godmode/shared";
 import { MAX_TASK_TITLE_LENGTH, TASK_PRIORITIES, TASK_TYPES } from "@godmode/shared";
@@ -15,6 +15,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
 import { modKey } from "@/lib/desktop";
 import { clearDraft, useDraft } from "@/lib/drafts";
+import { useGoals } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { DescriptionEditor, withoutPlaceholders, type DescriptionEditorHandle, type TextUpdate } from "./description-editor";
@@ -113,6 +114,20 @@ export function TaskDialog({
     [setForm],
   );
 
+  // The goal the board is filtered by: the new ticket serves it — in its workspace — unless the human takes it off.
+  const { data: goals = [] } = useGoals("all");
+  const filterGoal = !parent && defaultGoalId ? goals.find((g) => g.id === defaultGoalId) : undefined;
+  const [goalOff, setGoalOff] = useState(false);
+  useEffect(() => {
+    if (open) setGoalOff(false);
+  }, [open]);
+  useEffect(() => {
+    if (open && filterGoal?.workspaceId && workspaceId !== filterGoal.workspaceId) set("workspaceId", filterGoal.workspaceId);
+    // Only when the dialog opens with the goal (the human may pick another workspace afterwards).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, filterGoal?.id]);
+  const goal = filterGoal && !goalOff && (!filterGoal.workspaceId || filterGoal.workspaceId === workspaceId) ? filterGoal : null;
+
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
   const repos = workspaceRepos(workspace);
   const choice = repos.length ? (repoChoice === OTHER_REPO || repos.some((r) => r.id === repoChoice) ? repoChoice : repos[0]!.id) : OTHER_REPO;
@@ -136,7 +151,7 @@ export function TaskDialog({
         priority,
         dueDate,
         labels,
-        ...(parent ? { parentId: parent.id } : defaultGoalId ? { goalId: defaultGoalId } : {}),
+        ...(parent ? { parentId: parent.id } : goal ? { goalId: goal.id } : {}),
         ...(type !== "coding"
           ? {}
           : picked?.kind === "folder"
@@ -352,6 +367,15 @@ export function TaskDialog({
               <span className="flex h-8 items-center rounded-full border border-border/80 pr-1 pl-2">
                 <DueDateField value={dueDate} status={status} onChange={(d) => set("dueDate", d)} />
               </span>
+              {goal && (
+                <span className="flex h-8 items-center gap-1.5 rounded-full border border-border/80 pr-1.5 pl-2.5 text-[13px]" title={goal.why || undefined}>
+                  <Target className="size-3.5 text-brand-strong" aria-hidden />
+                  <span className="max-w-44 truncate">{goal.title}</span>
+                  <button type="button" className="grid size-5 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Don't file it under “${goal.title}”`} onClick={() => setGoalOff(true)}>
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
               {/* A part is always in its ticket's workspace. */}
               {!parent && (
                 <Pill

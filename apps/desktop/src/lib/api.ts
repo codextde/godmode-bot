@@ -433,7 +433,7 @@ export const api = {
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
     /** Whole teams to start with: a lead and its reports. */
     teams: () => get<TeamTemplate[]>("/api/team-templates"),
-    installTeam: (id: string, input: { workspaceId?: string | null; automations?: boolean }) =>
+    installTeam: (id: string, input: { workspaceId?: string | null; automations?: boolean; timezone?: string }) =>
       post<TeamInstallResult>(`/api/team-templates/${id}/install`, input),
     /** Start a fresh task conversation for the agent */
     run: (id: string, prompt?: string, workspaceId?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt, workspaceId }),

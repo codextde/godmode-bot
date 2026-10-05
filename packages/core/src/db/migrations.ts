@@ -1081,4 +1081,13 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
 CREATE INDEX IF NOT EXISTS idx_task_dependencies_waits_for ON task_dependencies(waits_for_id);
 `,
   },
+  {
+    id: 64,
+    name: "goals_of_deleted_workspaces",
+    sql: /* sql */ `
+-- Goals of workspaces deleted before they went along with them.
+UPDATE tasks SET goal_id = NULL WHERE goal_id IN (SELECT id FROM goals WHERE workspace_id IS NOT NULL AND workspace_id NOT IN (SELECT id FROM workspaces));
+DELETE FROM goals WHERE workspace_id IS NOT NULL AND workspace_id NOT IN (SELECT id FROM workspaces);
+`,
+  },
 ];

@@ -11,6 +11,7 @@ import { getRun, activeRunForConversation } from "../src/runner/runner";
 import { createWorkspace, deleteWorkspace, updateWorkspace } from "../src/services/workspaces";
 import { workingDirectoryProblem } from "../src/services/folders";
 import {
+  __setTaskRetryDelaysForTests,
   archiveTasks,
   checkPullRequests,
   checkoutDir,
@@ -173,6 +174,23 @@ describe("agents work on tasks", () => {
     await settled(broken.id, ["blocked"]);
     expect(listTaskEvents(broken.id).filter((e) => e.kind === "started" && e.data.retry).map((e) => e.kind === "started" && e.data.retry)).toEqual([1, 2]);
     expect(getTask(broken.id).blockedReason).toContain("still failing after 2 more tries");
+  }, 60_000);
+
+  test("moving a ticket while it waits to try again restarts it cleanly; the human's move cancels the waiting try", async () => {
+    __setTaskRetryDelaysForTests([60_000, 60_000]);
+    // The fake crashes once per state dir: again for this ticket.
+    rmSync(join(env.stateDir, "crashed-once"), { force: true });
+    try {
+      const t = createTask({ workspaceId, title: "CRASH_ONCE then fine, later", agentId: wsAgent.id });
+      await until(() => getTask(t.id).activity?.startsWith("Trying again") === true, 20_000, "the ticket to wait to try again");
+      updateTask(t.id, { status: "todo" });
+      await settled(t.id, ["in_review"]);
+      // Started by the human, not "tried again on its own"; nothing left waiting.
+      expect(listTaskEvents(t.id).some((e) => e.kind === "started" && e.data.retry)).toBe(false);
+      expect(getTask(t.id).activity).toBeNull();
+    } finally {
+      __setTaskRetryDelaysForTests([0, 0]);
+    }
   }, 60_000);
 
   test("the agent can report that it's blocked", async () => {

@@ -3,8 +3,8 @@ import type { Agent, Goal } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { getAccessToken } from "../src/server/auth";
 import { callTool } from "../src/mcp/tools";
-import { createWorkspace } from "../src/services/workspaces";
-import { createGoal, deleteGoal, getGoal } from "../src/tasks/goals";
+import { createWorkspace, deleteWorkspace } from "../src/services/workspaces";
+import { createGoal, deleteGoal, getGoal, updateGoal } from "../src/tasks/goals";
 import { createTask, getTask, startTasks, stopTasks, updateTask } from "../src/tasks/service";
 
 let env: TestEnv;
@@ -33,9 +33,17 @@ describe("goals", () => {
     const part = createTask({ title: "Check competitor prices", parentId: ticket.id });
     expect(getTask(part.id).goalId).toBe(goal.id);
     expect(getGoal(goal.id).tickets).toEqual({ total: 2, done: 0, open: 2 });
-    // Approving the whole settles its open part (cancelled): nothing left to do for the goal.
+    // Approving the whole settles its open part (cancelled): a dropped piece of work isn't part of how far the goal is.
     updateTask(ticket.id, { status: "done" });
-    expect(getGoal(goal.id).tickets).toEqual({ total: 2, done: 1, open: 0 });
+    expect(getGoal(goal.id).tickets).toEqual({ total: 1, done: 1, open: 0 });
+
+    // The ticket's goal changes: its parts follow; a part's own goal can't be set apart from it.
+    const other = createGoal({ title: "Keep customers happy" });
+    const lead = createTask({ title: "Plan the survey", goalId: goal.id });
+    const piece = createTask({ title: "Write the questions", parentId: lead.id });
+    updateTask(lead.id, { goalId: other.id });
+    expect(getTask(piece.id).goalId).toBe(other.id);
+    expect(() => updateTask(piece.id, { goalId: goal.id })).toThrow("its ticket's goal");
   }, 60_000);
 
   test("over HTTP and for agents; a goal of another workspace is refused; deleting a goal frees its tickets", async () => {
@@ -57,5 +65,10 @@ describe("goals", () => {
     const t = createTask({ title: "Find candidates", goalId: created.id });
     deleteGoal(created.id);
     expect(getTask(t.id).goalId).toBeNull();
+
+    // A goal stays in its workspace; a deleted workspace takes its goals along.
+    expect(() => updateGoal(theirs.id, { workspaceId: null })).toThrow("stays in its workspace");
+    await deleteWorkspace(ws.id);
+    expect(() => getGoal(theirs.id)).toThrow();
   }, 30_000);
 });
