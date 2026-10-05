@@ -1414,7 +1414,7 @@ A **runner** is a headless Godmode core on another computer (macOS for now) that
   in Godmode (`POST /api/runners`) runs the pair handshake: the runner stores the controller's key and drops the code
   before it answers. Or Godmode makes an offer (`POST /api/runners/pairing`): a temporary listener on every interface
   and `gmo1.<…>` with its URLs and a token, inside an install command — `curl …/godmode` from this computer with the
-  binary's SHA-256 pinned (compiled builds only) or `godmode.codext.de/runner.sh` with the license key — that ends in
+  binary's SHA-256 pinned (compiled builds only) or `usegodmode.com/runner.sh` with the license key — that ends in
   `godmode runner install --pair <offer>`. The runner then posts its code to the offer's `POST /pair`, sealed with a
   key derived from the token (which never crosses the network), and the controller pairs with it; the listener stops.
 * **Setup copy** (`snapshot.ts`). Before a chat starts on a runner, before every message to it, and 5 s after the

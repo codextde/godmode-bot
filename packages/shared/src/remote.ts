@@ -71,7 +71,7 @@ export interface RunnerPairingOffer {
   offerId: ID;
   /** One command that installs the runner from this computer and pairs it; null when this build can't serve its own binary. */
   command: string | null;
-  /** The same through godmode.codext.de (needs the license key in place of the placeholder). */
+  /** The same through usegodmode.com (needs the license key in place of the placeholder). */
   websiteCommand: string;
   /** Where the runner reaches this computer while pairing. */
   urls: string[];

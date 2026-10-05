@@ -358,6 +358,6 @@ export async function createOffer(onCode: (code: string) => Promise<{ name: stri
       log.warn("couldn't hash this program for the install command", err);
     }
   }
-  const websiteCommand = `curl -fsSL https://godmode.codext.de/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX GODMODE_PAIR=${pair} sh`;
+  const websiteCommand = `curl -fsSL https://usegodmode.com/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX GODMODE_PAIR=${pair} sh`;
   return { offerId: id, command, websiteCommand, urls, expiresAt: new Date(expiresAt).toISOString() };
 }

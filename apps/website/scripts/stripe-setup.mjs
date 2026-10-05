@@ -5,7 +5,7 @@
 //   • a customer-portal configuration (cancel subscription, update card, invoices)
 //
 // Usage:
-//   STRIPE_SECRET_KEY=sk_test_… SITE_URL=https://godmode.codext.de node scripts/stripe-setup.mjs
+//   STRIPE_SECRET_KEY=sk_test_… SITE_URL=https://usegodmode.com node scripts/stripe-setup.mjs
 //   (use a live key for production; it's safe to run again)
 //   STRIPE_WEBHOOK_API_VERSION=… pins the webhook's payload version — needed when the account already has live
 //   webhooks on 3 other API versions (Stripe's limit); the handler only reads fields that are stable across versions.
@@ -13,7 +13,7 @@
 import Stripe from 'stripe';
 
 const key = process.env.STRIPE_SECRET_KEY;
-const site = (process.env.SITE_URL ?? 'https://godmode.codext.de').replace(/\/$/, '');
+const site = (process.env.SITE_URL ?? 'https://usegodmode.com').replace(/\/$/, '');
 if (!key) {
   console.error('Set STRIPE_SECRET_KEY');
   process.exit(1);
