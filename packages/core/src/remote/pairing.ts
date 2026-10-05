@@ -13,7 +13,8 @@
  *    see the command can't be opened, and nobody on the network can read the code on its way.
  *
  * The pairing listener also serves this program's own executable, so the install command can fetch the runner from
- * the controller instead of the website; the command pins its SHA-256.
+ * the controller instead of the website; the command pins its SHA-256. There is one command per address of the
+ * controller (local network, virtual machines, Tailscale), so the human picks the network both computers share.
  */
 import { createHash, hkdfSync } from "node:crypto";
 import { networkInterfaces, hostname as osHostname } from "node:os";
@@ -25,7 +26,10 @@ import {
   parseRunnerCode,
   type RunnerPairingCode,
   type RunnerPairingOffer,
+  type RunnerNetwork,
+  type RunnerOfferRoute,
   type RunnerPairingOfferPayload,
+  type TailscaleStatus,
 } from "@godmode/shared";
 import { deleteMeta, getMeta, setMeta } from "../db";
 import { logger } from "../log";
@@ -73,6 +77,28 @@ export async function localAddresses(): Promise<string[]> {
   const host = osHostname().replace(/\.local$/i, "");
   const mdns = /^[A-Za-z0-9-]{1,63}$/.test(host) ? [`${host}.local`] : [];
   return [...new Set([...lan, ...tailnet, ...mdns])];
+}
+
+interface OfferAddress {
+  network: RunnerNetwork;
+  address: string;
+  detail: string | null;
+}
+
+const NETWORK_ORDER: Record<RunnerNetwork, number> = { lan: 0, vm: 1, tailscale: 2 };
+
+/** Where another computer can download Godmode from while pairing: local network first, then VM bridges, then Tailscale. */
+export function offerAddresses(ts: TailscaleStatus, interfaces = networkInterfaces()): OfferAddress[] {
+  const out: OfferAddress[] = [];
+  for (const [name, list] of Object.entries(interfaces)) {
+    for (const a of list ?? []) {
+      if (a.internal || a.family !== "IPv4" || a.address.startsWith("169.254.") || out.some((o) => o.address === a.address)) continue;
+      if (isTailscaleIp(a.address)) out.push({ network: "tailscale", address: a.address, detail: a.address === ts.ip ? ts.dnsName : null });
+      else out.push({ network: /^(bridge|vmnet|vboxnet|vnic)/.test(name) ? "vm" : "lan", address: a.address, detail: name });
+    }
+  }
+  if (ts.running && ts.ip && !out.some((o) => o.address === ts.ip)) out.push({ network: "tailscale", address: ts.ip, detail: ts.dnsName });
+  return out.sort((a, b) => NETWORK_ORDER[a.network] - NETWORK_ORDER[b.network]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -170,7 +196,7 @@ export async function deliverCode(offer: RunnerPairingOfferPayload, code: string
     ),
   );
   const targets = reachable.filter((u): u is string => !!u);
-  if (!targets.length) return { ok: false, error: "Godmode can't be reached from here." };
+  if (!targets.length) return { ok: false, error: "Godmode can't be reached from here. Both computers need the same network, or Tailscale signed in to the same account." };
   let lastError = "Godmode couldn't be reached.";
   for (const url of targets) {
     try {
@@ -228,8 +254,8 @@ interface Offer {
   attempts: number;
   server: Server<undefined>;
   timer: ReturnType<typeof setTimeout>;
-  /** Pairs with the code; resolves with the runner's name. */
-  onCode: (code: string) => Promise<{ name: string }>;
+  /** Pairs with the code (`from`: the address it came from); resolves with the runner's name. */
+  onCode: (code: string, from: string | null) => Promise<{ name: string }>;
   busy: boolean;
 }
 
@@ -253,7 +279,7 @@ function json(status: number, body: unknown): Response {
   return Response.json(body, { status, headers: { "cache-control": "no-store" } });
 }
 
-async function handlePair(current: Offer, req: Request): Promise<Response> {
+async function handlePair(current: Offer, req: Request, from: string | null): Promise<Response> {
   if (current.attempts >= MAX_PAIR_ATTEMPTS) return json(429, { error: "Too many attempts. Show a new install command in Godmode." });
   current.attempts++;
   const length = Number(req.headers.get("content-length") ?? 0);
@@ -279,7 +305,7 @@ async function handlePair(current: Offer, req: Request): Promise<Response> {
   if (current.busy) return json(409, { error: "Already pairing." });
   current.busy = true;
   try {
-    const { name } = await current.onCode(code);
+    const { name } = await current.onCode(code, from);
     if (offer === current) cancelOffer(true);
     return json(200, { ok: true, name });
   } catch (err) {
@@ -301,7 +327,7 @@ function serveExecutable(): Response {
  * A new pairing offer (replaces the previous one) and the temporary listener the runner reaches it on. `onCode`
  * pairs with the code the runner sends.
  */
-export async function createOffer(onCode: (code: string) => Promise<{ name: string }>): Promise<RunnerPairingOffer> {
+export async function createOffer(onCode: (code: string, from: string | null) => Promise<{ name: string }>): Promise<RunnerPairingOffer> {
   cancelOffer();
   const id = newId("rpo");
   const token = randomToken(32);
@@ -314,11 +340,11 @@ export async function createOffer(onCode: (code: string) => Promise<{ name: stri
       port: 0,
       idleTimeout: 60,
       maxRequestBodySize: MAX_PAIR_BODY,
-      fetch: (req) => {
+      fetch: (req, srv) => {
         const current = state.current;
         if (!current || current !== offer || current.expiresAt <= Date.now()) return json(404, { error: "No pairing in progress" });
         const path = new URL(req.url).pathname;
-        if (req.method === "POST" && path === "/pair") return handlePair(current, req);
+        if (req.method === "POST" && path === "/pair") return handlePair(current, req, srv.requestIP(req)?.address.replace(/^::ffff:/i, "") ?? null);
         if (req.method === "GET" && path === "/godmode") return serveExecutable();
         return json(404, { error: "Not found" });
       },
@@ -334,30 +360,37 @@ export async function createOffer(onCode: (code: string) => Promise<{ name: stri
   offer = { id, token, expiresAt, attempts: 0, server, timer, onCode, busy: false };
   state.current = offer;
 
-  const addresses = (await localAddresses()).filter((a) => !a.endsWith(".local"));
-  const remote = addresses.map((a) => `http://${a}:${port}`);
+  const tailscale = await tailscaleStatus(true);
+  const addresses = offerAddresses(tailscale);
+  const remote = addresses.map((a) => `http://${a.address}:${port}`);
   // Last: a runner on this same computer (trying it out) reaches the offer on loopback.
   const urls = [...remote, `http://127.0.0.1:${port}`];
   const payload: RunnerPairingOfferPayload = { v: 1, id, token, urls, name: computerName(), exp: Math.floor(expiresAt / 1000) };
   const pair = encodeRunnerOffer(payload);
 
-  let command: string | null = null;
+  let sha: string | null = null;
   if (isCompiledBinary() && remote.length) {
     try {
-      const sha = await hashExecutable();
-      const bin = "~/.local/bin";
-      command = [
-        `mkdir -p ${bin}`,
-        `curl -fsS ${remote[0]}/godmode -o ${bin}/godmode.new`,
-        `[ "$(shasum -a 256 ${bin}/godmode.new | cut -d' ' -f1)" = "${sha}" ]`,
-        `chmod 755 ${bin}/godmode.new`,
-        `mv -f ${bin}/godmode.new ${bin}/godmode`,
-        `${bin}/godmode runner install --pair ${pair}`,
-      ].join(" && ");
+      sha = await hashExecutable();
     } catch (err) {
       log.warn("couldn't hash this program for the install command", err);
     }
   }
-  const websiteCommand = `curl -fsSL https://godmode.codext.de/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX GODMODE_PAIR=${pair} sh`;
-  return { offerId: id, command, websiteCommand, urls, expiresAt: new Date(expiresAt).toISOString() };
+  const bin = "~/.local/bin";
+  const routes: RunnerOfferRoute[] = addresses.map((a, i) => ({
+    ...a,
+    url: remote[i]!,
+    command: sha
+      ? [
+          `mkdir -p ${bin}`,
+          `curl -fsS ${remote[i]}/godmode -o ${bin}/godmode.new`,
+          `[ "$(shasum -a 256 ${bin}/godmode.new | cut -d' ' -f1)" = "${sha}" ]`,
+          `chmod 755 ${bin}/godmode.new`,
+          `mv -f ${bin}/godmode.new ${bin}/godmode`,
+          `${bin}/godmode runner install --pair ${pair}`,
+        ].join(" && ")
+      : null,
+  }));
+  const websiteCommand = `curl -fsSL https://usegodmode.com/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX GODMODE_PAIR=${pair} sh`;
+  return { offerId: id, command: routes[0]?.command ?? null, routes, websiteCommand, urls, tailscale, expiresAt: new Date(expiresAt).toISOString() };
 }

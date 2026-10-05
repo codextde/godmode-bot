@@ -485,9 +485,9 @@ export function teamsAppPackage(opts: { appId: string; name: string; publicUrl: 
     id: opts.appId,
     developer: {
       name: "Godmode Bot",
-      websiteUrl: "https://godmode.codext.de",
-      privacyUrl: "https://godmode.codext.de/legal/privacy",
-      termsOfUseUrl: "https://godmode.codext.de/legal/terms",
+      websiteUrl: "https://usegodmode.com",
+      privacyUrl: "https://usegodmode.com/legal/privacy",
+      termsOfUseUrl: "https://usegodmode.com/legal/terms",
     },
     name: { short, full: `${short} — Godmode agents` },
     description: {

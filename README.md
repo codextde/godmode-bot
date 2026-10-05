@@ -16,7 +16,7 @@ memory, routines and history.
 [![browser-use](https://img.shields.io/badge/browser-browser--use-111.svg)](https://github.com/browser-use/browser-use)
 [![Tauri 2](https://img.shields.io/badge/desktop-Tauri%202-ffc131.svg)](https://tauri.app)
 
-[**Get Godmode**](https://godmode.codext.de) ·
+[**Get Godmode**](https://usegodmode.com) ·
 [**Quick start**](#-quick-start) ·
 [**Features**](#-features) ·
 [**Security**](#-security) ·
@@ -199,15 +199,15 @@ needs to be useful:
 
 ### Desktop app
 
-Buy a license at [**godmode.codext.de**](https://godmode.codext.de) ($500 lifetime or $50/month) and download the app
-from your welcome page — or later from [godmode.codext.de/download](https://godmode.codext.de/download) with your
+Buy a license at [**usegodmode.com**](https://usegodmode.com) ($500 lifetime or $50/month) and download the app
+from your welcome page — or later from [usegodmode.com/download](https://usegodmode.com/download) with your
 license key:
 
 - **macOS** — `.dmg` (Apple Silicon & Intel)
 - **Windows** — `.msi` / `.exe`
 - **Linux** — `.AppImage` / `.deb` / `.rpm`
 
-The app keeps itself up to date: new versions download in the background (from `godmode.codext.de/api/update`,
+The app keeps itself up to date: new versions download in the background (from `usegodmode.com/api/update`,
 which mirrors the signed bundles of the latest release), and a **Restart** button appears in the sidebar once one is
 ready.
 
@@ -224,7 +224,7 @@ On first launch the onboarding checks your system and installs what's missing wi
 Run Godmode on a home server, NAS, VM or Raspberry Pi and connect from any browser:
 
 ```bash
-curl -fsSL https://godmode.codext.de/install.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX sh
+curl -fsSL https://usegodmode.com/install.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX sh
 godmode serve --host 0.0.0.0     # prints the dashboard URL
 godmode token                    # access token for the first login
 godmode password 'a-strong-password'
@@ -529,5 +529,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 📄 License
 
-Commercial — see [LICENSE](LICENSE) and the [Terms](https://godmode.codext.de/legal/terms). © 2026 Codext GmbH.
+Commercial — see [LICENSE](LICENSE) and the [Terms](https://usegodmode.com/legal/terms). © 2026 Codext GmbH.
 Versions published before the switch remain available under the MIT License to those who received them.

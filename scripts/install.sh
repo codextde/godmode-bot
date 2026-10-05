@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs the standalone Godmode Bot server (`godmode`) on Linux or macOS.
 #
-#   curl -fsSL https://godmode.codext.de/install.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX sh
+#   curl -fsSL https://usegodmode.com/install.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX sh
 #
 # Environment:
 #   GODMODE_LICENSE       your license key (welcome page, invoice or billing portal) — required
@@ -11,7 +11,7 @@
 # Then: `godmode doctor` to check dependencies and `godmode serve --host 0.0.0.0` for the web dashboard.
 set -eu
 
-SITE="https://godmode.codext.de"
+SITE="https://usegodmode.com"
 LICENSE_KEY="${GODMODE_LICENSE:-}"
 VERSION="${GODMODE_VERSION:-latest}"
 INSTALL_DIR="${GODMODE_INSTALL_DIR:-$HOME/.local/bin}"

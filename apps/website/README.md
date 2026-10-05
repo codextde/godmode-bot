@@ -1,6 +1,6 @@
 # Godmode website
 
-The sales site for Godmode — https://godmode.codext.de. Astro 7 on Cloudflare Workers, Stripe Checkout for the
+The sales site for Godmode — https://usegodmode.com. Astro 7 on Cloudflare Workers, Stripe Checkout for the
 $500 lifetime / $50 monthly plans, a D1 database for orders and cookieless analytics, and an admin dashboard.
 
 ```
@@ -29,7 +29,7 @@ stripe listen --forward-to localhost:4321/api/stripe-webhook   # prints the loca
 ## Deploy
 
 ```bash
-SITE_URL=https://godmode.codext.de pnpm deploy   # astro build && wrangler deploy
+SITE_URL=https://usegodmode.com pnpm deploy   # astro build && wrangler deploy
 pnpm db:migrate                                   # after adding a migration
 ```
 
@@ -53,7 +53,7 @@ The site runs live on the Codext GmbH Stripe account (restricted key "Godmode We
 1. `stripe login` with the account that should receive payouts.
 2. Create a restricted key (write: Products, Prices, Checkout Sessions, Customers, Customer portal, Webhook endpoints;
    read: Charges and Refunds, Subscriptions)
-   and run `STRIPE_SECRET_KEY=rk_live_… SITE_URL=https://godmode.codext.de pnpm stripe:setup`.
+   and run `STRIPE_SECRET_KEY=rk_live_… SITE_URL=https://usegodmode.com pnpm stripe:setup`.
    It prints the new `STRIPE_WEBHOOK_SECRET`. If Stripe answers "maximum of 3 unique versions of live webhook
    endpoints", add `STRIPE_WEBHOOK_API_VERSION=<a version the account's other live webhooks already use>`.
 3. `pnpm wrangler secret put STRIPE_SECRET_KEY` and `… STRIPE_WEBHOOK_SECRET` with the live values.
