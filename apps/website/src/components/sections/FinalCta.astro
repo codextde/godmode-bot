@@ -3,7 +3,7 @@ import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import Character from '../ui/Character.astro';
 import CheckoutButton from '../ui/CheckoutButton.astro';
-import { PRICING, yearlySavings } from '@/config/site';
+import { FOUNDING, PRICING, yearlySavings } from '@/config/site';
 ---
 
 <section class="relative overflow-hidden py-24 sm:py-32">
@@ -18,7 +18,8 @@ import { PRICING, yearlySavings } from '@/config/site';
     </div>
     <Words text="Stop doing work *a computer can do.*" class="h-display text-grad mx-auto mt-8 max-w-[13ch] !text-[clamp(42px,7vw,96px)]" />
     <p class="lead mx-auto mt-7 max-w-[560px]" data-reveal style="--d:300">
-      Hand it the busywork today. Tomorrow morning, it’s done — and your crew knows how you like it.
+      Claim a founding seat today. The founder sets up your first {FOUNDING.setupAutomations} automations with you, and if
+      Godmode doesn’t give you {FOUNDING.outcomeHours} hours back in {FOUNDING.outcomeDays} days, you pay nothing.
     </p>
     <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal style="--d:450">
       <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="final" size="lg" />
@@ -26,7 +27,7 @@ import { PRICING, yearlySavings } from '@/config/site';
     </div>
     <p class="mt-6 flex items-center justify-center gap-2 text-[13px] text-muted" data-reveal style="--d:550">
       <Icon name="shield-check" size={14} class="text-brand" />
-      No charge today · cancel anytime before day {PRICING.trialDays} · secure checkout with Stripe
+      $0 today · price locked for life · {FOUNDING.seats} founding seats, closes {FOUNDING.endLabel}
     </p>
   </div>
 </section>

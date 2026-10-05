@@ -4,7 +4,7 @@ import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import Character from '../ui/Character.astro';
 import CheckoutButton from '../ui/CheckoutButton.astro';
-import { PRICING } from '@/config/site';
+import { FOUNDING, PRICING } from '@/config/site';
 import chat from '@/assets/shots/chat.png';
 ---
 
@@ -54,9 +54,9 @@ import chat from '@/assets/shots/chat.png';
     </div>
 
     <ul class="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[13px] text-muted" data-reveal style="--d:720">
-      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> Then ${PRICING.plans.monthly.price}/mo, or ${PRICING.plans.yearly.perMonth}/mo yearly</li>
-      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> Cancel anytime</li>
-      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> macOS · Windows · Linux</li>
+      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> Founder sets up your first {FOUNDING.setupAutomations} automations</li>
+      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> {FOUNDING.outcomeHours} hours back in {FOUNDING.outcomeDays} days, or full refund</li>
+      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> Then ${PRICING.plans.yearly.perMonth}/mo, locked for life</li>
     </ul>
   </div>
 

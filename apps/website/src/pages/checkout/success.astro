@@ -2,7 +2,7 @@
 import Base from '@/layouts/Base.astro';
 import Logo from '@/components/ui/Logo.astro';
 import Icon from '@/components/ui/Icon.astro';
-import { isPlan, PRICING, SITE, type Plan } from '@/config/site';
+import { FOUNDING, isPlan, PRICING, SITE, type Plan } from '@/config/site';
 import { stripe } from '@/lib/stripe';
 import { syncSubscription, upsertFromSession } from '@/lib/db';
 import { ORDER_COOKIE, publicId, sign, verify } from '@/lib/signed';
@@ -88,6 +88,12 @@ const handoffUrl = licenseKey ? `${Astro.url.origin}/download?key=${licenseKey}`
 const mailBody = `Your Godmode license key: ${licenseKey}\n\nDownload Godmode on your Mac or PC (your key is already filled in):\n${handoffUrl}\n`;
 const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Your Godmode license')}&body=${encodeURIComponent(mailBody)}`;
 
+const founding = session?.metadata?.founding === '1';
+const setupBody = `License: ${licenseKey}\n\nMy time zone:\nTimes that work for me this week:\n\n3 things I want Godmode to do for me:\n1.\n2.\n3.\n`;
+const setupUrl =
+  FOUNDING.bookingUrl ||
+  `mailto:${SITE.email}?subject=${encodeURIComponent('Founding setup call')}&body=${encodeURIComponent(setupBody)}`;
+
 Astro.response.headers.set('cache-control', 'no-store');
 Astro.response.headers.set('referrer-policy', 'no-referrer');
 
@@ -171,6 +177,34 @@ const steps = [
                 )}
               </p>
             </div>
+
+            {founding && (
+              <div class="card mt-12 p-6 sm:p-8" data-reveal style="--d:260">
+                <div class="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                  <div class="flex items-start gap-4">
+                    <span class="grid size-11 flex-none place-items-center rounded-xl bg-brand-soft text-brand">
+                      <Icon name="calendar-check" size={20} />
+                    </span>
+                    <div>
+                      <p class="font-mono text-[11px] tracking-[0.12em] text-brand uppercase">Founding member</p>
+                      <p class="h-card mt-1">Book your {FOUNDING.setupMinutes}-minute setup call</p>
+                      <p class="mt-1.5 max-w-[460px] text-[14px] leading-relaxed text-muted">
+                        Tell us the {FOUNDING.setupAutomations} things you want off your plate. We build them with you on
+                        the call, and your founders group invite follows right after.
+                      </p>
+                    </div>
+                  </div>
+                  <a href={setupUrl} class="btn btn-primary flex-none" data-track="founding_book" target={FOUNDING.bookingUrl ? '_blank' : undefined} rel="noopener">
+                    Book my call <Icon name="arrow-right" size={16} class="arrow" />
+                  </a>
+                </div>
+                <ul class="mt-6 grid gap-2 border-t border-line pt-5 text-[13px] text-text-2 sm:grid-cols-3">
+                  <li class="flex items-start gap-2"><Icon name="check" size={14} class="mt-0.5 flex-none text-brand" /> Price locked for as long as you stay</li>
+                  <li class="flex items-start gap-2"><Icon name="check" size={14} class="mt-0.5 flex-none text-brand" /> Running in {FOUNDING.runningHours} hours, or we set it up with you</li>
+                  <li class="flex items-start gap-2"><Icon name="check" size={14} class="mt-0.5 flex-none text-brand" /> {FOUNDING.outcomeHours} hours back in {FOUNDING.outcomeDays} days, or full refund</li>
+                </ul>
+              </div>
+            )}
 
             <div class="mt-12 flex flex-col gap-3">
               <div class="card p-6 sm:p-8" data-reveal style="--d:300">

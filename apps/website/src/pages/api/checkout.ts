@@ -1,10 +1,11 @@
 import type { APIRoute } from 'astro';
 import type Stripe from 'stripe';
 import { env } from 'cloudflare:workers';
-import { isPlan, PRICING, priceLabel, siteBase, trialCancelBy, type Plan } from '@/config/site';
+import { FOUNDING, foundingOpen, isPlan, PRICING, priceLabel, siteBase, trialCancelBy, type Plan } from '@/config/site';
 import { flag, priceFor, stripe } from '@/lib/stripe';
 import { newLicenseKey } from '@/lib/license';
-import { insertOpenOrder, type Attribution } from '@/lib/db';
+import { foundingTaken, insertOpenOrder, type Attribution } from '@/lib/db';
+import { minLivemode } from '@/lib/entitlement';
 import { allowed, BOTS } from '@/lib/limit';
 
 export const prerender = false;
@@ -50,7 +51,8 @@ export const POST: APIRoute = async ({ request, url }) => {
     for (const k of ATTR_KEYS) if (input[k]) attribution[k] = input[k].slice(0, 200);
 
     const licenseKey = newLicenseKey();
-    const metadata: Record<string, string> = { plan, license_key: licenseKey, ...attribution };
+    const founding = foundingOpen(await foundingTaken(minLivemode(), FOUNDING.start).catch(() => FOUNDING.seats));
+    const metadata: Record<string, string> = { plan, license_key: licenseKey, ...(founding ? { founding: '1' } : {}), ...attribution };
     const mode = 'subscription';
     const managed = flag(env.STRIPE_MANAGED_PAYMENTS);
     const requireTos = flag(env.STRIPE_REQUIRE_TOS);
@@ -77,7 +79,9 @@ export const POST: APIRoute = async ({ request, url }) => {
         : {}),
       custom_text: {
         submit: {
-          message: `${PRICING.trialDays} days free, then ${priceLabel(plan)}. Cancel anytime before ${trialCancelBy()} and you pay nothing. After that, a ${PRICING.guaranteeDays}-day money-back guarantee covers your first payment.`,
+          message: founding
+            ? `Founding 100: ${PRICING.trialDays} days free, then ${priceLabel(plan)}, locked for as long as you stay. Cancel anytime before ${trialCancelBy()} and you pay nothing. ${FOUNDING.outcomeHours} hours back in your first ${FOUNDING.outcomeDays} paid days, or a full refund.`
+            : `${PRICING.trialDays} days free, then ${priceLabel(plan)}. Cancel anytime before ${trialCancelBy()} and you pay nothing. After that, a ${PRICING.guaranteeDays}-day money-back guarantee covers your first payment.`,
         },
         ...(requireTos
           ? {
@@ -103,7 +107,7 @@ export const POST: APIRoute = async ({ request, url }) => {
       trial_period_days: PRICING.trialDays,
       trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
       // Shown in the customer portal, so subscribers can always find their key there.
-      description: `Godmode Pro — ${plan === 'yearly' ? 'Yearly' : 'Monthly'} · License ${licenseKey}`,
+      description: `Godmode Pro${founding ? ' Founding' : ''} — ${plan === 'yearly' ? 'Yearly' : 'Monthly'} · License ${licenseKey}`,
     };
 
     const session = await stripe().checkout.sessions.create(params);

@@ -1,6 +1,6 @@
 ---
 import Legal from '@/layouts/Legal.astro';
-import { LEGAL, PRICING } from '@/config/site';
+import { FOUNDING, LEGAL, PRICING } from '@/config/site';
 ---
 
 <Legal title="Refunds & cancellation" description="Free trial, money-back guarantee, cancelling a subscription and the EU right of withdrawal.">
@@ -16,6 +16,16 @@ import { LEGAL, PRICING } from '@/config/site';
     Not the right fit? Email <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a> within {PRICING.guaranteeDays} days of
     your first payment (the first payment after the trial). We refund the full amount to your original payment method — no questions, no forms — and your license is
     deactivated.
+  </p>
+
+  <h2>Founding 100: {FOUNDING.outcomeHours} hours back, or every cent back</h2>
+  <p>
+    If you joined through the Founding 100 offer, you get a longer, outcome-based guarantee on top: set up at least
+    {FOUNDING.setupAutomations} automations (we help on your setup call), and if Godmode hasn’t saved you
+    {FOUNDING.outcomeHours} hours of work in the first {FOUNDING.outcomeDays} days after your first payment, email
+    <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a> within those {FOUNDING.outcomeDays} days. We refund that payment in
+    full; your own estimate of the time saved is enough. If your first automation isn’t running
+    {FOUNDING.runningHours} hours after you install, tell us and the founder sets it up with you.
   </p>
 
   <h2>Cancelling a subscription</h2>
