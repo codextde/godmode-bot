@@ -25,6 +25,7 @@ import { stealthArgs, stopProbes, windowedUserAgent } from "./stealth";
 import { botCheckReport } from "./botCheck";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
 import { initLiveView, pauseLiveViews, resumeLiveViews } from "./screencast";
+import { initFocusGuard } from "./focusGuard";
 import { TabRegistry } from "./tabs";
 import { leasedChats, openChatLease, releaseChatLease, stopChatProxy } from "./proxy";
 import * as importer from "./importer";
@@ -133,6 +134,7 @@ export function listProfiles(): BrowserProfile[] {
 /** Ensure a global default profile exists (called at startup). */
 export function ensureDefaultProfile(): BrowserProfile {
   initLiveView();
+  initFocusGuard();
   if (!idleTimer) void adoptOrphans();
   startIdleWatcher();
   const existing = get<ProfileRow>("SELECT * FROM browser_profiles WHERE workspace_id IS NULL AND is_default = 1 ORDER BY created_at LIMIT 1");
