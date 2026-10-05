@@ -5,7 +5,7 @@ import Footer from '@/components/Footer.astro';
 import Icon from '@/components/ui/Icon.astro';
 import Words from '@/components/ui/Words.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
-import { PRICING } from '@/config/site';
+import { yearlySavings, PRICING } from '@/config/site';
 
 const groups: { name: string; icon: string; items: [string, string, string][] }[] = [
   {
@@ -120,7 +120,7 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
         </p>
         <div class="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
           <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="playbook" size="lg" />
-          <CheckoutButton plan="lifetime" label={`Founder Lifetime — $${PRICING.plans.lifetime.price}`} source="playbook" variant="ghost" size="lg" />
+          <CheckoutButton plan="yearly" label={`Or yearly — $${PRICING.plans.yearly.perMonth}/mo, save ${yearlySavings}%`} source="playbook" variant="ghost" size="lg" />
         </div>
       </div>
     </div>

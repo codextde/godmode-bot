@@ -2,10 +2,10 @@
 import Legal from '@/layouts/Legal.astro';
 import { LEGAL, PRICING } from '@/config/site';
 
-const { monthly, yearly, lifetime } = PRICING.plans;
+const { monthly, yearly } = PRICING.plans;
 ---
 
-<Legal title="Terms of sale & license" description="Terms for buying and using Godmode — free trial, Pro subscriptions and Founder Lifetime licenses.">
+<Legal title="Terms of sale & license" description="Terms for buying and using Godmode — free trial and Godmode Pro subscriptions.">
   <p>
     These terms apply to purchases of Godmode (“the Software”) from {LEGAL.company}, {LEGAL.street}, {LEGAL.city},
     {LEGAL.country} (“we”, “us”) through this website. By completing a purchase you agree to them.
@@ -15,8 +15,7 @@ const { monthly, yearly, lifetime } = PRICING.plans;
   <p>
     The product pages are an invitation to buy. You make an offer by completing checkout; the contract is concluded when
     your payment is confirmed or, for a plan with a free trial, when your trial starts. The Software is delivered by
-    download from this website; your license key is shown right after checkout, printed on your invoice (Founder Lifetime)
-    and shown in your billing portal (subscriptions). Contract language is English.
+    download from this website; your license key is shown right after checkout and in your billing portal. Contract language is English.
   </p>
 
   <h2>2. Plans</h2>
@@ -28,11 +27,6 @@ const { monthly, yearly, lifetime } = PRICING.plans;
     <li>
       <strong>Godmode Pro, yearly</strong> — ${yearly.price} per year, billed in advance and renewing automatically every
       year until cancelled.
-    </li>
-    <li>
-      <strong>Founder Lifetime</strong> — a one-time payment of ${lifetime.price} for a perpetual license to use the
-      Software, including all updates we release for it. It is limited to the first {PRICING.lifetimeCap} licenses sold
-      and may no longer be offered once they are gone; licenses already sold are not affected.
     </li>
   </ul>
   <p>
@@ -48,8 +42,8 @@ const { monthly, yearly, lifetime } = PRICING.plans;
     period, except under the money-back guarantee below.
   </p>
   <p>
-    If you bought an earlier plan (a $500 lifetime license or the $50 monthly plan), it continues on the terms that applied
-    when you bought it.
+    Lifetime licenses sold earlier stay valid on the terms that applied when they were bought, as does the earlier $50
+    monthly plan.
   </p>
   <p>
     Prices are in US dollars. Applicable sales tax or VAT is shown at checkout. Payment is processed by Stripe.

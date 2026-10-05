@@ -63,7 +63,7 @@ if (id) {
 }
 
 const metaPlan = session?.metadata?.plan;
-const plan: Plan = isPlan(metaPlan) ? metaPlan : session?.mode === 'subscription' ? 'monthly' : 'lifetime';
+const plan: Plan = isPlan(metaPlan) ? metaPlan : 'monthly';
 const licenseKey = session?.metadata?.license_key ?? '';
 const email = session?.customer_details?.email ?? '';
 const sub = session && typeof session.subscription === 'object' ? session.subscription : null;
@@ -164,8 +164,6 @@ const steps = [
                     <time class="text-text" datetime={new Date(trialEnd).toISOString()} data-local-date>{trialEndText}</time>{plan === 'yearly' ? `, then $${offer.price} for the year` : `, then $${offer.price} a month`}.
                     Cancel anytime in the billing portal.
                   </>
-                ) : plan === 'lifetime' ? (
-                  <>Your Founder Lifetime license is active — yours for good, with every update. A receipt is on its way{email ? ` to ${email}` : ''}.</>
                 ) : plan === 'yearly' ? (
                   <>Your yearly Godmode Pro plan is active for the next 12 months. A receipt is on its way{email ? ` to ${email}` : ''}.</>
                 ) : (
@@ -186,7 +184,7 @@ const steps = [
                   </button>
                 </div>
                 <p class="mt-3 text-[13px] text-muted">
-                  Keep it somewhere safe — it’s also {plan === 'lifetime' ? 'printed on your invoice' : 'shown in your billing portal'}.
+                  Keep it somewhere safe — it’s also shown in your billing portal.
                 </p>
               </div>
 

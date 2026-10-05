@@ -2,13 +2,13 @@
 import Words from '../ui/Words.astro';
 import { PRICING, SITE } from '@/config/site';
 
-const { monthly, yearly, lifetime } = PRICING.plans;
+const { monthly, yearly } = PRICING.plans;
 
 const faqs: { key: string; q: string; a: string }[] = [
   {
     key: 'what',
     q: 'What exactly do I get?',
-    a: `The Godmode desktop app for macOS, Windows and Linux (plus the headless server with its web dashboard), a license key, and every feature on this page, in every plan. Godmode Pro is $${monthly.price} a month, or $${yearly.price} a year ($${yearly.perMonth} a month), with every update while you’re subscribed. Founder Lifetime is a one-time $${lifetime.price} for the first ${PRICING.lifetimeCap} buyers, with all future updates included.`,
+    a: `The Godmode desktop app for macOS, Windows and Linux (plus the headless server with its web dashboard), a license key, and every feature on this page, in every plan. Godmode Pro is $${monthly.price} a month, or $${yearly.price} a year ($${yearly.perMonth} a month), with every update while you’re subscribed.`,
   },
   {
     key: 'trial',

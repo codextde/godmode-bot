@@ -2,9 +2,9 @@
 
 Ads account: https://ads.x.com/manager/18ce55kuefv/campaigns · Landing page: https://usegodmode.com
 
-Goal: start 7-day free trials of Godmode Pro ($39/month, or $348/year = $29/month) — and sell the 100 Founder
-Lifetime licenses ($499 once) — to founders, operators and tech-savvy professionals with budget. Optimise for
-**purchases** (a started trial fires Purchase with the plan's value), not clicks. Every campaign starts **paused** until the pixel is verified
+Goal: start 7-day free trials of Godmode Pro ($39/month, or $348/year = $29/month) with founders, operators and
+tech-savvy professionals with budget. Optimise for **purchases** (a started trial fires Purchase with value 0; X
+optimises on the event count), not clicks. Every campaign starts **paused** until the pixel is verified
 and the daily budget is confirmed.
 
 ## 1. Tracking (do this first)

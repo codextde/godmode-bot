@@ -5,9 +5,9 @@ import Nav from '@/components/Nav.astro';
 import Footer from '@/components/Footer.astro';
 import Icon from '@/components/ui/Icon.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
-import { PRICING, SITE } from '@/config/site';
+import { PRICING, SITE, yearlySavings } from '@/config/site';
 
-const { monthly, yearly, lifetime } = PRICING.plans;
+const { monthly, yearly } = PRICING.plans;
 const reasons = [
   {
     icon: 'wallet',
@@ -61,7 +61,7 @@ const reasons = [
 
       <div class="mt-10 flex flex-col gap-3 sm:flex-row">
         <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="recovery" size="lg" />
-        <CheckoutButton plan="lifetime" label={`Founder Lifetime — $${lifetime.price}`} source="recovery" variant="ghost" size="lg" />
+        <CheckoutButton plan="yearly" label={`Or yearly — $${yearly.perMonth}/mo, save ${yearlySavings}%`} source="recovery" variant="ghost" size="lg" />
       </div>
       <p class="mt-6 text-[14px] text-muted">
         Have a question first? <a class="text-text underline decoration-line-3 underline-offset-2" href={`mailto:${SITE.email}?subject=Question%20about%20Godmode`}>Ask the founder directly</a>.
