@@ -454,7 +454,20 @@ function TaskDetail({
 function WaitsForField({ task, board, onChange }: { task: Task; board: Task[]; onChange: (ids: string[]) => void }) {
   const ADD = "add";
   const ids = task.waitsFor.map((w) => w.id);
-  const choices = board.filter((t) => t.id !== task.id && !ids.includes(t.id) && t.status !== "done" && t.status !== "cancelled").sort((a, b) => b.number - a.number);
+  // Not what it is part of, nor its own parts (that would hold both), and only its workspace's tickets or global ones.
+  const related = new Set<string>([task.id]);
+  for (let up = task.parentId; up && !related.has(up); up = board.find((t) => t.id === up)?.parentId ?? null) related.add(up);
+  const below = [task.id];
+  while (below.length) {
+    const id = below.pop()!;
+    for (const t of board) if (t.parentId === id && !related.has(t.id)) {
+      related.add(t.id);
+      below.push(t.id);
+    }
+  }
+  const choices = board
+    .filter((t) => !related.has(t.id) && !ids.includes(t.id) && t.status !== "done" && t.status !== "cancelled" && (!t.workspaceId || t.workspaceId === task.workspaceId))
+    .sort((a, b) => b.number - a.number);
   return (
     <span className="flex min-h-8 flex-wrap items-center gap-1">
       {task.waitsFor.map((w) => (

@@ -36,12 +36,14 @@ function selectFor(scope: string): { sql: string; params: string[] } {
     scope === "all" ? "" : scope === "global" ? " AND t.workspace_id IS NULL" : " AND t.workspace_id = ?";
   const params = scope === "all" || scope === "global" ? [] : [scope, scope, scope, scope];
   const tickets = `FROM tasks t WHERE t.goal_id = g.id AND t.archived_at IS NULL AND t.status != 'cancelled'${where}`;
+  // What it cost is everything spent for it — archived and cancelled work too (money spent stays spent).
+  const spent = `FROM tasks t WHERE t.goal_id = g.id${where}`;
   return {
     sql: `SELECT g.*,
     (SELECT COUNT(*) ${tickets}) AS total,
     (SELECT COUNT(*) ${tickets} AND t.status = 'done') AS done,
     (SELECT COUNT(*) ${tickets} AND t.status != 'done') AS open,
-    (SELECT SUM(t.cost_usd) ${tickets}) AS cost
+    (SELECT SUM(t.cost_usd) ${spent}) AS cost
   FROM goals g`,
     params,
   };

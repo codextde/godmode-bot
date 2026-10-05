@@ -945,8 +945,8 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   /api/goals/:id`, Cloud: allowed; phone: closed). A goal has a title, why it matters, a target day and a status (active,
   achieved, dropped); global or a workspace's. A ticket serves one (`Task.goalId`, set on create or in the sheet; a part
   serves its ticket's goal and follows it when the ticket's changes), and its brief says so with the why. A goal counts
-  the tickets of the board's scope that serve it (archived and cancelled left out: total, done, open) and what their work
-  cost. A goal stays in its workspace; deleting a workspace deletes its goals (migration 64 clears older leftovers). The board shows the goals above the columns (a click filters, `?goal=`), new
+  the tickets of the board's scope that serve it (archived and cancelled left out: total, done, open) and what the work
+  for it cost (all of its tickets'). A goal stays in its workspace; deleting a workspace deletes its goals (migration 64 clears older leftovers). The board shows the goals above the columns (a click filters, `?goal=`), new
   tickets there serve the filtered goal; managers read them with `goals_list` and file tickets under one
   (`task_create { goalId }`). Deleting a goal leaves its tickets serving none.
 * **Ready-made teams** (`agents/teams.ts`, `GET /api/team-templates`, `POST /api/team-templates/:id/install
@@ -957,10 +957,12 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   built-in agent exists, on the Agents page; afterwards the org chart opens.
 * **Waiting for other tickets** (migration 63, table `task_dependencies`; `Task.waitsFor`, `waitsForTickets()`). A
   ticket may wait for up to 10 others (`waitsFor` on create and patch, the sheet's *Waits for*, `task_create {
-  waitsFor }`); loops and itself are refused. In Todo it doesn't start while one of them isn't finished (delivered,
-  done, cancelled or archived) — the card says *Waits for #3*, the sheet offers *Start without waiting* — and starts by
-  itself when the last one finishes (or is deleted). Its brief lists what they delivered (`<godmode-depends-on>`, quoted
-  as data, 1,500 characters each).
+  waitsFor }`) of its workspace or global ones; itself and loops are refused — a loop counts parts too (a ticket waits
+  for its parts), so a part can't wait for its own ticket. In Todo it doesn't start while one of them isn't finished
+  (delivered, done, cancelled or archived) — the card says *Waits for #3*, the sheet offers *Start without waiting* —
+  and starts by itself when the last one finishes (or is deleted, or its workspace is). A run the human starts in its
+  chat meanwhile makes it work (nothing restarts it then). Its brief lists what they delivered (`<godmode-depends-on>`,
+  quoted as data, 1,500 characters each), and says so for one it was started without.
 * **Sub-tickets** (migration 57, `tasks.parent_id`; `Task.parentId`, `parentNumber`, `subtasks { total, open, blocked }`).
   A lead on a ticket splits it with `task_split({ parts })` — managers to anyone they may give tasks, other agents to
   their reports (by id or name), no agent = backlog for the human; every part is checked (enabled, workspace, 20 at
