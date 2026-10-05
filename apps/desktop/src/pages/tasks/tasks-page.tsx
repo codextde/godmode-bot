@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, FolderGit2, ListFilter, Plus, Search, SquareKanban } from "lucide-react";
@@ -123,6 +123,14 @@ export default function TasksPage() {
     [archivedQ.data],
   );
   const view = params.get("view") === ARCHIVED ? ARCHIVED : "board";
+  // Another workspace in the sidebar: a goal picked in the last one would leave an empty board.
+  const shownScope = useRef(scope);
+  useEffect(() => {
+    if (scope === shownScope.current) return;
+    shownScope.current = scope;
+    if (goalFilter) setFilter("goal", null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope]);
   const setView = (next: string) => {
     const p = new URLSearchParams(params);
     if (next === ARCHIVED) p.set("view", ARCHIVED);
@@ -141,11 +149,12 @@ export default function TasksPage() {
       if (dueFilter === "week" && !(t.dueDate && t.dueDate >= today && t.dueDate <= week)) return false;
       if (dueFilter === "none" && t.dueDate) return false;
       if (labelFilter.size && !t.labels.some((l) => labelFilter.has(l))) return false;
-      if (goalFilter && t.goalId !== goalFilter) return false;
+      // The goal filter is the board's (its strip isn't shown in the archive).
+      if (goalFilter && view !== ARCHIVED && t.goalId !== goalFilter) return false;
       if (!q) return true;
       return `#${t.number} ${t.title} ${t.description} ${t.labels.join(" ")} ${t.agentId ? (agentById.get(t.agentId)?.name ?? "") : ""}`.toLowerCase().includes(q);
     };
-  }, [search, agentFilter, agentById, priorities, dueFilter, labelFilter, goalFilter]);
+  }, [search, agentFilter, agentById, priorities, dueFilter, labelFilter, goalFilter, view]);
   const labelsInUse = useMemo(() => [...new Set(tasks.flatMap((t) => t.labels))].sort((a, b) => a.localeCompare(b)), [tasks]);
   const overdueCount = useMemo(() => tasks.filter((t) => isOverdue(t)).length, [tasks]);
   const visible = useMemo(() => tasks.filter(matches), [tasks, matches]);

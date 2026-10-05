@@ -5,6 +5,16 @@ import { CheckCircle2, EllipsisVertical, Pencil, Plus, Target, Trash2, Undo2, XC
 import type { Goal, GoalInput } from "@godmode/shared";
 import { formatUsd } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -26,10 +36,14 @@ export function GoalsStrip({ goals, selected, onSelect, workspaceId }: { goals: 
   const done = goals.filter((g) => g.status !== "active");
   const shown = showDone ? goals : active;
   return (
-    <div className="flex items-stretch gap-2 overflow-x-auto px-5 pb-4 @2xl:px-8" role="list" aria-label="Goals">
-      {shown.map((g) => (
-        <GoalCard key={g.id} goal={g} selected={selected === g.id} onSelect={() => onSelect(selected === g.id ? null : g.id)} onEdit={() => setEditing(g)} />
-      ))}
+    <div className="flex items-stretch gap-2 overflow-x-auto px-5 pb-4 @2xl:px-8">
+      {shown.length > 0 && (
+        <ul className="flex items-stretch gap-2" aria-label="Goals">
+          {shown.map((g) => (
+            <GoalCard key={g.id} goal={g} selected={selected === g.id} onSelect={() => onSelect(selected === g.id ? null : g.id)} onEdit={() => setEditing(g)} />
+          ))}
+        </ul>
+      )}
       <div className="flex shrink-0 flex-col justify-center gap-1">
         <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => setEditing("new")}>
           <Plus /> {goals.length ? "Goal" : "Add a goal"}
@@ -64,17 +78,18 @@ function GoalCard({ goal: g, selected, onSelect, onEdit }: { goal: Goal; selecte
     },
     onError: (err) => toast.error("Couldn't delete the goal", { description: errorMessage(err) }),
   });
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const share = g.tickets.total ? Math.round((g.tickets.done / g.tickets.total) * 100) : 0;
+  const whyId = `goal-why-${g.id}`;
   return (
-    <div
-      role="listitem"
+    <li
       className={cn(
         "group relative flex w-60 shrink-0 flex-col rounded-xl border bg-card px-3 py-2.5 shadow-card transition",
         selected ? "border-foreground/40 ring-2 ring-ring/30" : "hover:border-foreground/20",
         g.status !== "active" && "opacity-70",
       )}
     >
-      <button type="button" onClick={onSelect} aria-pressed={selected} className="text-left focus-visible:outline-none" title={g.why || undefined}>
+      <button type="button" onClick={onSelect} aria-pressed={selected} aria-describedby={g.why ? whyId : undefined} className="text-left focus-visible:outline-none" title={g.why || undefined}>
         <span className="flex items-center gap-1.5 pr-6 text-[13px] font-medium">
           {g.status === "achieved" ? <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" /> : g.status === "dropped" ? <XCircle className="size-3.5 shrink-0 text-muted-foreground" /> : <Target className="size-3.5 shrink-0 text-brand-strong" />}
           <span className="truncate">{g.title}</span>
@@ -87,6 +102,11 @@ function GoalCard({ goal: g, selected, onSelect, onEdit }: { goal: Goal; selecte
           {g.costUsd > 0 && <span>· {formatUsd(g.costUsd)}</span>}
           {g.targetDate && <span className="ml-auto">{dueLabel(g.targetDate)}</span>}
         </span>
+        {g.why && (
+          <span id={whyId} className="sr-only">
+            {g.why}
+          </span>
+        )}
       </button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -113,12 +133,26 @@ function GoalCard({ goal: g, selected, onSelect, onEdit }: { goal: Goal; selecte
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => remove.mutate()}>
+          <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
             <Trash2 /> Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{g.title}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {g.tickets.total ? `Its ${g.tickets.total === 1 ? "ticket stays" : `${g.tickets.total} tickets stay`}, serving no goal.` : "No ticket serves it yet."} To keep it on record, mark it achieved or drop it instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction onClick={() => remove.mutate()}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </li>
   );
 }
 

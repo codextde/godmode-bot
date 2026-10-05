@@ -722,6 +722,8 @@ export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "use
     // The old agent's report is void.
     blockedReason = null;
   }
+  // A part serves its ticket's goal (it follows when the ticket's changes).
+  if (patch.goalId !== undefined && current.parent_id && patch.goalId !== current.goal_id) throw badRequest("A part serves its ticket's goal — change the goal of the ticket");
   const goalId = patch.goalId !== undefined ? checkGoal(patch.goalId, current.workspace_id) : undefined;
   if (patch.waitsFor !== undefined) setDependencies(id, patch.waitsFor);
   update("tasks", id, {
@@ -757,11 +759,15 @@ export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "use
     !!agentId &&
     ((status !== current.status && (status === "todo" || (status === "in_progress" && !wasWorking))) ||
       ((status === "todo" || status === "in_progress") && (reassigned || restored)));
+  // The human acted: a try it was waiting to make on its own is off.
+  if (status !== current.status || reassigned || archived !== !!current.archived_at) cancelRetry(id);
+  // The runs from before: a restart below starts a new one at once, which must not be stopped with them.
+  const earlierRuns = openRuns(current.conversation_id);
   // Start first: the restart owns the task before the old run's end is reported.
   if (starts) void dispatch(id, current.status === "blocked" ? { kind: current.blocked_kind, reason: current.blocked_reason } : undefined);
   // What it waited for changed: in Todo with nothing holding it anymore, it starts.
   else if (patch.waitsFor !== undefined && status === "todo" && !archived && agentId && !openRuns(current.conversation_id).length) void dispatch(id);
-  if (wasWorking && (status !== "in_progress" || reassigned)) void stopWork(current, actor === "user");
+  if (wasWorking && (status !== "in_progress" || reassigned)) void stopWork(current, actor === "user", earlierRuns);
   // A follow-up the agent scheduled would wake it up again (after dispatch, which already owns a task it restarts).
   if (current.conversation_id && ((archived && !current.archived_at) || (status !== current.status && status !== "in_progress") || reassigned)) {
     cancelFollowup(current.conversation_id);
@@ -774,6 +780,17 @@ export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "use
     });
   }
   if (archived !== !!current.archived_at) record(id, "archived", actor, { data: { archived } });
+  if (goalId !== undefined && goalId !== current.goal_id) {
+    // Its parts, and theirs, serve the same goal.
+    const parts = all<{ id: string }>(
+      "WITH RECURSIVE sub(id) AS (SELECT id FROM tasks WHERE parent_id = ? UNION ALL SELECT t.id FROM tasks t JOIN sub ON t.parent_id = sub.id) SELECT id FROM sub",
+      id,
+    );
+    for (const p of parts) {
+      sql("UPDATE tasks SET goal_id = ?, updated_at = ? WHERE id = ?", goalId, now(), p.id);
+      emit(p.id);
+    }
+  }
   emit(id);
   if (status !== current.status && (status === "done" || status === "cancelled")) closeParts(id, status, actor);
   // Taken off the board: its unfinished parts go with it (they'd work for a ticket nobody continues).
@@ -831,14 +848,15 @@ async function stopRuns(runIds: string[], reason: string, byHuman = false) {
 }
 
 /** Cancel the run working on a task (the board moved it away from In progress). */
-async function stopWork(task: TaskRow, byHuman = false) {
+async function stopWork(task: TaskRow, byHuman = false, runIds = openRuns(task.conversation_id)) {
   // A restart that already owns the task shows its own progress.
   if (!busy.has(task.id)) activity.delete(task.id);
-  await stopRuns(openRuns(task.conversation_id), "Stopped from the task board", byHuman);
+  await stopRuns(runIds, "Stopped from the task board", byHuman);
 }
 
 export async function deleteTask(id: string): Promise<void> {
   const task = requireRow(id);
+  cancelRetry(id);
   const waiting = all<{ task_id: string }>("SELECT task_id FROM task_dependencies WHERE waits_for_id = ?", id);
   sql("DELETE FROM tasks WHERE id = ?", id);
   sql("DELETE FROM task_dependencies WHERE task_id = ? OR waits_for_id = ?", id, id);
@@ -889,6 +907,7 @@ export async function sendTaskMessage(
 ): Promise<Task> {
   const task = requireRow(id);
   if (!content.trim() && !attachments.length) throw badRequest("Message is empty");
+  cancelRetry(id);
   if (!task.conversation_id || !conversationExists(task.conversation_id)) throw conflict("The task hasn't started yet — move it to Todo to start it");
   const owner = get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", task.conversation_id)?.agent_id;
   if (!task.agent_id || owner !== task.agent_id) throw conflict("Move the task to Todo to hand it to its agent");
@@ -1325,9 +1344,10 @@ function onBusEvent(event: ServerEvent) {
           record(task.id, "feedback", "user", { body: event.run.prompt, data: { on: before, files: [] } });
         } else if (busy.has(task.id) || event.run.trigger !== "task") {
           const again = !!get<{ id: string }>("SELECT id FROM task_events WHERE task_id = ? AND kind = 'started' LIMIT 1", task.id);
-          // A try on its own after a failure says so, with why.
-          const retry = retrying.get(task.id);
-          retrying.delete(task.id);
+          // A try on its own after a failure says so, with why (only the start its timer made).
+          const pending = retrying.get(task.id);
+          const retry = pending?.firing ? pending : undefined;
+          if (retry) retrying.delete(task.id);
           record(task.id, "started", agentActor(event.run.agentId), {
             runId: event.run.id,
             body: retry?.reason ?? "",
@@ -1472,13 +1492,36 @@ export function __setTaskRetryDelaysForTests(ms: number[] | null): void {
   retrying.clear();
 }
 /** Waiting to try again: the run that failed, and why (the start of the next try carries it to the timeline). */
-const retrying = new Map<string, { runId: string | null; reason: string; n: number; timer: ReturnType<typeof setTimeout> | null }>();
+interface PendingRetry {
+  runId: string | null;
+  reason: string;
+  n: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  /** The timer started the run that is starting now (only that start is "tried again on its own"). */
+  firing: boolean;
+}
+const retrying = new Map<string, PendingRetry>();
+
+/** The human acted on the ticket (moved, reassigned, archived, wrote, deleted it): a try waiting to be made is off. */
+function cancelRetry(id: string): void {
+  const r = retrying.get(id);
+  if (!r) return;
+  if (r.timer) clearTimeout(r.timer);
+  retrying.delete(id);
+  if (!busy.has(id)) setActivity(id, null);
+}
 
 /** Tries on its own since the ticket was last delivered, or the human last acted on it. */
 function retriesSoFar(id: string): number {
+  // Since a run last went well (delivered, waiting for a follow-up or its parts, picked up with its parts' results) or
+  // the human last acted — in the order rows were written, not by the clock.
   const since =
-    get<{ at: string | null }>("SELECT MAX(created_at) AS at FROM task_events WHERE task_id = ? AND kind IN ('delivered', 'feedback', 'status', 'answered', 'assigned')", id)?.at ?? "";
-  return get<{ n: number }>("SELECT COUNT(*) AS n FROM task_events WHERE task_id = ? AND kind = 'started' AND json_extract(data, '$.retry') IS NOT NULL AND created_at > ?", id, since)?.n ?? 0;
+    get<{ at: number | null }>(
+      `SELECT MAX(rowid) AS at FROM task_events WHERE task_id = ? AND (kind IN ('delivered', 'waiting', 'feedback', 'status', 'answered', 'assigned')
+         OR (kind = 'started' AND json_extract(data, '$.subtasks') IS NOT NULL))`,
+      id,
+    )?.at ?? 0;
+  return get<{ n: number }>("SELECT COUNT(*) AS n FROM task_events WHERE task_id = ? AND kind = 'started' AND json_extract(data, '$.retry') IS NOT NULL AND rowid > ?", id, since)?.n ?? 0;
 }
 
 /**
@@ -1490,27 +1533,34 @@ function retryLater(id: string, reason: string, conversationId: string | null, d
   const end = runEndOf(reason);
   if (end && !["interrupted", "timeout", "turns"].includes(end.kind)) return false;
   const n = retriesSoFar(id) + 1;
-  if (n > MAX_AUTO_RETRIES || retrying.has(id)) return false;
+  // A run that hit the time limit gets one more go (each can take the whole limit).
+  const max = end?.kind === "timeout" ? 1 : MAX_AUTO_RETRIES;
+  if (n > max || retrying.has(id)) return false;
   const runId = conversationId ? latestRunId(conversationId) : null;
   const wait = delayMs ?? RETRY_DELAYS_MS[n - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
-  const entry: { runId: string | null; reason: string; n: number; timer: ReturnType<typeof setTimeout> | null } = { runId, reason, n, timer: null };
+  const entry: PendingRetry = { runId, reason, n, timer: null, firing: false };
   retrying.set(id, entry);
+  const giveUp = () => {
+    // Only its own: a newer try may wait by now.
+    if (retrying.get(id) !== entry) return;
+    retrying.delete(id);
+    if (!busy.has(id)) setActivity(id, null);
+  };
   entry.timer = setTimeout(() => {
     entry.timer = null;
     try {
+      if (retrying.get(id) !== entry) return;
       const t = row(id);
       const latest = t?.conversation_id ? latestRunId(t.conversation_id) : null;
       if (!t || t.status !== "in_progress" || t.archived_at || busy.has(id) || latest !== runId || (t.conversation_id && openRuns(t.conversation_id).length)) {
-        retrying.delete(id);
-        if (t?.id) setActivity(id, null);
+        giveUp();
         return;
       }
+      entry.firing = true;
       // A try that couldn't start (setup problems block the ticket) leaves nothing waiting behind.
-      void dispatch(id, { kind: end?.kind === "interrupted" ? "interrupted" : "failed", reason }).finally(() => {
-        if (retrying.get(id) === entry) retrying.delete(id);
-      });
+      void dispatch(id, { kind: end?.kind === "interrupted" ? "interrupted" : "failed", reason }).finally(giveUp);
     } catch (err) {
-      retrying.delete(id);
+      giveUp();
       log.warn(`task ${id}: could not try again`, err);
     }
   }, wait);
@@ -2044,6 +2094,7 @@ export function startTasks(): void {
  * is still there, and a ticket that waits for its follow-up keeps waiting; the others are blocked, to be continued.
  */
 export function reconcileTasks(reason: string, opts: { retry?: boolean } = {}): void {
+  let restarts = 0;
   for (const t of all<TaskRow>("SELECT * FROM tasks WHERE status = 'in_progress'")) {
     if (openRuns(t.conversation_id).length || (t.conversation_id && getFollowup(t.conversation_id))) continue;
     // It waits for its parts: it keeps waiting, or continues when they were finished meanwhile.
@@ -2051,8 +2102,20 @@ export function reconcileTasks(reason: string, opts: { retry?: boolean } = {}): 
       if (!openParts(t.id).length) partClosed(t.id);
       continue;
     }
-    // Cut off by a restart: it picks the work up again by itself (a restored backup leaves that to the human).
-    if (opts.retry && t.agent_id && retryLater(t.id, reason, t.conversation_id, 5_000)) continue;
+    if (opts.retry && t.conversation_id) {
+      // The agent had finished; publishing or delivering it was cut off: that is done again, not the work.
+      const last = latestRunId(t.conversation_id);
+      if (last && getRun(last).status === "succeeded") {
+        void settle(t.id).catch((err) => log.warn(`task ${t.id}: could not deliver after the restart`, err));
+        continue;
+      }
+    }
+    // Cut off by a restart: it picks the work up again by itself, a few seconds apart (a restored backup leaves that to
+    // the human).
+    if (opts.retry && t.agent_id && retryLater(t.id, reason, t.conversation_id, 5_000 + restarts * 2_000)) {
+      restarts++;
+      continue;
+    }
     block(t.id, reason, { kind: "interrupted", from: ["in_progress"] });
   }
 }

@@ -226,6 +226,9 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
     // Global logins/2FA entries must not keep links to items the cascade is about to delete.
     run("UPDATE totp SET credential_id = NULL WHERE credential_id IN (SELECT id FROM credentials WHERE workspace_id = ?)", id);
     run("UPDATE credentials SET totp_id = NULL WHERE totp_id IN (SELECT id FROM totp WHERE workspace_id = ?)", id);
+    // Its goals go with it (tickets elsewhere that served one serve none).
+    run("UPDATE tasks SET goal_id = NULL WHERE goal_id IN (SELECT id FROM goals WHERE workspace_id = ?)", id);
+    run("DELETE FROM goals WHERE workspace_id = ?", id);
     run("DELETE FROM workspaces WHERE id = ?", id);
     removeFromDelegateLists(agents.map((a) => a.id));
   });

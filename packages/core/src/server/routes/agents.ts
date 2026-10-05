@@ -173,7 +173,10 @@ export function registerAgentRoutes(app: Hono): void {
   // Whole teams: a lead and its reports, in one go.
   app.get("/api/team-templates", (c) => c.json(TEAM_TEMPLATES));
   app.post("/api/team-templates/:id/install", async (c) => {
-    const input = await body(c, z.object({ workspaceId: z.string().max(100).nullable().optional(), automations: z.boolean().optional() }));
+    const input = await body(
+      c,
+      z.object({ workspaceId: z.string().max(100).nullable().optional(), automations: z.boolean().optional(), timezone: z.string().max(100).optional() }),
+    );
     return c.json(await installTeam(c.req.param("id"), input), 201);
   });
 

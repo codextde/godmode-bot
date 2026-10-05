@@ -27,12 +27,27 @@ interface GoalRow {
 
 const STATUSES: readonly GoalStatus[] = ["active", "achieved", "dropped"];
 
-const SELECT = `SELECT g.*,
-    (SELECT COUNT(*) FROM tasks t WHERE t.goal_id = g.id AND t.archived_at IS NULL) AS total,
-    (SELECT COUNT(*) FROM tasks t WHERE t.goal_id = g.id AND t.archived_at IS NULL AND t.status = 'done') AS done,
-    (SELECT COUNT(*) FROM tasks t WHERE t.goal_id = g.id AND t.archived_at IS NULL AND t.status NOT IN ('done', 'cancelled')) AS open,
-    (SELECT SUM(t.cost_usd) FROM tasks t WHERE t.goal_id = g.id) AS cost
-  FROM goals g`;
+/**
+ * A goal's numbers, over the tickets of a scope (what the board then shows when the goal is clicked): on the board
+ * (archived left out) and not cancelled — a dropped piece of work isn't part of how far the goal is.
+ */
+function selectFor(scope: string): { sql: string; params: string[] } {
+  const where =
+    scope === "all" ? "" : scope === "global" ? " AND t.workspace_id IS NULL" : " AND t.workspace_id = ?";
+  const params = scope === "all" || scope === "global" ? [] : [scope, scope, scope, scope];
+  const tickets = `FROM tasks t WHERE t.goal_id = g.id AND t.archived_at IS NULL AND t.status != 'cancelled'${where}`;
+  return {
+    sql: `SELECT g.*,
+    (SELECT COUNT(*) ${tickets}) AS total,
+    (SELECT COUNT(*) ${tickets} AND t.status = 'done') AS done,
+    (SELECT COUNT(*) ${tickets} AND t.status != 'done') AS open,
+    (SELECT SUM(t.cost_usd) ${tickets}) AS cost
+  FROM goals g`,
+    params,
+  };
+}
+
+const SELECT = selectFor("all").sql;
 
 function toModel(r: GoalRow): Goal {
   return {
@@ -56,9 +71,11 @@ function changed() {
 /** Goals of a scope ("all", "global" or a workspace id; a workspace sees the global goals too), active first. */
 export function listGoals(opts: { workspaceId?: string } = {}): Goal[] {
   const ws = opts.workspaceId ?? "all";
+  const select = selectFor(ws);
   const where = ws === "all" ? "" : ws === "global" ? "WHERE g.workspace_id IS NULL" : "WHERE (g.workspace_id = ? OR g.workspace_id IS NULL)";
   const rows = all<GoalRow>(
-    `${SELECT} ${where} ORDER BY CASE g.status WHEN 'active' THEN 0 WHEN 'achieved' THEN 1 ELSE 2 END, g.target_date IS NULL, g.target_date, g.created_at`,
+    `${select.sql} ${where} ORDER BY CASE g.status WHEN 'active' THEN 0 WHEN 'achieved' THEN 1 ELSE 2 END, g.target_date IS NULL, g.target_date, g.created_at`,
+    ...select.params,
     ...(ws === "all" || ws === "global" ? [] : [ws]),
   );
   return rows.map(toModel);
@@ -107,14 +124,15 @@ export function createGoal(input: GoalInput): Goal {
 }
 
 export function updateGoal(id: string, patch: Partial<GoalInput>): Goal {
-  getGoal(id);
+  const current = getGoal(id);
   if (patch.status !== undefined && !STATUSES.includes(patch.status)) throw badRequest("Unknown goal status");
+  // A goal stays where it was made: tickets elsewhere may serve it.
+  if (patch.workspaceId !== undefined && (patch.workspaceId ?? null) !== current.workspaceId) throw badRequest("A goal stays in its workspace — make a new one there");
   update("goals", id, {
     title: patch.title !== undefined ? cleanTitle(patch.title) : undefined,
     why: patch.why !== undefined ? redact(patch.why.trim()).slice(0, MAX_GOAL_WHY_LENGTH) : undefined,
     status: patch.status,
     target_date: patch.targetDate !== undefined ? cleanDate(patch.targetDate) : undefined,
-    workspace_id: patch.workspaceId !== undefined ? cleanWorkspace(patch.workspaceId) : undefined,
     updated_at: now(),
   });
   changed();

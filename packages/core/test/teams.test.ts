@@ -49,6 +49,13 @@ describe("ready-made teams", () => {
     expect(team.automations).toBe(scheduled);
     expect(listRoutines().filter((r) => team.members.some((m) => m.id === r.agentId)).length).toBe(scheduled);
 
+    // A second team that brings the same agent gets its own name.
+    const sales = (await (await call("/api/team-templates/sales/install", { method: "POST", body: JSON.stringify({ timezone: "Europe/Berlin" }) })).json()) as TeamInstallResult;
+    const again = (await (await call("/api/team-templates/sales/install", { method: "POST", body: "{}" })).json()) as TeamInstallResult;
+    expect(again.lead.name).toBe("Sales Lead (Sales)");
+    expect(new Set(listAgents({ workspaceId: "all" }).map((a) => a.name)).size).toBe(listAgents({ workspaceId: "all" }).length);
+    expect(sales.members.map((m) => m.name)).toContain("Research Analyst");
+
     expect((await call("/api/team-templates/nope/install", { method: "POST", body: "{}" })).status).toBe(404);
     expect(deviceMayCall("POST", "/api/team-templates/back-office/install")).toBe(false);
   });

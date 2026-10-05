@@ -919,12 +919,13 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   tells it to read secrets from the environment. With a locked vault only the file names are checked.
 * **Trying again on its own.** A ticket run that fails where a new try may help — a plain error (an API hiccup, a
   crash), a restart that cut it off, the time or turn limit — is started again by itself, In progress all along (card:
-  "Trying again shortly…"), twice in a row at most (after 30 s, then 2 min; after a restart in 5 s): the agent's
+  "Trying again shortly…"), twice in a row at most (once after a timeout; after 30 s, then 2 min; after a restart in 5 s,
+  a few seconds apart — a run that had finished is published, not run again): the agent's
   opening line says the last run failed and why, the timeline says "tried again on its own" with that reason. What only
   the human can fix (sign-in, Claude Code, a folder, the VM, the model, a chat too long, the cost limit) or a run they
   stopped is blocked at once; after the last try it is blocked "still failing after 2 more tries" and the human is told.
-  The count starts over when the ticket is delivered or the human acts on it; a try never cuts across a newer run or a
-  move on the board. A restored backup leaves interrupted tickets to the human.
+  The count starts over when a run goes well (delivered, waiting) or the human acts on it (counted in the order rows
+  were written); a move, a message or a new agent cancels a try that waits, and a try never cuts across a newer run. A restored backup leaves interrupted tickets to the human.
 * **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
   `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason (after trying again
   on its own, above), and a
@@ -943,8 +944,9 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
 * **Goals** (migration 62, table `goals`, `tasks.goal_id`; `tasks/goals.ts`; `GET/POST /api/goals`, `PATCH/DELETE
   /api/goals/:id`, Cloud: allowed; phone: closed). A goal has a title, why it matters, a target day and a status (active,
   achieved, dropped); global or a workspace's. A ticket serves one (`Task.goalId`, set on create or in the sheet; a part
-  serves its ticket's goal), and its brief says so with the why. A goal counts its tickets (archived left out: total,
-  done, open) and what their work cost. The board shows the goals above the columns (a click filters, `?goal=`), new
+  serves its ticket's goal and follows it when the ticket's changes), and its brief says so with the why. A goal counts
+  the tickets of the board's scope that serve it (archived and cancelled left out: total, done, open) and what their work
+  cost. A goal stays in its workspace; deleting a workspace deletes its goals (migration 64 clears older leftovers). The board shows the goals above the columns (a click filters, `?goal=`), new
   tickets there serve the filtered goal; managers read them with `goals_list` and file tickets under one
   (`task_create { goalId }`). Deleting a goal leaves its tickets serving none.
 * **Ready-made teams** (`agents/teams.ts`, `GET /api/team-templates`, `POST /api/team-templates/:id/install

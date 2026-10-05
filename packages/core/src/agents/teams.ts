@@ -6,8 +6,13 @@ import type { Agent, AgentTemplate, TeamInstallResult, TeamTemplate } from "@god
 import { audit } from "../services/audit";
 import { createRoutine } from "../services/routines";
 import { badRequest, notFound } from "../util";
-import { createAgent } from "./service";
+import { all } from "../db";
+import { logger } from "../log";
+import { createAgent, deleteAgent } from "./service";
+import { deleteRoutine } from "../services/routines";
 import { AGENT_TEMPLATES } from "./templates";
+
+const log = logger("teams");
 
 /** How a lead works: hand out, review, report — never do the reports' work itself. */
 function leadInstructions(area: string, goal: string): string {
@@ -101,9 +106,17 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
   },
 ];
 
-function agentInput(t: AgentTemplate, workspaceId: string | null, reportsTo: string | null, lead: boolean) {
+/** A name nobody on the team has yet: "Research Analyst", then "Research Analyst (Sales)", then "… 2". */
+function freeName(name: string, team: string, taken: Set<string>): string {
+  const candidates = [name, `${name} (${team})`, ...Array.from({ length: 8 }, (_, i) => `${name} (${team} ${i + 2})`)];
+  const free = candidates.find((c) => !taken.has(c.toLowerCase())) ?? `${name} (${Date.now()})`;
+  taken.add(free.toLowerCase());
+  return free;
+}
+
+function agentInput(t: AgentTemplate, name: string, workspaceId: string | null, reportsTo: string | null, lead: boolean) {
   return {
-    name: t.name,
+    name,
     role: t.role,
     avatar: t.avatar,
     color: t.color,
@@ -122,23 +135,45 @@ function agentInput(t: AgentTemplate, workspaceId: string | null, reportsTo: str
  * Create the team: its lead (reporting to the built-in agent), then each member reporting to the lead, and — when asked —
  * the members' automations from their templates.
  */
-export async function installTeam(id: string, opts: { workspaceId?: string | null; automations?: boolean } = {}): Promise<TeamInstallResult> {
+export async function installTeam(
+  id: string,
+  opts: { workspaceId?: string | null; automations?: boolean; timezone?: string } = {},
+): Promise<TeamInstallResult> {
   const team = TEAM_TEMPLATES.find((t) => t.id === id);
   if (!team) throw notFound("Team");
   const members = team.members.map((m) => AGENT_TEMPLATES.find((t) => t.id === m));
   if (members.some((m) => !m)) throw badRequest(`The ${team.name} team template is incomplete`);
   const workspaceId = opts.workspaceId ?? null;
-  const lead = await createAgent(agentInput(team.lead, workspaceId, null, true) as Parameters<typeof createAgent>[0]);
-  const created: Agent[] = [];
-  let automations = 0;
-  for (const t of members as AgentTemplate[]) {
-    const agent = await createAgent(agentInput(t, workspaceId, lead.id, false) as Parameters<typeof createAgent>[0]);
-    created.push(agent);
-    if (opts.automations && t.routine) {
-      createRoutine({ agentId: agent.id, name: t.routine.name, cron: t.routine.cron, prompt: t.routine.prompt });
-      automations++;
+  // Names stay apart from the agents there are (two teams may both bring a Research Analyst).
+  const taken = new Set(all<{ name: string }>("SELECT name FROM agents").map((a) => a.name.toLowerCase()));
+  const agents: Agent[] = [];
+  const routineIds: string[] = [];
+  try {
+    const lead = await createAgent(agentInput(team.lead, freeName(team.lead.name, team.name, taken), workspaceId, null, true) as Parameters<typeof createAgent>[0]);
+    agents.push(lead);
+    for (const t of members as AgentTemplate[]) {
+      const agent = await createAgent(agentInput(t, freeName(t.name, team.name, taken), workspaceId, lead.id, false) as Parameters<typeof createAgent>[0]);
+      agents.push(agent);
+      if (opts.automations && t.routine) {
+        routineIds.push(
+          createRoutine({ agentId: agent.id, name: t.routine.name, cron: t.routine.cron, prompt: t.routine.prompt, ...(opts.timezone ? { timezone: opts.timezone } : {}) }).id,
+        );
+      }
     }
+    audit("user", "team.install", lead.id, { team: id, members: agents.slice(1).map((a) => a.id), automations: routineIds.length });
+    return { lead, members: agents.slice(1), automations: routineIds.length };
+  } catch (err) {
+    // All or nothing: half a team would be duplicated by the next try.
+    for (const r of routineIds.reverse()) {
+      try {
+        deleteRoutine(r);
+      } catch (e) {
+        log.warn(`could not remove routine ${r} of a failed team install`, e);
+      }
+    }
+    for (const a of agents.reverse()) await deleteAgent(a.id).catch((e) => log.warn(`could not remove agent ${a.id} of a failed team install`, e));
+    throw err;
   }
-  audit("user", "team.install", lead.id, { team: id, members: created.map((a) => a.id), automations });
-  return { lead, members: created, automations };
 }
+
+

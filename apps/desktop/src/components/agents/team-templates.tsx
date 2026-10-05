@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowRight, CalendarClock } from "lucide-react";
 import type { AgentTemplate, TeamTemplate } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
+import { localTimezone } from "@/components/agents/cron";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -78,7 +79,8 @@ function InstallTeamDialog({ team, members, onClose }: { team: TeamTemplate | nu
   const [automations, setAutomations] = useState(true);
   const scheduled = members.filter((m) => m.routine);
   const install = useMutation({
-    mutationFn: () => api.agents.installTeam(team!.id, { workspaceId: workspace?.id ?? null, automations }),
+    // Schedules in the human's own time zone (the core may run elsewhere: Cloud, a server).
+    mutationFn: () => api.agents.installTeam(team!.id, { workspaceId: workspace?.id ?? null, automations, timezone: localTimezone() }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: qk.agents });
       qc.invalidateQueries({ queryKey: qk.routines });
