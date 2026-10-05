@@ -6,6 +6,8 @@ import { DEFAULT_PORT } from "@godmode/shared";
 export const VERSION = "0.1.0";
 /** The commit a compiled core was built from (scripts/build.ts); "dev" when it runs from source. */
 export const BUILD = process.env.GODMODE_BUILD || "dev";
+/** A `bun build --compile` binary (release app sidecar, server binary, Docker image), not the sources. */
+export const COMPILED = Bun.main.startsWith("/$bunfs/") || Bun.main.startsWith("B:/~BUN/");
 
 export type RunMode = "desktop" | "server";
 
@@ -104,8 +106,7 @@ export function config(): CoreConfig {
 
 /** argv that starts this Godmode again: the compiled binary, or bun with the entry script when it runs from source. */
 export function selfCommand(): string[] {
-  const compiled = Bun.main.startsWith("/$bunfs/") || Bun.main.startsWith("B:/~BUN/");
-  return compiled ? [process.execPath] : [process.execPath, Bun.main];
+  return COMPILED ? [process.execPath] : [process.execPath, Bun.main];
 }
 
 export function isLoopbackHost(host: string): boolean {

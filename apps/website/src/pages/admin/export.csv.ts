@@ -24,9 +24,10 @@ export const GET: APIRoute = async ({ request, url }) => {
   const sql =
     what === 'leads'
       ? `SELECT datetime(ts/1000, 'unixepoch') AS date, email, source, utm_source, utm_campaign FROM leads ORDER BY ts DESC`
-      : `SELECT datetime(created_at/1000, 'unixepoch') AS created, datetime(paid_at/1000, 'unixepoch') AS paid, plan, status,
-           amount_total/100.0 AS amount, currency, email, name, country, license_key, utm_source, utm_medium, utm_campaign,
-           utm_content, twclid, referrer, livemode, session_id FROM orders ORDER BY created_at DESC`;
+      : `SELECT datetime(created_at/1000, 'unixepoch') AS created, datetime(paid_at/1000, 'unixepoch') AS paid, plan, mode,
+           status, sub_status, datetime(trial_end/1000, 'unixepoch') AS trial_end, datetime(period_end/1000, 'unixepoch') AS period_end,
+           cancel_at_period_end, comp, amount_total/100.0 AS amount, currency, email, name, country, license_key, utm_source,
+           utm_medium, utm_campaign, utm_content, twclid, referrer, livemode, session_id FROM orders ORDER BY created_at DESC`;
   const { results } = await db().prepare(sql).all();
   return new Response(csv(results as Record<string, unknown>[]), {
     headers: {

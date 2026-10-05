@@ -12,6 +12,11 @@ export function useBootstrap() {
   return useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap, staleTime: 5_000 });
 }
 
+/** The licence; refetched now and then so a grace or trial window that ran out shows without a restart. */
+export function useLicense(enabled = true) {
+  return useQuery({ queryKey: qk.license, queryFn: api.license.get, enabled, staleTime: 30_000, refetchInterval: 10 * 60_000, retry: 1 });
+}
+
 export function useSettings() {
   return useQuery({ queryKey: qk.settings, queryFn: api.settings.get });
 }

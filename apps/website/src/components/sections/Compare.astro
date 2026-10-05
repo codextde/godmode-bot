@@ -2,6 +2,9 @@
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import Logo from '../ui/Logo.astro';
+import { PRICING } from '@/config/site';
+
+const { monthly, yearly } = PRICING.plans;
 
 type Cell = ['yes' | 'no' | 'partial' | '?' | 'text', string];
 const cols = ['Godmode', 'Grok Bot', 'ChatGPT Dots', 'OpenClaw', 'Hermes Agent', 'Claude Cowork'];
@@ -44,7 +47,7 @@ const rows: { label: string; cells: Cell[] }[] = [
   },
   {
     label: 'Price',
-    cells: [['text', '$500 once or $50/mo'], ['text', '$20–$40/mo, weekly cap'], ['text', 'From $100/mo (Pro)'], ['text', 'Free + model'], ['text', 'Free + model'], ['text', 'In Claude Pro / Max']],
+    cells: [['text', `${PRICING.trialDays} days free, then $${yearly.perMonth}–${monthly.price}/mo`], ['text', '$20–$40/mo, weekly cap'], ['text', 'From $100/mo (Pro)'], ['text', 'Free + model'], ['text', 'Free + model'], ['text', 'In Claude Pro / Max']],
   },
 ];
 const mark = {

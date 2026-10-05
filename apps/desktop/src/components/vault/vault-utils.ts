@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ApiRequestError, errorMessage } from "@/lib/api";
+import { ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 
 /** 423 = the vault got locked (auto-lock or locked elsewhere). */
@@ -13,6 +13,8 @@ export function isVaultLocked(err: unknown): boolean {
  * swaps to the unlock screen instead of showing a confusing error.
  */
 export function toastApiError(err: unknown, title: string, qc?: QueryClient) {
+  // App already shows the licence toast with its Activate action.
+  if (isLicenseRequired(err)) return;
   if (isVaultLocked(err)) {
     toast.warning("Vault is locked", { description: "Unlock the vault to continue." });
     void qc?.invalidateQueries({ queryKey: qk.bootstrap });

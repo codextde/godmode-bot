@@ -2,6 +2,7 @@
 import Logo from './ui/Logo.astro';
 import Icon from './ui/Icon.astro';
 import CheckoutButton from './ui/CheckoutButton.astro';
+import { PRICING } from '@/config/site';
 
 interface Props {
   home?: boolean;
@@ -38,9 +39,9 @@ const links = [
 
     <div class="flex items-center gap-2">
       <a href={base + '#pricing'} class="btn btn-ghost btn-sm hidden sm:inline-flex" data-track="nav_pricing">
-        $500 lifetime
+        From ${PRICING.plans.yearly.perMonth}/mo
       </a>
-      <CheckoutButton plan="lifetime" label="Get Godmode" source="nav" size="sm" class="hidden sm:block" />
+      <CheckoutButton plan="monthly" label="Start free trial" source="nav" size="sm" class="hidden sm:block" />
       <button
         type="button"
         class="btn btn-ghost btn-sm !px-2.5 lg:hidden"
@@ -69,8 +70,11 @@ const links = [
         ))
       }
       <div class="mt-6 grid gap-2">
-        <CheckoutButton plan="lifetime" label="Get lifetime — $500" source="menu" full size="lg" />
-        <CheckoutButton plan="monthly" label="Or $50 / month" source="menu" variant="ghost" full size="lg" />
+        <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="menu" full size="lg" />
+        <CheckoutButton plan="lifetime" label={`Founder Lifetime — $${PRICING.plans.lifetime.price}`} source="menu" variant="ghost" full size="lg" />
+        <p class="mt-1 text-center text-[13px] text-muted">
+          Then ${PRICING.plans.monthly.price}/mo, or ${PRICING.plans.yearly.perMonth}/mo yearly. Cancel anytime.
+        </p>
       </div>
     </nav>
   </div>

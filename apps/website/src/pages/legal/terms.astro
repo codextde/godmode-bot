@@ -1,9 +1,11 @@
 ---
 import Legal from '@/layouts/Legal.astro';
 import { LEGAL, PRICING } from '@/config/site';
+
+const { monthly, yearly, lifetime } = PRICING.plans;
 ---
 
-<Legal title="Terms of sale & license" description="Terms for buying and using Godmode — lifetime and monthly licenses.">
+<Legal title="Terms of sale & license" description="Terms for buying and using Godmode — free trial, Pro subscriptions and Founder Lifetime licenses.">
   <p>
     These terms apply to purchases of Godmode (“the Software”) from {LEGAL.company}, {LEGAL.street}, {LEGAL.city},
     {LEGAL.country} (“we”, “us”) through this website. By completing a purchase you agree to them.
@@ -12,22 +14,43 @@ import { LEGAL, PRICING } from '@/config/site';
   <h2>1. Contract and delivery</h2>
   <p>
     The product pages are an invitation to buy. You make an offer by completing checkout; the contract is concluded when
-    your payment is confirmed. The Software is delivered by download from this website; your license key is shown right after
-    payment, printed on your invoice (lifetime) and shown in your billing portal (monthly). Contract language is English.
+    your payment is confirmed or, for a plan with a free trial, when your trial starts. The Software is delivered by
+    download from this website; your license key is shown right after checkout, printed on your invoice (Founder Lifetime)
+    and shown in your billing portal (subscriptions). Contract language is English.
   </p>
 
   <h2>2. Plans</h2>
   <ul>
     <li>
-      <strong>Lifetime</strong> — a one-time payment of ${PRICING.plans.lifetime.price} for a perpetual license to use the
-      Software, including all updates we release for it.
+      <strong>Godmode Pro, monthly</strong> — ${monthly.price} per month, billed in advance and renewing automatically every
+      month until cancelled.
     </li>
     <li>
-      <strong>Monthly</strong> — ${PRICING.plans.monthly.price} per month, billed in advance and renewing automatically until
-      cancelled. You can cancel anytime in the billing portal or by email; access continues until the end of the paid
-      period.
+      <strong>Godmode Pro, yearly</strong> — ${yearly.price} per year, billed in advance and renewing automatically every
+      year until cancelled.
+    </li>
+    <li>
+      <strong>Founder Lifetime</strong> — a one-time payment of ${lifetime.price} for a perpetual license to use the
+      Software, including all updates we release for it. It is limited to the first {PRICING.lifetimeCap} licenses sold
+      and may no longer be offered once they are gone; licenses already sold are not affected.
     </li>
   </ul>
+  <p>
+    <strong>Free trial.</strong> Both Godmode Pro plans start with a free {PRICING.trialDays}-day trial. You add a payment
+    method at checkout, but nothing is charged during the trial. If you cancel before the trial ends, you pay nothing and
+    your license stops working when the trial ends. If you don’t cancel, your subscription starts automatically when the
+    trial ends: the first month or year (depending on your plan) is charged to your payment method then, and it renews
+    automatically after that. Checkout and the welcome page show the date your trial ends.
+  </p>
+  <p>
+    <strong>Cancelling a subscription.</strong> You can cancel anytime in the billing portal or by email. Access continues
+    until the end of the period you’ve paid for; there are no further charges and no partial refunds for the rest of a
+    period, except under the money-back guarantee below.
+  </p>
+  <p>
+    If you bought an earlier plan (a $500 lifetime license or the $50 monthly plan), it continues on the terms that applied
+    when you bought it.
+  </p>
   <p>
     Prices are in US dollars. Applicable sales tax or VAT is shown at checkout. Payment is processed by Stripe.
   </p>
@@ -58,7 +81,8 @@ import { LEGAL, PRICING } from '@/config/site';
 
   <h2>5. Money-back guarantee</h2>
   <p>
-    If you’re not happy, email us within {PRICING.guaranteeDays} days of your first payment and we’ll refund it in full.
+    If you’re not happy, email us within {PRICING.guaranteeDays} days of your first payment on any plan (for Godmode Pro,
+    the first payment after the free trial) and we’ll refund it in full.
     This voluntary guarantee is in addition to any statutory rights. See <a href="/legal/refunds">Refunds & cancellation</a>.
   </p>
 

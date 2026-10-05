@@ -4,7 +4,7 @@
 #   curl -fsSL https://usegodmode.com/install.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX sh
 #
 # Environment:
-#   GODMODE_LICENSE       your license key (welcome page, invoice or billing portal) — required
+#   GODMODE_LICENSE       your license key (welcome page, invoice or billing portal) — required; also stored for `godmode serve`
 #   GODMODE_VERSION       release tag to install, e.g. v0.2.0 (default: latest)
 #   GODMODE_INSTALL_DIR   target directory (default: ~/.local/bin)
 #
@@ -101,6 +101,11 @@ mv -f "$tmp/godmode" "$INSTALL_DIR/godmode"
 
 installed=$("$INSTALL_DIR/godmode" version 2>/dev/null) || err "the installed binary does not run: $INSTALL_DIR/godmode"
 say "Installed Godmode Bot $installed → $INSTALL_DIR/godmode"
+
+# The server checks the same key: store it in its data folder (GODMODE_HOME, default ~/.godmode).
+if ! "$INSTALL_DIR/godmode" license "$LICENSE_KEY" < /dev/null > /dev/null 2>&1; then
+  say "warning: the license key could not be stored; add it later with: godmode license <key>"
+fi
 
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;

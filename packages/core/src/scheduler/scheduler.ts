@@ -20,6 +20,7 @@ import { HttpError, badRequest, conflict, now } from "../util";
 import { pausedRun } from "../services/pauses";
 import { remindWaitingAutomation } from "../services/questions";
 import { exhaustedBudget } from "../services/budgets";
+import { isLicenseRequired, noteLicenseRefusal } from "../license/license";
 
 const log = logger("scheduler");
 
@@ -176,6 +177,11 @@ async function onTick(routineId: string) {
     }
     if (err instanceof HttpError && err.status === 404) {
       reloadSchedules();
+      return;
+    }
+    if (isLicenseRequired(err)) {
+      if (routine.trigger.type !== "condition") recordEvent(routineId, { source: "schedule", title: "Scheduled time reached", status: "failed", note: err.message });
+      noteLicenseRefusal(`Automation “${routine.name}”`, err);
       return;
     }
     log.error(`routine ${routineId} failed to start`, err);

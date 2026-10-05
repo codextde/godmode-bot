@@ -113,6 +113,7 @@ export const qk = {
   /** Godmode Cloud link status; billing sits under it, so invalidating `cloud` refreshes both. */
   cloud: ["cloud"] as unknown[],
   cloudBilling: ["cloud", "billing"] as unknown[],
+  license: ["license"] as unknown[],
   /** What agents used on this computer over the last `days` days. */
   usage: (days: number) => ["usage", days],
   chromeProfiles: ["chrome-profiles"] as unknown[],

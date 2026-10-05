@@ -3,18 +3,27 @@ import Legal from '@/layouts/Legal.astro';
 import { LEGAL, PRICING } from '@/config/site';
 ---
 
-<Legal title="Refunds & cancellation" description="Money-back guarantee, cancelling a subscription and the EU right of withdrawal.">
+<Legal title="Refunds & cancellation" description="Free trial, money-back guarantee, cancelling a subscription and the EU right of withdrawal.">
+  <h2>Free trial</h2>
+  <p>
+    Godmode Pro (monthly or yearly) starts with a free {PRICING.trialDays}-day trial. Nothing is charged during the trial.
+    Cancel before it ends — in the billing portal, from the app or by email — and you pay nothing at all. If you don’t
+    cancel, the subscription starts automatically when the trial ends and your first month or year is charged then.
+  </p>
+
   <h2>{PRICING.guaranteeDays}-day money-back guarantee</h2>
   <p>
     Not the right fit? Email <a href={`mailto:${LEGAL.email}`}>{LEGAL.email}</a> within {PRICING.guaranteeDays} days of
-    your first payment. We refund the full amount to your original payment method — no questions, no forms — and your
-    license is deactivated.
+    your first payment on any plan (for Godmode Pro, the first payment after the trial; for Founder Lifetime, your
+    purchase). We refund the full amount to your original payment method — no questions, no forms — and your license is
+    deactivated.
   </p>
 
-  <h2>Cancelling a monthly subscription</h2>
+  <h2>Cancelling a subscription</h2>
   <p>
-    Cancel anytime from the billing portal (linked in your receipt and on your welcome page) or by email. You keep access
-    until the end of the month you’ve paid for; there are no further charges.
+    Cancel monthly or yearly plans anytime from the billing portal (linked in your receipt, on your welcome page and in the
+    app) or by email. You keep access until the end of the month or year you’ve paid for; there are no further charges.
+    Renewals are not refunded, except within the guarantee above.
   </p>
 
   <h2>Right of withdrawal for consumers in the EU</h2>

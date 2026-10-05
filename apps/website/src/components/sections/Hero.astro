@@ -44,7 +44,7 @@ import chat from '@/assets/shots/chat.png';
     </p>
 
     <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal style="--d:600">
-      <CheckoutButton plan="lifetime" label={`Get Godmode — $${PRICING.plans.lifetime.price} once`} source="hero" size="lg" />
+      <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="hero" size="lg" />
       <button type="button" class="btn btn-ghost btn-lg group" data-open-video="hero">
         <span class="play-ring grid size-7 place-items-center rounded-full bg-text text-bg">
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 1.2v7.6L8.6 5z" fill="currentColor"></path></svg>
@@ -54,8 +54,8 @@ import chat from '@/assets/shots/chat.png';
     </div>
 
     <ul class="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[13px] text-muted" data-reveal style="--d:720">
-      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> or ${PRICING.plans.monthly.price}/month</li>
-      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> {PRICING.guaranteeDays}-day money-back guarantee</li>
+      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> Then ${PRICING.plans.monthly.price}/mo, or ${PRICING.plans.yearly.perMonth}/mo yearly</li>
+      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> Cancel anytime</li>
       <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> macOS · Windows · Linux</li>
     </ul>
   </div>

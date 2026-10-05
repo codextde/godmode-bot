@@ -2,11 +2,18 @@
 import Words from '../ui/Words.astro';
 import { PRICING, SITE } from '@/config/site';
 
+const { monthly, yearly, lifetime } = PRICING.plans;
+
 const faqs: { key: string; q: string; a: string }[] = [
   {
     key: 'what',
     q: 'What exactly do I get?',
-    a: `The Godmode desktop app for macOS, Windows and Linux (plus the headless server with its web dashboard), a license key, and every feature on this page. Lifetime is a one-time payment with all future updates included. Monthly includes everything while you’re subscribed.`,
+    a: `The Godmode desktop app for macOS, Windows and Linux (plus the headless server with its web dashboard), a license key, and every feature on this page, in every plan. Godmode Pro is $${monthly.price} a month, or $${yearly.price} a year ($${yearly.perMonth} a month), with every update while you’re subscribed. Founder Lifetime is a one-time $${lifetime.price} for the first ${PRICING.lifetimeCap} buyers, with all future updates included.`,
+  },
+  {
+    key: 'trial',
+    q: 'How does the free trial work?',
+    a: `Pick monthly or yearly and start your ${PRICING.trialDays}-day trial with a card, Apple Pay or Google Pay. Nothing is charged today. Cancel in the billing portal (one click from the app or your welcome page) before the ${PRICING.trialDays} days are up and you pay nothing. Otherwise your plan starts automatically when the trial ends: $${monthly.price} a month or $${yearly.price} a year, renewing until you cancel.`,
   },
   {
     key: 'claude',
@@ -56,7 +63,7 @@ const faqs: { key: string; q: string; a: string }[] = [
   {
     key: 'refund',
     q: 'What if it’s not for me?',
-    a: `Email us within ${PRICING.guaranteeDays} days of buying and we’ll refund you in full — no questions, no forms. Monthly plans can be cancelled anytime and run until the end of the paid month.`,
+    a: `During the trial, just cancel and you’re never charged. After your first payment, on any plan, email us within ${PRICING.guaranteeDays} days and we’ll refund it in full — no questions, no forms. Subscriptions can be cancelled anytime and keep working until the end of the period you paid for.`,
   },
   {
     key: 'invoice',

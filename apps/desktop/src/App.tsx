@@ -2,14 +2,16 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CloudErrorCode, type Bootstrap } from "@godmode/shared";
-import { ApiRequestError, api, isCloudError, setCloudIssueHandler, setUnauthorizedHandler, type CloudIssue } from "@/lib/api";
+import { ApiRequestError, api, isCloudError, setCloudIssueHandler, setLicenseRequiredHandler, setUnauthorizedHandler, type CloudIssue } from "@/lib/api";
 import { cloudContext, getCoreInfo, isTauri } from "@/lib/core";
 import { qk } from "@/lib/queryKeys";
 import { startRealtime, onServerEvent } from "@/lib/realtime";
 import { notifyDesktop } from "@/lib/desktop";
+import { useLicense } from "@/lib/hooks";
 import { syncUpdater } from "@/stores/updater";
 import { AppShell } from "@/components/layout/app-shell";
 import { CloudStatePage, type CloudState } from "@/components/layout/cloud-state";
+import { LicenseGate } from "@/components/license/license-gate";
 import { SplashScreen } from "@/components/layout/splash";
 import { LoginPage } from "@/pages/auth/login";
 import { UnlockPage } from "@/pages/auth/unlock";
@@ -62,7 +64,17 @@ export function App() {
     setUnauthorizedHandler(() => qc.invalidateQueries({ queryKey: qk.authStatus }));
     // Cloud mode: an offline computer or a used-up plan replaces the whole dashboard until it clears.
     setCloudIssueHandler((issue) => setCloudIssue((prev) => (prev?.kind === issue.kind ? prev : issue)));
-  }, [qc]);
+    // A run start refused for the licence: one calm toast that leads to activation (and the gate, when it blocks).
+    setLicenseRequiredHandler((message) => {
+      void qc.invalidateQueries({ queryKey: qk.license });
+      toast.warning("Godmode needs an active licence", {
+        id: "license-required",
+        description: message,
+        duration: 12_000,
+        action: { label: "Activate", onClick: () => navigate("/settings/license") },
+      });
+    });
+  }, [qc, navigate]);
 
   // The cloud's own answers (offline, signed out, plan limit) come back at once; retrying them only delays the page.
   const auth = useQuery({
@@ -74,6 +86,8 @@ export function App() {
   });
   const authed = auth.data?.authenticated ?? false;
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap, enabled: authed, staleTime: 5_000 });
+  // The licence gate is for the computer itself; through the cloud, refused runs say why in their toast.
+  const license = useLicense(authed && !cloudContext && !!boot.data?.settings.onboardingComplete && !!boot.data?.vault.unlocked);
 
   const recheck = useCallback(async () => {
     const status = await api.auth.status();
@@ -170,6 +184,7 @@ export function App() {
   const b = boot.data;
   if (!b.vault.initialized || !b.settings.onboardingComplete) return <OnboardingPage bootstrap={b} />;
   if (!b.vault.unlocked) return <UnlockPage />;
+  if (!cloudContext && license.data?.blocked) return <LicenseGate state={license.data} />;
 
   return (
     <AppShell>

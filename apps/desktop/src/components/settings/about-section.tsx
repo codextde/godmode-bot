@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import { AppWindow, ArrowUpRight, Bot, CircleArrowDown, ExternalLink, Globe, Heart, Layers, Plug, RefreshCw, RotateCw, Scale } from "lucide-react";
+import { LICENSE_SITE } from "@godmode/shared";
 import { Backdrop, Logo } from "@/components/brand";
 import { useRestartToUpdate } from "@/components/layout/update-button";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-kit";
@@ -12,7 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { openExternal } from "@/lib/desktop";
 import { checkForUpdates, useUpdater } from "@/stores/updater";
 
-export const SITE = "https://usegodmode.com";
+export const SITE = LICENSE_SITE;
 
 const CREDITS: { name: string; description: string; url: string; icon: ReactNode }[] = [
   { name: "Claude Code", description: "The agentic brain behind every coworker.", url: "https://docs.anthropic.com/en/docs/claude-code", icon: <Bot /> },
@@ -35,7 +36,7 @@ export function AboutSection({ version }: { version: string | undefined }) {
           <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}>
             <Logo className="size-16" />
           </motion.div>
-          <p className="eyebrow mt-6">Open source · MIT</p>
+          <p className="eyebrow mt-6">Godmode Pro · Codext GmbH</p>
           <h2 className="heading-display mt-2 text-[36px]">
             Godmode <span className="text-foreground/35">Bot</span>
           </h2>
@@ -84,7 +85,13 @@ export function AboutSection({ version }: { version: string | undefined }) {
             </motion.button>
           ))}
         </div>
-        <p className="mt-5 text-center text-xs text-muted-foreground">Open source under the MIT License. Made with care for people who'd rather delegate.</p>
+        <p className="mt-5 text-center text-xs text-muted-foreground">
+          Commercial software by Codext GmbH, licensed under the{" "}
+          <button type="button" className="font-medium text-foreground underline-offset-4 hover:underline" onClick={() => void openExternal(`${SITE}/legal/terms`)}>
+            Godmode terms
+          </button>
+          . Made with care for people who'd rather delegate.
+        </p>
       </section>
     </div>
   );

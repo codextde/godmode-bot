@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNow } from "@/components/vault/use-now";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 
 /** "today at 16:00", "tomorrow at 09:00", "Thu, Oct 1 at 09:00" */
@@ -56,7 +56,7 @@ export function useFollowupActions() {
   const runNow = useMutation({
     mutationFn: (conversationId: string) => api.followups.runNow(conversationId),
     onSuccess: (run) => refresh(run.conversationId),
-    onError: (err) => toast.error("Couldn't continue now", { description: errorMessage(err) }),
+    onError: (err) => !isLicenseRequired(err) && toast.error("Couldn't continue now", { description: errorMessage(err) }),
   });
   return { move, cancel, runNow };
 }

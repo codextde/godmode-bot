@@ -161,7 +161,9 @@ export type EntityName =
   | "system"
   | "runners"
   /** The cloud link: state, account, plan or billing changed. */
-  | "cloud";
+  | "cloud"
+  /** The licence: key, verification or whether runs are refused changed. */
+  | "license";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =

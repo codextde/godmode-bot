@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { useRunRoutine } from "@/components/agents/routine-item";
-import { api, ApiRequestError, errorMessage } from "@/lib/api";
+import { api, ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api";
 import { useRoutines, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 
@@ -68,6 +68,7 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
     onError: (err) => {
       // Something else moved the chat on meanwhile: show it.
       if (err instanceof ApiRequestError && err.code === "stale") void qc.invalidateQueries({ queryKey: qk.conversation(conversation.id) });
+      if (isLicenseRequired(err)) return;
       toast.error(err instanceof ApiRequestError && err.status === 409 ? "Can't pick this up" : "Couldn't pick this up", { description: errorMessage(err) });
     },
   });

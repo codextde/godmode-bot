@@ -1,3 +1,4 @@
+import type { AstroCookies } from 'astro';
 import { env } from 'cloudflare:workers';
 
 // Small HMAC-signed tokens for cookies: `<payload>.<expiry>.<signature>` (base64url).
@@ -51,3 +52,16 @@ export async function dailyHash(day: string, value: string): Promise<string> {
 }
 
 export const ORDER_COOKIE = 'gm_order';
+
+// A license key handed over by link (/download?key=…) lives here instead of in the URL, so it never reaches page
+// scripts, history or the ad pixel. Scoped to /download, short-lived, signed.
+export const KEY_COOKIE = 'gm_key';
+const KEY_TTL = 30 * 60;
+
+export async function setKeyCookie(cookies: AstroCookies, key: string, secure: boolean) {
+  const value = key.trim().toUpperCase().slice(0, 40);
+  if (!/^[A-Z0-9-]+$/.test(value)) return;
+  cookies.set(KEY_COOKIE, await sign(value, KEY_TTL), { httpOnly: true, secure, sameSite: 'lax', path: '/download', maxAge: KEY_TTL });
+}
+
+export const keyFromCookie = (cookies: AstroCookies) => verify(cookies.get(KEY_COOKIE)?.value);

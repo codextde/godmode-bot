@@ -2,9 +2,9 @@
 import Base from '@/layouts/Base.astro';
 import Logo from '@/components/ui/Logo.astro';
 import Icon from '@/components/ui/Icon.astro';
-import { PRICING, SITE } from '@/config/site';
+import { isPlan, PRICING, SITE, type Plan } from '@/config/site';
 import { stripe } from '@/lib/stripe';
-import { upsertFromSession } from '@/lib/db';
+import { syncSubscription, upsertFromSession } from '@/lib/db';
 import { ORDER_COOKIE, publicId, sign, verify } from '@/lib/signed';
 import { allowed } from '@/lib/limit';
 import type Stripe from 'stripe';
@@ -47,30 +47,46 @@ let state: 'paid' | 'processing' | 'invalid' | 'expired' = Astro.url.searchParam
 
 if (id) {
   try {
-    session = await stripe().checkout.sessions.retrieve(id);
+    session = await stripe().checkout.sessions.retrieve(id, { expand: ['subscription'] });
     if (session.status === 'complete' && session.metadata?.license_key) {
       const paid = session.payment_status === 'paid' || session.payment_status === 'no_payment_required';
       state = paid ? 'paid' : 'processing';
-      // Same idempotent write as the webhook, so the license works even if the webhook is late.
+      // Same idempotent writes as the webhook, so the license works even if the webhook is late.
       await upsertFromSession(session, paid ? 'paid' : 'pending').catch((e) => console.error(e));
+      if (typeof session.subscription === 'object' && session.subscription) {
+        await syncSubscription(session.subscription).catch((e) => console.error(e));
+      }
     }
   } catch (e) {
     console.error('success page lookup failed', e);
   }
 }
 
-const plan = session?.metadata?.plan === 'monthly' ? 'monthly' : 'lifetime';
+const metaPlan = session?.metadata?.plan;
+const plan: Plan = isPlan(metaPlan) ? metaPlan : session?.mode === 'subscription' ? 'monthly' : 'lifetime';
 const licenseKey = session?.metadata?.license_key ?? '';
 const email = session?.customer_details?.email ?? '';
+const sub = session && typeof session.subscription === 'object' ? session.subscription : null;
+const trialEnd = sub?.status === 'trialing' && sub.trial_end ? sub.trial_end * 1000 : null;
+const trialEndText = trialEnd
+  ? new Date(trialEnd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+  : '';
+const offer = PRICING.plans[plan];
 const purchase =
   state === 'paid' && session
     ? {
         id: await publicId(session.id),
-        value: (session.amount_total ?? 0) / 100,
+        // A started trial has collected nothing, so it reports no value.
+        value: trialEnd ? 0 : (session.amount_total ?? 0) / 100,
         currency: (session.currency ?? 'usd').toUpperCase(),
-        plan,
+        plan: trialEnd ? `${plan}_trial` : plan,
       }
     : null;
+
+// The handoff link for buyers on a phone: opens the download page on their computer with the key filled in.
+const handoffUrl = licenseKey ? `${Astro.url.origin}/download?key=${licenseKey}` : '';
+const mailBody = `Your Godmode license key: ${licenseKey}\n\nDownload Godmode on your Mac or PC (your key is already filled in):\n${handoffUrl}\n`;
+const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Your Godmode license')}&body=${encodeURIComponent(mailBody)}`;
 
 Astro.response.headers.set('cache-control', 'no-store');
 Astro.response.headers.set('referrer-policy', 'no-referrer');
@@ -141,48 +157,91 @@ const steps = [
               <h1 class="h-display text-grad mx-auto mt-8 !text-[clamp(40px,7vw,80px)]" data-reveal style="--d:100">
                 Welcome to <span class="serif">Godmode.</span>
               </h1>
-              <p class="lead mx-auto mt-5 max-w-[560px]" data-reveal style="--d:200">
-                {plan === 'lifetime' ? 'Your lifetime license is active.' : 'Your subscription is active.'} A receipt is on its way
-                {email ? ` to ${email}` : ''}. Let’s put your first agent to work.
+              <p class="lead mx-auto mt-5 max-w-[580px]" data-reveal style="--d:200">
+                {trialEnd ? (
+                  <>
+                    Your {PRICING.trialDays}-day trial is running. You won’t be charged until{' '}
+                    <time class="text-text" datetime={new Date(trialEnd).toISOString()} data-local-date>{trialEndText}</time>{plan === 'yearly' ? `, then $${offer.price} for the year` : `, then $${offer.price} a month`}.
+                    Cancel anytime in the billing portal.
+                  </>
+                ) : plan === 'lifetime' ? (
+                  <>Your Founder Lifetime license is active — yours for good, with every update. A receipt is on its way{email ? ` to ${email}` : ''}.</>
+                ) : plan === 'yearly' ? (
+                  <>Your yearly Godmode Pro plan is active for the next 12 months. A receipt is on its way{email ? ` to ${email}` : ''}.</>
+                ) : (
+                  <>Your Godmode Pro subscription is active. A receipt is on its way{email ? ` to ${email}` : ''}.</>
+                )}
               </p>
             </div>
 
-            <div class="card mt-12 p-6 sm:p-8" data-reveal style="--d:300">
-              <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Your license key</p>
-              <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <code class="flex-1 rounded-xl bg-[rgb(0_0_0/0.35)] px-4 py-3.5 font-mono text-[17px] tracking-[0.06em] text-text ring-1 ring-line-2 sm:text-[19px]">
-                  {licenseKey}
-                </code>
-                <button type="button" class="btn btn-ghost" data-copy={licenseKey}>
-                  <Icon name="copy" size={15} /> <span data-copy-label>Copy</span>
-                </button>
+            <div class="mt-12 flex flex-col gap-3">
+              <div class="card p-6 sm:p-8" data-reveal style="--d:300">
+                <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Your license key</p>
+                <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <code class="flex-1 rounded-xl bg-[rgb(0_0_0/0.35)] px-4 py-3.5 font-mono text-[16px] tracking-[0.04em] break-all text-text ring-1 ring-line-2 sm:text-[19px] sm:tracking-[0.06em]">
+                    {licenseKey}
+                  </code>
+                  <button type="button" class="btn btn-ghost" data-copy={licenseKey}>
+                    <Icon name="copy" size={15} /> <span data-copy-label>Copy</span>
+                  </button>
+                </div>
+                <p class="mt-3 text-[13px] text-muted">
+                  Keep it somewhere safe — it’s also {plan === 'lifetime' ? 'printed on your invoice' : 'shown in your billing portal'}.
+                </p>
               </div>
-              <p class="mt-3 text-[13px] text-muted">
-                Keep it somewhere safe — it’s also {plan === 'lifetime' ? 'printed on your invoice' : 'shown in your billing portal'}.
-              </p>
-            </div>
 
-            <div class="mt-3 grid gap-3 sm:grid-cols-3" data-reveal style="--d:350">
-              <a href="/download/mac" class="card flex items-center gap-4 p-5" data-track="download_mac">
-                <Icon name="apple" size={22} />
-                <span><b class="block text-[15px] font-medium">macOS</b><span class="text-[12.5px] text-muted">Apple silicon</span></span>
-              </a>
-              <a href="/download/windows" class="card flex items-center gap-4 p-5" data-track="download_windows">
-                <Icon name="monitor" size={22} />
-                <span><b class="block text-[15px] font-medium">Windows</b><span class="text-[12.5px] text-muted">.msi / .exe</span></span>
-              </a>
-              <a href="/download/linux" class="card flex items-center gap-4 p-5" data-track="download_linux">
-                <Icon name="terminal" size={22} />
-                <span><b class="block text-[15px] font-medium">Linux</b><span class="text-[12.5px] text-muted">AppImage</span></span>
-              </a>
+              <div class="send-card card order-first p-6 sm:order-last sm:p-8" data-send data-reveal style="--d:250">
+                <div class="flex items-start gap-4">
+                  <span class="grid size-11 flex-none place-items-center rounded-xl bg-brand-soft text-brand">
+                    <Icon name="laptop" size={20} />
+                  </span>
+                  <div>
+                    <p class="h-card">
+                      <span class="sm:hidden">Now send it to your computer</span>
+                      <span class="hidden sm:inline">Installing on another computer?</span>
+                    </p>
+                    <p class="mt-1.5 text-[14px] leading-relaxed text-muted">
+                      Godmode runs on your Mac or PC. Send yourself this link — it opens the download with your key filled in.
+                    </p>
+                  </div>
+                </div>
+                <div class="mt-5 flex flex-col gap-2 sm:flex-row">
+                  <button type="button" class="btn btn-primary sm:flex-1" data-share={handoffUrl} data-track="handoff_share" hidden>
+                    <Icon name="share" size={16} /> Send to my computer
+                  </button>
+                  <a href={mailto} class="btn btn-ghost sm:flex-1" data-mail-handoff data-track="handoff_email">
+                    <Icon name="mail" size={16} /> Email it to me
+                  </a>
+                  <button type="button" class="btn btn-ghost sm:flex-1" data-copy={handoffUrl} data-track="handoff_copy">
+                    <Icon name="link" size={15} /> <span data-copy-label>Copy link</span>
+                  </button>
+                </div>
+              </div>
+
+              <div data-reveal style="--d:350">
+                <div class="grid gap-3 sm:grid-cols-3">
+                  <a href="/download/mac" class="card flex items-center gap-4 p-5" data-track="download_mac">
+                    <Icon name="apple" size={22} />
+                    <span><b class="block text-[15px] font-medium">macOS</b><span class="text-[12.5px] text-muted">Apple silicon</span></span>
+                  </a>
+                  <a href="/download/windows" class="card flex items-center gap-4 p-5" data-track="download_windows">
+                    <Icon name="monitor" size={22} />
+                    <span><b class="block text-[15px] font-medium">Windows</b><span class="text-[12.5px] text-muted">.msi / .exe</span></span>
+                  </a>
+                  <a href="/download/linux" class="card flex items-center gap-4 p-5" data-track="download_linux">
+                    <Icon name="terminal" size={22} />
+                    <span><b class="block text-[15px] font-medium">Linux</b><span class="text-[12.5px] text-muted">AppImage</span></span>
+                  </a>
+                </div>
+                <p class="mt-3 text-center text-[12.5px] text-dim">
+                  Also: <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/mac-intel">macOS Intel</a> ·
+                  <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/windows-msi">Windows MSI</a> ·
+                  <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/linux-deb">.deb</a> ·
+                  <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/linux-rpm">.rpm</a> ·
+                  <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download">headless server & all builds</a>
+                </p>
+              </div>
             </div>
-            <p class="mt-3 text-center text-[12.5px] text-dim">
-              Also: <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/mac-intel">macOS Intel</a> ·
-              <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/windows-msi">Windows MSI</a> ·
-              <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/linux-deb">.deb</a> ·
-              <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/linux-rpm">.rpm</a> ·
-              <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download">headless server & all builds</a>
-            </p>
 
             <ol class="mt-12 grid gap-3 sm:grid-cols-2" data-reveal style="--d:400">
               {steps.map((s, i) => (
@@ -204,7 +263,7 @@ const steps = [
               </p>
               {session?.customer && (
                 <a href="/api/portal" class="btn btn-ghost btn-sm flex-none">
-                  <Icon name="receipt-text" size={14} /> Billing & invoices
+                  <Icon name="receipt-text" size={14} /> {trialEnd ? 'Manage trial & billing' : 'Billing & invoices'}
                 </a>
               )}
             </div>
@@ -223,6 +282,25 @@ const steps = [
   }
   <script>
     import { consent, track, xEvent } from '@/scripts/analytics';
+
+    document.querySelectorAll<HTMLTimeElement>('time[data-local-date]').forEach((t) => {
+      const d = new Date(t.dateTime);
+      if (!Number.isNaN(d.getTime())) t.textContent = d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+    });
+
+    const share = document.querySelector<HTMLButtonElement>('[data-share]');
+    if (share && typeof navigator.share === 'function') {
+      share.hidden = false;
+      share.addEventListener('click', () => {
+        navigator
+          .share({ title: 'Godmode', text: 'Download Godmode (license key included)', url: share.dataset.share })
+          .catch(() => {});
+      });
+    } else {
+      // Without a share sheet, email is the most direct way to get the link to the computer.
+      document.querySelector('[data-mail-handoff]')?.classList.replace('btn-ghost', 'btn-primary');
+    }
+
     type Purchase = { id: string; value: number; currency: string; plan: string };
     const p = (window as unknown as { __gmPurchase?: Purchase }).__gmPurchase;
     const once = (key: string) => {

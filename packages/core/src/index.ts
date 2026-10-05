@@ -8,6 +8,7 @@
  *   godmode doctor           check dependencies (claude, uv, chrome) and permissions; --fix repairs what it can
  *   godmode update           update the installed tools
  *   godmode cleanup          show what takes up space; --fix removes what is safe to remove
+ *   godmode license [<key>]  show the licence, or add (replace) the licence key
  *   godmode runner <install|pair|serve|status|uninstall>   work for a Godmode on another computer (see remote/cli.ts)
  *   godmode mcp | tools | call   the running Godmode for Claude Code and other apps outside it (see connect/cli.ts)
  *   godmode version
@@ -57,6 +58,7 @@ import { startRunners, stopRunners } from "./remote/runners";
 import { bootstrapDependencies } from "./remote/health";
 import { startKeepAwake, stopKeepAwake } from "./remote/keepAwake";
 import { startCloudLink, stopCloudLink } from "./cloud/link";
+import { licenseState, setLicenseKey, startLicense, stopLicense } from "./license/license";
 import { removeCoreFile, runConnectCli, USAGE as CONNECT_USAGE, writeCoreFile } from "./connect/cli";
 import { newId } from "./util";
 import { SPEND_BACKFILL_SQL } from "./db/migrations";
@@ -163,6 +165,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   }
 
   applyRuntimeSettings(getSettings());
+  // Before anything can start a run (and before child processes could inherit GODMODE_LICENSE).
+  if (!runner) startLicense();
   await vault.tryAutoUnlock();
   ensureDefaultProfile();
   await ensureDefaultAgent();
@@ -308,6 +312,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       stopMobileAccess();
       stopRunners();
       stopCloudLink();
+      stopLicense();
       removeCoreFile(cfg.dataDir);
       await stopMessaging();
       stopTasks();
@@ -363,6 +368,7 @@ Usage:
   godmode doctor [--fix]     Check dependencies and permissions (--fix repairs what it can)
   godmode update             Update the installed tools
   godmode cleanup [--fix]    Show what takes up space (--fix removes what is safe to remove)
+  godmode license [<key>]    Show the licence, or add the licence key (GM-XXXXX-XXXXX-XXXXX-XXXXX)
   godmode version
 
 Claude Code and other AI tools (they set up agents, automations and tasks in the running Godmode):
@@ -436,6 +442,17 @@ ${RUNNER_USAGE.replace(/^Usage:\n/, "")}`);
       else if (!results.length) console.log("Everything is up to date.");
       for (const r of results) console.log(`${r.ok ? "✅" : "❌"} ${r.name.padEnd(22)} ${!r.ok ? r.output.split("\n").pop() : r.upToDate ? "already up to date" : `${r.previous ?? "?"} → ${r.version ?? "?"}`}`);
       process.exit(results.every((r) => r.ok) ? 0 : 1);
+    }
+    case "license": {
+      if (!process.env.GODMODE_LOG_LEVEL) setLogLevel("warn");
+      const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
+      openDb(cfg.dbPath);
+      const key = positionals[1];
+      const s = key ? await setLicenseKey(key) : licenseState();
+      const until = s.trialEndsAt ?? s.renewsAt ?? s.graceEndsAt ?? s.unverifiedUntil;
+      console.log(`${s.status}${s.plan ? ` · ${s.plan}` : ""}${s.keyHint ? ` · key …${s.keyHint}` : ""}${until ? ` · until ${until.slice(0, 10)}` : ""}`);
+      if (s.message) console.log(s.message);
+      process.exit(s.blocked ? 1 : 0);
     }
     case "cleanup": {
       const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});

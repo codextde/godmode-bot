@@ -20,6 +20,7 @@ import { pausedRun } from "../services/pauses";
 import { remindWaitingAutomation } from "../services/questions";
 import { onCheckRunFinished } from "./conditions";
 import { HttpError, badRequest, conflict, newId, now, parseJson, truncate } from "../util";
+import { isLicenseRequired, noteLicenseRefusal } from "../license/license";
 
 const log = logger("automations");
 
@@ -405,7 +406,8 @@ export async function dispatch(routineId: string, opts: { byHuman?: boolean } = 
     setEventStatus(waitingIds, "failed", oneLine(message, 300));
     exec("UPDATE routines SET last_status = 'failed' WHERE id = ?", routineId);
     emitRoutine(routineId);
-    notify("error", `Automation “${routine.name}” could not start`, message, "/automations");
+    if (isLicenseRequired(err)) noteLicenseRefusal(`Automation “${routine.name}”`, err);
+    else notify("error", `Automation “${routine.name}” could not start`, message, "/automations");
     throw err;
   } finally {
     dispatching.delete(routineId);

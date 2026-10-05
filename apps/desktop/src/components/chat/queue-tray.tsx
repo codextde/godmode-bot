@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/common";
-import { api, ApiRequestError, errorMessage } from "@/lib/api";
+import { api, ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api";
 import { pendingQueued } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -92,7 +92,7 @@ export function QueueTray({
     mutationFn: () => api.conversations.queue.sendNow(conversationId),
     onError: (err) => {
       void qc.invalidateQueries({ queryKey: key });
-      if (!gone(err)) toast.error("Couldn't send the queue", { description: errorMessage(err) });
+      if (!gone(err) && !isLicenseRequired(err)) toast.error("Couldn't send the queue", { description: errorMessage(err) });
     },
   });
 

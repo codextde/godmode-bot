@@ -27,7 +27,6 @@ import { cloudContext } from "@/lib/core";
 import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import { SITE } from "./about-section";
 import { CloudLinkDialog, isLinked, useCloudStatus } from "./cloud-link-dialog";
 import { ToneBadge } from "./cloud-section";
 import { Callout, InfoRow, SectionHeading, Segmented, SettingsGroup } from "./settings-kit";
@@ -122,9 +121,9 @@ function UnlinkedBilling({ defaultUrl }: { defaultUrl: string }) {
         </div>
       </section>
       <Callout tone="muted">
-        Looking for your Godmode licence? Licences (Lifetime or Monthly) are separate from Godmode Cloud and are managed at{" "}
-        <button type="button" className="font-medium text-foreground underline-offset-4 hover:underline" onClick={() => void openExternal(SITE)}>
-          {SITE.replace(/^https?:\/\//, "")}
+        Looking for your Godmode licence? It is separate from Godmode Cloud: your plan, key and subscription are under{" "}
+        <button type="button" className="font-medium text-foreground underline-offset-4 hover:underline" onClick={() => navigate("/settings/license")}>
+          Settings → License
         </button>
         .
       </Callout>

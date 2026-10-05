@@ -58,6 +58,7 @@ import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
 import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
+import { LicenseBanner } from "@/components/license/license-banner";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useBootstrap, useMods } from "@/lib/hooks";
 import { api } from "@/lib/api";
@@ -262,6 +263,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <MobileBar attention={inboxCount > 0} />
         <DesktopDragStrip />
         {cloudContext && boot && <CloudVersionNote coreVersion={boot.version} uiVersion={cloudContext.uiVersion} />}
+        <LicenseBanner />
         <div ref={setScrollEl} className="@container min-h-0 flex-1 overflow-y-auto">
           <PageScrollContext value={scrollEl}>{children}</PageScrollContext>
         </div>

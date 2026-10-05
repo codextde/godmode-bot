@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import type { ConversationWithMessages, RoutineTriggerType } from "@godmode/shared";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
@@ -55,7 +55,7 @@ export function OnePromptCard({ compact = false }: { compact?: boolean }) {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${res.conversation.id}`);
     },
-    onError: (err) => toast.error("Couldn't reach Godmode", { description: errorMessage(err) }),
+    onError: (err) => !isLicenseRequired(err) && toast.error("Couldn't reach Godmode", { description: errorMessage(err) }),
   });
   const canSubmit = text.trim().length > 3 && !start.isPending;
   const submit = () => canSubmit && start.mutate();

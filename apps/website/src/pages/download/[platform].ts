@@ -2,20 +2,24 @@ import type { APIRoute } from 'astro';
 import { assetRedirect, latestRelease, PLATFORMS } from '@/lib/releases';
 import { entitled } from '@/lib/entitlement';
 import { allowed } from '@/lib/limit';
+import { keyFromCookie, setKeyCookie } from '@/lib/signed';
 
 export const prerender = false;
 
-/** /download/mac, /download/windows?key=GM-… — licensed customers only. */
+/** /download/mac, /download/windows — licensed customers only (order cookie, key cookie, or a legacy ?key=). */
 export const GET: APIRoute = async ({ params, url, cookies, request }) => {
   const platform = params.platform ?? '';
   const target = PLATFORMS[platform];
   if (!target) return new Response('Unknown platform', { status: 404 });
   if (!(await allowed('CHECKOUT_LIMIT', request))) return new Response('Too many requests', { status: 429 });
 
-  if (!(await entitled(cookies, url.searchParams.get('key')))) {
+  const queryKey = url.searchParams.get('key');
+  if (queryKey) await setKeyCookie(cookies, queryKey, url.protocol === 'https:');
+  const key = queryKey ?? (await keyFromCookie(cookies));
+  if (!(await entitled(cookies, key))) {
     const back = new URLSearchParams({ platform });
-    if (url.searchParams.has('key')) back.set('invalid', '1');
-    return new Response(null, { status: 303, headers: { location: `/download?${back}` } });
+    if (key) back.set('invalid', '1');
+    return new Response(null, { status: 303, headers: { location: `/download?${back}`, 'cache-control': 'no-store' } });
   }
   try {
     const release = await latestRelease();

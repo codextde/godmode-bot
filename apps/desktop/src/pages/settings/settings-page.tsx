@@ -13,6 +13,7 @@ import {
   Globe,
   HeartPulse,
   Info,
+  KeySquare,
   MonitorUp,
   RefreshCw,
   ScrollText,
@@ -35,6 +36,7 @@ import { ComputerSection } from "@/components/settings/computer-section";
 import { ConnectSection } from "@/components/settings/connect-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { InstructionsSection } from "@/components/settings/instructions-section";
+import { LicenseSection } from "@/components/settings/license-section";
 import { LogsSection } from "@/components/settings/logs-section";
 import { MemorySection } from "@/components/settings/memory-section";
 import { PhoneSection } from "@/components/settings/phone-section";
@@ -62,6 +64,7 @@ const SECTIONS = [
   { id: "phone", label: "Phone", icon: <Smartphone />, group: "App" },
   { id: "connect", label: "Claude Code & MCP", icon: <SquareTerminal />, group: "App" },
   { id: "cloud", label: "Cloud", icon: <Cloud />, group: "App" },
+  { id: "license", label: "License", icon: <KeySquare />, group: "App" },
   { id: "billing", label: "Billing", icon: <CreditCard />, group: "App" },
   { id: "system", label: "System", icon: <HeartPulse />, group: "App" },
   { id: "cleanup", label: "Cleanup", icon: <BroomSparkles />, group: "App" },
@@ -72,7 +75,7 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 /** Sections that render without the settings document (they use their own endpoints). */
-const STANDALONE: SectionId[] = ["backup", "connect", "cloud", "billing", "system", "cleanup", "about"];
+const STANDALONE: SectionId[] = ["backup", "connect", "cloud", "license", "billing", "system", "cleanup", "about"];
 
 export default function SettingsPage() {
   const { section } = useParams();
@@ -114,6 +117,7 @@ export default function SettingsPage() {
       phone: () => <PhoneSection settings={s} />,
       connect: () => <ConnectSection />,
       cloud: () => <CloudSection />,
+      license: () => <LicenseSection />,
       billing: () => <BillingSection />,
       system: () => <SystemSection bootstrap={boot} settings={settings.data} />,
       cleanup: () => <CleanupSection settings={settings.data} />,

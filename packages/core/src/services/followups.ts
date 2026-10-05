@@ -18,6 +18,7 @@ import { deliverFollowup } from "../messaging/bridge";
 import { emitConversationUpdated, sendMessage } from "./conversations";
 import { notify, runNotifiedUser } from "./notifications";
 import { getSettings } from "./settings";
+import { isLicenseRequired, licenseBlocks, noteLicenseRefusal, requireLicense } from "../license/license";
 
 const log = logger("followups");
 
@@ -296,7 +297,8 @@ function arm() {
     (f) => !busy(f.conversation_id),
   );
   if (!next) return;
-  const wait = Math.min(Math.max(0, Date.parse(next.due_at) - Date.now()), TICK_MS);
+  // Due ones wait in place while the licence refuses runs: look again a tick later, not right away.
+  const wait = licenseBlocks() ? TICK_MS : Math.min(Math.max(0, Date.parse(next.due_at) - Date.now()), TICK_MS);
   timer = setTimeout(() => {
     timer = null;
     void sweep();
@@ -314,6 +316,16 @@ export function sweep(): Promise<void> {
 }
 
 async function startDue() {
+  if (licenseBlocks()) {
+    const due = get<{ n: number }>("SELECT COUNT(*) AS n FROM followups WHERE due_at <= ?", now())?.n ?? 0;
+    if (!due) return;
+    try {
+      requireLicense();
+    } catch (err) {
+      if (isLicenseRequired(err)) noteLicenseRefusal(due === 1 ? "A follow-up" : `${due} follow-ups`, err);
+    }
+    return;
+  }
   for (const r of all<FollowupRow>(`${SELECT} WHERE f.due_at <= ? ORDER BY f.due_at`, now())) {
     if (busy(r.conversation_id)) continue;
     const reason: FollowupReason = Date.now() - Date.parse(r.due_at) > LATE_MS ? "late" : "due";

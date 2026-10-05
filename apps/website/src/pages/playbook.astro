@@ -116,11 +116,11 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
       <div class="card mt-24 p-8 text-center sm:p-12" data-reveal>
         <h2 class="text-[clamp(26px,3.4vw,40px)] font-semibold tracking-[-0.04em]">Ready to hand these off?</h2>
         <p class="mx-auto mt-3 max-w-[520px] text-muted">
-          ${PRICING.plans.lifetime.price} once or ${PRICING.plans.monthly.price}/month. {PRICING.guaranteeDays}-day money-back guarantee.
+          {PRICING.trialDays} days free, then ${PRICING.plans.monthly.price}/month or ${PRICING.plans.yearly.perMonth}/month billed yearly. Cancel anytime.
         </p>
         <div class="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-          <CheckoutButton plan="lifetime" label="Get Godmode lifetime" source="playbook" size="lg" />
-          <CheckoutButton plan="monthly" label="Start monthly" source="playbook" variant="ghost" size="lg" />
+          <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="playbook" size="lg" />
+          <CheckoutButton plan="lifetime" label={`Founder Lifetime — $${PRICING.plans.lifetime.price}`} source="playbook" variant="ghost" size="lg" />
         </div>
       </div>
     </div>

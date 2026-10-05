@@ -21,12 +21,12 @@ import { PRICING } from '@/config/site';
       Hand it the busywork today. Tomorrow morning, it’s done — and your crew knows how you like it.
     </p>
     <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal style="--d:450">
-      <CheckoutButton plan="lifetime" label={`Get lifetime — $${PRICING.plans.lifetime.price}`} source="final" size="lg" />
-      <CheckoutButton plan="monthly" label={`Start at $${PRICING.plans.monthly.price}/month`} source="final" variant="ghost" size="lg" />
+      <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="final" size="lg" />
+      <CheckoutButton plan="lifetime" label={`Founder Lifetime $${PRICING.plans.lifetime.price}`} source="final" variant="ghost" size="lg" />
     </div>
     <p class="mt-6 flex items-center justify-center gap-2 text-[13px] text-muted" data-reveal style="--d:550">
       <Icon name="shield-check" size={14} class="text-brand" />
-      {PRICING.guaranteeDays}-day money-back guarantee · secure checkout with Stripe
+      No charge today · cancel anytime before day {PRICING.trialDays} · secure checkout with Stripe
     </p>
   </div>
 </section>

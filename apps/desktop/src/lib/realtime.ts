@@ -77,6 +77,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   runners: [qk.runners],
   // Cloud link state, plan or billing changed (linking approved, link up or down, notice from the cloud).
   cloud: [qk.cloud, qk.cloudBilling],
+  // Key added or removed, a new answer from the licence server, runs refused or allowed again.
+  license: [qk.license],
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
   followups: [qk.followups],

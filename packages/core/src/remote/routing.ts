@@ -12,6 +12,7 @@ import { get, run as sql } from "../db";
 import { logger } from "../log";
 import { conversationExists, deleteConversation, emitConversationUpdated, getConversation } from "../services/conversations";
 import { HttpError, badRequest } from "../util";
+import { requireLicense } from "../license/license";
 import { reconcileConversation } from "./mirror";
 import { getRunner, link, prepareRemoteMessage, runnerOfConversation } from "./runners";
 
@@ -23,6 +24,8 @@ const BROWSER = /^\/api\/browser\/profiles\/[A-Za-z0-9_-]{1,100}\/(input|navigat
 const PROXY = /^\/api\/runners\/([A-Za-z0-9_-]{1,100})\/proxy(\/.*)$/;
 /** Chat sub-routes the runner answers. `files` resolves the paths in its messages on its own disk. */
 const FORWARDED = /^\/(messages|queue\/send|queue\/[A-Za-z0-9_-]{1,100}|pause|continue|retry|followup|followup\/run|files)$/;
+/** Chat sub-routes that start a new run on the runner (continuing a paused one isn't new work). */
+const STARTS_RUN = /^\/(messages|retry|followup\/run|queue\/send)$/;
 const MAX_BODY = 64 * 1024 * 1024;
 
 function runnerOfRun(runId: string): string | null {
@@ -133,6 +136,7 @@ async function conversationRequest(c: Context, runnerId: string, id: string, res
     return null;
   }
   if (!FORWARDED.test(rest)) return null;
+  if (method === "POST" && STARTS_RUN.test(rest)) requireLicense();
   // Both start a run there: the runner gets what it needs for it first.
   if ((rest === "/messages" || rest === "/retry") && method === "POST") await prepareRemoteMessage(id);
   return forward(c, runnerId, pathAndQuery(c));

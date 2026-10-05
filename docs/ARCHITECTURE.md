@@ -1285,6 +1285,37 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   arrive through the cloud link on channel `mobile` and pass the same device-token and scope checks as on the
   phones' listener. See [Godmode Cloud](#godmode-cloud).
 
+## Licence
+
+Godmode is commercial software: a 7-day trial, then a monthly, yearly or Founder Lifetime licence, each with every
+feature (`packages/core/src/license`, `LicenseState` in `@godmode/shared`).
+
+* **Key and state** live in meta keys `license.*` (`key`, `verdict`: the licence server's last answer, `unverified_since`,
+  `grace_ends_at`, `first_start`), not in Settings, which paired phones can read. Logs and the UI only see the last 5
+  characters (`keyHint`); the full key only travels to the licence server and in its `manageUrl`.
+* **Entering it:** Settings → License, the onboarding's Activate step, the gate, `godmode license <key>`, or
+  `GODMODE_LICENSE` (headless, Docker, `install.sh`), which seeds it when none is stored and is then removed from the
+  environment so no child process sees it.
+* **Checking:** `GET <site>/api/license?key=…` at start, every 6 hours, on `POST /api/license/refresh` and (at most every
+  5 minutes) when a run is refused. `GODMODE_LICENSE_URL` overrides `https://godmode.codext.de`. Network errors, 5xx and
+  answers that aren't the server's own keep the last state (fail-open). A key the server refuses (400/404 with
+  `valid: false`) is not stored; `canceled`, `refunded` and `expired` become `expired`. A key that could not be checked
+  yet counts as `unverified` for 7 days from when the first unchecked key was entered.
+* **Grace:** the first start of a version with licences on an install that was used before (onboarding done, runs,
+  chats or more than the default agent) and has no key records `grace_ends_at` = 7 days later, once.
+* **Gate:** only release builds enforce it: the compiled binary (`COMPILED` in `config.ts`, `Bun.main` inside Bun's
+  `$bunfs`), i.e. the app sidecar, the server binaries and the Docker image. From source nothing is refused
+  (`GODMODE_LICENSE_ENFORCE=1` turns it on for trying it out), and a runner never refuses: the computer it works for
+  checks before a chat goes there. While the state is `missing`, `invalid`, `expired`, or an unverified key's or the
+  grace period's 7 days are over, `startRun`, `sendMessage`/`startChat`, run starts forwarded to runners and task starts
+  refuse with HTTP 402 `license_required`. Runs already working, and paused runs that continue, are left alone.
+  Scheduled automations record a failed event and notify at most once a day; scheduled dreams are skipped.
+* **API:** `GET /api/license`, `PUT /api/license {key}`, `DELETE /api/license`, `POST /api/license/refresh`
+  (`entity.changed: license` when the state changes). Through the cloud only the owner reads it; the key is changed on
+  the computer itself. Phones can't reach it and show refused runs as "Godmode needs an active licence on your computer".
+* **UI:** a full-page gate while runs are refused, banners (trial ends within 3 days, payment due, grace, unverified;
+  dismissed for a day), the onboarding step and Settings → License.
+
 ## Godmode Cloud
 
 An optional, self-hosted service (`apps/cloud`; deployment and operation in

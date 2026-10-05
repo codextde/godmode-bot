@@ -38,7 +38,7 @@ import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useVoiceSettings } from "@/hooks/use-voice";
-import { api, ApiRequestError, errorMessage } from "@/lib/api";
+import { api, ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces } from "@/lib/hooks";
@@ -230,7 +230,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           old ? { ...old, messages: old.messages.filter((m) => m.id !== ctx.tempId), queue: old.queue.filter((m) => m.id !== ctx.id) } : old,
         );
       }
-      toast.error("Message not sent", { description: errorMessage(err) });
+      if (!isLicenseRequired(err)) toast.error("Message not sent", { description: errorMessage(err) });
     },
   });
 

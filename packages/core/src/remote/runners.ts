@@ -45,6 +45,7 @@ import { mergeMemory, readMemoryState, writeMemoryState } from "./memorySync";
 import { adoptChat, applyRunnerEvent, catchUp, runnerDisconnected, setMirrorHooks } from "./mirror";
 import { cancelOffer, createOffer } from "./pairing";
 import { buildSnapshot, snapshotDigest } from "./snapshot";
+import { requireLicense } from "../license/license";
 
 const log = logger("runners");
 
@@ -648,6 +649,8 @@ export async function fixRunner(id: string, checkId: string): Promise<RunnerFixR
  * VMs of this computer don't exist there, so they are left out.
  */
 export async function startRemoteChat(runnerId: string, input: StartChatInput): Promise<StartChatResult> {
+  // The runner doesn't check licences: the computer it works for does, before anything goes there.
+  requireLicense();
   const l = link(runnerId);
   l.assertOnline();
   const agentId = input.agentId || getDefaultAgentId();
