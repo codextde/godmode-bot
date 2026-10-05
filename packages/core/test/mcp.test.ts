@@ -16,6 +16,7 @@ import { createRoutine, listRoutines } from "../src/services/routines";
 import { updateSettings } from "../src/services/settings";
 import { createWorkspace } from "../src/services/workspaces";
 import { createMcpServer } from "../src/integrations/mcpServers";
+import { __setKeepaliveForTests } from "../src/mcp/http";
 
 const PASSPHRASE = "correct horse battery staple";
 const PASSWORD = "s3cret-Pass-9876";
@@ -392,6 +393,28 @@ describe("agents + delegation", () => {
     expect(conv.messages[0]!.source).toBe("delegation");
     expect(child.prompt).toStartWith("[Delegated by Delegator");
     expect(child.prompt).toContain("Your final answer goes back to Delegator.]\n\nSay hello");
+  });
+
+  test("a long agent_delegate sends progress for the caller's progressToken, so Claude Code's idle timeout doesn't fire", async () => {
+    __setKeepaliveForTests(50);
+    try {
+      const res = await post(tokens[delegator.id]!, {
+        jsonrpc: "2.0",
+        id: 11,
+        method: "tools/call",
+        params: { name: "agent_delegate", arguments: { agentId: worker.id, task: "SLOW_STREAM", timeoutSeconds: 60 }, _meta: { progressToken: 11 } },
+      });
+      const events = (await res.text()).split("\n").filter((l) => l.startsWith("data: ")).map((l) => JSON.parse(l.slice(6)));
+      const progress = events.filter((e) => e.method === "notifications/progress");
+      expect(progress.length).toBeGreaterThan(1);
+      expect(progress.every((e) => e.params.progressToken === 11)).toBe(true);
+      expect(progress.map((e) => e.params.progress)).toEqual(progress.map((_, i) => i + 1));
+      const last = events.at(-1);
+      expect(last.id).toBe(11);
+      expect(last.result.content[0].text).toContain("Worker finished the task");
+    } finally {
+      __setKeepaliveForTests(null);
+    }
   });
 
   test("agent_delegate without waiting + delegation_status", async () => {
