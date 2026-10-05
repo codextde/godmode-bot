@@ -16,6 +16,7 @@ export const qk = {
   permissions: ["doctor", "permissions"] as unknown[],
   toolUpdates: ["doctor", "updates"] as unknown[],
   maintenance: ["doctor", "maintenance"] as unknown[],
+  cleanup: ["cleanup"] as unknown[],
   models: ["models"] as unknown[],
   vaultStatus: ["vault", "status"] as unknown[],
   appSecrets: ["vault", "secrets"] as unknown[],

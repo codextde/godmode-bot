@@ -87,6 +87,7 @@ needs to be useful:
 | 🧬 **Workspace folders & repos** | Attach project folders and git repositories to a workspace — paste `https://github.com/you/app` and Godmode clones it with your git sign-in, keeps it up to date and hands it to every agent in the workspace. |
 | 🎙️ **Voice mode** | Dictate and hear replies; hands-free conversation loop (Web Speech, OpenAI or ElevenLabs). |
 | 💾 **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
+| 🧹 **Cleanup** | Settings → Cleanup shows what Godmode's data folder holds, checks tools, permissions, updates, the database and disk space in one go, and frees what piles up: browser caches, worktrees of finished tasks, unused clones, leftovers of interrupted runs, old logs and the database's free pages — once a day on its own, or with one click. Anything that may still hold work stays. |
 | 🩺 **Diagnostic log** | Errors, slow spots and how every run went, with secrets masked. Settings → Logs groups recurring problems and copies an AI-ready report — paste it into Claude to find bugs and speed things up. |
 | 🖥️ **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
 | 🖥️ **Runners** | Keep working with the lid closed: put Godmode on another Mac — a Mac mini, an old laptop — with one install command, and pick it under **Run on** when you start a chat. Godmode copies your agents, logins, 2FA codes and browser sessions there, the work happens there, and you watch it here live like any other chat. Install, pairing and Claude Code set themselves up; a health view shows what's missing (software, macOS permissions, the vault) with one-click fixes, or hand it to **Fix with Claude**. Encrypted end to end. |
@@ -169,6 +170,10 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/ssh-servers.png" alt="SSH servers with their connection status, pinned host keys and the agents and chats using them" /><br /><sub><b>SSH servers</b> — password or key, sealed in the vault; host keys pinned on the first connection</sub></td>
     <td><img src="docs/screenshots/ssh-chat.png" alt="An agent reading a config and a log on a server over SSH and changing the config after backing it up" /><br /><sub><b>Work on servers</b> — pick servers for a chat; the agent runs commands and edits files there</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/cleanup.png" alt="Settings → Cleanup: storage by area, a self check of tools, permissions, updates, database, disk and worktrees" /><br /><sub><b>Cleanup</b> — what the data folder holds, and a self check of everything Godmode relies on</sub></td>
+    <td><img src="docs/screenshots/cleanup-items.png" alt="What can go: leftovers, browser caches, worktrees of finished tasks, unused clones, database, logs, trash" /><br /><sub><b>Free up space</b> — safe items are picked for you; whatever may still hold work stays</sub></td>
   </tr>
 </table>
 

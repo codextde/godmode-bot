@@ -527,6 +527,34 @@ the environment (with the build's commit), recurring problems, a run summary (co
 by the clock than Claude worked), memory and sleep, slow spots (requests, by-design waits apart, tool calls, queries,
 stalls and what blocked them), the tail of `desktop.log` and the newest entries that fit in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
 
+## Cleanup
+
+Settings → Cleanup (`services/cleanup.ts`, `GET /api/cleanup[?refresh=1]`, `POST /api/cleanup { ids }`,
+`godmode cleanup [--fix]`) walks the data directory once per look: what each area takes on disk (written blocks, so
+sparse VM disks count what they use), a self check (database `quick_check`, kept for an hour unless asked again; free
+disk space; task folders left over from deleted tasks) and what can go. The UI adds the system check, permissions and
+updates of Settings → System to the self check.
+
+| Item | What goes | Stays |
+|---|---|---|
+| Leftovers (recommended) | Run temp files (`godmode-mcp-<run>`…), imports and PR bodies in the system temp folder that are Godmode's own and untouched for a day; browser-use run folders; folders of deleted profiles and agents; interrupted clones (`*.cloning-*`) a day old | Anything of a run that is working |
+| Browser caches (recommended) | `Cache`, `Code Cache`, `GPUCache`, Dawn and shader caches of every profile | Cookies, logins, site data; profiles whose Chromium runs (registered, a live `SingletonLock`, `lockfile` on Windows) |
+| Worktrees of finished tasks (recommended) | Worktrees of tasks done or cancelled a day ago, and of deleted tasks — removed and pruned; branches stay | Uncommitted changes (also files git is told not to list), commits on no branch, a rebase or merge under way, full clones with unpushed commits or stashes, folders that aren't checkouts, tasks whose chat works or is paused |
+| Clones no task uses (recommended) | Bare clones in `repos/.tasks` no task names | One a task folder still uses or with commits never pushed |
+| Database (recommended) | `VACUUM` + `wal_checkpoint(TRUNCATE)` once 1 MB+ of pages is free | Waits while agents work, a backup runs, or the disk can't hold two copies |
+| Old logs (recommended) | Replaced logs a week old, logs of deleted VMs | The current logs |
+| Unfinished VM downloads, Trash, macOS images | Only when picked: layers kept to resume a download, `agents/.trash`, `repos/.trash`, `browser/.trash`, image templates (`removeImage`) | Images and layers while a download runs |
+
+What goes is looked at twice: for the report, and again right before it is removed. Worktrees and clones are asked
+about inside the tasks' per-repository lock (`removeCheckoutUnless`, `whileCloneIdle` in `tasks/git.ts`), so a task
+that was reopened meanwhile keeps its files. Runs count as working when the runner has them or the `runs` table says
+so. Cleaning takes its turn with repairs and updates (`inTurn`); `godmode cleanup --fix` hands the work to a running
+core and only cleans by itself when none answers.
+
+With `settings.maintenance.autoCleanup` (default on) the background upkeep cleans the recommended items at most once a
+day while no agent works. Unasked, worktrees go a week after their task finished, and folders without a task once
+nothing touched them for a week. The last run is kept in `meta` (`cleanup.lastRun`, `cleanup.lastAutomatic`).
+
 ## WebSocket (`/api/ws`)
 
 Server → UI events are defined in `packages/shared/src/events.ts`. The UI keeps React Query caches in sync

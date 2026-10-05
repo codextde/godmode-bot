@@ -29,6 +29,9 @@ import type {
   ChromeImportResult,
   ClaudeUpdateResult,
   ClaudeUpdateStatus,
+  CleanupId,
+  CleanupReport,
+  CleanupRun,
   ClientLogInput,
   CloudBilling,
   CloudSettings,
@@ -326,6 +329,12 @@ export const api = {
     /** Update one tool, or (without an id) every tool that has an update. */
     update: (id?: ToolId) => post<ToolUpdateResult[]>("/api/doctor/updates", { id }),
     maintenance: () => get<MaintenanceStatus>("/api/doctor/maintenance"),
+  },
+
+  cleanup: {
+    /** What takes up space, what can go, and a check of the data folder; `refresh` checks the database again too. */
+    report: (refresh = false) => get<CleanupReport>("/api/cleanup", { refresh: refresh ? 1 : undefined }),
+    run: (ids: CleanupId[]) => post<CleanupRun>("/api/cleanup", { ids }),
   },
 
   vault: {

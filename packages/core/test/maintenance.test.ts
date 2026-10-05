@@ -105,7 +105,7 @@ beforeEach(async () => {
     runner: { claudePath: tools.claude },
     browser: { enabled: true, chromePath: tools.browser, browserUseCommand: "" },
     computer: { enabled: false },
-    maintenance: { autoFix: true, autoUpdate: true },
+    maintenance: { autoFix: true, autoUpdate: true, autoCleanup: false },
     onboardingComplete: true,
   });
   __resetUpdatesForTests();
@@ -471,13 +471,13 @@ suite("system routes", () => {
   });
 
   test("the upkeep settings take true or false", async () => {
-    expect(getSettings().maintenance).toEqual({ autoFix: true, autoUpdate: true });
+    expect(getSettings().maintenance).toEqual({ autoFix: true, autoUpdate: true, autoCleanup: false });
     expect((await call("PUT", "/api/settings", { maintenance: { autoUpdate: "yes" } })).status).toBe(400);
     expect((await call("PUT", "/api/settings", { maintenance: [] })).status).toBe(400);
     const saved = await call<Settings>("PUT", "/api/settings", { maintenance: { autoUpdate: false } });
     expect(saved.status).toBe(200);
-    expect(saved.data.maintenance).toEqual({ autoFix: true, autoUpdate: false });
+    expect(saved.data.maintenance).toEqual({ autoFix: true, autoUpdate: false, autoCleanup: false });
     resetSettingsCache();
-    expect(getSettings().maintenance).toEqual({ autoFix: true, autoUpdate: false });
+    expect(getSettings().maintenance).toEqual({ autoFix: true, autoUpdate: false, autoCleanup: false });
   });
 });
