@@ -1,7 +1,7 @@
 import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
-import type { Agent, Conversation } from "@godmode/shared";
+import type { Agent, Conversation, Workspace } from "@godmode/shared";
 import { type KeyboardEvent, useRef } from "react";
 import { motion } from "motion/react";
 import { AlarmClock, Archive, CircleCheck, Hourglass, MessageCircleQuestion, MessagesSquare, Pause, Pin, Trash2, Zap } from "lucide-react";
@@ -15,11 +15,11 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AgentAvatar } from "@/components/common";
+import { AgentAvatar, colorGradient } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { followupWhen } from "@/components/chat/followup";
 import { api } from "@/lib/api";
-import { useAllAgents, useConversations } from "@/lib/hooks";
+import { useAllAgents, useConversations, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
@@ -35,6 +35,7 @@ export function RecentChats() {
     queryFn: async () => (await api.conversations.list({ archived: true, limit: 1 })).length > 0,
   });
   const { data: agents = [] } = useAllAgents();
+  const { data: workspaces = [] } = useWorkspaces();
   const conversationId = useMatch("/chat/:conversationId")?.params.conversationId;
   const { pathname } = useLocation();
   const liveRuns = useLive((s) => s.runs);
@@ -84,6 +85,8 @@ export function RecentChats() {
           {items.length === 0 && <EmptyTab tab={recentTab} />}
           {items.map((c) => {
             const agent = agents.find((a) => a.id === c.agentId);
+            const workspaceId = c.workspaceId ?? agent?.workspaceId;
+            const workspace = workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
             const running = runningConversations.has(c.id) || (c.running && !queuedConversations.has(c.id));
             const queued = !running && queuedConversations.has(c.id);
             return (
@@ -107,46 +110,49 @@ export function RecentChats() {
                         )}
                         {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
                       </span>
-                      <span className="block truncate text-[11px] text-muted-foreground">
-                        {running && !c.paused ? (
-                          <span className="text-shimmer font-medium">Working…</span>
-                        ) : queued && !c.paused ? (
-                          <span>Queued — waiting for a free slot</span>
-                        ) : c.paused?.reason === "question" ? (
-                          <span className="flex items-center gap-1 text-foreground" title={c.paused.question?.title}>
-                            <MessageCircleQuestion className="size-3 shrink-0 text-warning" aria-hidden />
-                            <span className="truncate">
-                              {c.paused.question?.kind === "approval" ? "Needs your OK" : "Needs your answer"}
-                              {c.paused.question?.title ? ` · ${c.paused.question.title}` : ""}
+                      <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                        {workspace && <WorkspaceChip workspace={workspace} />}
+                        <span className="block min-w-0 flex-1 truncate">
+                          {running && !c.paused ? (
+                            <span className="text-shimmer font-medium">Working…</span>
+                          ) : queued && !c.paused ? (
+                            <span>Queued — waiting for a free slot</span>
+                          ) : c.paused?.reason === "question" ? (
+                            <span className="flex items-center gap-1 text-foreground" title={c.paused.question?.title}>
+                              <MessageCircleQuestion className="size-3 shrink-0 text-warning" aria-hidden />
+                              <span className="truncate">
+                                {c.paused.question?.kind === "approval" ? "Needs your OK" : "Needs your answer"}
+                                {c.paused.question?.title ? ` · ${c.paused.question.title}` : ""}
+                              </span>
                             </span>
-                          </span>
-                        ) : c.paused ? (
-                          <span className="flex items-center gap-1">
-                            {c.paused.reason === "limit" ? (
-                              <Hourglass className="size-3 shrink-0 text-warning" aria-hidden />
-                            ) : (
-                              <Pause className="size-3 shrink-0 fill-current" aria-hidden />
-                            )}
-                            <span className="truncate">
-                              {c.paused.reason === "user"
-                                ? "Paused"
-                                : c.paused.reason === "budget"
-                                  ? "Held — budget used up"
-                                  : c.paused.auto && c.paused.resumeAt
-                                    ? `Continues ${followupWhen(c.paused.resumeAt)}`
-                                    : "Waiting for the limit"}
+                          ) : c.paused ? (
+                            <span className="flex items-center gap-1">
+                              {c.paused.reason === "limit" ? (
+                                <Hourglass className="size-3 shrink-0 text-warning" aria-hidden />
+                              ) : (
+                                <Pause className="size-3 shrink-0 fill-current" aria-hidden />
+                              )}
+                              <span className="truncate">
+                                {c.paused.reason === "user"
+                                  ? "Paused"
+                                  : c.paused.reason === "budget"
+                                    ? "Held — budget used up"
+                                    : c.paused.auto && c.paused.resumeAt
+                                      ? `Continues ${followupWhen(c.paused.resumeAt)}`
+                                      : "Waiting for the limit"}
+                              </span>
                             </span>
-                          </span>
-                        ) : c.followup ? (
-                          <span className="flex items-center gap-1" title={c.followup.note}>
-                            <AlarmClock className="size-3 shrink-0 text-brand-strong" aria-hidden />
-                            <span className="truncate">Continues {followupWhen(c.followup.dueAt)}</span>
-                          </span>
-                        ) : (
-                          <>
-                            {originLine(c, agents) ?? agent?.name ?? "Agent"} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false })}
-                          </>
-                        )}
+                          ) : c.followup ? (
+                            <span className="flex items-center gap-1" title={c.followup.note}>
+                              <AlarmClock className="size-3 shrink-0 text-brand-strong" aria-hidden />
+                              <span className="truncate">Continues {followupWhen(c.followup.dueAt)}</span>
+                            </span>
+                          ) : (
+                            <>
+                              {originLine(c, agents) ?? agent?.name ?? "Agent"} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false })}
+                            </>
+                          )}
+                        </span>
                       </span>
                     </span>
                   </Link>
@@ -210,6 +216,24 @@ function originLine(c: Conversation, agents: Agent[]): string | null {
   }
   if (c.origin === "routine") return "Automation";
   return null;
+}
+
+/** Which workspace a chat belongs to, in the workspace's colour. Global chats go without. */
+function WorkspaceChip({ workspace }: { workspace: Workspace }) {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(workspace.color);
+  return (
+    <span
+      title={`Workspace: ${workspace.name}`}
+      className={cn(
+        "inline-flex h-4 max-w-22 shrink-0 items-center gap-1 rounded-[5px] px-1 text-[10px] font-medium text-foreground/75 ring-1 ring-inset",
+        hex ? "ring-foreground/10" : colorGradient(workspace.color),
+      )}
+      style={hex ? { backgroundColor: `color-mix(in oklab, ${workspace.color} 14%, transparent)` } : undefined}
+    >
+      {workspace.icon && <span className="text-[9px] leading-none" aria-hidden>{workspace.icon}</span>}
+      <span className="truncate">{workspace.name}</span>
+    </span>
+  );
 }
 
 type ChatBucket = Exclude<RecentTab, "all">;
