@@ -290,7 +290,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=Godmode Bot
             org.opencontainers.image.description=Godmode Bot headless server with the web dashboard, Chromium, uv and Claude Code
-            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.licenses=LicenseRef-Proprietary
 
       - uses: docker/build-push-action@v7
         with:

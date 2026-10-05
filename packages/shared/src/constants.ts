@@ -5,6 +5,8 @@ export const APP_SLUG = "godmode";
 export const DEFAULT_PORT = 7777;
 export const DEFAULT_MODEL = "claude-opus-5-5";
 export const DEFAULT_AGENT_SLUG = "godmode";
+/** Godmode's website: licences are bought, checked and managed there (`GODMODE_LICENSE_URL` overrides it in the core). */
+export const LICENSE_SITE = "https://usegodmode.com";
 
 /** Fallback model list, used until (or when) the installed Claude Code CLI reports its own. */
 export const MODEL_OPTIONS: { id: string; label: string; hint: string }[] = [

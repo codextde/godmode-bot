@@ -12,35 +12,68 @@ export const SITE = {
   model: 'Claude Opus 5.5',
 } as const;
 
-export type Plan = 'lifetime' | 'monthly';
+export type Plan = 'monthly' | 'yearly' | 'lifetime';
+
+export const isPlan = (v: unknown): v is Plan => v === 'monthly' || v === 'yearly' || v === 'lifetime';
+
+const LIFETIME_CAP = 100;
 
 export const PRICING = {
   currency: 'USD',
+  trialDays: 7,
   guaranteeDays: 14,
+  // Founder Lifetime is sold to the first `lifetimeCap` buyers only (paid, non-comp orders).
+  lifetimeCap: LIFETIME_CAP,
   plans: {
-    lifetime: {
-      id: 'lifetime' as Plan,
-      name: 'Lifetime',
-      price: 500,
-      cadence: 'one-time',
-      lookupKey: 'godmode_lifetime_usd',
-      blurb: 'Pay once. Own it. Every update included.',
-      cta: 'Get lifetime access',
-    },
     monthly: {
       id: 'monthly' as Plan,
-      name: 'Monthly',
-      price: 50,
-      cadence: 'per month',
-      lookupKey: 'godmode_monthly_usd',
-      blurb: 'Everything in Godmode. Cancel anytime.',
-      cta: 'Start monthly',
+      name: 'Pro Monthly',
+      price: 39,
+      perMonth: 39,
+      interval: 'month',
+      lookupKey: 'godmode_pro_monthly_usd',
+    },
+    yearly: {
+      id: 'yearly' as Plan,
+      name: 'Pro Yearly',
+      price: 348,
+      perMonth: 29,
+      interval: 'year',
+      lookupKey: 'godmode_pro_yearly_usd',
+    },
+    lifetime: {
+      id: 'lifetime' as Plan,
+      name: 'Founder Lifetime',
+      price: 499,
+      perMonth: null,
+      interval: null,
+      lookupKey: 'godmode_founder_lifetime_usd',
     },
   },
-  // Shown under the pricing cards. Keep it true: lifetime is a launch offer that can be
-  // retired for new buyers at any time (existing lifetime licenses stay valid).
-  launchNote: 'Lifetime is a launch offer. When it’s gone, it’s gone — licenses already sold stay valid forever.',
+  founderNote:
+    `Founder Lifetime is limited to the first ${LIFETIME_CAP} licenses and won’t come back once they’re gone. Every license already sold stays valid for good.`,
 } as const;
+
+/** Percent saved by paying yearly instead of monthly, rounded down so the claim is never overstated. */
+export const yearlySavings = Math.floor((1 - PRICING.plans.yearly.price / (PRICING.plans.monthly.price * 12)) * 100);
+
+/** Short price line for a plan, e.g. "$39/month", "$348/year", "$499 once". */
+export function priceLabel(plan: Plan): string {
+  const p = PRICING.plans[plan];
+  return p.interval ? `$${p.price}/${p.interval}` : `$${p.price} once`;
+}
+
+/**
+ * The last calendar day (UTC) on which a trial started now can safely be cancelled. One day earlier than the
+ * real end, so the date is never too late in any time zone.
+ */
+export function trialCancelBy(from = Date.now()): string {
+  return new Date(from + (PRICING.trialDays - 1) * 86400000).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
 
 export const FOUNDER = {
   name: 'Daniel Ehrhardt',
@@ -58,7 +91,7 @@ export const LEGAL = {
   phone: '+49 7904 5203106',
   email: 'kontakt@codext.de',
   // Bump by hand only when the legal texts change.
-  updated: 'September 30, 2026',
+  updated: 'October 5, 2026',
 } as const;
 
 export const TRACKING = {

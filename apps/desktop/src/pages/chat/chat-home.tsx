@@ -25,7 +25,7 @@ import { RunnerChip, RunnerNote } from "@/components/runners/runner-chip";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useConversations, useRunners, useScopeWorkspace, useWorkspaces, useAttention } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
@@ -152,7 +152,7 @@ export default function ChatHome() {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${res.conversation.id}`);
     },
-    onError: (err) => toast.error("Couldn't start the chat", { description: errorMessage(err) }),
+    onError: (err) => !isLicenseRequired(err) && toast.error("Couldn't start the chat", { description: errorMessage(err) }),
   });
 
   const userName = boot?.settings.general.userName?.trim();

@@ -1,7 +1,8 @@
 # Godmode website
 
-The sales site for Godmode — https://usegodmode.com. Astro 7 on Cloudflare Workers, Stripe Checkout for the
-$500 lifetime / $50 monthly plans, a D1 database for orders and cookieless analytics, and an admin dashboard.
+The sales site for Godmode — https://usegodmode.com. Astro 7 on Cloudflare Workers, Stripe Checkout for
+Godmode Pro ($39/month or $348/year, both with a 7-day free trial) and the capped Founder Lifetime ($499 once),
+a D1 database for orders and cookieless analytics, and an admin dashboard.
 
 ```
 src/config/site.ts        prices, guarantee, links, legal details, tracking IDs — edit here first
@@ -10,7 +11,9 @@ src/pages/api/checkout    creates the Stripe Checkout Session (form POST or ?pla
 src/pages/api/stripe-webhook  records orders, subscriptions and refunds (idempotent)
 src/pages/checkout/*      success page (license key + downloads) and the abandoned-checkout page
 src/pages/admin           sales dashboard (HTTP Basic auth, password = ADMIN_PASSWORD)
-src/pages/api/license     license lookup for the desktop app: GET /api/license?key=GM-…
+src/pages/api/license     license lookup for the desktop app: GET /api/license?key=GM-… (trial/renewal state)
+src/pages/api/portal      Stripe customer portal by welcome-page cookie or ?key=GM-…
+src/pages/api/offer       Founder Lifetime licenses left: { lifetimeLeft }
 migrations/               D1 schema (orders, events, leads, stripe_events)
 scripts/stripe-setup.mjs  creates products/prices, webhook and customer portal (idempotent)
 video/                    HyperFrames sources for the site and ad videos → public/media/
@@ -60,7 +63,15 @@ The site runs live on the Codext GmbH Stripe account (restricted key "Godmode We
 4. In the Stripe Dashboard: public business details, statement descriptor "GODMODE", payment methods, customer
    emails (successful payments + refunds), and — if you want — Stripe Tax, the Terms URL and promotional emails
    (then flip the matching flags above).
-5. Buy the lifetime plan once with a real card, check `/admin` (Live), refund it from the Dashboard.
+5. Buy the Founder Lifetime plan once with a real card, check `/admin` (Live), refund it from the Dashboard.
+
+## Plans
+
+Prices, the trial length, the guarantee and the Founder Lifetime cap live in `src/config/site.ts`; the Stripe
+prices are found by lookup key (`godmode_pro_monthly_usd`, `godmode_pro_yearly_usd`,
+`godmode_founder_lifetime_usd`). Older orders (the $500 lifetime and $50 monthly plans) stay valid; their prices are
+never archived, so existing subscriptions keep renewing. Free licenses can be issued from `/admin` and don't count
+toward revenue or the cap.
 
 ## Analytics
 

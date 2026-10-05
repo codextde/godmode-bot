@@ -66,6 +66,7 @@ import type {
   FollowupPatch,
   Goal,
   GoalInput,
+  LicenseState,
   GitCommit,
   LocalChromeProfile,
   LogEntry,
@@ -158,7 +159,7 @@ import type {
   WorkspaceInput,
   WorkspaceSource,
 } from "@godmode/shared";
-import { CloudErrorCode } from "@godmode/shared";
+import { CloudErrorCode, LICENSE_REQUIRED } from "@godmode/shared";
 import { cloudContext, getCoreInfo, goToCloudLogin } from "./core";
 
 export class ApiRequestError extends Error {
@@ -198,6 +199,16 @@ function qs(query?: Query): string {
   }
   const s = p.toString();
   return s ? `?${s}` : "";
+}
+
+let onLicenseRequired: ((message: string) => void) | null = null;
+/** A run start was refused for the licence (402 `license_required`); App shows the way to activate. */
+export function setLicenseRequiredHandler(fn: (message: string) => void) {
+  onLicenseRequired = fn;
+}
+
+export function isLicenseRequired(err: unknown): err is ApiRequestError {
+  return err instanceof ApiRequestError && err.code === LICENSE_REQUIRED;
 }
 
 let onUnauthorized: (() => void) | null = null;
@@ -246,6 +257,7 @@ export async function request<T>(method: string, path: string, body?: unknown, i
       else if (res.status === 402 && err.code === CloudErrorCode.PlanLimit) onCloudIssue?.({ kind: "plan", message: err.error });
     }
     if (res.status === 401 && !path.startsWith("/api/auth/")) onUnauthorized?.();
+    if (res.status === 402 && err.code === LICENSE_REQUIRED) onLicenseRequired?.(err.error);
     if (res.status === 403 && err.code === "grant_required" && headers.has(GRANT_HEADER)) onGrantRejected?.();
     throw new ApiRequestError(res.status, err.error, err.code, err.details);
   }
@@ -674,6 +686,14 @@ export const api = {
     billing: () => get<CloudBilling>("/api/cloud/billing"),
     cancel: () => post<CloudBilling>("/api/cloud/billing/cancel"),
     resume: () => post<CloudBilling>("/api/cloud/billing/resume"),
+  },
+
+  license: {
+    get: () => get<LicenseState>("/api/license"),
+    /** 400 `license_invalid` for a malformed key or one the licence server doesn't know. */
+    set: (key: string) => put<LicenseState>("/api/license", { key }),
+    remove: () => del<LicenseState>("/api/license"),
+    refresh: () => post<LicenseState>("/api/license/refresh"),
   },
 
   /** What the agents on this computer used over the last `days` days (from its run history). */

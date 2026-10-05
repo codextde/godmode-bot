@@ -211,8 +211,8 @@
       "ad-end",
       '<div class="logo" data-logo></div><div class="name">Godmode Bot</div>' +
         '<div class="tagl">Your AI coworker that <span class="serif">actually</span> does the work.</div>' +
-        '<div class="price"><span>$500 once</span><span class="or">or</span><span>$50<span class="per">/mo</span></span></div>' +
-        '<div class="cta">Get Godmode<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>' +
+        '<div class="price"><span>7 days free</span><span class="or">then</span><span>$29<span class="per">/mo</span></span></div>' +
+        '<div class="cta">Start free trial<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>' +
         '<div class="url">usegodmode.com</div>' +
         '<div class="meta"><span class="claude-dot"></span><span style="color:#d8d4cc">Claude Opus 5.5</span><span>·</span><span>Mac · Windows · Linux</span></div>',
       ctx.layer

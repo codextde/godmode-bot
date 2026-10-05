@@ -3,7 +3,9 @@ import Base from '@/layouts/Base.astro';
 import Logo from '@/components/ui/Logo.astro';
 import Bars from '@/components/admin/Bars.astro';
 import { checkAdmin } from '@/lib/auth';
-import { db } from '@/lib/db';
+import { db, insertComp } from '@/lib/db';
+import { minLivemode } from '@/lib/entitlement';
+import { newLicenseKey } from '@/lib/license';
 import { PRICING } from '@/config/site';
 
 export const prerender = false;
@@ -11,6 +13,28 @@ export const prerender = false;
 const denied = checkAdmin(Astro.request);
 if (denied) return denied;
 Astro.response.headers.set('cache-control', 'no-store');
+
+// "Issue a free license": browsers send Basic auth with cross-site form posts too, so only accept same-origin ones.
+let compError = '';
+if (Astro.request.method === 'POST') {
+  const origin = Astro.request.headers.get('origin');
+  const form = await Astro.request.formData().catch(() => null);
+  const email = String(form?.get('email') ?? '').trim().slice(0, 200);
+  const name = String(form?.get('name') ?? '').trim().slice(0, 200);
+  if (origin !== Astro.url.origin) compError = 'Rejected: the form must be sent from this page.';
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) compError = 'Enter a valid email address.';
+  else {
+    const id = await insertComp({ email, name: name || null, licenseKey: newLicenseKey(), livemode: minLivemode() });
+    return Astro.redirect(`/admin?comp=${encodeURIComponent(id)}${minLivemode() ? '' : '&mode=test'}#comp`, 303);
+  }
+}
+const compId = Astro.url.searchParams.get('comp');
+const issued = compId
+  ? await db()
+      .prepare(`SELECT license_key, email FROM orders WHERE session_id = ? AND comp = 1`)
+      .bind(compId)
+      .first<{ license_key: string; email: string }>()
+  : null;
 
 const range = [7, 30, 90].includes(Number(Astro.url.searchParams.get('days'))) ? Number(Astro.url.searchParams.get('days')) : 30;
 const live = Astro.url.searchParams.get('mode') !== 'test';
@@ -27,7 +51,8 @@ const all = async (sql: string, ...args: unknown[]) => ((await D.prepare(sql).bi
 const one = async (sql: string, ...args: unknown[]) => ((await D.prepare(sql).bind(...args).first()) ?? {}) as Row;
 const n = (v: unknown) => Number(v ?? 0);
 
-const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sourceOrders, recent, abandoned, leads, ctas] =
+const now = Date.now();
+const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sourceOrders, recent, abandoned, leads, ctas, subs, trials] =
   await Promise.all([
     one(`SELECT COUNT(DISTINCT day || visitor) AS v FROM events WHERE day >= ? AND type = 'pageview'`, sinceDay),
     all(
@@ -37,14 +62,14 @@ const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sour
     ),
     all(
       `SELECT plan, status, COUNT(*) AS c, SUM(amount_total) AS amount, currency FROM orders
-       WHERE created_at >= ? AND livemode = ? GROUP BY plan, status, currency`,
+       WHERE created_at >= ? AND livemode = ? AND COALESCE(comp, 0) = 0 GROUP BY plan, status, currency`,
       sinceMs,
       liveFlag,
     ),
     one(
-      `SELECT SUM(CASE WHEN plan = 'lifetime' AND status = 'paid' THEN 1 ELSE 0 END) AS lifetime,
-              SUM(CASE WHEN plan = 'monthly' AND status = 'paid' THEN 1 ELSE 0 END) AS subs,
-              SUM(CASE WHEN status = 'paid' AND currency = 'usd' THEN amount_total ELSE 0 END) AS revenue
+      `SELECT SUM(CASE WHEN plan = 'lifetime' AND status = 'paid' AND COALESCE(comp, 0) = 0 THEN 1 ELSE 0 END) AS lifetime,
+              SUM(CASE WHEN comp = 1 AND status = 'paid' THEN 1 ELSE 0 END) AS comps,
+              SUM(CASE WHEN status = 'paid' AND currency = 'usd' AND COALESCE(comp, 0) = 0 THEN amount_total ELSE 0 END) AS revenue
        FROM orders WHERE livemode = ?`,
       liveFlag,
     ),
@@ -70,7 +95,8 @@ const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sour
       liveFlag,
     ),
     all(
-      `SELECT created_at, plan, status, amount_total, currency, email, country, utm_source, utm_campaign, twclid
+      `SELECT created_at, plan, status, sub_status, trial_end, comp, amount_total, currency, email, country, utm_source,
+              utm_campaign, twclid
        FROM orders WHERE livemode = ? AND status NOT IN ('open') ORDER BY created_at DESC LIMIT 25`,
       liveFlag,
     ),
@@ -85,6 +111,24 @@ const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sour
        GROUP BY label ORDER BY c DESC LIMIT 12`,
       sinceDay,
     ),
+    // Every live subscription with what it's worth per month (legacy orders at their own price).
+    all(
+      `SELECT plan, sub_status, amount_total, currency FROM orders
+       WHERE livemode = ? AND mode = 'subscription' AND status = 'paid'`,
+      liveFlag,
+    ),
+    one(
+      `SELECT
+         SUM(CASE WHEN sub_status = 'trialing' THEN 1 ELSE 0 END) AS running,
+         SUM(CASE WHEN sub_status = 'trialing' AND cancel_at_period_end = 1 THEN 1 ELSE 0 END) AS cancelling,
+         SUM(CASE WHEN trial_end <= ?2 AND sub_status IN ('active', 'past_due', 'unpaid') THEN 1
+                  WHEN trial_end <= ?2 AND period_end > trial_end + 3600000 AND status <> 'refunded' THEN 1 ELSE 0 END) AS converted,
+         SUM(CASE WHEN sub_status IN ('canceled', 'incomplete_expired', 'paused')
+                   AND (period_end IS NULL OR period_end <= trial_end + 3600000) THEN 1 ELSE 0 END) AS dropped
+       FROM orders WHERE livemode = ?1 AND mode = 'subscription' AND trial_end IS NOT NULL`,
+      liveFlag,
+      now,
+    ),
   ]);
 
 const visitors = n(visitorsRow.v);
@@ -95,7 +139,20 @@ const revenueUsd = paidOrders.filter((r) => r.currency === 'usd').reduce((s, r) 
 const otherCurrencies = paidOrders.filter((r) => r.currency && r.currency !== 'usd');
 const refunded = orderRows.filter((r) => r.status === 'refunded').reduce((s, r) => s + n(r.c), 0);
 const openCheckouts = orderRows.reduce((s, r) => s + n(r.c), 0);
-const mrr = n(allTime.subs) * PRICING.plans.monthly.price;
+const { monthly, yearly, lifetime } = PRICING.plans;
+// MRR counts paying subscriptions only (not trials). Legacy orders that were charged at checkout count at that price.
+const monthlyValue = (r: Row) => {
+  const paidAtCheckout = r.currency === 'usd' && n(r.amount_total) > 0 ? n(r.amount_total) / 100 : 0;
+  if (r.plan === 'yearly') return (paidAtCheckout || yearly.price) / 12;
+  return paidAtCheckout || monthly.price;
+};
+const paying = subs.filter((r) => r.sub_status !== 'trialing');
+const mrr = paying.reduce((s, r) => s + monthlyValue(r), 0);
+const trialMrr = subs.filter((r) => r.sub_status === 'trialing').reduce((s, r) => s + monthlyValue(r), 0);
+const payingBy = (plan: string) => paying.filter((r) => r.plan === plan).length;
+const converted = n(trials.converted);
+const dropped = n(trials.dropped);
+const lifetimeSold = n(allTime.lifetime);
 
 const funnel = [
   { label: 'Visitors', value: visitors },
@@ -156,20 +213,70 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
           </p>
         </div>
         <div class="card p-6">
-          <p class="text-[13px] text-muted">Paid orders</p>
-          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{paidCount}</p>
-          <p class="mt-1 text-[12.5px] text-dim">{pct(paidCount, visitors)} of visitors · {refunded} refunded</p>
-        </div>
-        <div class="card p-6">
           <p class="text-[13px] text-muted">MRR</p>
           <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{money(mrr)}</p>
-          <p class="mt-1 text-[12.5px] text-dim">{n(allTime.subs)} active monthly</p>
+          <p class="mt-1 text-[12.5px] text-dim">{paying.length} paying · +{money(trialMrr)} in trial</p>
         </div>
         <div class="card p-6">
-          <p class="text-[13px] text-muted">Lifetime licenses</p>
-          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{n(allTime.lifetime)}</p>
-          <p class="mt-1 text-[12.5px] text-dim">{n(leads.c)} leads ({n(leads.recent)} new)</p>
+          <p class="text-[13px] text-muted">Paid orders</p>
+          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{paidCount}</p>
+          <p class="mt-1 text-[12.5px] text-dim">{pct(paidCount, visitors)} of visitors · {refunded} refunded · {n(leads.c)} leads ({n(leads.recent)} new)</p>
         </div>
+        <div class="card p-6">
+          <p class="text-[13px] text-muted">Founder Lifetime</p>
+          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">
+            {lifetimeSold}<span class="text-[18px] font-normal text-dim"> / {PRICING.lifetimeCap}</span>
+          </p>
+          <p class="mt-1 text-[12.5px] text-dim">{Math.max(0, PRICING.lifetimeCap - lifetimeSold)} left · {n(allTime.comps)} free licenses</p>
+        </div>
+      </section>
+
+      <section class="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr_1.2fr]">
+        <div class="card p-6">
+          <p class="text-[13px] text-muted">Active licenses by plan</p>
+          <dl class="mt-4 space-y-2.5 text-[13.5px]">
+            <div class="flex justify-between"><dt class="text-text-2">Pro monthly · ${monthly.price}</dt><dd class="tabular-nums">{payingBy('monthly')}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">Pro yearly · ${yearly.price}</dt><dd class="tabular-nums">{payingBy('yearly')}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">{lifetime.name} · ${lifetime.price}</dt><dd class="tabular-nums">{lifetimeSold}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">In trial</dt><dd class="tabular-nums">{n(trials.running)}</dd></div>
+            <div class="flex justify-between"><dt class="text-muted">Free (comp)</dt><dd class="tabular-nums text-muted">{n(allTime.comps)}</dd></div>
+          </dl>
+          <p class="mt-4 text-[12px] text-dim">Revenue counts what was charged at checkout; renewals and post-trial charges are in Stripe.</p>
+        </div>
+        <div class="card p-6">
+          <p class="text-[13px] text-muted">Trials</p>
+          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{pct(converted, converted + dropped)}</p>
+          <p class="mt-1 text-[12.5px] text-dim">trial → paid · all time</p>
+          <dl class="mt-4 space-y-2.5 text-[13.5px]">
+            <div class="flex justify-between"><dt class="text-text-2">Running now</dt><dd class="tabular-nums">{n(trials.running)}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">…set to cancel</dt><dd class="tabular-nums">{n(trials.cancelling)}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">Converted to paid</dt><dd class="tabular-nums">{converted}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">Canceled in trial</dt><dd class="tabular-nums">{dropped}</dd></div>
+          </dl>
+        </div>
+        <form id="comp" method="post" action="/admin" class="card p-6">
+          <p class="text-[13px] text-muted">Issue a free license</p>
+          <p class="mt-1 text-[12.5px] text-dim">
+            A {lifetime.name} license that skips Stripe ({minLivemode() ? 'live' : 'test'} mode). Not counted in revenue or the cap.
+          </p>
+          {
+            issued && (
+              <div class="mt-4 rounded-xl p-3 ring-1 ring-[rgb(47_214_144/0.35)]" style="background: rgb(47 214 144 / 0.06)">
+                <p class="text-[12.5px] text-muted">License for {issued.email}</p>
+                <div class="mt-1.5 flex items-center gap-2">
+                  <code class="flex-1 font-mono text-[15px] tracking-[0.04em] break-all text-text">{issued.license_key}</code>
+                  <button type="button" class="btn btn-ghost btn-sm" data-copy={issued.license_key}><span data-copy-label>Copy</span></button>
+                </div>
+              </div>
+            )
+          }
+          {compError && <p class="mt-4 text-[13px] text-danger">{compError}</p>}
+          <div class="mt-4 grid gap-2 sm:grid-cols-2">
+            <input name="email" type="email" required placeholder="Email" class="h-10 rounded-xl bg-[rgb(0_0_0/0.3)] px-3 text-[14px] ring-1 ring-line-2 outline-none placeholder:text-dim focus:ring-brand" />
+            <input name="name" placeholder="Name (optional)" class="h-10 rounded-xl bg-[rgb(0_0_0/0.3)] px-3 text-[14px] ring-1 ring-line-2 outline-none placeholder:text-dim focus:ring-brand" />
+          </div>
+          <button type="submit" class="btn btn-ghost btn-sm mt-3">Create license key</button>
+        </form>
       </section>
 
       <section class="mt-3 grid gap-3 lg:grid-cols-2">
@@ -254,8 +361,8 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
             {recent.map((o) => (
               <tr class="border-t border-line">
                 <td class="py-2 font-mono text-[12px] text-muted">{date(o.created_at)}</td>
-                <td>{o.plan}</td>
-                <td><span class:list={['chip', o.status === 'paid' && 'chip-brand']}>{o.status}</span></td>
+                <td>{o.plan}{o.comp ? <span class="text-dim"> · free</span> : null}</td>
+                <td><span class:list={['chip', o.status === 'paid' && 'chip-brand']}>{o.sub_status && o.sub_status !== 'active' ? o.sub_status : o.status}</span></td>
                 <td class="text-right tabular-nums">{o.amount_total != null ? money(n(o.amount_total) / 100, String(o.currency ?? 'usd')) : '—'}</td>
                 <td class="pl-4 text-text-2">{o.email ?? '—'}</td>
                 <td class="text-muted">{o.country ?? '—'}</td>

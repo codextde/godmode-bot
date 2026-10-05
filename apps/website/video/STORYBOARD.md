@@ -30,7 +30,7 @@ Rebuild everything with `./build.sh` (or `./build.sh <project>`).
 ## Frame ad-main-16x9 / ad-main-1x1 — (18s)
 - blueprint: kinetic-type-beats (hook) · device-surface-showcase (framed real screenshots, inner camera) · titlecard-reveal/cta end card
 - 0 hook "Your next hire isn't human." · 2.2 intro (home.png) · 4.65 vault (chat.png, highlight on Secret hidden)
-- 8.45 computer use / own Mac (vm scene) · 12.2 routines.png + Slack card · 15.3 end card ($500 once or $50/mo, Get Godmode)
+- 8.45 computer use / own Mac (vm scene) · 12.2 routines.png + Slack card · 15.3 end card (7 days free, then $29/mo, Start free trial)
 
 ## Frame ad-vault-1x1 — (11s)
 - 0 hook "Give AI your logins. It never sees them." · 2.0 vault scene with camera travel login → AI panel → wide · 7.55 end card

@@ -20,7 +20,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Agent, Routine } from "@godmode/shared";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { cloudContext, coreUrl } from "@/lib/core";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -96,6 +96,7 @@ export function useRunRoutine() {
       toast.success(title, { action: { label: "Watch", onClick: () => navigate(`/chat/${run.conversationId}`) } });
     },
     onError: (err, routine) =>
+      !isLicenseRequired(err) &&
       toast.error(routine.trigger.type === "condition" ? "Couldn't start the check" : "Couldn't start the automation", { description: errorMessage(err) }),
   });
 }

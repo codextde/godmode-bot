@@ -1,10 +1,11 @@
 import type { APIRoute } from 'astro';
 import type Stripe from 'stripe';
 import { env } from 'cloudflare:workers';
-import { PRICING, type Plan } from '@/config/site';
+import { isPlan, PRICING, priceLabel, trialCancelBy, type Plan } from '@/config/site';
 import { flag, priceFor, stripe } from '@/lib/stripe';
 import { newLicenseKey } from '@/lib/license';
-import { insertOpenOrder, type Attribution } from '@/lib/db';
+import { insertOpenOrder, lifetimeSold, type Attribution } from '@/lib/db';
+import { minLivemode } from '@/lib/entitlement';
 import { allowed, BOTS } from '@/lib/limit';
 
 export const prerender = false;
@@ -23,9 +24,12 @@ async function readInput(request: Request): Promise<Record<string, string>> {
   return Object.fromEntries([...form.entries()].map(([k, v]) => [k, typeof v === 'string' ? v : '']));
 }
 
+/** Unknown or missing plans fall back to the monthly trial. */
+const planFrom = (v: unknown): Plan => (isPlan(v) ? v : 'monthly');
+
 export const POST: APIRoute = async ({ request, url }) => {
   const wantsJson = (request.headers.get('accept') ?? '').includes('application/json');
-  let plan: Plan = 'lifetime';
+  let plan: Plan = 'monthly';
 
   try {
     if (!(await allowed('CHECKOUT_LIMIT', request))) {
@@ -34,14 +38,20 @@ export const POST: APIRoute = async ({ request, url }) => {
         : new Response(null, { status: 303, headers: { location: `/checkout/canceled?plan=${plan}&error=1` } });
     }
     const input = await readInput(request);
-    plan = input.plan === 'monthly' ? 'monthly' : 'lifetime';
+    plan = planFrom(input.plan);
     const offer = PRICING.plans[plan];
+
+    if (plan === 'lifetime' && (await lifetimeSold(minLivemode())) >= PRICING.lifetimeCap) {
+      return wantsJson
+        ? Response.json({ error: 'sold_out' }, { status: 409 })
+        : new Response(null, { status: 303, headers: { location: '/?soldout=1#pricing' } });
+    }
     const attribution: Attribution = {};
     for (const k of ATTR_KEYS) if (input[k]) attribution[k] = input[k].slice(0, 200);
 
     const licenseKey = newLicenseKey();
     const metadata: Record<string, string> = { plan, license_key: licenseKey, ...attribution };
-    const mode = plan === 'monthly' ? 'subscription' : 'payment';
+    const mode = plan === 'lifetime' ? 'payment' : 'subscription';
     const managed = flag(env.STRIPE_MANAGED_PAYMENTS);
     const requireTos = flag(env.STRIPE_REQUIRE_TOS);
     // Needs "promotional emails" accepted under Dashboard → Settings → Checkout first.
@@ -66,7 +76,10 @@ export const POST: APIRoute = async ({ request, url }) => {
         : {}),
       custom_text: {
         submit: {
-          message: `Instant access after payment. ${PRICING.guaranteeDays}-day money-back guarantee — just email us.`,
+          message:
+            mode === 'subscription'
+              ? `${PRICING.trialDays} days free, then ${priceLabel(plan)}. Cancel anytime before ${trialCancelBy()} and you pay nothing. After that, a ${PRICING.guaranteeDays}-day money-back guarantee covers your first payment.`
+              : `Founder Lifetime: pay once, every update included. Instant access after payment. ${PRICING.guaranteeDays}-day money-back guarantee — just email us.`,
         },
         ...(requireTos
           ? {
@@ -93,15 +106,21 @@ export const POST: APIRoute = async ({ request, url }) => {
         params.invoice_creation = {
           enabled: true,
           invoice_data: {
-            description: 'Godmode Bot — Lifetime license',
+            description: 'Godmode Bot — Founder Lifetime license',
             metadata: { license_key: licenseKey },
             footer: `Your license key: ${licenseKey}`,
           },
         };
       }
     } else {
-      // Shown in the customer portal, so subscribers can always find their key there.
-      params.subscription_data = { metadata, description: `Godmode Bot — Monthly · License ${licenseKey}` };
+      params.payment_method_collection = 'always';
+      params.subscription_data = {
+        metadata,
+        trial_period_days: PRICING.trialDays,
+        trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
+        // Shown in the customer portal, so subscribers can always find their key there.
+        description: `Godmode Pro — ${plan === 'yearly' ? 'Yearly' : 'Monthly'} · License ${licenseKey}`,
+      };
     }
 
     const session = await stripe().checkout.sessions.create(params);
@@ -121,10 +140,10 @@ export const POST: APIRoute = async ({ request, url }) => {
   }
 };
 
-// A plain GET (e.g. a link in an ad or email) starts checkout too: /api/checkout?plan=monthly.
+// A plain GET (e.g. a link in an ad, an email or the app) starts checkout too: /api/checkout?plan=yearly.
 // Link previewers and scanners get the pricing section instead of a Stripe session.
 export const GET: APIRoute = async (ctx) => {
-  const plan = ctx.url.searchParams.get('plan') === 'monthly' ? 'monthly' : 'lifetime';
+  const plan = planFrom(ctx.url.searchParams.get('plan'));
   if (BOTS.test(ctx.request.headers.get('user-agent') ?? '')) {
     return new Response(null, { status: 303, headers: { location: '/#pricing' } });
   }

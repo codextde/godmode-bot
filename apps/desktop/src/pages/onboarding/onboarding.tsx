@@ -2,9 +2,10 @@ import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { Globe2, HandHeart, LockKeyhole, PartyPopper, Stethoscope, AppWindow } from "lucide-react";
+import { Globe2, HandHeart, KeySquare, LockKeyhole, PartyPopper, Stethoscope, AppWindow } from "lucide-react";
 import type { Bootstrap } from "@godmode/shared";
 import { Backdrop, Wordmark } from "@/components/brand";
+import { ActivateStep } from "@/components/onboarding/activate-step";
 import { BrowserStep } from "@/components/onboarding/browser-step";
 import { DoneStep, type OnboardingSummary } from "@/components/onboarding/done-step";
 import { RemoteStep } from "@/components/onboarding/remote-step";
@@ -18,7 +19,7 @@ import { isMac } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
-type StepId = "welcome" | "system" | "vault" | "browser" | "remote" | "done";
+type StepId = "welcome" | "system" | "vault" | "browser" | "remote" | "activate" | "done";
 
 const STEP_META: Record<StepId, Omit<StepMeta, "id">> = {
   welcome: { title: "Welcome", hint: "Say hello", icon: <HandHeart /> },
@@ -26,6 +27,7 @@ const STEP_META: Record<StepId, Omit<StepMeta, "id">> = {
   vault: { title: "Vault", hint: "Encrypted logins & 2FA", icon: <LockKeyhole /> },
   browser: { title: "Browser sessions", hint: "Import Chrome sign-ins", icon: <AppWindow />, optional: true },
   remote: { title: "Remote dashboard", hint: "Password for web access", icon: <Globe2 /> },
+  activate: { title: "Activate", hint: "Free trial or licence key", icon: <KeySquare /> },
   done: { title: "Done", hint: "Start working", icon: <PartyPopper /> },
 };
 
@@ -64,7 +66,7 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
     if (!(bootstrap.vault.initialized && bootstrap.vault.unlocked)) list.push("vault");
     list.push("browser");
     if (serverMode) list.push("remote");
-    list.push("done");
+    list.push("activate", "done");
     return list;
   });
   const [index, setIndex] = useState(() => {
@@ -82,6 +84,7 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
     vault: bootstrap.vault.initialized && bootstrap.vault.unlocked ? "existing" : null,
     importedCookies: null,
     dashboardPassword: bootstrap.settings.server.hasDashboardPassword,
+    license: null,
   });
 
   const go = (to: number) => {
@@ -156,6 +159,17 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
           onBack={back}
           onDone={(dashboardPassword) => {
             setSummary((s) => ({ ...s, dashboardPassword }));
+            next();
+          }}
+        />
+      );
+      break;
+    case "activate":
+      content = (
+        <ActivateStep
+          onBack={back}
+          onDone={(state) => {
+            setSummary((s) => ({ ...s, license: state }));
             next();
           }}
         />

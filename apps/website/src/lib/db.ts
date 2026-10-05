@@ -105,7 +105,14 @@ export async function upsertFromSession(s: Stripe.Checkout.Session, status: 'pai
     .run();
 }
 
-/** Mirrors a subscription's current state (fetched fresh from Stripe, so event order doesn't matter). */
+/** Epoch ms from a Stripe timestamp (seconds), or null. */
+const ms = (v: number | null | undefined) => (typeof v === 'number' && v > 0 ? v * 1000 : null);
+
+/**
+ * Mirrors a subscription's current state (fetched fresh from Stripe, so event order doesn't matter).
+ * `status` keeps the coarse license state; `sub_status`, `trial_end`, `period_end` and `cancel_at_period_end`
+ * carry Stripe's details for the license API and the dashboard.
+ */
 export async function syncSubscription(sub: Stripe.Subscription) {
   const status =
     sub.status === 'active' || sub.status === 'trialing'
@@ -115,17 +122,51 @@ export async function syncSubscription(sub: Stripe.Subscription) {
         : sub.status === 'canceled' || sub.status === 'incomplete_expired'
           ? 'canceled'
           : null;
-  if (!status) return;
+  // Since the 2025 "basil" API versions the billing period lives on the subscription item.
+  const legacy = sub as unknown as { current_period_end?: number | null };
+  const periodEnd = ms(sub.items?.data?.[0]?.current_period_end ?? legacy.current_period_end);
+  const cancelling = sub.status !== 'canceled' && (sub.cancel_at_period_end || Boolean(sub.cancel_at));
   await db()
-    .prepare(`UPDATE orders SET status = ? WHERE subscription_id = ? AND status NOT IN ('open', 'refunded')`)
-    .bind(status, sub.id)
+    .prepare(
+      `UPDATE orders SET
+         status = CASE WHEN ?1 IS NULL OR status IN ('open', 'refunded') THEN status ELSE ?1 END,
+         sub_status = ?2, trial_end = ?3, period_end = COALESCE(?4, period_end), cancel_at_period_end = ?5
+       WHERE subscription_id = ?6`,
+    )
+    .bind(status, sub.status, ms(sub.trial_end), periodEnd, cancelling ? 1 : 0, sub.id)
     .run();
+}
+
+/** Founder Lifetime licenses sold so far: paid, not free, and from the Stripe mode the site runs in. */
+export async function lifetimeSold(minLivemode: number): Promise<number> {
+  const row = await db()
+    .prepare(
+      `SELECT COUNT(*) AS n FROM orders
+       WHERE plan = 'lifetime' AND status = 'paid' AND COALESCE(comp, 0) = 0 AND livemode >= ?`,
+    )
+    .bind(minLivemode)
+    .first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+
+/** A free license issued from /admin. It never touches Stripe and doesn't count toward revenue or the cap. */
+export async function insertComp(o: { email: string; name: string | null; licenseKey: string; livemode: number }) {
+  const id = `comp_${[...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
+  const now = Date.now();
+  await db()
+    .prepare(
+      `INSERT INTO orders (session_id, created_at, paid_at, plan, mode, status, email, name, license_key, livemode, comp)
+       VALUES (?, ?, ?, 'lifetime', 'comp', 'paid', ?, ?, ?, ?, 1)`,
+    )
+    .bind(id, now, now, o.email, o.name, o.licenseKey, o.livemode)
+    .run();
+  return id;
 }
 
 /**
  * Revokes the license behind a refunded or charged-back payment: the lifetime order that owns the
  * PaymentIntent, or — for subscription invoices, whose PaymentIntents we don't store — the customer's
- * monthly order.
+ * subscription orders.
  */
 export async function revokeForCharge(charge: Stripe.Charge) {
   const pi = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id;
@@ -136,7 +177,7 @@ export async function revokeForCharge(charge: Stripe.Charge) {
   }
   if (customer) {
     await db()
-      .prepare(`UPDATE orders SET status = 'refunded' WHERE customer_id = ? AND plan = 'monthly' AND status <> 'open'`)
+      .prepare(`UPDATE orders SET status = 'refunded' WHERE customer_id = ? AND mode = 'subscription' AND status <> 'open'`)
       .bind(customer)
       .run();
   }

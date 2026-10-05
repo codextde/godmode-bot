@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { ArrowRight, Bot, CircleCheck, CircleDashed, Plug, ShieldCheck } from "lucide-react";
-import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
+import { MASCOT_CHARACTER, MASCOT_COLOR, type LicenseState } from "@godmode/shared";
 import { Character } from "@/components/character";
 import { FormError, SubmitButton } from "./auth-layout";
 import { Confetti, StepCard } from "./step-kit";
@@ -11,6 +11,7 @@ export interface OnboardingSummary {
   vault: "created" | "unlocked" | "existing" | null;
   importedCookies: number | null;
   dashboardPassword: boolean | null;
+  license: LicenseState | null;
 }
 
 const NEXT = [
@@ -59,6 +60,13 @@ export function DoneStep({
       detail: summary.importedCookies !== null ? `${summary.importedCookies.toLocaleString()} cookies imported` : "Skipped — import any time from Browser",
     },
   ];
+  const license = summary.license;
+  const licensed = !!license?.keyHint && !license.blocked && ["active", "trial", "past_due", "unverified"].includes(license.status);
+  items.push({
+    label: "Godmode Pro",
+    ok: licensed ? true : license?.blocked ? false : null,
+    detail: licensed ? (license!.status === "trial" ? "Free trial active" : "Activated") : license?.status === "grace" ? "Add your key in Settings → License" : "Skipped",
+  });
   if (serverMode)
     items.push({
       label: "Dashboard password",

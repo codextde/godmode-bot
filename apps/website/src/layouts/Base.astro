@@ -26,24 +26,24 @@ const jsonLd = {
   url: Astro.site?.href ?? SITE.url,
   publisher: { '@type': 'Organization', name: 'Codext GmbH', url: 'https://codext.de' },
   offers: [
-    {
+    ...(['monthly', 'yearly'] as const).map((plan) => ({
       '@type': 'Offer',
-      name: 'Godmode Lifetime',
-      price: PRICING.plans.lifetime.price,
-      priceCurrency: PRICING.currency,
-      category: 'one-time',
-    },
-    {
-      '@type': 'Offer',
-      name: 'Godmode Monthly',
-      price: PRICING.plans.monthly.price,
+      name: `Godmode ${PRICING.plans[plan].name}`,
+      price: PRICING.plans[plan].price,
       priceCurrency: PRICING.currency,
       priceSpecification: {
         '@type': 'UnitPriceSpecification',
-        price: PRICING.plans.monthly.price,
+        price: PRICING.plans[plan].price,
         priceCurrency: PRICING.currency,
-        billingDuration: 'P1M',
+        billingDuration: plan === 'yearly' ? 'P1Y' : 'P1M',
       },
+    })),
+    {
+      '@type': 'Offer',
+      name: `Godmode ${PRICING.plans.lifetime.name}`,
+      price: PRICING.plans.lifetime.price,
+      priceCurrency: PRICING.currency,
+      category: 'one-time',
     },
   ],
 };

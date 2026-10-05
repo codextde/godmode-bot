@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Bot, CalendarClock, Plus, Sparkles, Wand2, X } from "lucide-react";
 import type { Agent, AgentInput, AgentTemplate } from "@godmode/shared";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { qk } from "@/lib/queryKeys";
 import { clearDraft, draftKeys, loadDraft, useDraft } from "@/lib/drafts";
@@ -74,7 +74,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${res.conversation.id}`);
     },
-    onError: (err) => toast.error("Couldn't reach Godmode", { description: errorMessage(err) }),
+    onError: (err) => !isLicenseRequired(err) && toast.error("Couldn't reach Godmode", { description: errorMessage(err) }),
   });
   const canDescribe = description.trim().length > 3 && !describe.isPending;
 

@@ -22,7 +22,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Agent, Dream, DreamOverview, DreamStatus } from "@godmode/shared";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useSettings } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -104,7 +104,7 @@ export function DreamsPanel({ agent }: { agent: Agent }) {
       toast.success(`${agent.name} is dreaming…`, { description: `${reviewedLabel(dream)}.` });
     },
     onError: (err) => {
-      toast.error("Couldn't start a dream", { description: errorMessage(err) });
+      if (!isLicenseRequired(err)) toast.error("Couldn't start a dream", { description: errorMessage(err) });
       qc.invalidateQueries({ queryKey: qk.agentDreams(agent.id) });
     },
   });

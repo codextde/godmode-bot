@@ -40,6 +40,7 @@ import { parseComputerTarget } from "../computer/targets";
 import { audit } from "./audit";
 import { getSettings } from "./settings";
 import { clearQueue, listQueue } from "./messageQueue";
+import { requireLicense } from "../license/license";
 import { continueConversation, pauseOf, PAUSE_QUESTION_JOIN, PAUSE_QUESTION_SQL, toPause, type PauseQuestionCols } from "./pauses";
 
 const log = logger("chat");
@@ -662,6 +663,8 @@ export async function sendMessage(
   },
 ): Promise<SendMessageResult> {
   const { conv, agent } = messageTarget(conversationId, input.trigger);
+  // Before anything is stored: a refused run leaves no message or upload behind.
+  requireLicense();
   const content = (input.content ?? "").trim();
   const files = input.attachments ?? [];
   if (!content && files.length === 0 && !input.files?.length) throw badRequest("Message is empty");
@@ -730,6 +733,7 @@ export async function startChat(
     instructions?: string;
   } & ModelChoice,
 ): Promise<StartChatResult> {
+  requireLicense();
   const agentId = input.agentId || getDefaultAgentId();
   if (!agentId) throw badRequest("No agent given and no default agent exists");
   const agent = getAgent(agentId);

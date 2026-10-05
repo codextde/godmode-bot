@@ -1,6 +1,7 @@
 import { attribution, initConsent, track, xEvent } from './analytics';
 import { initDotField } from './dotfield';
 import { initCharacters } from './characters';
+import { isPlan, PRICING } from '@/config/site';
 
 window.__gm = true;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -298,7 +299,8 @@ if (roi) {
     // Assume Godmode takes over 70% of the repetitive hours you describe — deliberately conservative.
     const savedHoursYear = Math.round(h * 0.7 * 48);
     const savedYear = savedHoursYear * r;
-    const paybackDays = savedYear > 0 ? Math.max(1, Math.ceil(500 / (savedYear / 365))) : 0;
+    const yearlyCost = Number(roi.dataset.roiCost) || PRICING.plans.yearly.price;
+    const paybackDays = savedYear > 0 ? Math.max(1, Math.ceil(yearlyCost / (savedYear / 365))) : 0;
     out('hours').textContent = String(h);
     out('rate').textContent = `$${r}`;
     out('saved-hours').textContent = fmt(savedHoursYear);
@@ -323,7 +325,8 @@ if (roi) {
 // Checkout forms: attach attribution, show progress, fire conversion events -----------------------
 document.querySelectorAll<HTMLFormElement>('form[data-checkout]').forEach((form) => {
   form.addEventListener('submit', () => {
-    const plan = (form.elements.namedItem('plan') as HTMLInputElement | null)?.value ?? 'lifetime';
+    const picked = new FormData(form).get('plan');
+    const plan = isPlan(picked) ? picked : 'monthly';
     const a = attribution();
     for (const [k, v] of Object.entries(a)) {
       let input = form.querySelector<HTMLInputElement>(`input[name="${k}"]`);
@@ -341,9 +344,41 @@ document.querySelectorAll<HTMLFormElement>('form[data-checkout]').forEach((form)
       btn.setAttribute('aria-busy', 'true');
     }
     track('checkout_start', `${plan}:${form.dataset.checkout || 'page'}`);
-    xEvent('checkout', { value: plan === 'monthly' ? 50 : 500, currency: 'USD', contents: [{ content_id: plan }] });
+    xEvent('checkout', { value: PRICING.plans[plan].price, currency: PRICING.currency, contents: [{ content_id: plan }] });
   });
 });
+// Founder Lifetime: show how many capped licenses are left; on any failure the card simply shows no counter.
+const lifetimeCard = document.querySelector<HTMLElement>('[data-lifetime-card]');
+const soldOutParam = /(^|[?&#])soldout=1\b/.test(location.search + location.hash);
+const markSoldOut = () => {
+  lifetimeCard?.classList.add('is-soldout');
+  const label = lifetimeCard?.querySelector('.btn-label');
+  if (label) label.textContent = 'Sold out';
+  lifetimeCard?.querySelector('button[type="submit"]')?.setAttribute('disabled', '');
+};
+if (soldOutParam) {
+  document.querySelector('[data-soldout-note]')?.removeAttribute('hidden');
+  if (location.hash.startsWith('#pricing')) pricing?.scrollIntoView();
+}
+if (lifetimeCard) {
+  fetch('/api/offer', { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((data: unknown) => {
+      const lifetimeLeft = (data as { lifetimeLeft?: unknown } | null)?.lifetimeLeft;
+      if (typeof lifetimeLeft !== 'number') return;
+      const cap = PRICING.lifetimeCap;
+      const left = lifetimeCard.querySelector<HTMLElement>('[data-lifetime-left]');
+      const slot = lifetimeCard.querySelector<HTMLElement>('[data-lifetime-slot]');
+      if (left) {
+        left.textContent = lifetimeLeft > 0 ? `${lifetimeLeft} of ${cap} left` : 'Sold out';
+        left.hidden = false;
+      }
+      slot?.style.setProperty('--sold', `${Math.min(100, ((cap - lifetimeLeft) / cap) * 100)}%`);
+      if (lifetimeLeft <= 0) markSoldOut();
+    })
+    .catch(() => {});
+}
+
 // Back/forward cache: reset spinners when the visitor returns from Stripe.
 addEventListener('pageshow', (e) => {
   if (e.persisted) document.querySelectorAll<HTMLButtonElement>('[data-loading]').forEach((b) => delete b.dataset.loading);

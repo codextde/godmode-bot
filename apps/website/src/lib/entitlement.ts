@@ -5,7 +5,7 @@ import { isLicenseKey } from './license';
 import { ORDER_COOKIE, verify } from './signed';
 
 /** While the site runs on Stripe test keys, test-mode purchases count; with live keys only live ones do. */
-const minLivemode = () => (env.STRIPE_SECRET_KEY?.includes('_test_') ? 0 : 1);
+export const minLivemode = () => (env.STRIPE_SECRET_KEY?.includes('_test_') ? 0 : 1);
 
 /** True when this browser holds a paid order (signed cookie) or the request carries a paid license key. */
 export async function entitled(cookies: AstroCookies, key: string | null): Promise<boolean> {

@@ -25,6 +25,7 @@ services:
         required: false
     environment:
       TZ: ${TZ:-UTC}
+      GODMODE_LICENSE: ${GODMODE_LICENSE:-}
     volumes:
       # Database, vault, agent repositories, browser profiles, backups, logs.
       - godmode-data:/data

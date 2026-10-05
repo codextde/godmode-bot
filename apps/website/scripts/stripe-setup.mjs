@@ -22,24 +22,49 @@ const stripe = new Stripe(key);
 const mode = key.includes('_live_') ? 'LIVE' : 'TEST';
 const webhookApiVersion = process.env.STRIPE_WEBHOOK_API_VERSION ?? '2026-09-30.endive';
 
-const PLANS = [
+// One product per offer; prices are found by lookup_key, products by metadata.godmode_product. Old prices
+// (godmode_lifetime_usd, godmode_monthly_usd) are left alone so existing subscriptions keep renewing.
+const PRODUCTS = [
   {
-    lookup_key: 'godmode_lifetime_usd',
+    key: 'pro',
     product: {
-      name: 'Godmode Bot — Lifetime',
-      description: 'Lifetime license for Godmode Bot, the AI coworker that works like a human on your computer. All updates included.',
-      metadata: { plan: 'lifetime' },
+      name: 'Godmode Pro',
+      description: 'Godmode, the AI coworker that works like a human on your computer. Every feature, every update while subscribed.',
     },
-    price: { unit_amount: 50000, currency: 'usd', tax_behavior: 'inclusive' },
+    prices: [
+      {
+        lookup_key: 'godmode_pro_monthly_usd',
+        unit_amount: 3900,
+        currency: 'usd',
+        tax_behavior: 'inclusive',
+        recurring: { interval: 'month' },
+        metadata: { plan: 'monthly' },
+      },
+      {
+        lookup_key: 'godmode_pro_yearly_usd',
+        unit_amount: 34800,
+        currency: 'usd',
+        tax_behavior: 'inclusive',
+        recurring: { interval: 'year' },
+        metadata: { plan: 'yearly' },
+      },
+    ],
   },
   {
-    lookup_key: 'godmode_monthly_usd',
+    key: 'founder_lifetime',
     product: {
-      name: 'Godmode Bot — Monthly',
-      description: 'Monthly subscription to Godmode Bot, the AI coworker that works like a human on your computer. Cancel anytime.',
-      metadata: { plan: 'monthly' },
+      name: 'Godmode Founder Lifetime',
+      description: 'Founder Lifetime license for Godmode, the AI coworker that works like a human on your computer. Pay once, every update included.',
     },
-    price: { unit_amount: 5000, currency: 'usd', tax_behavior: 'inclusive', recurring: { interval: 'month' } },
+    prices: [
+      {
+        lookup_key: 'godmode_founder_lifetime_usd',
+        unit_amount: 49900,
+        currency: 'usd',
+        tax_behavior: 'inclusive',
+        metadata: { plan: 'lifetime' },
+      },
+    ],
   },
 ];
 
@@ -56,15 +81,32 @@ const WEBHOOK_EVENTS = [
 
 console.log(`Stripe setup (${mode} mode) for ${site}\n`);
 
-for (const plan of PLANS) {
-  const existing = await stripe.prices.list({ lookup_keys: [plan.lookup_key], active: true, limit: 1 });
-  if (existing.data[0]) {
-    console.log(`✓ price ${plan.lookup_key} exists: ${existing.data[0].id}`);
-    continue;
+let allProducts;
+for (const def of PRODUCTS) {
+  let product;
+  for (const price of def.prices) {
+    const existing = await stripe.prices.list({ lookup_keys: [price.lookup_key], active: true, limit: 1 });
+    if (existing.data[0]) {
+      console.log(`✓ price ${price.lookup_key} exists: ${existing.data[0].id}`);
+      product ??= typeof existing.data[0].product === 'string' ? existing.data[0].product : existing.data[0].product.id;
+      continue;
+    }
+    if (!product) {
+      allProducts ??= await stripe.products.list({ active: true, limit: 100 }).autoPagingToArray({ limit: 1000 });
+      product = allProducts.find((p) => p.metadata?.godmode_product === def.key)?.id;
+    }
+    if (!product) {
+      const created = await stripe.products.create({
+        ...def.product,
+        metadata: { godmode_product: def.key },
+        tax_code: 'txcd_10202000',
+      });
+      product = created.id;
+      console.log(`+ created product ${def.product.name}: ${product}`);
+    }
+    const created = await stripe.prices.create({ ...price, product });
+    console.log(`+ created price ${price.lookup_key}: ${created.id}`);
   }
-  const product = await stripe.products.create({ ...plan.product, tax_code: 'txcd_10202000' });
-  const price = await stripe.prices.create({ ...plan.price, product: product.id, lookup_key: plan.lookup_key });
-  console.log(`+ created ${plan.product.name}: product ${product.id}, price ${price.id}`);
 }
 
 const url = `${site}/api/stripe-webhook`;

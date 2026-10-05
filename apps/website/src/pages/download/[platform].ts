@@ -14,7 +14,10 @@ export const GET: APIRoute = async ({ params, url, cookies, request }) => {
 
   if (!(await entitled(cookies, url.searchParams.get('key')))) {
     const back = new URLSearchParams({ platform });
-    if (url.searchParams.has('key')) back.set('invalid', '1');
+    if (url.searchParams.has('key')) {
+      back.set('invalid', '1');
+      back.set('key', (url.searchParams.get('key') ?? '').slice(0, 40));
+    }
     return new Response(null, { status: 303, headers: { location: `/download?${back}` } });
   }
   try {

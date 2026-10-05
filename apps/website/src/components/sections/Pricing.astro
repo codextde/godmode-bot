@@ -2,9 +2,9 @@
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import CheckoutButton from '../ui/CheckoutButton.astro';
-import { PRICING, SITE } from '@/config/site';
+import { PRICING, SITE, yearlySavings } from '@/config/site';
 
-const { lifetime, monthly } = PRICING.plans;
+const { monthly, yearly, lifetime } = PRICING.plans;
 const included = [
   'Unlimited agents, chats and automations',
   'Browser use with your Chrome sessions',
@@ -15,7 +15,12 @@ const included = [
   'Desktop app + headless web dashboard',
   'macOS, Windows and Linux',
 ];
-const monthsToBreakEven = Math.ceil(lifetime.price / monthly.price);
+const proPerks = ['Every feature and every update', 'Cancel anytime in two clicks', 'Switch between monthly and yearly anytime'];
+const lifetimePerks = ['Everything in Pro, for good', 'All future updates, included', 'Priority email support from the founder'];
+const cycles = [
+  { plan: 'monthly', label: 'Monthly', checked: false },
+  { plan: 'yearly', label: 'Yearly', checked: true },
+] as const;
 ---
 
 <section id="pricing" class="relative py-20 sm:py-28" data-track-view="pricing">
@@ -23,82 +28,141 @@ const monthsToBreakEven = Math.ceil(lifetime.price / monthly.price);
   <div class="container-x">
     <div class="mx-auto max-w-[760px] text-center">
       <p class="eyebrow justify-center" data-reveal><span class="n">10</span> Pricing</p>
-      <Words text="One price. *No seats, no credits, no caps.*" class="h-section mx-auto mt-6" />
+      <Words text={`Free for ${PRICING.trialDays} days. *Then one simple price.*`} class="h-section mx-auto mt-6" />
       <p class="lead mx-auto mt-6 max-w-[560px]" data-reveal style="--d:200">
-        Everything Godmode can do, in both plans. Pick how you want to pay.
+        Every feature in every plan. No seats, no credits, no caps.
       </p>
     </div>
 
-    <div class="mx-auto mt-16 grid max-w-[980px] gap-4 md:grid-cols-[1.08fr_1fr] md:items-stretch">
-      <!-- Lifetime -->
+    <div data-soldout-note hidden class="mx-auto mt-10 flex max-w-[980px] items-start gap-3 rounded-2xl p-4 text-[14px] ring-1 ring-[rgb(232_165_58/0.35)]" style="background: rgb(232 165 58 / 0.06)" role="status">
+      <Icon name="hourglass" size={18} class="mt-0.5 flex-none text-warn" />
+      <p class="text-text-2">
+        <span class="text-text">Founder Lifetime just sold out.</span> Godmode Pro has every feature, and you can try it free for
+        {PRICING.trialDays} days.
+      </p>
+    </div>
+
+    <div class="mx-auto mt-12 grid max-w-[980px] gap-4 sm:mt-16 md:grid-cols-[1.18fr_1fr] md:items-stretch">
       <div class="price-card is-featured" data-reveal>
-        <div class="price-inner p-8 sm:p-10">
-          <div class="flex items-center justify-between">
-            <p class="text-[15px] font-medium">{lifetime.name}</p>
-            <span class="chip chip-brand"><Icon name="sparkles" size={11} /> Best value · launch offer</span>
+        <form method="post" action="/api/checkout" data-checkout="pricing" class="price-inner pro-card flex flex-col p-6 sm:p-10">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-[15px] font-medium">Godmode Pro</p>
+            <span class="chip chip-brand"><Icon name="sparkles" size={11} /> {PRICING.trialDays} days free</span>
           </div>
-          <p class="mt-7 flex items-baseline gap-2">
-            <span class="text-[64px] leading-none font-semibold tracking-[-0.055em]">${lifetime.price}</span>
-            <span class="text-[15px] text-muted">once</span>
-          </p>
-          <p class="mt-3 text-[15px] text-text-2">{lifetime.blurb}</p>
-          <p class="mt-1 text-[13px] text-muted">Costs the same as {monthsToBreakEven} months of monthly — then it’s free forever.</p>
-          <CheckoutButton plan="lifetime" label={lifetime.cta} source="pricing" full size="lg" class="mt-8" />
-          <ul class="mt-8 space-y-3 text-[14.5px]">
+
+          <fieldset class="seg mt-6">
+            <legend class="sr-only">Billing period</legend>
             {
-              included.map((f) => (
-                <li class="flex items-start gap-3 text-text-2">
+              cycles.map((c) => (
+                <>
+                  <input type="radio" name="plan" id={`cycle-${c.plan}`} value={c.plan} checked={c.checked} />
+                  <label for={`cycle-${c.plan}`} data-track={`cycle_${c.plan}`}>
+                    {c.label}
+                    {c.plan === 'yearly' && <span class="seg-save">−{yearlySavings}%</span>}
+                  </label>
+                </>
+              ))
+            }
+          </fieldset>
+
+          <div class="price-swap mt-7" aria-live="polite">
+            <div data-for="yearly">
+              <p class="flex items-baseline gap-2">
+                <span class="price-num">${yearly.perMonth}</span>
+                <span class="text-[15px] text-muted">/ month</span>
+                <s class="ml-1 text-[15px] text-dim" aria-label={`instead of $${monthly.price}`}>${monthly.price}</s>
+              </p>
+              <p class="mt-3 text-[14px] text-text-2">
+                Billed ${yearly.price} yearly · <span class="text-brand">save {yearlySavings}%</span>
+              </p>
+            </div>
+            <div data-for="monthly">
+              <p class="flex items-baseline gap-2">
+                <span class="price-num">${monthly.price}</span>
+                <span class="text-[15px] text-muted">/ month</span>
+              </p>
+              <p class="mt-3 text-[14px] text-text-2">Billed monthly · cancel anytime</p>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-lg group mt-7 w-full">
+            <span class="btn-label">Start {PRICING.trialDays}-day free trial</span>
+            <Icon name="arrow-right" size={16} class="arrow" />
+            <span class="btn-spinner" aria-hidden="true"></span>
+          </button>
+          <p class="mt-3 text-center text-[13px] text-muted">No charge today. Cancel anytime before day {PRICING.trialDays}.</p>
+
+          <div class="rule my-7"></div>
+          <ul class="space-y-3 text-[14.5px]">
+            {
+              proPerks.map((f, i) => (
+                <li class:list={['flex items-start gap-3', i ? 'text-text-2' : 'text-text']}>
                   <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-brand" />
                   {f}
                 </li>
               ))
             }
-            <li class="flex items-start gap-3 text-text">
-              <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-brand" />
-              All future updates, included
-            </li>
-            <li class="flex items-start gap-3 text-text">
-              <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-brand" />
-              Priority email support from the founder
-            </li>
           </ul>
-        </div>
+        </form>
       </div>
 
-      <!-- Monthly -->
-      <div class="price-card" data-reveal style="--d:100">
-        <div class="price-inner p-8 sm:p-10">
-          <p class="text-[15px] font-medium">{monthly.name}</p>
-          <p class="mt-7 flex items-baseline gap-2">
-            <span class="text-[64px] leading-none font-semibold tracking-[-0.055em]">${monthly.price}</span>
-            <span class="text-[15px] text-muted">/ month</span>
-          </p>
-          <p class="mt-3 text-[15px] text-text-2">{monthly.blurb}</p>
-          <p class="mt-1 text-[13px] text-muted">Start small. Switch to lifetime whenever you like.</p>
-          <CheckoutButton plan="monthly" label={monthly.cta} source="pricing" variant="ghost" full size="lg" class="mt-8" />
-          <ul class="mt-8 space-y-3 text-[14.5px]">
+      <div class="price-card" data-reveal style="--d:100" data-lifetime-card>
+        <div class="price-inner flex flex-col p-6 sm:p-10">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-[15px] font-medium">{lifetime.name}</p>
+            <span class="chip">One-time</span>
+          </div>
+          <div class="founder-slot mt-6" data-lifetime-slot>
+            <i aria-hidden="true"></i>
+            <span>First {PRICING.lifetimeCap} buyers only</span>
+            <span class="founder-left" data-lifetime-left hidden></span>
+          </div>
+          <div class="mt-7">
+            <p class="flex items-baseline gap-2">
+              <span class="price-num">${lifetime.price}</span>
+              <span class="text-[15px] text-muted">once</span>
+            </p>
+            <p class="mt-3 text-[14px] text-text-2">Pay once, own it. Every future update included.</p>
+          </div>
+
+          <CheckoutButton plan="lifetime" label="Get Founder Lifetime" source="pricing" variant="ghost" full size="lg" class="mt-7" />
+          <p class="mt-3 text-center text-[13px] text-muted">{PRICING.guaranteeDays}-day money-back guarantee.</p>
+
+          <div class="rule my-7"></div>
+          <ul class="space-y-3 text-[14.5px]">
             {
-              included.map((f) => (
-                <li class="flex items-start gap-3 text-text-2">
+              lifetimePerks.map((f, i) => (
+                <li class:list={['flex items-start gap-3', i ? 'text-text-2' : 'text-text']}>
                   <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-muted" />
                   {f}
                 </li>
               ))
             }
-            <li class="flex items-start gap-3 text-text-2">
-              <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-muted" />
-              Updates while subscribed · cancel anytime
-            </li>
           </ul>
         </div>
       </div>
     </div>
 
-    <div class="mx-auto mt-6 grid max-w-[980px] gap-3 md:grid-cols-3" data-reveal style="--d:150">
+    <div class="included mx-auto mt-4 max-w-[980px] rounded-[26px] p-6 ring-1 ring-line sm:p-8" data-reveal style="--d:120">
+      <p class="text-[13px] text-muted">Included in every plan</p>
+      <ul class="mt-5 grid gap-x-6 gap-y-3.5 text-[14.5px] sm:grid-cols-2 lg:grid-cols-4">
+        {
+          included.map((f) => (
+            <li class="flex items-start gap-3 text-text-2">
+              <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-brand" />
+              {f}
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+
+    <div class="mx-auto mt-3 grid max-w-[980px] gap-3 md:grid-cols-3" data-reveal style="--d:150">
       <div class="flex items-start gap-3 rounded-2xl p-4 ring-1 ring-line">
         <Icon name="shield-check" size={18} class="mt-0.5 flex-none text-brand" />
         <p class="text-[13px] leading-relaxed text-muted">
-          <span class="text-text">{PRICING.guaranteeDays}-day money-back guarantee.</span> Not for you? Email us, get every cent back.
+          <span class="text-text">Try first, then a {PRICING.guaranteeDays}-day guarantee.</span> Cancel during the trial and pay nothing.
+          After your first payment, email us within {PRICING.guaranteeDays} days for a full refund.
         </p>
       </div>
       <div class="flex items-start gap-3 rounded-2xl p-4 ring-1 ring-line">
@@ -121,7 +185,7 @@ const monthsToBreakEven = Math.ceil(lifetime.price / monthly.price);
 
     <p class="mx-auto mt-8 max-w-[640px] text-center text-[13px] text-muted" data-reveal>
       <Icon name="hourglass" size={13} class="mr-1 inline -translate-y-px text-[#f0a488]" />
-      {PRICING.launchNote}
+      {PRICING.founderNote}
     </p>
     <p class="mt-3 text-center text-[13px] text-dim" data-reveal>
       Need it for a team? <a href={`mailto:${SITE.email}?subject=Godmode%20for%20teams`} class="underline decoration-line-3 underline-offset-2 hover:text-text" data-track="teams_mail">Talk to us</a>.

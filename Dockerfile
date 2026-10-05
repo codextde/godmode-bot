@@ -3,7 +3,7 @@
 # Godmode Bot — headless server with the web dashboard (for a home server, NAS, VPS, Raspberry Pi 4/5, …).
 #
 #   docker build -t godmode-bot .
-#   docker run -d -p 7777:7777 -v godmode-data:/data -e ANTHROPIC_API_KEY=… godmode-bot
+#   docker run -d -p 7777:7777 -v godmode-data:/data -e GODMODE_LICENSE=GM-… -e ANTHROPIC_API_KEY=… godmode-bot
 #   docker exec <container> godmode token        # access token for the dashboard
 #
 # Claude Code needs credentials: pass ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`), or log in

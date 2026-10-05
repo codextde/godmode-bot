@@ -127,6 +127,7 @@ import { attachSsh, detachSsh, promptServers } from "../ssh/service";
 import { parseComputerTarget } from "../computer/targets";
 import { timedSync } from "../diagnostics/slow";
 import { StreamAccumulator, addUsage, detectLoginFailure, redactBlock } from "./stream";
+import { requireLicense } from "../license/license";
 
 const log = logger("runner");
 
@@ -486,6 +487,7 @@ function safely(what: string, fn: () => void) {
 
 export async function startRun(input: StartRunInput): Promise<Run> {
   if (shuttingDown) throw new HttpError(503, "Godmode is shutting down", "shutting_down");
+  requireLicense();
   const agent = getAgent(input.agentId);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   const conv = get<{ agent_id: string; runner_id: string | null }>("SELECT agent_id, runner_id FROM conversations WHERE id = ?", input.conversationId);

@@ -4,12 +4,22 @@ import Nav from '@/components/Nav.astro';
 import Footer from '@/components/Footer.astro';
 import Icon from '@/components/ui/Icon.astro';
 import { PLATFORMS } from '@/lib/releases';
+import { isLicenseKey } from '@/lib/license';
 import { SITE } from '@/config/site';
 
 export const prerender = false;
 
-const selected = Astro.url.searchParams.get('platform') ?? 'mac';
+// ?key=GM-… arrives from the welcome page's "send to my computer" link: fill it in and pick this computer's system.
+const rawKey = (Astro.url.searchParams.get('key') ?? '').trim().toUpperCase();
+const key = isLicenseKey(rawKey) ? rawKey : '';
+const ua = Astro.request.headers.get('user-agent') ?? '';
+const phone = /iPhone|iPad|iPod|Android/i.test(ua);
+const guess = /Windows/i.test(ua) ? 'windows' : /Linux/i.test(ua) && !phone ? 'linux' : 'mac';
+const asked = Astro.url.searchParams.get('platform') ?? '';
+const selected = PLATFORMS[asked] ? asked : guess;
 const invalid = Astro.url.searchParams.has('invalid');
+Astro.response.headers.set('cache-control', 'no-store');
+Astro.response.headers.set('referrer-policy', 'no-referrer');
 ---
 
 <Base title="Download" description="Download Godmode with your license key." noindex>
@@ -17,8 +27,18 @@ const invalid = Astro.url.searchParams.has('invalid');
   <main class="pt-36 pb-24">
     <div class="container-x max-w-[640px]">
       <p class="eyebrow"><span class="n">●</span> Customers</p>
-      <h1 class="h-section mt-5">Download Godmode</h1>
-      <p class="lead mt-5">Enter the license key from your welcome page, invoice or billing portal.</p>
+      <h1 class="h-section mt-5">{key && !invalid ? 'Your download is ready' : 'Download Godmode'}</h1>
+      <p class="lead mt-5">
+        {key && !invalid ? 'Your license key is filled in. Check the system and download.' : 'Enter the license key from your welcome page, invoice or billing portal.'}
+      </p>
+      {
+        phone && (
+          <p class="mt-6 flex items-start gap-2 rounded-xl p-3 text-[13.5px] text-text-2 ring-1 ring-line-2">
+            <Icon name="laptop" size={16} class="mt-0.5 flex-none text-brand" />
+            Godmode installs on a Mac, Windows or Linux computer. Open this page there to download.
+          </p>
+        )
+      }
 
       <form method="get" action="/download/go" class="card mt-10 grid gap-4 p-6 sm:p-8">
         {
@@ -33,6 +53,7 @@ const invalid = Astro.url.searchParams.has('invalid');
           <span class="text-[13px] text-muted">License key</span>
           <input
             name="key"
+            value={key || (invalid ? rawKey.slice(0, 40) : '')}
             required
             autocomplete="off"
             spellcheck="false"
@@ -43,12 +64,12 @@ const invalid = Astro.url.searchParams.has('invalid');
         </label>
         <label class="grid gap-2">
           <span class="text-[13px] text-muted">Platform</span>
-          <select name="platform" class="h-[50px] rounded-xl bg-[rgb(0_0_0/0.3)] px-4 text-[15px] text-text ring-1 ring-line-2 outline-none focus:ring-brand">
+          <select name="platform" data-platform class="h-[50px] rounded-xl bg-[rgb(0_0_0/0.3)] px-4 text-[15px] text-text ring-1 ring-line-2 outline-none focus:ring-brand">
             {Object.entries(PLATFORMS).map(([id, p]) => <option value={id} selected={id === selected}>{p.label}</option>)}
           </select>
         </label>
         <button type="submit" class="btn btn-primary btn-lg mt-2">
-          <Icon name="download" size={16} /> Download
+          <Icon name="download" size={16} /> <span data-download-label>Download for {PLATFORMS[selected].label}</span>
         </button>
       </form>
       <p class="mt-6 text-[14px] text-muted">
@@ -57,4 +78,12 @@ const invalid = Astro.url.searchParams.has('invalid');
     </div>
   </main>
   <Footer />
+  <script>
+    const select = document.querySelector<HTMLElement>('[data-platform]');
+    const label = document.querySelector<HTMLElement>('[data-download-label]');
+    select?.addEventListener('change', () => {
+      const option = select.querySelector<HTMLElement>('option:checked');
+      if (label && option) label.textContent = `Download for ${option.textContent}`;
+    });
+  </script>
 </Base>

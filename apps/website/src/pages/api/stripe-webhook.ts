@@ -60,6 +60,9 @@ async function handle(event: Stripe.Event) {
       const s = event.data.object;
       const paid = s.payment_status === 'paid' || s.payment_status === 'no_payment_required';
       await upsertFromSession(s, paid ? 'paid' : 'pending');
+      // Trials complete without a payment; store the trial end right away instead of waiting for an update event.
+      const subId = typeof s.subscription === 'string' ? s.subscription : s.subscription?.id;
+      if (s.mode === 'subscription' && subId) await syncSubscription(await stripe().subscriptions.retrieve(subId));
       break;
     }
     case 'checkout.session.async_payment_succeeded':

@@ -18,6 +18,7 @@ import {
   Info,
   Keyboard,
   KeyRound,
+  KeySquare,
   Layers,
   Lock,
   MessageCircle,
@@ -62,7 +63,7 @@ import { cloudContext } from "@/lib/core";
 import { modKey } from "@/lib/desktop";
 import { AgentAvatar } from "@/components/common";
 
-/** Settings sections by what people look for there (Cloud and Billing are under Navigate). */
+/** Settings sections by what people look for there (Cloud, License and Billing are under Navigate). */
 const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[] = [
   { id: "general", label: "General", icon: SlidersHorizontal, words: "name startup tray notifications desktop" },
   { id: "ai", label: "AI & Claude", icon: Sparkles, words: "model effort ultracode monthly budget team cost limit" },
@@ -311,6 +312,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem value="godmode cloud link browser remote access" onSelect={() => go("/settings/cloud")}>
             <Cloud /> Godmode Cloud
+          </CommandItem>
+          <CommandItem value="license licence key activate trial subscription pro plan" onSelect={() => go("/settings/license")}>
+            <KeySquare /> License
           </CommandItem>
           <CommandItem value="billing plan subscription invoices usage cost tokens" onSelect={() => go("/settings/billing")}>
             <CreditCard /> Billing and usage

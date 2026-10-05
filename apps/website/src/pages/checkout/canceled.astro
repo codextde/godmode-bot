@@ -1,5 +1,5 @@
 ---
-// Where Stripe sends people who leave checkout. Answer the likely reason and offer the other plan.
+// Where Stripe sends people who leave checkout. Answer the likely reason and point to the free trial.
 import Base from '@/layouts/Base.astro';
 import Nav from '@/components/Nav.astro';
 import Footer from '@/components/Footer.astro';
@@ -7,16 +7,17 @@ import Icon from '@/components/ui/Icon.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
 import { PRICING, SITE } from '@/config/site';
 
+const { monthly, yearly, lifetime } = PRICING.plans;
 const reasons = [
   {
     icon: 'wallet',
-    q: '$500 feels like a lot right now.',
-    a: `Start at $${PRICING.plans.monthly.price} for a month instead. If it doesn’t pay for itself in the first week, cancel in two clicks.`,
+    q: 'I don’t want to pay before I’ve tried it.',
+    a: `You don’t have to. Start the ${PRICING.trialDays}-day free trial: nothing is charged today, and if you cancel before day ${PRICING.trialDays} you pay nothing. After that it’s $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly.`,
   },
   {
     icon: 'shield-question',
     q: 'Not sure it will work for my tasks.',
-    a: `You’re covered by a ${PRICING.guaranteeDays}-day money-back guarantee. Try your hardest workflow — if Godmode can’t do it, email us and get every cent back.`,
+    a: `That’s what the trial is for. Hand it your hardest workflow this week. And if you only notice after your first payment, a ${PRICING.guaranteeDays}-day money-back guarantee still has you covered.`,
   },
   {
     icon: 'lock-keyhole',
@@ -39,8 +40,8 @@ const reasons = [
       </div>
 
       <p class="eyebrow"><span class="n">●</span> No charge was made</p>
-      <h1 class="h-section mt-5 max-w-[16ch]">Still thinking it over? <span class="serif text-muted">Fair.</span></h1>
-      <p class="lead mt-5 max-w-[560px]">Here’s what usually holds people back — and why it shouldn’t.</p>
+      <h1 class="h-section mt-5 max-w-[16ch]">Not sure yet? <span class="serif text-muted">Try it free for {PRICING.trialDays} days.</span></h1>
+      <p class="lead mt-5 max-w-[560px]">No charge today, cancel anytime before day {PRICING.trialDays}. Here’s what usually holds people back — and why it shouldn’t.</p>
 
       <div class="mt-12 grid gap-3">
         {
@@ -59,8 +60,8 @@ const reasons = [
       </div>
 
       <div class="mt-10 flex flex-col gap-3 sm:flex-row">
-        <CheckoutButton plan="lifetime" label={`Get lifetime — $${PRICING.plans.lifetime.price}`} source="recovery" size="lg" />
-        <CheckoutButton plan="monthly" label={`Try a month — $${PRICING.plans.monthly.price}`} source="recovery" variant="ghost" size="lg" />
+        <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="recovery" size="lg" />
+        <CheckoutButton plan="lifetime" label={`Founder Lifetime — $${lifetime.price}`} source="recovery" variant="ghost" size="lg" />
       </div>
       <p class="mt-6 text-[14px] text-muted">
         Have a question first? <a class="text-text underline decoration-line-3 underline-offset-2" href={`mailto:${SITE.email}?subject=Question%20about%20Godmode`}>Ask the founder directly</a>.

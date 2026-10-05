@@ -94,6 +94,7 @@ import {
   removeSecrets,
   type TaskRepo,
 } from "./git";
+import { licenseBlocks, licenseState } from "../license/license";
 
 const log = logger("tasks");
 
@@ -1195,6 +1196,8 @@ export async function dispatch(id: string, resume?: Resume): Promise<void> {
       return block(id, "The assigned agent doesn't exist anymore.", { kind: "setup", from: STARTABLE });
     }
     if (!agent.enabled) return block(id, `${agent.name} is disabled — turn it on or assign another agent.`, { kind: "setup", from: STARTABLE });
+    // Before a worktree is made for a run that can't start.
+    if (licenseBlocks()) return block(id, licenseState().message ?? "Godmode needs an active licence to start new work.", { kind: "setup", from: STARTABLE });
 
     const previous = openRuns(task.conversation_id);
     if (previous.length) await stopRuns(previous, "Restarted from the task board");

@@ -307,6 +307,10 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/cloud/billing/cancel", refused(LINK_ONLY)],
   ["POST", "/api/cloud/billing/resume", refused(LINK_ONLY)],
   ["GET", "/api/usage", A],
+  // The licence key is entered and removed on the computer; its owner may see the state and ask the server again.
+  ["GET", "/api/license", "owner"],
+  ["POST", "/api/license/refresh", "owner"],
+  ["PUT|DELETE", "/api/license", refused(COMPUTER_ONLY)],
   // What the team spent and its monthly budgets; letting held work run is like continuing a paused chat.
   ["GET", "/api/spend", A],
   ["GET", "/api/budgets", A],

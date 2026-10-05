@@ -199,7 +199,7 @@ needs to be useful:
 
 ### Desktop app
 
-Buy a license at [**usegodmode.com**](https://usegodmode.com) ($500 lifetime or $50/month) and download the app
+Start a 7-day free trial at [**usegodmode.com**](https://usegodmode.com) ($39/month, or $29/month billed yearly; or $499 once for Founder Lifetime) and download the app
 from your welcome page — or later from [usegodmode.com/download](https://usegodmode.com/download) with your
 license key:
 

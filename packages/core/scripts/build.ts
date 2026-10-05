@@ -201,7 +201,7 @@ async function compile(opts: {
           publisher: "Codext GmbH",
           version: `${opts.version}.0`,
           description: opts.sidecar ? "Godmode Bot core" : "Godmode Bot server",
-          copyright: "Copyright (c) Codext GmbH. MIT License.",
+          copyright: "© 2026 Codext GmbH",
           icon: join(repoDir, "apps/desktop/src-tauri/icons/icon.ico"),
         }
       : undefined;

@@ -32,7 +32,7 @@ import type {
   Vm,
   Workspace,
 } from "@godmode/shared";
-import { CloudErrorCode, isPhoneUrlAllowed } from "@godmode/shared";
+import { CloudErrorCode, LICENSE_REQUIRED, isPhoneUrlAllowed } from "@godmode/shared";
 import type { PendingFile, UploadFile } from "./attachments";
 import { withPending } from "./pending-queue";
 import { addressOrder, baseUrl, useSession, type Connection } from "./session";
@@ -50,6 +50,9 @@ export class ApiError extends Error {
     super(message);
   }
 }
+
+/** New work is refused until the computer has an active licence; it is added there, not on the phone. */
+const LICENSE_MESSAGE = "Godmode needs an active licence on your computer. Add your licence key in Godmode there, under Settings → License.";
 
 export const OFFLINE_MESSAGE = "Can't reach your computer. Check that it's awake and connected to Tailscale or Godmode Cloud.";
 const NO_ANSWER_MESSAGE = "No answer from your computer. Check whether it went through before trying again.";
@@ -200,6 +203,7 @@ export async function request<T>(method: string, path: string, body?: unknown, m
     }
     if (!isUnreachable(res.status, code)) {
       useSession.getState().setActiveUrl(base);
+      if (code === LICENSE_REQUIRED) throw new ApiError(res.status, LICENSE_MESSAGE, code);
       throw new ApiError(res.status, error ?? `Request failed (${res.status})`, code);
     }
     forget(base);
