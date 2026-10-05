@@ -5,7 +5,8 @@ import type { Agent } from "@godmode/shared";
 import { waitsForTickets } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { listActiveRuns } from "../src/runner/runner";
-import { createTask, deleteTask, getTask, startTasks, stopTasks, updateTask } from "../src/tasks/service";
+import { createTask, deleteTask, getTask, sendTaskMessage, startTasks, stopTasks, updateTask } from "../src/tasks/service";
+import { createWorkspace } from "../src/services/workspaces";
 
 let env: TestEnv;
 let agent: Agent;
@@ -64,6 +65,54 @@ describe("a ticket that waits for others", () => {
     expect(getTask(second.id).runId).toBeNull();
     updateTask(second.id, { waitsFor: [] });
     await until(() => getTask(second.id).status !== "todo", 20_000, "the ticket to start once nothing holds it");
+    await until(() => listActiveRuns().length === 0, 20_000, "runs to end");
+  }, 60_000);
+
+  test("a part can't wait for its own ticket; tickets of another workspace are refused; a refused update changes nothing", async () => {
+    const parent = createTask({ title: "Launch" });
+    const part = createTask({ title: "Write the post", parentId: parent.id });
+    expect(() => updateTask(part.id, { waitsFor: [parent.id] })).toThrow("loop");
+
+    const ws = createWorkspace({ name: "Client B" });
+    const theirs = createTask({ title: "Their ticket", workspaceId: ws.id });
+    expect(() => createTask({ title: "Ours", waitsFor: [theirs.id] })).toThrow("another workspace");
+
+    const blocker = createTask({ title: "Blocker" });
+    const t = createTask({ title: "Waits" });
+    expect(() => updateTask(t.id, { title: " ", waitsFor: [blocker.id] })).toThrow();
+    expect(getTask(t.id).waitsFor).toEqual([]);
+  });
+
+  test("a run the human starts in a waiting ticket's chat makes it work; what it waited for finishing doesn't restart it", async () => {
+    const finish = join(env.stateDir, "finish");
+    const t = createTask({ title: "Summarize the quarter", agentId: agent.id });
+    await until(() => getTask(t.id).status === "in_review", 20_000, "the first delivery");
+    const blocker = createTask({ title: "Get the last numbers" });
+    updateTask(t.id, { waitsFor: [blocker.id] });
+    updateTask(t.id, { status: "todo" });
+    expect(getTask(t.id).status).toBe("todo");
+    await sendTaskMessage(t.id, "WAIT_TO_FINISH Use what you have for now");
+    await until(() => getTask(t.id).status === "in_progress" && getTask(t.id).runStatus === "running", 20_000, "the human's run to work");
+    const runId = getTask(t.id).runId!;
+    updateTask(blocker.id, { status: "done" });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(getTask(t.id).runId).toBe(runId);
+    writeFileSync(finish, "");
+    try {
+      await until(() => getTask(t.id).status === "in_review", 20_000, "the human's run to deliver");
+    } finally {
+      rmSync(finish, { force: true });
+    }
+    expect(getTask(t.id).runStatus).toBe("succeeded");
+  }, 60_000);
+
+  test("started without waiting, the brief says so instead of claiming it waited", async () => {
+    const blocker = createTask({ title: "Find the supplier" });
+    const t = createTask({ title: "Order the parts", agentId: agent.id, status: "backlog", waitsFor: [blocker.id] });
+    updateTask(t.id, { status: "in_progress" });
+    await until(() => invocations(env).some((i) => i.prompt.includes("# Order the parts")), 20_000, "the brief");
+    const brief = invocations(env).find((i) => i.prompt.includes("# Order the parts"))!.prompt;
+    expect(brief).toContain(`#${blocker.number} “Find the supplier” — not finished: you started without it`);
     await until(() => listActiveRuns().length === 0, 20_000, "runs to end");
   }, 60_000);
 });

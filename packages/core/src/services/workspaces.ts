@@ -219,6 +219,7 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
     }
   }
 
+  let goalsGone = false;
   tx(() => {
     // The default agent is always global; never let a cascade take it down.
     run("UPDATE agents SET workspace_id = NULL WHERE workspace_id = ? AND is_default = 1", id);
@@ -228,11 +229,12 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
     run("UPDATE credentials SET totp_id = NULL WHERE totp_id IN (SELECT id FROM totp WHERE workspace_id = ?)", id);
     // Its goals go with it (tickets elsewhere that served one serve none).
     run("UPDATE tasks SET goal_id = NULL WHERE goal_id IN (SELECT id FROM goals WHERE workspace_id = ?)", id);
-    run("DELETE FROM goals WHERE workspace_id = ?", id);
+    goalsGone = run("DELETE FROM goals WHERE workspace_id = ?", id).changes > 0;
     run("DELETE FROM workspaces WHERE id = ?", id);
     removeFromDelegateLists(agents.map((a) => a.id));
   });
 
+  if (goalsGone) bus.emit({ type: "entity.changed", entity: "goals" });
   await trashClones(clones);
   for (const agent of agents) {
     try {
