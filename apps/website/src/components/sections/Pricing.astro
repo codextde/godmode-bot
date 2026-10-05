@@ -2,7 +2,7 @@
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import CheckoutButton from '../ui/CheckoutButton.astro';
-import { PRICING, SITE, yearlySavings } from '@/config/site';
+import { FOUNDING, PRICING, SITE } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
 const included = [
@@ -18,39 +18,99 @@ const included = [
 const cards = [
   {
     plan: 'yearly',
-    name: 'Yearly',
+    name: 'Founding yearly',
     featured: true,
-    chip: `Best value · save ${yearlySavings}%`,
+    chip: `Save $${monthly.price * 12 - yearly.price}`,
     price: yearly.perMonth,
-    was: monthly.price,
-    billed: `Billed $${yearly.price} yearly`,
-    perks: [`$${monthly.price * 12 - yearly.price} less per year than monthly`, 'Every feature and every update', 'Cancel anytime in two clicks'],
+    billed: `Billed $${yearly.price} yearly, locked for life`,
+    after: `$${FOUNDING.listPrice.yearly}/mo after ${FOUNDING.endLabel}`,
   },
   {
     plan: 'monthly',
-    name: 'Monthly',
+    name: 'Founding monthly',
     featured: false,
-    chip: 'Most flexible',
+    chip: 'Flexible',
     price: monthly.price,
-    was: null,
-    billed: 'Billed monthly',
-    perks: ['Pay as you go, month by month', 'Every feature and every update', 'Switch to yearly anytime'],
+    billed: 'Billed monthly, locked for life',
+    after: `$${FOUNDING.listPrice.monthly}/mo after ${FOUNDING.endLabel}`,
   },
 ] as const;
+const stack = [
+  {
+    tag: 'Core',
+    title: 'Godmode Pro, every feature',
+    text: 'The AI coworker that uses your computer like you do. Every update while you’re subscribed.',
+    value: `$${monthly.price * 12}`,
+    per: '/yr',
+  },
+  {
+    tag: 'Bonus 1',
+    title: 'Your first AI employee, built with you',
+    text: `A ${FOUNDING.setupMinutes}-minute 1:1 setup call with the founder. You leave with ${FOUNDING.setupAutomations} automations running.`,
+    value: '$300',
+    per: '',
+  },
+  {
+    tag: 'Bonus 2',
+    title: 'The hire-in-a-click library',
+    text: '9 ready-made agents (invoices, inbox, research, leads, QA…) and the 25-automation playbook. Paste, run, done.',
+    value: '$250',
+    per: '',
+  },
+  {
+    tag: 'Bonus 3',
+    title: 'Founding price, locked for life',
+    text: `Your price never goes up while you stay. After ${FOUNDING.endLabel} it’s $${FOUNDING.listPrice.monthly}/mo, or $${FOUNDING.listPrice.yearly}/mo yearly.`,
+    value: `$${(FOUNDING.listPrice.yearly - yearly.perMonth) * 12}`,
+    per: '/yr',
+  },
+  {
+    tag: 'Bonus 4',
+    title: 'A direct line to the founder',
+    text: 'The private founders group. Your feature requests jump the queue.',
+    value: '$500',
+    per: '/yr',
+  },
+];
+const total = monthly.price * 12 + 300 + 250 + (FOUNDING.listPrice.yearly - yearly.perMonth) * 12 + 500;
+const guarantees = [
+  {
+    icon: 'gift',
+    title: `${PRICING.trialDays} days free`,
+    text: `Nothing charged today. Cancel in two clicks before day ${PRICING.trialDays} and you pay nothing.`,
+  },
+  {
+    icon: 'timer',
+    title: `Running in ${FOUNDING.runningHours} hours`,
+    text: `If your first automation isn’t running ${FOUNDING.runningHours} hours after you install, the founder sets it up with you.`,
+  },
+  {
+    icon: 'shield-check',
+    title: `${FOUNDING.outcomeHours} hours back, or every cent back`,
+    text: `Set up ${FOUNDING.setupAutomations} automations (we help). If Godmode hasn’t saved you ${FOUNDING.outcomeHours} hours in your first ${FOUNDING.outcomeDays} paid days, you get a full refund.`,
+  },
+];
 ---
 
 <section id="pricing" class="relative py-20 sm:py-28" data-track-view="pricing">
   <div class="pricing-glow pointer-events-none absolute inset-x-0 top-40 -z-10 h-[700px]" aria-hidden="true"></div>
   <div class="container-x">
-    <div class="mx-auto max-w-[760px] text-center">
-      <p class="eyebrow justify-center" data-reveal><span class="n">10</span> Pricing</p>
-      <Words text={`Free for ${PRICING.trialDays} days. *Then one simple price.*`} class="h-section mx-auto mt-6" />
-      <p class="lead mx-auto mt-6 max-w-[560px]" data-reveal style="--d:200">
-        Every feature in every plan. No seats, no credits, no caps.
+    <div class="mx-auto max-w-[780px] text-center">
+      <p class="eyebrow justify-center" data-reveal><span class="n">10</span> Founding 100</p>
+      <Words text="Your first AI employee. *Working by Friday.*" class="h-section mx-auto mt-6" />
+      <p class="lead mx-auto mt-6 max-w-[600px]" data-reveal style="--d:200">
+        The founder sets it up with you, the price is locked for life, and if it doesn’t give you {FOUNDING.outcomeHours}
+        hours back in {FOUNDING.outcomeDays} days, you pay nothing. Only for the first {FOUNDING.seats} founders.
       </p>
     </div>
 
-    <div class="mx-auto mt-12 grid max-w-[980px] gap-4 sm:mt-16 md:grid-cols-2 md:items-stretch">
+    <div class="founder-slot mx-auto mt-10 max-w-[560px]" data-founding-slot data-reveal style="--d:250">
+      <i aria-hidden="true"></i>
+      <span class="flex items-center gap-2 text-text-2"><span class="live-dot !size-1.5"></span> Founding seats</span>
+      <span class="founder-left" data-founding-left>Closes {FOUNDING.endLabel}</span>
+    </div>
+
+    <div class="mx-auto mt-8 grid max-w-[980px] gap-4 md:grid-cols-2 md:items-stretch">
       {
         cards.map((c, i) => (
           <div class:list={['price-card', c.featured && 'is-featured']} data-reveal style={`--d:${i * 100}`}>
@@ -64,15 +124,9 @@ const cards = [
               <p class="mt-7 flex items-baseline gap-2">
                 <span class="price-num">${c.price}</span>
                 <span class="text-[15px] text-muted">/ month</span>
-                {c.was && (
-                  <s class="ml-1 text-[15px] text-dim" aria-label={`instead of $${c.was}`}>
-                    ${c.was}
-                  </s>
-                )}
               </p>
-              <p class="mt-3 text-[14px] text-text-2">
-                {c.billed}
-              </p>
+              <p class="mt-3 text-[14px] text-text-2">{c.billed}</p>
+              <p class="mt-1 text-[13px] text-dim">{c.after}</p>
               <CheckoutButton
                 plan={c.plan}
                 label={`Start ${PRICING.trialDays}-day free trial`}
@@ -82,64 +136,94 @@ const cards = [
                 size="lg"
                 class="mt-7"
               />
-              <p class="mt-3 text-center text-[13px] text-muted">No charge today. Cancel anytime before day {PRICING.trialDays}.</p>
-              <div class="rule my-7" />
-              <ul class="space-y-3 text-[14.5px]">
-                {c.perks.map((f, j) => (
-                  <li class:list={['flex items-start gap-3', j ? 'text-text-2' : 'text-text']}>
-                    <Icon name="check" size={16} stroke={2.2} class:list={['mt-0.5 flex-none', c.featured ? 'text-brand' : 'text-muted']} />
-                    {f}
-                  </li>
-                ))}
-              </ul>
+              <p class="mt-3 text-center text-[13px] text-muted">$0 today. Every bonus below included.</p>
             </div>
           </div>
         ))
       }
     </div>
 
-    <div class="included mx-auto mt-4 max-w-[980px] rounded-[26px] p-6 ring-1 ring-line sm:p-8" data-reveal style="--d:120">
-      <p class="text-[13px] text-muted">Included in every plan</p>
-      <ul class="mt-5 grid gap-x-6 gap-y-3.5 text-[14.5px] sm:grid-cols-2 lg:grid-cols-4">
+    <div class="included mx-auto mt-4 max-w-[980px] overflow-hidden rounded-[26px] ring-1 ring-line" data-reveal style="--d:120">
+      <div class="flex items-center justify-between gap-4 px-6 pt-6 sm:px-8 sm:pt-8">
+        <p class="text-[13px] text-muted">Everything a founding seat gets you</p>
+        <p class="hidden font-mono text-[11px] tracking-[0.12em] text-dim uppercase sm:block">Comparable value</p>
+      </div>
+      <ol class="mt-3">
         {
-          included.map((f) => (
-            <li class="flex items-start gap-3 text-text-2">
-              <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-brand" />
-              {f}
+          stack.map((s, i) => (
+            <li class="stack-row">
+              <span class:list={['stack-tag', i && 'is-bonus']}>{s.tag}</span>
+              <div class="min-w-0">
+                <p class="text-[15px] font-medium text-text">{s.title}</p>
+                <p class="mt-1 text-[13.5px] leading-relaxed text-muted">{s.text}</p>
+                {i === 0 && (
+                  <ul class="mt-3 hidden flex-wrap gap-1.5 sm:flex">
+                    {included.map((f) => (
+                      <li class="rounded-full px-2.5 py-1 text-[12px] text-text-2 ring-1 ring-line-2">{f}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <p class="stack-value">
+                {s.value}
+                <span class="text-dim">{s.per}</span>
+              </p>
             </li>
           ))
         }
-      </ul>
+      </ol>
+      <div class="stack-total">
+        <div>
+          <p class="text-[13px] text-muted">Comparable value, year one</p>
+          <p class="mt-1 text-[22px] font-medium tracking-[-0.03em] text-text-2 line-through decoration-[rgb(240_82_91/0.7)]">
+            ${total.toLocaleString('en-US')}
+          </p>
+        </div>
+        <div class="text-right">
+          <p class="text-[13px] text-muted">You pay today</p>
+          <p class="mt-1 text-[34px] leading-none font-semibold tracking-[-0.05em] text-brand">$0</p>
+        </div>
+      </div>
     </div>
 
     <div class="mx-auto mt-3 grid max-w-[980px] gap-3 md:grid-cols-3" data-reveal style="--d:150">
-      <div class="flex items-start gap-3 rounded-2xl p-4 ring-1 ring-line">
-        <Icon name="shield-check" size={18} class="mt-0.5 flex-none text-brand" />
-        <p class="text-[13px] leading-relaxed text-muted">
-          <span class="text-text">Try first, then a {PRICING.guaranteeDays}-day guarantee.</span> Cancel during the trial and pay nothing.
-          After your first payment, email us within {PRICING.guaranteeDays} days for a full refund.
-        </p>
-      </div>
+      {
+        guarantees.map((g) => (
+          <div class="flex items-start gap-3 rounded-2xl p-5 ring-1 ring-line">
+            <Icon name={g.icon} size={18} class="mt-0.5 flex-none text-brand" />
+            <p class="text-[13px] leading-relaxed text-muted">
+              <span class="block text-[14px] text-text">{g.title}</span>
+              {g.text}
+            </p>
+          </div>
+        ))
+      }
+    </div>
+
+    <div class="mx-auto mt-3 grid max-w-[980px] gap-3 md:grid-cols-2" data-reveal style="--d:180">
       <div class="flex items-start gap-3 rounded-2xl p-4 ring-1 ring-line">
         <span class="mt-0.5 grid size-[18px] flex-none place-items-center text-claude">
           <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l1.9 6.2L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.8z"></path></svg>
         </span>
         <p class="text-[13px] leading-relaxed text-muted">
-          <span class="text-text">Runs on your Claude plan.</span> Sign in with Claude Pro or Max, or use an Anthropic API key — not
-          included. <a href="#faq" class="underline decoration-line-3 underline-offset-2 hover:text-text">Details</a>
+          <span class="text-text">Runs on the Claude plan you already have.</span> Sign in with Claude Pro or Max, or use an
+          Anthropic API key — not included. <a href="#faq" class="underline decoration-line-3 underline-offset-2 hover:text-text">Details</a>
         </p>
       </div>
       <div class="flex items-start gap-3 rounded-2xl p-4 ring-1 ring-line">
-        <Icon name="receipt-text" size={18} class="mt-0.5 flex-none text-muted" />
+        <Icon name="smartphone" size={18} class="mt-0.5 flex-none text-muted" />
         <p class="text-[13px] leading-relaxed text-muted">
-          <span class="text-text">Business-ready.</span> Invoice with your VAT ID, paid securely via Stripe. Card, Apple Pay, Google Pay
-          & more.
+          <span class="text-text">On your phone?</span> Claim your seat now. The welcome page sends the Mac or PC download
+          to your inbox in one tap, and you book your setup call right there.
         </p>
       </div>
     </div>
 
-    <p class="mt-8 text-center text-[13px] text-dim" data-reveal>
-      Need it for a team? <a href={`mailto:${SITE.email}?subject=Godmode%20for%20teams`} class="underline decoration-line-3 underline-offset-2 hover:text-text" data-track="teams_mail">Talk to us</a>.
+    <p class="mx-auto mt-8 max-w-[760px] text-center text-[12.5px] leading-relaxed text-dim" data-reveal>
+      Comparable values are what the same thing costs elsewhere: Godmode’s monthly price for a year, an automation freelancer
+      at $100/h, a priority support tier. Founding seats count checkouts since October 5; the offer closes at seat
+      {FOUNDING.seats} or on {FOUNDING.endLabel}, whichever comes first. Need it for a team?
+      <a href={`mailto:${SITE.email}?subject=Godmode%20for%20teams`} class="underline decoration-line-3 underline-offset-2 hover:text-text" data-track="teams_mail">Talk to us</a>.
     </p>
   </div>
 </section>

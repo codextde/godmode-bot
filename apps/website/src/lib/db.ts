@@ -138,6 +138,22 @@ export async function syncSubscription(sub: Stripe.Subscription) {
     .run();
 }
 
+/**
+ * Founding seats taken: paid or pending subscriptions since the offer started, plus checkouts opened in the last half
+ * hour, so the cap can't be oversold by buyers checking out at once.
+ */
+export async function foundingTaken(minLivemode: number, since: number): Promise<number> {
+  const row = await db()
+    .prepare(
+      `SELECT COUNT(*) AS n FROM orders
+       WHERE plan IN ('monthly', 'yearly') AND COALESCE(comp, 0) = 0 AND livemode >= ? AND created_at >= ?
+         AND (status IN ('paid', 'pending') OR (status = 'open' AND created_at > ?))`,
+    )
+    .bind(minLivemode, since, Date.now() - 30 * 60 * 1000)
+    .first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+
 /** A free license issued from /admin: a non-expiring `lifetime` order that never touches Stripe or revenue. */
 export async function insertComp(o: { email: string; name: string | null; licenseKey: string; livemode: number }) {
   const id = `comp_${[...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;

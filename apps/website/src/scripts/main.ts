@@ -347,6 +347,24 @@ document.querySelectorAll<HTMLFormElement>('form[data-checkout]').forEach((form)
     xEvent('checkout', { value: PRICING.plans[plan].price, currency: PRICING.currency, contents: [{ content_id: plan }] });
   });
 });
+// Founding 100: seats left; on any failure the counters keep their static text.
+const foundingSlots = document.querySelectorAll<HTMLElement>('[data-founding-slot]');
+if (foundingSlots.length) {
+  fetch('/api/offer', { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((res: unknown) => {
+      const data = (res ?? {}) as { seats?: unknown; left?: unknown; open?: unknown };
+      if (typeof data.left !== 'number' || typeof data.seats !== 'number') return;
+      const { left, seats } = data;
+      foundingSlots.forEach((slot) => {
+        const out = slot.querySelector<HTMLElement>('[data-founding-left]');
+        if (out) out.textContent = data.open ? `${left} of ${seats} left` : 'Founding seats are gone';
+        slot.style.setProperty('--taken', `${Math.min(100, ((seats - left) / seats) * 100)}%`);
+      });
+    })
+    .catch(() => {});
+}
+
 // Back/forward cache: reset spinners when the visitor returns from Stripe.
 addEventListener('pageshow', (e) => {
   if (e.persisted) document.querySelectorAll<HTMLButtonElement>('[data-loading]').forEach((b) => delete b.dataset.loading);

@@ -25,7 +25,7 @@ export const isPlan = (v: unknown): v is Plan => v === 'monthly' || v === 'yearl
 
 export const PRICING = {
   currency: 'USD',
-  trialDays: 7,
+  trialDays: 14,
   guaranteeDays: 14,
   plans: {
     monthly: {
@@ -46,6 +46,28 @@ export const PRICING = {
     },
   },
 } as const;
+
+/**
+ * Founding 100: the launch offer. Seats are checkouts started after `start` (see foundingTaken). Subscriptions keep
+ * their Stripe price, so the price lock holds as long as founders aren't migrated to a new price.
+ */
+export const FOUNDING = {
+  seats: 100,
+  start: Date.UTC(2026, 9, 5, 20, 0),
+  // End of October 31 in US Pacific time, so the deadline is never early anywhere.
+  end: Date.UTC(2026, 10, 1, 7, 0),
+  endLabel: 'October 31',
+  setupMinutes: 20,
+  setupAutomations: 3,
+  runningHours: 48,
+  outcomeHours: 10,
+  outcomeDays: 30,
+  listPrice: { monthly: 59, yearly: 49 },
+  // Optional scheduling page (Cal.com, Calendly…) for the setup call; without it founders book by email.
+  bookingUrl: import.meta.env.PUBLIC_FOUNDING_BOOKING_URL ?? '',
+} as const;
+
+export const foundingOpen = (taken: number, now = Date.now()) => now < FOUNDING.end && taken < FOUNDING.seats;
 
 /** Percent saved by paying yearly instead of monthly, rounded down so the claim is never overstated. */
 export const yearlySavings = Math.floor((1 - PRICING.plans.yearly.price / (PRICING.plans.monthly.price * 12)) * 100);

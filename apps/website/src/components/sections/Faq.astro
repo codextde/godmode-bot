@@ -1,6 +1,6 @@
 ---
 import Words from '../ui/Words.astro';
-import { PRICING, SITE } from '@/config/site';
+import { FOUNDING, PRICING, SITE } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
 
@@ -9,6 +9,11 @@ const faqs: { key: string; q: string; a: string }[] = [
     key: 'what',
     q: 'What exactly do I get?',
     a: `The Godmode desktop app for macOS, Windows and Linux (plus the headless server with its web dashboard), a license key, and every feature on this page, in every plan. Godmode Pro is $${monthly.price} a month, or $${yearly.price} a year ($${yearly.perMonth} a month), with every update while you’re subscribed.`,
+  },
+  {
+    key: 'founding',
+    q: 'What is the Founding 100?',
+    a: `Our launch offer for the first ${FOUNDING.seats} customers, open until ${FOUNDING.endLabel}. You get Godmode Pro plus a ${FOUNDING.setupMinutes}-minute 1:1 setup call with the founder (you leave with ${FOUNDING.setupAutomations} automations running), the ready-made agents and playbook, a private founders group, and your price locked for as long as you stay subscribed. After the offer closes, Godmode Pro costs $${FOUNDING.listPrice.monthly} a month or $${FOUNDING.listPrice.yearly} a month billed yearly.`,
   },
   {
     key: 'trial',
@@ -63,7 +68,7 @@ const faqs: { key: string; q: string; a: string }[] = [
   {
     key: 'refund',
     q: 'What if it’s not for me?',
-    a: `During the trial, just cancel and you’re never charged. After your first payment, on any plan, email us within ${PRICING.guaranteeDays} days and we’ll refund it in full — no questions, no forms. Subscriptions can be cancelled anytime and keep working until the end of the period you paid for.`,
+    a: `During the trial, just cancel and you’re never charged. After your first payment, on any plan, email us within ${PRICING.guaranteeDays} days and we’ll refund it in full — no questions, no forms. Founding members get more: set up ${FOUNDING.setupAutomations} automations (we help), and if Godmode hasn’t saved you ${FOUNDING.outcomeHours} hours in your first ${FOUNDING.outcomeDays} paid days, we refund everything you paid. Subscriptions can be cancelled anytime and keep working until the end of the period you paid for.`,
   },
   {
     key: 'invoice',

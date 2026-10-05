@@ -730,6 +730,65 @@ html.menu-open { overflow: hidden; }
 .price-num { font-size: 56px; line-height: 1; font-weight: 600; letter-spacing: -0.055em; font-variant-numeric: tabular-nums; }
 @media (min-width: 640px) { .price-num { font-size: 64px; } }
 
+/* Founding 100: seats left (filled in by main.ts) and the value stack. */
+.founder-slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  font-size: 13.5px;
+  background: rgb(0 0 0 / 0.32);
+  box-shadow: 0 0 0 1px var(--line-2) inset;
+}
+.founder-slot > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--taken, 0%);
+  background: linear-gradient(90deg, rgb(240 164 136 / 0.05), rgb(240 164 136 / 0.16));
+  box-shadow: inset -1px 0 0 rgb(240 164 136 / 0.45);
+  transition: width 1.2s var(--ease-out);
+}
+.founder-slot > span { position: relative; }
+.founder-left { font-family: var(--font-mono); font-size: 12px; color: #f0a488; white-space: nowrap; }
+.stack-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 20px;
+  padding: 18px 24px;
+  border-top: 1px solid var(--line);
+}
+@media (min-width: 640px) {
+  .stack-row { grid-template-columns: 88px 1fr auto; padding: 20px 32px; }
+}
+.stack-tag {
+  grid-column: 1 / -1;
+  align-self: start;
+  justify-self: start;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+  box-shadow: 0 0 0 1px var(--line-2) inset;
+}
+.stack-tag.is-bonus { color: var(--brand); background: var(--brand-soft); box-shadow: none; }
+@media (min-width: 640px) { .stack-tag { grid-column: auto; margin-top: 1px; } }
+.stack-value { font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.stack-total {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  border-top: 1px solid var(--line-2);
+  background: rgb(47 214 144 / 0.04);
+}
+@media (min-width: 640px) { .stack-total { padding: 26px 32px; } }
 .included { background: linear-gradient(180deg, rgb(255 250 240 / 0.02), transparent 60%); }
 
 /* Final CTA ---------------------------------------------------------------------------------- */
