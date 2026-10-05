@@ -151,8 +151,12 @@ export type EntityName =
   | "ssh-servers"
   | "messaging"
   | "tasks"
+  /** Goals: added, changed, deleted (their progress follows the tickets). */
+  | "goals"
   | "followups"
   | "mobile"
+  /** A connected app (Claude Code, another MCP client) was added, removed or used. */
+  | "connectors"
   | "system"
   | "runners"
   /** The cloud link: state, account, plan or billing changed. */

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent } from "@godmode/shared";
 import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
-import { get, insert, run as sql } from "../src/db";
+import { insert, run as sql } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { deviceMayCall } from "../src/mobile/scope";
 import { getRun, waitForRun } from "../src/runner/runner";
@@ -58,6 +58,20 @@ describe("unread chats and their notices", () => {
     expect(listAttention().some((i) => i.id === `failed:${chat.conversation.id}`)).toBe(false);
   }, 30_000);
 
+  test("a reply that only mentions notify_user still gets Godmode's notice", async () => {
+    const chat = await startChat({ agentId: agent.id, content: "Say hello", title: "Mentions it" });
+    await waitForRun(chat.run.id, 20_000);
+    const conv = chat.conversation.id;
+    const runId = newId("run");
+    insert("runs", { id: runId, agent_id: agent.id, conversation_id: conv, trigger: "chat", status: "succeeded", prompt: "x", result: "done", created_at: now(), finished_at: now() });
+    insert("messages", { id: newId("msg"), conversation_id: conv, role: "assistant", content: "I could use notify_user later", blocks: JSON.stringify([{ type: "text", text: "I could use notify_user later" }]), run_id: runId, attachments: "[]", created_at: now() });
+    const before = titles().length;
+    const { bus } = await import("../src/events/bus");
+    bus.emit({ type: "run.finished", run: getRun(runId) });
+    expect(titles().length).toBe(before + 1);
+    expect(titles()[0]).toBe("Mia replied in “Mentions it”");
+  }, 30_000);
+
   test("the agent's own notify_user replaces Godmode's notice", async () => {
     const chat = await startChat({ agentId: agent.id, content: "Say hello", title: "Told already" });
     await waitForRun(chat.run.id, 20_000);
@@ -90,6 +104,13 @@ describe("automations tell the human what they're set to", () => {
     // Automation chats are never "unread": the automation tells the human, or the list does.
     expect(getConversation(getRun(second.id).conversationId).unread).toBeNull();
 
+    // It worked once, then couldn't even start: still listed (a failed start leaves no run).
+    sql("UPDATE runs SET status = 'succeeded' WHERE id = ?", second.id);
+    sql("UPDATE routines SET last_status = 'failed' WHERE id = ?", routine.id);
+    expect(listAttention().some((i) => i.id === `automation:${routine.id}`)).toBe(true);
+    sql("UPDATE routines SET last_status = 'succeeded' WHERE id = ?", routine.id);
+    expect(listAttention().some((i) => i.id === `automation:${routine.id}`)).toBe(false);
+
     const quiet = createRoutine({ agentId: agent.id, name: "Quiet one", cron: "0 4 * * *", prompt: "CRASH quietly", notify: "never" });
     const q = await triggerRoutine(quiet.id, { scheduled: true });
     await waitForRun(q.id, 20_000);
@@ -106,11 +127,10 @@ describe("the list", () => {
     updateTask(t.id, { status: "done" });
     expect(listAttention().some((i) => i.id === `review:${t.id}`)).toBe(false);
     expect(deviceMayCall("GET", "/api/attention")).toBe(false);
-    const res = await fetch(`${env.baseUrl}/api/system/bootstrap`, { headers: { Authorization: `Bearer ${getAccessToken()}` } }).catch(() => null);
-    if (res?.ok) {
-      const boot = (await res.json()) as { counts: { attention: { total: number }; unreadChats: number } };
-      expect(boot.counts.attention.total).toBe(listAttention().length);
-    }
+    const res = await fetch(`${env.baseUrl}/api/bootstrap`, { headers: { Authorization: `Bearer ${getAccessToken()}` } });
+    expect(res.status).toBe(200);
+    const boot = (await res.json()) as { counts: { attention: { total: number } } };
+    expect(boot.counts.attention.total).toBe(listAttention().length);
   });
 
   test("a chat paused by the human waits for them; one held run per budget is one row", async () => {
@@ -124,7 +144,22 @@ describe("the list", () => {
     expect(listAttention().find((i) => i.id === `paused:${runId}`)).toMatchObject({ title: "Mia is paused", action: "Continue", link: `/chat/${conv}` });
     sql("DELETE FROM paused_runs WHERE run_id = ?", runId);
     expect(listAttention().some((i) => i.id === `paused:${runId}`)).toBe(false);
-    expect(get<{ n: number }>("SELECT COUNT(*) AS n FROM conversations WHERE unread_run_id IS NOT NULL")!.n).toBeGreaterThanOrEqual(0);
+  });
+
+  test("a chat on a runner that stands still there is listed, unless it continues by itself", () => {
+    const conv = newId("cnv");
+    const pause = { runId: "run_remote1", reason: "user", pausedAt: now(), limit: null, resumeAt: null, auto: false };
+    insert("conversations", { id: conv, agent_id: agent.id, title: "On the Mac mini", origin: "chat", runner_id: "rnr_1", runner_state: JSON.stringify({ running: false, paused: pause }), created_at: now(), updated_at: now() });
+    expect(listAttention().find((i) => i.id === "paused:run_remote1")).toMatchObject({ title: "Mia is paused", link: `/chat/${conv}`, conversationId: conv });
+    sql("UPDATE conversations SET runner_state = ? WHERE id = ?", JSON.stringify({ running: false, paused: { ...pause, reason: "limit", auto: true } }), conv);
+    expect(listAttention().some((i) => i.id === "paused:run_remote1")).toBe(false);
+  });
+
+  test("a missing login whose chat is gone leads to the Inbox", () => {
+    const id = newId("mlg");
+    insert("missing_logins", { id, agent_id: agent.id, run_id: null, service: "Stripe", url: "https://stripe.com", reason: "Needs to read invoices", status: "open", created_at: now(), updated_at: now() });
+    expect(listAttention().find((i) => i.id === `login:${id}`)?.link).toBe("/inbox");
+    sql("UPDATE missing_logins SET status = 'resolved' WHERE id = ?", id);
   });
 
   test("a chat a window shows is read at once, and its runs leave nothing unread", async () => {

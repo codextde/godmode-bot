@@ -54,7 +54,7 @@ export const MAX_BACKUP_BYTES = 2 * 1024 ** 3;
 const FILE_PREFIX = "godmode-backup-";
 
 /** Never exported: login sessions, paired phones, paired runners and controllers, and the migration ledger. */
-const EXCLUDED_TABLES = new Set(["sessions", "mobile_devices", "runners", "link_controllers", "runner_memory", "_migrations"]);
+const EXCLUDED_TABLES = new Set(["sessions", "mobile_devices", "connectors", "runners", "link_controllers", "runner_memory", "_migrations"]);
 /** Vault key material travels in vault.json, not db.json. */
 const VAULT_META_KEYS = new Set(["vault.kdf", "vault.wrapped_dek", "vault.canary"]);
 /** Settings sections that belong to this machine (bind address, remote access, allowed origins, phone and cloud access). */
@@ -127,6 +127,10 @@ export const EXECUTABLE_SETTINGS: Record<string, string[]> = {
 };
 
 let busy: "export" | "import" | null = null;
+
+export function backupInProgress(): boolean {
+  return busy !== null;
+}
 
 function withLock<T>(kind: "export" | "import", fn: () => Promise<T>): Promise<T> {
   if (busy) throw conflict(`A backup ${busy} is already in progress`);

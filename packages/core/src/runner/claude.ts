@@ -13,6 +13,7 @@ const KILL_GRACE_MS = 5000;
 /** Environment variables of the parent that must not leak into claude processes. */
 const STRIP_ENV = [
   "GODMODE_TOKEN",
+  "GODMODE_CONNECT_TOKEN",
   "CLAUDECODE",
   "CLAUDE_CODE_ENTRYPOINT",
   "CLAUDE_CODE_SSE_PORT",

@@ -39,7 +39,23 @@ import type {
   ServerEvent,
   TaskPriority,
 } from "@godmode/shared";
-import { BROWSER_MCP_NAME, CUA_MCP_NAME, DEFAULT_MODEL, EFFORT_OPTIONS, TASK_PRIORITY_RANK, WORKFLOW_TOOL, isModelId, parseSlashCommand } from "@godmode/shared";
+import {
+  BROWSER_MCP_NAME,
+  CUA_MCP_NAME,
+  DEFAULT_MODEL,
+  EFFORT_OPTIONS,
+  RUN_CLI_MISSING,
+  RUN_COST_LIMIT,
+  RUN_INTERRUPTED,
+  RUN_MAX_TURNS,
+  RUN_SHUT_DOWN,
+  RUN_STOPPED_BY_USER,
+  TASK_PRIORITY_RANK,
+  WORKFLOW_TOOL,
+  isModelId,
+  parseSlashCommand,
+  type ActivityNames,
+} from "@godmode/shared";
 import { all, get, insert, run as sql, tx } from "../db";
 import { bus } from "../events/bus";
 import { setRunSnapshots, setWelcomeEvents } from "../server/ws";
@@ -131,8 +147,8 @@ export interface StartRunInput {
   byHuman?: boolean;
 }
 
-export const CLAUDE_NOT_FOUND = "Claude Code CLI not found. Install it from Settings → System.";
-export const INTERRUPTED = "Interrupted (Godmode restarted)";
+export const CLAUDE_NOT_FOUND = RUN_CLI_MISSING;
+export const INTERRUPTED = RUN_INTERRUPTED;
 const TERMINAL: ReadonlySet<RunStatus> = new Set(["succeeded", "failed", "cancelled"]);
 const STDERR_TAIL_BYTES = 8 * 1024;
 const DELTA_INTERVAL_MS = 100;
@@ -354,6 +370,8 @@ interface Job {
   answersSettled?: boolean;
   /** The human stopped it (from a chat, the board or a chat platform), not Godmode. */
   stoppedByHuman?: boolean;
+  /** Resolves ids in tool input for the activity label (memoized per run). */
+  names?: ActivityNames;
   /** The human started or let it run: a used-up monthly budget doesn't hold it. */
   exempt?: boolean;
   /** What this stretch of the run sends to Claude. */
@@ -770,7 +788,7 @@ function closePaused(row: RunRow, reason: string, byHuman = false): void {
   if (p && convAlive) {
     safely("close the paused message", () => {
       const message = getMessage(p.message_id);
-      const blocks = p.reason === "question" ? withdrawOpenBlocks(message.blocks, reason === "Cancelled" || reason === "Cancelled by user" ? null : reason) : message.blocks;
+      const blocks = p.reason === "question" ? withdrawOpenBlocks(message.blocks, reason === "Cancelled" || reason === RUN_STOPPED_BY_USER ? null : reason) : message.blocks;
       assistant = updateMessage(p.message_id, { blocks: [...blocks, { type: "notice", level: "info", text: reason }] });
     });
   }
@@ -889,11 +907,11 @@ export async function shutdownRunner(): Promise<void> {
   shuttingDown = true;
   for (const runId of [...queue]) {
     const job = jobs.get(runId);
-    if (job) await cancelRun(runId, "Cancelled (Godmode shut down)");
+    if (job) await cancelRun(runId, RUN_SHUT_DOWN);
   }
   const running = [...jobs.values()].filter((j) => j.status === "running");
   for (const job of running) {
-    job.cancelReason ??= "Cancelled (Godmode shut down)";
+    job.cancelReason ??= RUN_SHUT_DOWN;
     if (job.proc) killTree(job.proc);
   }
   await Promise.race([
@@ -1261,9 +1279,31 @@ setWelcomeEvents(() =>
   }),
 );
 
+/** Names for the plain-words activity: agents by name, logins by site (never a username or secret); secrets masked. */
+function activityNames(job: Job): ActivityNames {
+  if (job.names) return job.names;
+  const agents = new Map<string, string | undefined>();
+  const logins = new Map<string, string | undefined>();
+  job.names = {
+    agent: (id) => {
+      if (!agents.has(id)) agents.set(id, get<{ name: string }>("SELECT name FROM agents WHERE id = ?", id)?.name);
+      return agents.get(id);
+    },
+    login: (id) => {
+      if (!logins.has(id)) {
+        const row = get<{ name: string; domains: string }>("SELECT name, domains FROM credentials WHERE id = ?", id);
+        logins.set(id, row ? (parseJson<string[]>(row.domains, [])[0] ?? row.name) : undefined);
+      }
+      return logins.get(id);
+    },
+    redact,
+  };
+  return job.names;
+}
+
 function emitActivity(job: Job, text: string) {
-  // A workflow's label quotes what the model wrote, like the blocks do.
-  const label = redact(text);
+  // A workflow's label quotes what the model wrote, like the blocks do. Masked first, then cut.
+  const label = redact(text).slice(0, 120);
   if (label === job.lastLabel) return;
   job.lastLabel = label;
   bus.emit({ type: "run.activity", runId: job.runId, agentId: job.agentId, label });
@@ -1527,7 +1567,7 @@ async function spawnClaude(
       job.answersSettled = true;
       settleAnswers(job);
     }
-    emitActivity(job, job.pause && !job.cancelReason ? (job.pause.reason === "question" ? "Asking you…" : "Pausing…") : job.acc.activityLabel());
+    emitActivity(job, job.pause && !job.cancelReason ? (job.pause.reason === "question" ? "Asking you…" : "Pausing…") : job.acc.activityLabel(activityNames(job)));
   });
   const exitCode = await proc.exited;
   const stderr = await stderrP;
@@ -1568,9 +1608,9 @@ function describeFailure(job: Job, attempt: Attempt): string {
     if (final.errors.length) return final.errors.join("; ");
     switch (final.subtype) {
       case "error_max_turns":
-        return "Stopped after reaching the maximum number of turns.";
+        return RUN_MAX_TURNS;
       case "error_max_budget_usd":
-        return "Stopped: the run reached its cost budget.";
+        return RUN_COST_LIMIT;
       case "error_during_execution":
         return final.text || "Claude Code failed during execution.";
       default:
@@ -1631,8 +1671,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     instructions: string | null;
     instructions_digest: string | null;
     memory_digest: string | null;
+    secret_access: string | null;
   }>(
-    "SELECT claude_session_id, claude_session_cost_usd, working_directory, model, effort, ultracode, instructions, instructions_digest, memory_digest FROM conversations WHERE id = ?",
+    "SELECT claude_session_id, claude_session_cost_usd, working_directory, model, effort, ultracode, instructions, instructions_digest, memory_digest, secret_access FROM conversations WHERE id = ?",
     job.conversationId,
   );
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
@@ -1826,6 +1867,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath) : null,
         followups: job.trigger !== "check" && job.trigger !== "delegation",
+        fillOnly: conv.secret_access === "fill",
         // Delegated work reports to the run that handed it over; checks only observe.
         asking: job.trigger !== "check" && !job.parentRunId,
         delegated: !!job.parentRunId,

@@ -11,7 +11,7 @@ import { AgentAvatar } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
-const ICON: Record<AttentionItem["kind"], LucideIcon> = {
+export const ATTENTION_ICON: Record<AttentionItem["kind"], LucideIcon> = {
   question: MessageCircleQuestion,
   login: KeyRound,
   review: KanbanSquare,
@@ -48,7 +48,7 @@ export function AttentionList({ items, agentById, className }: { items: Attentio
 
 function AttentionRow({ item, agent }: { item: AttentionItem; agent?: Agent }) {
   const qc = useQueryClient();
-  const Icon = ICON[item.kind];
+  const Icon = ATTENTION_ICON[item.kind];
   const resume = useMutation({
     mutationFn: () => api.conversations.continue(item.conversationId!),
     onSuccess: () => {

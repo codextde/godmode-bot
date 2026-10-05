@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Folder, FolderGit2, Globe2, Maximize2, Minimize2, Paperclip, X } from "lucide-react";
+import { ChevronRight, Folder, FolderGit2, Globe2, Maximize2, Minimize2, Paperclip, Target, X } from "lucide-react";
 import { toast } from "sonner";
 import type { Agent, Task, TaskPriority, TaskStatus, TaskType, Workspace } from "@godmode/shared";
 import { MAX_TASK_TITLE_LENGTH, TASK_PRIORITIES, TASK_TYPES } from "@godmode/shared";
@@ -15,6 +15,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
 import { modKey } from "@/lib/desktop";
 import { clearDraft, useDraft } from "@/lib/drafts";
+import { useGoals } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { DescriptionEditor, withoutPlaceholders, type DescriptionEditorHandle, type TextUpdate } from "./description-editor";
@@ -54,6 +55,8 @@ export function TaskDialog({
   defaultWorkspaceId,
   defaultStatus,
   onCreated,
+  parent,
+  defaultGoalId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -62,6 +65,10 @@ export function TaskDialog({
   defaultWorkspaceId: string | null;
   defaultStatus?: TaskStatus;
   onCreated?: (task: Task) => void;
+  /** A part of this ticket (it waits for it). */
+  parent?: Pick<Task, "id" | "number"> | null;
+  /** The goal the new ticket serves (the board is filtered by it). */
+  defaultGoalId?: string | null;
 }) {
   const qc = useQueryClient();
   const editor = useRef<DescriptionEditorHandle>(null);
@@ -89,7 +96,9 @@ export function TaskDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [open, defaultWorkspaceId, defaultStatus],
   );
-  const [live, setForm, kept] = useDraft(open ? DRAFT : undefined, base);
+  // A part keeps its own draft (per ticket): it never turns up as a plain new task, or the other way round.
+  const draftKey = parent ? `${DRAFT}:part:${parent.id}` : DRAFT;
+  const [live, setForm, kept] = useDraft(open ? draftKey : undefined, base);
   // While the dialog animates out, keep showing what it had.
   const closing = useRef(live);
   if (open) closing.current = live;
@@ -104,6 +113,20 @@ export function TaskDialog({
     (update: TextUpdate) => setForm((f) => ({ ...f, description: typeof update === "function" ? update(f.description) : update })),
     [setForm],
   );
+
+  // The goal the board is filtered by: the new ticket serves it — in its workspace — unless the human takes it off.
+  const { data: goals = [] } = useGoals("all");
+  const filterGoal = !parent && defaultGoalId ? goals.find((g) => g.id === defaultGoalId) : undefined;
+  const [goalOff, setGoalOff] = useState(false);
+  useEffect(() => {
+    if (open) setGoalOff(false);
+  }, [open]);
+  useEffect(() => {
+    if (open && filterGoal?.workspaceId && workspaceId !== filterGoal.workspaceId) set("workspaceId", filterGoal.workspaceId);
+    // Only when the dialog opens with the goal (the human may pick another workspace afterwards).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, filterGoal?.id]);
+  const goal = filterGoal && !goalOff && (!filterGoal.workspaceId || filterGoal.workspaceId === workspaceId) ? filterGoal : null;
 
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
   const repos = workspaceRepos(workspace);
@@ -128,6 +151,7 @@ export function TaskDialog({
         priority,
         dueDate,
         labels,
+        ...(parent ? { parentId: parent.id } : goal ? { goalId: goal.id } : {}),
         ...(type !== "coding"
           ? {}
           : picked?.kind === "folder"
@@ -143,7 +167,7 @@ export function TaskDialog({
         titleRef.current?.focus();
         return;
       }
-      clearDraft(DRAFT);
+      clearDraft(draftKey);
       onOpenChange(false);
       onCreated?.(task);
     },
@@ -194,7 +218,7 @@ export function TaskDialog({
                 )}
               </span>
               <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" />
-              <span className="font-medium">New task</span>
+              <span className="font-medium">{parent ? `New part of #${parent.number}` : "New task"}</span>
             </DialogTitle>
             <DialogDescription className="sr-only">Give the task a title and a description — paste or drop images, PDFs and files into it.</DialogDescription>
             <div className="ml-auto flex items-center gap-0.5">
@@ -343,28 +367,40 @@ export function TaskDialog({
               <span className="flex h-8 items-center rounded-full border border-border/80 pr-1 pl-2">
                 <DueDateField value={dueDate} status={status} onChange={(d) => set("dueDate", d)} />
               </span>
-              <Pill
-                value={workspaceId ?? GLOBAL}
-                label="Workspace"
-                onChange={(v) => {
-                  const next = v === GLOBAL ? null : v;
-                  setForm((f) => ({
-                    ...f,
-                    workspaceId: next,
-                    agentId: f.agentId && agentsInReach(agents, next).some((a) => a.id === f.agentId) ? f.agentId : null,
-                  }));
-                }}
-              >
-                <SelectItem value={GLOBAL}>
-                  <Globe2 className="size-4" /> Global
-                </SelectItem>
-                {workspaces.length > 0 && <SelectSeparator />}
-                {workspaces.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>
-                    <span>{w.icon}</span> {w.name}
+              {goal && (
+                <span className="flex h-8 items-center gap-1.5 rounded-full border border-border/80 pr-1.5 pl-2.5 text-[13px]" title={goal.why || undefined}>
+                  <Target className="size-3.5 text-brand-strong" aria-hidden />
+                  <span className="max-w-44 truncate">{goal.title}</span>
+                  <button type="button" className="grid size-5 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Don't file it under “${goal.title}”`} onClick={() => setGoalOff(true)}>
+                    <X className="size-3" />
+                  </button>
+                </span>
+              )}
+              {/* A part is always in its ticket's workspace. */}
+              {!parent && (
+                <Pill
+                  value={workspaceId ?? GLOBAL}
+                  label="Workspace"
+                  onChange={(v) => {
+                    const next = v === GLOBAL ? null : v;
+                    setForm((f) => ({
+                      ...f,
+                      workspaceId: next,
+                      agentId: f.agentId && agentsInReach(agents, next).some((a) => a.id === f.agentId) ? f.agentId : null,
+                    }));
+                  }}
+                >
+                  <SelectItem value={GLOBAL}>
+                    <Globe2 className="size-4" /> Global
                   </SelectItem>
-                ))}
-              </Pill>
+                  {workspaces.length > 0 && <SelectSeparator />}
+                  {workspaces.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      <span>{w.icon}</span> {w.name}
+                    </SelectItem>
+                  ))}
+                </Pill>
+              )}
             </div>
             <div className="rounded-xl border border-border/80 px-2.5">
               <LabelsInput value={labels} onChange={(l) => set("labels", l)} />

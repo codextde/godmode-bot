@@ -376,6 +376,9 @@ export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt"
  */
 export type PauseReason = "user" | "limit" | "question" | "budget";
 
+/** How a turn that ended early is picked up: `continue` where it stopped, or `again` from its prompt. */
+export type RetryMode = "continue" | "again";
+
 /** Whose monthly budget holds a run: the agent's own, or the whole team's. */
 export interface PauseBudget {
   scope: "agent" | "team";
@@ -526,6 +529,8 @@ export type MessageBlock =
   | { type: "command"; name: string; args: string; output: string }
   /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
   | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason }
+  /** The human picked up a turn that ended early: `continue` where it stopped, or `again` from its prompt. */
+  | { type: "retry"; mode: RetryMode; runId: ID; at: ISODate; masked?: boolean }
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */
@@ -1070,6 +1075,8 @@ export interface MaintenanceSettings {
   autoFix: boolean;
   /** Install updates of the installed tools in the background, while no agent is working. */
   autoUpdate: boolean;
+  /** Clean up what is safe to remove (Settings → Cleanup, recommended items) once a day, while no agent is working. */
+  autoCleanup: boolean;
 }
 
 export interface GeneralSettings {
@@ -1432,6 +1439,90 @@ export interface MaintenanceStatus {
   postponed: string | null;
   fixes: FixResult[];
   updates: ToolUpdateResult[];
+}
+
+/* ------------------------------------------------------------------ */
+/* Cleanup (Settings → Cleanup)                                         */
+/* ------------------------------------------------------------------ */
+
+export type CleanupId =
+  | "temp-files"
+  | "browser-cache"
+  | "task-worktrees"
+  | "task-clones"
+  | "database"
+  | "old-logs"
+  | "vm-downloads"
+  | "trash"
+  | "vm-images";
+
+export interface CleanupEntry {
+  name: string;
+  path: string | null;
+  bytes: number;
+  modifiedAt: ISODate | null;
+  /** Why this one stays when its group is cleaned (uncommitted changes, the browser is open…); null = it goes. */
+  kept: string | null;
+}
+
+export interface CleanupItem {
+  id: CleanupId;
+  name: string;
+  detail: string;
+  /** What cleaning frees (entries that are kept don't count). */
+  bytes: number;
+  count: number;
+  /** Safe to clean without looking: selected by default and cleaned by the automatic cleanup. */
+  recommended: boolean;
+  /** Why it can't be cleaned right now; null = it can. */
+  blocked: string | null;
+  entries: CleanupEntry[];
+}
+
+export type StorageArea = "agents" | "browser" | "vms" | "repos" | "database" | "other";
+
+export interface StorageUsage {
+  area: StorageArea;
+  name: string;
+  bytes: number;
+}
+
+export type HealthCheckId = "database" | "disk" | "worktrees";
+
+export interface HealthCheck {
+  id: HealthCheckId;
+  name: string;
+  status: "ok" | "warn" | "error";
+  detail: string;
+}
+
+export interface CleanupResult {
+  id: CleanupId;
+  name: string;
+  ok: boolean;
+  freedBytes: number;
+  removed: number;
+  /** Entries left alone (see CleanupEntry.kept). */
+  kept: number;
+  output: string;
+}
+
+export interface CleanupRun {
+  automatic: boolean;
+  startedAt: ISODate;
+  finishedAt: ISODate;
+  freedBytes: number;
+  results: CleanupResult[];
+}
+
+export interface CleanupReport {
+  checkedAt: ISODate;
+  dataDir: string;
+  disk: { freeBytes: number; totalBytes: number } | null;
+  storage: StorageUsage[];
+  checks: HealthCheck[];
+  items: CleanupItem[];
+  lastRun: CleanupRun | null;
 }
 
 /* ------------------------------------------------------------------ */

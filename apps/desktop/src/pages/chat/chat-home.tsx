@@ -32,6 +32,7 @@ import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
 import { AttentionList } from "@/components/attention/attention-list";
+import { AwaySummaryCard } from "@/components/attention/away-summary";
 import { useLive, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
@@ -276,11 +277,12 @@ export default function ChatHome() {
 
         <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
           <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
-          <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>/</Kbd> commands <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere
+          <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>/</Kbd> commands <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere <span className="opacity-40">·</span> <Kbd>?</Kbd> shortcuts
         </motion.p>
       </div>
 
       <div className="relative mx-auto w-full max-w-5xl space-y-10 px-4 pb-16 @md:px-5 @xl:px-8">
+        <AwaySummaryCard agents={agents} />
         <NeedsYou agents={agents} />
         <RunningNow agents={agents} />
         <RecentChats agents={agents} />

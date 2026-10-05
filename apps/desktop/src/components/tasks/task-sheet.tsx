@@ -12,10 +12,12 @@ import {
   ArrowUpRight,
   Check,
   ChevronRight,
+  CornerDownRight,
   EllipsisVertical,
   GitBranch,
   GitPullRequestCreateArrow,
   Hourglass,
+  ListTree,
   MessageSquareReply,
   MessagesSquare,
   OctagonAlert,
@@ -25,10 +27,11 @@ import {
   RotateCcw,
   SendHorizontal,
   Square,
+  Target,
   Trash2,
 } from "lucide-react";
 import type { Agent, Task, TaskEvent, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
-import { MAX_TASK_TITLE_LENGTH, githubBranchUrl, isWaiting, reopenStatus } from "@godmode/shared";
+import { MAX_TASK_TITLE_LENGTH, githubBranchUrl, isWaiting, reopenStatus, waitsForTickets } from "@godmode/shared";
 import { WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { ChatFilesScope } from "@/components/chat/local-files";
@@ -46,13 +49,14 @@ import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } f
 import { api } from "@/lib/api";
 import { modKey, openExternal } from "@/lib/desktop";
 import { draftKeys, saveDraft, useDraft } from "@/lib/drafts";
-import { useQuestions, useTasks } from "@/lib/hooks";
+import { useGoals, useQuestions, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { QuestionCard, viewOfQuestion } from "@/components/chat/question-card";
 import { cn } from "@/lib/utils";
 import { DescriptionEditor, withoutPlaceholders, type DescriptionEditorHandle, type TextUpdate } from "./description-editor";
 import { AgentSelect, DueDateField, LabelsInput, PrioritySelect, StatusSelect, agentsInReach } from "./task-fields";
 import { TaskTimeline } from "./task-timeline";
+import { TaskDialog } from "./task-dialog";
 import { PullRequestChip, useTaskActivity } from "./task-card";
 import { BLOCKED_META, StatusIcon, TYPE_META, TypeIcon, formatCost, formatWork, isWorking, pauseLabel, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
 import { followupWhen, useFollowupActions } from "@/components/chat/followup";
@@ -132,6 +136,75 @@ function isTextField(el: Element | null): boolean {
 /** Property values read as text and turn into a control on hover, as in Linear. */
 const PROP_CONTROL = "-ml-2.5 h-8 w-auto max-w-full border-transparent bg-transparent px-2.5 shadow-none hover:bg-accent/60 data-[state=open]:bg-accent/60 dark:bg-transparent";
 
+/**
+ * A ticket split into parts: the bigger ticket it belongs to, and its own parts with where each one stands. The parent
+ * waits until its parts are delivered, done, cancelled or archived; then its agent continues with their results.
+ */
+function PartsSection({ task, board, agents, workspaces }: { task: Task; board: Task[]; agents: Agent[]; workspaces: Map<string, Workspace> }) {
+  const [adding, setAdding] = useState(false);
+  const parent = task.parentId ? board.find((t) => t.id === task.parentId) : undefined;
+  const parts = board.filter((t) => t.parentId === task.id).sort((a, b) => a.number - b.number);
+  const hidden = (task.subtasks?.total ?? 0) - parts.length;
+  const closed = task.status === "done" || task.status === "cancelled" || !!task.archivedAt;
+  if (!task.parentNumber && !parts.length && closed) return null;
+  // Where the core would refuse a part: 3 levels deep, 20 parts, or a ticket that won't wait for it (delivered or settled).
+  let depth = 1;
+  for (let up = task.parentId; up && depth < 4; depth++) up = board.find((t) => t.id === up)?.parentId ?? null;
+  const canAdd = !closed && task.status !== "in_review" && depth < 3 && (task.subtasks?.total ?? 0) < 20;
+  return (
+    <section className="space-y-2" aria-labelledby={`parts-${task.id}`}>
+      <div className="flex items-center gap-2">
+        <h3 id={`parts-${task.id}`} className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          {parts.length ? `Parts · ${(task.subtasks?.total ?? 0) - (task.subtasks?.open ?? 0)} of ${task.subtasks?.total ?? parts.length} finished` : "Parts"}
+        </h3>
+        {canAdd && (
+          <Button size="xs" variant="ghost" className="ml-auto text-muted-foreground" onClick={() => setAdding(true)}>
+            <ListTree /> Add a part
+          </Button>
+        )}
+      </div>
+      {task.parentNumber && (
+        <p className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
+          <CornerDownRight className="size-3.5 shrink-0" aria-hidden />
+          Part of{" "}
+          <Link to={`/tasks?task=${task.parentId}`} className="min-w-0 truncate font-medium text-foreground underline-offset-2 hover:underline">
+            #{task.parentNumber} {parent?.title ?? ""}
+          </Link>
+        </p>
+      )}
+      {parts.length > 0 && (
+        <ul className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
+          {parts.map((p) => {
+            const who = agents.find((a) => a.id === p.agentId);
+            return (
+              <li key={p.id}>
+                <Link to={`/tasks?task=${p.id}`} className="flex min-w-0 items-center gap-2.5 px-3 py-2 text-[13px] transition hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none">
+                  <StatusIcon status={p.status} className="size-3.5 shrink-0" />
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">#{p.number}</span>
+                  <span className="min-w-0 flex-1 truncate">{p.title}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{who?.name ?? "Unassigned"}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {hidden > 0 && <p className="text-xs text-muted-foreground">{hidden === 1 ? "1 more part is archived." : `${hidden} more parts are archived.`}</p>}
+      {!parts.length && !task.parentNumber && (
+        <p className="text-xs text-muted-foreground">Split the work: each part is a ticket of its own, and this one waits until they're finished.</p>
+      )}
+      <TaskDialog
+        open={adding}
+        onOpenChange={setAdding}
+        workspaces={[...workspaces.values()]}
+        agents={agents}
+        defaultWorkspaceId={task.workspaceId}
+        parent={task}
+      />
+    </section>
+  );
+}
+
 function TaskDetail({
   task,
   agents,
@@ -169,8 +242,9 @@ function TaskDetail({
     mutationFn: (patch: TaskPatch) => api.tasks.update(task.id, patch),
     // Shown right away, not when the server answers. Not the description: its editor shows what it saved itself, and
     // must still tell the saved text from a failed save's (which it gets back as a draft).
+    // Nor what it waits for: the server answers with the tickets' numbers and titles.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    onMutate: ({ description, ...patch }) => put((t) => ({ ...t, ...patch })),
+    onMutate: ({ description, waitsFor, ...patch }) => put((t) => ({ ...t, ...patch })),
     // Only this save's fields: another save still on its way keeps its optimistic value.
     onSuccess: (t, patch) => put((x) => ({ ...x, ...Object.fromEntries(Object.keys(patch).map((k) => [k, t[k as keyof Task]])) })),
     onError: (e) => {
@@ -267,6 +341,12 @@ function TaskDetail({
             <Prop label="Due date">
               <DueDateField value={task.dueDate} status={task.status} onChange={(dueDate) => save.mutate({ dueDate })} />
             </Prop>
+            <Prop label="Waits for">
+              <WaitsForField task={task} board={board} onChange={(waitsFor) => save.mutate({ waitsFor })} />
+            </Prop>
+            <Prop label="Goal">
+              <GoalSelect task={task} onChange={(goalId) => save.mutate({ goalId })} className={PROP_CONTROL} />
+            </Prop>
             <Prop label="Labels">
               <LabelsInput value={task.labels} onChange={(labels) => save.mutate({ labels })} suggestions={labelsInUse} />
             </Prop>
@@ -328,7 +408,15 @@ function TaskDetail({
             )}
           </dl>
 
-          <WorkPanel task={task} agent={agent} onMove={onMove} onReason={(blockedReason) => save.mutate({ blockedReason })} />
+          <WorkPanel
+            task={task}
+            agent={agent}
+            onMove={onMove}
+            onReason={(blockedReason) => save.mutate({ blockedReason })}
+            onStartWithoutWaiting={() => save.mutate({ waitsFor: task.waitsFor.filter((w) => w.finished).map((w) => w.id) })}
+          />
+
+          <PartsSection task={task} board={board} agents={agents} workspaces={workspaces} />
 
           {task.summary && (
             <section className="space-y-2">
@@ -359,6 +447,80 @@ function TaskDetail({
 
       {started && task.agentId && !task.archivedAt && <FollowUp task={task} agent={agent} />}
     </div>
+  );
+}
+
+/** Tickets this one waits for: it starts once each is delivered. Chips to remove, a picker to add (no loops: the core says). */
+function WaitsForField({ task, board, onChange }: { task: Task; board: Task[]; onChange: (ids: string[]) => void }) {
+  const ADD = "add";
+  const ids = task.waitsFor.map((w) => w.id);
+  // Not what it is part of, nor its own parts (that would hold both), and only its workspace's tickets or global ones.
+  const related = new Set<string>([task.id]);
+  for (let up = task.parentId; up && !related.has(up); up = board.find((t) => t.id === up)?.parentId ?? null) related.add(up);
+  const below = [task.id];
+  while (below.length) {
+    const id = below.pop()!;
+    for (const t of board) if (t.parentId === id && !related.has(t.id)) {
+      related.add(t.id);
+      below.push(t.id);
+    }
+  }
+  const choices = board
+    .filter((t) => !related.has(t.id) && !ids.includes(t.id) && t.status !== "done" && t.status !== "cancelled" && (!t.workspaceId || t.workspaceId === task.workspaceId))
+    .sort((a, b) => b.number - a.number);
+  return (
+    <span className="flex min-h-8 flex-wrap items-center gap-1">
+      {task.waitsFor.map((w) => (
+        <span key={w.id} className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs", w.finished && "text-muted-foreground line-through decoration-foreground/30")} title={w.title}>
+          #{w.number} <span className="max-w-32 truncate">{w.title}</span>
+          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Stop waiting for #${w.number}`} onClick={() => onChange(ids.filter((id) => id !== w.id))}>
+            ×
+          </button>
+        </span>
+      ))}
+      {choices.length > 0 && ids.length < 10 && (
+        <Select value={ADD} onValueChange={(v) => v !== ADD && onChange([...ids, v])}>
+          <SelectTrigger aria-label="Wait for another ticket" className="h-7 w-auto gap-1 border-dashed px-2 text-xs text-muted-foreground">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" className="max-h-72">
+            <SelectItem value={ADD} disabled>
+              {ids.length ? "Also wait for…" : "Wait for a ticket…"}
+            </SelectItem>
+            {choices.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                #{t.number} {t.title}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {!ids.length && !choices.length && <span className="text-xs text-muted-foreground">Nothing</span>}
+    </span>
+  );
+}
+
+/** The goal a ticket serves — active ones of its workspace and global ones (a part serves its ticket's). */
+function GoalSelect({ task, onChange, className }: { task: Task; onChange: (goalId: string | null) => void; className?: string }) {
+  const { data: goals = [] } = useGoals(task.workspaceId ?? "global");
+  const NONE = "none";
+  const choices = goals.filter((g) => g.status === "active" || g.id === task.goalId);
+  return (
+    <Select value={task.goalId ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)} disabled={!!task.parentId}>
+      <SelectTrigger aria-label="Goal" className={cn(className, "disabled:opacity-100 disabled:hover:bg-transparent")} title={task.parentId ? "A part serves its ticket's goal" : undefined}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper">
+        <SelectItem value={NONE}>
+          <span className="text-muted-foreground">No goal</span>
+        </SelectItem>
+        {choices.map((g) => (
+          <SelectItem key={g.id} value={g.id}>
+            <Target className="size-3.5 text-brand-strong" /> {g.title}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -454,11 +616,14 @@ function WorkPanel({
   agent,
   onMove,
   onReason,
+  onStartWithoutWaiting,
 }: {
   task: Task;
   agent?: Agent;
   onMove: (task: Task, status: TaskStatus) => void;
   onReason: (reason: string) => void;
+  /** Drop what it waits for (it starts then). */
+  onStartWithoutWaiting: () => void;
 }) {
   const qc = useQueryClient();
   const activity = useTaskActivity(task);
@@ -786,6 +951,23 @@ function WorkPanel({
             <a href={pr.url} target="_blank" rel="noreferrer">
               {pr.number ? "Review" : "Open pull request"} <ArrowUpRight />
             </a>
+          </Button>
+        </div>
+      </Panel>
+    );
+  }
+
+  // Waits in Todo for tickets that aren't delivered yet: it starts by itself, or now without them.
+  if (agent && waitsForTickets(task)) {
+    const open = task.waitsFor.filter((w) => !w.finished);
+    return (
+      <Panel>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[13px] text-muted-foreground">
+            Waits for {open.map((w) => `#${w.number}`).join(", ")} — {agent.name} starts by itself once {open.length === 1 ? "it is" : "they are"} delivered, with {open.length === 1 ? "its" : "their"} result.
+          </p>
+          <Button size="sm" variant="outline" onClick={() => onStartWithoutWaiting()}>
+            <Play /> Start without waiting
           </Button>
         </div>
       </Panel>

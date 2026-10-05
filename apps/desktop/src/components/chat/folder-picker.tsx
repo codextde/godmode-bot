@@ -220,14 +220,14 @@ export function FolderPickerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="gap-0 overflow-hidden p-0 sm:max-w-xl"
+        className="grid-cols-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-xl"
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           inputRef.current?.focus();
         }}
         onCloseAutoFocus={onCloseAutoFocus}
       >
-        <DialogHeader className="px-5 pt-5 pb-4">
+        <DialogHeader className="px-5 pt-5 pb-4 text-left">
           <DialogTitle className="flex items-center gap-2">
             <FolderOpen className="size-[18px] text-muted-foreground" />
             {title}
@@ -296,106 +296,116 @@ export function FolderPickerDialog({
         </div>
 
         <Command shouldFilter={!pathQuery} loop className="rounded-none bg-transparent">
-          <CommandInput
-            ref={inputRef}
-            value={query}
-            onValueChange={setQuery}
-            onKeyDown={onInputKeyDown}
-            placeholder="Filter, or paste a path…"
-            aria-label="Filter folders or enter a path"
-          />
-          <CommandList className="h-[min(21rem,48vh)] max-h-none px-1.5 py-1">
-            {pathQuery ? (
-              <CommandGroup>
-                <CommandItem value="__go" onSelect={() => void go(query.trim())} className="gap-2.5 py-2">
-                  {pending ? <Loader2 className="animate-spin" /> : <CornerDownLeft />}
-                  Open <span className="min-w-0 truncate font-mono text-[13px]">{query.trim()}</span>
-                </CommandItem>
-              </CommandGroup>
-            ) : (
-              <>
-                {!browsed && recents.length > 0 && (
-                  <CommandGroup heading="Recent">
-                    {recents.map((p) => (
-                      <CommandItem key={p} value={`recent ${p}`} onSelect={() => pick(p)} className="group gap-2.5 py-2">
-                        <History />
-                        <span className="shrink-0 font-medium">{folderName(p)}</span>
-                        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{shortPath(p, current?.home)}</span>
-                        <span className="text-[11px] text-muted-foreground opacity-0 transition group-data-[selected=true]:opacity-100">Use ↵</span>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                )}
-                {!current && listing.isError && (
-                  <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-sm text-muted-foreground">
-                    <p>{errorMessage(listing.error)}</p>
-                    {path !== undefined && (
-                      <Button type="button" variant="outline" size="sm" onClick={() => setPath(undefined)}>
-                        <Home /> Go to your home folder
-                      </Button>
-                    )}
-                  </div>
-                )}
-                <CommandGroup heading={current ? `Folders${entries.length ? ` · ${entries.length}${current.truncated ? "+" : ""}` : ""}` : undefined}>
-                  {!current && !listing.isError
-                    ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="mx-2 my-2.5 h-4" style={{ width: `${40 + ((i * 17) % 45)}%` }} />)
-                    : entries.map((e) => (
-                        <CommandItem key={e.path} value={e.name} onSelect={() => void go(e.path)} className="group gap-2.5 py-2">
-                          {e.git ? <FolderGit2 /> : <Folder />}
-                          <span className="min-w-0 flex-1 truncate">{e.name}</span>
-                          {pending === e.path ? (
-                            <Loader2 className="size-3.5 animate-spin" />
-                          ) : e.blocked ? null : (
-                            <button
-                              type="button"
-                              tabIndex={-1}
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                pick(e.path);
-                              }}
-                              className="rounded-md border bg-card px-2 py-0.5 text-[11px] font-medium text-muted-foreground opacity-0 shadow-xs transition group-hover:opacity-100 group-data-[selected=true]:opacity-100 hover:text-foreground"
-                            >
-                              Use
-                            </button>
-                          )}
-                          <ChevronRight className="size-3.5 text-muted-foreground/60" />
+          <div className="relative">
+            <CommandInput
+              ref={inputRef}
+              value={query}
+              onValueChange={setQuery}
+              onKeyDown={onInputKeyDown}
+              placeholder="Filter, or paste a path…"
+              aria-label="Filter folders or enter a path"
+            />
+            {!query && (
+              <div className="pointer-events-none absolute inset-y-0 right-3 hidden items-center gap-1.5 text-[11px] text-muted-foreground md:flex">
+                <Kbd>↵</Kbd> open <span className="opacity-40">·</span> <Kbd>⌫</Kbd> up
+              </div>
+            )}
+          </div>
+          <div className="flex h-[min(21rem,48vh)] flex-col">
+            <CommandList className="max-h-none min-h-0 flex-1 px-1.5 py-1">
+              {pathQuery ? (
+                <CommandGroup>
+                  <CommandItem value="__go" onSelect={() => void go(query.trim())} className="gap-2.5 py-2">
+                    {pending ? <Loader2 className="animate-spin" /> : <CornerDownLeft />}
+                    Open <span className="min-w-0 truncate font-mono text-[13px]">{query.trim()}</span>
+                  </CommandItem>
+                </CommandGroup>
+              ) : (
+                <>
+                  {!browsed && recents.length > 0 && (
+                    <CommandGroup heading="Recent">
+                      {recents.map((p) => (
+                        <CommandItem key={p} value={`recent ${p}`} onSelect={() => pick(p)} className="group gap-2.5 py-2">
+                          <History />
+                          <span className="shrink-0 font-medium">{folderName(p)}</span>
+                          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{shortPath(p, current?.home)}</span>
+                          <span className="text-[11px] text-muted-foreground opacity-0 transition group-data-[selected=true]:opacity-100">Use ↵</span>
                         </CommandItem>
                       ))}
-                </CommandGroup>
-                {current && (
-                  <CommandEmpty className="px-6 py-10 text-center text-sm text-muted-foreground">
-                    {query ? `No folders match “${query}”.` : "No subfolders here. Use this folder, or go up a level."}
-                  </CommandEmpty>
-                )}
-              </>
+                    </CommandGroup>
+                  )}
+                  {!current && listing.isError && (
+                    <div className="flex flex-col items-center gap-3 px-6 py-10 text-center text-sm text-muted-foreground">
+                      <p>{errorMessage(listing.error)}</p>
+                      {path !== undefined && (
+                        <Button type="button" variant="outline" size="sm" onClick={() => setPath(undefined)}>
+                          <Home /> Go to your home folder
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  <CommandGroup heading={current ? `Folders${entries.length ? ` · ${entries.length}${current.truncated ? "+" : ""}` : ""}` : undefined}>
+                    {!current && !listing.isError
+                      ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="mx-2 my-2.5 h-4" style={{ width: `${40 + ((i * 17) % 45)}%` }} />)
+                      : entries.map((e) => (
+                          <CommandItem key={e.path} value={e.name} onSelect={() => void go(e.path)} className="group gap-2.5 py-2">
+                            {e.git ? <FolderGit2 /> : <Folder />}
+                            <span className="min-w-0 flex-1 truncate">{e.name}</span>
+                            {pending === e.path ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : e.blocked ? null : (
+                              <button
+                                type="button"
+                                tabIndex={-1}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  pick(e.path);
+                                }}
+                                className="rounded-md border bg-card px-2 py-0.5 text-[11px] font-medium text-muted-foreground opacity-0 shadow-xs transition group-hover:opacity-100 group-data-[selected=true]:opacity-100 hover:text-foreground"
+                              >
+                                Use
+                              </button>
+                            )}
+                            <ChevronRight className="size-3.5 text-muted-foreground/60" />
+                          </CommandItem>
+                        ))}
+                  </CommandGroup>
+                  {current && (
+                    <CommandEmpty className="px-6 py-10 text-center text-sm text-muted-foreground">
+                      {query ? `No folders match “${query}”.` : "No subfolders here. Use this folder, or go up a level."}
+                    </CommandEmpty>
+                  )}
+                </>
+              )}
+            </CommandList>
+            {current?.blocked && (
+              <p className="flex gap-1.5 border-t border-warning/30 bg-warning/[0.07] px-4 py-2 text-xs text-warning">
+                <TriangleAlert className="mt-px size-3.5 shrink-0" />
+                {current.blocked}
+              </p>
             )}
-          </CommandList>
+          </div>
         </Command>
 
-        <div className="flex flex-wrap items-center gap-2 border-t bg-muted/30 px-4 py-3">
-          {current?.blocked ? (
-            <p className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-warning">
-              <TriangleAlert className="size-3.5 shrink-0" />
-              <span className="min-w-0">{current.blocked}</span>
-            </p>
-          ) : (
-            <div className="hidden min-w-0 flex-1 items-center gap-1.5 text-[11px] text-muted-foreground md:flex">
-              <Kbd>↵</Kbd> open <span className="opacity-40">·</span> <Kbd>⌫</Kbd> up <span className="opacity-40">·</span> <Kbd>{modKey}↵</Kbd> use
-            </div>
+        <div className="flex items-center gap-2 border-t bg-muted/30 px-4 py-3">
+          {isTauri && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => void browseNative()} className="-ml-1 text-muted-foreground">
+              {isMac ? "Open Finder…" : "Browse…"}
+            </Button>
           )}
-          <div className="ml-auto flex items-center gap-2">
-            {isTauri && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => void browseNative()}>
-                {isMac ? "Open Finder…" : "Browse…"}
-              </Button>
-            )}
-            <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="button" size="sm" disabled={!current || !!current.blocked} onClick={() => current && pick(current.path)}>
-              Use <span className="max-w-[11rem] truncate">“{currentName}”</span>
-            </Button>
-          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} className="ml-auto">
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!current || !!current.blocked}
+            onClick={() => current && pick(current.path)}
+            className="min-w-0 shrink"
+          >
+            <span className="max-w-[17rem] truncate">Use “{currentName}”</span>
+            <kbd className="hidden font-sans text-[10px] opacity-60 md:inline">{modKey}↵</kbd>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

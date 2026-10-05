@@ -291,6 +291,8 @@ export function createConversation(
     workspaceId?: string | null;
     sshServerIds?: string[];
     instructions?: string;
+    /** No raw secrets in this chat, whatever its agent may read (see `chatFillOnly`). */
+    fillOnly?: boolean;
   } & ModelChoice,
 ): Conversation {
   const agent = getAgent(input.agentId); // 404 if the agent doesn't exist
@@ -315,6 +317,7 @@ export function createConversation(
     browser_profile_id: browserProfileId,
     workspace_id: normalizeWorkspaceId(agent, input.workspaceId),
     ssh_server_ids: JSON.stringify(sshServerIds),
+    secret_access: input.fillOnly ? "fill" : null,
     instructions: input.instructions?.trim() ?? "",
     pinned: 0,
     archived: 0,
@@ -326,6 +329,16 @@ export function createConversation(
   bus.emit({ type: "conversation.updated", conversation });
   if (vmId) assignmentsChanged();
   return conversation;
+}
+
+/**
+ * The chat works without raw secrets even when its agent may read them: its task was handed over by an agent that
+ * could not read them itself. It stays that way for everything that happens in the chat later. A chat that is gone
+ * counts as fill-only too.
+ */
+export function chatFillOnly(conversationId: string): boolean {
+  const row = get<{ secret_access: string | null }>("SELECT secret_access FROM conversations WHERE id = ?", conversationId);
+  return !row || row.secret_access === "fill";
 }
 
 export function getConversation(id: string): ConversationWithMessages {
@@ -348,9 +361,9 @@ export function listConversations(
     where.push("(c.workspace_id = ? OR c.agent_id IN (SELECT id FROM agents WHERE workspace_id = ?))");
     params.push(opts.workspaceId, opts.workspaceId);
   }
-  const search = opts.search?.trim();
-  if (search) {
-    const like = `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  // Every word, in the title or in a message ("invoice march" finds "March invoice review"); at most six words.
+  for (const word of (opts.search ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 6)) {
+    const like = `%${word.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
     where.push(
       "(c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages m2 WHERE m2.conversation_id = c.id AND m2.content LIKE ? ESCAPE '\\'))",
     );
