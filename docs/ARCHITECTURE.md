@@ -26,7 +26,7 @@ Godmode Bot is an AI coworker that runs on your machine. It drives **Claude Code
 | Path | What |
 |---|---|
 | `packages/shared` | Types shared by core and UI: models (`models.ts`), API inputs (`api.ts`), WS events (`events.ts`). **The contract.** |
-| `packages/core` | The daemon (Bun + Hono + bun:sqlite). HTTP API under `/api`, WebSocket at `/api/ws`, MCP gateway at `/mcp`. |
+| `packages/core` | The daemon (Bun + Hono + bun:sqlite). HTTP API under `/api`, WebSocket at `/api/ws`, MCP gateway at `/mcp` (for runs, and for [connected apps](#connected-apps-claude-code--mcp)). |
 | `apps/desktop` | React UI (also served by the core as the web dashboard) + `src-tauri` desktop shell. |
 | `apps/mobile` | Phone app (Expo, iOS + Android). Own toolchain (bun), outside the pnpm workspace; imports `@godmode/shared` from source. |
 | `apps/cloud` | Godmode Cloud, optional and self-hosted (Next.js + a custom Node server, PostgreSQL): accounts, admin, Stripe billing and the relay to linked computers. See [Godmode Cloud](#godmode-cloud). |
@@ -50,6 +50,7 @@ mods/<run-id>/<name>/ a run's own copy of the mods it loads (see "Mods"); writte
 logs/godmode.jsonl    diagnostic log (see "Diagnostic log"); godmode.1.jsonl is the previous 2 MB, desktop.log the shell's
 link-key              0600 — this installation's X25519 key pair for the runner link (see "Remote runners")
 runner.json           a runner only (~/.godmode-runner, GODMODE_RUNNER_HOME): pid and ports while it serves
+core.json             0600 — pid and port of the serving core, for `godmode mcp | tools | call` (see "Connected apps")
 ```
 
 ### Agent repositories
@@ -156,9 +157,17 @@ ask within the same moment share a request.
   (dashboard password). Loopback-only by default with Host-header DNS-rebinding protection, CSRF origin check,
   login rate limiting, strict CSP for the dashboard. Requests relayed by a linked Godmode Cloud never use these
   credentials; see [Godmode Cloud](#godmode-cloud).
-* **MCP gateway**: each run gets a random bearer token scoped to that run/agent; expires when the run ends.
+* **MCP gateway**: each run gets a random bearer token scoped to that run/agent; expires when the run ends. A
+  connected app's key (see [Connected apps](#connected-apps-claude-code--mcp)) opens `/mcp` only, and there only the
+  management tools.
   Management tools cannot grant reveal access, move agents between workspaces or attach out-of-scope profiles/MCP
-  servers; fill-only agents cannot delegate to reveal-mode agents.
+  servers. `agent_delegate` to a reveal-mode agent works for every caller, but unless the caller's run reads raw
+  secrets itself (reveal mode, its own chat not fill-only) and the target is global or in its workspace, the task's
+  chat is marked fill-only (`conversations.secret_access = 'fill'`): `vault_get_login` / `vault_get_totp` are off in it
+  for good, and the agent counts as fill-only there for what it hands on or sets up — for itself too. What outlives
+  the task (automations, assigning board tasks, settings of a reveal-mode agent, giving that agent a VM) is still
+  refused for such callers. Login allow-lists are not compared, and the task can still write to the agent's memory and
+  files.
 * **Token hand-off**: the desktop shell starts the core with `--token-stdin` and writes the token as the first stdin
   line; the core strips `GODMODE_*` from every child process environment.
 
@@ -372,11 +381,13 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
   socket); showing it, or `POST /api/conversations/read` (`ids` or `"all"`),
   reads it — and reading a chat whose run failed clears the agent's "Last run failed". Automation, task, delegation and
   platform chats are never unread.
-* **While you were away** (`services/away.ts`, `GET /api/away?since=<ISO>`, Cloud: allowed; phone: closed). After at
-  least two hours without the human's input (pointer, keys, wheel in a focused window; the last time is kept per computer
-  in `localStorage`, `lib/presence.ts`), Home shows what the team did since: runs that ended (checks left out) and how
-  many failed, tickets delivered, what the work cost (the spend ledger), who worked, and up to six things worth a look —
-  delivered tickets, problems (chats and automations), then replies — one line per chat or automation. Closed with ×.
+* **While you were away** (`services/away.ts`, `GET /api/away?since=<ISO>&until=<ISO>`, Cloud: allowed; phone: closed).
+  After at least two hours without the human's input (released pointer or key, wheel, in a focused window; the last time
+  is kept per computer in `localStorage`, `lib/presence.ts`), Home shows what the team did from then until they came
+  back (at most 31 days): runs that ended (checks left out) and how many failed, tickets delivered (by whom), what the
+  work cost (the spend ledger), who worked, and up to six things worth a look — delivered tickets, problems (chats still
+  unread, and automations), then replies in chats still unread — one line per chat or automation. Runs are found
+  through `idx_runs_finished` (migration 58). Closed with ×.
 * **Notices** (`services/runNotices.ts`). Such a run that nobody watched notifies once — "Mia replied in “Q4 plan”" /
   "Mia ran into a problem in “…”" — unless the agent called `notify_user` itself (the tool call, not the word) or the
   run reported a missing login (that has its own notice). Only the computer the human uses tells: a runner's runs
@@ -488,6 +499,53 @@ the core, the desktop and the phone alike.
 Runs may get three more servers behind the gateway, all with the same run token: `/mcp/computer` (see Computer use),
 `/mcp/vm` (see macOS virtual machines) and `/mcp/ssh` (see SSH servers).
 
+## Connected apps (Claude Code & MCP)
+
+Claude Code — and any other MCP client — can set Godmode up from outside: create and change agents, automations and
+tasks, and read what was done. `packages/core/src/connect/`.
+
+* **Keys.** `connectors` (migration 70): `name`, `client` (`claude-code` | `other`), `access` (`manage` | `read`),
+  `token_hash` (SHA-256 of `gmc_<random>`), `installed`, `calls`, `last_tool`, `last_used_at`. The key is in the answer
+  of `POST /api/connectors` and nowhere else. Backups leave the table out. An `access` value other than `manage` only
+  reads.
+* **Gateway.** `POST /mcp` takes a run token or an app's key; `/mcp/computer`, `/mcp/vm`, `/mcp/ssh` and the hook only
+  run tokens. `connectorContext()` turns a key into a `RunContext` with `agentId` = the built-in agent, `runId` and
+  `conversationId` `""`, and `connector: { id, name, access }`. The server introduces itself with
+  `CONNECT_INSTRUCTIONS` instead of the agents' text.
+* **Tools.** `CONNECTOR_TOOLS` in `mcp/tools.ts` is the allowlist, each tool marked `read` or `manage`: `agents_list`,
+  `agent_get`, `agent_create`, `agent_update`, `agent_delete`, the `routine_*` and `automation_*` tools, `tasks_list`,
+  `task_get`, `task_create`, `task_update`, `task_message`, `task_note`, `runs_list`, `spend_overview`, `workspaces_list`,
+  `logins_overview` (names, never secrets), `missing_logins_list`, `vms_list`, `vm_create`, `vm_assign`, `vm_power`.
+  Nothing that needs a run, a chat or a browser (vault fills, questions, follow-ups, delegation, API tools). `tools/list`
+  and `tools/call` both check it; a `read` key is refused on `manage` tools. A read key still sees login names and
+  usernames (`logins_overview`) and snippets of prompts and results (`runs_list`, `task_get`). The tools themselves
+  are unchanged, so the agent rules hold: created agents are fill-only without management rights, computer use, a working folder or SSH
+  servers; workspace moves, browser profiles and out-of-scope MCP servers stay human-only. `agents_list` includes the
+  built-in agent for an app.
+* **Audit.** The tools audit as the built-in agent (`agent.create`, …); every `manage` call, and every call that was
+  refused or failed, adds `connector.call` with actor `connector:<id>`, the tool as target, the app's name and `ok`.
+  `connector.create` / `connector.remove` for the keys. `task_update` refuses to rewrite the title, description or
+  type of a task whose agent the caller couldn't hand work to (reveal mode, unattended computer use) — for agents
+  and apps alike.
+* **Command line** (`connect/cli.ts`, key in `GODMODE_CONNECT_TOKEN`): `godmode mcp` is an MCP server over stdio that
+  answers `initialize` and `ping` itself and passes everything else to the running core's `/mcp`; `godmode tools` and
+  `godmode call <tool> <json>` do one request. They find the core through `<data dir>/core.json` (written by `serve`,
+  removed on shutdown) on every call — so a core that restarts on another port is found again — or `GODMODE_URL` for
+  one on another computer. The setup always names `--data-dir`, since the app starts the program in its own
+  environment. While Godmode is closed (or quits during a call), `tools/list` answers with no tools and the bridge
+  sends `notifications/tools/list_changed` once the core answers a ping again; tool calls say that Godmode isn't
+  running. Only JSON-RPC answers are passed on: anything else becomes an error for that request.
+* **Claude Code.** `POST /api/connectors { client: "claude-code", install: true }` runs
+  `claude mcp add-json --scope user godmode {command, args: ["mcp"], env: {GODMODE_CONNECT_TOKEN}}` (after removing the
+  entry it made before; the keys of replaced entries are deleted). Removing that app runs `claude mcp remove`. When
+  Claude Code isn't installed or refuses, the answer carries the command to paste, and apps added earlier stop
+  counting as installed (their entry is gone). Godmode's own runs use
+  `--strict-mcp-config`, so the entry never reaches an agent's run, and `GODMODE_CONNECT_TOKEN` is stripped from run
+  environments.
+* **Routes.** `GET /api/connectors` (apps, the tool list, whether Claude Code is installed), `POST /api/connectors`,
+  `DELETE /api/connectors/:id` — refused for phones and through Godmode Cloud. UI: Settings → Claude Code & MCP
+  (`connect-section.tsx`, `connect-app-dialog.tsx`); entity `connectors` refreshes it when an app is used.
+
 ## HTTP API
 
 All routes are under `/api` and require auth except `/api/health` and `/api/auth/*`.
@@ -522,6 +580,34 @@ numbers), `GET /api/logs/entries?level=&search=&limit=` and `GET /api/logs/repor
 the environment (with the build's commit), recurring problems, a run summary (cost by agent, runs that took far longer
 by the clock than Claude worked), memory and sleep, slow spots (requests, by-design waits apart, tool calls, queries,
 stalls and what blocked them), the tail of `desktop.log` and the newest entries that fit in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
+
+## Cleanup
+
+Settings → Cleanup (`services/cleanup.ts`, `GET /api/cleanup[?refresh=1]`, `POST /api/cleanup { ids }`,
+`godmode cleanup [--fix]`) walks the data directory once per look: what each area takes on disk (written blocks, so
+sparse VM disks count what they use), a self check (database `quick_check`, kept for an hour unless asked again; free
+disk space; task folders left over from deleted tasks) and what can go. The UI adds the system check, permissions and
+updates of Settings → System to the self check.
+
+| Item | What goes | Stays |
+|---|---|---|
+| Leftovers (recommended) | Run temp files (`godmode-mcp-<run>`…), imports and PR bodies in the system temp folder that are Godmode's own and untouched for a day; browser-use run folders; folders of deleted profiles and agents; interrupted clones (`*.cloning-*`) a day old | Anything of a run that is working |
+| Browser caches (recommended) | `Cache`, `Code Cache`, `GPUCache`, Dawn and shader caches of every profile | Cookies, logins, site data; profiles whose Chromium runs (registered, a live `SingletonLock`, `lockfile` on Windows) |
+| Worktrees of finished tasks (recommended) | Worktrees of tasks done or cancelled a day ago, and of deleted tasks — removed and pruned; branches stay | Uncommitted changes (also files git is told not to list), commits on no branch, a rebase or merge under way, full clones with unpushed commits or stashes, folders that aren't checkouts, tasks whose chat works or is paused |
+| Clones no task uses (recommended) | Bare clones in `repos/.tasks` no task names | One a task folder still uses or with commits never pushed |
+| Database (recommended) | `VACUUM` + `wal_checkpoint(TRUNCATE)` once 1 MB+ of pages is free | Waits while agents work, a backup runs, or the disk can't hold two copies |
+| Old logs (recommended) | Replaced logs a week old, logs of deleted VMs | The current logs |
+| Unfinished VM downloads, Trash, macOS images | Only when picked: layers kept to resume a download, `agents/.trash`, `repos/.trash`, `browser/.trash`, image templates (`removeImage`) | Images and layers while a download runs |
+
+What goes is looked at twice: for the report, and again right before it is removed. Worktrees and clones are asked
+about inside the tasks' per-repository lock (`removeCheckoutUnless`, `whileCloneIdle` in `tasks/git.ts`), so a task
+that was reopened meanwhile keeps its files. Runs count as working when the runner has them or the `runs` table says
+so. Cleaning takes its turn with repairs and updates (`inTurn`); `godmode cleanup --fix` hands the work to a running
+core and only cleans by itself when none answers.
+
+With `settings.maintenance.autoCleanup` (default on) the background upkeep cleans the recommended items at most once a
+day while no agent works. Unasked, worktrees go a week after their task finished, and folders without a task once
+nothing touched them for a week. The last run is kept in `meta` (`cleanup.lastRun`, `cleanup.lastAutomatic`).
 
 ## WebSocket (`/api/ws`)
 
@@ -987,8 +1073,18 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   `refs/worktree/godmode/with-secrets/<commit>` (never pushed; its reflog keeps the commits for git's 90 days even
   when the repository is cleaned up from another checkout), a notification names the files, and the agent's brief
   tells it to read secrets from the environment. With a locked vault only the file names are checked.
+* **Trying again on its own.** A ticket run that fails where a new try may help — a plain error (an API hiccup, a
+  crash), a restart that cut it off, the time or turn limit — is started again by itself, In progress all along (card:
+  "Trying again shortly…"), twice in a row at most (once after a timeout; after 30 s, then 2 min; after a restart in 5 s,
+  a few seconds apart — a run that had finished is published, not run again): the agent's
+  opening line says the last run failed and why, the timeline says "tried again on its own" with that reason. What only
+  the human can fix (sign-in, Claude Code, a folder, the VM, the model, a chat too long, the cost limit) or a run they
+  stopped is blocked at once; after the last try it is blocked "still failing after 2 more tries" and the human is told.
+  The count starts over when a run goes well (delivered, waiting) or the human acts on it (counted in the order rows
+  were written); a move, a message or a new agent cancels a try that waits, and a try never cuts across a newer run. A restored backup leaves interrupted tickets to the human.
 * **When a run ends** (any run in the task's conversation, so the human's follow-ups count too): succeeded →
-  `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason, and a
+  `in_review` (after publishing, for coding tasks), failed or stopped → `blocked` with the reason (after trying again
+  on its own, above), and a
   `task_report_blocked` call during the run → `blocked` with what the agent needs. A follow-up puts a delivered or
   blocked task back to `in_progress`; for coding tasks the next push updates the open pull request. The run's answer
   becomes the task's result: images it names by path in the agent's folders or the temp folder (checked by their
@@ -1001,6 +1097,43 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   an optional `blockedReason` only they can change). Starting a blocked task again opens the prompt with why: "Godmode
   restarted while you were working…" or "Your last run … failed: <reason>". Handing a blocked task to another agent
   turns `needs_input`, `failed`, `stopped` and `interrupted` into `manual` (the new agent starts again).
+* **Goals** (migration 62, table `goals`, `tasks.goal_id`; `tasks/goals.ts`; `GET/POST /api/goals`, `PATCH/DELETE
+  /api/goals/:id`, Cloud: allowed; phone: closed). A goal has a title, why it matters, a target day and a status (active,
+  achieved, dropped); global or a workspace's. A ticket serves one (`Task.goalId`, set on create or in the sheet; a part
+  serves its ticket's goal and follows it when the ticket's changes), and its brief says so with the why. A goal counts
+  the tickets of the board's scope that serve it (archived and cancelled left out: total, done, open) and what the work
+  for it cost (all of its tickets'). A goal stays in its workspace; deleting a workspace deletes its goals (migration 64 clears older leftovers). The board shows the goals above the columns (a click filters, `?goal=`), new
+  tickets there serve the filtered goal; managers read them with `goals_list` and file tickets under one
+  (`task_create { goalId }`). Deleting a goal leaves its tickets serving none.
+* **Ready-made teams** (`agents/teams.ts`, `GET /api/team-templates`, `POST /api/team-templates/:id/install
+  { workspaceId?, automations? }`, Cloud: allowed; phone: closed). A team is a lead (its own template, with instructions
+  for leading: split tickets with `task_split`, hand chat work over, review, report) and reports taken from the agent
+  templates. Installing creates the lead (reporting to the built-in agent, delegation on), then each report under it,
+  and — when asked — the reports' scheduled automations from their templates. Offered on *New agent* and, while only the
+  built-in agent exists, on the Agents page; afterwards the org chart opens.
+* **Waiting for other tickets** (migration 63, table `task_dependencies`; `Task.waitsFor`, `waitsForTickets()`). A
+  ticket may wait for up to 10 others (`waitsFor` on create and patch, the sheet's *Waits for*, `task_create {
+  waitsFor }`) of its workspace or global ones; itself and loops are refused — a loop counts parts too (a ticket waits
+  for its parts), so a part can't wait for its own ticket. In Todo it doesn't start while one of them isn't finished
+  (delivered, done, cancelled or archived) — the card says *Waits for #3*, the sheet offers *Start without waiting* —
+  and starts by itself when the last one finishes (or is deleted, or its workspace is). A run the human starts in its
+  chat meanwhile makes it work (nothing restarts it then). Its brief lists what they delivered (`<godmode-depends-on>`,
+  quoted as data, 1,500 characters each), and says so for one it was started without.
+* **Sub-tickets** (migration 57, `tasks.parent_id`; `Task.parentId`, `parentNumber`, `subtasks { total, open, blocked }`).
+  A lead on a ticket splits it with `task_split({ parts })` — managers to anyone they may give tasks, other agents to
+  their reports (by id or name), no agent = backlog for the human; every part is checked (enabled, workspace, 20 at
+  most) before any is filed — or a manager files one with `task_create({ parentTaskId })` for a ticket it works on or
+  filed; the human adds one from the ticket (*Add a part*, `POST /api/tasks { parentId }`). A part is always in its
+  ticket's workspace; at most 3 levels. A part's prompt names what it is part of; the ticket's own brief lists its parts
+  with their results (so its agent builds on them instead of splitting again). A lead reads and sends back its own parts
+  (`task_get`, `task_message`, manager or not). When the ticket's run ends while parts are open (not delivered, done,
+  cancelled or archived — a delivered part is the lead's to review), it waits (`in_progress`, a `waiting` event with
+  `subtasks`) instead of going to review. When the last part closes — or parts closed that its agent hasn't seen
+  (`tasks.parts_seen_at`, migration 59: set when its brief or a wake-up carried their results; approving a delivered
+  part isn't news) — its agent continues in its chat with `<godmode-subtasks>`: each part's state, agent and result
+  (quoted as data without Godmode's note tags, 1,500 characters each). This holds also after a follow-up, a pause, a
+  retry or a restart. Approving the ticket (Done, also by a merged pull request) approves its delivered parts;
+  cancelling it cancels its unfinished parts; archiving it archives them. Deleting a ticket leaves its parts on their own.
 * **Tickets**: `priority` (urgent, high, medium, low, none), `dueDate` (a calendar day) and up to 10 `labels`; the agent
   is told them in the prompt. Queued ticket runs (triggers `task` and `followup`) start in priority order, then by the
   earliest due day (`ticketOrder()` in the runner shares out only the queue places ticket runs hold — the human's chat,
@@ -1029,7 +1162,7 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   filters by agent, `task_message` sends feedback into a ticket (it arrives marked as coming from that agent, not the
   human, is on the timeline, and is refused for the caller's own ticket and for a ticket whose run stands still — only
   the human continues those), `task_note` leaves a note (a working agent on its own ticket, managers on any).
-  `task_create` / `task_update` follow the delegation rules (no reveal-mode or unattended
+  `task_create` / `task_update` follow the rules for scheduling an agent (no reveal-mode or unattended
   computer agents from callers that couldn't use them, VM-kept runs stay off the host); coding tasks created by agents
   use the workspace's repositories; and a run working on a task — or delegated from one — can't start a manager agent
   (itself included), so tasks can't spawn tasks without end. Follow-ups wait while Godmode prepares or publishes a task. Task numbers are never reused.
@@ -1088,8 +1221,8 @@ conversation (origin `slack` / `telegram` / `teams`, with standing instructions 
 unverified). Messages of a chat are accepted in order; each starts a normal chat run, the platform shows typing (Slack:
 an 👀 reaction) and the answer is converted (Telegram HTML, Slack mrkdwn, Teams Markdown) and split. Chat commands:
 `/help`, `/agents`, `/agent <name>` (switch; in a Slack thread the channel follows), `/new`, `/stop`; Slack uses
-`/godmode <command>`. Claude Code's own slash commands are not available from chats. Attachments (≤ 25 MB, Telegram ≤ 20 MB)
-are downloaded into the agent's uploads. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
+`/godmode <command>`. Claude Code's own slash commands are not available from chats. Attachments (any number;
+≤ 25 MB each, Telegram ≤ 20 MB, 250 MB per message) are downloaded into the agent's uploads. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
 connections but restore them turned off, so two machines never answer for one bot.
 
 ## Phone app

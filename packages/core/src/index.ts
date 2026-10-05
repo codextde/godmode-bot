@@ -7,11 +7,15 @@
  *   godmode password <pw>    set the web dashboard password
  *   godmode doctor           check dependencies (claude, uv, chrome) and permissions; --fix repairs what it can
  *   godmode update           update the installed tools
+ *   godmode cleanup          show what takes up space; --fix removes what is safe to remove
  *   godmode runner <install|pair|serve|status|uninstall>   work for a Godmode on another computer (see remote/cli.ts)
+ *   godmode mcp | tools | call   the running Godmode for Claude Code and other apps outside it (see connect/cli.ts)
  *   godmode version
  */
 import { rmSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
+import type { CleanupRun } from "@godmode/shared";
+import { formatBytes } from "@godmode/shared";
 import { loadConfig, config, BUILD, VERSION, isLoopbackHost, type CoreConfig } from "./config";
 import { logger, setLogDir, setLogLevel } from "./log";
 import { openDb, closeDb, setMeta, getDb } from "./db";
@@ -41,7 +45,8 @@ import { closeGuestTunnels } from "./vm/guest";
 import { startTasks, stopTasks } from "./tasks/service";
 import { runDoctor } from "./services/doctor";
 import { checkPermissions } from "./services/permissions";
-import { fixAll, installUpdates, startMaintenance, stopMaintenance } from "./services/maintenance";
+import { cleanUp, fixAll, installUpdates, startMaintenance, stopMaintenance } from "./services/maintenance";
+import { RECOMMENDED, scanCleanup } from "./services/cleanup";
 import { checkUpdates } from "./services/updates";
 import { resourceSnapshot, startDiagnostics, stopDiagnostics } from "./diagnostics/monitor";
 import { getModelCatalog } from "./runner/models";
@@ -52,6 +57,7 @@ import { startRunners, stopRunners } from "./remote/runners";
 import { bootstrapDependencies } from "./remote/health";
 import { startKeepAwake, stopKeepAwake } from "./remote/keepAwake";
 import { startCloudLink, stopCloudLink } from "./cloud/link";
+import { removeCoreFile, runConnectCli, USAGE as CONNECT_USAGE, writeCoreFile } from "./connect/cli";
 import { newId } from "./util";
 import { SPEND_BACKFILL_SQL } from "./db/migrations";
 
@@ -252,6 +258,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     // Only a linked computer dials its cloud; it follows settings changes by itself. A runner never does: it works
     // for another computer, which is the one people reach.
     startCloudLink({ app, websocket: websocketHandler });
+    // Where `godmode mcp` and `godmode call` find this core.
+    writeCoreFile(cfg);
   }
 
   const displayHost = isLoopbackHost(cfg.host) ? "127.0.0.1" : cfg.host;
@@ -300,6 +308,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       stopMobileAccess();
       stopRunners();
       stopCloudLink();
+      removeCoreFile(cfg.dataDir);
       await stopMessaging();
       stopTasks();
     }
@@ -322,6 +331,25 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   }
 }
 
+/**
+ * `godmode cleanup --fix`: a core that is running cleans itself — only it knows which browsers are open and holds
+ * the locks its agents and tasks take. Without one, this process does.
+ */
+async function cleanUpFromCli(): Promise<CleanupRun> {
+  const url = `http://127.0.0.1:${Number(process.env.GODMODE_PORT || getSettings().server.port)}`;
+  const health = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2_000) })
+    .then((res) => res.json() as Promise<{ name?: string }>)
+    .catch(() => null);
+  if (health?.name !== "godmode-bot") return cleanUp(RECOMMENDED);
+  const res = await fetch(`${url}/api/cleanup`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${getAccessToken()}`, "content-type": "application/json" },
+    body: JSON.stringify({ ids: RECOMMENDED }),
+  });
+  if (!res.ok) throw new Error("Godmode is running — clean up from Settings → Cleanup, or quit Godmode first.");
+  return (await res.json()) as CleanupRun;
+}
+
 async function main() {
   const { values, positionals } = parseCli();
   const cmd = positionals[0] ?? "serve";
@@ -334,7 +362,11 @@ Usage:
   godmode password <new>     Set the web dashboard password
   godmode doctor [--fix]     Check dependencies and permissions (--fix repairs what it can)
   godmode update             Update the installed tools
+  godmode cleanup [--fix]    Show what takes up space (--fix removes what is safe to remove)
   godmode version
+
+Claude Code and other AI tools (they set up agents, automations and tasks in the running Godmode):
+${CONNECT_USAGE}
 
 Runner (this computer works for a Godmode on another one):
 ${RUNNER_USAGE.replace(/^Usage:\n/, "")}`);
@@ -356,6 +388,12 @@ ${RUNNER_USAGE.replace(/^Usage:\n/, "")}`);
       if (code !== 0 || !serving) process.exit(code);
       return;
     }
+    case "mcp":
+    case "tools":
+    case "call":
+      // Nothing but the answer on stdout: an MCP client reads every line of it.
+      setLogLevel("error");
+      process.exit(await runConnectCli(cmd, positionals.slice(1), typeof values["data-dir"] === "string" ? values["data-dir"] : undefined));
     case "token": {
       const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
       openDb(cfg.dbPath);
@@ -398,6 +436,23 @@ ${RUNNER_USAGE.replace(/^Usage:\n/, "")}`);
       else if (!results.length) console.log("Everything is up to date.");
       for (const r of results) console.log(`${r.ok ? "✅" : "❌"} ${r.name.padEnd(22)} ${!r.ok ? r.output.split("\n").pop() : r.upToDate ? "already up to date" : `${r.previous ?? "?"} → ${r.version ?? "?"}`}`);
       process.exit(results.every((r) => r.ok) ? 0 : 1);
+    }
+    case "cleanup": {
+      const cfg = loadConfig(values["data-dir"] ? { dataDir: String(values["data-dir"]) } : {});
+      openDb(cfg.dbPath);
+      if (values.fix) {
+        const run = await cleanUpFromCli();
+        for (const r of run.results) console.log(`${r.ok ? "🧹" : "✋"} ${r.name.padEnd(30)} ${r.ok ? formatBytes(r.freedBytes) : r.output.split("\n")[0]}`);
+        console.log(`Freed ${formatBytes(run.freedBytes)}.`);
+      }
+      const report = await scanCleanup();
+      for (const s of report.storage) console.log(`   ${s.name.padEnd(30)} ${formatBytes(s.bytes)}`);
+      for (const i of report.items.filter((i) => i.count)) {
+        console.log(`${i.recommended ? "🧹" : "🔎"} ${i.name.padEnd(30)} ${formatBytes(i.bytes)}${i.blocked ? ` — ${i.blocked}` : ""}`);
+      }
+      for (const c of report.checks) console.log(`${c.status === "ok" ? "✅" : c.status === "warn" ? "⚠️ " : "❌"} ${c.name.padEnd(30)} ${c.detail}`);
+      if (!values.fix && report.items.some((i) => i.recommended && i.count)) console.log("Run `godmode cleanup --fix` to remove what is marked 🧹.");
+      process.exit(report.checks.some((c) => c.status === "error") ? 1 : 0);
     }
     default:
       console.error(`Unknown command: ${cmd}`);

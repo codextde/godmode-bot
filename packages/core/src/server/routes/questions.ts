@@ -18,7 +18,7 @@ const answerSchema = z
     decision: z.enum(["approve", "decline"]).optional(),
     note: z.string().max(2000).optional(),
     text: z.string().max(20_000).optional(),
-    attachments: z.array(attachmentSchema).max(20).optional(),
+    attachments: z.array(attachmentSchema).optional(),
   })
   .refine((v) => [v.optionId, v.decision, v.text].filter((x) => x !== undefined).length === 1, "Give exactly one of optionId, decision or text")
   .refine((v) => v.note === undefined || v.decision !== undefined, "A note goes with a decision")

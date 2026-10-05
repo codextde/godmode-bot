@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { MessageBlocks } from "./message-blocks";
 import { CopyButton } from "./copy-button";
 import { UserBubble } from "./user-bubble";
-import { AttachmentChip } from "./attachments";
+import { AttachmentList } from "./attachments";
 import { useAllAgents, useBootstrap, useTasks } from "@/lib/hooks";
 import { describeTool } from "./tool-meta";
 import { FollowupMarker, followupBlock } from "./followup";
@@ -143,13 +143,7 @@ export function StartedMessage({ message, delegatedFrom }: { message: Message; d
             {open ? "Show less" : "Show all"}
           </button>
         )}
-        {message.attachments.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {message.attachments.map((a, i) => (
-              <AttachmentChip key={`${a.name}-${i}`} name={a.name} mime={a.mime} size={a.size} />
-            ))}
-          </div>
-        )}
+        {message.attachments.length > 0 && <AttachmentList files={message.attachments} className="mt-2" />}
       </div>
       <div className="mt-1 flex h-6 items-center gap-1.5 pl-1 text-[11px] text-muted-foreground opacity-0 transition group-focus-within/msg:opacity-100 group-hover/msg:opacity-100">
         {body && <CopyButton text={body} label="Copy message" />}

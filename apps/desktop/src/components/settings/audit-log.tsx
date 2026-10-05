@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
-import { ChevronRight, Cpu, RefreshCw, ScrollText, UserRound } from "lucide-react";
+import { ChevronRight, Cpu, RefreshCw, ScrollText, SquareTerminal, UserRound } from "lucide-react";
 import type { AuditEntry } from "@godmode/shared";
 import { AgentAvatar, EmptyState } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,17 @@ function actionTone(action: string): string {
   return "border-border bg-secondary text-secondary-foreground";
 }
 
-function Actor({ actor, agents }: { actor: string; agents: Map<string, { id: string; name: string; avatar: string; color: string }> }) {
+function Actor({ actor, agents, app }: { actor: string; agents: Map<string, { id: string; name: string; avatar: string; color: string }>; app?: string }) {
+  // A connected app (Settings → Claude Code & MCP); its entries carry the name it had.
+  if (actor.startsWith("connector:"))
+    return (
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-secondary text-foreground">
+          <SquareTerminal className="size-3.5" />
+        </span>
+        <span className="truncate">{app ?? "Connected app"}</span>
+      </span>
+    );
   if (actor.startsWith("agent:")) {
     const agent = agents.get(actor.slice(6));
     return agent ? (
@@ -192,7 +202,7 @@ function AuditRow({
           </Tooltip>
         </TableCell>
         <TableCell className="max-w-44">
-          <Actor actor={row.actor} agents={agents} />
+          <Actor actor={row.actor} agents={agents} app={typeof row.details.app === "string" ? row.details.app : undefined} />
         </TableCell>
         <TableCell>
           <Badge variant="outline" className={cn("font-mono text-[11px] font-normal", actionTone(row.action))}>

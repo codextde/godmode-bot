@@ -23,6 +23,11 @@ export interface ChatFiles {
 }
 
 export const CHAT_IMAGE_PATH = "/api/files/image";
+
+/** File names as one short line: "a.png, b.png, c.png and 12 more". */
+export function fileNameSummary(names: string[], max = 3): string {
+  return names.length > max + 1 ? `${names.slice(0, max).join(", ")} and ${names.length - max} more` : names.join(", ");
+}
 export const MAX_CHAT_FILE_REFS = 80;
 // Paths stand in prose: a longer line is data, and a message is only read this far.
 const MAX_LINE = 4000;

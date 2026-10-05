@@ -88,9 +88,14 @@ export function useAttention() {
   return useQuery({ queryKey: qk.attention, queryFn: api.attention, staleTime: 2_000 });
 }
 
-/** What the team did since `since` (null = not asked). */
-export function useAway(since: string | null) {
-  return useQuery({ queryKey: qk.away(since ?? ""), queryFn: () => api.away(since!), enabled: !!since, staleTime: 60_000 });
+/** What the team did while the human was away (null = not asked). */
+export function useAway(away: { since: string; until: string } | null) {
+  return useQuery({
+    queryKey: qk.away(away?.since ?? "", away?.until ?? ""),
+    queryFn: () => api.away(away!.since, away!.until),
+    enabled: !!away,
+    staleTime: 60_000,
+  });
 }
 
 export function useBudgets() {
@@ -110,6 +115,13 @@ export function useTasks(workspaceId?: ScopeFilter) {
   const scope = useUi((s) => s.workspace);
   const ws = workspaceId ?? scope;
   return useQuery({ queryKey: qk.taskList(ws), queryFn: () => api.tasks.list({ workspaceId: ws }) });
+}
+
+/** Goals of the sidebar scope (a workspace sees its own and the global ones). */
+export function useGoals(workspaceId?: ScopeFilter) {
+  const scope = useUi((s) => s.workspace);
+  const ws = workspaceId ?? scope;
+  return useQuery({ queryKey: qk.goalList(ws), queryFn: () => api.goals.list({ workspaceId: ws }) });
 }
 
 /** A ticket's timeline, kept current by `task.event`. */
@@ -230,4 +242,8 @@ export function useRunners() {
 
 export function useAgentTemplates() {
   return useQuery({ queryKey: qk.agentTemplates, queryFn: api.agents.templates, staleTime: 5 * 60_000 });
+}
+
+export function useTeamTemplates() {
+  return useQuery({ queryKey: qk.teamTemplates, queryFn: api.agents.teams, staleTime: 5 * 60_000 });
 }

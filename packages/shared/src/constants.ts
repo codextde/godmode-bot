@@ -103,5 +103,8 @@ export const SSH_MCP_NAME = "ssh";
 /** Longest global, workspace or chat instructions the API accepts. */
 export const MAX_INSTRUCTIONS_LENGTH = 20_000;
 
+/** What the files of one message may add up to, however many there are: they travel in one request. */
+export const MAX_MESSAGE_ATTACHMENT_BYTES = 250 * 1024 * 1024;
+
 /** Placeholder the API returns/accepts for stored secret values (MCP env/headers): sending it back keeps the stored value. */
 export const SECRET_MASK = "********";

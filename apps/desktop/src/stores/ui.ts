@@ -6,6 +6,8 @@ interface UiState {
   /** Workspace scope selected in the sidebar: "all" | "global" | workspace id */
   workspace: string;
   commandOpen: boolean;
+  /** The keyboard shortcuts list is open. */
+  shortcutsOpen: boolean;
   voiceMode: boolean;
   sidebarCollapsed: boolean;
   /** Show the live browser preview next to chats while the agent's browser is open. */
@@ -20,10 +22,11 @@ interface UiState {
   collapsedColumns: string[];
   /** The Agents page shows cards or the org chart. */
   agentsView: "grid" | "chart";
-  /** The human came back after a while: since when they were away (Home sums up what happened). Not kept. */
-  awaySince: string | null;
+  /** The human came back after a while: from when to when they were away (Home sums up what happened). Not kept. */
+  away: { since: string; until: string } | null;
   setWorkspace: (id: string) => void;
   setCommandOpen: (open: boolean) => void;
+  setShortcutsOpen: (open: boolean) => void;
   setVoiceMode: (on: boolean) => void;
   setSidebarCollapsed: (v: boolean) => void;
   setBrowserPanel: (v: boolean) => void;
@@ -32,7 +35,7 @@ interface UiState {
   skipClaudeVersion: (version: string | null) => void;
   toggleColumn: (status: string) => void;
   setAgentsView: (v: "grid" | "chart") => void;
-  setAwaySince: (since: string | null) => void;
+  setAway: (away: { since: string; until: string } | null) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -40,6 +43,7 @@ export const useUi = create<UiState>()(
     (set) => ({
       workspace: "all",
       commandOpen: false,
+      shortcutsOpen: false,
       voiceMode: false,
       sidebarCollapsed: false,
       browserPanel: true,
@@ -48,9 +52,10 @@ export const useUi = create<UiState>()(
       skippedClaudeVersion: null,
       collapsedColumns: ["cancelled"],
       agentsView: "grid",
-      awaySince: null,
+      away: null,
       setWorkspace: (workspace) => set({ workspace }),
       setCommandOpen: (commandOpen) => set({ commandOpen }),
+      setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
       setVoiceMode: (voiceMode) => set({ voiceMode }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setBrowserPanel: (browserPanel) => set({ browserPanel }),
@@ -62,7 +67,7 @@ export const useUi = create<UiState>()(
           collapsedColumns: s.collapsedColumns.includes(status) ? s.collapsedColumns.filter((c) => c !== status) : [...s.collapsedColumns, status],
         })),
       setAgentsView: (agentsView) => set({ agentsView }),
-      setAwaySince: (awaySince) => set({ awaySince }),
+      setAway: (away) => set({ away }),
     }),
     {
       // Per computer in cloud mode: the selected workspace id belongs to one computer.

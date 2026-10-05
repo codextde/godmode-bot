@@ -67,9 +67,12 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   mods: [qk.mods],
   // Bot status, access requests and chats (the sidebar badge counts requests).
   messaging: [qk.messaging, qk.bootstrap],
-  tasks: [qk.tasks],
+  tasks: [qk.tasks, qk.goals],
+  goals: [qk.goals],
   // A phone was paired, removed, or connected.
   mobile: [qk.mobile],
+  // An app was connected, removed, or called a tool.
+  connectors: [qk.connectors],
   // A runner was paired, removed, or its chats changed.
   runners: [qk.runners],
   // Cloud link state, plan or billing changed (linking approved, link up or down, notice from the cloud).
@@ -77,8 +80,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
   followups: [qk.followups],
-  // The background upkeep repaired or updated a tool: system check, permissions, updates.
-  system: [qk.doctor],
+  // The background upkeep repaired, updated or cleaned up: system check, permissions, updates, cleanup.
+  system: [qk.doctor, qk.cleanup],
 };
 
 export function startRealtime(queryClient: QueryClient) {
@@ -242,6 +245,8 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "task.updated":
       upsertTask(qc, event.task);
+      // Goals count their tickets.
+      refreshSoon(qc, qk.goals);
       // Tickets to review and blocked ones are on "Needs you".
       refreshSoon(qc, qk.bootstrap);
       break;

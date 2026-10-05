@@ -59,7 +59,7 @@ const sshServerIds = z.array(z.string().trim().min(1).max(100)).max(50).optional
 
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
-  attachments: z.array(attachmentSchema).max(20).optional(),
+  attachments: z.array(attachmentSchema).optional(),
   voice: z.boolean().optional(),
   queue: z.boolean().optional(),
   queueId: z
@@ -121,7 +121,7 @@ export function registerChatRoutes(app: Hono): void {
   app.get("/api/attention", (c) => c.json(listAttention()));
 
   // What the team did since the human was last here (Home's "while you were away").
-  app.get("/api/away", (c) => c.json(awaySummary(c.req.query("since") ?? "")));
+  app.get("/api/away", (c) => c.json(awaySummary(c.req.query("since") ?? "", c.req.query("until") || undefined)));
 
   app.patch("/api/conversations/:id", async (c) => {
     const patch = await body(

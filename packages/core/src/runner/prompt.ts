@@ -41,6 +41,8 @@ export interface PromptContext {
   memory?: { text: string; truncated: boolean } | null;
   /** The run may schedule follow-ups (followup_schedule). */
   followups?: boolean;
+  /** No raw secrets in this chat, whatever the agent may read: its task came from an agent that could not read them. */
+  fillOnly?: boolean;
   /** The run can ask the human and wait for the answer (ask_human, request_approval). */
   asking?: boolean;
   /** Another agent handed this task over: its questions go to that agent, not to the human. */
@@ -244,7 +246,8 @@ No browser tools are attached to this run. If a task needs a website, say so in 
   if (ctx.sources?.items.length) out.push(sourcesSection(ctx.sources, human, !!ctx.vm));
   if (ctx.vm) out.push(vmSection(ctx.vm, human, settings.browser.enabled && agent.browser.enabled));
   if (ctx.ssh?.length) out.push(sshSection(ctx.ssh, human));
-  if (ctx.computer) out.push(computerSection(ctx.computer, human, perms.secretAccess === "reveal"));
+  const rawSecrets = perms.secretAccess === "reveal" && !ctx.fillOnly;
+  if (ctx.computer) out.push(computerSection(ctx.computer, human, rawSecrets));
 
   out.push(`### Logging in to websites
 Never ask ${human} for a password and never type a password or 2FA code yourself — Godmode fills secrets directly into the page so you never see them.
@@ -256,9 +259,12 @@ Never ask ${human} for a password and never type a password or 2FA code yourself
 6. Take a snapshot/screenshot to confirm you are logged in.
 If there is no saved login for the site, the login is rejected, a 2FA code is needed but none is linked, or the account does not exist, call \`report_missing_login({ service, url, kind, reason })\` (kind: "missing_credential" | "invalid_credential" | "missing_totp" | "missing_account" | "other"). Then continue with any other part of the task you can still do, and mention the missing login in your final summary. Do not retry a rejected password more than once (accounts get locked).`);
 
-  if (perms.secretAccess === "reveal") {
+  if (rawSecrets) {
     out.push(`### Raw secrets
 You may read raw secrets with \`vault_get_login\` / \`vault_get_totp\` — only when a secret must be passed to an API or CLI tool that cannot be filled in the browser. Every reveal is audited. Never write secrets into files, memory, commits or your answer.`);
+  } else if (perms.secretAccess === "reveal") {
+    out.push(`### Raw secrets
+Not in this chat: its task came from another agent that may not read raw secrets, so \`vault_get_login\` / \`vault_get_totp\` are off here. Godmode still fills logins and 2FA codes into pages for you. If part of the task needs a raw secret (an API or CLI that cannot be filled in the browser), do the rest and say so in your final summary — ${human} can give you that part themselves.`);
   }
 
   out.push(teamSection(ctx, human));

@@ -19,7 +19,7 @@ import {
   UserRound,
 } from "lucide-react";
 import type { Agent, Task, TaskEvent } from "@godmode/shared";
-import { taskEventText } from "@godmode/shared";
+import { fileNameSummary, taskEventText } from "@godmode/shared";
 import { Markdown } from "@/components/chat/markdown";
 import { ChatFilesScope } from "@/components/chat/local-files";
 import { followupWhen } from "@/components/chat/followup";
@@ -168,7 +168,7 @@ function EventRow({ event: e, task }: { event: TaskEvent; task: Task }) {
     );
   }
 
-  const bodied = ["feedback", "note", "asked", "answered", "blocked", "waiting"].includes(e.kind) || (e.kind === "status" && !!e.body);
+  const bodied = ["feedback", "note", "asked", "answered", "blocked", "waiting"].includes(e.kind) || ((e.kind === "status" || e.kind === "started") && !!e.body);
   return (
     <Row
       icon={Icon}
@@ -178,7 +178,7 @@ function EventRow({ event: e, task }: { event: TaskEvent; task: Task }) {
         bodied && e.body ? (
           <div className={cn(quiet, "w-fit max-w-full", e.kind === "waiting" && "line-clamp-3")}>
             <Markdown className="text-[13px]">{e.body}</Markdown>
-            {e.kind === "feedback" && e.data.files.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Files: {e.data.files.join(", ")}</p>}
+            {e.kind === "feedback" && e.data.files.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Files: {fileNameSummary(e.data.files)}</p>}
           </div>
         ) : null
       }

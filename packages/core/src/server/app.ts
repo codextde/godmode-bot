@@ -31,6 +31,7 @@ import { handleWebhook } from "../automations/webhooks";
 import { registerMessagingRoutes } from "./routes/messaging";
 import { handleMessagingHook } from "../messaging/service";
 import { registerMobileRoutes } from "./routes/mobile";
+import { registerConnectorRoutes } from "./routes/connectors";
 import { registerRunnerRoutes } from "./routes/runners";
 import { registerLinkRoutes } from "./routes/link";
 import { remoteRouting } from "../remote/routing";
@@ -128,7 +129,7 @@ export function createApp() {
   app.get("/api/health", (c) => c.json({ ok: true, name: "godmode-bot" }));
   registerAuthRoutes(app); // handles its own auth for protected auth endpoints
 
-  // MCP gateway for agent runs (authenticated by per-run tokens, not user auth)
+  // MCP gateway for agent runs and connected apps (authenticated by per-run tokens and app keys, not user auth)
   registerMcpRoutes(app);
 
   // Automation webhooks (the secret token in the path is the credential)
@@ -167,6 +168,7 @@ export function createApp() {
   registerFileRoutes(app);
   registerLogRoutes(app);
   registerMobileRoutes(app);
+  registerConnectorRoutes(app);
   registerRunnerRoutes(app);
   registerLinkRoutes(app);
   registerCloudRoutes(app);

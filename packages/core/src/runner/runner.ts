@@ -1673,8 +1673,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     instructions: string | null;
     instructions_digest: string | null;
     memory_digest: string | null;
+    secret_access: string | null;
   }>(
-    "SELECT claude_session_id, claude_session_cost_usd, working_directory, model, effort, ultracode, instructions, instructions_digest, memory_digest FROM conversations WHERE id = ?",
+    "SELECT claude_session_id, claude_session_cost_usd, working_directory, model, effort, ultracode, instructions, instructions_digest, memory_digest, secret_access FROM conversations WHERE id = ?",
     job.conversationId,
   );
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
@@ -1871,6 +1872,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath) : null,
         followups: job.trigger !== "check" && job.trigger !== "delegation",
+        fillOnly: conv.secret_access === "fill",
         // Delegated work reports to the run that handed it over; checks only observe.
         asking: job.trigger !== "check" && !job.parentRunId,
         delegated: !!job.parentRunId,

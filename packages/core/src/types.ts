@@ -9,7 +9,7 @@ export interface McpConfigFile {
   mcpServers: Record<string, McpServerJson>;
 }
 
-/** Identity of a caller of the Godmode MCP gateway (resolved from the per-run bearer token). */
+/** Identity of a caller of the Godmode MCP gateway (resolved from the per-run bearer token, or a connected app's key). */
 export interface RunContext {
   runId: string;
   agentId: string;
@@ -17,4 +17,6 @@ export interface RunContext {
   workspaceId: string | null;
   /** depth of delegation chain (0 = top level) */
   depth: number;
+  /** Set when a connected app calls instead of a run (connect/connectors.ts): `runId` and `conversationId` are "". */
+  connector?: { id: string; name: string; access: "manage" | "read" };
 }

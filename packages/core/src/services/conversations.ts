@@ -22,7 +22,7 @@ import type {
   RunTrigger,
 } from "@godmode/shared";
 import type { ComputerTarget, ConversationPatch, ConversationWithMessages, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
-import { computerTargetLabel } from "@godmode/shared";
+import { computerTargetLabel, MAX_MESSAGE_ATTACHMENT_BYTES } from "@godmode/shared";
 import { all, bool, get, insert, int, run as sql, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -291,6 +291,8 @@ export function createConversation(
     workspaceId?: string | null;
     sshServerIds?: string[];
     instructions?: string;
+    /** No raw secrets in this chat, whatever its agent may read (see `chatFillOnly`). */
+    fillOnly?: boolean;
   } & ModelChoice,
 ): Conversation {
   const agent = getAgent(input.agentId); // 404 if the agent doesn't exist
@@ -315,6 +317,7 @@ export function createConversation(
     browser_profile_id: browserProfileId,
     workspace_id: normalizeWorkspaceId(agent, input.workspaceId),
     ssh_server_ids: JSON.stringify(sshServerIds),
+    secret_access: input.fillOnly ? "fill" : null,
     instructions: input.instructions?.trim() ?? "",
     pinned: 0,
     archived: 0,
@@ -326,6 +329,16 @@ export function createConversation(
   bus.emit({ type: "conversation.updated", conversation });
   if (vmId) assignmentsChanged();
   return conversation;
+}
+
+/**
+ * The chat works without raw secrets even when its agent may read them: its task was handed over by an agent that
+ * could not read them itself. It stays that way for everything that happens in the chat later. A chat that is gone
+ * counts as fill-only too.
+ */
+export function chatFillOnly(conversationId: string): boolean {
+  const row = get<{ secret_access: string | null }>("SELECT secret_access FROM conversations WHERE id = ?", conversationId);
+  return !row || row.secret_access === "fill";
 }
 
 export function getConversation(id: string): ConversationWithMessages {
@@ -348,9 +361,9 @@ export function listConversations(
     where.push("(c.workspace_id = ? OR c.agent_id IN (SELECT id FROM agents WHERE workspace_id = ?))");
     params.push(opts.workspaceId, opts.workspaceId);
   }
-  const search = opts.search?.trim();
-  if (search) {
-    const like = `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  // Every word, in the title or in a message ("invoice march" finds "March invoice review"); at most six words.
+  for (const word of (opts.search ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 6)) {
+    const like = `%${word.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
     where.push(
       "(c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages m2 WHERE m2.conversation_id = c.id AND m2.content LIKE ? ESCAPE '\\'))",
     );
@@ -581,15 +594,26 @@ function decodeBase64(data: string): Buffer {
 
 /** Write uploads into `<repo>/workspace/uploads/<yyyy-mm-dd>/`; returns repo-relative paths (posix). */
 export function saveAttachments(agent: Agent, files: NonNullable<SendMessageInput["attachments"]>): Attachment[] {
-  const decoded = files.map((f) => ({ name: safeFileName(f.name), mime: f.mime || "application/octet-stream", bytes: decodeBase64(f.data) }));
+  let total = 0;
+  const decoded = files.map((f) => {
+    const bytes = decodeBase64(f.data);
+    if ((total += bytes.length) > MAX_MESSAGE_ATTACHMENT_BYTES) throw badRequest(`Attachments too large together (max ${MAX_MESSAGE_ATTACHMENT_BYTES / 1024 / 1024} MB)`);
+    return { name: safeFileName(f.name), mime: f.mime || "application/octet-stream", bytes };
+  });
   const day = localDate();
   const dir = join(agent.repoPath, "workspace", "uploads", day);
   mkdirSync(dir, { recursive: true });
+  // Where the search for a free name stopped, per name: many files of one name don't start it over each time.
+  // Lower case, as "A.png" and "a.png" are one file on most disks.
+  const tried = new Map<string, number>();
   return decoded.map((f) => {
     const ext = extname(f.name);
     const stem = f.name.slice(0, f.name.length - ext.length);
     let name = f.name;
-    for (let i = 1; existsSync(join(dir, name)); i++) name = `${stem}-${i}${ext}`;
+    const key = f.name.toLowerCase();
+    let i = tried.get(key) ?? 1;
+    for (; existsSync(join(dir, name)); i++) name = `${stem}-${i}${ext}`;
+    tried.set(key, i);
     writeFileSync(join(dir, name), f.bytes);
     return { name, mime: f.mime, path: `workspace/uploads/${day}/${name}`, size: f.bytes.length };
   });

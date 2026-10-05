@@ -1,11 +1,12 @@
 /**
  * Tools of the Godmode MCP gateway. Every call runs as the agent that owns the run token (RunContext):
  * vault fills (the model never sees secrets), missing-login reports, notifications, peer agents and
- * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management.
+ * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management. A connected app
+ * (connect/connectors.ts) calls as the built-in agent, and only the tools in CONNECTOR_TOOLS.
  */
 import { join } from "node:path";
 import { z } from "zod";
-import type { Agent, ApiTool, Credential, MissingLoginKind, Mod, Routine, RoutineTrigger, Run, Task, Vm } from "@godmode/shared";
+import type { Agent, ApiTool, ConnectorAccess, ConnectorTool, Credential, MissingLoginKind, Mod, Routine, RoutineTrigger, Run, Task, Vm } from "@godmode/shared";
 import {
   AGENT_COLORS,
   CHARACTER_BODIES,
@@ -29,7 +30,9 @@ import {
   isOverdue,
   isWaiting,
   taskEventText,
+  ticketList,
   waitsForAnswer,
+  waitsForSubtasks,
 } from "@godmode/shared";
 import type { RunContext } from "../types";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
@@ -53,7 +56,7 @@ import { reportDream } from "../memory/dreaming";
 import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/composio";
 import { listTriggerTypes } from "../integrations/composioTriggers";
 import { listWorkspaces } from "../services/workspaces";
-import { createAgent, deleteAgent, getAgent, listAgents, peersFor, updateAgent } from "../agents/service";
+import { createAgent, deleteAgent, getAgent, listAgents, peersFor, teamOf, updateAgent } from "../agents/service";
 import { addCredentialDomain, credentialsForAgent, findCredentialsForAgent, getCredential, listCredentials, markCredentialUsed, revealForAgent } from "../vault/credentials";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
 import { nameGuessMatchesHost } from "../vault/match";
@@ -67,18 +70,20 @@ import { get } from "../db";
 import { config } from "../config";
 import { fixRunner, runnerExec, runnerHealth } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
-import { createConversation, sendMessage } from "../services/conversations";
+import { chatFillOnly, createConversation, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
 import { spendReport } from "../services/spend";
 import { budgetOverview, budgetSentence, exhaustedBudget } from "../services/budgets";
 import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun, runExempt } from "../runner/runner";
+import { listGoals } from "../tasks/goals";
 import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow } from "../runner/prompt";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { askQuestion, listQuestions } from "../services/questions";
 import { createMod, findMod, listMods, updateMod } from "../mods/service";
+import { noteConnectorCall } from "../connect/connectors";
 
 const log = logger("mcp");
 
@@ -130,6 +135,8 @@ const toolsRunner = (ctx: RunContext): string | null =>
   get<{ runner_tools_id: string | null }>("SELECT runner_tools_id FROM conversations WHERE id = ?", ctx.conversationId)?.runner_tools_id ?? null;
 const canDelegate = (a: Agent) => a.permissions.allowDelegation || a.permissions.canManageAgents;
 const canReveal = (a: Agent) => a.permissions.secretAccess === "reveal";
+/** Raw secrets in this run: the agent may read them, and its chat's task didn't come from an agent that may not. */
+const revealsHere = (a: Agent, ctx: RunContext) => canReveal(a) && !chatFillOnly(ctx.conversationId);
 
 const json = (v: unknown) => JSON.stringify(v, null, 2);
 
@@ -198,7 +205,7 @@ function delegationHeader(from: Agent, to: Agent): string {
  * A lead the caller may not set: one it couldn't hand work to itself (it reads secrets in plain text and the caller
  * doesn't). Its reports are introduced to it as its team, so that would put the caller's agent next to it.
  */
-function protectedLeadRefusal(agent: Agent, leadId: string | null | undefined): string | null {
+function protectedLeadRefusal(agent: Agent, ctx: RunContext, leadId: string | null | undefined): string | null {
   if (!leadId) return null;
   let lead: Agent;
   try {
@@ -206,7 +213,7 @@ function protectedLeadRefusal(agent: Agent, leadId: string | null | undefined): 
   } catch {
     return null;
   }
-  return lead.id === agent.id ? null : revealTargetRefusal(agent, lead, "make it a lead");
+  return lead.id === agent.id ? null : revealTargetRefusal(agent, ctx, lead, "make it a lead");
 }
 
 /** Agents the caller may see/delegate to. */
@@ -238,20 +245,30 @@ function offHostRefusal(ctx: RunContext, target: Agent, what: string): string | 
   return `This task runs in a virtual machine and is kept off the human's computer, and ${target.name} works on the computer — only the human can ${what}.`;
 }
 
-/**
- * A reveal-mode agent gets plaintext secrets, so it only takes work (tasks, schedules, instructions) from a
- * caller that could reveal them itself — and never from another workspace. Returns the refusal, or null.
- */
-function revealTargetRefusal(caller: Agent, target: Agent, what: string): string | null {
-  // An agent that may control this computer on its own only takes work from callers that may too.
+/** An agent that may control this computer on its own only takes work from callers that may too. Returns the refusal, or null. */
+function computerTargetRefusal(caller: Agent, target: Agent, what: string): string | null {
   if (target.computer.enabled && !caller.computer.enabled && target.id !== caller.id) {
     return `${target.name} can control this computer on its own; only the human can ${what}.`;
   }
-  if (target.permissions.secretAccess !== "reveal") return null;
-  if (caller.permissions.secretAccess !== "reveal") return `Target agent can reveal secrets; only the human can ${what} from here.`;
-  if (target.workspaceId !== null && target.workspaceId !== caller.workspaceId) {
-    return `${target.name} can reveal secrets and belongs to another workspace; only the human can ${what}.`;
-  }
+  return null;
+}
+
+/** The caller's run reads raw secrets itself, and `target` is global or in its workspace (login allow-lists are not compared). */
+function revealsFor(caller: Agent, ctx: RunContext, target: Agent): boolean {
+  return revealsHere(caller, ctx) && (target.workspaceId === null || target.workspaceId === caller.workspaceId);
+}
+
+/**
+ * A reveal-mode agent gets plaintext secrets, so what stays with it or starts it later (schedules, board tasks,
+ * instructions, its VM) only comes from a caller whose run reveals secrets itself — and never from another
+ * workspace. That holds for the agent itself too while it works in a fill-only chat. Returns the refusal, or null.
+ * A delegated task is not refused: it runs without raw secrets (`agent_delegate`).
+ */
+function revealTargetRefusal(caller: Agent, ctx: RunContext, target: Agent, what: string): string | null {
+  const computer = computerTargetRefusal(caller, target, what);
+  if (computer || !canReveal(target)) return computer;
+  if (!revealsHere(caller, ctx)) return `Target agent can reveal secrets; only the human can ${what} from here.`;
+  if (!revealsFor(caller, ctx, target)) return `${target.name} can reveal secrets and belongs to another workspace; only the human can ${what}.`;
   return null;
 }
 
@@ -570,6 +587,49 @@ function isDreamRun(ctx: RunContext): boolean {
 
 const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report"]);
 
+/**
+ * What an app outside Godmode may call, and the access its key needs. Nothing that needs a run, a chat or a browser,
+ * and nothing that touches a secret: an app sets the team up and looks at its work.
+ */
+const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
+  ["agents_list", "read"],
+  ["agent_get", "read"],
+  ["routine_list", "read"],
+  ["automation_triggers_list", "read"],
+  ["automation_events_list", "read"],
+  ["tasks_list", "read"],
+  ["task_get", "read"],
+  ["runs_list", "read"],
+  ["spend_overview", "read"],
+  ["workspaces_list", "read"],
+  ["logins_overview", "read"],
+  ["missing_logins_list", "read"],
+  ["vms_list", "read"],
+  ["agent_create", "manage"],
+  ["agent_update", "manage"],
+  ["agent_delete", "manage"],
+  ["routine_create", "manage"],
+  ["routine_update", "manage"],
+  ["routine_run", "manage"],
+  ["routine_delete", "manage"],
+  ["task_create", "manage"],
+  ["task_update", "manage"],
+  ["task_message", "manage"],
+  ["task_note", "manage"],
+  ["vm_create", "manage"],
+  ["vm_assign", "manage"],
+  ["vm_power", "manage"],
+]);
+
+/** The tool is closed to the caller because it is a connected app: not on the list, or its key only reads. */
+function connectorRefusal(ctx: RunContext, name: string): string | null {
+  if (!ctx.connector) return null;
+  const needs = CONNECTOR_TOOLS.get(name);
+  if (!needs) return `The tool ${name} is not available to connected apps.`;
+  if (needs === "manage" && ctx.connector.access !== "manage") return `${ctx.connector.name} may only look: ${name} changes Godmode. The human can give it full access in Settings → Claude Code & MCP.`;
+  return null;
+}
+
 /** The run works on a board task (its conversation is the task's). */
 function isTaskRun(ctx: RunContext): boolean {
   try {
@@ -616,9 +676,30 @@ function taskSummary(t: Task, names: Map<string, string>, agentNames: Map<string
     ...(t.blockedKind ? { blockedKind: t.blockedKind } : {}),
     ...(isWaiting(t) && t.followup ? { waitingUntil: t.followup.dueAt } : {}),
     ...(waitsForAnswer(t) ? { waitingForHuman: true } : {}),
+    ...(t.goalId ? { goalId: t.goalId } : {}),
+    ...(t.waitsFor.length ? { waitsFor: t.waitsFor.map((w) => `#${w.number}${w.finished ? " (finished)" : ""}`) } : {}),
+    ...(t.parentNumber ? { partOf: `#${t.parentNumber}` } : {}),
+    ...(t.subtasks ? { parts: { total: t.subtasks.total, open: t.subtasks.open } } : {}),
+    ...(waitsForSubtasks(t) ? { waitingForParts: true } : {}),
     ...(t.summary ? { hasResult: true } : {}),
     description: snippet(t.description, 400),
   };
+}
+
+/** The ticket this run works on, when it has parts: its agent leads them (reads them, sends them back). */
+function ledTicket(ctx: RunContext): Task | null {
+  try {
+    const t = taskForConversation(ctx.conversationId);
+    return t?.subtasks ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A part of the ticket this run works on (a lead may read it and send it back, manager or not). */
+function ownPart(ctx: RunContext, t: Task): boolean {
+  const led = ledTicket(ctx);
+  return !!led && t.parentId === led.id;
 }
 
 /**
@@ -631,7 +712,16 @@ function taskAssignRefusal(caller: Agent, ctx: RunContext, agentId: string | nul
   if (inTaskChain(ctx) && target.permissions.canManageAgents) {
     return `${target.id === caller.id ? "You are" : `${target.name} is`} working on tasks already — only the human can start another manager from here. Assign a specialist agent, or leave it in the backlog.`;
   }
-  return offHostRefusal(ctx, target, "give it tasks") ?? revealTargetRefusal(caller, target, "give it tasks");
+  return offHostRefusal(ctx, target, "give it tasks") ?? revealTargetRefusal(caller, ctx, target, "give it tasks");
+}
+
+/** Rewriting a task that belongs to an agent the caller couldn't hand work to (it reads secrets, or controls this computer). */
+function taskEditRefusal(caller: Agent, ctx: RunContext, agentId: string): string | null {
+  try {
+    return revealTargetRefusal(caller, ctx, getAgent(agentId), "change its tasks");
+  } catch {
+    return null; // the agent is gone
+  }
 }
 
 function localTimezone(): string {
@@ -760,7 +850,7 @@ const TOOLS: ToolDef[] = [
     description:
       "Reveal the username and password of a saved login. Only for secrets that must go to an API/CLI and cannot be filled in the browser — every call is audited. Never write the values into files, memory or your answer.",
     schema: z.object({ credentialId: z.string() }),
-    when: canReveal,
+    when: revealsHere,
     run: ({ credentialId }, { agent, ctx }) => {
       const secret = revealForAgent(agent, credentialId);
       audit(`agent:${agent.id}`, "credential.reveal", credentialId, { field: "username+password", runId: ctx.runId });
@@ -773,7 +863,7 @@ const TOOLS: ToolDef[] = [
     name: "vault_get_totp",
     description: "Reveal the current 2FA code of an entry (or of a login's linked 2FA). Audited. Prefer vault_fill_totp for websites.",
     schema: z.object({ totpId: z.string().optional(), credentialId: z.string().optional() }),
-    when: canReveal,
+    when: revealsHere,
     run: ({ totpId, credentialId }, { agent, ctx }) => {
       let id = totpId ?? null;
       if (!id && credentialId) {
@@ -997,15 +1087,16 @@ const TOOLS: ToolDef[] = [
       "List the other Godmode agents you can work with: id, name, role (job title), who they report to, description, workspace and status. `relation` marks your lead and the agents that report to you.",
     schema: z.object({}),
     when: canDelegate,
-    run: (_args, { agent }) => {
+    run: (_args, { agent, ctx }) => {
       const names = workspaceNames();
       const team = listAgents();
-      const agents = reachableAgents(agent);
+      // A connected app is nobody's teammate: it sees the whole team, the built-in agent included.
+      const agents = ctx.connector ? [agent, ...reachableAgents(agent)] : reachableAgents(agent);
       const lead = leadOf(agent, team);
       return agents.length
         ? json(
             agents.map((a) => {
-              const relation = a.id === lead?.id ? "your lead" : leadOf(a, team)?.id === agent.id ? "reports to you" : null;
+              const relation = ctx.connector ? null : a.id === lead?.id ? "your lead" : leadOf(a, team)?.id === agent.id ? "reports to you" : null;
               return { ...agentSummary(a, names, team), ...(relation ? { relation } : {}) };
             }),
           )
@@ -1059,7 +1150,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "agent_delegate",
     description:
-      "Hand a task to another agent — pick the one whose role fits. The task must be self-contained (goal, inputs, expected output); the agent is told it comes from you and its final answer comes back to you. wait:true (default) waits for the result and returns it; wait:false returns immediately with a run id you can check with delegation_status.",
+      "Hand a task to another agent — pick the one whose role fits. The task must be self-contained (goal, inputs, expected output); the agent is told it comes from you and its final answer comes back to you. wait:true (default) waits for the result and returns it; wait:false returns immediately with a run id you can check with delegation_status. An agent that can read raw secrets works on your task without them unless you can read them too (Godmode still fills its logins into pages).",
     schema: z.object({
       agentId: z.string(),
       task: z.string().min(1),
@@ -1074,12 +1165,14 @@ const TOOLS: ToolDef[] = [
       }
       const target = requireReachable(agent, agentId);
       if (!target.enabled) return fail(`${target.name} is disabled.`);
-      // Orchestrators too: only peers (respects delegateTo), and reveal-mode agents only for reveal-mode callers.
+      // Orchestrators too: only peers (respects delegateTo).
       if (!peersFor(agent).some((p) => p.id === target.id)) {
         return fail(`Agent ${agentId} is not one of your peers (use agents_list to see who you can work with).`);
       }
-      const refusal = revealTargetRefusal(agent, target, "hand it tasks");
+      const refusal = computerTargetRefusal(agent, target, "hand it tasks");
       if (refusal) return fail(refusal);
+      // A caller that reads no raw secrets itself gets none through the task: its chat is fill-only, for good.
+      const fillOnly = !revealsFor(agent, ctx, target);
       // Unattended work doesn't spend past a used-up monthly budget by handing work on (a chat the human leads may).
       const stop = runExempt(ctx.runId) ? null : exhaustedBudget(target);
       if (stop) {
@@ -1096,7 +1189,7 @@ const TOOLS: ToolDef[] = [
       const inherited = target.browser.profileId ? null : runChatBrowserProfile(ctx.runId);
       const reach = target.workspaceId ?? workspaceId;
       const browserProfileId = inherited && (!inherited.workspaceId || inherited.workspaceId === reach) ? inherited.id : null;
-      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId, workspaceId });
+      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId, workspaceId, fillOnly });
       // The chat shows the bare task under "From <agent>"; Claude also learns who asked and where its answer goes.
       const { run } = await sendMessage(conversation.id, {
         content: task,
@@ -1152,7 +1245,7 @@ const TOOLS: ToolDef[] = [
     when: managesSetup,
     run: async ({ routine, ...input }, { agent, ctx }) => {
       assertAgentPatchAllowed(null, input);
-      const leadRefusal = protectedLeadRefusal(agent, input.reportsTo);
+      const leadRefusal = protectedLeadRefusal(agent, ctx, input.reportsTo);
       if (leadRefusal) return fail(leadRefusal);
       // Secret access, management rights and login allow-lists stay human-only (enforced by createAgent for agent actors).
       // Agents created from a VM work in that VM.
@@ -1177,8 +1270,8 @@ const TOOLS: ToolDef[] = [
       const target = getAgent(agentId);
       const refusal =
         offHostRefusal(ctx, target, "change its settings") ??
-        (target.id === agent.id ? null : revealTargetRefusal(agent, target, "change its settings")) ??
-        protectedLeadRefusal(agent, patch.reportsTo);
+        revealTargetRefusal(agent, ctx, target, "change its settings") ??
+        protectedLeadRefusal(agent, ctx, patch.reportsTo);
       if (refusal) return fail(refusal);
       assertAgentPatchAllowed(target, patch);
       const updated = await updateAgent(agentId, patch, `agent:${agent.id}`);
@@ -1193,7 +1286,7 @@ const TOOLS: ToolDef[] = [
     schema: z.object({ agentId: z.string() }),
     when: managesSetup,
     run: async ({ agentId }, { agent, ctx }) => {
-      if (agentId === agent.id) return fail("You cannot delete yourself.");
+      if (agentId === agent.id && !ctx.connector) return fail("You cannot delete yourself.");
       const target = getAgent(agentId);
       if (target.isDefault) return fail("The default Godmode agent cannot be deleted.");
       const offHost = offHostRefusal(ctx, target, "delete it");
@@ -1277,7 +1370,7 @@ const TOOLS: ToolDef[] = [
     when: managesSetup,
     run: async ({ timezone, trigger, ...input }, { agent, ctx }) => {
       const target = getAgent(input.agentId);
-      const refusal = offHostRefusal(ctx, target, "schedule its tasks") ?? revealTargetRefusal(agent, target, "schedule its tasks");
+      const refusal = offHostRefusal(ctx, target, "schedule its tasks") ?? revealTargetRefusal(agent, ctx, target, "schedule its tasks");
       if (refusal) return fail(refusal);
       const resolved = await resolveAppTrigger(trigger as RoutineTrigger | undefined, input.agentId);
       const r = createRoutine({ ...input, trigger: resolved, timezone: timezone ?? localTimezone() });
@@ -1304,7 +1397,7 @@ const TOOLS: ToolDef[] = [
     run: async ({ routineId, trigger, ...patch }, { agent, ctx }) => {
       const current = getRoutine(routineId);
       const target = getAgent(current.agentId);
-      const refusal = offHostRefusal(ctx, target, "change its automations") ?? revealTargetRefusal(agent, target, "schedule its tasks");
+      const refusal = offHostRefusal(ctx, target, "change its automations") ?? revealTargetRefusal(agent, ctx, target, "schedule its tasks");
       if (refusal) return fail(refusal);
       const resolved = trigger ? await resolveAppTrigger(trigger as RoutineTrigger, current.agentId) : undefined;
       const r = updateRoutine(routineId, { ...patch, ...(resolved ? { trigger: resolved } : {}) });
@@ -1321,7 +1414,7 @@ const TOOLS: ToolDef[] = [
     when: managesSetup,
     run: async ({ routineId }, { agent, ctx }) => {
       const target = getAgent(getRoutine(routineId).agentId);
-      const refusal = offHostRefusal(ctx, target, "run its tasks") ?? revealTargetRefusal(agent, target, "run its tasks");
+      const refusal = offHostRefusal(ctx, target, "run its tasks") ?? revealTargetRefusal(agent, ctx, target, "run its tasks");
       if (refusal) return fail(refusal);
       const started = await runRoutineNow(routineId);
       audit(`agent:${agent.id}`, "routine.run", routineId, { runId: started.id });
@@ -1414,6 +1507,20 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
+    name: "goals_list",
+    description:
+      "List the goals the work serves — what each is for, its target date, and how far it is (tickets done of all, what the work cost). File tickets under a goal with task_create's goalId, so their agents know why.",
+    schema: z.object({ all: z.boolean().optional().describe("Also achieved and dropped goals") }),
+    when: isManager,
+    run: ({ all: everything }) =>
+      json(
+        listGoals()
+          .filter((g) => everything || g.status === "active")
+          .map((g) => ({ id: g.id, title: g.title, why: g.why || undefined, status: g.status, targetDate: g.targetDate ?? undefined, tickets: g.tickets, costUsd: g.costUsd })),
+      ),
+  }),
+
+  defineTool({
     name: "task_create",
     description:
       "Add a task to the task board. type: general (do it and report), research (a written report) or coding (the agent changes the code and Godmode opens a pull request — the workspace needs a repository). In a workspace with a git repository every task works in its own git worktree on its own branch, so tasks never get in each other's way. With an agent and start=true (default) the agent starts right away (status todo); otherwise it waits in the backlog. Optional: priority (urgent, high, medium, low, none — queued tasks start in priority order and the agent is told), dueDate (YYYY-MM-DD) and labels.",
@@ -1427,20 +1534,107 @@ const TOOLS: ToolDef[] = [
       priority: z.enum(TASK_PRIORITIES as [string, ...string[]]).optional(),
       dueDate: z.string().max(10).nullable().optional().describe("YYYY-MM-DD"),
       labels: z.array(z.string().max(100)).max(10).optional(),
+      parentTaskId: z.string().optional().describe('Make it a part of this ticket (id or "#12"): that ticket waits until its parts are done, then its agent continues with their results'),
+      goalId: z.string().optional().describe("The goal it serves (goals_list): its agent is told why"),
+      waitsFor: z.array(z.string()).max(10).optional().describe('Tickets it waits for ("#12" or ids): it starts once each is delivered, with their results in its brief'),
     }),
     when: managesSetup,
-    run: ({ start, ...input }, { agent, ctx }) => {
+    run: ({ start, parentTaskId, waitsFor, ...input }, { agent, ctx }) => {
       const refusal = taskAssignRefusal(agent, ctx, input.agentId);
       if (refusal) return fail(refusal);
+      const parentTask = parentTaskId ? findTask(parentTaskId) : null;
+      // Only the ticket it works on, or one it filed: another agent's running ticket would start waiting for parts it never asked for.
+      if (parentTask && parentTask.conversationId !== ctx.conversationId && parentTask.createdBy !== `agent:${agent.id}`) {
+        return fail(`Add parts only to the ticket you work on or tickets you filed — #${parentTask.number} is neither.`);
+      }
       const t = createTask(
         {
           ...(input as Parameters<typeof createTask>[0]),
+          ...(parentTask ? { parentId: parentTask.id } : {}),
+          ...(waitsFor?.length ? { waitsFor: waitsFor.map((ref) => findTask(ref).id) } : {}),
           status: input.agentId && start !== false ? "todo" : "backlog",
         },
         `agent:${agent.id}`,
       );
       audit(`agent:${agent.id}`, "task.create", t.id, { agentId: t.agentId, type: t.type });
       return json(taskSummary(t, workspaceNames(), new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]))));
+    },
+  }),
+
+  defineTool({
+    name: "task_split",
+    description:
+      "Split the ticket you are working on into parts for your team: each part becomes a sub-ticket on the board, and an assigned one starts right away. Your ticket then waits (In progress) until every part is delivered (or done, cancelled, archived), and you continue in this chat with their results to finish the whole ticket — a delivered part is yours to review: read it with task_get, send it back with task_message. After splitting, end your turn: say briefly how you split the work. Give each part a self-contained title and description (what to do, what to deliver back). agentId: one of your reports, by id or name (managers: any agent they may give tasks to); without one the part waits in the backlog for the human to assign.",
+    schema: z.object({
+      parts: z
+        .array(
+          z.object({
+            title: z.string().min(1).max(200),
+            description: z.string().max(20_000).optional(),
+            agentId: z.string().optional(),
+            type: z.enum(TASK_TYPES as [string, ...string[]]).optional(),
+            priority: z.enum(TASK_PRIORITIES as [string, ...string[]]).optional(),
+          }),
+        )
+        .min(1)
+        .max(8),
+    }),
+    // A lead on a ticket: a manager, or an agent with reports. Not on a runner (its board is a copy).
+    when: (agent, ctx) => config().role !== "runner" && isTaskRun(ctx) && (isManager(agent) || teamOf(agent).reports.length > 0),
+    run: ({ parts: asked }, { agent, ctx }) => {
+      const parent = taskForConversation(ctx.conversationId);
+      if (!parent) return fail("Only the agent working on a ticket can split it.");
+      const everyone = listAgents({ workspaceId: "all" });
+      const reports = teamOf(agent).reports;
+      // Every part is checked before any is filed: a refusal never leaves half a split behind.
+      const parts: ((typeof asked)[number] & { agentId?: string })[] = [];
+      for (const p of asked) {
+        if (!p.agentId) {
+          parts.push(p);
+          continue;
+        }
+        // An id, or a report's name (a lead may know its team by name only).
+        const wanted = p.agentId.trim().toLowerCase();
+        // By name: its reports first, then agents of the ticket's workspace, then global ones.
+        const named = (a: { name: string }) => a.name.toLowerCase() === wanted;
+        const target =
+          everyone.find((a) => a.id === p.agentId) ??
+          reports.find(named) ??
+          everyone.find((a) => named(a) && a.workspaceId === parent.workspaceId) ??
+          everyone.find((a) => named(a) && !a.workspaceId) ??
+          everyone.find(named);
+        if (!target) return fail(`There is no agent "${p.agentId}".`);
+        if (target.id === agent.id) return fail("Do your own part yourself — split off only what others should do.");
+        if (!isManager(agent) && !reports.some((r) => r.id === target.id)) return fail(`${target.name} doesn't report to you — give parts to your reports, or leave agentId out for the human to assign.`);
+        if (!target.enabled) return fail(`${target.name} is switched off — give that part to someone else, or leave agentId out for the human to assign.`);
+        if (target.workspaceId && target.workspaceId !== parent.workspaceId) return fail(`${target.name} works in another workspace than #${parent.number}.`);
+        const refusal = taskAssignRefusal(agent, ctx, target.id);
+        if (refusal) return fail(refusal);
+        parts.push({ ...p, agentId: target.id });
+      }
+      const existing = parent.subtasks?.total ?? 0;
+      if (existing + parts.length > 20) return fail(`#${parent.number} can have 20 parts; it has ${existing}.`);
+      const agentNames = new Map(everyone.map((a) => [a.id, a.name]));
+      const created = parts.map((p) =>
+        createTask(
+          {
+            title: redact(p.title),
+            description: p.description ? redact(p.description) : undefined,
+            type: (p.type as Task["type"] | undefined) ?? "general",
+            priority: (p.priority as Task["priority"] | undefined) ?? parent.priority,
+            workspaceId: parent.workspaceId,
+            agentId: p.agentId ?? null,
+            // A coding part works in the same repository, from the same base.
+            ...(p.type === "coding" ? { repoUrl: parent.repoUrl, repoPath: parent.repoPath, baseBranch: parent.baseBranch } : {}),
+            status: p.agentId ? "todo" : "backlog",
+            parentId: parent.id,
+          },
+          `agent:${agent.id}`,
+        ),
+      );
+      audit(`agent:${agent.id}`, "task.split", parent.id, { parts: created.map((t) => t.id) });
+      const list = created.map((t) => `#${t.number} ${t.title} — ${t.agentId ? (agentNames.get(t.agentId) ?? "an agent") : "waits for the human to assign it"}`).join("\n");
+      return `Split #${parent.number} into ${ticketList(created.map((t) => t.number))}:\n${list}\n\nEnd your turn now with a short note on how you split the work. Your ticket waits until the parts are done; then you continue here with their results.`;
     },
   }),
 
@@ -1463,8 +1657,12 @@ const TOOLS: ToolDef[] = [
     }),
     when: managesSetup,
     run: ({ taskId: ref, ...patch }, { agent, ctx }) => {
-      const taskId = findTask(ref).id;
-      const refusal = taskAssignRefusal(agent, ctx, patch.agentId ?? (patch.status || patch.archived === false ? getTask(taskId).agentId : null));
+      const current = findTask(ref);
+      const taskId = current.id;
+      const refusal =
+        taskAssignRefusal(agent, ctx, patch.agentId ?? (patch.status || patch.archived === false ? current.agentId : null)) ??
+        // What a task says is what its agent is told to do: the same rule as handing it the task.
+        (current.agentId && (patch.title !== undefined || patch.description !== undefined || patch.type !== undefined) ? taskEditRefusal(agent, ctx, current.agentId) : null);
       if (refusal) return fail(refusal);
       const t = updateTask(taskId, { ...patch, ...(patch.labels ? { labels: patch.labels.map((l) => redact(l)) } : {}) } as Parameters<typeof updateTask>[1], `agent:${agent.id}`);
       audit(`agent:${agent.id}`, "task.update", taskId, { fields: Object.keys(patch) });
@@ -1480,9 +1678,10 @@ const TOOLS: ToolDef[] = [
       taskId: z.string().describe('Task id, or its number like "#12"'),
       history: z.boolean().optional(),
     }),
-    when: isManager,
-    run: ({ taskId, history }) => {
+    when: (agent, ctx) => isManager(agent) || !!ledTicket(ctx),
+    run: ({ taskId, history }, { agent, ctx }) => {
       const t = findTask(taskId);
+      if (!isManager(agent) && !ownPart(ctx, t)) return fail(`#${t.number} isn't one of your ticket's parts — you can read those.`);
       const agentNames = new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]));
       const human = getSettings().general.userName.trim() || "the human";
       const events = listTaskEvents(t.id, 50);
@@ -1515,10 +1714,11 @@ const TOOLS: ToolDef[] = [
       taskId: z.string().describe('Task id, or its number like "#12"'),
       content: z.string().min(1).max(20_000),
     }),
-    when: managesSetup,
+    when: (agent, ctx) => managesSetup(agent) || (config().role !== "runner" && !!ledTicket(ctx)),
     run: async ({ taskId, content }, { agent, ctx }) => {
       const t = findTask(taskId);
       if (t.conversationId && t.conversationId === ctx.conversationId) return fail("That is the task you are working on — do the work, or leave a note with task_note.");
+      if (!managesSetup(agent) && !ownPart(ctx, t)) return fail(`#${t.number} isn't one of your ticket's parts — you can send those back.`);
       const refusal = taskAssignRefusal(agent, ctx, t.agentId);
       if (refusal) return fail(refusal);
       await sendTaskMessage(t.id, redact(content), [], { actor: `agent:${agent.id}`, via: "task" }, `agent:${agent.id}`);
@@ -1795,8 +1995,9 @@ const TOOLS: ToolDef[] = [
     when: managesSetup,
     run: async ({ vmId, target, id }, { agent, ctx }) => {
       if (target !== "this_chat" && !id) return fail(`Pass the ${target}'s id.`);
+      if (target === "this_chat" && !ctx.conversationId) return fail("There is no chat here: assign the VM to an agent or a workspace.");
       if (target === "agent") {
-        const refusal = id === agent.id ? null : revealTargetRefusal(agent, getAgent(id!), "move it into a VM");
+        const refusal = revealTargetRefusal(agent, ctx, getAgent(id!), "move it into a VM");
         if (refusal) return fail(refusal);
       }
       const kind = target === "this_chat" ? "conversation" : target;
@@ -1926,10 +2127,15 @@ export function allToolNames(): string[] {
   return TOOLS.map((t) => t.name);
 }
 
+/** What a connected app can call, for the human to read: reading tools first. */
+export function connectorTools(): ConnectorTool[] {
+  return [...CONNECTOR_TOOLS].map(([name, access]) => ({ name, access, description: BY_NAME.get(name)?.description ?? "" }));
+}
+
 /** Tools listed for this agent in this run (permission-filtered). */
 export function listToolsFor(agent: Agent, ctx: RunContext): { name: string; description: string; inputSchema: Record<string, unknown> }[] {
   const dream = isDreamRun(ctx);
-  return TOOLS.filter((t) => (dream ? DREAM_TOOLS.has(t.name) : !t.when || t.when(agent, ctx))).map((t) => {
+  return TOOLS.filter((t) => (dream ? DREAM_TOOLS.has(t.name) : !t.when || t.when(agent, ctx)) && !connectorRefusal(ctx, t.name)).map((t) => {
     let schema = schemaCache.get(t.name);
     if (!schema) {
       schema = inputSchema(t.schema);
@@ -1954,12 +2160,24 @@ export function toolErrorMessage(err: unknown): string {
 export async function callTool(ctx: RunContext, name: string, args: unknown): Promise<ToolCallResult> {
   const tool = BY_NAME.get(name);
   if (!tool) throw new UnknownToolError(`Unknown tool: ${name}`);
+  const out = await runTool(tool, ctx, name, args);
+  if (ctx.connector) {
+    noteConnectorCall(ctx.connector.id, name);
+    // Reading leaves no entry; a change does, and so does everything that was refused or failed.
+    if (CONNECTOR_TOOLS.get(name) !== "read" || out.isError) audit(`connector:${ctx.connector.id}`, "connector.call", name, { app: ctx.connector.name, ok: !out.isError });
+  }
+  return out;
+}
+
+async function runTool(tool: ToolDef, ctx: RunContext, name: string, args: unknown): Promise<ToolCallResult> {
   const result = (text: string, isError = false): ToolCallResult => ({
     content: [{ type: "text", text }],
     ...(isError ? { isError: true } : {}),
   });
   try {
     const agent = getAgent(ctx.agentId);
+    const refusal = connectorRefusal(ctx, name);
+    if (refusal) return result(refusal, true);
     if (tool.when && !tool.when(agent, ctx)) return result(`The tool ${name} is not available to ${agent.name}.`, true);
     if (!DREAM_TOOLS.has(name) && isDreamRun(ctx)) return result(`The tool ${name} is not available while dreaming.`, true);
     const parsed = tool.schema.parse(args ?? {});
