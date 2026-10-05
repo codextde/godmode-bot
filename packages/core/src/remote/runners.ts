@@ -247,8 +247,11 @@ export async function removeRunner(id: string): Promise<void> {
 /* Pairing                                                              */
 /* ------------------------------------------------------------------ */
 
-/** Pair with a runner from its pairing code (pasted, or delivered by `godmode runner install --pair`). */
-export async function pairWithCode(text: string): Promise<RemoteRunner> {
+/**
+ * Pair with a runner from its pairing code (pasted, or delivered by `godmode runner install --pair`). `via`: the
+ * address the code was delivered from, dialed first (it proved to reach this computer, e.g. over Tailscale).
+ */
+export async function pairWithCode(text: string, via: string | null = null): Promise<RemoteRunner> {
   const code = parseRunnerCode(text);
   if (!code) throw badRequest("That isn't a runner's pairing code. It starts with gmr1.");
   let key: string;
@@ -257,6 +260,7 @@ export async function pairWithCode(text: string): Promise<RemoteRunner> {
   } catch {
     throw badRequest("That pairing code is damaged. Copy it again.");
   }
+  if (via && code.addresses.includes(via)) code.addresses = [via, ...code.addresses.filter((a) => a !== via)];
   const { info, address } = await RemoteLink.pair({ identity: loadIdentity(), code, name: computerName() });
   const addresses = [...new Set([address, ...code.addresses])].slice(0, MAX_ADDRESSES);
   const ts = now();
@@ -300,7 +304,7 @@ export async function pairWithCode(text: string): Promise<RemoteRunner> {
 
 /** Show an install command that pairs the runner by itself. */
 export function createPairing(): Promise<RunnerPairingOffer> {
-  return createOffer(async (code) => ({ name: (await pairWithCode(code)).name }));
+  return createOffer(async (code, from) => ({ name: (await pairWithCode(code, from)).name }));
 }
 
 export function cancelPairing(): void {

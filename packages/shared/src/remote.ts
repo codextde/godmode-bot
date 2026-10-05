@@ -3,6 +3,7 @@
  * computer sleeps. The Godmode the human uses (the controller) pairs with a runner once, copies what the work needs to
  * it and mirrors its chats; everything between the two travels over an end-to-end encrypted link.
  */
+import type { TailscaleStatus } from "./mobile";
 import type { ID, ISODate } from "./models";
 
 /** Port the runner listens on for the encrypted link (phones use 7787). */
@@ -66,15 +67,34 @@ export interface RunnerPatch {
   syncBrowser?: boolean;
 }
 
+/** How a runner reaches this computer: the local network, a virtual machine's bridge, or Tailscale. */
+export type RunnerNetwork = "lan" | "vm" | "tailscale";
+
+/** One address of this computer the install command can use. */
+export interface RunnerOfferRoute {
+  network: RunnerNetwork;
+  address: string;
+  /** `http://<address>:<port>` of the pairing listener. */
+  url: string;
+  /** The interface ("en0"), or Tailscale's MagicDNS name of this computer. */
+  detail: string | null;
+  /** The install command through this address; null when this build can't serve its own binary. */
+  command: string | null;
+}
+
 /** POST /api/runners/pairing */
 export interface RunnerPairingOffer {
   offerId: ID;
-  /** One command that installs the runner from this computer and pairs it; null when this build can't serve its own binary. */
+  /** One command that installs the runner from this computer and pairs it (through the first route); null when this build can't serve its own binary. */
   command: string | null;
+  /** Every address of this computer the other Mac can download from, best first. */
+  routes: RunnerOfferRoute[];
   /** The same through godmode.codext.de (needs the license key in place of the placeholder). */
   websiteCommand: string;
   /** Where the runner reaches this computer while pairing. */
   urls: string[];
+  /** Tailscale on this computer, so the human can pick it or learn why it isn't there. */
+  tailscale: TailscaleStatus;
   expiresAt: ISODate;
 }
 
