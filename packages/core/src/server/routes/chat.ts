@@ -59,7 +59,7 @@ const sshServerIds = z.array(z.string().trim().min(1).max(100)).max(50).optional
 
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
-  attachments: z.array(attachmentSchema).max(20).optional(),
+  attachments: z.array(attachmentSchema).optional(),
   voice: z.boolean().optional(),
   queue: z.boolean().optional(),
   queueId: z

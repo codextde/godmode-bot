@@ -3,7 +3,7 @@
  * conversation continues, and sending the answer back once the run finishes.
  */
 import type { Agent, AgentQuestion, MessagingProvider, Run } from "@godmode/shared";
-import { parseSlashCommand, SLACK_COMMAND } from "@godmode/shared";
+import { MAX_MESSAGE_ATTACHMENT_BYTES, parseSlashCommand, SLACK_COMMAND } from "@godmode/shared";
 import { getAgent } from "../agents/service";
 import { get } from "../db";
 import { logger } from "../log";
@@ -34,7 +34,6 @@ import type { ChatTarget, InboundMessage, MessagingAdapter } from "./types";
 
 const log = logger("messaging");
 
-const MAX_FILES = 10;
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 20;
 /** Messages per bot per minute, across all its chats. */
@@ -365,20 +364,33 @@ function conversationFor(conn: ConnectionRow, msg: InboundMessage, chat: ChatRow
 async function attachmentsOf(msg: InboundMessage): Promise<{ files: { name: string; mime: string; data: string }[]; problems: string[] }> {
   const files: { name: string; mime: string; data: string }[] = [];
   const problems: string[] = [];
-  for (const f of msg.files.slice(0, MAX_FILES)) {
+  let total = 0;
+  let over = 0;
+  for (const f of msg.files) {
     if (f.size !== null && f.size > MAX_ATTACHMENT_BYTES) {
       problems.push(`${f.name} is larger than ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB`);
+      continue;
+    }
+    // Any number of files, but only as much as one message carries. What doesn't fit isn't fetched; once the
+    // message is full, neither is a file of unknown size.
+    if (total + (f.size ?? 0) > MAX_MESSAGE_ATTACHMENT_BYTES || (f.size === null && over > 0)) {
+      over++;
       continue;
     }
     try {
       const bytes = await f.download();
       if (bytes.byteLength > MAX_ATTACHMENT_BYTES) throw new Error(`larger than ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB`);
+      if (total + bytes.byteLength > MAX_MESSAGE_ATTACHMENT_BYTES) {
+        over++;
+        continue;
+      }
+      total += bytes.byteLength;
       files.push({ name: f.name, mime: f.mime, data: Buffer.from(bytes).toString("base64") });
     } catch (err) {
       problems.push(`${f.name}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  if (msg.files.length > MAX_FILES) problems.push(`only the first ${MAX_FILES} files were taken`);
+  if (over) problems.push(`${over} more didn't fit, a message carries up to ${MAX_MESSAGE_ATTACHMENT_BYTES / 1024 / 1024} MB of files`);
   return { files, problems };
 }
 

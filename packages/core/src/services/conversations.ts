@@ -22,7 +22,7 @@ import type {
   RunTrigger,
 } from "@godmode/shared";
 import type { ComputerTarget, ConversationPatch, ConversationWithMessages, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
-import { computerTargetLabel } from "@godmode/shared";
+import { computerTargetLabel, MAX_MESSAGE_ATTACHMENT_BYTES } from "@godmode/shared";
 import { all, bool, get, insert, int, run as sql, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -594,15 +594,26 @@ function decodeBase64(data: string): Buffer {
 
 /** Write uploads into `<repo>/workspace/uploads/<yyyy-mm-dd>/`; returns repo-relative paths (posix). */
 export function saveAttachments(agent: Agent, files: NonNullable<SendMessageInput["attachments"]>): Attachment[] {
-  const decoded = files.map((f) => ({ name: safeFileName(f.name), mime: f.mime || "application/octet-stream", bytes: decodeBase64(f.data) }));
+  let total = 0;
+  const decoded = files.map((f) => {
+    const bytes = decodeBase64(f.data);
+    if ((total += bytes.length) > MAX_MESSAGE_ATTACHMENT_BYTES) throw badRequest(`Attachments too large together (max ${MAX_MESSAGE_ATTACHMENT_BYTES / 1024 / 1024} MB)`);
+    return { name: safeFileName(f.name), mime: f.mime || "application/octet-stream", bytes };
+  });
   const day = localDate();
   const dir = join(agent.repoPath, "workspace", "uploads", day);
   mkdirSync(dir, { recursive: true });
+  // Where the search for a free name stopped, per name: many files of one name don't start it over each time.
+  // Lower case, as "A.png" and "a.png" are one file on most disks.
+  const tried = new Map<string, number>();
   return decoded.map((f) => {
     const ext = extname(f.name);
     const stem = f.name.slice(0, f.name.length - ext.length);
     let name = f.name;
-    for (let i = 1; existsSync(join(dir, name)); i++) name = `${stem}-${i}${ext}`;
+    const key = f.name.toLowerCase();
+    let i = tried.get(key) ?? 1;
+    for (; existsSync(join(dir, name)); i++) name = `${stem}-${i}${ext}`;
+    tried.set(key, i);
     writeFileSync(join(dir, name), f.bytes);
     return { name, mime: f.mime, path: `workspace/uploads/${day}/${name}`, size: f.bytes.length };
   });

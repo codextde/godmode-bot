@@ -144,7 +144,7 @@ export function registerTaskRoutes(app: Hono): void {
   app.post("/api/tasks/:id/messages", async (c) => {
     const { content, attachments } = await body(
       c,
-      z.object({ content: z.string().max(100_000).default(""), attachments: z.array(attachmentSchema).max(20).optional() }),
+      z.object({ content: z.string().max(100_000).default(""), attachments: z.array(attachmentSchema).optional() }),
     );
     // From a phone the answer to a question counts as given from the phone.
     return c.json(await sendTaskMessage(c.req.param("id"), content, attachments, { actor: "user", via: requestDevice(c) ? "phone" : "task" }));

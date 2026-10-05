@@ -26,7 +26,7 @@ import { useVoicePrefs, useVoiceSession, stopSpeaking } from "@/lib/voice";
 import { useUi } from "@/stores/ui";
 import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
-import { AttachmentChip, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, readAttachment, type PendingAttachment } from "./attachments";
+import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } from "./attachments";
 import { LevelBars } from "./voice-visuals";
 import { WorkingTicks } from "@/components/aicss/Motion";
 import { SlashHint, SlashMenu, findCommand, rankCommands, slashOptionId, useSlashCommands } from "./slash-commands";
@@ -171,24 +171,8 @@ export function Composer({
 
   const addFiles = useCallback(async (files: File[]) => {
     if (files.length === 0 || disabledRef.current) return;
-    const room = MAX_ATTACHMENTS - attachmentsRef.current.length;
-    if (room <= 0) {
-      toast.warning(`You can attach up to ${MAX_ATTACHMENTS} files.`);
-      return;
-    }
-    const accepted = files.slice(0, room).filter((f) => {
-      if (f.size > MAX_ATTACHMENT_BYTES) {
-        toast.warning(`${f.name} is larger than 25 MB.`);
-        return false;
-      }
-      return true;
-    });
-    try {
-      const read = await Promise.all(accepted.map(readAttachment));
-      setAttachments((prev) => [...prev, ...read]);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not read the file.");
-    }
+    const read = await readAttachments(files, totalBytes(attachmentsRef.current), toast.warning);
+    if (read.length) setAttachments((prev) => [...prev, ...read]);
   }, []);
 
   useImperativeHandle(
@@ -392,21 +376,20 @@ export function Composer({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="flex flex-wrap gap-2 px-4 pt-3.5">
-              {attachments.map((a) => (
-                <AttachmentChip
-                  key={a.id}
-                  name={a.name}
-                  mime={a.mime}
-                  size={a.size}
-                  previewUrl={a.previewUrl}
-                  onRemove={() => {
-                    if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
-                    setAttachments((prev) => prev.filter((x) => x.id !== a.id));
-                  }}
-                />
-              ))}
-            </div>
+            <AttachmentTray
+              files={attachments}
+              tall={size === "lg"}
+              className="px-2.5 pt-2"
+              onRemove={(a) => {
+                if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+                setAttachments((prev) => prev.filter((x) => x.id !== a.id));
+              }}
+              onClear={() => {
+                attachments.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+                setAttachments(NO_ATTACHMENTS);
+                textareaRef.current?.focus({ preventScroll: true });
+              }}
+            />
           </motion.div>
         )}
       </AnimatePresence>
