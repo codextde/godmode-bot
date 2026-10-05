@@ -9,7 +9,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { isConversationViewed, setConversationViewHandler } from "../server/ws";
 import { emitConversationUpdated, markConversationsRead } from "./conversations";
-import { notify } from "./notifications";
+import { notify, runNotifiedUser } from "./notifications";
 
 const log = logger("notices");
 
@@ -17,11 +17,6 @@ const log = logger("notices");
 const HUMAN_ORIGINS = new Set(["chat", "api"]);
 /** Turns the human started or asked for (a follow-up the agent promised them counts). */
 const HUMAN_TRIGGERS = new Set(["chat", "manual", "api", "followup"]);
-
-/** The agent told the human itself during this run. */
-function calledNotifyUser(runId: string): boolean {
-  return !!get("SELECT 1 FROM messages WHERE run_id = ? AND role = 'assistant' AND instr(blocks, 'notify_user') > 0", runId);
-}
 
 /** The run stopped on a missing login, which notifies on its own. */
 function reportedMissingLogin(runId: string): boolean {
@@ -48,7 +43,7 @@ function afterRun(r: Run): void {
   sql("UPDATE conversations SET unread_run_id = ? WHERE id = ?", r.id, conv.id);
   emitConversationUpdated(conv.id);
   // A follow-up reports through its own notice (followups.ts).
-  if (r.trigger === "followup" || calledNotifyUser(r.id) || reportedMissingLogin(r.id)) return;
+  if (r.trigger === "followup" || runNotifiedUser(r.id) || reportedMissingLogin(r.id)) return;
   if (r.status === "failed") notify("error", `${agent} ran into a problem in “${conv.title}”`, shorten(r.error ?? ""), `/chat/${conv.id}`);
   else notify("success", `${agent} replied in “${conv.title}”`, shorten((r.result ?? "").replace(/\s+/g, " ").trim()), `/chat/${conv.id}`);
 }
@@ -58,7 +53,7 @@ function automationNotice(r: Run, conversationId: string, viewed: boolean): void
   const routine = get<{ name: string; notify: string | null; agent_id: string }>("SELECT name, notify, agent_id FROM routines WHERE id = ?", r.routineId!);
   if (!routine) return;
   const setting = routine.notify ?? "failures";
-  if (setting === "never" || viewed || calledNotifyUser(r.id) || reportedMissingLogin(r.id)) return;
+  if (setting === "never" || viewed || runNotifiedUser(r.id) || reportedMissingLogin(r.id)) return;
   if (r.status === "failed") {
     const before = get<{ status: string }>(
       "SELECT status FROM runs WHERE routine_id = ? AND trigger = 'routine' AND id != ? AND status IN ('succeeded', 'failed') ORDER BY created_at DESC LIMIT 1",

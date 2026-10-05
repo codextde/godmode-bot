@@ -128,6 +128,10 @@ export const EXECUTABLE_SETTINGS: Record<string, string[]> = {
 
 let busy: "export" | "import" | null = null;
 
+export function backupInProgress(): boolean {
+  return busy !== null;
+}
+
 function withLock<T>(kind: "export" | "import", fn: () => Promise<T>): Promise<T> {
   if (busy) throw conflict(`A backup ${busy} is already in progress`);
   busy = kind;

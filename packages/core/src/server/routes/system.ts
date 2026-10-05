@@ -13,7 +13,8 @@ import { runDoctor, installDependency } from "../../services/doctor";
 import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
 import { PERMISSION_IDS, checkPermissions, fixPermission } from "../../services/permissions";
 import { TOOL_IDS, checkUpdates } from "../../services/updates";
-import { fixAll, inTurn, installUpdates, maintenanceStatus } from "../../services/maintenance";
+import { cleanUp, fixAll, inTurn, installUpdates, maintenanceStatus } from "../../services/maintenance";
+import { CLEANUP_IDS, scanCleanup } from "../../services/cleanup";
 import { disableIdleTimeout } from "../../mcp/http";
 import { getModelCatalog } from "../../runner/models";
 import { getDefaultAgentId } from "../../agents/service";
@@ -126,7 +127,7 @@ export function registerSystemRoutes(app: Hono) {
     const maintenance = patch.maintenance as Record<string, unknown> | undefined;
     if (maintenance !== undefined) {
       if (typeof maintenance !== "object" || maintenance === null || Array.isArray(maintenance)) throw badRequest("Invalid upkeep settings");
-      for (const key of ["autoFix", "autoUpdate"] as const) {
+      for (const key of ["autoFix", "autoUpdate", "autoCleanup"] as const) {
         if (maintenance[key] !== undefined && typeof maintenance[key] !== "boolean") throw badRequest(`maintenance.${key} must be true or false`);
       }
     }
@@ -205,4 +206,15 @@ export function registerSystemRoutes(app: Hono) {
     return c.json(await installUpdates(id));
   });
   app.get("/api/doctor/maintenance", (c) => c.json(maintenanceStatus()));
+
+  /** What takes up space, what can go, and a check of the data folder. */
+  app.get("/api/cleanup", async (c) => {
+    disableIdleTimeout(c);
+    return c.json(await scanCleanup({ fresh: c.req.query("refresh") === "1" }));
+  });
+  app.post("/api/cleanup", async (c) => {
+    const { ids } = await body(c, z.object({ ids: z.array(z.enum(CLEANUP_IDS)).min(1) }));
+    disableIdleTimeout(c);
+    return c.json(await cleanUp(ids));
+  });
 }

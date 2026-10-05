@@ -229,16 +229,18 @@ function budgetsMayHaveChanged(): void {
   if (releaseTimer) return;
   releaseTimer = setTimeout(() => {
     releaseTimer = null;
-    const now = amountsNow();
-    if (now === lastAmounts) return;
-    lastAmounts = now;
-    if (!get("SELECT 1 FROM paused_runs WHERE reason = 'budget'")) return;
+    // A timer outlives what started it (shutting down, a test that closed its database): it never throws.
     try {
+      const now = amountsNow();
+      if (now === lastAmounts) return;
+      lastAmounts = now;
+      if (!get("SELECT 1 FROM paused_runs WHERE reason = 'budget'")) return;
       releaseHeld("auto");
     } catch (err) {
       log.warn("could not continue held runs", err);
     }
   }, 250);
+  releaseTimer.unref?.();
 }
 
 export function startBudgets(): void {

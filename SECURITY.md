@@ -43,7 +43,10 @@ We aim to acknowledge reports within 72 hours and to ship a fix for critical iss
   audited as `connector.call`, and keys are left out of backups. Phones and Godmode Cloud can't create or remove keys. A full key can create agents and automations that
   later act with your saved logins, so it deserves the same care as the app itself.
 - **No privilege escalation through agents**: agents that create or edit agents cannot grant reveal access, change
-  workspaces, browser profiles or out-of-scope integrations; fill-only agents cannot delegate to reveal-mode agents.
+  workspaces, browser profiles or out-of-scope integrations. A task an agent hands to a reveal-mode agent runs
+  without raw secrets unless the caller reads raw secrets itself and the target is global or in the caller's workspace
+  (logins are still filled into pages), and that chat stays fill-only; scheduling such an agent, putting tasks on the
+  board for it or changing its settings stays with you. The task can still write to that agent's memory and files.
 - **Redaction**: known secret values (logins, 2FA, API keys, MCP env/header values) are masked in transcripts, run logs
   and the UI.
 - **Audit log**: every secret access (fill, reveal, export) is recorded with agent and run id.

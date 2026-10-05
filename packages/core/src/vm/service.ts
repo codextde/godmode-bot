@@ -359,6 +359,11 @@ export async function vmStatus(): Promise<VmStatus> {
   };
 }
 
+/** An image is being downloaded: the layers in `vm/downloads` are in use. */
+export function imageDownloadInProgress(): boolean {
+  return pulls.size > 0;
+}
+
 /** Remove a downloaded image (its template) to free space; VMs made from it keep working. */
 export async function removeImage(image: string, actor = "user"): Promise<void> {
   await ensureTart();

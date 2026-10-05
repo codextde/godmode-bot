@@ -38,6 +38,11 @@ const ICONS = {
   camera: ["camera.fill", "photo_camera"],
   back: ["chevron.backward", "arrow_back"],
   doc: ["doc.text", "description"],
+  attach: ["paperclip", "attach_file"],
+  photo: ["photo", "image"],
+  film: ["film", "movie"],
+  archiveFile: ["doc.zipper", "folder_zip"],
+  table: ["tablecells", "table"],
   terminal: ["apple.terminal", "terminal"],
   pencil: ["pencil", "edit"],
   list: ["checklist", "list"],
@@ -61,6 +66,7 @@ const ICONS = {
   external: ["arrow.up.right", "open_in_new"],
   archive: ["archivebox", "archive"],
   unarchive: ["arrow.uturn.backward", "unarchive"],
+  workflow: ["flowchart", "account_tree"],
 } as const satisfies Record<string, readonly [SFSymbol, AndroidSymbol]>;
 
 export type IconName = keyof typeof ICONS;

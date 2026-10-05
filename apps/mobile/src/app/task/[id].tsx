@@ -1,4 +1,4 @@
-import { isWaiting, reopenStatus, waitsForAnswer, type TaskBlockedKind } from "@godmode/shared";
+import { isWaiting, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets, type TaskBlockedKind } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -11,6 +11,7 @@ import { openChat } from "@/components/rows";
 import { STATUS_META, TaskStatusBadge, TYPE_META } from "@/components/task-row";
 import { Avatar, Badge, Button, Card, Row, SectionTitle, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { activityText } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
@@ -71,9 +72,9 @@ export default function TaskScreen() {
     ]);
   };
 
-  const followUp = async (content: string) => {
+  const followUp = async (content: string, files: PendingFile[]) => {
     try {
-      onDone(await api.tasks.message(id, content));
+      onDone(await api.tasks.message(id, content, await encodeFiles(files)));
     } catch (err) {
       Alert.alert("Couldn't send it", errorText(err));
       throw err;
@@ -109,6 +110,10 @@ export default function TaskScreen() {
                   : "Working on it"
               : waitsForAnswer(t)
                 ? "Waiting for your answer"
+                : waitsForTickets(t)
+                  ? `Waits for ${t.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")} — starts once delivered`
+                : waitsForSubtasks(t)
+                  ? `Waiting for ${t.subtasks!.open === 1 ? "1 part" : `${t.subtasks!.open} parts`}`
                 : isWaiting(t)
                   ? "Waiting for its follow-up"
                   : t.pause
@@ -180,6 +185,8 @@ export default function TaskScreen() {
         </View>
       )}
 
+      <Parts task={t} />
+
       {t.pullRequest && (
         <Card
           style={styles.pr}
@@ -223,7 +230,7 @@ export default function TaskScreen() {
       {canFollowUp && (
         <View>
           <SectionTitle title={t.status === "blocked" ? "Help it along" : "Ask for changes"} />
-          <Composer onSend={followUp} placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
+          <Composer draftKey={`task:${id}`} onSend={followUp} attachments placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
         </View>
       )}
     </ScrollView>
@@ -322,7 +329,61 @@ function ActionButtons({
   );
 }
 
+/** What the ticket is part of, and its own parts (a lead's ticket waits until they're finished). */
+function Parts({ task }: { task: Task }) {
+  const c = useColors();
+  const { byId } = useAgents();
+  const board = useQuery({ queryKey: qk.taskList(null), queryFn: () => api.tasks.list(), enabled: !!task.subtasks || !!task.parentId });
+  const parts = (board.data ?? []).filter((p) => p.parentId === task.id).sort((a, b) => a.number - b.number);
+  const parent = task.parentId ? board.data?.find((p) => p.id === task.parentId) : undefined;
+  if (!task.parentId && !task.subtasks) return null;
+  const open = (id: string) => {
+    tap();
+    router.push({ pathname: "/task/[id]", params: { id } });
+  };
+  return (
+    <View style={{ gap: space.sm }}>
+      {task.parentId ? (
+        <Card style={styles.pr} onPress={() => open(task.parentId!)}>
+          <Icon name="branch" size={17} color={c.textMuted} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <T variant="footnote" muted>
+              Part of
+            </T>
+            <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
+              #{task.parentNumber} {parent?.title ?? ""}
+            </T>
+          </View>
+          <Icon name="chevron" size={13} color={c.textFaint} />
+        </Card>
+      ) : null}
+      {task.subtasks ? (
+        <View>
+          <SectionTitle title={`Parts · ${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} finished`} />
+          <Card style={{ paddingVertical: 4 }}>
+            {parts.map((p) => (
+              <Pressable key={p.id} onPress={() => open(p.id)} accessibilityRole="button" style={({ pressed }) => [styles.part, { opacity: pressed ? 0.6 : 1 }]}>
+                <T variant="footnote" muted style={{ fontVariant: ["tabular-nums"] }}>
+                  #{p.number}
+                </T>
+                <T variant="subhead" numberOfLines={1} style={{ flex: 1 }}>
+                  {p.title}
+                </T>
+                <T variant="footnote" muted numberOfLines={1}>
+                  {STATUS_META[p.status].label}
+                  {p.agentId ? ` · ${byId.get(p.agentId)?.name ?? "an agent"}` : ""}
+                </T>
+              </Pressable>
+            ))}
+          </Card>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  part: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
   content: {
     paddingHorizontal: space.lg,
     paddingTop: space.md,

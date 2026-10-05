@@ -1,8 +1,8 @@
 import { forwardRef, type HTMLAttributes } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { AlarmClock, CalendarDays, GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, Hourglass, MessageCircleQuestion, OctagonAlert, Paperclip, Pause } from "lucide-react";
+import { AlarmClock, CalendarDays, CornerDownRight, Link2, GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, Hourglass, ListTree, MessageCircleQuestion, OctagonAlert, Paperclip, Pause } from "lucide-react";
 import type { Agent, Task, Workspace } from "@godmode/shared";
-import { isOverdue, taskAttachmentIds } from "@godmode/shared";
+import { isOverdue, taskAttachmentIds, waitsForTickets } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { LiveDot } from "@/components/aicss/Motion";
 import { useLive } from "@/stores/live";
@@ -77,6 +77,9 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
     task.priority !== "none" ? PRIORITY_META[task.priority].label.toLowerCase() : null,
     task.dueDate ? `due ${dueLabel(task.dueDate)}` : null,
     overdue ? "overdue" : null,
+    task.parentNumber ? `part of #${task.parentNumber}` : null,
+    waitsForTickets(task) ? `waits for ${task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")}` : null,
+    task.subtasks ? `${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} parts finished` : null,
     waiting,
   ]
     .filter(Boolean)
@@ -102,6 +105,11 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
           <TypeIcon type={task.type} className="size-3.5" />
         </span>
         <span className="font-mono tabular-nums">#{task.number}</span>
+        {task.parentNumber && (
+          <span className="flex items-center gap-0.5 font-mono tabular-nums" title={`Part of #${task.parentNumber}`} aria-label={`part of #${task.parentNumber}`}>
+            <CornerDownRight className="size-3" aria-hidden />#{task.parentNumber}
+          </span>
+        )}
         {task.priority !== "none" && (
           <span title={PRIORITY_META[task.priority].label} aria-label={PRIORITY_META[task.priority].label}>
             <PriorityIcon priority={task.priority} />
@@ -124,9 +132,15 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
           {task.runStatus === "running" && task.runStartedAt && <CardElapsed since={task.runStartedAt} />}
         </p>
       )}
+      {waitsForTickets(task) && (
+        <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number} ${w.title}`).join("\n")}>
+          <Link2 className="size-3 shrink-0" />
+          <span className="truncate">Waits for {task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")}</span>
+        </p>
+      )}
       {waiting && !activity && !paused && (
         <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={task.followup?.note}>
-          <AlarmClock className="size-3 shrink-0 text-brand-strong" />
+          {task.subtasks?.open && !task.followup ? <ListTree className="size-3 shrink-0 text-brand-strong" /> : <AlarmClock className="size-3 shrink-0 text-brand-strong" />}
           <span className="truncate">{waiting}</span>
         </p>
       )}
@@ -183,6 +197,15 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
             >
               <CalendarDays className="size-3" />
               {closed ? dueLabel(task.dueDate!) : due}
+            </span>
+          )}
+          {task.subtasks && (
+            <span
+              className="flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums"
+              title={`${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} parts finished`}
+            >
+              <ListTree className="size-3" />
+              {task.subtasks.total - task.subtasks.open}/{task.subtasks.total}
             </span>
           )}
           {files > 0 && (
