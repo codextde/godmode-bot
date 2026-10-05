@@ -1,4 +1,4 @@
-import { isWaiting, reopenStatus, waitsForAnswer, waitsForSubtasks, type TaskBlockedKind } from "@godmode/shared";
+import { isWaiting, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets, type TaskBlockedKind } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -110,6 +110,8 @@ export default function TaskScreen() {
                   : "Working on it"
               : waitsForAnswer(t)
                 ? "Waiting for your answer"
+                : waitsForTickets(t)
+                  ? `Waits for ${t.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")} — starts once delivered`
                 : waitsForSubtasks(t)
                   ? `Waiting for ${t.subtasks!.open === 1 ? "1 part" : `${t.subtasks!.open} parts`}`
                 : isWaiting(t)
