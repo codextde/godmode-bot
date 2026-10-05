@@ -152,13 +152,17 @@ describe("messages", () => {
   test("many sockets together cannot make the cloud hold more than the link's limit", async () => {
     const chunk = Buffer.alloc(1024 * 1024, 3);
     const socks = [];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 24; i++) {
       const { ws } = await dashboardSocket();
       ws.pause();
       socks.push(await computer.socket(i));
     }
-    // 14 MiB each stays under the per-socket backlog limit; five of them pass the 64 MiB a link may hold.
-    for (const sock of socks) for (let i = 0; i < 14; i++) computer.send(CloudFrame.WsBinary, sock.id, chunk);
+    // 14 MiB each stays under the per-socket backlog limit. Kernel socket buffers take up to ~10 MiB per socket off the
+    // cloud's books on Linux, so it takes this many sockets to pass the 64 MiB a link may hold on every platform.
+    for (let i = 0; i < 14 && !computer.closeEvent; i++) {
+      for (const sock of socks) computer.send(CloudFrame.WsBinary, sock.id, chunk);
+      await sleep(10);
+    }
     expect(await computer.closed()).toEqual({ code: CloudClose.Protocol, reason: "WebSocket messages beyond the link's limit." });
   });
 
