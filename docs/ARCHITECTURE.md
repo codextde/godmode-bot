@@ -26,7 +26,7 @@ Godmode Bot is an AI coworker that runs on your machine. It drives **Claude Code
 | Path | What |
 |---|---|
 | `packages/shared` | Types shared by core and UI: models (`models.ts`), API inputs (`api.ts`), WS events (`events.ts`). **The contract.** |
-| `packages/core` | The daemon (Bun + Hono + bun:sqlite). HTTP API under `/api`, WebSocket at `/api/ws`, MCP gateway at `/mcp`. |
+| `packages/core` | The daemon (Bun + Hono + bun:sqlite). HTTP API under `/api`, WebSocket at `/api/ws`, MCP gateway at `/mcp` (for runs, and for [connected apps](#connected-apps-claude-code--mcp)). |
 | `apps/desktop` | React UI (also served by the core as the web dashboard) + `src-tauri` desktop shell. |
 | `apps/mobile` | Phone app (Expo, iOS + Android). Own toolchain (bun), outside the pnpm workspace; imports `@godmode/shared` from source. |
 | `apps/cloud` | Godmode Cloud, optional and self-hosted (Next.js + a custom Node server, PostgreSQL): accounts, admin, Stripe billing and the relay to linked computers. See [Godmode Cloud](#godmode-cloud). |
@@ -49,6 +49,7 @@ tasks/<task-id>/      checkout of a coding task's repository (see "Tasks")
 logs/godmode.jsonl    diagnostic log (see "Diagnostic log"); godmode.1.jsonl is the previous 2 MB, desktop.log the shell's
 link-key              0600 — this installation's X25519 key pair for the runner link (see "Remote runners")
 runner.json           a runner only (~/.godmode-runner, GODMODE_RUNNER_HOME): pid and ports while it serves
+core.json             0600 — pid and port of the serving core, for `godmode mcp | tools | call` (see "Connected apps")
 ```
 
 ### Agent repositories
@@ -155,7 +156,9 @@ ask within the same moment share a request.
   (dashboard password). Loopback-only by default with Host-header DNS-rebinding protection, CSRF origin check,
   login rate limiting, strict CSP for the dashboard. Requests relayed by a linked Godmode Cloud never use these
   credentials; see [Godmode Cloud](#godmode-cloud).
-* **MCP gateway**: each run gets a random bearer token scoped to that run/agent; expires when the run ends.
+* **MCP gateway**: each run gets a random bearer token scoped to that run/agent; expires when the run ends. A
+  connected app's key (see [Connected apps](#connected-apps-claude-code--mcp)) opens `/mcp` only, and there only the
+  management tools.
   Management tools cannot grant reveal access, move agents between workspaces or attach out-of-scope profiles/MCP
   servers. `agent_delegate` to a reveal-mode agent works for every caller, but unless the caller's run reads raw
   secrets itself (reveal mode, its own chat not fill-only) and the target is global or in its workspace, the task's
@@ -491,6 +494,53 @@ the core, the desktop and the phone alike.
 
 Runs may get three more servers behind the gateway, all with the same run token: `/mcp/computer` (see Computer use),
 `/mcp/vm` (see macOS virtual machines) and `/mcp/ssh` (see SSH servers).
+
+## Connected apps (Claude Code & MCP)
+
+Claude Code — and any other MCP client — can set Godmode up from outside: create and change agents, automations and
+tasks, and read what was done. `packages/core/src/connect/`.
+
+* **Keys.** `connectors` (migration 70): `name`, `client` (`claude-code` | `other`), `access` (`manage` | `read`),
+  `token_hash` (SHA-256 of `gmc_<random>`), `installed`, `calls`, `last_tool`, `last_used_at`. The key is in the answer
+  of `POST /api/connectors` and nowhere else. Backups leave the table out. An `access` value other than `manage` only
+  reads.
+* **Gateway.** `POST /mcp` takes a run token or an app's key; `/mcp/computer`, `/mcp/vm`, `/mcp/ssh` and the hook only
+  run tokens. `connectorContext()` turns a key into a `RunContext` with `agentId` = the built-in agent, `runId` and
+  `conversationId` `""`, and `connector: { id, name, access }`. The server introduces itself with
+  `CONNECT_INSTRUCTIONS` instead of the agents' text.
+* **Tools.** `CONNECTOR_TOOLS` in `mcp/tools.ts` is the allowlist, each tool marked `read` or `manage`: `agents_list`,
+  `agent_get`, `agent_create`, `agent_update`, `agent_delete`, the `routine_*` and `automation_*` tools, `tasks_list`,
+  `task_get`, `task_create`, `task_update`, `task_message`, `task_note`, `runs_list`, `spend_overview`, `workspaces_list`,
+  `logins_overview` (names, never secrets), `missing_logins_list`, `vms_list`, `vm_create`, `vm_assign`, `vm_power`.
+  Nothing that needs a run, a chat or a browser (vault fills, questions, follow-ups, delegation, API tools). `tools/list`
+  and `tools/call` both check it; a `read` key is refused on `manage` tools. A read key still sees login names and
+  usernames (`logins_overview`) and snippets of prompts and results (`runs_list`, `task_get`). The tools themselves
+  are unchanged, so the agent rules hold: created agents are fill-only without management rights, computer use, a working folder or SSH
+  servers; workspace moves, browser profiles and out-of-scope MCP servers stay human-only. `agents_list` includes the
+  built-in agent for an app.
+* **Audit.** The tools audit as the built-in agent (`agent.create`, …); every `manage` call, and every call that was
+  refused or failed, adds `connector.call` with actor `connector:<id>`, the tool as target, the app's name and `ok`.
+  `connector.create` / `connector.remove` for the keys. `task_update` refuses to rewrite the title, description or
+  type of a task whose agent the caller couldn't hand work to (reveal mode, unattended computer use) — for agents
+  and apps alike.
+* **Command line** (`connect/cli.ts`, key in `GODMODE_CONNECT_TOKEN`): `godmode mcp` is an MCP server over stdio that
+  answers `initialize` and `ping` itself and passes everything else to the running core's `/mcp`; `godmode tools` and
+  `godmode call <tool> <json>` do one request. They find the core through `<data dir>/core.json` (written by `serve`,
+  removed on shutdown) on every call — so a core that restarts on another port is found again — or `GODMODE_URL` for
+  one on another computer. The setup always names `--data-dir`, since the app starts the program in its own
+  environment. While Godmode is closed (or quits during a call), `tools/list` answers with no tools and the bridge
+  sends `notifications/tools/list_changed` once the core answers a ping again; tool calls say that Godmode isn't
+  running. Only JSON-RPC answers are passed on: anything else becomes an error for that request.
+* **Claude Code.** `POST /api/connectors { client: "claude-code", install: true }` runs
+  `claude mcp add-json --scope user godmode {command, args: ["mcp"], env: {GODMODE_CONNECT_TOKEN}}` (after removing the
+  entry it made before; the keys of replaced entries are deleted). Removing that app runs `claude mcp remove`. When
+  Claude Code isn't installed or refuses, the answer carries the command to paste, and apps added earlier stop
+  counting as installed (their entry is gone). Godmode's own runs use
+  `--strict-mcp-config`, so the entry never reaches an agent's run, and `GODMODE_CONNECT_TOKEN` is stripped from run
+  environments.
+* **Routes.** `GET /api/connectors` (apps, the tool list, whether Claude Code is installed), `POST /api/connectors`,
+  `DELETE /api/connectors/:id` — refused for phones and through Godmode Cloud. UI: Settings → Claude Code & MCP
+  (`connect-section.tsx`, `connect-app-dialog.tsx`); entity `connectors` refreshes it when an app is used.
 
 ## HTTP API
 

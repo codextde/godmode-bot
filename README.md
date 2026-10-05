@@ -60,6 +60,7 @@ needs to be useful:
 | ⚡ **Automations** | Work starts when it happens: on a schedule (“weekdays at 08:00”), when something happens in a connected app (a new email, a Slack message, a calendar event, a Notion update), when a condition you describe comes true (“competitor pricing changes”), or when a webhook is called. Describe it in one sentence and Godmode sets it up. |
 | ⏰ **Follow-ups** | When a task needs waiting — a reply to an email, a delivery, a build, office hours — the agent sets itself a time and picks the chat up again on its own, with all the context, like a coworker who says “I'll check back tomorrow at 10”. You see when it comes back and can continue now, move it or cancel it. |
 | 🤝 **Delegation** | Agents hand tasks to peer agents or spawn short-lived subagents. The Godmode agent can list, check, create and configure all agents. Follow a handoff both ways: open the teammate's chat from the handoff card, and jump back to the chat that asked from there. |
+| 🧰 **Claude Code & MCP** | Build your team from the terminal: connect Claude Code — or Cursor, Codex, Claude Desktop, any app that speaks MCP — and say *“Create a Godmode agent that…”*. One click in **Settings → Claude Code & MCP** adds Godmode to Claude Code for every project. The app gets Godmode's own management tools (agents, automations, tasks, runs, VMs) through a key of its own, with full or look-only access; scripts reach the same tools with `godmode call`. Passwords, 2FA codes and settings stay out of its reach. |
 | 🏢 **Team & org chart** | Give every agent a role (*Bookkeeper*, *Research analyst*) and a lead; agents are told who does what and who they report to, so work goes to the right one. The **org chart** shows the whole team with what each is doing right now. Status tells the truth — *Working in 2 chats*, *Queued*, *Needs your answer*, *Last run failed* (one click opens the run) — and each agent's page shows **what's on its plate**: live work, waiting chats, board tickets, follow-ups and its next automations. Duplicate an agent in one click; messages from automations, the board or other agents are labelled as such, never shown as yours. Or start a **whole team** in one click — *Back office*, *Marketing*, *Sales*, *Product & QA*: a lead and its reports, wired up, with their schedules. |
 | 💰 **Spend & budgets** | See what the team cost today, this week, this month and all time — per agent and per kind of work, booked when it was spent. Give the team (and any agent) a **monthly budget**: you're told at 80%; at 100% automations, follow-ups and board tickets are **held, not failed** — they continue by themselves next month or as soon as you raise the budget, or right away when you click *Let it run*. Chats you start always run. |
 | 📨 **Message queue** | Keep writing while an agent works: your messages wait in a queue above the message box, and the agent picks them up at its next step and works them into what it is doing — a correction lands right away, an extra request comes after the current step. Reword or remove a queued message until it is picked up, or hit *Send now* to interrupt. |
@@ -142,6 +143,10 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/phone-pairing.png" alt="Connect a phone by scanning a one-time QR code" /><br /><sub><b>Connect a phone</b> — scan a one-time code; the phone gets its own key</sub></td>
     <td><img src="docs/screenshots/phone-settings.png" alt="Phone settings: Tailscale status, phone access and paired phones" /><br /><sub><b>Phone settings</b> — Tailscale status, paired phones, remove one anytime</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/connect.png" alt="Settings: Claude Code and MCP, with the connected apps and the tools they can call" /><br /><sub><b>Claude Code & MCP</b> — connected apps, their access and the tools they can call</sub></td>
+    <td><img src="docs/screenshots/connect-claude-code.png" alt="Claude Code connected in one click, with a first prompt to try" /><br /><sub><b>One click</b> — Godmode adds itself to Claude Code; ask for an agent in your next session</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/messaging.png" alt="Slack, Telegram and Teams bots connected to agents" /><br /><sub><b>Messaging</b> — talk to agents from Slack, Telegram and Microsoft Teams</sub></td>
@@ -252,6 +257,27 @@ The runner keeps its Mac awake while it serves. Sign in to Claude Code on it onc
 and Screen Recording on its screen if agents should use apps there — the runner's health view says what's left. On the
 runner: `godmode runner status`, `godmode runner pair` (a new pairing code to paste under **Add runner → Enter a
 pairing code**), `godmode runner uninstall`.
+
+### Claude Code & other AI tools — set Godmode up from your terminal
+
+1. In Godmode open **Settings → Claude Code & MCP → Connect Claude Code**. Godmode adds itself to Claude Code on this
+   computer as an MCP server, for every project.
+2. Start a new Claude Code session and ask: *“Create a Godmode agent that checks our competitors' pricing every Monday
+   morning and sends me a summary.”* The agent, its instructions and its schedule show up in Godmode.
+
+**Connect another app** gives any other MCP client (Cursor, Codex, Claude Desktop…) its own key, with the config to
+paste. A key either sets up and steers (agents, automations, tasks, VMs) or only looks; remove an app in the same place
+and its key stops working. The same tools work from a shell, for scripts:
+
+```bash
+export GODMODE_CONNECT_TOKEN=gmc_…          # the key from Settings → Claude Code & MCP
+godmode tools                                # what the key can do; `godmode tools agent_create` shows the arguments
+godmode call agent_create '{"name":"Scout","role":"Research analyst","instructions":"…"}'
+godmode mcp                                  # the MCP server itself (stdio) — what the apps start
+```
+
+`godmode` here is the core binary (in the desktop app: `Godmode Bot.app/Contents/MacOS/godmode-core`; the dialog shows
+the full path). Inside Godmode nothing changes: the built-in *Godmode* agent creates and manages agents from any chat.
 
 ## ⚡ Quick start
 
@@ -404,6 +430,13 @@ Every run is committed, so you can see exactly what an agent learned and did —
   set of routes: no logins, 2FA codes, backups, integrations, settings or folders, and only screens shared in a chat
   can be controlled. A paired phone can still ask agents to act on your computer — remove a lost phone in
   Settings → Phone, and turn on *Require Face ID* in the app.
+- **Connected apps** (Claude Code, other MCP clients) get a key of their own (stored hashed) that opens only the
+  management tools of the MCP gateway: no passwords, 2FA codes, settings or files. They see which logins exist (names
+  and usernames) and what agents were asked and answered. They act as the built-in agent and inside its limits — an
+  agent they create can use saved logins but not read them, can't manage agents and can't control this computer until
+  you allow it. Every change and every refused call is in the audit log; removing an app cuts it off at once. A key
+  that sets up and steers can still create agents and automations that act with your logins: connect only apps you
+  trust, and give the others a look-only key.
 
 - **Runners** pair with a one-time code and pin each other's keys; the link is end-to-end encrypted (X25519, AES-256-GCM)
   and the runner's API never listens beyond its own loopback. A paired Godmode gets your vault key on the runner so
@@ -445,6 +478,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Runners: another Mac does the work of a chat while this one sleeps — one install command, encrypted link, setup copied, live view
 - [ ] Runners on Windows and Linux, tasks of the board on a runner, VMs copied to a runner
 - [x] Godmode Cloud (optional, self-hosted): your computer in any browser, phones without Tailscale, accounts and plans
+- [x] Claude Code & MCP: Claude Code and other AI tools create and manage agents, automations and tasks from outside, plus a `godmode` command line for scripts
 - [ ] Push notifications
 - [ ] Team mode: shared workspaces and approvals
 

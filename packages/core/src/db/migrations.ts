@@ -1099,4 +1099,24 @@ DELETE FROM goals WHERE workspace_id IS NOT NULL AND workspace_id NOT IN (SELECT
 ALTER TABLE conversations ADD COLUMN secret_access TEXT;
 `,
   },
+  {
+    id: 70,
+    name: "connectors",
+    sql: /* sql */ `
+-- Apps outside Godmode (Claude Code, other MCP clients) that may call its management tools. \`token_hash\` is the
+-- SHA-256 of the app's key. installed: Godmode added the app's entry to Claude Code on this computer.
+CREATE TABLE IF NOT EXISTS connectors (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  client TEXT NOT NULL DEFAULT 'other',
+  access TEXT NOT NULL DEFAULT 'manage',
+  token_hash TEXT NOT NULL UNIQUE,
+  installed INTEGER NOT NULL DEFAULT 0,
+  calls INTEGER NOT NULL DEFAULT 0,
+  last_tool TEXT,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL
+);
+`,
+  },
 ];

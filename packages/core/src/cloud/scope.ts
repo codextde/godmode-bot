@@ -285,6 +285,10 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["PATCH|DELETE", "/api/mobile/devices/:id", refused(PHONES_ONLY)],
   ["GET|DELETE", "/api/mobile/me", refused(PHONES_ONLY)],
 
+  // Keys for apps on this computer are made and taken away there.
+  ["GET|POST", "/api/connectors", refused(COMPUTER_ONLY)],
+  ["DELETE", "/api/connectors/:id", refused(COMPUTER_ONLY)],
+
   ["GET", "/api/cloud", "owner"],
   ["PUT", "/api/cloud", refused(LINK_ONLY)],
   ["POST|DELETE", "/api/cloud/link", refused(LINK_ONLY)],

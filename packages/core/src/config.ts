@@ -102,6 +102,12 @@ export function config(): CoreConfig {
   return current;
 }
 
+/** argv that starts this Godmode again: the compiled binary, or bun with the entry script when it runs from source. */
+export function selfCommand(): string[] {
+  const compiled = Bun.main.startsWith("/$bunfs/") || Bun.main.startsWith("B:/~BUN/");
+  return compiled ? [process.execPath] : [process.execPath, Bun.main];
+}
+
 export function isLoopbackHost(host: string): boolean {
   return host === "127.0.0.1" || host === "localhost" || host === "::1";
 }

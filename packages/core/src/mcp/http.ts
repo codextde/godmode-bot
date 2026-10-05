@@ -1,6 +1,7 @@
 /**
  * Godmode MCP gateway at POST /mcp — Streamable HTTP transport, stateless, JSON-RPC 2.0.
- * Authenticated with per-run bearer tokens (mcp/tokens.ts), never with the user's access token.
+ * Authenticated with per-run bearer tokens (mcp/tokens.ts) or, on `/mcp` only, the key of a connected app
+ * (connect/connectors.ts) — never with the user's access token.
  * `tools/call` answers over SSE when the client accepts it, with keepalives, so long calls
  * (agent_delegate waiting for a peer) survive idle timeouts; everything else answers with JSON.
  */
@@ -10,6 +11,8 @@ import { excerpt, logger } from "../log";
 import { getAgent } from "../agents/service";
 import type { RunContext } from "../types";
 import { resolveRunToken } from "./tokens";
+import { connectorContext } from "../connect/connectors";
+import { CONNECT_INSTRUCTIONS } from "../connect/instructions";
 import { deliverQueued, pauseAtStep } from "../runner/runner";
 import { hasQueued } from "../services/messageQueue";
 import { UnknownToolError, callTool, listToolsFor, toolErrorMessage } from "./tools";
@@ -74,6 +77,9 @@ export const GODMODE_SERVER: McpServerDef = {
   call: callTool,
   isUnknownTool: (err) => err instanceof UnknownToolError,
 };
+
+/** The same gateway as an app outside Godmode sees it: the management tools, introduced for a reader that isn't an agent. */
+const CONNECT_SERVER: McpServerDef = { ...GODMODE_SERVER, instructions: CONNECT_INSTRUCTIONS };
 
 export const COMPUTER_SERVER: McpServerDef = {
   name: "computer",
@@ -227,8 +233,10 @@ function sseCall(ctx: RunContext, msg: unknown, server: McpServerDef): Response 
 }
 
 async function serve(c: Context, server: McpServerDef): Promise<Response> {
-  const ctx = resolveRunToken(bearer(c));
+  const token = bearer(c);
+  const ctx = resolveRunToken(token) ?? (server === GODMODE_SERVER ? connectorContext(token) : null);
   if (!ctx) return c.json(rpcError(null, -32001, "Unauthorized: invalid or expired run token"), 401);
+  if (ctx.connector) server = CONNECT_SERVER;
 
   let body: unknown;
   try {

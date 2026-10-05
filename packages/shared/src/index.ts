@@ -10,6 +10,7 @@ export * from "./messaging";
 export * from "./schedule";
 export * from "./tasks";
 export * from "./mobile";
+export * from "./connect";
 export * from "./remote";
 export * from "./character";
 export * from "./files";

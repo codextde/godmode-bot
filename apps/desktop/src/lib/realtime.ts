@@ -70,6 +70,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   goals: [qk.goals],
   // A phone was paired, removed, or connected.
   mobile: [qk.mobile],
+  // An app was connected, removed, or called a tool.
+  connectors: [qk.connectors],
   // A runner was paired, removed, or its chats changed.
   runners: [qk.runners],
   // Cloud link state, plan or billing changed (linking approved, link up or down, notice from the cloud).

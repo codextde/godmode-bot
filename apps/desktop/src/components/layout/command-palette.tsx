@@ -30,6 +30,7 @@ import {
   ScrollText,
   Server,
   Settings,
+  SquareTerminal,
   ShieldCheck,
   SlidersHorizontal,
   Smartphone,
@@ -300,6 +301,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem value="instructions rules agent context" onSelect={() => go("/settings/instructions")}>
             <ScrollText /> Instructions
+          </CommandItem>
+          <CommandItem value="claude code mcp server cli connect terminal cursor api key" onSelect={() => go("/settings/connect")}>
+            <SquareTerminal /> Claude Code & MCP
           </CommandItem>
           <CommandItem value="godmode cloud link browser remote access" onSelect={() => go("/settings/cloud")}>
             <Cloud /> Godmode Cloud

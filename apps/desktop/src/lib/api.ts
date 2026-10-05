@@ -46,6 +46,9 @@ import type {
   ComputerInputEvent,
   ComputerSources,
   ComputerStatus,
+  ConnectStatus,
+  ConnectorCreated,
+  ConnectorInput,
   Conversation,
   ConversationPatch,
   ConversationWithMessages,
@@ -603,6 +606,14 @@ export const api = {
     cancelPairing: () => del<{ ok: true }>("/api/mobile/pairing"),
     renameDevice: (id: string, name: string) => patch<MobileDevice>(`/api/mobile/devices/${id}`, { name }),
     removeDevice: (id: string) => del<{ ok: true }>(`/api/mobile/devices/${id}`),
+  },
+
+  connectors: {
+    /** Apps that may set Godmode up from outside (Claude Code, other MCP clients), and what they can call. */
+    status: () => get<ConnectStatus>("/api/connectors"),
+    /** A new key. The answer holds it, with everything the app needs to use it; it can't be read again. */
+    create: (input: ConnectorInput) => post<ConnectorCreated>("/api/connectors", input),
+    remove: (id: string) => del<{ ok: true }>(`/api/connectors/${id}`),
   },
 
   runners: {
