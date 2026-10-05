@@ -46,6 +46,7 @@ vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, ta
                       disks and gm-image-* templates), downloads/ (image layers while downloading),
                       shared/<vm-id>/ shared folders, logs/<vm-id>.log, ssh/ key
 tasks/<task-id>/      checkout of a coding task's repository (see "Tasks")
+mods/<run-id>/<name>/ a run's own copy of the mods it loads (see "Mods"); written from the database, removed with the run
 logs/godmode.jsonl    diagnostic log (see "Diagnostic log"); godmode.1.jsonl is the previous 2 MB, desktop.log the shell's
 link-key              0600 — this installation's X25519 key pair for the runner link (see "Remote runners")
 runner.json           a runner only (~/.godmode-runner, GODMODE_RUNNER_HOME): pid and ports while it serves
@@ -183,7 +184,9 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
-       --settings <tmp json>                   (the message-queue hook, see below; `ultracode: true` with Ultracode)
+       --settings <tmp json>                   (the message-queue hook, see below; `ultracode: true` with Ultracode;
+                                                `pluginConfigs` with the options of the run's mods)
+       [--plugin-dir <data>/mods/<run-id>/<name> for each mod that is on for the agent, see Mods]
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key or in a VM; Bash in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
        [--add-dir <folder or clone> for each usable workspace folder and repository]
@@ -488,6 +491,7 @@ the core, the desktop and the phone alike.
 | `ask_human({ question, context?, options? })`, `request_approval({ action, reason, affects })` | Ask the human a question or for an OK and stand still until the answer; the run continues with it (see Questions and approvals). Not in condition checks, dreams or delegated runs |
 | `task_report_blocked({ reason })` | Only in runs working on a board task: say what's missing (access, an account, information nobody can give now); the task moves to Blocked when the run ends (see Tasks). Decisions and OKs go through `ask_human` / `request_approval` |
 | `memory_dream_report({ summary, changes })` | Only in dream runs — and the only tool they get: report what a memory consolidation changed (see Dreaming) |
+| `mods_list({ mod? })`, `mod_save({ mod?, title, description?, files })` | Only for agents with `canManageAgents`: the installed mods (with `mod`: one with its files), and saving a mod the agent wrote as a draft — switched off, checked by Claude Code's validator, for the human to review (see Mods). `mod_save` only saves over an agent's own draft — never a mod the human made, added or has had on — and isn't offered on a runner |
 | `notify_user({ title, body })` | Push a notification to the human |
 | `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
 | `api_tools_list()`, `api_tool_docs({ tool })`, `api_tool_request({ tool, method, path, json \| form \| body, query, saveAs })` | Only for agents with API tools: list them, read one's docs, call its API with the key added by Godmode (see Integrations) |
@@ -868,6 +872,74 @@ Remote machines agents sign in to and control (`packages/core/src/ssh/`, `/api/s
   system prompt lists the servers (address, OS, description, whether sudo can be answered) with rules for working on
   real machines; resumed turns restate them. Audit: `ssh.use` (first call per run and server), `ssh.sudo`,
   `ssh.assign` / `ssh.unassign`.
+
+## Mods
+
+[Claude Code mods](https://claude.com/blog/claude-code-mods) are small plugins of TypeScript function hooks that run
+inside Claude Code: `register(on, options)` adds hooks `($, e, next)` on its events — a tool call, a prompt, a row the
+conversation keeps, a turn — and each hook lets the event happen (`next(e)`), changes it or answers for itself
+(`{ deny }`). Godmode installs them for its agents (`packages/core/src/mods/`, `/api/mods`, the **Mods** page):
+
+* **Records** (`mods`, `Mod` in `shared/mods.ts`): `name` (the plugin's name — lowercase, fixed once created), title,
+  description, icon, where it came from (`template` | `custom` | `agent` | `import`), `files` (every file of the plugin
+  as JSON, path → text: `.claude-plugin/plugin.json`, `hooks/hooks.json`, the hooks module, …), whether it is on, whose
+  runs load it (`scope` `all` | `agents` + `agent_ids`; a deleted agent never widens it to everyone), option values and
+  the last check. The database is the mod: paths are relative, stay inside the folder and never name
+  `.claude-plugin/types/` (Claude Code's own); at most 40 files, 200 KB each. The manifest always carries the mod's
+  name. `digest` names the code as it stands.
+* **Check** (`mods/check.ts`): Claude Code says nothing in a headless run about a mod it refuses — the mod just doesn't
+  act. So every change of the files is run through `claude plugin validate --json` in a scratch folder (the validator
+  reads the code, it doesn't run it), and the report is kept (`ModCheck`): errors and warnings by file, the hooks the
+  module registers (with their matchers), everything it calls on `$` — also through a helper function of its own — and
+  whether the plugin ships programs for Claude Code to start (command hooks, MCP or LSP servers, monitors, `bin/`).
+  `modAbilities()` turns that into what the mod can do — "Sees and changes tool calls", and marked as reaching outside
+  the conversation: reading or writing files, running programs, the network, environment variables. A mod whose check
+  fails can't be switched on (409). The report is about one Claude Code (`check_key`: the files' digest + the CLI
+  binary's size and date): after an update of Claude Code the next run checks its mods again first, and switching a mod
+  on does too. Runs that start together ask once about the same code; a check that timed out is asked again next time.
+  `POST /api/mods/check` checks unsaved files (the editor's *Check*); without Claude Code installed there is no report
+  (`check: null`).
+* **Gallery** (`mods/templates.ts`, `GET /api/mods/templates`): mods Godmode ships — *Protect files*, *Command guard*,
+  *Step limit*, *Secret scrubber*, *Turn recap*, *Prompt shortcuts*. Each is one hooks module (`mods/gallery/<id>.ts.txt`,
+  imported as text so the compiled core carries it) plus a manifest with its options. They are on once added; a gallery
+  mod whose code the human changes becomes their own (`custom`). `test/mods-gallery.test.ts` loads each module and
+  calls its hooks the way the engine does; `test/mods.e2e.test.ts` (`GODMODE_E2E=1`) validates them against the
+  installed Claude Code. The guards match patterns in tool calls and output: *Command guard* also sees the shells of
+  Godmode's `ssh` and `vm` tools; none of them stops an agent that is set on getting around it.
+* **Options**: the manifest's `userConfig` (string, number, boolean, a choice, a list, a path; `required`, `sensitive`)
+  becomes the form on the mod's *Options* tab. Values are checked against it and stored on the mod; sensitive ones are
+  sealed with the vault key (`mods.secrets:<id>`, never returned — `secretKeys` says which have one). A run that loads
+  the mod is handed them in its settings file, where an agent with full access to the computer could read them. What
+  the code no longer declares is forgotten when the code is saved, and doesn't come back with a later version. A mod
+  with a required option that has no value can't be switched on.
+* **Runs** (`modsForRun`, `runner.ts`): every run except dreams and condition checks loads the mods that are on for its
+  agent. The first to load sees an event first and its result last, so the gallery's insight mods load first (they see
+  every call, refused ones included), then the human's own and workflow mods, then privacy and guardrails — which judge
+  a call as it will run, after anything another mod rewrote; within a group, in the order they were added. Each run gets
+  a copy of its own (`<data>/mods/<run-id>/<name>/`, written from the database, removed when the run ends; leftovers go
+  at startup), passed with one `--plugin-dir` each; the options go into the run's `--settings` file as `pluginConfigs`.
+  So a run that writes into its mods reaches no other run and no later one. A mod that is on but can't be loaded (its
+  check fails, an option is missing, its secrets need the vault) is left out and the chat says so in a warning — the
+  human relies on it. Runs in a VM and runs without permission bypass load them too: a mod is the human's code, not
+  the run's.
+* **In the chat** (`stream.ts`): what a mod shows the person arrives as `system` events — `ui_log`, `ui_toast`,
+  `ui_status` — and becomes a `notice` block with `mod` (the plugin's name), drawn as a note from that mod. A standing
+  status is said once; at most 200 notes per stretch of a run. A refused tool call is the tool's error result with the
+  mod's reason. A run with mods gets `CLAUDE_CODE_PLUGIN_DIR_WATCH=1`: only then does a headless Claude Code tell its
+  host that a hook threw and was skipped, or that a module didn't load — notes at warning level. Panes and bands
+  (`ui.render`) aren't drawn — Godmode is a headless host — and the mod's abilities say so.
+* **Who decides**: only the human switches a mod on, and the switch names the code they saw (`digest` on `PATCH`; 409
+  when the code is another by now). A manager agent can write one (`mod_save`; its prompt points it at Claude Code's
+  `plugin-authoring` skill): it arrives switched off with `needsReview`, the human gets a notification that leads to
+  the code — one for every version — and switching it on is the OK. An agent saves over drafts only: a mod the human
+  made, added from the gallery or has had on is theirs, switched on or not — otherwise an agent could rewrite a guard
+  into nothing. `POST /api/mods/import` reads a Claude Code plugin folder from this computer (text files only, links
+  not followed); it arrives switched off.
+* **Elsewhere**: backups carry mods and bring them back switched off and unchecked (one with an unsafe name is
+  skipped); runners get them with the rest of the setup and check them with their own Claude Code; phones can't reach
+  `/api/mods`; through Godmode Cloud, reading is allowed, creating, changing and deleting need `allowSecrets`, importing
+  a folder is refused. Audit: `mod.create`, `mod.update` (which files, whether it was switched on or off, its scope —
+  never the code or an option's value), `mod.delete`.
 
 ## Automations
 

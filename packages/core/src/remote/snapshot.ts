@@ -12,6 +12,7 @@
  */
 import { join } from "node:path";
 import type { EntityName } from "@godmode/shared";
+import { MOD_NAME_RE } from "@godmode/shared";
 import { ensureAgentRepo, refreshAgentFiles, trashAgentRepo } from "../agents/service";
 import { decodeValue, encodeValue, EXECUTABLE_SETTINGS, SAFE_ID, type DumpValue } from "../backup/backup";
 import { ensureDefaultProfile } from "../browser/manager";
@@ -64,6 +65,8 @@ const TABLES: TableSpec[] = [
   { table: "composio_connections", own: [], entity: "composio" },
   { table: "api_tools", own: ["last_used_at"], entity: "api-tools" },
   { table: "ssh_servers", own: ["last_connected_at", "last_error"], entity: "ssh-servers" },
+  // check_*: each computer checks a mod with its own Claude Code.
+  { table: "mods", own: ["check_report", "check_key"], entity: "mods" },
   {
     table: "browser_profiles",
     own: ["user_data_dir", "cookie_count", "imported_from", "imported_at"],
@@ -196,6 +199,7 @@ function unsafe(table: string, row: Record<string, unknown>): string | null {
   }
   if (table === "browser_profiles" && !SAFE_ID.test(String(row.id))) return `Skipped browser profile "${label}": its id isn't a safe folder name.`;
   if (table === "vms" && !VM_ID.test(String(row.id))) return `Skipped virtual machine "${label}": its id isn't a safe folder name.`;
+  if (table === "mods" && !MOD_NAME_RE.test(String(row.name))) return `Skipped mod "${label}": its name isn't a safe folder name.`;
   return null;
 }
 

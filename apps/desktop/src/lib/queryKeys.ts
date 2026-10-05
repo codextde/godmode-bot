@@ -99,6 +99,9 @@ export const qk = {
   vmScreen: (id: string, size: number) => ["vm-screen", id, size],
   sshServers: ["ssh-servers"] as unknown[],
   sshLocalKeys: ["ssh-local-keys"] as unknown[],
+  mods: ["mods"] as unknown[],
+  /** Not under ["mods"]: the gallery doesn't change when a mod does. */
+  modTemplates: ["mod-templates"] as unknown[],
   /** Phone access: Tailscale status and paired phones. */
   mobile: ["mobile"] as unknown[],
   connectors: ["connectors"] as unknown[],

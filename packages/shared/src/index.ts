@@ -5,6 +5,7 @@ export * from "./constants";
 export * from "./computer";
 export * from "./vm";
 export * from "./ssh";
+export * from "./mods";
 export * from "./git";
 export * from "./messaging";
 export * from "./schedule";

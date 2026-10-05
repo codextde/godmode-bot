@@ -1,0 +1,30 @@
+import type { Register } from 'claude-code'
+
+export const register: Register = (on, options) => {
+  const limit = Number(options.maxCalls)
+  let calls = 0
+
+  on('turn.start', ($, e, next) => {
+    calls = 0
+
+    return next(e)
+  })
+
+  on('tool.call', ($, e, next) => {
+    // Godmode's own tools stay open: past the limit the agent can still report, notify and ask the human.
+    if (String(e.tool).startsWith('mcp__godmode__')) {
+      return next(e)
+    }
+    calls += 1
+    if (calls <= limit) {
+      return next(e)
+    }
+    if (calls === limit + 1) {
+      $.ui.log(`Step limit reached: ${limit} tool calls in this turn. Further calls are refused.`)
+    }
+
+    return {
+      deny: `The "Step limit" mod allows ${limit} tool calls per turn and this turn has used them. Stop calling tools: say what is done, what is left and why it took this many steps, then end the turn.`,
+    }
+  })
+}

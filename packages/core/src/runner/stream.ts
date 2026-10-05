@@ -12,7 +12,7 @@ import { toolActivity, type ActivityNames } from "@godmode/shared";
  *  - the final `result` (one per turn: a workflow that ends later starts another turn in the same process)
  * Subagent output (events with `parent_tool_use_id`) is kept but flagged with `parentToolUseId`.
  * Slash commands that Claude Code runs locally (`/context`, `/model sonnet`…) become `command` blocks;
- * `/clear` and `/compact` become notices.
+ * `/clear` and `/compact` become notices, and so does what a mod posts (`ui_log`, `ui_toast`, `ui_status`).
  */
 import type { MessageBlock, QueuedMessage, RunUsage, ToolTask, ToolTaskAgent } from "@godmode/shared";
 
@@ -20,6 +20,10 @@ import type { MessageBlock, QueuedMessage, RunUsage, ToolTask, ToolTaskAgent } f
 export const MAX_TOOL_RESULT_CHARS = 20_000;
 /** Largest base64 image kept on a tool_use block (~1.5 MB decoded). */
 export const MAX_TOOL_IMAGE_BASE64 = 2_000_000;
+/** Notes one stretch of a run keeps from its mods, and how long one may be: a mod can log in a loop. */
+export const MAX_MOD_NOTES = 200;
+const MAX_MOD_NOTE_CHARS = 2000;
+const MOD_FAILURE = /^hooks module did not load: |^[\w.]+ hook skipped: /;
 
 export interface StreamFinal {
   text: string;
@@ -196,6 +200,8 @@ export class StreamAccumulator {
   private messages = new Map<string, BlockRef[]>();
   /** Background work this stretch of the run started, by Claude Code's task id (the same objects as on the blocks). */
   private tasks = new Map<string, ToolTask>();
+  private modStatus = new Map<string, string>();
+  private modNotes = 0;
   private pendingTextDelta = "";
 
   /** `blocks`: what the run already produced before it was paused. */
@@ -292,8 +298,11 @@ export class StreamAccumulator {
     const partial = new Set<number>();
     for (const refs of this.messages.values()) for (const r of refs) if (!r.confirmed) partial.add(r.blockIdx);
     for (let i = this.blocks.length - 1; i >= 0; i--) if (partial.has(i)) this.blocks.splice(i, 1);
-    const last = this.blocks[this.blocks.length - 1];
-    if (pause.reason === "limit" && last?.type === "text" && !last.parentToolUseId && last.text.length < 300 && LIMIT_TEXT.test(last.text)) this.blocks.pop();
+    // A mod may have posted after Claude Code's line about the limit (a recap at the turn's end).
+    let at = this.blocks.length - 1;
+    while (at >= 0 && this.blocks[at]!.type === "notice" && (this.blocks[at] as Extract<MessageBlock, { type: "notice" }>).mod) at--;
+    const last = this.blocks[at];
+    if (pause.reason === "limit" && last?.type === "text" && !last.parentToolUseId && last.text.length < 300 && LIMIT_TEXT.test(last.text)) this.blocks.splice(at, 1);
     this.messages.clear();
     this.streams.clear();
     // Background work ends with the process; the run that continues streams these blocks again.
@@ -318,8 +327,34 @@ export class StreamAccumulator {
       return true;
     } else if (e.subtype === "task_started" || e.subtype === "task_progress" || e.subtype === "task_updated" || e.subtype === "task_notification") {
       return this.onTask(e);
+    } else if (e.subtype === "ui_log" || e.subtype === "ui_toast" || e.subtype === "ui_status") {
+      return this.onModNote(e);
     }
     return false;
+  }
+
+  /**
+   * What a mod shows the person (`$.ui.log`, `$.ui.toast`, `$.ui.status`) becomes a note from that mod. A status is
+   * repeated by the engine as long as it stands: only a new one is a note.
+   */
+  private onModNote(e: Json): boolean {
+    const mod = str(e.plugin);
+    const text = str(e.text)?.trim();
+    if (!mod) return false;
+    if (e.subtype === "ui_status") {
+      if (!text) this.modStatus.delete(mod);
+      if (!text || this.modStatus.get(mod) === text) return false;
+      this.modStatus.set(mod, text);
+    }
+    if (!text || this.modNotes > MAX_MOD_NOTES) return false;
+    this.modNotes++;
+    if (this.modNotes > MAX_MOD_NOTES) this.addNotice("info", "More notes from mods aren't shown in this turn.");
+    else {
+      // The engine's own lines about a mod: its module didn't load, or one of its hooks threw and was skipped.
+      const level = e.subtype === "ui_log" && MOD_FAILURE.test(text) ? "warning" : "info";
+      this.blocks.push({ type: "notice", level, text: text.length > MAX_MOD_NOTE_CHARS ? `${text.slice(0, MAX_MOD_NOTE_CHARS)}…` : text, mod });
+    }
+    return true;
   }
 
   /** Background work of a tool call: started, then progress (for a workflow with its agents), then how it ended. */

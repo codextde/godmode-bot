@@ -149,6 +149,7 @@ export type EntityName =
   | "computer"
   | "vms"
   | "ssh-servers"
+  | "mods"
   | "messaging"
   | "tasks"
   /** Goals: added, changed, deleted (their progress follows the tickets). */

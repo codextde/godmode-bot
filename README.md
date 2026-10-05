@@ -76,6 +76,7 @@ needs to be useful:
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
 | 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent works *entirely inside the VM* — commands, files, apps (computer use with Cua Driver) and the web (Google Chrome with browser-use) — and no browser opens on your Mac. It gives the software it installs there the macOS permissions it needs (Accessibility, Screen Recording, Automation, …) itself, so no permission dialog stops it. Watch the VM's screen next to the chat and take control anytime. Allow it once and agents sign in inside the VM too: Godmode fills your saved logins and 2FA codes for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
 | 🔌 **SSH servers** | Let agents work on your servers: save a server with a password or an SSH key (paste it, pick one from `~/.ssh` or generate a new one) and give it to a chat or an agent. Godmode signs in and answers `sudo` — the AI never sees the password or the key. Agents run commands, edit config files and copy files back and forth; the host key is pinned on the first connection. |
+| 🧩 **Mods** | [Claude Code mods](https://claude.com/blog/claude-code-mods) for your agents: small pieces of code that run inside every turn — refuse risky shell commands, keep agents away from `.env` files, mask keys in tool output before the model reads them, cap runaway turns, expand `!shortcuts`. Add one from the gallery, set its options, pick the agents it runs for; write your own in the built-in editor or let Godmode draft it. Every mod is checked by Claude Code's own validator, and Godmode shows what it hooks into and what it can reach before you switch it on. |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
 | 🔐 **Vault** | Logins with password generator, per-workspace or global, AES-256-GCM encrypted, fully audited. |
 | 📥 **Password import** | Bring logins over from Chrome (and Edge, Brave, Arc), 1Password (.1pux or CSV), Bitwarden, Apple Passwords, Firefox and more — with a preview that updates saved logins instead of duplicating them. |
@@ -175,6 +176,18 @@ needs to be useful:
   <tr>
     <td><img src="docs/screenshots/ssh-servers.png" alt="SSH servers with their connection status, pinned host keys and the agents and chats using them" /><br /><sub><b>SSH servers</b> — password or key, sealed in the vault; host keys pinned on the first connection</sub></td>
     <td><img src="docs/screenshots/ssh-chat.png" alt="An agent reading a config and a log on a server over SSH and changing the config after backing it up" /><br /><sub><b>Work on servers</b> — pick servers for a chat; the agent runs commands and edits files there</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/mods.png" alt="The Mods page: installed mods with what they hook into and the agents they run for, and the gallery below" /><br /><sub><b>Mods</b> — what each one hooks into, what it can reach and whose runs load it</sub></td>
+    <td><img src="docs/screenshots/mod-code.png" alt="A mod an agent drafted: its code in the editor, marked for review, with Claude Code's check result underneath" /><br /><sub><b>Read and edit the code</b> — a mod Godmode drafted waits for your review; Claude Code's validator checks every change</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/mod-options.png" alt="The options of Protect files: the protected paths and the kind of protection" /><br /><sub><b>Options</b> — set what a mod protects or refuses without touching its code</sub></td>
+    <td><img src="docs/screenshots/mods-chat.png" alt="A chat where Secret scrubber masked a token, Command guard and Protect files refused two steps and Turn recap summed up the turn" /><br /><sub><b>In the chat</b> — mods refuse steps, mask secrets and post notes while the agent works</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/mods-gallery.png" alt="The mod gallery: Protect files, Command guard, Step limit, Secret scrubber, Turn recap and Prompt shortcuts" /><br /><sub><b>Gallery</b> — guardrails, privacy, insight and workflow mods that work as they are</sub></td>
+    <td><img src="docs/screenshots/mod-overview.png" alt="A mod's overview: what it can do, with talking to the internet marked as reaching outside the conversation, and the event it hooks" /><br /><sub><b>What it can do</b> — told from the code by Claude Code's validator, before you switch it on</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/cleanup.png" alt="Settings → Cleanup: storage by area, a self check of tools, permissions, updates, database, disk and worktrees" /><br /><sub><b>Cleanup</b> — what the data folder holds, and a self check of everything Godmode relies on</sub></td>
@@ -345,6 +358,30 @@ trusts only that key from then on. Then pick the server for a **chat** (the *SSH
 | **Secrets** | The password, key and passphrase are sealed in the vault and never part of the prompt; transcripts and tool results mask them, also when a command prints them. The agent works in that account's shell, so give it an account with only the rights it needs — a narrow `NOPASSWD` sudo rule is safer than a saved sudo password. |
 | **Checking in** | Each server card shows whether it was reachable, its OS and pinned host key, which agents and chats use it, and a **Run command** box for a quick look yourself. |
 
+### Mods — change how your agents work
+
+Open **Mods** in the sidebar. The **gallery** has mods that are ready to use — add one and it is on for every agent:
+
+| | |
+|---|---|
+| **Protect files** | Agents can't edit or overwrite the paths you name (`.env`, keys, a `secrets` folder), also not with a shell command that redirects into them or removes, moves or edits them — or, if you choose, can't read them or name them in a shell command at all. |
+| **Command guard** | Refuses shell commands that match a pattern: force pushes, `git reset --hard`, `rm -rf` on your home folder, piping a download into a shell — on this computer and in the shells of servers and virtual machines. The agent is told to explain instead of finding another way. |
+| **Step limit** | Caps the tool calls of one turn; past the limit the agent has to wrap up and say what is left. |
+| **Secret scrubber** | Masks AWS, GitHub, Stripe, Slack and Google keys, JWTs, private keys, bearer tokens, passwords in URLs and `password=…` values in tool output before the model reads it — also secrets that aren't in your vault. Code is left as it is. |
+| **Turn recap** | Posts a line after each long turn: duration, tools used, failed calls. |
+| **Prompt shortcuts** | `!brief`, `!plan` and shortcuts of your own, at the start of a line or as the last word, are expanded before the agent reads your message. |
+
+Each mod has **options** (the paths, the patterns, the limit), and **Runs for** decides whose runs load it: every agent
+or the ones you pick. For anything else, **New mod** opens an editor with a starting point, or **Ask Godmode to write
+one** and review its draft: a mod an agent wrote arrives switched off, and switching it on is your OK — for exactly
+the code you read.
+
+A mod is real code inside the agent's process, so Godmode shows what it is before it runs: Claude Code's validator
+checks every change, and the mod's page lists what it **hooks into** (Bash calls, prompts, …) and what it can **reach
+outside the conversation** (files, programs, the network). A mod that doesn't pass can't be switched on; one that stops
+passing after a Claude Code update is left out of runs and the chat says so. What a mod posts (`$.ui.log`, a toast, a
+status) shows in the chat as a note from that mod.
+
 ### Good to know
 
 - **macOS — Chrome session import** reads your Chrome profile, which macOS protects: grant Godmode
@@ -473,6 +510,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Agents working in a dedicated macOS VM (Tart / Virtualization.framework): shell, files and screen, assigned per agent, chat or workspace
 - [x] API tools: any API with a key (Nano Banana, OpenAI, ElevenLabs…) for agents, global / workspace / agent
 - [x] SSH servers: agents run commands, edit files and copy files on remote machines — password or key, sudo, pinned host keys
+- [x] Mods: Claude Code mods for agents — a gallery of guardrails, options, an editor, drafts written by Godmode, checked before they run
 - [ ] Windows / Linux VMs
 - [x] Phone app (iOS / Android): chats, runs, automations, live browser, screen and VM views, paired over Tailscale
 - [x] Runners: another Mac does the work of a chat while this one sleeps — one install command, encrypted link, setup copied, live view

@@ -27,6 +27,7 @@ import { applyRuntimeSettings, onSettingsApplied } from "./services/runtime";
 import * as vault from "./vault/vault";
 import { ensureDefaultAgent } from "./agents/service";
 import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
+import { clearRunMods } from "./mods/service";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
@@ -166,6 +167,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   ensureDefaultProfile();
   await ensureDefaultAgent();
   recoverInterruptedRuns();
+  clearRunMods();
   // Runs that were cut off by a crash are booked now (once): what their earlier stretches cost counts.
   getDb().run(SPEND_BACKFILL_SQL);
   // Before anything can start a run: the runner keeps the display on while runs work, and counts them from the start.

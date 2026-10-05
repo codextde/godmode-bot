@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  Puzzle,
   Search,
   Server,
   Settings,
@@ -28,6 +29,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
+import { modState } from "@godmode/shared";
 import {
   Sidebar,
   SidebarContent,
@@ -57,7 +59,7 @@ import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
 import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { useBootstrap } from "@/lib/hooks";
+import { useBootstrap, useMods } from "@/lib/hooks";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { isMac, modKey } from "@/lib/desktop";
@@ -112,6 +114,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const attention = boot?.counts.attention;
   const waiting = attention?.total ?? (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0);
   const inboxCount = waiting || (boot?.counts.unreadNotifications ?? 0);
+  const { data: mods = [] } = useMods();
+  // Mods that wait for the human: an agent's draft to review, or code the check refuses.
+  const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m))).length;
 
   // Notices when the human comes back after a while (Home then sums up what happened).
   useEffect(() => startPresence(), []);
@@ -163,6 +168,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
     { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
+    { to: "/mods", label: "Mods", icon: <Puzzle />, badge: modsWaiting || undefined },
     { to: "/activity", label: "Activity", icon: <Activity /> },
     { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
   ];

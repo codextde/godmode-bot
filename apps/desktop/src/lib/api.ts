@@ -87,6 +87,13 @@ import type {
   MobileDevice,
   MobilePairingOffer,
   MobileStatus,
+  Mod,
+  ModCheck,
+  ModCheckInput,
+  ModImportInput,
+  ModInput,
+  ModPatch,
+  ModTemplate,
   ModelCatalog,
   PasswordImportPreview,
   PasswordImportResult,
@@ -595,6 +602,22 @@ export const api = {
     /** Private keys in ~/.ssh on the computer running Godmode. */
     localKeys: () => get<SshLocalKey[]>("/api/ssh/local-keys"),
     generateKey: (comment?: string) => post<SshGeneratedKey>("/api/ssh/keys", comment ? { comment } : {}),
+  },
+
+  mods: {
+    list: () => get<Mod[]>("/api/mods"),
+    get: (id: string) => get<Mod>(`/api/mods/${id}`),
+    /** The gallery: mods Godmode ships, ready to add. */
+    templates: () => get<ModTemplate[]>("/api/mods/templates"),
+    create: (input: ModInput) => post<Mod>("/api/mods", input),
+    update: (id: string, input: ModPatch) => patch<Mod>(`/api/mods/${id}`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/mods/${id}`),
+    /** Run Claude Code's validator over the saved files again. */
+    check: (id: string) => post<Mod>(`/api/mods/${id}/check`),
+    /** Check files that aren't saved yet; `check` is null when Claude Code isn't installed. */
+    checkFiles: (input: ModCheckInput) => post<{ check: ModCheck | null }>("/api/mods/check", input),
+    /** Add a Claude Code plugin folder from the computer running Godmode. */
+    import: (input: ModImportInput) => post<Mod>("/api/mods/import", input),
   },
 
   mobile: {

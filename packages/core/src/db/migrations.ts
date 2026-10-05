@@ -1119,4 +1119,34 @@ CREATE TABLE IF NOT EXISTS connectors (
 );
 `,
   },
+  {
+    id: 71,
+    name: "mods",
+    sql: /* sql */ `
+-- Claude Code mods. files: the plugin's files (JSON, path → text). check_report: what this computer's Claude Code said
+-- about them; check_key: the files and the Claude Code that report is about. secrets_enc: sensitive option values.
+CREATE TABLE IF NOT EXISTS mods (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  icon TEXT NOT NULL DEFAULT 'puzzle',
+  origin TEXT NOT NULL DEFAULT 'custom',
+  template_id TEXT,
+  created_by TEXT NOT NULL DEFAULT 'user',
+  files TEXT NOT NULL DEFAULT '{}',
+  option_values TEXT NOT NULL DEFAULT '{}',
+  secrets_enc TEXT,
+  secret_keys TEXT NOT NULL DEFAULT '[]',
+  enabled INTEGER NOT NULL DEFAULT 0,
+  needs_review INTEGER NOT NULL DEFAULT 0,
+  scope TEXT NOT NULL DEFAULT 'all',
+  agent_ids TEXT NOT NULL DEFAULT '[]',
+  check_report TEXT,
+  check_key TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`,
+  },
 ];

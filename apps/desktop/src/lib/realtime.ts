@@ -64,6 +64,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   // VM list + status (installs, image downloads, assignment changes).
   vms: [qk.vms],
   "ssh-servers": [qk.sshServers],
+  mods: [qk.mods],
   // Bot status, access requests and chats (the sidebar badge counts requests).
   messaging: [qk.messaging, qk.bootstrap],
   tasks: [qk.tasks, qk.goals],
