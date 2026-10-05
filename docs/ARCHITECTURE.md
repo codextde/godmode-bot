@@ -157,7 +157,13 @@ ask within the same moment share a request.
   credentials; see [Godmode Cloud](#godmode-cloud).
 * **MCP gateway**: each run gets a random bearer token scoped to that run/agent; expires when the run ends.
   Management tools cannot grant reveal access, move agents between workspaces or attach out-of-scope profiles/MCP
-  servers; fill-only agents cannot delegate to reveal-mode agents.
+  servers. `agent_delegate` to a reveal-mode agent works for every caller, but unless the caller's run reads raw
+  secrets itself (reveal mode, its own chat not fill-only) and the target is global or in its workspace, the task's
+  chat is marked fill-only (`conversations.secret_access = 'fill'`): `vault_get_login` / `vault_get_totp` are off in it
+  for good, and the agent counts as fill-only there for what it hands on or sets up — for itself too. What outlives
+  the task (automations, assigning board tasks, settings of a reveal-mode agent, giving that agent a VM) is still
+  refused for such callers. Login allow-lists are not compared, and the task can still write to the agent's memory and
+  files.
 * **Token hand-off**: the desktop shell starts the core with `--token-stdin` and writes the token as the first stdin
   line; the core strips `GODMODE_*` from every child process environment.
 
@@ -1006,7 +1012,7 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   filters by agent, `task_message` sends feedback into a ticket (it arrives marked as coming from that agent, not the
   human, is on the timeline, and is refused for the caller's own ticket and for a ticket whose run stands still — only
   the human continues those), `task_note` leaves a note (a working agent on its own ticket, managers on any).
-  `task_create` / `task_update` follow the delegation rules (no reveal-mode or unattended
+  `task_create` / `task_update` follow the rules for scheduling an agent (no reveal-mode or unattended
   computer agents from callers that couldn't use them, VM-kept runs stay off the host); coding tasks created by agents
   use the workspace's repositories; and a run working on a task — or delegated from one — can't start a manager agent
   (itself included), so tasks can't spawn tasks without end. Follow-ups wait while Godmode prepares or publishes a task. Task numbers are never reused.
