@@ -19,7 +19,7 @@ import ImageIO
 import ScreenCaptureKit
 import UniformTypeIdentifiers
 
-let HELPER_VERSION = "2"
+let HELPER_VERSION = "3"
 
 // MARK: - Output
 
@@ -1696,12 +1696,81 @@ func openApp(_ p: Params) throws -> [String: Any] {
   return ["pid": pid ?? NSNull(), "path": appURL.path]
 }
 
+// MARK: - Focus guard (agent browsers)
+
+/// Chromium activates itself when a page opens a tab or popup, or when a tool opens a tab in the foreground — taking
+/// the keyboard from whatever the human is doing. While the core has armed an agent browser (it just opened a tab),
+/// an activation the human didn't make by clicking one of its windows is handed straight back. Main thread only.
+final class FocusGuard {
+  static let shared = FocusGuard()
+  private var armedUntil: [pid_t: Date] = [:]
+  private var current: NSRunningApplication?
+  private var lastTaken: (pid: pid_t, at: Date, from: NSRunningApplication?, byHuman: Bool)?
+  private var observing = false
+
+  func arm(pid: pid_t, ms: Int) {
+    observe()
+    let now = Date()
+    armedUntil[pid] = max(armedUntil[pid] ?? now, now.addingTimeInterval(Double(ms) / 1000))
+    // The tab's activation can come before the core heard of the tab.
+    if ms > 0, let t = lastTaken, t.pid == pid, !t.byHuman, now.timeIntervalSince(t.at) < 1.5,
+       NSWorkspace.shared.frontmostApplication?.processIdentifier == pid {
+      giveBack(to: t.from)
+    }
+  }
+
+  private func observe() {
+    if observing { return }
+    observing = true
+    current = NSWorkspace.shared.frontmostApplication
+    NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+      guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+      self?.activated(app)
+    }
+  }
+
+  private func activated(_ app: NSRunningApplication) {
+    let before = current
+    current = app
+    let pid = app.processIdentifier
+    guard before?.processIdentifier != pid, let until = armedUntil[pid] else { return }
+    let byHuman = clickedInto(pid)
+    lastTaken = (pid, Date(), before, byHuman)
+    if !byHuman, until > Date() { giveBack(to: before) }
+  }
+
+  private func giveBack(to app: NSRunningApplication?) {
+    lastTaken = nil
+    guard let app, !app.isTerminated, app.processIdentifier != getpid() else { return }
+    app.activate(options: [])
+  }
+
+  /// Did the human just click one of the app's windows?
+  private func clickedInto(_ pid: pid_t) -> Bool {
+    let since = min(
+      CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .leftMouseDown),
+      CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .rightMouseDown))
+    guard since < 1 else { return false }
+    let point = CGEvent(source: nil)?.location ?? .zero
+    let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+    for w in list where (w[kCGWindowLayer as String] as? Int) == 0 {
+      guard let owner = w[kCGWindowOwnerPID as String] as? Int, owner != Int(getpid()),
+            (w[kCGWindowAlpha as String] as? Double ?? 1) > 0,
+            let bounds = w[kCGWindowBounds as String] as? NSDictionary,
+            let rect = CGRect(dictionaryRepresentation: bounds), rect.contains(point)
+      else { continue }
+      return owner == Int(pid)
+    }
+    return false
+  }
+}
+
 // MARK: - Dispatch
 
 /// Input runs one command at a time (event order matters); lookups run concurrently so a long `type` doesn't block them.
 let inputQueue = DispatchQueue(label: "godmode.computer.input")
 let readQueue = DispatchQueue(label: "godmode.computer.read", attributes: .concurrent)
-let readCommands: Set<String> = ["hello", "permissions", "displays", "windows", "window", "apps", "cursor"]
+let readCommands: Set<String> = ["hello", "permissions", "displays", "windows", "window", "apps", "cursor", "guardFocus"]
 
 func handle(_ line: String) {
   guard let data = line.data(using: .utf8),
@@ -1758,6 +1827,11 @@ func handle(_ line: String) {
       case "activate": return try activate(p)
       case "ensureKeyWindow": return try ensureKeyWindow(p)
       case "openApp": return try openApp(p)
+      case "guardFocus":
+        let pid = pid_t(try p.requireInt("pid"))
+        let ms = max(0, min(p.int("ms") ?? 0, 10_000))
+        DispatchQueue.main.async { FocusGuard.shared.arm(pid: pid, ms: ms) }
+        return ["ok": true]
       case "agentCursor":
         if p.bool("hide") == true {
           let window = p.int("window")
