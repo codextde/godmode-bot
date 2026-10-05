@@ -1,6 +1,8 @@
 import { AppState, type AppStateStatus } from "react-native";
 import { browserView, type ClientEvent, type EntityName, type ServerEvent, type Vm } from "@godmode/shared";
 import { api, forget, reachableBase } from "./api";
+import { setQueue } from "./composer";
+import { withPending } from "./pending-queue";
 import { useLive } from "./live";
 import { qk, queryClient } from "./query";
 import { useSession } from "./session";
@@ -57,6 +59,18 @@ export const subscribeComputer = (view: string) =>
 
 export const subscribeConversation = (conversationId: string) =>
   subscription(`conversation:${conversationId}`, { type: "conversation.subscribe", conversationId }, { type: "conversation.unsubscribe", conversationId });
+
+/** The chat on screen while the app is in front: the computer counts it as read and doesn't notify about it. */
+let viewing: string | null = null;
+
+export function viewConversation(conversationId: string | null) {
+  viewing = conversationId;
+  sendView();
+}
+
+function sendView() {
+  sendEvent({ type: "conversation.view", conversationId: AppState.currentState === "active" ? viewing : null });
+}
 
 function replaySubscriptions() {
   for (const key of counts.keys()) {
@@ -116,6 +130,11 @@ function handle(event: ServerEvent) {
     case "message.created":
     case "message.updated":
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.message.conversationId) });
+      break;
+    case "queue.updated":
+      setQueue(event.conversationId, () => withPending(event.conversationId, event.queue));
+      // A fetch that started before this change must not bring the old queue back.
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.conversationId) });
       break;
     case "conversation.updated":
       void queryClient.invalidateQueries({ queryKey: qk.conversations });
@@ -236,6 +255,7 @@ async function connect() {
     useSession.getState().setActiveUrl(base);
     useLive.getState().setStatus("online");
     replaySubscriptions();
+    if (viewing) sendView();
     void catchUp();
     void queryClient.invalidateQueries();
     pingTimer = setInterval(() => sendEvent({ type: "ping" }), 25_000);
@@ -264,6 +284,8 @@ async function connect() {
 }
 
 function onAppState(state: AppStateStatus) {
+  // Pulled-down notification shade or the app switcher: the chat isn't being read meanwhile.
+  if (viewing) sendView();
   if (state === "active") {
     if (running && !socket) {
       clearTimers();

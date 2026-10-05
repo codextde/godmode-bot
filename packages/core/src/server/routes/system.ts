@@ -1,18 +1,20 @@
 import type { Hono } from "hono";
 import { homedir } from "node:os";
 import type { Bootstrap } from "@godmode/shared";
-import { MAX_INSTRUCTIONS_LENGTH, isModelId } from "@godmode/shared";
+import { MAX_INSTRUCTIONS_LENGTH, isModelId, countAttention } from "@godmode/shared";
 import { config } from "../../config";
 import { get } from "../../db";
 import * as vault from "../../vault/vault";
 import { getSettings, updateSettings } from "../../services/settings";
 import { listNotifications, markRead, clearNotifications, unreadCount } from "../../services/notifications";
 import { audit, listAudit } from "../../services/audit";
+import { listAttention } from "../../services/attention";
 import { runDoctor, installDependency } from "../../services/doctor";
 import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
 import { PERMISSION_IDS, checkPermissions, fixPermission } from "../../services/permissions";
 import { TOOL_IDS, checkUpdates } from "../../services/updates";
-import { fixAll, inTurn, installUpdates, maintenanceStatus } from "../../services/maintenance";
+import { cleanUp, fixAll, inTurn, installUpdates, maintenanceStatus } from "../../services/maintenance";
+import { CLEANUP_IDS, scanCleanup } from "../../services/cleanup";
 import { disableIdleTimeout } from "../../mcp/http";
 import { getModelCatalog } from "../../runner/models";
 import { getDefaultAgentId } from "../../agents/service";
@@ -52,8 +54,11 @@ export function registerSystemRoutes(app: Hono) {
         openQuestions: count("SELECT COUNT(*) AS c FROM questions WHERE status = 'open'"),
         runningRuns: count("SELECT COUNT(*) AS c FROM runs WHERE status IN ('queued','running')"),
         // A question counts once: as the open question, not also as its notification.
-        unreadNotifications: count("SELECT COUNT(*) AS c FROM notifications WHERE read = 0 AND kind != 'question'"),
+        // Questions and missing logins count once: as the waiting thing ("Needs you"), not also as their notification.
+        unreadNotifications: count("SELECT COUNT(*) AS c FROM notifications WHERE read = 0 AND kind NOT IN ('question', 'missing_login')"),
         messagingRequests: pendingRequestCount(),
+        attention: countAttention(listAttention()),
+        unreadChats: count("SELECT COUNT(*) AS c FROM conversations WHERE unread_run_id IS NOT NULL AND archived = 0"),
       },
     };
     return c.json(data);
@@ -122,7 +127,7 @@ export function registerSystemRoutes(app: Hono) {
     const maintenance = patch.maintenance as Record<string, unknown> | undefined;
     if (maintenance !== undefined) {
       if (typeof maintenance !== "object" || maintenance === null || Array.isArray(maintenance)) throw badRequest("Invalid upkeep settings");
-      for (const key of ["autoFix", "autoUpdate"] as const) {
+      for (const key of ["autoFix", "autoUpdate", "autoCleanup"] as const) {
         if (maintenance[key] !== undefined && typeof maintenance[key] !== "boolean") throw badRequest(`maintenance.${key} must be true or false`);
       }
     }
@@ -201,4 +206,15 @@ export function registerSystemRoutes(app: Hono) {
     return c.json(await installUpdates(id));
   });
   app.get("/api/doctor/maintenance", (c) => c.json(maintenanceStatus()));
+
+  /** What takes up space, what can go, and a check of the data folder. */
+  app.get("/api/cleanup", async (c) => {
+    disableIdleTimeout(c);
+    return c.json(await scanCleanup({ fresh: c.req.query("refresh") === "1" }));
+  });
+  app.post("/api/cleanup", async (c) => {
+    const { ids } = await body(c, z.object({ ids: z.array(z.enum(CLEANUP_IDS)).min(1) }));
+    disableIdleTimeout(c);
+    return c.json(await cleanUp(ids));
+  });
 }

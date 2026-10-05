@@ -62,8 +62,13 @@ class BuildError extends Error {}
 /** "<commit>[+changes] <date>" of the checkout that is built; "unknown" outside a git checkout. */
 function buildStamp(): string {
   const git = (...args: string[]) => {
-    const res = Bun.spawnSync(["git", ...args], { cwd: repoDir, stdout: "pipe", stderr: "ignore" });
-    return res.exitCode === 0 ? res.stdout.toString().trim() : null;
+    // Without git installed (the Docker build stage) spawning throws instead of failing.
+    try {
+      const res = Bun.spawnSync(["git", ...args], { cwd: repoDir, stdout: "pipe", stderr: "ignore" });
+      return res.exitCode === 0 ? res.stdout.toString().trim() : null;
+    } catch {
+      return null;
+    }
   };
   const commit = git("rev-parse", "--short", "HEAD");
   if (!commit) return "unknown";

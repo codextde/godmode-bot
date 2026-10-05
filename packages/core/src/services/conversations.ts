@@ -30,7 +30,7 @@ import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
 import { redact } from "../vault/vault";
-import { getAgent, getDefaultAgentId } from "../agents/service";
+import { getAgent, getDefaultAgentId, setAgentFailedRun } from "../agents/service";
 import { activeRunForConversation, cancelRun, listActiveRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
 import { remoteRunForConversation } from "../remote/activeRuns";
 import { closeChatTabs } from "../browser/manager";
@@ -80,6 +80,8 @@ interface ConversationRow extends PauseQuestionCols {
   paused_run_id?: string | null;
   paused_reason?: PauseReason | null;
   paused_budget_scope?: "agent" | "team" | null;
+  unread_run_id?: string | null;
+  unread_status?: string | null;
   paused_budget_usd?: number | null;
   paused_limit?: string | null;
   paused_resume_at?: string | null;
@@ -183,6 +185,7 @@ function toConversation(r: ConversationRow): Conversation {
           )
         : null,
     delegatedFrom: r.from_run_id && r.from_agent_id ? { agentId: r.from_agent_id, conversationId: r.from_conversation_id ?? null, runId: r.from_run_id } : null,
+    unread: r.unread_run_id ? { runId: r.unread_run_id, failed: r.unread_status === "failed" } : null,
   };
 }
 
@@ -209,7 +212,8 @@ const PAUSE_SQL =
   PAUSE_QUESTION_SQL;
 // A handed-over chat links back to the run (and through it the chat and agent) that asked. Derived, not stored: when
 // the asking agent or its chat is deleted the link goes null by itself.
-const DELEGATED_SQL = "pr.id AS from_run_id, pr.agent_id AS from_agent_id, pc.id AS from_conversation_id";
+const DELEGATED_SQL =
+  "pr.id AS from_run_id, pr.agent_id AS from_agent_id, pc.id AS from_conversation_id, (SELECT ur.status FROM runs ur WHERE ur.id = c.unread_run_id) AS unread_status";
 const DELEGATED_JOIN =
   "LEFT JOIN runs pr ON c.origin = 'delegation' AND pr.id = (SELECT r.parent_run_id FROM runs r WHERE r.conversation_id = c.id AND r.parent_run_id IS NOT NULL ORDER BY r.created_at, r.rowid LIMIT 1) " +
   "LEFT JOIN conversations pc ON pc.id = pr.conversation_id";
@@ -287,6 +291,8 @@ export function createConversation(
     workspaceId?: string | null;
     sshServerIds?: string[];
     instructions?: string;
+    /** No raw secrets in this chat, whatever its agent may read (see `chatFillOnly`). */
+    fillOnly?: boolean;
   } & ModelChoice,
 ): Conversation {
   const agent = getAgent(input.agentId); // 404 if the agent doesn't exist
@@ -311,6 +317,7 @@ export function createConversation(
     browser_profile_id: browserProfileId,
     workspace_id: normalizeWorkspaceId(agent, input.workspaceId),
     ssh_server_ids: JSON.stringify(sshServerIds),
+    secret_access: input.fillOnly ? "fill" : null,
     instructions: input.instructions?.trim() ?? "",
     pinned: 0,
     archived: 0,
@@ -322,6 +329,16 @@ export function createConversation(
   bus.emit({ type: "conversation.updated", conversation });
   if (vmId) assignmentsChanged();
   return conversation;
+}
+
+/**
+ * The chat works without raw secrets even when its agent may read them: its task was handed over by an agent that
+ * could not read them itself. It stays that way for everything that happens in the chat later. A chat that is gone
+ * counts as fill-only too.
+ */
+export function chatFillOnly(conversationId: string): boolean {
+  const row = get<{ secret_access: string | null }>("SELECT secret_access FROM conversations WHERE id = ?", conversationId);
+  return !row || row.secret_access === "fill";
 }
 
 export function getConversation(id: string): ConversationWithMessages {
@@ -344,9 +361,9 @@ export function listConversations(
     where.push("(c.workspace_id = ? OR c.agent_id IN (SELECT id FROM agents WHERE workspace_id = ?))");
     params.push(opts.workspaceId, opts.workspaceId);
   }
-  const search = opts.search?.trim();
-  if (search) {
-    const like = `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  // Every word, in the title or in a message ("invoice march" finds "March invoice review"); at most six words.
+  for (const word of (opts.search ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 6)) {
+    const like = `%${word.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
     where.push(
       "(c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages m2 WHERE m2.conversation_id = c.id AND m2.content LIKE ? ESCAPE '\\'))",
     );
@@ -426,6 +443,28 @@ export function setConversationState(
 }
 
 /** Cancel any active run, then delete the conversation, its messages and its transcript file. */
+/**
+ * The human has seen these chats (opened them, or "Mark all read"): nothing is new there anymore, and a failure in them
+ * stops showing as "Last run failed" on the agent once its chat was read.
+ */
+export function markConversationsRead(ids: string[] | "all"): number {
+  const rows =
+    ids === "all"
+      ? all<{ id: string; unread_run_id: string }>("SELECT id, unread_run_id FROM conversations WHERE unread_run_id IS NOT NULL")
+      : ids.flatMap((id) => {
+          const r = get<{ id: string; unread_run_id: string | null }>("SELECT id, unread_run_id FROM conversations WHERE id = ?", id);
+          return r?.unread_run_id ? [{ id: r.id, unread_run_id: r.unread_run_id }] : [];
+        });
+  for (const r of rows) {
+    sql("UPDATE conversations SET unread_run_id = NULL WHERE id = ? AND unread_run_id = ?", r.id, r.unread_run_id);
+    // Seen: the agent stops saying "Last run failed" for it.
+    const failed = get<{ id: string }>("SELECT id FROM agents WHERE failed_run_id = ?", r.unread_run_id);
+    if (failed) setAgentFailedRun(failed.id, null);
+    emitConversationUpdated(r.id);
+  }
+  return rows.length;
+}
+
 export async function deleteConversation(id: string): Promise<void> {
   const row = requireConversationRow(id);
   // First, so the run that is cancelled below doesn't hand over to the queue.

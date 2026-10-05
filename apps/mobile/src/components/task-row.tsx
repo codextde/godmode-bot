@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { Agent, Task, TaskStatus, TaskType } from "@godmode/shared";
-import { isOverdue, isWaiting, waitsForAnswer } from "@godmode/shared";
+import { isOverdue, isWaiting, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Avatar, Badge, Row, T, tap } from "./ui";
 import { shortTime } from "@/lib/format";
@@ -46,11 +46,19 @@ export function TaskRow({ task, agent, workspaceName }: { task: Task; agent?: Ag
     task.status === "blocked"
       ? task.blockedReason
       : task.status === "in_progress"
-        ? (task.activity ?? (isWaiting(task) && task.followup ? `Continues ${shortTime(task.followup.dueAt)}` : null))
+        ? (task.activity ??
+          (isWaiting(task) && task.followup
+            ? `Continues ${shortTime(task.followup.dueAt)}`
+            : waitsForSubtasks(task)
+              ? `Waiting for ${task.subtasks!.open === 1 ? "1 part" : `${task.subtasks!.open} parts`}`
+              : null))
         : null;
   const extra = [
     task.priority === "urgent" ? "Urgent" : task.priority === "high" ? "High" : null,
     task.dueDate ? (isOverdue(task) ? "overdue" : `due ${task.dueDate.slice(5)}`) : null,
+    task.parentNumber ? `part of #${task.parentNumber}` : null,
+    waitsForTickets(task) ? `waits for ${task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")}` : null,
+    task.subtasks ? `${task.subtasks.total - task.subtasks.open}/${task.subtasks.total} parts` : null,
   ].filter(Boolean);
   return (
     <Pressable onPress={() => openTask(task.id)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}>

@@ -168,7 +168,7 @@ function EventRow({ event: e, task }: { event: TaskEvent; task: Task }) {
     );
   }
 
-  const bodied = ["feedback", "note", "asked", "answered", "blocked", "waiting"].includes(e.kind) || (e.kind === "status" && !!e.body);
+  const bodied = ["feedback", "note", "asked", "answered", "blocked", "waiting"].includes(e.kind) || ((e.kind === "status" || e.kind === "started") && !!e.body);
   return (
     <Row
       icon={Icon}

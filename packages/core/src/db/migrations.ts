@@ -993,4 +993,110 @@ ALTER TABLE paused_runs ADD COLUMN budget_scope TEXT;
 ALTER TABLE paused_runs ADD COLUMN budget_usd REAL;
 `,
   },
+  {
+    id: 54,
+    name: "needs_you",
+    sql: /* sql */ `
+-- A chat with something new: the run that ended while nobody had it open (NULL = read).
+ALTER TABLE conversations ADD COLUMN unread_run_id TEXT;
+-- When an automation tells the human that a run ended: 'failures' (default), 'always' or 'never'.
+ALTER TABLE routines ADD COLUMN notify TEXT NOT NULL DEFAULT 'failures';
+CREATE INDEX IF NOT EXISTS idx_runs_routine ON runs(routine_id, trigger, created_at);
+`,
+  },
+  {
+    id: 55,
+    name: "budget_exempt",
+    sql: /* sql */ `
+-- A paused run the human started or let run past a used-up budget keeps that when it continues.
+ALTER TABLE paused_runs ADD COLUMN exempt INTEGER NOT NULL DEFAULT 0;
+`,
+  },
+  {
+    id: 57,
+    name: "sub_tickets",
+    sql: /* sql */ `
+-- A sub-ticket: part of a bigger ticket (its parent waits until its sub-tickets are done, then continues with them).
+ALTER TABLE tasks ADD COLUMN parent_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id) WHERE parent_id IS NOT NULL;
+`,
+  },
+  {
+    id: 58,
+    name: "away_indexes",
+    sql: /* sql */ `
+-- "While you were away" reads what ended, and what was delivered, in a window of time.
+CREATE INDEX IF NOT EXISTS idx_runs_finished ON runs(finished_at) WHERE finished_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_task_events_kind ON task_events(kind, created_at);
+`,
+  },
+  {
+    id: 59,
+    name: "parts_seen",
+    sql: /* sql */ `
+-- When the ticket's agent last got its parts' results (in its brief, or woken with them): parts that closed later are news.
+ALTER TABLE tasks ADD COLUMN parts_seen_at TEXT;
+`,
+  },
+  {
+    id: 61,
+    name: "parts_seen_backfill",
+    sql: /* sql */ `
+-- Tickets with parts from before parts_seen_at: their agent saw those parts already (they aren't news on its next run).
+UPDATE tasks SET parts_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE parts_seen_at IS NULL AND status != 'in_progress' AND id IN (SELECT parent_id FROM tasks WHERE parent_id IS NOT NULL);
+`,
+  },
+  {
+    id: 62,
+    name: "goals",
+    sql: /* sql */ `
+-- What the work is for: tickets serve a goal (its agent is told why), and the board shows how far each goal is.
+CREATE TABLE IF NOT EXISTS goals (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT,
+  title TEXT NOT NULL,
+  why TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',
+  target_date TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+ALTER TABLE tasks ADD COLUMN goal_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_tasks_goal ON tasks(goal_id) WHERE goal_id IS NOT NULL;
+`,
+  },
+  {
+    id: 63,
+    name: "ticket_dependencies",
+    sql: /* sql */ `
+-- A ticket that waits for others: it starts once each of them is delivered (or done, cancelled, archived).
+CREATE TABLE IF NOT EXISTS task_dependencies (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  waits_for_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (task_id, waits_for_id)
+);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_waits_for ON task_dependencies(waits_for_id);
+`,
+  },
+  {
+    id: 64,
+    name: "goals_of_deleted_workspaces",
+    sql: /* sql */ `
+-- Goals of workspaces deleted before they went along with them.
+UPDATE tasks SET goal_id = NULL WHERE goal_id IN (SELECT id FROM goals WHERE workspace_id IS NOT NULL AND workspace_id NOT IN (SELECT id FROM workspaces));
+DELETE FROM goals WHERE workspace_id IS NOT NULL AND workspace_id NOT IN (SELECT id FROM workspaces);
+`,
+  },
+  {
+    id: 31,
+    name: "chat_secret_access",
+    sql: /* sql */ `
+-- 'fill': no raw secrets in this chat, whatever its agent may read — its task came from an agent that could not
+-- read them itself. NULL = the agent's own secret access.
+ALTER TABLE conversations ADD COLUMN secret_access TEXT;
+`,
+  },
 ];

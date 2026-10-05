@@ -6,6 +6,7 @@ import {
   AudioLines,
   BrainCircuit,
   Box,
+  BroomSparkles,
   Cloud,
   CreditCard,
   DatabaseBackup,
@@ -27,6 +28,7 @@ import { AiSection } from "@/components/settings/ai-section";
 import { BackupSection } from "@/components/settings/backup-section";
 import { BillingSection } from "@/components/settings/billing-section";
 import { BrowserSection } from "@/components/settings/browser-section";
+import { CleanupSection } from "@/components/settings/cleanup-section";
 import { CloudSection } from "@/components/settings/cloud-section";
 import { ComputerSection } from "@/components/settings/computer-section";
 import { GeneralSection } from "@/components/settings/general-section";
@@ -59,6 +61,7 @@ const SECTIONS = [
   { id: "cloud", label: "Cloud", icon: <Cloud />, group: "App" },
   { id: "billing", label: "Billing", icon: <CreditCard />, group: "App" },
   { id: "system", label: "System", icon: <HeartPulse />, group: "App" },
+  { id: "cleanup", label: "Cleanup", icon: <BroomSparkles />, group: "App" },
   { id: "logs", label: "Logs", icon: <Activity />, group: "App" },
   { id: "about", label: "About", icon: <Info />, group: "App" },
 ] as const satisfies readonly { id: string; label: string; icon: ReactNode; group: string }[];
@@ -66,7 +69,7 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 /** Sections that render without the settings document (they use their own endpoints). */
-const STANDALONE: SectionId[] = ["backup", "cloud", "billing", "system", "about"];
+const STANDALONE: SectionId[] = ["backup", "cloud", "billing", "system", "cleanup", "about"];
 
 export default function SettingsPage() {
   const { section } = useParams();
@@ -109,6 +112,7 @@ export default function SettingsPage() {
       cloud: () => <CloudSection />,
       billing: () => <BillingSection />,
       system: () => <SystemSection bootstrap={boot} settings={settings.data} />,
+      cleanup: () => <CleanupSection settings={settings.data} />,
       logs: () => <LogsSection settings={s} />,
       about: () => <AboutSection version={boot?.version} />,
     }[active]();

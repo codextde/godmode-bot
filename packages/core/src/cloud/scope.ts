@@ -71,6 +71,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/doctor/permissions/fix", refused(COMPUTER_ONLY)],
   ["POST", "/api/doctor/fix", refused(COMPUTER_ONLY)],
   ["POST", "/api/doctor/updates", refused(COMPUTER_ONLY)],
+  ["GET", "/api/cleanup", A],
+  ["POST", "/api/cleanup", refused(COMPUTER_ONLY)],
 
   ["GET", "/api/vault/status", A],
   ["POST", "/api/vault/lock", A],
@@ -102,6 +104,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/agents", A],
   ["POST", "/api/agents", agentPermissions],
   ["GET", "/api/agent-templates", A],
+  ["GET", "/api/team-templates", A],
+  ["POST", "/api/team-templates/:id/install", A],
   ["GET|DELETE", "/api/agents/:id", A],
   ["PATCH", "/api/agents/:id", agentPermissions],
   ["POST", "/api/agents/:id/run", agentPermissions],
@@ -128,6 +132,10 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
 
   ["GET|POST", "/api/conversations", A],
   ["GET|PATCH|DELETE", "/api/conversations/:id", A],
+  ["POST", "/api/conversations/read", A],
+  ["POST", "/api/conversations/:id/retry", A],
+  ["GET", "/api/attention", A],
+  ["GET", "/api/away", A],
   ["POST", "/api/conversations/:id/messages", A],
   ["PATCH|DELETE", "/api/conversations/:id/queue/:messageId", A],
   ["POST", "/api/conversations/:id/queue/send", A],
@@ -213,6 +221,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/vms/:id/screenshot", A],
 
   ["GET|POST", "/api/tasks", A],
+  ["GET|POST", "/api/goals", A],
+  ["PATCH|DELETE", "/api/goals/:id", A],
   ["GET", "/api/tasks/:id/events", A],
   // Questions agents ask before they act: reading and answering them is ordinary use of the dashboard.
   // Runners: seeing them is fine from anywhere. Pairing, copying the setup (logins, 2FA, sessions) to them, fixing

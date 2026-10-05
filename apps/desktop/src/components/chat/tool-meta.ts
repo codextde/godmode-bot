@@ -1,3 +1,4 @@
+import { GATEWAY_DONE } from "@godmode/shared";
 import type { LucideIcon } from "lucide-react";
 import {
   AlarmClock,
@@ -53,6 +54,7 @@ import {
   Wrench,
   X,
   ZoomIn,
+  Zap,
 } from "lucide-react";
 
 export type ToolKind =
@@ -441,7 +443,8 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
     case "task_report_blocked":
       return { kind: "agents", icon: OctagonAlert, title: "Reported what it needs", detail: truncate(str(input.reason), 120) || undefined };
     default:
-      return null;
+      // A Godmode tool without its own card: the shared past-tense title, never its raw name.
+      return GATEWAY_DONE[tool] ? { kind: "other", icon: Zap, title: GATEWAY_DONE[tool]! } : null;
   }
 }
 
