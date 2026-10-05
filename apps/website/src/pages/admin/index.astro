@@ -144,7 +144,7 @@ const revenueUsd = paidOrders.filter((r) => r.currency === 'usd').reduce((s, r) 
 const otherCurrencies = paidOrders.filter((r) => r.currency && r.currency !== 'usd');
 const refunded = orderRows.filter((r) => r.status === 'refunded').reduce((s, r) => s + n(r.c), 0);
 const openCheckouts = orderRows.reduce((s, r) => s + n(r.c), 0);
-const { monthly, yearly, lifetime } = PRICING.plans;
+const { monthly, yearly } = PRICING.plans;
 // MRR counts paying subscriptions only (not trials). Legacy orders that were charged at checkout count at that price.
 const monthlyValue = (r: Row) => {
   const paidAtCheckout = r.currency === 'usd' && n(r.amount_total) > 0 ? n(r.amount_total) / 100 : 0;
@@ -157,7 +157,7 @@ const trialMrr = subs.filter((r) => r.sub_status === 'trialing').reduce((s, r) =
 const payingBy = (plan: string) => paying.filter((r) => r.plan === plan).length;
 const converted = n(trials.converted);
 const dropped = n(trials.dropped);
-const lifetimeSold = n(allTime.lifetime);
+const legacyLifetime = n(allTime.lifetime);
 
 const funnel = [
   { label: 'Visitors', value: visitors },
@@ -228,11 +228,9 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
           <p class="mt-1 text-[12.5px] text-dim">{pct(paidCount, visitors)} of visitors · {refunded} refunded · {n(leads.c)} leads ({n(leads.recent)} new)</p>
         </div>
         <div class="card p-6">
-          <p class="text-[13px] text-muted">Founder Lifetime</p>
-          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">
-            {lifetimeSold}<span class="text-[18px] font-normal text-dim"> / {PRICING.lifetimeCap}</span>
-          </p>
-          <p class="mt-1 text-[12.5px] text-dim">{Math.max(0, PRICING.lifetimeCap - lifetimeSold)} left · {n(allTime.comps)} free licenses</p>
+          <p class="text-[13px] text-muted">In trial</p>
+          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{n(trials.running)}</p>
+          <p class="mt-1 text-[12.5px] text-dim">{pct(converted, converted + dropped)} convert to paid · {n(allTime.comps)} free licenses</p>
         </div>
       </section>
 
@@ -242,7 +240,7 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
           <dl class="mt-4 space-y-2.5 text-[13.5px]">
             <div class="flex justify-between"><dt class="text-text-2">Pro monthly · ${monthly.price}</dt><dd class="tabular-nums">{payingBy('monthly')}</dd></div>
             <div class="flex justify-between"><dt class="text-text-2">Pro yearly · ${yearly.price}</dt><dd class="tabular-nums">{payingBy('yearly')}</dd></div>
-            <div class="flex justify-between"><dt class="text-text-2">{lifetime.name} · ${lifetime.price}</dt><dd class="tabular-nums">{lifetimeSold}</dd></div>
+            {legacyLifetime > 0 && <div class="flex justify-between"><dt class="text-text-2">Lifetime (legacy)</dt><dd class="tabular-nums">{legacyLifetime}</dd></div>}
             <div class="flex justify-between"><dt class="text-text-2">In trial</dt><dd class="tabular-nums">{n(trials.running)}</dd></div>
             <div class="flex justify-between"><dt class="text-muted">Free (comp)</dt><dd class="tabular-nums text-muted">{n(allTime.comps)}</dd></div>
           </dl>
@@ -263,7 +261,7 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
         <form id="comp" method="post" action="/admin" class="card p-6">
           <p class="text-[13px] text-muted">Issue a free license</p>
           <p class="mt-1 text-[12.5px] text-dim">
-            A {lifetime.name} license that skips Stripe ({minLivemode() ? 'live' : 'test'} mode). Not counted in revenue or the cap.
+            A license that never expires and skips Stripe ({minLivemode() ? 'live' : 'test'} mode). Not counted in revenue.
           </p>
           {
             issued && (

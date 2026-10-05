@@ -2,7 +2,7 @@
 import Logo from './ui/Logo.astro';
 import Icon from './ui/Icon.astro';
 import CheckoutButton from './ui/CheckoutButton.astro';
-import { PRICING } from '@/config/site';
+import { PRICING, yearlySavings } from '@/config/site';
 
 interface Props {
   home?: boolean;
@@ -71,7 +71,7 @@ const links = [
       }
       <div class="mt-6 grid gap-2">
         <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="menu" full size="lg" />
-        <CheckoutButton plan="lifetime" label={`Founder Lifetime — $${PRICING.plans.lifetime.price}`} source="menu" variant="ghost" full size="lg" />
+        <CheckoutButton plan="yearly" label={`Or yearly — $${PRICING.plans.yearly.perMonth}/mo, save ${yearlySavings}%`} source="menu" variant="ghost" full size="lg" />
         <p class="mt-1 text-center text-[13px] text-muted">
           Then ${PRICING.plans.monthly.price}/mo, or ${PRICING.plans.yearly.perMonth}/mo yearly. Cancel anytime.
         </p>

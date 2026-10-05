@@ -138,26 +138,7 @@ export async function syncSubscription(sub: Stripe.Subscription) {
     .run();
 }
 
-/** How long a started Founder Lifetime checkout holds its place under the cap (its Stripe session expires then). */
-export const LIFETIME_HOLD_MS = 31 * 60 * 1000;
-
-/**
- * Founder Lifetime licenses taken: paid (or paying by bank transfer), not free, from the Stripe mode the site runs
- * in — plus checkouts started in the last half hour, so the cap can't be oversold by buyers paying at once.
- */
-export async function lifetimeSold(minLivemode: number): Promise<number> {
-  const row = await db()
-    .prepare(
-      `SELECT COUNT(*) AS n FROM orders
-       WHERE plan = 'lifetime' AND COALESCE(comp, 0) = 0 AND livemode >= ?
-         AND (status IN ('paid', 'pending') OR (status = 'open' AND created_at > ?))`,
-    )
-    .bind(minLivemode, Date.now() - LIFETIME_HOLD_MS)
-    .first<{ n: number }>();
-  return Number(row?.n ?? 0);
-}
-
-/** A free license issued from /admin. It never touches Stripe and doesn't count toward revenue or the cap. */
+/** A free license issued from /admin: a non-expiring `lifetime` order that never touches Stripe or revenue. */
 export async function insertComp(o: { email: string; name: string | null; licenseKey: string; livemode: number }) {
   const id = `comp_${[...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
   const now = Date.now();
@@ -186,8 +167,8 @@ async function subscriptionForCharge(charge: Stripe.Charge, pi: string | null): 
 }
 
 /**
- * Revokes the license behind a refunded or charged-back payment. A lifetime order owns its PaymentIntent and is
- * revoked directly. A subscription charge is traced to its subscription: only a canceled subscription loses its
+ * Revokes the license behind a refunded or charged-back payment. A one-time (legacy lifetime) order owns its
+ * PaymentIntent and is revoked directly. A subscription charge is traced to its subscription: only a canceled subscription loses its
  * license; a live one (e.g. a goodwill refund of one renewal) keeps whatever state Stripe reports.
  */
 export async function revokeForCharge(charge: Stripe.Charge) {

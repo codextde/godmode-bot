@@ -38,13 +38,6 @@ const jsonLd = {
         billingDuration: plan === 'yearly' ? 'P1Y' : 'P1M',
       },
     })),
-    {
-      '@type': 'Offer',
-      name: `Godmode ${PRICING.plans.lifetime.name}`,
-      price: PRICING.plans.lifetime.price,
-      priceCurrency: PRICING.currency,
-      category: 'one-time',
-    },
   ],
 };
 

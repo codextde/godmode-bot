@@ -22,8 +22,8 @@ const stripe = new Stripe(key);
 const mode = key.includes('_live_') ? 'LIVE' : 'TEST';
 const webhookApiVersion = process.env.STRIPE_WEBHOOK_API_VERSION ?? '2026-09-30.endive';
 
-// One product per offer; prices are found by lookup_key, products by metadata.godmode_product. Old prices
-// (godmode_lifetime_usd, godmode_monthly_usd) are left alone so existing subscriptions keep renewing.
+// One product per offer; prices are found by lookup_key, products by metadata.godmode_product. The old monthly price
+// (godmode_monthly_usd) stays active so existing subscriptions keep renewing; lifetime prices are retired below.
 const PRODUCTS = [
   {
     key: 'pro',
@@ -47,22 +47,6 @@ const PRODUCTS = [
         tax_behavior: 'inclusive',
         recurring: { interval: 'year' },
         metadata: { plan: 'yearly' },
-      },
-    ],
-  },
-  {
-    key: 'founder_lifetime',
-    product: {
-      name: 'Godmode Founder Lifetime',
-      description: 'Founder Lifetime license for Godmode, the AI coworker that works like a human on your computer. Pay once, every update included.',
-    },
-    prices: [
-      {
-        lookup_key: 'godmode_founder_lifetime_usd',
-        unit_amount: 49900,
-        currency: 'usd',
-        tax_behavior: 'inclusive',
-        metadata: { plan: 'lifetime' },
       },
     ],
   },
@@ -108,6 +92,16 @@ for (const def of PRODUCTS) {
     console.log(`+ created price ${price.lookup_key}: ${created.id}`);
   }
 }
+
+// Lifetime is no longer sold: deactivate its prices so no new checkout can use them (never deleted; orders that
+// already used them are unaffected).
+const RETIRED_LOOKUP_KEYS = ['godmode_founder_lifetime_usd', 'godmode_lifetime_usd'];
+const retired = await stripe.prices.list({ lookup_keys: RETIRED_LOOKUP_KEYS, active: true, limit: 10 });
+for (const price of retired.data) {
+  await stripe.prices.update(price.id, { active: false });
+  console.log(`- deactivated retired price ${price.lookup_key}: ${price.id}`);
+}
+if (!retired.data.length) console.log(`✓ no active retired prices (${RETIRED_LOOKUP_KEYS.join(', ')})`);
 
 const url = `${site}/api/stripe-webhook`;
 const hooks = await stripe.webhookEndpoints.list({ limit: 100 });

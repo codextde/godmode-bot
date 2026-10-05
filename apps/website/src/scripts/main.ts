@@ -347,38 +347,6 @@ document.querySelectorAll<HTMLFormElement>('form[data-checkout]').forEach((form)
     xEvent('checkout', { value: PRICING.plans[plan].price, currency: PRICING.currency, contents: [{ content_id: plan }] });
   });
 });
-// Founder Lifetime: show how many capped licenses are left; on any failure the card simply shows no counter.
-const lifetimeCard = document.querySelector<HTMLElement>('[data-lifetime-card]');
-const soldOutParam = /(^|[?&#])soldout=1\b/.test(location.search + location.hash);
-const markSoldOut = () => {
-  lifetimeCard?.classList.add('is-soldout');
-  const label = lifetimeCard?.querySelector('.btn-label');
-  if (label) label.textContent = 'Sold out';
-  lifetimeCard?.querySelector('button[type="submit"]')?.setAttribute('disabled', '');
-};
-if (soldOutParam) {
-  document.querySelector('[data-soldout-note]')?.removeAttribute('hidden');
-  if (location.hash.startsWith('#pricing')) pricing?.scrollIntoView();
-}
-if (lifetimeCard) {
-  fetch('/api/offer', { cache: 'no-store' })
-    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-    .then((data: unknown) => {
-      const lifetimeLeft = (data as { lifetimeLeft?: unknown } | null)?.lifetimeLeft;
-      if (typeof lifetimeLeft !== 'number') return;
-      const cap = PRICING.lifetimeCap;
-      const left = lifetimeCard.querySelector<HTMLElement>('[data-lifetime-left]');
-      const slot = lifetimeCard.querySelector<HTMLElement>('[data-lifetime-slot]');
-      if (left) {
-        left.textContent = lifetimeLeft > 0 ? `${lifetimeLeft} of ${cap} left` : 'Sold out';
-        left.hidden = false;
-      }
-      slot?.style.setProperty('--sold', `${Math.min(100, ((cap - lifetimeLeft) / cap) * 100)}%`);
-      if (lifetimeLeft <= 0) markSoldOut();
-    })
-    .catch(() => {});
-}
-
 // Back/forward cache: reset spinners when the visitor returns from Stripe.
 addEventListener('pageshow', (e) => {
   if (e.persisted) document.querySelectorAll<HTMLButtonElement>('[data-loading]').forEach((b) => delete b.dataset.loading);

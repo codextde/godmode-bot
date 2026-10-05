@@ -18,18 +18,15 @@ export const SITE = {
  */
 export const siteBase = (origin: string) => (import.meta.env.DEV ? origin : SITE.url.replace(/\/$/, ''));
 
-export type Plan = 'monthly' | 'yearly' | 'lifetime';
+/** Plans on sale. Older orders may also carry `lifetime` (licenses sold before, and free licenses from /admin). */
+export type Plan = 'monthly' | 'yearly';
 
-export const isPlan = (v: unknown): v is Plan => v === 'monthly' || v === 'yearly' || v === 'lifetime';
-
-const LIFETIME_CAP = 100;
+export const isPlan = (v: unknown): v is Plan => v === 'monthly' || v === 'yearly';
 
 export const PRICING = {
   currency: 'USD',
   trialDays: 7,
   guaranteeDays: 14,
-  // Founder Lifetime is sold to the first `lifetimeCap` buyers only (paid, non-comp orders).
-  lifetimeCap: LIFETIME_CAP,
   plans: {
     monthly: {
       id: 'monthly' as Plan,
@@ -47,26 +44,16 @@ export const PRICING = {
       interval: 'year',
       lookupKey: 'godmode_pro_yearly_usd',
     },
-    lifetime: {
-      id: 'lifetime' as Plan,
-      name: 'Founder Lifetime',
-      price: 499,
-      perMonth: null,
-      interval: null,
-      lookupKey: 'godmode_founder_lifetime_usd',
-    },
   },
-  founderNote:
-    `Founder Lifetime is limited to the first ${LIFETIME_CAP} licenses and won’t come back once they’re gone. Every license already sold stays valid for good.`,
 } as const;
 
 /** Percent saved by paying yearly instead of monthly, rounded down so the claim is never overstated. */
 export const yearlySavings = Math.floor((1 - PRICING.plans.yearly.price / (PRICING.plans.monthly.price * 12)) * 100);
 
-/** Short price line for a plan, e.g. "$39/month", "$348/year", "$499 once". */
+/** Short price line for a plan, e.g. "$39/month" or "$348/year". */
 export function priceLabel(plan: Plan): string {
   const p = PRICING.plans[plan];
-  return p.interval ? `$${p.price}/${p.interval}` : `$${p.price} once`;
+  return `$${p.price}/${p.interval}`;
 }
 
 /**
