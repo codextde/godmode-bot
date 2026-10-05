@@ -24,6 +24,7 @@ import {
   writeAgentFile,
 } from "../../agents/service";
 import { AGENT_TEMPLATES } from "../../agents/templates";
+import { TEAM_TEMPLATES, installTeam } from "../../agents/teams";
 import { listSlashCommands } from "../../runner/commands";
 import type { RoutineTrigger } from "@godmode/shared";
 import { createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigger, runRoutineNow, updateRoutine } from "../../services/routines";
@@ -154,6 +155,7 @@ export const routineSchema = z.object({
   filter: z.string().trim().max(2000).optional(),
   enabled: z.boolean().optional(),
   reuseConversation: z.boolean().optional(),
+  notify: z.enum(["always", "failures", "never"]).optional(),
 });
 
 function scopeParam(value: string | undefined): string | null | "all" {
@@ -168,6 +170,15 @@ export function registerAgentRoutes(app: Hono): void {
   app.get("/api/agents", (c) => c.json(listAgents({ workspaceId: scopeParam(c.req.query("workspaceId")) })));
 
   app.get("/api/agent-templates", (c) => c.json(AGENT_TEMPLATES));
+  // Whole teams: a lead and its reports, in one go.
+  app.get("/api/team-templates", (c) => c.json(TEAM_TEMPLATES));
+  app.post("/api/team-templates/:id/install", async (c) => {
+    const input = await body(
+      c,
+      z.object({ workspaceId: z.string().max(100).nullable().optional(), automations: z.boolean().optional(), timezone: z.string().max(100).optional() }),
+    );
+    return c.json(await installTeam(c.req.param("id"), input), 201);
+  });
 
   app.get("/api/agents/:id", (c) => c.json(getAgent(c.req.param("id"))));
 
@@ -300,7 +311,7 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post("/api/routines/:id/test-event", async (c) => {
     const { payload } = await body(c, z.object({ payload: z.unknown().optional() }));
-    const { event } = await sendTestEvent(c.req.param("id"), payload);
+    const { event } = await sendTestEvent(c.req.param("id"), payload, { byHuman: true });
     return c.json(event);
   });
 

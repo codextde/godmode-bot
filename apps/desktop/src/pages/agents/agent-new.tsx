@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { AgentForm, agentToValues, type AgentFormValues } from "@/components/agents/agent-form";
 import { cronToHuman, localTimezone } from "@/components/agents/cron";
 import { randomLook } from "@/components/agents/character-studio";
+import { TeamTemplates } from "@/components/agents/team-templates";
 
 const EXAMPLES = [
   "Download my invoices from all vendor portals on the 1st of every month",
@@ -180,6 +181,14 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
               ))}
             </div>
           </div>
+        </section>
+
+        <section>
+          <div className="mb-4">
+            <h2 className="text-lg font-medium tracking-[-0.02em]">Or start a whole team</h2>
+            <p className="text-sm text-muted-foreground">A lead and its reports, wired up in the org chart: the lead hands out the work and reviews it.</p>
+          </div>
+          <TeamTemplates />
         </section>
 
         <section>

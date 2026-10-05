@@ -1,9 +1,13 @@
+import { Image } from "expo-image";
 import { marked, type Token, type Tokens } from "marked";
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
+import { TASK_ATTACHMENT_PATH } from "@godmode/shared";
+import { Icon } from "./icon";
+import { addressOrder, useSession } from "@/lib/session";
 import { radius, space, type, useColors, type Colors } from "@/lib/theme";
 
-/** Agent answers: Markdown rendered with native text (paragraphs, lists, code, quotes, tables, links). */
+/** Agent answers: Markdown rendered with native text (paragraphs, lists, code, quotes, tables, links, task pictures). */
 export const Markdown = memo(function Markdown({ text, color }: { text: string; color?: string }) {
   const c = useColors();
   const tokens = useMemo(() => marked.lexer(text, { gfm: true }), [text]);
@@ -26,12 +30,24 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
         </Text>
       );
     }
-    case "paragraph":
+    case "paragraph": {
+      const tokens = (t as Tokens.Paragraph).tokens;
+      const pictures = tokens.filter(isTaskPicture);
+      if (pictures.length && tokens.every((p) => isTaskPicture(p) || p.type === "br" || (p.type === "text" && !p.raw.trim()))) {
+        return (
+          <View key={key} style={{ gap: 8 }}>
+            {pictures.map((p, i) => (
+              <TaskPicture key={i} path={p.href} alt={p.text} />
+            ))}
+          </View>
+        );
+      }
       return (
         <Text key={key} style={[type.body, { color }]} selectable>
-          {inline((t as Tokens.Paragraph).tokens, c, color)}
+          {inline(tokens, c, color)}
         </Text>
       );
+    }
     case "heading": {
       const h = t as Tokens.Heading;
       const size = h.depth <= 1 ? 22 : h.depth === 2 ? 19 : 17;
@@ -149,6 +165,41 @@ function inline(tokens: Token[] | undefined, c: Colors, color: string): ReactNod
   });
 }
 
+function isTaskPicture(t: Token): t is Tokens.Image {
+  return t.type === "image" && (t as Tokens.Image).href.startsWith(TASK_ATTACHMENT_PATH) && !(t as Tokens.Image).href.includes("..");
+}
+
+/** A picture attached to a task: served by the computer, so it is loaded with this phone's key, from each address in turn. */
+function TaskPicture({ path, alt }: { path: string; alt: string }) {
+  const c = useColors();
+  const connection = useSession((s) => s.connection);
+  const [ratio, setRatio] = useState(4 / 3);
+  const [attempt, setAttempt] = useState(0);
+  if (!connection) return null;
+  const bases = addressOrder(connection);
+  if (attempt >= bases.length) {
+    return (
+      <View style={[styles.missing, { backgroundColor: c.sunken }]}>
+        <Icon name="photo" size={15} color={c.textFaint} />
+        <Text style={[type.footnote, { color: c.textMuted, flexShrink: 1 }]} numberOfLines={1}>
+          {alt || "Picture"} couldn't load
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <Image
+      source={{ uri: bases[attempt] + path, headers: { authorization: `Bearer ${connection.token}` } }}
+      onLoad={(e) => e.source.width && e.source.height && setRatio(Math.max(0.5, e.source.width / e.source.height))}
+      onError={() => setAttempt((a) => a + 1)}
+      accessibilityLabel={alt}
+      contentFit="contain"
+      transition={150}
+      style={[styles.picture, { aspectRatio: ratio, backgroundColor: c.sunken }]}
+    />
+  );
+}
+
 function decode(s: string): string {
   return s
     .replace(/&amp;/g, "&")
@@ -159,6 +210,20 @@ function decode(s: string): string {
 }
 
 const styles = StyleSheet.create({
+  picture: {
+    width: "100%",
+    maxHeight: 420,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+  },
+  missing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: space.md,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+  },
   listItem: {
     flexDirection: "row",
     gap: 6,

@@ -17,7 +17,7 @@ import type { CleanupRun } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { loadConfig, config, BUILD, VERSION, isLoopbackHost, type CoreConfig } from "./config";
 import { logger, setLogDir, setLogLevel } from "./log";
-import { openDb, closeDb, setMeta } from "./db";
+import { openDb, closeDb, setMeta, getDb } from "./db";
 import { createApp } from "./server/app";
 import { websocketHandler, type WsData } from "./server/ws";
 import { authenticateRequest, getAccessToken, isAllowedOrigin, setDashboardPassword } from "./server/auth";
@@ -31,6 +31,7 @@ import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
 import { startPauses, stopPauses } from "./services/pauses";
 import { startBudgets, stopBudgets } from "./services/budgets";
+import { startRunNotices, stopRunNotices } from "./services/runNotices";
 import { startAutomationEvents, stopAutomationEvents } from "./automations/events";
 import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
 import { startMessaging, stopMessaging } from "./messaging/service";
@@ -55,6 +56,7 @@ import { bootstrapDependencies } from "./remote/health";
 import { startKeepAwake, stopKeepAwake } from "./remote/keepAwake";
 import { startCloudLink, stopCloudLink } from "./cloud/link";
 import { newId } from "./util";
+import { SPEND_BACKFILL_SQL } from "./db/migrations";
 
 const log = logger("core");
 
@@ -162,6 +164,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   ensureDefaultProfile();
   await ensureDefaultAgent();
   recoverInterruptedRuns();
+  // Runs that were cut off by a crash are booked now (once): what their earlier stretches cost counts.
+  getDb().run(SPEND_BACKFILL_SQL);
   // Before anything can start a run: the runner keeps the display on while runs work, and counts them from the start.
   if (runner) startKeepAwake();
   else startScheduler();
@@ -169,6 +173,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   startPauses();
   startBudgets();
   if (!runner) {
+    // A runner's runs are told by the computer it works for (they arrive there as its own runs).
+    startRunNotices();
     startDreaming();
     startAutomationEvents();
     startAppTriggers();
@@ -289,6 +295,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       // Only its own: a runner.json that names another process is that runner's way of saying it serves.
       if (runningRunner(cfg.dataDir)?.pid === process.pid) rmSync(runnerFile(cfg.dataDir), { force: true });
     } else {
+      stopRunNotices();
       stopDreaming();
       stopAppTriggers();
       stopAutomationEvents();

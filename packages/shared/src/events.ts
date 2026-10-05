@@ -151,6 +151,8 @@ export type EntityName =
   | "ssh-servers"
   | "messaging"
   | "tasks"
+  /** Goals: added, changed, deleted (their progress follows the tickets). */
+  | "goals"
   | "followups"
   | "mobile"
   | "system"
@@ -174,6 +176,8 @@ export type ClientEvent =
    * Phones only get `run.delta` (the streaming reply) for conversations they have open; other clients get all of them.
    */
   | { type: "conversation.subscribe"; conversationId: ID }
+  /** The chat this client shows right now in a visible, focused window (null = none): it is read, and its runs don't notify. */
+  | { type: "conversation.view"; conversationId: ID | null }
   | { type: "conversation.unsubscribe"; conversationId: ID }
   /** This client applies `run.delta` patches (`applyRunDelta`): send it what changed instead of the whole list. */
   | { type: "deltas.patch" }

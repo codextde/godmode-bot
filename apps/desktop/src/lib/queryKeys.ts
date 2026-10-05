@@ -1,6 +1,9 @@
 /** Central React Query keys. Prefix-based invalidation: invalidating `qk.agents` also hits `qk.agent(id)`. */
 export const qk = {
   bootstrap: ["bootstrap"] as unknown[],
+  /** "Needs you" — under `bootstrap`, so whatever refreshes the counts refreshes the list. */
+  attention: ["bootstrap", "attention"] as unknown[],
+  away: (since: string, until: string) => ["away", since, until],
   authStatus: ["auth-status"] as unknown[],
   settings: ["settings"] as unknown[],
   notifications: ["notifications"] as unknown[],
@@ -40,6 +43,9 @@ export const qk = {
   agentCommits: (id: string) => ["agents", "commits", id],
   agentCommands: (id: string) => ["agents", "commands", id],
   agentTemplates: ["agent-templates"] as unknown[],
+  teamTemplates: ["team-templates"] as unknown[],
+  goals: ["goals"] as unknown[],
+  goalList: (workspaceId: string) => ["goals", "list", workspaceId],
   /** Dreams (memory consolidation); invalidating the root refreshes every overview and detail. */
   dreams: ["dreams"] as unknown[],
   agentDreams: (agentId: string) => ["dreams", "agent", agentId],

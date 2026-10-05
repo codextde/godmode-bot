@@ -5,18 +5,18 @@
  * that came due while Godmode was off or the computer slept run as soon as it is back; one that comes due while its
  * chat is busy — or whose run is paused — waits for that turn to finish.
  */
-import type { Followup, FollowupReason, MessageBlock, Run } from "@godmode/shared";
+import type { Followup, FollowupReason, Run } from "@godmode/shared";
 import { all, get, insert, run as exec } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
-import { badRequest, conflict, notFound, now, parseJson } from "../util";
+import { badRequest, conflict, notFound, now } from "../util";
 import { redact } from "../vault/vault";
 import { describeNow } from "../runner/prompt";
 import { activeRunForConversation, waitForRun } from "../runner/runner";
 import { pauseOf } from "./pauses";
 import { deliverFollowup } from "../messaging/bridge";
 import { emitConversationUpdated, sendMessage } from "./conversations";
-import { notify } from "./notifications";
+import { notify, runNotifiedUser } from "./notifications";
 import { getSettings } from "./settings";
 
 const log = logger("followups");
@@ -234,6 +234,8 @@ async function start(r: FollowupRow, reason: FollowupReason): Promise<Run | null
       prompt: followupPrompt(r, reason),
       marker: [{ type: "followup", note: r.note, dueAt: r.due_at, setAt: r.created_at, reason }],
       trigger: "followup",
+      // "Continue now" is the human's click: a used-up budget doesn't hold it.
+      byHuman: reason === "now",
     });
     void report(r, run.id);
     return run;
@@ -257,12 +259,7 @@ async function report(r: FollowupRow, runId: string): Promise<void> {
     if (run.status === "cancelled") return;
     // A board ticket reports its own outcome ("ready for review", "blocked", or waiting again).
     if (get<{ id: string }>("SELECT id FROM tasks WHERE conversation_id = ?", r.conversation_id)) return;
-    // Only a message that mentions the tool is read: a run's blocks hold megabytes of tool output and screenshots.
-    const blocks = all<{ blocks: string }>(
-      "SELECT blocks FROM messages WHERE run_id = ? AND role = 'assistant' AND instr(blocks, 'notify_user') > 0",
-      runId,
-    ).flatMap((m) => parseJson<MessageBlock[]>(m.blocks, []));
-    if (blocks.some((b) => b.type === "tool_use" && b.name.endsWith("notify_user"))) return;
+    if (runNotifiedUser(runId)) return;
     const agentName = get<{ name: string }>("SELECT name FROM agents WHERE id = ?", r.agent_id)?.name ?? "An agent";
     const text = (run.status === "succeeded" ? run.result : run.error)?.replace(/\s+/g, " ").trim() ?? "";
     notify(

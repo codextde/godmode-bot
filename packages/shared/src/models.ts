@@ -1,3 +1,4 @@
+import type { AttentionCounts } from "./attention";
 import type { AgentCharacter } from "./character";
 /**
  * Core domain models shared between the Godmode core daemon and the UI.
@@ -231,6 +232,9 @@ export interface RoutineTriggerStatus {
   observation: string | null;
 }
 
+/** When an automation tells the human that a run ended. A failure is told once until a run succeeds again. */
+export type RoutineNotify = "always" | "failures" | "never";
+
 export interface Routine {
   id: ID;
   agentId: ID;
@@ -245,6 +249,8 @@ export interface Routine {
   enabled: boolean;
   /** Keep a single conversation for every run of this routine (continuity) vs. new conversation per run. */
   reuseConversation: boolean;
+  /** When it tells the human that a run ended: `failures` (default), `always`, or `never`. */
+  notify: RoutineNotify;
   conversationId: ID | null;
   lastRunAt: ISODate | null;
   /** Next scheduled run (schedule) or check (condition). */
@@ -353,6 +359,8 @@ export interface Conversation {
   running?: boolean;
   /** When the agent continues this chat on its own (see Followup). */
   followup?: ConversationFollowup | null;
+  /** Something new happened while nobody had the chat open: its latest run's end. Opening the chat reads it. */
+  unread?: { runId: ID; failed: boolean } | null;
   /** The chat's run stands still: paused by the human, waiting for Claude's usage limit to reset, or waiting for the human's answer. */
   paused?: RunPause | null;
   /** A chat another agent handed over: who asked, from which chat (null when that chat was deleted) and which run. */
@@ -367,6 +375,9 @@ export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt"
  * is used up (see PauseBudget).
  */
 export type PauseReason = "user" | "limit" | "question" | "budget";
+
+/** How a turn that ended early is picked up: `continue` where it stopped, or `again` from its prompt. */
+export type RetryMode = "continue" | "again";
 
 /** Whose monthly budget holds a run: the agent's own, or the whole team's. */
 export interface PauseBudget {
@@ -518,6 +529,8 @@ export type MessageBlock =
   | { type: "command"; name: string; args: string; output: string }
   /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
   | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason }
+  /** The human picked up a turn that ended early: `continue` where it stopped, or `again` from its prompt. */
+  | { type: "retry"; mode: RetryMode; runId: ID; at: ISODate; masked?: boolean }
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */
@@ -1538,5 +1551,9 @@ export interface Bootstrap {
     unreadNotifications: number;
     /** People waiting for approval to talk to a messaging bot. */
     messagingRequests: number;
+    /** Everything that waits for the human ("Needs you"), by kind. */
+    attention: AttentionCounts;
+    /** Chats with something new, not archived. */
+    unreadChats: number;
   };
 }

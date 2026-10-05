@@ -159,6 +159,61 @@ describe("monthly budgets", () => {
     await until(() => getRun(again.id).status === "succeeded", 15_000, "continued by the human");
   }, 60_000);
 
+  test("a run queued behind a working one in the same chat isn't held until that one is done", async () => {
+    const own = await makeAgent({ name: "Busy chat", permissions: { monthlyBudgetUsd: 1 } });
+    spent(2, own.id);
+    // The human's chat run works (it isn't held); a follow-up queues behind it in the same chat.
+    const chat = await startChat({ agentId: own.id, content: "LONG_STEP while it works" });
+    await until(() => getRun(chat.run.id).status === "running", 10_000, "the chat run to work");
+    const { sendMessage } = await import("../src/services/conversations");
+    const { run: queued } = await sendMessage(chat.conversation.id, { content: "Say hello", trigger: "followup" });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(getRun(queued.id).status).toBe("queued");
+    expect(get("SELECT 1 FROM paused_runs WHERE conversation_id = ?", chat.conversation.id)).toBeNull();
+    const { writeFileSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    writeFileSync(join(env.stateDir, "step-done"), "");
+    try {
+      await waitForRun(chat.run.id, 20_000);
+      expect(getRun(chat.run.id).status).toBe("succeeded");
+      await until(() => getRun(queued.id).status === "paused", 10_000, "the follow-up to be held once the chat is free");
+    } finally {
+      rmSync(join(env.stateDir, "step-done"), { force: true });
+    }
+  }, 60_000);
+
+  test("let through once, it stays let through after a later pause; Continue now on a follow-up isn't held", async () => {
+    const own = await makeAgent({ name: "Let through", permissions: { monthlyBudgetUsd: 1 } });
+    spent(2, own.id);
+    const routine = createRoutine({ agentId: own.id, name: "Weekly", cron: "0 9 * * 1", prompt: "LONG_STEP report" });
+    const run = await runRoutineNow(routine.id, { byHuman: true });
+    await until(() => getRun(run.id).status === "running", 10_000, "Run now to work");
+    const { pauseRun, resumeRun } = await import("../src/runner/runner");
+    const { pausedRun } = await import("../src/services/pauses");
+    await pauseRun(run.id);
+    await until(() => getRun(run.id).status === "paused", 15_000, "paused");
+    expect(pausedRun(run.id)).toMatchObject({ reason: "user", exempt: 1 });
+    // Continued by the timer (not the human): still not held.
+    const { writeFileSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    writeFileSync(join(env.stateDir, "step-done"), "");
+    try {
+      resumeRun(pausedRun(run.id)!, "auto");
+      await waitForRun(run.id, 20_000);
+      expect(getRun(run.id).status).not.toBe("paused");
+    } finally {
+      rmSync(join(env.stateDir, "step-done"), { force: true });
+    }
+
+    const { scheduleFollowup, runFollowupNow } = await import("../src/services/followups");
+    const chat = await startChat({ agentId: own.id, content: "Say hello" });
+    await waitForRun(chat.run.id, 20_000);
+    scheduleFollowup({ conversationId: chat.conversation.id, agentId: own.id, note: "Check again", dueAt: new Date(Date.now() + 3_600_000), runId: chat.run.id });
+    const now = await runFollowupNow(chat.conversation.id);
+    await waitForRun(now.id, 20_000);
+    expect(getRun(now.id).status).toBe("succeeded");
+  }, 60_000);
+
   test("only the human sets an agent's monthly budget", async () => {
     const godmode = await ensureDefaultAgent();
     const updated = await updateAgent(agent.id, { permissions: { monthlyBudgetUsd: 25 } });

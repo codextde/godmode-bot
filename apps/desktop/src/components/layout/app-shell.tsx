@@ -65,6 +65,27 @@ import { cloudContext, isTauri, storageKey } from "@/lib/core";
 import { useLive, useRunningCount } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { startPresence } from "@/lib/presence";
+import { GO_TO, ShortcutsDialog } from "@/components/layout/shortcuts-dialog";
+
+/**
+ * Typing in a field, a dialog, an open list or menu (typeahead), or a remote screen the human controls
+ * (`role=application`): plain keys belong to it.
+ */
+function typingIn(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return (
+    !!el &&
+    (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || !!el.closest("[role=dialog],[role=alertdialog],[role=application],[role=listbox],[role=menu]"))
+  );
+}
+
+/** The letter a key stands for, also on layouts without Latin letters (G is the G key wherever it is labelled). */
+function letterOf(e: KeyboardEvent): string {
+  const key = e.key.toLowerCase();
+  if (/^[a-z]$/.test(key) || key.length !== 1) return key;
+  return /^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : key;
+}
 
 interface NavItem {
   to: string;
@@ -87,12 +108,42 @@ export function AppShell({ children }: { children: ReactNode }) {
   const compact = useMediaQuery("(width >= 768px) and (width < 1024px)");
   const [peek, setPeek] = useState(false);
   useEffect(() => setPeek(false), [compact, location.key]);
-  const inboxCount = (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.unreadNotifications ?? 0);
+  // What waits for the human; only when nothing does, the updates they haven't read.
+  const attention = boot?.counts.attention;
+  const waiting = attention?.total ?? (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0);
+  const inboxCount = waiting || (boot?.counts.unreadNotifications ?? 0);
+
+  // Notices when the human comes back after a while (Home then sums up what happened).
+  useEffect(() => startPresence(), []);
 
   // Global shortcuts
   useEffect(() => {
+    // "G then T": the G, while the next key may still come.
+    let goAt = 0;
     const onKey = (e: KeyboardEvent) => {
       const mod = isMac ? e.metaKey : e.ctrlKey;
+      // Plain keys only outside text fields and dialogs (there they are typing), and only keys nothing else took.
+      if (!mod && !e.altKey && !e.defaultPrevented && !typingIn(e.target)) {
+        const key = letterOf(e);
+        if (e.key === "?") {
+          e.preventDefault();
+          useUi.getState().setShortcutsOpen(true);
+          return;
+        }
+        if (goAt && Date.now() - goAt < 1500) {
+          goAt = 0;
+          const target = GO_TO.find((g) => g.key === key);
+          if (target) {
+            e.preventDefault();
+            navigate(target.to);
+          }
+          return;
+        }
+        if (key === "g" && !e.shiftKey) {
+          goAt = Date.now();
+          return;
+        }
+      }
       if (mod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setCommandOpen(true);
@@ -109,9 +160,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [navigate, setCommandOpen]);
 
   const workNav: NavItem[] = [
-    { to: "/tasks", label: "Tasks", icon: <SquareKanban /> },
+    { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
-    { to: "/automations", label: "Automations", icon: <Workflow /> },
+    { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/activity", label: "Activity", icon: <Activity /> },
     { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
   ];
@@ -210,6 +261,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </SidebarInset>
       <CommandPalette />
+      <ShortcutsDialog />
     </SidebarProvider>
   );
 }

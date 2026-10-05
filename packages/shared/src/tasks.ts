@@ -79,9 +79,10 @@ export interface TaskEventData {
   assigned: { from: ID | null; to: ID | null; fromName: string; toName: string };
   archived: { archived: boolean };
   /** again: not the ticket's first start. */
-  started: { trigger: RunTrigger; again: boolean };
-  /** body: what the agent said when it ended its turn. */
-  waiting: { dueAt: ISODate; note: string };
+  /** retry: tried again on its own after a failure (1, 2, …); body: why the run before failed. */
+  started: { trigger: RunTrigger; again: boolean; subtasks?: number[]; retry?: number };
+  /** body: what the agent said when it ended its turn. Waits for a follow-up (dueAt, note) or for sub-tickets. */
+  waiting: { dueAt?: ISODate; note?: string; subtasks?: number[] };
   /** body: the full result. */
   delivered: { costUsd: number | null; durationMs: number | null; pullRequest: number | null };
   /** body: the reason. */
@@ -223,6 +224,16 @@ export interface Task {
   completedAt: ISODate | null;
   /** Off the board since then; null = on the board. */
   archivedAt: ISODate | null;
+  /** The bigger ticket this one is part of (it waits for this one), and its number. */
+  parentId: ID | null;
+  parentNumber: number | null;
+  /** The goal this ticket serves (its agent is told why), or null. */
+  goalId: ID | null;
+  /** Tickets this one waits for: it starts once each is delivered (or done, cancelled, archived). */
+  waitsFor: { id: ID; number: number; title: string; finished: boolean }[];
+  /** Its own sub-tickets: how many, how many are still open (not delivered, done, cancelled or archived), and how many
+   *  of those are blocked. null = none. */
+  subtasks: { total: number; open: number; blocked: number } | null;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -242,9 +253,19 @@ export interface TaskInput {
   priority?: TaskPriority;
   dueDate?: string | null;
   labels?: string[];
+  /** Make it a sub-ticket of this ticket (it waits for it). */
+  parentId?: ID | null;
+  /** The goal it serves (a part serves its ticket's goal). */
+  goalId?: ID | null;
+  /** Tickets it waits for before it starts. */
+  waitsFor?: ID[];
 }
 
 export interface TaskPatch {
+  /** The goal it serves; null = none. */
+  goalId?: ID | null;
+  /** Tickets it waits for before it starts (replaces the list). */
+  waitsFor?: ID[];
   title?: string;
   description?: string;
   type?: TaskType;
@@ -288,6 +309,22 @@ export function isOverdue(t: Pick<Task, "dueDate" | "status">, today = localDay(
 /** Nothing runs and nothing stands still: the ticket waits for the time its agent set to continue. */
 export function isWaiting(t: Pick<Task, "status" | "followup" | "pause" | "runStatus" | "activity">): boolean {
   return t.status === "in_progress" && !!t.followup && !t.pause && t.runStatus !== "queued" && t.runStatus !== "running" && !t.activity;
+}
+
+/** "#13", "#13 and #14", "#13, #14 and #15". */
+export function ticketList(numbers: readonly number[]): string {
+  const n = numbers.map((x) => `#${x}`);
+  return n.length < 2 ? (n[0] ?? "") : `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}`;
+}
+
+/** In Todo, not started: it waits for tickets that aren't finished yet. */
+export function waitsForTickets(t: Pick<Task, "status" | "waitsFor">): boolean {
+  return t.status === "todo" && t.waitsFor.some((w) => !w.finished);
+}
+
+/** In progress, nothing running: the ticket waits until its sub-tickets are done (then its agent continues). */
+export function waitsForSubtasks(t: Pick<Task, "status" | "subtasks" | "pause" | "runStatus" | "activity" | "followup">): boolean {
+  return t.status === "in_progress" && !!t.subtasks?.open && !t.followup && !t.pause && t.runStatus !== "queued" && t.runStatus !== "running" && !t.activity;
 }
 
 /** The ticket's run waits for the human's answer to a question or an approval. */
@@ -342,12 +379,15 @@ export function taskEventText(e: TaskEvent, o: { you: string; youObject: string;
     case "archived":
       return e.data.archived ? `${a} archived it` : `${a} put it back on the board`;
     case "started":
+      if (e.data.subtasks?.length) return `${a} picked it up again — ${ticketList(e.data.subtasks)} ${e.data.subtasks.length === 1 ? "is" : "are"} done`;
+      if (e.data.retry) return e.data.retry > 1 ? `${a} tried once more on its own` : `${a} tried again on its own after the run failed`;
       if (!e.data.again) return `${a} started working`;
       if (e.data.trigger === "followup") return `${a} continued as planned`;
       if (e.data.trigger === "task") return `${a} started over`;
       return `${a} picked it up again`;
     case "waiting":
-      return `${a} is waiting — continues ${o.when ? o.when(e.data.dueAt) : e.data.dueAt}`;
+      if (e.data.subtasks?.length) return `${a} is waiting for ${ticketList(e.data.subtasks)}`;
+      return `${a} is waiting — continues ${e.data.dueAt ? (o.when ? o.when(e.data.dueAt) : e.data.dueAt) : "later"}`;
     case "delivered":
       return `${a} delivered${e.data.pullRequest ? ` — pull request #${e.data.pullRequest}` : ""}`;
     case "blocked":
@@ -386,3 +426,35 @@ export function taskEventText(e: TaskEvent, o: { you: string; youObject: string;
       return e.data.status === "approved" ? `${a} approved` : e.data.status === "declined" ? `${a} declined` : `${a} answered`;
   }
 }
+
+export type GoalStatus = "active" | "achieved" | "dropped";
+
+/** What the work is for: tickets serve a goal; its agent is told why, and the board shows how far it is. */
+export interface Goal {
+  id: ID;
+  /** null = a goal across all workspaces. */
+  workspaceId: ID | null;
+  title: string;
+  /** Why it matters, or how to tell it is reached (the agents get it with every ticket that serves it). */
+  why: string;
+  status: GoalStatus;
+  /** A calendar day, YYYY-MM-DD. */
+  targetDate: string | null;
+  /** Tickets serving it (archived ones left out), and how many are done. */
+  tickets: { total: number; done: number; open: number };
+  /** What the work on its tickets cost so far. */
+  costUsd: number;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
+export interface GoalInput {
+  title: string;
+  why?: string;
+  workspaceId?: ID | null;
+  targetDate?: string | null;
+  status?: GoalStatus;
+}
+
+export const MAX_GOAL_TITLE_LENGTH = 200;
+export const MAX_GOAL_WHY_LENGTH = 2000;

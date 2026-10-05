@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, FolderGit2, ListFilter, Plus, Search, SquareKanban } from "lucide-react";
@@ -41,7 +41,8 @@ import { followupWhen } from "@/components/chat/followup";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
 import { api, errorMessage } from "@/lib/api";
-import { useAllAgents, useArchivedTasks, useTasks, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useArchivedTasks, useGoals, useTasks, useWorkspaces } from "@/lib/hooks";
+import { GoalsStrip } from "@/components/tasks/goals-strip";
 import { qk } from "@/lib/queryKeys";
 import { upsertTask } from "@/lib/realtime";
 import { useUi } from "@/stores/ui";
@@ -52,7 +53,10 @@ const ARCHIVED = "archived";
 
 function typingIn(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
-  return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || !!el.closest("[role=dialog]"));
+  return (
+    !!el &&
+    (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || !!el.closest("[role=dialog],[role=alertdialog],[role=application],[role=listbox],[role=menu]"))
+  );
 }
 
 /** Where a moved card lands in the cached list until the server answers (same rule as the core). */
@@ -71,6 +75,7 @@ export default function TasksPage() {
   const [params, setParams] = useSearchParams();
   const tasksQ = useTasks();
   const archivedQ = useArchivedTasks();
+  const { data: goals = [] } = useGoals();
   const { setArchived } = useArchiveTasks();
   const { data: agents = [] } = useAllAgents();
   const { data: workspaceList = [] } = useWorkspaces();
@@ -80,6 +85,7 @@ export default function TasksPage() {
   const priorities = useMemo(() => new Set((params.get("priority") ?? "").split(",").filter(Boolean) as TaskPriority[]), [params]);
   const dueFilter = params.get("due") as "overdue" | "week" | "none" | null;
   const labelFilter = useMemo(() => new Set((params.get("label") ?? "").split(",").filter(Boolean)), [params]);
+  const goalFilter = params.get("goal");
   const setFilter = (key: string, value: string | null) => {
     const p = new URLSearchParams(params);
     if (value) p.set(key, value);
@@ -94,10 +100,10 @@ export default function TasksPage() {
     else next.add(value);
     setFilter(key, [...next].join(",") || null);
   };
-  const filtersOn = priorities.size + labelFilter.size + (dueFilter ? 1 : 0);
+  const filtersOn = priorities.size + labelFilter.size + (dueFilter ? 1 : 0) + (goalFilter ? 1 : 0);
   const clearFilters = () => {
     const p = new URLSearchParams(params);
-    for (const k of ["q", "agent", "priority", "due", "label"]) p.delete(k);
+    for (const k of ["q", "agent", "priority", "due", "label", "goal"]) p.delete(k);
     setParams(p, { replace: true });
   };
   const [creating, setCreating] = useState(false);
@@ -117,6 +123,14 @@ export default function TasksPage() {
     [archivedQ.data],
   );
   const view = params.get("view") === ARCHIVED ? ARCHIVED : "board";
+  // Another workspace in the sidebar: a goal picked in the last one would leave an empty board.
+  const shownScope = useRef(scope);
+  useEffect(() => {
+    if (scope === shownScope.current) return;
+    shownScope.current = scope;
+    if (goalFilter) setFilter("goal", null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope]);
   const setView = (next: string) => {
     const p = new URLSearchParams(params);
     if (next === ARCHIVED) p.set("view", ARCHIVED);
@@ -135,10 +149,12 @@ export default function TasksPage() {
       if (dueFilter === "week" && !(t.dueDate && t.dueDate >= today && t.dueDate <= week)) return false;
       if (dueFilter === "none" && t.dueDate) return false;
       if (labelFilter.size && !t.labels.some((l) => labelFilter.has(l))) return false;
+      // The goal filter is the board's (its strip isn't shown in the archive).
+      if (goalFilter && view !== ARCHIVED && t.goalId !== goalFilter) return false;
       if (!q) return true;
       return `#${t.number} ${t.title} ${t.description} ${t.labels.join(" ")} ${t.agentId ? (agentById.get(t.agentId)?.name ?? "") : ""}`.toLowerCase().includes(q);
     };
-  }, [search, agentFilter, agentById, priorities, dueFilter, labelFilter]);
+  }, [search, agentFilter, agentById, priorities, dueFilter, labelFilter, goalFilter, view]);
   const labelsInUse = useMemo(() => [...new Set(tasks.flatMap((t) => t.labels))].sort((a, b) => a.localeCompare(b)), [tasks]);
   const overdueCount = useMemo(() => tasks.filter((t) => isOverdue(t)).length, [tasks]);
   const visible = useMemo(() => tasks.filter(matches), [tasks, matches]);
@@ -166,7 +182,8 @@ export default function TasksPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "c" || e.metaKey || e.ctrlKey || e.altKey || typingIn(e.target)) return;
+      // A key the app already used ("G then C" goes to Chat) isn't "new ticket".
+      if (e.key.toLowerCase() !== "c" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || typingIn(e.target)) return;
       e.preventDefault();
       setCreating(true);
     };
@@ -389,6 +406,8 @@ export default function TasksPage() {
         )}
       </div>
 
+      {view !== ARCHIVED && <GoalsStrip goals={goals} selected={goalFilter} onSelect={(id) => setFilter("goal", id)} workspaceId={workspace?.id ?? null} />}
+
       <div className="min-h-0 flex-1">
         {view === ARCHIVED ? (
           archivedQ.isPending ? (
@@ -461,6 +480,7 @@ export default function TasksPage() {
         workspaces={workspaceList}
         agents={agents}
         defaultWorkspaceId={workspace?.id ?? null}
+        defaultGoalId={goalFilter}
       />
       <TaskSheet
         task={selected}

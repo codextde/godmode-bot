@@ -1,5 +1,5 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { Navigate, Route, Routes, useNavigate } from "react-router";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CloudErrorCode, type Bootstrap } from "@godmode/shared";
 import { ApiRequestError, api, isCloudError, setCloudIssueHandler, setUnauthorizedHandler, type CloudIssue } from "@/lib/api";
@@ -41,6 +41,10 @@ const SettingsPage = lazy(() => import("@/pages/settings/settings-page"));
 export function App() {
   const qc = useQueryClient();
   const navigate = useNavigate();
+  // The page on screen as the router sees it (through Godmode Cloud the address bar has a /d/<device> prefix).
+  const location = useLocation();
+  const onScreen = useRef("");
+  onScreen.current = `${location.pathname}${location.search}`;
   const [coreReady, setCoreReady] = useState(false);
   const [coreError, setCoreError] = useState<string | null>(null);
   const [cloudIssue, setCloudIssue] = useState<CloudIssue | null>(null);
@@ -103,7 +107,7 @@ export function App() {
       if (event.type === "notification" && event.notification.kind === "question") {
         // An agent waits for the human: a toast that leads to the question, unless it is on screen already.
         const n = event.notification;
-        const here = n.link && `${location.pathname}${location.search}` === n.link && document.hasFocus();
+        const here = !!n.link && onScreen.current === n.link && document.hasFocus();
         if (here) {
           void api.notifications.read([n.id]).catch(() => undefined);
           return;
@@ -122,7 +126,24 @@ export function App() {
       if (event.type === "notification") {
         const n = event.notification;
         const fn = n.kind === "error" ? toast.error : n.kind === "warning" || n.kind === "missing_login" ? toast.warning : n.kind === "success" ? toast.success : toast;
-        fn(n.title, { description: n.body || undefined });
+        const here = !!n.link && onScreen.current === n.link && document.hasFocus();
+        // Already on screen: nothing to pop up, it's read.
+        if (here) {
+          void api.notifications.read([n.id]).catch(() => undefined);
+          return;
+        }
+        fn(n.title, {
+          description: n.body || undefined,
+          action: n.link
+            ? {
+                label: "Open",
+                onClick: () => {
+                  navigate(n.link!);
+                  void api.notifications.read([n.id]).catch(() => undefined);
+                },
+              }
+            : undefined,
+        });
         const desktopOn = qc.getQueryData<{ settings?: { general?: { desktopNotifications?: boolean } } }>(qk.bootstrap)?.settings?.general
           ?.desktopNotifications;
         if (desktopOn !== false && !document.hasFocus()) void notifyDesktop(n.title, n.body);
