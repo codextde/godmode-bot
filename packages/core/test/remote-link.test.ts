@@ -11,7 +11,8 @@ import { setLogLevel } from "../src/log";
 import { generateKeyPair } from "../src/remote/crypto";
 import { RemoteLink, type LinkState } from "../src/remote/linkClient";
 import { forgetController, startLinkServer, stopLinkServer } from "../src/remote/linkServer";
-import { cancelOffer, createOffer, createRunnerCode, deliverCode } from "../src/remote/pairing";
+import { setTailscaleOverride } from "../src/mobile/tailscale";
+import { cancelOffer, createOffer, createRunnerCode, deliverCode, offerAddresses } from "../src/remote/pairing";
 import { getAccessToken } from "../src/server/auth";
 import { websocketHandler } from "../src/server/ws";
 import { HttpError, sleep } from "../src/util";
@@ -236,6 +237,43 @@ describe("pairing offers", () => {
     const after = await deliverCode({ ...payload, urls: loopback }, runnerCode);
     expect(after.ok).toBe(false);
     expect(received).toHaveLength(1);
+  });
+
+  test("the offer lists this computer's networks, Tailscale with its MagicDNS name, and the code arrives through any of them", async () => {
+    const ts = { installed: true, running: true, ip: "100.101.102.103", dnsName: "studio.tail1234.ts.net", tailnet: "me@example.com", detail: null };
+    const nic = (address: string, internal = false) => ({ address, family: "IPv4" as const, internal, netmask: "255.255.255.0", mac: "00:00:00:00:00:00", cidr: null });
+    const routes = offerAddresses(ts, {
+      lo0: [nic("127.0.0.1", true)],
+      utun4: [nic("100.101.102.103")],
+      bridge100: [nic("192.168.64.1")],
+      en0: [nic("192.168.68.56"), nic("169.254.10.2")],
+    });
+    expect(routes).toEqual([
+      { network: "lan", address: "192.168.68.56", detail: "en0" },
+      { network: "vm", address: "192.168.64.1", detail: "bridge100" },
+      { network: "tailscale", address: "100.101.102.103", detail: "studio.tail1234.ts.net" },
+    ]);
+    expect(offerAddresses(ts, { en0: [nic("10.0.0.4")] }).at(-1)).toEqual({ network: "tailscale", address: "100.101.102.103", detail: "studio.tail1234.ts.net" });
+    expect(offerAddresses({ ...ts, running: false, ip: null }, { en0: [nic("10.0.0.4")] })).toHaveLength(1);
+
+    setTailscaleOverride(ts);
+    try {
+      const from: (string | null)[] = [];
+      const offer = await createOffer(async (_c, via) => {
+        from.push(via);
+        return { name: "Controller" };
+      });
+      expect(offer.tailscale.dnsName).toBe("studio.tail1234.ts.net");
+      expect(offer.routes.at(-1)).toMatchObject({ network: "tailscale", address: "100.101.102.103", detail: "studio.tail1234.ts.net" });
+      expect(offer.routes.map((r) => r.url)).toEqual(offer.urls.slice(0, offer.routes.length));
+      const payload = parseRunnerOffer(/GODMODE_PAIR=(\S+)/.exec(offer.websiteCommand)![1]!)!;
+      const { code: runnerCode } = await createRunnerCode();
+      expect(await deliverCode({ ...payload, urls: offer.urls.filter((u) => u.startsWith("http://127.0.0.1:")) }, runnerCode)).toEqual({ ok: true, name: "Controller" });
+      expect(from).toEqual(["127.0.0.1"]);
+    } finally {
+      setTailscaleOverride(null);
+      cancelOffer();
+    }
   });
 
   test("an expired offer is not delivered", async () => {

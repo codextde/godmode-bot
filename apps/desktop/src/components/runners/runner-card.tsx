@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { LiveDot } from "@/components/aicss/Motion";
 import { CopyButton } from "@/components/chat/copy-button";
 import { cn } from "@/lib/utils";
+import { TailscaleMark, isTailscaleHost } from "./network-picker";
 import { RunnerHealthPanel, useRunnerHealth } from "./runner-health";
 import {
   CHECK_COLOR,
@@ -120,6 +121,11 @@ export function RunnerCard({
               <span className={cn("truncate font-mono", runner.address ? "text-foreground/80" : "text-muted-foreground")} title={runner.address ? `Connected through ${endpoint}` : `Godmode tries ${runner.addresses.join(", ")}`}>
                 {endpoint}
               </span>
+              {isTailscaleHost(runner.address ?? runner.addresses[0]) && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-[5px] border px-1.5 py-px text-[10px] font-medium text-muted-foreground">
+                  <TailscaleMark className="size-2.5" /> Tailscale
+                </span>
+              )}
               <CopyButton text={endpoint} label="Copy address" className="size-5" />
             </p>
           )}

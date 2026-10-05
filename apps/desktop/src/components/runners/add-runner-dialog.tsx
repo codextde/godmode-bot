@@ -17,6 +17,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useRunners } from "@/lib/hooks";
 import { onServerEvent, upsertRunner } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
+import { NetworkPicker, pickRoute } from "./network-picker";
 import { RunnerHealthPanel, useRunnerHealth } from "./runner-health";
 import { CommandBlock, THIS_COMPUTER, THIS_COMPUTER_INLINE, blockingChecks } from "./runner-parts";
 import { useRunnerActions } from "./use-runner-actions";
@@ -38,6 +39,7 @@ export function AddRunnerDialog({ open, onOpenChange }: { open: boolean; onOpenC
   const [paired, setPaired] = useState<RemoteRunner | null>(null);
   const [byCode, setByCode] = useState(false);
   const [source, setSource] = useState<Source>("local");
+  const [address, setAddress] = useState<string | null>(null);
   const now = useNow(1000);
 
   const create = useMutation({ mutationFn: api.runners.pairing, onSuccess: setOffer });
@@ -48,6 +50,7 @@ export function AddRunnerDialog({ open, onOpenChange }: { open: boolean; onOpenC
     setOffer(null);
     setByCode(false);
     setSource("local");
+    setAddress(null);
     create.mutate();
     const off = onServerEvent((e) => {
       if (e.type === "runner.paired") setPaired(e.runner);
@@ -67,6 +70,10 @@ export function AddRunnerDialog({ open, onOpenChange }: { open: boolean; onOpenC
     if (open && expired && !paired && !create.isPending) create.mutate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, expired, paired]);
+
+  const route = offer ? pickRoute(offer.routes, address) : null;
+  const command = route?.command ?? null;
+  const waitingOn = route?.url ?? offer?.urls[0] ?? null;
 
   // The list is kept live: the paired runner's connection and health follow it.
   const runner = paired ? (runners?.find((r) => r.id === paired.id) ?? paired) : null;
@@ -99,20 +106,41 @@ export function AddRunnerDialog({ open, onOpenChange }: { open: boolean; onOpenC
             <motion.div key="command" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-6">
               <ol className="space-y-5">
                 <Step n={1} title="Pick a Mac that stays on">
-                  A Mac mini, or a laptop that stays plugged in. It has to reach this computer: on the same network, or through Tailscale.
+                  A Mac mini, or a laptop that stays plugged in.
                 </Step>
-                <Step n={2} title="Run this in Terminal on the other Mac">
+                <Step n={2} title={`How it reaches ${THIS_COMPUTER_INLINE}`}>
+                  {offer && !create.isError ? (
+                    <div className={cn("mt-2 transition-opacity", create.isPending && "opacity-40")}>
+                      <NetworkPicker
+                        routes={offer.routes}
+                        tailscale={offer.tailscale}
+                        value={route}
+                        onChange={(r) => setAddress(r.address)}
+                        onRefresh={() => create.mutate()}
+                        refreshing={create.isPending}
+                      />
+                    </div>
+                  ) : create.isError ? (
+                    "On the same network, or from anywhere through Tailscale."
+                  ) : (
+                    <Skeleton className="mt-2 h-28 rounded-lg" aria-label="Looking up this computer's networks" />
+                  )}
+                </Step>
+                <Step n={3} title="Run this in Terminal on the other Mac">
                   {offer && !create.isError ? (
                     <div className={cn("space-y-2.5 transition-opacity", create.isPending && "opacity-40")}>
-                      {offer.command ? (
+                      {command ? (
                         <Tabs value={source} onValueChange={(v) => setSource(v as Source)} className="gap-2.5">
                           <TabsList className="grid w-full grid-cols-2">
                             <TabsTrigger value="local">Install from {THIS_COMPUTER_INLINE}</TabsTrigger>
                             <TabsTrigger value="website">Install from usegodmode.com</TabsTrigger>
                           </TabsList>
                           <TabsContent value="local" className="space-y-2.5">
-                            <CommandBlock text={offer.command} title="Terminal on the other Mac" />
-                            <p>It downloads Godmode from this computer, installs it as a runner and pairs it. The command works once.</p>
+                            <CommandBlock text={command} title="Terminal on the other Mac" />
+                            <p>
+                              It downloads Godmode from this computer
+                              {route?.network === "tailscale" ? " through Tailscale" : ""}, installs it as a runner and pairs it. The command works once.
+                            </p>
                           </TabsContent>
                           <TabsContent value="website" className="space-y-2.5">
                             <WebsiteCommand command={offer.websiteCommand} />
@@ -141,7 +169,7 @@ export function AddRunnerDialog({ open, onOpenChange }: { open: boolean; onOpenC
                     <Skeleton className="h-36 rounded-lg" aria-label="Making the install command" />
                   )}
                 </Step>
-                <Step n={3} title="It pairs by itself">
+                <Step n={4} title="It pairs by itself">
                   The runner appears here when the command finishes — usually under a minute. The first time, it also installs Claude Code and a browser.
                 </Step>
               </ol>
@@ -151,12 +179,13 @@ export function AddRunnerDialog({ open, onOpenChange }: { open: boolean; onOpenC
                   <MonitorSmartphone className="size-4 shrink-0 text-foreground" />
                   <span className="min-w-0">
                     Waiting for the runner
-                    {offer.urls[0] ? (
+                    {waitingOn ? (
                       <>
                         {" "}
-                        on <span className="font-mono text-[11px] break-all text-foreground">{offer.urls[0].replace(/^https?:\/\//, "")}</span>
+                        on <span className="font-mono text-[11px] break-all text-foreground">{waitingOn.replace(/^https?:\/\//, "")}</span>
                       </>
                     ) : null}
+                    {route?.network === "tailscale" ? " through Tailscale" : null}
                   </span>
                   <span className="ml-auto flex shrink-0 gap-1" aria-hidden>
                     {[0, 1, 2].map((i) => (
