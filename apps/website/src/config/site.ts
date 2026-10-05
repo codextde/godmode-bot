@@ -12,6 +12,12 @@ export const SITE = {
   model: 'Claude Opus 5.5',
 } as const;
 
+/**
+ * Base URL for links handed to Stripe (success/cancel/return URLs). Always the canonical site in production, so a
+ * request's Host header can't steer buyers elsewhere; the local origin only in `astro dev`.
+ */
+export const siteBase = (origin: string) => (import.meta.env.DEV ? origin : SITE.url.replace(/\/$/, ''));
+
 export type Plan = 'monthly' | 'yearly' | 'lifetime';
 
 export const isPlan = (v: unknown): v is Plan => v === 'monthly' || v === 'yearly' || v === 'lifetime';

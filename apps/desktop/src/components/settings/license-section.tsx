@@ -41,7 +41,7 @@ const STATUS: Record<LicenseStatus, { label: string; tone: "live" | "neutral" | 
 const PLAN: Record<LicensePlan, string> = {
   monthly: "Monthly",
   yearly: "Yearly",
-  lifetime: "Founder Lifetime",
+  lifetime: "Lifetime",
 };
 
 const day = (iso: string) => format(new Date(iso), "MMMM d, yyyy");
@@ -127,7 +127,7 @@ function LicenseCard({ state: s }: { state: LicenseState }) {
     <>
       {s.message && <Callout tone={s.blocked ? "danger" : s.status === "past_due" || s.status === "unverified" ? "warning" : "info"}>{s.message}</Callout>}
       <SettingsGroup
-        title={s.plan === "lifetime" ? "Godmode Pro · Founder Lifetime" : "Godmode Pro"}
+        title={s.plan === "lifetime" ? "Godmode Pro · Lifetime" : "Godmode Pro"}
         icon={<KeyRound />}
         description={s.checkedAt ? `Checked ${formatDistanceToNow(new Date(s.checkedAt), { addSuffix: true })}` : "Not checked with usegodmode.com yet"}
         actions={<ToneBadge tone={status.tone}>{status.label}</ToneBadge>}

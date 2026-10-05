@@ -49,7 +49,9 @@ const jsonLd = {
 };
 
 // Internal pages (admin) never load marketing pixels.
-const tracking = bare ? { x: '', xEvents: {} } : { x: TRACKING.xPixelId, xEvents: TRACKING.xEvents };
+// Pages whose URL carries a license key never load the pixel either (uwt.js reads location.href).
+const tracking =
+  bare || Astro.url.searchParams.has('key') ? { x: '', xEvents: {} } : { x: TRACKING.xPixelId, xEvents: TRACKING.xEvents };
 ---
 
 <!doctype html>

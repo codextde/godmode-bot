@@ -76,8 +76,8 @@ const purchase =
   state === 'paid' && session
     ? {
         id: await publicId(session.id),
-        // A trial collects nothing today; report what the plan is worth so ad optimisation still sees a value.
-        value: trialEnd ? offer.price : (session.amount_total ?? 0) / 100,
+        // A started trial has collected nothing, so it reports no value.
+        value: trialEnd ? 0 : (session.amount_total ?? 0) / 100,
         currency: (session.currency ?? 'usd').toUpperCase(),
         plan: trialEnd ? `${plan}_trial` : plan,
       }

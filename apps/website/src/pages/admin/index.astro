@@ -52,6 +52,10 @@ const one = async (sql: string, ...args: unknown[]) => ((await D.prepare(sql).bi
 const n = (v: unknown) => Number(v ?? 0);
 
 const now = Date.now();
+// A trial whose email already started an earlier trial: visible here so trial abuse can be spotted (nothing automatic).
+const REPEAT_TRIAL = `(o.trial_end IS NOT NULL AND o.email IS NOT NULL AND EXISTS (
+  SELECT 1 FROM orders p WHERE lower(p.email) = lower(o.email) AND p.trial_end IS NOT NULL
+    AND p.livemode = o.livemode AND p.created_at < o.created_at))`;
 const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sourceOrders, recent, abandoned, leads, ctas, subs, trials] =
   await Promise.all([
     one(`SELECT COUNT(DISTINCT day || visitor) AS v FROM events WHERE day >= ? AND type = 'pageview'`, sinceDay),
@@ -95,9 +99,9 @@ const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sour
       liveFlag,
     ),
     all(
-      `SELECT created_at, plan, status, sub_status, trial_end, comp, amount_total, currency, email, country, utm_source,
-              utm_campaign, twclid
-       FROM orders WHERE livemode = ? AND status NOT IN ('open') ORDER BY created_at DESC LIMIT 25`,
+      `SELECT o.created_at, o.plan, o.status, o.sub_status, o.trial_end, o.comp, o.amount_total, o.currency, o.email,
+              o.country, o.utm_source, o.utm_campaign, o.twclid, ${REPEAT_TRIAL} AS repeat_trial
+       FROM orders o WHERE o.livemode = ? AND o.status NOT IN ('open') ORDER BY o.created_at DESC LIMIT 25`,
       liveFlag,
     ),
     all(
@@ -124,8 +128,9 @@ const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sour
          SUM(CASE WHEN trial_end <= ?2 AND sub_status IN ('active', 'past_due', 'unpaid') THEN 1
                   WHEN trial_end <= ?2 AND period_end > trial_end + 3600000 AND status <> 'refunded' THEN 1 ELSE 0 END) AS converted,
          SUM(CASE WHEN sub_status IN ('canceled', 'incomplete_expired', 'paused')
-                   AND (period_end IS NULL OR period_end <= trial_end + 3600000) THEN 1 ELSE 0 END) AS dropped
-       FROM orders WHERE livemode = ?1 AND mode = 'subscription' AND trial_end IS NOT NULL`,
+                   AND (period_end IS NULL OR period_end <= trial_end + 3600000) THEN 1 ELSE 0 END) AS dropped,
+         SUM(CASE WHEN ${REPEAT_TRIAL} THEN 1 ELSE 0 END) AS repeats
+       FROM orders o WHERE livemode = ?1 AND mode = 'subscription' AND trial_end IS NOT NULL`,
       liveFlag,
       now,
     ),
@@ -252,6 +257,7 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
             <div class="flex justify-between"><dt class="text-text-2">…set to cancel</dt><dd class="tabular-nums">{n(trials.cancelling)}</dd></div>
             <div class="flex justify-between"><dt class="text-text-2">Converted to paid</dt><dd class="tabular-nums">{converted}</dd></div>
             <div class="flex justify-between"><dt class="text-text-2">Canceled in trial</dt><dd class="tabular-nums">{dropped}</dd></div>
+            <div class="flex justify-between"><dt class="text-text-2">Repeat trials (same email)</dt><dd class:list={['tabular-nums', n(trials.repeats) > 0 && 'text-warn']}>{n(trials.repeats)}</dd></div>
           </dl>
         </div>
         <form id="comp" method="post" action="/admin" class="card p-6">
@@ -361,7 +367,10 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
             {recent.map((o) => (
               <tr class="border-t border-line">
                 <td class="py-2 font-mono text-[12px] text-muted">{date(o.created_at)}</td>
-                <td>{o.plan}{o.comp ? <span class="text-dim"> · free</span> : null}</td>
+                <td>
+                  {o.plan}{o.comp ? <span class="text-dim"> · free</span> : null}
+                  {o.repeat_trial ? <span class="chip chip-warn ml-1.5">repeat trial</span> : null}
+                </td>
                 <td><span class:list={['chip', o.status === 'paid' && 'chip-brand']}>{o.sub_status && o.sub_status !== 'active' ? o.sub_status : o.status}</span></td>
                 <td class="text-right tabular-nums">{o.amount_total != null ? money(n(o.amount_total) / 100, String(o.currency ?? 'usd')) : '—'}</td>
                 <td class="pl-4 text-text-2">{o.email ?? '—'}</td>

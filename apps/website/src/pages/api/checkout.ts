@@ -1,10 +1,10 @@
 import type { APIRoute } from 'astro';
 import type Stripe from 'stripe';
 import { env } from 'cloudflare:workers';
-import { isPlan, PRICING, priceLabel, trialCancelBy, type Plan } from '@/config/site';
+import { isPlan, PRICING, priceLabel, siteBase, trialCancelBy, type Plan } from '@/config/site';
 import { flag, priceFor, stripe } from '@/lib/stripe';
 import { newLicenseKey } from '@/lib/license';
-import { insertOpenOrder, lifetimeSold, type Attribution } from '@/lib/db';
+import { insertOpenOrder, LIFETIME_HOLD_MS, lifetimeSold, type Attribution } from '@/lib/db';
 import { minLivemode } from '@/lib/entitlement';
 import { allowed, BOTS } from '@/lib/limit';
 
@@ -57,11 +57,12 @@ export const POST: APIRoute = async ({ request, url }) => {
     // Needs "promotional emails" accepted under Dashboard → Settings → Checkout first.
     const promotions = flag(env.STRIPE_COLLECT_PROMOTIONS);
 
+    const base = siteBase(url.origin);
     const params: Stripe.Checkout.SessionCreateParams = {
       mode,
       line_items: [{ price: await priceFor(plan), quantity: 1 }],
-      success_url: `${url.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${url.origin}/checkout/canceled?plan=${plan}`,
+      success_url: `${base}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${base}/checkout/canceled?plan=${plan}`,
       integration_identifier: INTEGRATION_ID,
       allow_promotion_codes: true,
       billing_address_collection: 'auto',
@@ -84,7 +85,7 @@ export const POST: APIRoute = async ({ request, url }) => {
         ...(requireTos
           ? {
               terms_of_service_acceptance: {
-                message: `I agree to the [Terms](${url.origin}/legal/terms) and ask Codext GmbH to deliver the software right away. I understand that I lose my statutory right of withdrawal once delivery has begun; the ${PRICING.guaranteeDays}-day money-back guarantee still applies.`,
+                message: `I agree to the [Terms](${base}/legal/terms) and ask Codext GmbH to deliver the software right away. I understand that I lose my statutory right of withdrawal once delivery has begun; the ${PRICING.guaranteeDays}-day money-back guarantee still applies.`,
               },
             }
           : {}),
@@ -100,6 +101,8 @@ export const POST: APIRoute = async ({ request, url }) => {
     }
 
     if (mode === 'payment') {
+      // Matches the cap's reservation window: an abandoned Founder Lifetime checkout frees its place again.
+      params.expires_at = Math.floor((Date.now() + LIFETIME_HOLD_MS) / 1000);
       params.customer_creation = 'always';
       params.payment_intent_data = { metadata, description: `${offer.name} license — Godmode Bot` };
       if (!managed) {

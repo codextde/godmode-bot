@@ -184,7 +184,7 @@ export function App() {
   const b = boot.data;
   if (!b.vault.initialized || !b.settings.onboardingComplete) return <OnboardingPage bootstrap={b} />;
   if (!b.vault.unlocked) return <UnlockPage />;
-  if (license.data?.blocked) return <LicenseGate state={license.data} />;
+  if (!cloudContext && license.data?.blocked) return <LicenseGate state={license.data} />;
 
   return (
     <AppShell>

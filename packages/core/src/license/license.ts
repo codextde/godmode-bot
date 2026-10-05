@@ -31,6 +31,8 @@ const DAY_MS = 86_400_000;
 export const LICENSE_CHECK_INTERVAL_MS = 6 * 3_600_000;
 export const LICENSE_GRACE_MS = 7 * DAY_MS;
 export const LICENSE_UNVERIFIED_MS = 7 * DAY_MS;
+/** A subscription not confirmed for this long after its trial or period ended counts as unverified again. */
+export const LICENSE_STALE_MS = 14 * DAY_MS;
 const REQUEST_TIMEOUT_MS = 15_000;
 /** A refused run asks the server again at most this often (the human may have just paid). */
 const RECHECK_BLOCKED_MS = 5 * 60_000;
@@ -72,6 +74,9 @@ type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 const defaultFetch: Fetch = (url, init) => fetch(url, init);
 let fetchImpl = defaultFetch;
 let enforcedOverride: boolean | null = null;
+let compiled = COMPILED;
+/** A `GODMODE_LICENSE` key that differs from the stored one: it replaces it once the server has answered for it. */
+let pendingEnvKey: string | null = null;
 let clock = () => Date.now();
 let timer: ReturnType<typeof setInterval> | null = null;
 let checking: Promise<LicenseState> | null = null;
@@ -87,6 +92,10 @@ export function __setLicenseEnforcedForTests(value: boolean | null) {
   enforcedOverride = value;
 }
 
+export function __setLicenseCompiledForTests(value: boolean | null) {
+  compiled = value ?? COMPILED;
+}
+
 export function __setLicenseClockForTests(fn: (() => number) | null) {
   clock = fn ?? (() => Date.now());
 }
@@ -94,6 +103,7 @@ export function __setLicenseClockForTests(fn: (() => number) | null) {
 export function __resetLicenseForTests() {
   for (const key of Object.values(META)) deleteMeta(key);
   checking = null;
+  pendingEnvKey = null;
   signature = "";
   lastNotice = 0;
   lastBlockedCheck = 0;
@@ -111,11 +121,13 @@ export function licenseEnforced(): boolean {
   } catch {
     return false;
   }
-  return COMPILED || process.env.GODMODE_LICENSE_ENFORCE === "1";
+  return compiled || process.env.GODMODE_LICENSE_ENFORCE === "1";
 }
 
+/** `GODMODE_LICENSE_URL` is for tests and builds from source: a release build only asks the real site. */
 export function licenseBaseUrl(): string {
-  return (process.env.GODMODE_LICENSE_URL?.trim() || LICENSE_SITE).replace(/\/+$/, "");
+  const override = compiled ? "" : process.env.GODMODE_LICENSE_URL?.trim();
+  return (override || LICENSE_SITE).replace(/\/+$/, "");
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -136,6 +148,20 @@ function refusedKeyMessage(v: Verdict): string {
   return "This licence key isn't valid. Check it for typos, or start a free trial to get one.";
 }
 
+/**
+ * Fail-open has an end: a good answer older than 14 days whose trial (or paid period) has ended since stops counting
+ * as proof. Returns when that happened; the 7-day unverified window starts there. Lifetime licences never go stale.
+ */
+function staleSince(v: Verdict, now: number): number | null {
+  const status = statusOf(v);
+  if (status === "invalid" || status === "expired") return null;
+  const checked = Date.parse(v.checkedAt);
+  const end = Date.parse((status === "trial" ? (v.trialEndsAt ?? v.renewsAt) : v.renewsAt) ?? "");
+  if (Number.isNaN(checked) || Number.isNaN(end)) return null;
+  if (now - checked <= LICENSE_STALE_MS || now <= end) return null;
+  return Math.max(checked + LICENSE_STALE_MS, end);
+}
+
 export function licenseState(): LicenseState {
   const now = clock();
   const key = getMeta(META.key);
@@ -153,6 +179,11 @@ export function licenseState(): LicenseState {
   } else if (!verdict) {
     const since = Date.parse(getMeta(META.unverifiedSince) ?? "");
     const until = (Number.isNaN(since) ? now : since) + LICENSE_UNVERIFIED_MS;
+    unverifiedUntil = iso(until);
+    status = "unverified";
+    refuses = now >= until;
+  } else if (staleSince(verdict, now) !== null) {
+    const until = staleSince(verdict, now)! + LICENSE_UNVERIFIED_MS;
     unverifiedUntil = iso(until);
     status = "unverified";
     refuses = now >= until;
@@ -274,6 +305,7 @@ function storeVerdict(verdict: Verdict) {
 export function refreshLicense(): Promise<LicenseState> {
   checking ??= (async () => {
     try {
+      if (pendingEnvKey) await adoptEnvKey(pendingEnvKey);
       const key = getMeta(META.key);
       if (!key) return publish();
       const answer = await ask(key);
@@ -293,6 +325,24 @@ export function refreshLicense(): Promise<LicenseState> {
     }
   })();
   return checking;
+}
+
+/** The key from `GODMODE_LICENSE` replaces the stored one once the server answered for it (and didn't refuse it). */
+async function adoptEnvKey(key: string): Promise<void> {
+  const answer = await ask(key);
+  if (answer.kind === "unreachable") {
+    log.info("GODMODE_LICENSE differs from the stored key; it is checked again later", { key: key.slice(-5), reason: answer.reason });
+    return;
+  }
+  pendingEnvKey = null;
+  if (statusOf(answer.verdict) === "invalid") {
+    log.warn("GODMODE_LICENSE was refused by the licence server; the stored key stays", { key: key.slice(-5) });
+    return;
+  }
+  setMeta(META.key, key);
+  storeVerdict(answer.verdict);
+  audit("system", "license.set", key.slice(-5), { from: "GODMODE_LICENSE", status: statusOf(answer.verdict) });
+  log.info("licence key taken from GODMODE_LICENSE", { key: key.slice(-5) });
 }
 
 /** PUT /api/license: a key the server refuses is not stored; one it can't be asked about counts as unverified. */
@@ -362,20 +412,22 @@ function usedBefore(): boolean {
 }
 
 /**
- * Before anything can start a run: takes the key from `GODMODE_LICENSE` when none is stored (and keeps it from child
- * processes), and, on the first start with licences, gives an install that was already used 7 days to add a key.
+ * Before anything can start a run: takes the key from `GODMODE_LICENSE` (and keeps it from child processes) — at once
+ * when none is stored, after the next check when it differs from the stored one — and, on the first start with
+ * licences, gives an install that was already used 7 days to add a key.
  */
 export function initLicense(): void {
   const fromEnv = process.env.GODMODE_LICENSE;
   delete process.env.GODMODE_LICENSE;
-  if (fromEnv?.trim() && !getMeta(META.key)) {
+  const stored = getMeta(META.key);
+  if (fromEnv?.trim()) {
     const key = normalizeLicenseKey(fromEnv);
     if (!isLicenseKey(key)) log.warn("GODMODE_LICENSE is not a licence key (GM-XXXXX-XXXXX-XXXXX-XXXXX), ignored");
-    else {
+    else if (!stored) {
       setMeta(META.key, key);
       if (!getMeta(META.unverifiedSince)) setMeta(META.unverifiedSince, iso(clock()));
       log.info("licence key taken from GODMODE_LICENSE", { key: key.slice(-5) });
-    }
+    } else if (stored !== key) pendingEnvKey = key;
   }
   if (!getMeta(META.firstStart)) {
     setMeta(META.firstStart, iso(clock()));

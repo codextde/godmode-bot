@@ -5,6 +5,7 @@ import { ORDER_COOKIE, verify } from '@/lib/signed';
 import { allowed } from '@/lib/limit';
 import { isLicenseKey } from '@/lib/license';
 import { minLivemode } from '@/lib/entitlement';
+import { siteBase } from '@/config/site';
 
 export const prerender = false;
 
@@ -29,7 +30,7 @@ export const GET: APIRoute = async ({ url, cookies, request }) => {
         .bind(key, minLivemode())
         .first<{ customer_id: string | null }>();
       if (!row?.customer_id) return new Response('No billing account for this license', { status: 404 });
-      return await openPortal(row.customer_id, `${url.origin}/download?key=${key}`);
+      return await openPortal(row.customer_id, `${siteBase(url.origin)}/download`);
     } catch (e) {
       console.error('portal failed', e);
       return new Response('Could not open the billing portal. Please email us.', { status: 502 });
@@ -43,7 +44,7 @@ export const GET: APIRoute = async ({ url, cookies, request }) => {
     const session = await stripe().checkout.sessions.retrieve(id);
     const customer = typeof session.customer === 'string' ? session.customer : session.customer?.id;
     if (!customer) return new Response('No customer for this purchase', { status: 404 });
-    return await openPortal(customer, `${url.origin}/checkout/success`);
+    return await openPortal(customer, `${siteBase(url.origin)}/checkout/success`);
   } catch (e) {
     console.error('portal failed', e);
     return new Response('Could not open the billing portal. Please email us.', { status: 502 });

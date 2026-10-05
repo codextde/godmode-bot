@@ -17,7 +17,7 @@ export type LicenseSource = "gate" | "onboarding" | "settings" | "banner";
 
 export const SUPPORT_MAIL = "kontakt@codext.de";
 
-export function checkoutUrl(source: LicenseSource, plan: "monthly" | "yearly" | "lifetime" = "monthly"): string {
+export function checkoutUrl(source: LicenseSource, plan: "monthly" | "yearly" = "monthly"): string {
   return `${LICENSE_SITE}/api/checkout?plan=${plan}&utm_source=app&utm_medium=${source}`;
 }
 

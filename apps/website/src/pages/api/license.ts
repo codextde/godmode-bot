@@ -32,9 +32,11 @@ function statusOf(row: Row): Status {
       return 'trialing';
     case 'active':
       return 'active';
+    // Stripe is still retrying the payment; `unpaid` means it gave up.
     case 'past_due':
-    case 'unpaid':
       return 'past_due';
+    case 'unpaid':
+      return 'expired';
     case 'canceled':
     case 'incomplete_expired':
       return 'canceled';

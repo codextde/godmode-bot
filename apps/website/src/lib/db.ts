@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import type Stripe from 'stripe';
+import { stripe } from './stripe';
 
 export const db = () => env.DB;
 
@@ -137,14 +138,21 @@ export async function syncSubscription(sub: Stripe.Subscription) {
     .run();
 }
 
-/** Founder Lifetime licenses sold so far: paid, not free, and from the Stripe mode the site runs in. */
+/** How long a started Founder Lifetime checkout holds its place under the cap (its Stripe session expires then). */
+export const LIFETIME_HOLD_MS = 31 * 60 * 1000;
+
+/**
+ * Founder Lifetime licenses taken: paid (or paying by bank transfer), not free, from the Stripe mode the site runs
+ * in — plus checkouts started in the last half hour, so the cap can't be oversold by buyers paying at once.
+ */
 export async function lifetimeSold(minLivemode: number): Promise<number> {
   const row = await db()
     .prepare(
       `SELECT COUNT(*) AS n FROM orders
-       WHERE plan = 'lifetime' AND status = 'paid' AND COALESCE(comp, 0) = 0 AND livemode >= ?`,
+       WHERE plan = 'lifetime' AND COALESCE(comp, 0) = 0 AND livemode >= ?
+         AND (status IN ('paid', 'pending') OR (status = 'open' AND created_at > ?))`,
     )
-    .bind(minLivemode)
+    .bind(minLivemode, Date.now() - LIFETIME_HOLD_MS)
     .first<{ n: number }>();
   return Number(row?.n ?? 0);
 }
@@ -163,22 +171,40 @@ export async function insertComp(o: { email: string; name: string | null; licens
   return id;
 }
 
+/** The subscription a charge paid for, via its invoice (on the charge in older API versions, else via invoice payments). */
+async function subscriptionForCharge(charge: Stripe.Charge, pi: string | null): Promise<string | null> {
+  const legacyCharge = charge as unknown as { invoice?: string | { id: string } | null };
+  let invoiceId = idOf(legacyCharge.invoice);
+  if (!invoiceId && pi) {
+    const payments = await stripe().invoicePayments.list({ payment: { type: 'payment_intent', payment_intent: pi }, limit: 1 });
+    invoiceId = idOf(payments.data[0]?.invoice as string | { id: string } | null | undefined);
+  }
+  if (!invoiceId) return null;
+  const invoice = await stripe().invoices.retrieve(invoiceId);
+  const legacyInvoice = invoice as unknown as { subscription?: string | { id: string } | null };
+  return idOf(invoice.parent?.subscription_details?.subscription) ?? idOf(legacyInvoice.subscription);
+}
+
 /**
- * Revokes the license behind a refunded or charged-back payment: the lifetime order that owns the
- * PaymentIntent, or — for subscription invoices, whose PaymentIntents we don't store — the customer's
- * subscription orders.
+ * Revokes the license behind a refunded or charged-back payment. A lifetime order owns its PaymentIntent and is
+ * revoked directly. A subscription charge is traced to its subscription: only a canceled subscription loses its
+ * license; a live one (e.g. a goodwill refund of one renewal) keeps whatever state Stripe reports.
  */
 export async function revokeForCharge(charge: Stripe.Charge) {
-  const pi = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id;
-  const customer = typeof charge.customer === 'string' ? charge.customer : charge.customer?.id;
+  const pi = typeof charge.payment_intent === 'string' ? charge.payment_intent : (charge.payment_intent?.id ?? null);
   if (pi) {
     const res = await db().prepare(`UPDATE orders SET status = 'refunded' WHERE payment_intent_id = ?`).bind(pi).run();
     if (res.meta.changes > 0) return;
   }
-  if (customer) {
+  const subId = await subscriptionForCharge(charge, pi);
+  if (!subId) return;
+  const sub = await stripe().subscriptions.retrieve(subId);
+  if (sub.status === 'canceled' || sub.status === 'incomplete_expired') {
     await db()
-      .prepare(`UPDATE orders SET status = 'refunded' WHERE customer_id = ? AND mode = 'subscription' AND status <> 'open'`)
-      .bind(customer)
+      .prepare(`UPDATE orders SET status = 'refunded', sub_status = ? WHERE subscription_id = ? AND status <> 'open'`)
+      .bind(sub.status, subId)
       .run();
+  } else {
+    await syncSubscription(sub);
   }
 }

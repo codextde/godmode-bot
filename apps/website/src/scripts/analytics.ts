@@ -105,7 +105,7 @@ let pixelLoaded = false;
 
 function loadXPixel() {
   const t = window.__gmTracking;
-  if (pixelLoaded || !t?.x) return;
+  if (pixelLoaded || !t?.x || new URLSearchParams(location.search).has('key')) return;
   pixelLoaded = true;
   /* eslint-disable */
   // Official X base code (uwt.js), unminified.

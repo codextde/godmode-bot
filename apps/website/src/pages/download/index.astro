@@ -6,11 +6,20 @@ import Icon from '@/components/ui/Icon.astro';
 import { PLATFORMS } from '@/lib/releases';
 import { isLicenseKey } from '@/lib/license';
 import { SITE } from '@/config/site';
+import { keyFromCookie, setKeyCookie } from '@/lib/signed';
 
 export const prerender = false;
 
-// ?key=GM-… arrives from the welcome page's "send to my computer" link: fill it in and pick this computer's system.
-const rawKey = (Astro.url.searchParams.get('key') ?? '').trim().toUpperCase();
+// ?key=GM-… arrives from the welcome page's "send to my computer" link. Move it into a cookie and reload the clean
+// URL before anything renders, so the key never sits in the address bar, history, analytics or the ad pixel.
+if (Astro.url.searchParams.has('key')) {
+  await setKeyCookie(Astro.cookies, Astro.url.searchParams.get('key') ?? '', Astro.url.protocol === 'https:');
+  const clean = new URLSearchParams(Astro.url.searchParams);
+  clean.delete('key');
+  Astro.response.headers.set('cache-control', 'no-store');
+  return Astro.redirect(clean.size ? `/download?${clean}` : '/download', 303);
+}
+const rawKey = ((await keyFromCookie(Astro.cookies)) ?? '').toUpperCase();
 const key = isLicenseKey(rawKey) ? rawKey : '';
 const ua = Astro.request.headers.get('user-agent') ?? '';
 const phone = /iPhone|iPad|iPod|Android/i.test(ua);
@@ -40,7 +49,7 @@ Astro.response.headers.set('referrer-policy', 'no-referrer');
         )
       }
 
-      <form method="get" action="/download/go" class="card mt-10 grid gap-4 p-6 sm:p-8">
+      <form method="post" action="/download/go" class="card mt-10 grid gap-4 p-6 sm:p-8">
         {
           invalid && (
             <p class="flex items-start gap-2 rounded-xl p-3 text-[13.5px] text-text-2 ring-1 ring-[rgb(240_82_91/0.35)]" style="background: rgb(240 82 91 / 0.06)">

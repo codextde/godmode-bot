@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { LicenseState } from "@godmode/shared";
 import { setupEnv, type TestEnv } from "./fixtures/runner-harness";
-import { getMeta } from "../src/db";
+import { get, getMeta, run as sql } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { waitForRun } from "../src/runner/runner";
@@ -10,11 +10,14 @@ import { updateSettings } from "../src/services/settings";
 import { createRoutine } from "../src/services/routines";
 import { triggerRoutine } from "../src/scheduler/scheduler";
 import { listNotifications } from "../src/services/notifications";
+import { scheduleFollowup, sweep as sweepFollowups } from "../src/services/followups";
 import {
   LICENSE_GRACE_MS,
+  LICENSE_STALE_MS,
   LICENSE_UNVERIFIED_MS,
   __resetLicenseForTests,
   __setLicenseClockForTests,
+  __setLicenseCompiledForTests,
   __setLicenseEnforcedForTests,
   __setLicenseFetchForTests,
   initLicense,
@@ -62,6 +65,7 @@ afterAll(async () => {
   __setLicenseFetchForTests(null);
   __setLicenseClockForTests(null);
   __setLicenseEnforcedForTests(null);
+  __setLicenseCompiledForTests(null);
   await env.close();
 });
 
@@ -279,15 +283,111 @@ describe("keys and the licence server", () => {
     expect(calls).toHaveLength(2);
   });
 
-  test("GODMODE_LICENSE_URL points the check elsewhere", async () => {
+  test("GODMODE_LICENSE_URL points the check elsewhere, but only from source", async () => {
     process.env.GODMODE_LICENSE_URL = "http://127.0.0.1:9/";
     try {
       answer = trial({ manageUrl: "http://127.0.0.1:9/api/portal?key=x" });
       const { body } = await putKey(KEY);
       expect(calls[0]).toBe(`http://127.0.0.1:9/api/license?key=${KEY}`);
       expect(body.manageUrl).toBe("http://127.0.0.1:9/api/portal?key=x");
+
+      // A release build ignores it: a fake server can't unlock it.
+      __setLicenseCompiledForTests(true);
+      await refreshLicense();
+      expect(calls[1]).toBe(`https://usegodmode.com/api/license?key=${KEY}`);
     } finally {
+      __setLicenseCompiledForTests(null);
       delete process.env.GODMODE_LICENSE_URL;
     }
+  });
+
+  test("fail-open ends: a trial not confirmed for 14 days after it ended counts as unverified, then refuses", async () => {
+    answer = trial({ trialEndsAt: now + 3 * DAY });
+    const { body } = await putKey(KEY);
+    const checked = Date.parse(body.checkedAt!);
+    answer = offline;
+
+    // Offline past the trial's end, but within 14 days of the last answer: still the trial.
+    now = checked + 10 * DAY;
+    expect(licenseState()).toMatchObject({ status: "trial", blocked: false });
+
+    now = checked + LICENSE_STALE_MS + DAY;
+    const stale = licenseState();
+    expect(stale.status).toBe("unverified");
+    expect(stale.blocked).toBe(false);
+    expect(stale.unverifiedUntil).toBe(new Date(checked + LICENSE_STALE_MS + LICENSE_UNVERIFIED_MS).toISOString());
+
+    now = checked + LICENSE_STALE_MS + LICENSE_UNVERIFIED_MS;
+    expect(licenseState()).toMatchObject({ status: "unverified", blocked: true });
+
+    // One answer from the server and it is fine again.
+    answer = json({ valid: true, plan: "monthly", status: "active", renewsAt: now + 30 * DAY });
+    expect(await refreshLicense()).toMatchObject({ status: "active", blocked: false });
+  });
+
+  test("fail-open ends for a paid period too, never for lifetime", async () => {
+    answer = json({ valid: true, plan: "monthly", status: "active", renewsAt: now + DAY });
+    await putKey(KEY);
+    answer = offline;
+    now += LICENSE_STALE_MS + LICENSE_UNVERIFIED_MS + 2 * DAY;
+    expect(licenseState()).toMatchObject({ status: "unverified", blocked: true });
+
+    __resetLicenseForTests();
+    now = Date.parse("2026-10-05T12:00:00Z");
+    answer = json({ valid: true, plan: "lifetime", status: "active", renewsAt: null });
+    await putKey(KEY);
+    now += 400 * DAY;
+    expect(licenseState()).toMatchObject({ status: "active", blocked: false });
+  });
+
+  test("a different GODMODE_LICENSE replaces the stored key once the server answered for it", async () => {
+    answer = trial();
+    await putKey(KEY);
+
+    process.env.GODMODE_LICENSE = OTHER;
+    initLicense();
+    expect(getMeta("license.key")).toBe(KEY);
+
+    // Unreachable: the stored key stays, and the env key is tried again on the next check.
+    answer = offline;
+    await refreshLicense();
+    expect(getMeta("license.key")).toBe(KEY);
+
+    answer = json({ valid: true, plan: "yearly", status: "active", renewsAt: now + 300 * DAY });
+    const s = await refreshLicense();
+    expect(getMeta("license.key")).toBe(OTHER);
+    expect(s).toMatchObject({ status: "active", plan: "yearly", keyHint: "PQ5RS" });
+  });
+
+  test("a GODMODE_LICENSE the server refuses doesn't replace the stored key", async () => {
+    answer = trial();
+    await putKey(KEY);
+    process.env.GODMODE_LICENSE = OTHER;
+    initLicense();
+    let n = 0;
+    answer = () => (n++ === 0 ? Response.json({ valid: false, reason: "unknown" }, { status: 404 }) : trial()());
+    const s = await refreshLicense();
+    expect(getMeta("license.key")).toBe(KEY);
+    expect(s.status).toBe("trial");
+  });
+});
+
+describe("follow-ups while the licence refuses runs", () => {
+  test("a due follow-up stays and the human hears once, not per follow-up", async () => {
+    __setLicenseEnforcedForTests(false);
+    const chat = await startChat({ content: "Remind me later" });
+    await waitForRun(chat.run.id, 20_000);
+    const agentId = chat.conversation.agentId;
+    scheduleFollowup({ conversationId: chat.conversation.id, agentId, dueAt: new Date(Date.now() + 60_000), note: "Check the invoice" });
+    sql("UPDATE followups SET due_at = ? WHERE conversation_id = ?", new Date(Date.now() - 60_000).toISOString(), chat.conversation.id);
+
+    __setLicenseEnforcedForTests(true);
+    const before = listNotifications().length;
+    await sweepFollowups();
+    await sweepFollowups();
+    expect(get<{ n: number }>("SELECT COUNT(*) AS n FROM followups WHERE conversation_id = ?", chat.conversation.id)?.n).toBe(1);
+    const added = listNotifications().slice(0, listNotifications().length - before);
+    expect(added.map((n) => n.title)).toEqual(["Godmode needs an active licence"]);
+    sql("DELETE FROM followups WHERE conversation_id = ?", chat.conversation.id);
   });
 });
