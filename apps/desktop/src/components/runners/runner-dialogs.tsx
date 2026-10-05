@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { InlineCode } from "@/components/onboarding/doctor-checklist";
+import { TailscaleMark, isTailscaleHost } from "./network-picker";
 import type { RunnerActions } from "./use-runner-actions";
 
 const MAX_NAME = 60;
@@ -87,6 +88,8 @@ export function RunnerAddressesDialog({ runner, onClose, actions }: { runner: Re
   if (portValid && portNumber !== runner.port) patch.port = portNumber;
   const changed = Object.keys(patch).length > 0;
   const saving = actions.isBusy("update", runner.id);
+  const tailnet = list.filter(isTailscaleHost);
+  const canPreferTailscale = tailnet.length > 0 && !isTailscaleHost(list[0]);
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!changed || list.length === 0 || !portValid || saving) return;
@@ -128,6 +131,23 @@ export function RunnerAddressesDialog({ runner, onClose, actions }: { runner: Re
                 "One per line: an IP address or a name."
               )}
             </p>
+            {canPreferTailscale && (
+              <div className="flex items-center gap-2.5 rounded-lg border bg-paper-2 px-3 py-2 text-xs text-muted-foreground">
+                <TailscaleMark className="size-3.5 shrink-0 text-foreground" />
+                <span className="min-w-0 flex-1">
+                  Away from home? Its Tailscale address <span className="font-mono text-foreground/85">{tailnet[0]}</span> works from anywhere.
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  className="shrink-0 text-foreground"
+                  onClick={() => setAddresses([...tailnet, ...list.filter((a) => !isTailscaleHost(a))].join("\n"))}
+                >
+                  Try it first
+                </Button>
+              </div>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="runner-port">Port</Label>
