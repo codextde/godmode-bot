@@ -18,7 +18,7 @@ export default function AgentScreen() {
   const { byId } = useAgents();
   const agent = byId.get(id);
   const runs = useLive((s) => s.runs);
-  const working = Object.values(runs).filter((r) => r.run.agentId === id);
+  const working = Object.values(runs).filter((r) => r.run.agentId === id && r.run.status === "running");
   const routines = useQuery({ queryKey: qk.agentRoutines(id), queryFn: () => api.routines.list({ agentId: id }) });
   const chats = useQuery({ queryKey: [...qk.conversations, "agent", id], queryFn: () => api.conversations.list({ agentId: id, limit: 5 }) });
 
@@ -32,8 +32,21 @@ export default function AgentScreen() {
         <T variant="title">{agent.name}</T>
         <Row style={{ gap: 6 }}>
           {agent.isDefault && <Badge label="Main assistant" />}
-          {!agent.enabled ? <Badge label="Paused" tone="warning" /> : working.length ? <Badge label="Working" tone="brand" live /> : null}
+          {!agent.enabled ? (
+            <Badge label="Off" />
+          ) : working.length ? (
+            <Badge label={working.length > 1 ? `Working in ${working.length} chats` : "Working"} tone="brand" live />
+          ) : (agent.openQuestions ?? 0) > 0 ? (
+            <Badge label="Needs your answer" tone="warning" />
+          ) : agent.failedRunId ? (
+            <Badge label="Last run failed" tone="danger" />
+          ) : null}
         </Row>
+        {agent.role ? (
+          <T variant="subhead" style={{ textAlign: "center" }}>
+            {agent.role}
+          </T>
+        ) : null}
         {agent.description ? (
           <T variant="subhead" muted style={{ textAlign: "center", maxWidth: 320 }}>
             {agent.description}

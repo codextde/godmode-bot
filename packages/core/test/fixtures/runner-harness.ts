@@ -20,6 +20,7 @@ import { createApp } from "../../src/server/app";
 import { createAgent } from "../../src/agents/service";
 import { bus } from "../../src/events/bus";
 import { __setClaudeBinaryForTests, cancelRun, listActiveRuns, waitForRun } from "../../src/runner/runner";
+import { __setTaskRetryDelaysForTests } from "../../src/tasks/service";
 
 type BrowserModule = typeof browserManager;
 // Copy the real exports before mocking (mock.module replaces the module's exports in place).
@@ -112,6 +113,8 @@ export async function setupEnv(prefix = "godmode-runner-"): Promise<TestEnv> {
   const stateDir = join(dataDir, "fake-claude");
   process.env.FAKE_CLAUDE_STATE = stateDir;
   __setClaudeBinaryForTests([process.execPath, FAKE_CLAUDE]);
+  // A ticket whose run failed tries again right away in tests (the real pauses are 30 s and 2 min).
+  __setTaskRetryDelaysForTests([0, 0]);
   return {
     dataDir,
     stateDir,
@@ -122,6 +125,7 @@ export async function setupEnv(prefix = "godmode-runner-"): Promise<TestEnv> {
         await waitForRun(r.runId, 10_000);
       }
       __setClaudeBinaryForTests(null);
+      __setTaskRetryDelaysForTests(null);
       server.stop(true);
       closeDb();
       resetSettingsCache();
@@ -140,6 +144,8 @@ export interface Invocation {
   args: string[];
   prompt: string;
   cwd: string;
+  /** Content of the run's `--settings` file (the hooks, and `ultracode` when on); null without one. */
+  settings: { hooks?: unknown; ultracode?: boolean } | null;
   env: { ANTHROPIC_API_KEY: string | null; GODMODE_TOKEN: string | null; CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: string | null };
 }
 

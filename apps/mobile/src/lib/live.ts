@@ -28,12 +28,16 @@ export interface Frame {
 
 interface LiveState {
   status: LinkStatus;
+  /** Why it's offline in the cloud gateway's words (computer not connected, plan limit), when it said so. */
+  offlineReason: string | null;
   runs: Record<string, LiveRun>;
+  /** Runs seen ending lately: an answer that arrives after their end doesn't bring them back as live. */
+  ended: string[];
   /** Latest activity per run; may arrive before the run itself is known. */
   labels: Record<string, string>;
   drafts: Record<string, Draft>;
   frames: Record<string, Frame>;
-  setStatus: (status: LinkStatus) => void;
+  setStatus: (status: LinkStatus, offlineReason?: string | null) => void;
   seedRuns: (runs: Run[]) => void;
   runStarted: (run: Run) => void;
   runActivity: (runId: string, label: string) => void;
@@ -45,11 +49,13 @@ interface LiveState {
 
 export const useLive = create<LiveState>((set) => ({
   status: "connecting",
+  offlineReason: null,
   runs: {},
+  ended: [],
   labels: {},
   drafts: {},
   frames: {},
-  setStatus: (status) => set({ status }),
+  setStatus: (status, offlineReason = null) => set({ status, offlineReason }),
   seedRuns: (runs) =>
     set((s) => {
       const ids = new Set(runs.map((r) => r.id));
@@ -59,7 +65,7 @@ export const useLive = create<LiveState>((set) => ({
         drafts: Object.fromEntries(Object.entries(s.drafts).filter(([, d]) => ids.has(d.runId))),
       };
     }),
-  runStarted: (run) => set((s) => ({ runs: { ...s.runs, [run.id]: { run, activity: s.labels[run.id] ?? null } } })),
+  runStarted: (run) => set((s) => (s.ended.includes(run.id) ? s : { runs: { ...s.runs, [run.id]: { run, activity: s.labels[run.id] ?? null } } })),
   runActivity: (runId, label) =>
     set((s) => ({
       labels: { ...s.labels, [runId]: label },
@@ -71,7 +77,7 @@ export const useLive = create<LiveState>((set) => ({
       const { [run.id]: _label, ...labels } = s.labels;
       const drafts = { ...s.drafts };
       if (drafts[run.conversationId]?.runId === run.id) delete drafts[run.conversationId];
-      return { runs, labels, drafts };
+      return { runs, labels, drafts, ended: [...s.ended.slice(-49), run.id] };
     }),
   delta: (conversationId, draft) => set((s) => ({ drafts: { ...s.drafts, [conversationId]: draft } })),
   frame: (key, frame) => set((s) => ({ frames: { ...s.frames, [key]: frame } })),

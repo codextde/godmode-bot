@@ -1,10 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, Credential, MessageBlock } from "@godmode/shared";
-import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Lock, ShieldAlert, SquareSlash, TriangleAlert } from "lucide-react";
+import type { Agent, Credential, MessageBlock, ToolTaskAgent } from "@godmode/shared";
+import { WORKFLOW_TOOL } from "@godmode/shared";
+import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Loader2, Lock, ShieldAlert, Square, SquareSlash, TriangleAlert, Workflow, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentAvatar } from "@/components/common";
 import { ThinkingState } from "@/components/aicss/ThinkingState";
@@ -12,21 +14,25 @@ import { ThinkingReasoning } from "@/components/aicss/ThinkingReasoning";
 import { FileDiff, diffLines, type DiffRow } from "@/components/aicss/FileDiff";
 import { DrawCheck } from "@/components/aicss/Motion";
 import { Orb } from "@/components/aicss/Orb";
-import { api } from "@/lib/api";
+import { formatDuration, formatTokens } from "@/components/runs/run-status";
+import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { useLive } from "@/stores/live";
 import { Markdown } from "./markdown";
 import { UserBubble } from "./user-bubble";
 import { CopyButton } from "./copy-button";
 import { Lightbox } from "./lightbox";
 import { PauseMarker } from "./pause";
+import { QuestionCard, viewOfBlock } from "./question-card";
 import { describeTool, formatToolInput, hostOf, todoItems, type ToolContext, type ToolKind, type ToolMeta } from "./tool-meta";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
 type ThinkingBlock = Extract<MessageBlock, { type: "thinking" }>;
 type UserMessageBlock = Extract<MessageBlock, { type: "user_message" }>;
 type PauseBlock = Extract<MessageBlock, { type: "pause" }>;
+type QuestionBlock = Extract<MessageBlock, { type: "question" }>;
 
 type Step = { type: "tool"; block: ToolUseBlock } | { type: "thought"; block: ThinkingBlock; key: string };
 
@@ -38,9 +44,11 @@ type Item =
   | { kind: "command"; key: string; name: string; args: string; output: string }
   | { kind: "user-message"; key: string; block: UserMessageBlock }
   | { kind: "pause"; key: string; block: PauseBlock }
+  | { kind: "question"; key: string; block: QuestionBlock }
   | { kind: "tools"; key: string; steps: Step[] }
   | { kind: "missing-login"; key: string; block: ToolUseBlock }
   | { kind: "delegate"; key: string; block: ToolUseBlock }
+  | { kind: "workflow"; key: string; block: ToolUseBlock }
   | { kind: "subagent"; key: string; block: ToolUseBlock; children: MessageBlock[] };
 
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);
@@ -49,10 +57,17 @@ function parentOf(b: MessageBlock): string | null {
   return "parentToolUseId" in b ? (b.parentToolUseId ?? null) : null;
 }
 
-function isStandaloneTool(name: string): "missing-login" | "delegate" | "subagent" | null {
+const ASK_TOOLS = new Set(["ask_human", "request_approval"]);
+
+function bareName(name: string): string {
+  return name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : name;
+}
+
+function isStandaloneTool(name: string): "missing-login" | "delegate" | "workflow" | "subagent" | null {
   const bare = name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : name;
   if (bare === "report_missing_login") return "missing-login";
   if (bare === "agent_delegate") return "delegate";
+  if (name === WORKFLOW_TOOL) return "workflow";
   if (SUBAGENT_TOOLS.has(name)) return "subagent";
   return null;
 }
@@ -77,6 +92,8 @@ function buildItems(blocks: MessageBlock[]): Item[] {
   top.forEach((b, i) => {
     const key = `${b.type}-${i}`;
     if (b.type === "tool_use") {
+      // The question card is the record of an ask; the call itself only shows when it failed.
+      if (ASK_TOOLS.has(bareName(b.name)) && !b.isError) return;
       const standalone = isStandaloneTool(b.name);
       if (standalone) {
         group = null;
@@ -106,7 +123,9 @@ function buildItems(blocks: MessageBlock[]): Item[] {
     else if (b.type === "notice") items.push({ kind: "notice", key, level: b.level, text: b.text });
     else if (b.type === "command") items.push({ kind: "command", key, name: b.name, args: b.args, output: b.output });
     else if (b.type === "user_message") items.push({ kind: "user-message", key: b.id, block: b });
-    else if (b.type === "pause") items.push({ kind: "pause", key, block: b });
+    // A run that stands still for a question: the card says so.
+    else if (b.type === "pause" && b.reason !== "question") items.push({ kind: "pause", key, block: b });
+    else if (b.type === "question") items.push({ kind: "question", key: b.id, block: b });
   });
   return items;
 }
@@ -137,7 +156,18 @@ function useToolContext(blocks: MessageBlock[]): ToolContext {
 }
 
 /** Renders an assistant turn from its structured blocks. */
-export function MessageBlocks({ blocks, streaming = false, compact = false }: { blocks: MessageBlock[]; streaming?: boolean; compact?: boolean }) {
+export function MessageBlocks({
+  blocks,
+  streaming = false,
+  compact = false,
+  runId,
+}: {
+  blocks: MessageBlock[];
+  streaming?: boolean;
+  compact?: boolean;
+  /** The run that wrote these blocks: handoff cards find the runs it handed over through it. */
+  runId?: string;
+}) {
   const items = useMemo(() => buildItems(blocks), [blocks]);
   const ctx = useToolContext(blocks);
   const lastBlock = blocks[blocks.length - 1];
@@ -171,12 +201,16 @@ export function MessageBlocks({ blocks, streaming = false, compact = false }: { 
             return <PickedUpMessage key={item.key} block={item.block} />;
           case "pause":
             return <PauseMarker key={item.key} block={item.block} />;
+          case "question":
+            return <QuestionCard key={item.key} question={viewOfBlock(item.block)} streaming={streaming && item.block.status === "open"} />;
           case "tools":
             return <ToolGroup key={item.key} steps={item.steps} ctx={ctx} streaming={active} />;
           case "missing-login":
             return <MissingLoginCard key={item.key} block={item.block} />;
           case "delegate":
-            return <DelegateCard key={item.key} block={item.block} streaming={streaming} />;
+            return <DelegateCard key={item.key} block={item.block} streaming={streaming} parentRunId={runId} />;
+          case "workflow":
+            return <WorkflowCard key={item.key} block={item.block} streaming={streaming} />;
           case "subagent":
             return <SubagentCard key={item.key} block={item.block} ctx={ctx} childBlocks={item.children} streaming={streaming && !item.block.result} />;
         }
@@ -563,7 +597,7 @@ function DiffStat({ rows }: { rows: DiffRow[] }) {
   );
 }
 
-function ToolDetails({ block, edit }: { block: ToolUseBlock; edit?: { file: string; rows: DiffRow[] } | null }) {
+function ToolDetails({ block, edit, inputLabel = "Input" }: { block: ToolUseBlock; edit?: { file: string; rows: DiffRow[] } | null; inputLabel?: string }) {
   const [full, setFull] = useState(false);
   if (edit) {
     return (
@@ -600,7 +634,7 @@ function ToolDetails({ block, edit }: { block: ToolUseBlock; edit?: { file: stri
       ) : (
         input &&
         input !== "{}" && (
-          <DetailPanel label="Input" text={input} />
+          <DetailPanel label={inputLabel} text={input} />
         )
       )}
       {block.result !== undefined && (
@@ -700,14 +734,71 @@ function useAgentById(id: string | undefined): Agent | undefined {
   return id ? agents.find((a) => a.id === id) : undefined;
 }
 
-function DelegateCard({ block, streaming }: { block: ToolUseBlock; streaming: boolean }) {
+/**
+ * The run a handoff started: one of the runs the parent handed over to that agent. The id in the card's result decides
+ * (only this parent's own runs are candidates, so nothing an agent writes can point it elsewhere); before the result is
+ * there, the newest run with that task — the one being handed over right now.
+ */
+function useHandedOverRun(parentRunId: string | undefined, agentId: string | undefined, task: string | undefined, result: string, refused: boolean) {
+  const children = useQuery({
+    queryKey: qk.runChildren(parentRunId ?? ""),
+    queryFn: () => api.runs.list({ parentRunId, limit: 100 }),
+    enabled: !!parentRunId && !!agentId && !refused,
+    staleTime: 5_000,
+  });
+  const mine = (children.data ?? []).filter((r) => r.agentId === agentId);
+  const wanted = task?.trim();
+  const named = result ? mine.find((r) => result.includes(`(run ${r.id},`)) : undefined;
+  const run =
+    named ??
+    (result ? undefined : wanted ? mine.find((r) => r.prompt.trimEnd().endsWith(wanted)) : undefined) ??
+    (mine.length === 1 ? mine[0] : undefined);
+  const live = useLive((s) => (run ? s.runs[run.id] : undefined));
+  return { run, live, loading: children.isLoading };
+}
+
+function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; streaming: boolean; parentRunId?: string }) {
   const input = (block.input ?? {}) as { agentId?: string; task?: string; wait?: boolean };
   const agent = useAgentById(input.agentId);
   const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
   const running = stepRunning(block, streaming);
   const result = block.result ?? "";
+  // A refused handoff (not a peer, switched off, too deep…) never started a run.
+  const refused = !!block.isError && !/\(run run_/.test(result);
+  const { run: child, live } = useHandedOverRun(parentRunId, input.agentId, input.task, result, refused);
+  const status = live?.status ?? child?.status;
+  const working = status === "running" || status === "queued";
+  const stop = useMutation({
+    mutationFn: () => api.runs.cancel(child!.id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.runs }),
+    onError: (err) => toast.error("Couldn't stop it", { description: errorMessage(err) }),
+  });
+  const name = agent?.name ?? "the agent";
+  const state =
+    refused
+      ? { text: "couldn't hand over", tone: "text-destructive" }
+      : status === "running"
+        ? { text: live?.activity && live.activity !== "Starting…" ? live.activity : "working on it…", tone: "text-shimmer" }
+        : status === "queued"
+          ? { text: "queued", tone: "text-muted-foreground" }
+          : status === "paused"
+            ? { text: "paused — open its chat to see why", tone: "text-warning" }
+            : status === "succeeded"
+              ? { text: "done", tone: "text-success", check: true }
+              : status === "failed"
+                ? { text: "failed", tone: "text-destructive" }
+                : status === "cancelled"
+                  ? { text: "stopped", tone: "text-muted-foreground" }
+                  : running
+                    ? { text: "handing over…", tone: "text-shimmer" }
+                    : block.isError
+                      ? { text: "failed", tone: "text-destructive" }
+                      : block.result !== undefined
+                        ? { text: input.wait === false ? "handed over" : "done", tone: "text-success", check: true }
+                        : null;
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", running && "glow-border", block.isError && "border-destructive/30")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", (running || status === "running") && "glow-border", (block.isError || status === "failed") && "border-destructive/30")}>
       <div className="flex items-start gap-3 p-3.5">
         {agent ? (
           <AgentAvatar agent={agent} size="md" />
@@ -717,8 +808,8 @@ function DelegateCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Delegated to</span>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+            <span className="text-muted-foreground">Handed to</span>
             {agent ? (
               <Link to={`/agents/${agent.id}`} className="font-semibold hover:underline">
                 {agent.name}
@@ -726,17 +817,29 @@ function DelegateCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
             ) : (
               <span className="font-semibold">another agent</span>
             )}
-            {running ? (
-              <span className="text-shimmer text-xs font-medium">working on it…</span>
-            ) : block.isError ? (
-              <span className="text-xs font-medium text-destructive">failed</span>
-            ) : block.result !== undefined ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
-                <DrawCheck className="size-3.5" /> {input.wait === false ? "handed off" : "done"}
+            {agent?.role && <span className="text-xs text-muted-foreground">· {agent.role}</span>}
+            {state && (
+              <span className={cn("inline-flex min-w-0 items-center gap-1 text-xs font-medium", state.tone)} aria-live="polite">
+                {state.check && <DrawCheck className="size-3.5" />}
+                <span className="truncate">{state.text}</span>
               </span>
-            ) : null}
+            )}
           </div>
           {input.task && <p className="mt-1 line-clamp-3 text-[13px] text-muted-foreground">{input.task}</p>}
+          {child && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <Button asChild size="xs" variant="outline">
+                <Link to={`/chat/${child.conversationId}`}>
+                  <ArrowUpRight /> Open chat
+                </Link>
+              </Button>
+              {working && (
+                <Button size="xs" variant="ghost" className="text-muted-foreground hover:text-destructive" disabled={stop.isPending} onClick={() => stop.mutate()} aria-label={`Stop ${name}'s part`}>
+                  {stop.isPending ? <Loader2 className="animate-spin" /> : <Square className="size-2.5 fill-current" />} Stop
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
       {result && (
@@ -809,6 +912,150 @@ function SubagentCard({ block, ctx, childBlocks, streaming }: { block: ToolUseBl
           )}
         </div>
       </Collapse>
+    </div>
+  );
+}
+
+const AGENT_STATE_LABEL: Record<ToolTaskAgent["state"], string> = { queued: "Queued", running: "Running", done: "Done", failed: "Failed" };
+
+/** Agents of a workflow by phase, phases in the order their first agent was queued. */
+function agentPhases(agents: ToolTaskAgent[]): { phase: string; agents: ToolTaskAgent[] }[] {
+  const phases = new Map<string, ToolTaskAgent[]>();
+  for (const a of agents) phases.set(a.phase, [...(phases.get(a.phase) ?? []), a]);
+  return Array.from(phases, ([phase, list]) => ({ phase, agents: list }));
+}
+
+function WorkflowAgent({ agent, live }: { agent: ToolTaskAgent; live: boolean }) {
+  // An agent still queued or running when its workflow ended never finished.
+  const running = live && agent.state === "running";
+  const label = live || agent.state === "done" || agent.state === "failed" ? AGENT_STATE_LABEL[agent.state] : "Not finished";
+  return (
+    <li className="flex items-center gap-2 text-[13px]">
+      {agent.state === "done" ? (
+        <span aria-hidden className="grid size-3.5 shrink-0 place-items-center rounded-full bg-brand text-white dark:text-black">
+          <DrawCheck className="size-2.5" />
+        </span>
+      ) : agent.state === "failed" ? (
+        <XCircle aria-hidden className="size-3.5 shrink-0 text-destructive" />
+      ) : running ? (
+        <CircleDot aria-hidden className="size-3.5 shrink-0 animate-pulse text-foreground" />
+      ) : (
+        <Circle aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+      )}
+      <span className={cn("min-w-0 flex-1 truncate", agent.state === "done" && "text-muted-foreground", agent.state === "failed" && "text-destructive")}>
+        {agent.label}
+        <span className="sr-only"> — {label}</span>
+      </span>
+      {running && agent.lastTool ? (
+        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{agent.lastTool}</span>
+      ) : (
+        !!agent.tokens && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{formatTokens(agent.tokens)} tokens</span>
+      )}
+    </li>
+  );
+}
+
+/** A Claude Code workflow: the agents it runs, by phase, kept up to date while it works. */
+function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: boolean }) {
+  const [open, setOpen] = useState<boolean | null>(null);
+  const [details, setDetails] = useState(false);
+  const task = block.task;
+  const input = (block.input ?? {}) as { name?: unknown; script?: unknown };
+  const name = task?.description || (typeof input.name === "string" ? input.name : "");
+  const title = name || "Workflow";
+  // A workflow still running on a turn that has ended was cut off with its run.
+  const status = task ? (task.status === "running" && !streaming ? "stopped" : task.status) : null;
+  const running = status ? status === "running" : stepRunning(block, streaming);
+  const failed = status === "failed" || !!block.isError;
+  const expanded = open ?? running;
+  const agents = task?.agents ?? [];
+  const phases = agentPhases(agents);
+  const done = agents.filter((a) => a.state === "done").length;
+  const state = failed
+    ? "Failed"
+    : status === "running"
+      ? task?.activity || "Running…"
+      : status === "completed"
+        ? "Completed"
+        : status === "stopped"
+          ? "Stopped"
+          : running
+            ? "Starting…"
+            : block.result === undefined
+              ? "No result"
+              : "";
+  const stats = [
+    agents.length > 0 && `${done}/${agents.length} agents`,
+    !!task?.totalTokens && `${formatTokens(task.totalTokens)} tokens`,
+    !!task?.durationMs && formatDuration(task.durationMs),
+  ].filter(Boolean);
+  const script = typeof input.script === "string" ? input.script : "";
+
+  return (
+    <div className={cn("rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "glow-border")}>
+      <button
+        type="button"
+        onClick={() => setOpen(!expanded)}
+        aria-expanded={expanded}
+        disabled={agents.length === 0}
+        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition enabled:hover:bg-accent/40"
+      >
+        <span
+          className={cn(
+            "grid size-[27px] shrink-0 place-items-center rounded-full border",
+            failed ? "border-destructive/30 bg-destructive/10 text-destructive" : toneFor("subagent"),
+          )}
+        >
+          {running ? <Orb variant="B5" size={15} label={title} /> : <Workflow className="size-3.5" />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={cn("block truncate text-sm font-medium", running && "text-shimmer")}>{title}</span>
+          {(name || state) && (
+            <span className="block truncate text-xs text-muted-foreground">
+              {name && "Workflow"}
+              {name && state && " · "}
+              {state && <span className={cn(failed && "text-destructive")}>{state}</span>}
+            </span>
+          )}
+        </span>
+        {agents.length > 0 && <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")} />}
+      </button>
+      {block.isError && block.result && (
+        <p className="line-clamp-4 px-3 pb-2.5 font-mono text-xs break-words whitespace-pre-wrap text-destructive">{block.result}</p>
+      )}
+      <Collapse open={expanded && agents.length > 0}>
+        <div className="max-h-64 space-y-2.5 overflow-y-auto border-t px-3.5 py-3">
+          {phases.map(({ phase, agents: list }) => (
+            <div key={phase}>
+              {phase && <div className="mb-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">{phase}</div>}
+              <ul className="space-y-1.5">
+                {list.map((a, i) => (
+                  <WorkflowAgent key={i} agent={a} live={status === "running"} />
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Collapse>
+      <div className="border-t">
+        <div className="flex items-center gap-3 pr-3.5 text-xs text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setDetails((d) => !d)}
+            aria-expanded={details}
+            className="flex flex-1 items-center gap-1.5 py-2 pl-3.5 text-left font-medium transition hover:text-foreground"
+          >
+            <ChevronRight className={cn("size-3.5 shrink-0 transition-transform", details && "rotate-90")} />
+            Details
+          </button>
+          {stats.length > 0 && <span className="min-w-0 truncate tabular-nums">{stats.join(" · ")}</span>}
+        </div>
+        <Collapse open={details}>
+          <div className="px-3 pb-1">
+            <ToolDetails block={script ? { ...block, input: script } : block} inputLabel={script ? "Script" : undefined} />
+          </div>
+        </Collapse>
+      </div>
     </div>
   );
 }

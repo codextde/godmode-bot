@@ -1,12 +1,14 @@
+import { GATEWAY_DONE } from "@godmode/shared";
 import type { LucideIcon } from "lucide-react";
 import {
   AlarmClock,
   AlarmClockOff,
+  AppWindow,
   ArrowLeft,
   Bell,
-  Box,
   Bot,
   BotMessageSquare,
+  Box,
   Camera,
   Code2,
   Eye,
@@ -19,19 +21,21 @@ import {
   FolderSearch,
   Globe,
   History,
+  Hourglass,
   KeyRound,
   Keyboard,
   Layers,
   Link2,
-  Monitor,
-  MonitorUp,
-  Move,
-  ZoomIn,
-  Hourglass,
-  AppWindow,
   ListChecks,
   ListTree,
+  MessageCircleQuestion,
+  MessageSquareReply,
+  Monitor,
+  MonitorUp,
   MousePointerClick,
+  Move,
+  NotebookPen,
+  OctagonAlert,
   PanelsTopLeft,
   Plug,
   ScanText,
@@ -40,6 +44,7 @@ import {
   Server,
   ShieldAlert,
   ShieldCheck,
+  SquareKanban,
   Terminal,
   Trash2,
   Type,
@@ -48,6 +53,8 @@ import {
   Workflow,
   Wrench,
   X,
+  ZoomIn,
+  Zap,
 } from "lucide-react";
 
 export type ToolKind =
@@ -309,7 +316,23 @@ const GODMODE_TOOLS = new Set([
   "notify_user",
   "followup_schedule",
   "followup_cancel",
+  "ask_human",
+  "request_approval",
+  "tasks_list",
+  "task_get",
+  "task_create",
+  "task_update",
+  "task_message",
+  "task_note",
+  "task_report_blocked",
 ]);
+
+/** "task #12" for a task reference ("#12", "12" or an id). */
+function taskRef(input: Input): string {
+  const ref = str(input.taskId);
+  const n = /^#?(\d+)$/.exec(ref)?.[1];
+  return n ? `task #${n}` : "the task";
+}
 
 /** "in 90 min" or the `at` time of a followup_schedule call. */
 function followupTime(input: Input): string {
@@ -401,8 +424,27 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       return { kind: "notify", icon: AlarmClock, title: `Will continue ${followupTime(input)}`, detail: truncate(str(input.note), 120) || undefined };
     case "followup_cancel":
       return { kind: "notify", icon: AlarmClockOff, title: "Cancelled its follow-up" };
+    case "ask_human":
+      return { kind: "agents", icon: MessageCircleQuestion, title: "Asked you", detail: truncate(str(input.question), 120) || undefined };
+    case "request_approval":
+      return { kind: "agents", icon: ShieldCheck, title: "Asked for your OK", detail: truncate(str(input.action), 120) || undefined };
+    case "tasks_list":
+      return { kind: "agents", icon: SquareKanban, title: "Looked at the board" };
+    case "task_get":
+      return { kind: "agents", icon: SquareKanban, title: `Read ${taskRef(input)}` };
+    case "task_create":
+      return { kind: "agents", icon: SquareKanban, title: "Filed a task", detail: truncate(str(input.title), 120) || undefined };
+    case "task_update":
+      return { kind: "agents", icon: SquareKanban, title: `Changed ${taskRef(input)}` };
+    case "task_message":
+      return { kind: "agents", icon: MessageSquareReply, title: `Sent a message into ${taskRef(input)}`, detail: truncate(str(input.content), 120) || undefined };
+    case "task_note":
+      return { kind: "agents", icon: NotebookPen, title: "Left a note on the task", detail: truncate(str(input.text), 120) || undefined };
+    case "task_report_blocked":
+      return { kind: "agents", icon: OctagonAlert, title: "Reported what it needs", detail: truncate(str(input.reason), 120) || undefined };
     default:
-      return null;
+      // A Godmode tool without its own card: the shared past-tense title, never its raw name.
+      return GATEWAY_DONE[tool] ? { kind: "other", icon: Zap, title: GATEWAY_DONE[tool]! } : null;
   }
 }
 
@@ -449,6 +491,8 @@ function builtinMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "too
         detail: who && who !== "general-purpose" ? who : undefined,
       };
     }
+    case "Workflow":
+      return { kind: "subagent", icon: Workflow, title: str(input.name) ? `Ran the workflow ${str(input.name)}` : "Ran a workflow" };
     case "TodoWrite":
     case "TaskCreate":
     case "TaskUpdate":

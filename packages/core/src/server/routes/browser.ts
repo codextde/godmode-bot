@@ -15,6 +15,7 @@ import {
 import { dispatchInput, initLiveView } from "../../browser/screencast";
 import { installProfileUse, profileUseStatus, syncWithProfileUse } from "../../browser/profileUse";
 import { body, z } from "../validate";
+import { expectSlow } from "../../mcp/http";
 import { conversationExists } from "../../services/conversations";
 import { notFound } from "../../util";
 
@@ -54,6 +55,7 @@ export function registerBrowserRoutes(app: Hono): void {
   });
 
   app.post("/api/browser/profiles/:id/launch", async (c) => {
+    expectSlow(c);
     const { headless } = await body(c, z.object({ headless: z.boolean().nullable().optional() }));
     return c.json(await launchBrowser(c.req.param("id"), headless == null ? {} : { headless }));
   });

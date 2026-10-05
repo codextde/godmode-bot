@@ -1,11 +1,12 @@
-import { useRef, useState, type KeyboardEvent, type Ref } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, Cpu, RotateCw } from "lucide-react";
+import { Check, ChevronDown, Cpu, RotateCw, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import {
   DEFAULT_MODEL,
   EFFORT_LABELS,
   EFFORT_OPTIONS,
+  ULTRACODE_HINT,
   effortForModel,
   findModel,
   type Agent,
@@ -13,6 +14,7 @@ import {
   type Effort,
 } from "@godmode/shared";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api, errorMessage } from "@/lib/api";
 import { useModelCatalog, useSettings } from "@/lib/hooks";
@@ -24,6 +26,8 @@ export interface ModelChoice {
   model: string | null;
   /** null = the agent's effort */
   effort: Effort | null;
+  /** null = the agent's Ultracode setting */
+  ultracode: boolean | null;
 }
 
 const EFFORT_HINTS: Record<Effort, string> = {
@@ -34,20 +38,24 @@ const EFFORT_HINTS: Record<Effort, string> = {
   max: "Thinks as long as it needs. Slowest, most tokens.",
 };
 
-function customModel(id: string): ClaudeModel {
-  return { id, resolvedModel: id, label: id, description: "Custom model id", efforts: [...EFFORT_OPTIONS], latest: true };
+function customModel(id: string, ultracode: boolean): ClaudeModel {
+  return { id, resolvedModel: id, label: id, description: "Custom model id", efforts: [...EFFORT_OPTIONS], ultracode, latest: true };
 }
 
 /** What a chat runs with: its override, else the agent's, else the global default. */
-function useEffectiveModel(agent: Agent | undefined, choice: ModelChoice) {
+export function useEffectiveModel(agent: Agent | undefined, choice: ModelChoice) {
   const { catalog } = useModelCatalog();
   const { data: settings } = useSettings();
+  // Nobody knows what a custom model id can do: it gets Ultracode whenever this Claude Code has it at all.
+  const anyUltracode = catalog.models.some((m) => m.ultracode);
   const baseId = agent?.model?.trim() || settings?.runner.model?.trim() || DEFAULT_MODEL;
-  const base = findModel(catalog.models, baseId) ?? customModel(baseId);
-  const current = choice.model ? (findModel(catalog.models, choice.model) ?? customModel(choice.model)) : base;
+  const base = findModel(catalog.models, baseId) ?? customModel(baseId, anyUltracode);
+  const current = choice.model ? (findModel(catalog.models, choice.model) ?? customModel(choice.model, anyUltracode)) : base;
   const baseEffort = agent?.effort ?? settings?.runner.effort ?? "high";
   const effort = effortForModel(current.efforts, choice.effort ?? baseEffort);
-  return { catalog, base, baseEffort, current, effort };
+  const baseUltracode = agent?.ultracode ?? settings?.runner.ultracode ?? false;
+  const ultracode = current.ultracode && (choice.ultracode ?? baseUltracode);
+  return { catalog, base, baseEffort, baseUltracode, anyUltracode, current, effort, ultracode };
 }
 
 function EffortGlyph({ level, count }: { level: number; count: number }) {
@@ -133,16 +141,18 @@ export function ModelPicker({
   const [showOlder, setShowOlder] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const selectedRef = useRef<HTMLButtonElement>(null);
-  const { catalog, base, baseEffort, current, effort } = useEffectiveModel(agent, value);
+  const ultracodeId = useId();
+  const { catalog, base, baseEffort, baseUltracode, anyUltracode, current, effort, ultracode } = useEffectiveModel(agent, value);
 
   const listed = catalog.models.some((m) => m.id === current.id) ? catalog.models : [current, ...catalog.models];
   const latest = listed.filter((m) => m.latest);
   const older = listed.filter((m) => !m.latest);
-  const overridden = value.model !== null || value.effort !== null;
+  const overridden = value.model !== null || value.effort !== null || value.ultracode !== null;
   const effortIndex = effort ? current.efforts.indexOf(effort) : -1;
 
   const pickModel = (m: ClaudeModel) => onChange({ model: m.id === base.id ? null : m.id });
   const pickEffort = (e: Effort) => onChange({ effort: e === baseEffort ? null : e });
+  const pickUltracode = (on: boolean) => onChange({ ultracode: on === baseUltracode ? null : on });
   const focusId = showOlder || current.latest ? current.id : latest[0]?.id;
 
   const refresh = async () => {
@@ -167,7 +177,7 @@ export function ModelPicker({
     next.focus();
   };
 
-  const summary = effort ? `${current.label} · ${EFFORT_LABELS[effort]} effort` : current.label;
+  const summary = [current.label, effort && `${EFFORT_LABELS[effort]} effort`, ultracode && "Ultracode"].filter(Boolean).join(" · ");
 
   return (
     <Popover
@@ -192,6 +202,7 @@ export function ModelPicker({
               <Cpu className="hidden size-4 shrink-0 @max-sm/composer:block" />
               <span className="truncate @max-sm/composer:hidden">{current.label}</span>
               {effort && <EffortGlyph level={effortIndex} count={current.efforts.length} />}
+              {ultracode && <Workflow aria-hidden className="size-3.5 shrink-0" />}
               <ChevronDown className="size-3.5 shrink-0 opacity-60" />
             </button>
           </PopoverTrigger>
@@ -281,6 +292,26 @@ export function ModelPicker({
           )}
         </div>
 
+        {current.ultracode ? (
+          <div className="border-t px-3 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor={ultracodeId} className="flex items-center gap-1.5 text-[13px] font-medium">
+                <Workflow aria-hidden className="size-3.5 text-muted-foreground" /> Ultracode
+              </label>
+              <Switch id={ultracodeId} checked={ultracode} onCheckedChange={pickUltracode} aria-describedby={`${ultracodeId}-hint`} />
+            </div>
+            <p id={`${ultracodeId}-hint`} className="mt-1.5 text-xs text-muted-foreground">
+              {ULTRACODE_HINT}
+            </p>
+          </div>
+        ) : (
+          anyUltracode && (
+            <p className="border-t px-3 py-2.5 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Ultracode</span> isn't available for {current.label}.
+            </p>
+          )
+        )}
+
         <div className="flex items-center gap-2 border-t bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -302,7 +333,7 @@ export function ModelPicker({
           {overridden && (
             <button
               type="button"
-              onClick={() => onChange({ model: null, effort: null })}
+              onClick={() => onChange({ model: null, effort: null, ultracode: null })}
               className="ml-auto shrink-0 rounded-md px-1.5 py-0.5 font-medium text-foreground/80 transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               Use {agent ? `${agent.name}'s` : "agent"} default

@@ -8,6 +8,7 @@ import type { AgentTemplate } from "@godmode/shared";
 export const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: "inbox-triage",
+    role: "Inbox manager",
     name: "Inbox Triage",
     avatar: "📥",
     color: "sky",
@@ -36,6 +37,7 @@ Never: send emails, unsubscribe, delete messages or click links in suspicious em
   },
   {
     id: "research-analyst",
+    role: "Research analyst",
     name: "Research Analyst",
     avatar: "🔎",
     color: "indigo",
@@ -56,6 +58,7 @@ Keep a list of trusted and untrustworthy sources per domain in MEMORY.md.`,
   },
   {
     id: "invoice-collector",
+    role: "Invoice collector",
     name: "Invoice Collector",
     avatar: "🧾",
     color: "emerald",
@@ -83,6 +86,7 @@ Never pay invoices, change payment methods, cancel subscriptions or change accou
   },
   {
     id: "daily-briefing",
+    role: "Briefing writer",
     name: "Daily Briefing",
     avatar: "☀️",
     color: "amber",
@@ -110,6 +114,7 @@ Learn what the human reads and what they skip; adjust the format in MEMORY.md ac
   },
   {
     id: "social-media-manager",
+    role: "Social media manager",
     name: "Social Media Manager",
     avatar: "📣",
     color: "fuchsia",
@@ -133,6 +138,7 @@ Update MEMORY.md with performance learnings (best times, formats and topics).`,
   },
   {
     id: "price-monitor",
+    role: "Market monitor",
     name: "Price & Competitor Monitor",
     avatar: "📈",
     color: "orange",
@@ -159,6 +165,7 @@ Pages change layout: when extraction breaks, record the new selectors/steps in M
   },
   {
     id: "lead-researcher",
+    role: "Lead researcher",
     name: "Lead Researcher",
     avatar: "🎯",
     color: "rose",
@@ -181,6 +188,7 @@ Never send outreach messages or connection requests yourself, never buy data, an
   },
   {
     id: "web-qa-tester",
+    role: "QA tester",
     name: "Web App QA Tester",
     avatar: "🧪",
     color: "cyan",
@@ -208,6 +216,7 @@ Keep flow scripts and known flaky steps up to date in MEMORY.md.`,
   },
   {
     id: "bookkeeping-helper",
+    role: "Bookkeeper",
     name: "Bookkeeping Helper",
     avatar: "📒",
     color: "lime",

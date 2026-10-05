@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Cpu, Gauge, ShieldAlert, SlidersHorizontal, Sparkles, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
-import { EFFORT_LABELS, EFFORT_OPTIONS, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
+import { EFFORT_LABELS, EFFORT_OPTIONS, ULTRACODE_HINT, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
 import { ReasoningEffort } from "@/components/aicss/ReasoningEffort";
 import {
   AlertDialog,
@@ -17,7 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { InlineCode } from "@/components/onboarding/doctor-checklist";
-import { useModelCatalog } from "@/lib/hooks";
+import { useBudgets, useModelCatalog } from "@/lib/hooks";
+import { BudgetMeter } from "@/components/budgets/budget-meter";
 import { cn } from "@/lib/utils";
 import {
   Callout,
@@ -133,6 +134,10 @@ export function AiSection({ settings }: { settings: Settings }) {
   const { catalog } = useModelCatalog();
   const r = settings.runner;
   const [confirmBypass, setConfirmBypass] = useState(false);
+  const defaultModel = findModel(catalog.models, r.model);
+  // A custom model id: possible whenever this Claude Code has Ultracode at all.
+  const anyUltracode = catalog.models.some((m) => m.ultracode);
+  const ultracodeAvailable = defaultModel ? defaultModel.ultracode : anyUltracode;
 
   const setBypass = (on: boolean) => {
     if (on) {
@@ -160,13 +165,37 @@ export function AiSection({ settings }: { settings: Settings }) {
         <SettingRow label="Reasoning effort" description="Higher effort thinks longer before acting — better results, more tokens.">
           <ReasoningEffort
             aria-label="Reasoning effort"
-            label={findModel(catalog.models, r.model)?.label ?? "Effort"}
+            label={defaultModel?.label ?? "Effort"}
             stops={EFFORT_OPTIONS.map((e) => EFFORT_LABELS[e])}
             value={Math.max(0, EFFORT_OPTIONS.indexOf(r.effort))}
             onChange={(i) => {
               const effort: Effort = EFFORT_OPTIONS[i] ?? "high";
               if (effort !== r.effort) patch({ runner: { effort } });
             }}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Ultracode"
+          htmlFor="ultracode"
+          description={
+            <>
+              {ULTRACODE_HINT}
+              {!ultracodeAvailable && (
+                <span className="mt-1 block font-medium text-foreground/80">
+                  {anyUltracode
+                    ? `${defaultModel?.label ?? "The default model"} doesn't support dynamic workflows — pick a model that does.`
+                    : "The installed Claude Code doesn't offer dynamic workflows."}
+                </span>
+              )}
+            </>
+          }
+        >
+          {/* Stays switchable while it is on: agents with a model of their own still follow this default. */}
+          <Switch
+            id="ultracode"
+            checked={r.ultracode ?? false}
+            disabled={!ultracodeAvailable && !r.ultracode}
+            onCheckedChange={(ultracode) => patch({ runner: { ultracode } })}
           />
         </SettingRow>
       </SettingsGroup>
@@ -242,6 +271,24 @@ export function AiSection({ settings }: { settings: Settings }) {
             onCommit={(v) => patch({ runner: { defaultMaxBudgetUsd: v === 0 ? null : v } })}
           />
         </SettingRow>
+        <SettingRow
+          label="Monthly team budget"
+          htmlFor="team-budget"
+          description="Everything your agents cost in a calendar month. At 80% you're told; at 100% automations, follow-ups and board tickets wait until you raise it or let them run. Chats you start still run."
+        >
+          <NumberField
+            id="team-budget"
+            prefix="$"
+            suffix="USD"
+            min={0}
+            step={5}
+            allowEmpty
+            placeholder="No budget"
+            value={r.monthlyBudgetUsd ?? null}
+            onCommit={(v) => patch({ runner: { monthlyBudgetUsd: v === 0 ? null : v } })}
+          />
+        </SettingRow>
+        <TeamBudget />
       </SettingsGroup>
 
       <SettingsGroup title="Claude Code CLI" icon={<TerminalSquare />}>
@@ -289,6 +336,17 @@ export function AiSection({ settings }: { settings: Settings }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+/** What the team spent this month against its budget, under the field that sets it. */
+function TeamBudget() {
+  const { data } = useBudgets();
+  if (!data) return null;
+  return (
+    <div className="px-4 pb-4">
+      <BudgetMeter status={data.team} resetsAt={data.resetsAt} whose="the team's" release={{ scope: "team" }} />
     </div>
   );
 }

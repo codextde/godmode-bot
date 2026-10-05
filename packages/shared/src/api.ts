@@ -1,9 +1,12 @@
+import type { SpendKind } from "./budget";
 import type { AgentCharacter } from "./character";
 import type { AgentComputerConfig, ComputerTarget } from "./computer";
 import type {
+  RoutineNotify,
   Agent,
   AgentBrowserConfig,
   AgentPermissions,
+  AgentQuestion,
   Attachment,
   Conversation,
   Credential,
@@ -56,8 +59,14 @@ export interface AgentInput {
   personality?: string;
   description?: string;
   instructions?: string;
+  /** Job title on the team; "" = none. */
+  role?: string;
+  /** Its lead; null = the built-in agent. */
+  reportsTo?: ID | null;
   model?: string;
   effort?: Effort | null;
+  /** null = the global default. */
+  ultracode?: boolean | null;
   enabled?: boolean;
   permissions?: Partial<AgentPermissions>;
   browser?: Partial<AgentBrowserConfig>;
@@ -81,7 +90,29 @@ export interface AgentTemplate {
   personality: string;
   description: string;
   instructions: string;
+  /** Its job title on the team. */
+  role: string;
   routine?: { name: string; cron: string; prompt: string };
+}
+
+/** A whole team to start with: a lead and its reports (agent templates), wired up in the org chart. */
+export interface TeamTemplate {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  /** Leads the team: hands out the work, reviews it and reports to the human. */
+  lead: AgentTemplate;
+  /** Its reports, by agent template id (`GET /api/agent-templates`). */
+  members: string[];
+}
+
+/** What installing a team created. */
+export interface TeamInstallResult {
+  lead: Agent;
+  members: Agent[];
+  /** Automations created from the members' templates (when asked for). */
+  automations: number;
 }
 
 export interface RoutineInput {
@@ -97,6 +128,7 @@ export interface RoutineInput {
   filter?: string;
   enabled?: boolean;
   reuseConversation?: boolean;
+  notify?: RoutineNotify;
 }
 
 export interface WebhookRotateResult {
@@ -131,6 +163,31 @@ export interface SendMessageInput {
 export interface SendMessageResult {
   message: Message;
   run: Run;
+  /**
+   * The chat was waiting for the human's answer, so the message was taken as that answer: no message was added, `run` is
+   * the run that asked (it continues) and `message` is the agent's message that shows the question.
+   */
+  question?: AgentQuestion;
+}
+
+/**
+ * The human's answer to an AgentQuestion. Exactly one of `optionId` (questions: a suggested answer), `decision`
+ * (approvals; `note` optional) or `text` (own words, for both kinds; may be "" when files are attached).
+ */
+export interface AnswerQuestionInput {
+  optionId?: string;
+  decision?: "approve" | "decline";
+  /** A sentence for the agent that goes with the decision. */
+  note?: string;
+  text?: string;
+  /** Files that go with `text`. */
+  attachments?: SendMessageInput["attachments"];
+}
+
+/** `run` is the run that asked: it continues with the answer. */
+export interface AnswerQuestionResult {
+  question: AgentQuestion;
+  run: Run;
 }
 
 /** `queued`: the agent was working, so the message waits in the chat's queue. */
@@ -144,6 +201,7 @@ export interface StartChatInput {
   /** Model for this chat; omitted = the agent's. */
   model?: string | null;
   effort?: Effort | null;
+  ultracode?: boolean | null;
   /** Work in this folder instead of the agent's default. */
   workingDirectory?: string | null;
   /** Share a screen, window or browser tab with the new chat. */
@@ -157,6 +215,8 @@ export interface StartChatInput {
   /** SSH servers the chat may use, in addition to the agent's. */
   sshServerIds?: ID[];
   instructions?: string;
+  /** Work on this runner instead of this computer. */
+  runnerId?: ID | null;
 }
 
 /** Move a chat's follow-up to another time. */
@@ -168,9 +228,10 @@ export interface ConversationPatch {
   title?: string;
   pinned?: boolean;
   archived?: boolean;
-  /** null = back to the agent's model / effort. */
+  /** null = back to the agent's model / effort / Ultracode. */
   model?: string | null;
   effort?: Effort | null;
+  ultracode?: boolean | null;
   /** null = back to the agent's default folder. */
   workingDirectory?: string | null;
   /** Share a screen, window or browser tab with the agent; null = stop sharing. */
@@ -458,3 +519,54 @@ export interface ClientLogInput {
 }
 
 export type { Agent, Attachment, Conversation, Credential, Message, Routine, Run, TotpEntry, Workspace };
+
+/* ------------------------------------------------------------------ */
+/* Spend and budgets                                                    */
+/* ------------------------------------------------------------------ */
+
+export type SpendPeriod = "today" | "week" | "month" | "all";
+
+export interface SpendTotals {
+  /** Runs that worked in the period (a run that went on after a pause counts in each period it worked in). */
+  runs: number;
+  failed: number;
+  costUsd: number;
+  durationMs: number;
+}
+
+/**
+ * What the team cost, booked when the money was spent (each stretch of a run when it ended). `periods` holds the four
+ * totals; the breakdowns are for `period`.
+ */
+export interface SpendReport {
+  period: SpendPeriod;
+  /** IANA zone days and months are counted in (the computer Godmode runs on). */
+  timeZone: string;
+  periods: Record<SpendPeriod, SpendTotals>;
+  byAgent: (SpendTotals & { agentId: ID; name: string; deleted: boolean })[];
+  byKind: (SpendTotals & { kind: SpendKind })[];
+  /** Runs queued, working or standing still right now: what they cost so far is in, the rest comes. */
+  active: number;
+}
+
+export interface BudgetStatus {
+  /** null = the team's budget. */
+  agentId: ID | null;
+  budgetUsd: number | null;
+  spentUsd: number;
+  /** Runs held for this budget. */
+  held: number;
+  state: "none" | "ok" | "warning" | "exhausted";
+}
+
+export interface BudgetOverview {
+  /** "2026-10" */
+  month: string;
+  /** When the month's budgets start over. */
+  resetsAt: ISODate;
+  team: BudgetStatus;
+  /** Agents with a budget of their own, or held runs. */
+  agents: BudgetStatus[];
+}
+
+export type BudgetReleaseInput = { scope: "team" } | { scope: "agent"; agentId: ID };

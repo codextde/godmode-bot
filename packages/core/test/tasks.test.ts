@@ -11,12 +11,16 @@ import { getRun, activeRunForConversation } from "../src/runner/runner";
 import { createWorkspace, deleteWorkspace, updateWorkspace } from "../src/services/workspaces";
 import { workingDirectoryProblem } from "../src/services/folders";
 import {
+  __setTaskRetryDelaysForTests,
   archiveTasks,
   checkPullRequests,
   checkoutDir,
   createTask,
   deleteTask,
+  addTaskNote,
+  findTask,
   getTask,
+  listTaskEvents,
   listTasks,
   pushTaskBranch,
   sendTaskMessage,
@@ -27,9 +31,10 @@ import {
 import { getFollowup, scheduleFollowup } from "../src/services/followups";
 import { pauseConversation } from "../src/services/pauses";
 import { sendMessage } from "../src/services/conversations";
-import { __setGhForTests, compareUrl, openPullRequest, repoCacheDir } from "../src/tasks/git";
+import { __setGhForTests, compareUrl, openPullRequest, pushBranch, removeSecrets, repoCacheDir } from "../src/tasks/git";
 import { HttpError } from "../src/util";
-import { rememberSecret } from "../src/vault/vault";
+import { redact, rememberSecret, rememberSecretValues, withoutSecrets } from "../src/vault/vault";
+import { listNotifications } from "../src/services/notifications";
 import { updateSettings } from "../src/services/settings";
 import { mkdtempSync } from "node:fs";
 
@@ -156,6 +161,37 @@ describe("agents work on tasks", () => {
     expect(getTask(task.id).conversationId).toBe(firstConversation);
     expect(getTask(task.id).blockedReason).toBeNull();
   });
+
+  test("a run that fails once is tried again on its own and delivered; one that keeps failing is blocked after two tries", async () => {
+    const flaky = createTask({ workspaceId, title: "CRASH_ONCE then fine", agentId: wsAgent.id });
+    await settled(flaky.id, ["in_review"]);
+    const events = listTaskEvents(flaky.id);
+    const retry = events.find((e) => e.kind === "started" && e.data.retry);
+    expect(retry?.body).toContain("exploded");
+    expect(events.some((e) => e.kind === "blocked")).toBe(false);
+
+    const broken = createTask({ workspaceId, title: "CRASH every time", agentId: wsAgent.id });
+    await settled(broken.id, ["blocked"]);
+    expect(listTaskEvents(broken.id).filter((e) => e.kind === "started" && e.data.retry).map((e) => e.kind === "started" && e.data.retry)).toEqual([1, 2]);
+    expect(getTask(broken.id).blockedReason).toContain("still failing after 2 more tries");
+  }, 60_000);
+
+  test("moving a ticket while it waits to try again restarts it cleanly; the human's move cancels the waiting try", async () => {
+    __setTaskRetryDelaysForTests([60_000, 60_000]);
+    // The fake crashes once per state dir: again for this ticket.
+    rmSync(join(env.stateDir, "crashed-once"), { force: true });
+    try {
+      const t = createTask({ workspaceId, title: "CRASH_ONCE then fine, later", agentId: wsAgent.id });
+      await until(() => getTask(t.id).activity?.startsWith("Trying again") === true, 20_000, "the ticket to wait to try again");
+      updateTask(t.id, { status: "todo" });
+      await settled(t.id, ["in_review"]);
+      // Started by the human, not "tried again on its own"; nothing left waiting.
+      expect(listTaskEvents(t.id).some((e) => e.kind === "started" && e.data.retry)).toBe(false);
+      expect(getTask(t.id).activity).toBeNull();
+    } finally {
+      __setTaskRetryDelaysForTests([0, 0]);
+    }
+  }, 60_000);
 
   test("the agent can report that it's blocked", async () => {
     const task = createTask({ workspaceId, title: "TASK_BLOCKED billing export", agentId: wsAgent.id });
@@ -701,22 +737,286 @@ describe("races and safety", () => {
     expect(files).not.toContain(".env");
   });
 
-  test("a secret-looking file the agent committed itself blocks the push", async () => {
+  const secret = "Zq9-vault-Secret-4242";
+  /** Everything a remote has: the messages and patches of every commit on every branch. */
+  const published = (bare: string) => git(["log", "--all", "-p", "--format=%B"], bare);
+  const secretsNotice = (t: Task) => listNotifications().find((n) => n.title === `Task #${t.number}: secrets kept out of ${t.branch}`);
+  /** The branch as the agent left it, kept in the task's worktree. */
+  const keptRef = (id: string) => git(["for-each-ref", "--format=%(refname)", "refs/worktree/godmode"], checkoutDir(id));
+
+  test("a branch that only adds a secret-looking file has nothing to push", async () => {
     const task = createTask({ workspaceId, title: "TASK_COMMIT_ENV configure production", type: "coding", agentId: wsAgent.id });
-    await settled(task.id, ["blocked"]);
+    await settled(task.id, ["in_review"]);
     const t = getTask(task.id);
-    expect(t.blockedReason).toContain(".env.production");
     expect(await git(["branch", "--list", t.branch!], remote)).toBe("");
+    // Still there for the agent and the human, just not on the branch anymore.
+    expect(existsSync(join(checkoutDir(t.id), ".env.production"))).toBe(true);
+    expect(await git(["status", "--porcelain"], checkoutDir(t.id))).toBe("?? .env.production");
+    expect(secretsNotice(t)?.body).toContain(".env.production");
   });
 
-  test("changes containing a vault secret are not pushed", async () => {
-    const secret = "Zq9-vault-Secret-4242";
+  test("secrets the agent committed are taken out of every commit before the push", async () => {
+    rememberSecret(secret);
+    const task = createTask({ workspaceId, title: "Configure it", description: `TASK_HISTORY:${secret}`, type: "coding", agentId: wsAgent.id });
+    await settled(task.id, ["in_review"]);
+    const t = getTask(task.id);
+    expect(t.branchPushed).toBe(true);
+    expect((await git(["ls-tree", "-r", "--name-only", t.branch!], remote)).split("\n").sort()).toEqual(["README.md", "config.txt", "feature.txt"]);
+    // The agent's second commit removed the secret again, but its first would have been pushed too: they became one.
+    expect(await git(["log", "--format=%s%n%b", `main..${t.branch}`], remote)).toBe(
+      `${t.title} (#${t.number})\n- Configure with GODMODE_REMOVED_SECRET\n- Read the token from the environment`,
+    );
+    const all = await published(remote);
+    expect(all).not.toContain(secret);
+    expect(all).not.toContain("API_TOKEN=abc123");
+    // Nothing is lost: the file stays in the worktree and the agent's commits stay reachable there.
+    const dir = checkoutDir(t.id);
+    expect(readFileSync(join(dir, ".env.production"), "utf8")).toBe("API_TOKEN=abc123\n");
+    const kept = await keptRef(t.id);
+    expect(await git(["log", "--format=%s", kept], dir)).toContain(`Configure with ${secret}`);
+    const notice = secretsNotice(t)!;
+    expect(notice.kind).toBe("warning");
+    expect(notice.body).toContain(".env.production");
+    expect(notice.body).toContain(kept);
+    expect(notice.body).not.toContain(secret);
+  });
+
+  test("a vault secret in the agent's changes is replaced, never pushed; a follow-up's too", async () => {
     rememberSecret(secret);
     const task = createTask({ workspaceId, title: "Configure it", description: `TASK_LEAK:${secret}`, type: "coding", agentId: wsAgent.id });
-    await settled(task.id, ["blocked"]);
+    await settled(task.id, ["in_review"]);
     const t = getTask(task.id);
-    expect(t.blockedReason).toContain("secret saved in the vault");
-    expect(await git(["branch", "--list", t.branch!], remote)).toBe("");
+    const dir = checkoutDir(t.id);
+    expect(await git(["show", `${t.branch}:config.txt`], remote)).toBe("token=GODMODE_REMOVED_SECRET");
+    expect(readFileSync(join(dir, "config.txt"), "utf8")).toBe("token=GODMODE_REMOVED_SECRET\n");
+    expect(await git(["show", `${await keptRef(t.id)}:config.txt`], dir)).toBe(`token=${secret}`);
+    expect(secretsNotice(t)?.body).toContain("config.txt");
+    expect(await git(["status", "--porcelain"], dir)).toBe("");
+
+    // Pushed before: only the new commit is rewritten, and it lands on top of what the remote has.
+    const first = await git(["rev-parse", t.branch!], remote);
+    await sendTaskMessage(t.id, `TASK_LEAK:${secret}-again`);
+    await until(() => getTask(t.id).runId !== t.runId, 5_000, "follow-up run");
+    await settled(t.id, ["in_review"]);
+    expect(await git(["rev-parse", `${t.branch}~1`], remote)).toBe(first);
+    expect(await git(["show", `${t.branch}:config.txt`], remote)).toBe("token=GODMODE_REMOVED_SECRET-again");
+    expect(await published(remote)).not.toContain(secret);
+    expect((await keptRef(t.id)).split("\n")).toHaveLength(2);
+  });
+
+  test("a file whose secret can't be replaced is left out of the push", async () => {
+    rememberSecret(secret);
+    const task = createTask({ workspaceId, title: "Keep the legacy config", description: `TASK_LEAK_BYTES:${secret}`, type: "coding", agentId: wsAgent.id });
+    await settled(task.id, ["in_review"]);
+    const t = getTask(task.id);
+    // Not UTF-8, so rewriting it could damage it: the rest of the work is pushed, the file stays where it is.
+    expect((await git(["ls-tree", "-r", "--name-only", t.branch!], remote)).split("\n").sort()).toEqual(["README.md", "feature.txt"]);
+    expect(await published(remote)).not.toContain(secret);
+    expect(readFileSync(join(checkoutDir(t.id), "legacy.txt")).includes(`token=${secret}`)).toBe(true);
+    expect(secretsNotice(t)?.body).toContain("legacy.txt");
+  });
+
+  test("plain settings, removed lines and the lines around a change never count as a secret", async () => {
+    rememberSecret(secret);
+    // A saved password that is an ordinary word, and what a custom MCP server is given: settings, and one token.
+    rememberSecret("postgres");
+    rememberSecretValues({ AWS_REGION: "eu-central-1", API_BASE: "https://api.example.com/v1", API_TOKEN: "tok-Config-Value-9911" });
+    expect(redact("region=eu-central-1 db=postgres")).toBe("region=•••••••• db=••••••••");
+
+    const { url, bare } = makeRemote("plain-settings");
+    const seed = mkdtempSync(join(env.dataDir, "seed-"));
+    await git(["clone", "-q", url, seed], env.dataDir);
+    writeFileSync(join(seed, "settings.txt"), `name=app\ntoken=${secret}\nport=3000\nold_token=${secret}\n`);
+    await git(["add", "-A"], seed);
+    await git(["-c", "user.name=Human", "-c", "user.email=h@example.com", "commit", "-qm", "Settings"], seed);
+    await git(["push", "-q", "origin", "main"], seed);
+
+    // The agent removes one line with the secret and adds settings right below another one the repository already had.
+    const task = createTask({ title: "TASK_TIDY the settings", type: "coding", repoUrl: url, agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+    const t = getTask(task.id);
+    expect(await git(["show", `${t.branch}:settings.txt`], bare)).toBe(`name=app\ntoken=${secret}\nport=3000\nregion=eu-central-1\nbase=https://api.example.com/v1\ndb=postgres`);
+    // Pushed as it was committed: nothing rewritten, nothing kept aside, nothing to tell.
+    expect(await git(["log", "--format=%s", `main..${t.branch}`], bare)).toBe(`${t.title} (#${t.number})`);
+    expect(await keptRef(t.id)).toBe("");
+    expect(secretsNotice(t)).toBeUndefined();
+  });
+
+  test("pushing from the board takes secrets out instead of refusing", async () => {
+    rememberSecret(secret);
+    const { url, bare } = makeRemote("board-secret");
+    const task = createTask({ title: "Note it down", description: `TASK_LEAK:${secret}`, repoUrl: url, agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+    const t = getTask(task.id);
+    // Not pushed, so nothing was touched: the agent's file is committed as it is.
+    expect(t.branchPushed).toBe(false);
+    expect(await git(["show", `${t.branch}:config.txt`], checkoutDir(t.id))).toBe(`token=${secret}`);
+
+    const pushed = await pushTaskBranch(t.id, { pullRequest: false });
+    expect(pushed.branchPushed).toBe(true);
+    expect(await git(["show", `${t.branch}:config.txt`], bare)).toBe("token=GODMODE_REMOVED_SECRET");
+    expect(await published(bare)).not.toContain(secret);
+    expect(secretsNotice(t)?.body).toContain("config.txt");
+
+    // Follow-ups keep the pushed branch up to date — cleaned the same way, without a "wasn't pushed" warning.
+    await sendTaskMessage(t.id, `TASK_LEAK:${secret}-again`);
+    await until(() => getTask(t.id).runId !== t.runId, 5_000, "follow-up run");
+    await settled(t.id, ["in_review"]);
+    expect(await git(["show", `${t.branch}:config.txt`], bare)).toBe("token=GODMODE_REMOVED_SECRET-again");
+    expect(await published(bare)).not.toContain(secret);
+    expect(listNotifications().some((n) => n.title.includes(`${t.branch} wasn't pushed`))).toBe(false);
+  });
+
+  test("a secret added after the base was merged into a pushed branch: the cleaned commit keeps both, so the push fast-forwards", async () => {
+    rememberSecret(secret);
+    const { url, bare } = makeRemote("merged-base");
+    const dir = mkdtempSync(join(env.dataDir, "merged-"));
+    const agentGit = (...args: string[]) => git(["-c", "user.name=Agent", "-c", "user.email=agent@example.com", ...args], dir);
+    const commit = async (message: string, file: string, content: string | Buffer) => {
+      writeFileSync(join(dir, file), content);
+      await agentGit("add", "-A");
+      await agentGit("commit", "-qm", message);
+    };
+    // Saved in the vault too, but the base has had it for long: already public, so a file moved from there isn't touched.
+    const known = "Base-known-Secret-7731";
+    rememberSecret(known);
+    const legacy = Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]); // Latin-1: can't be rewritten safely
+    const branch = "godmode/1-task";
+    await git(["clone", "-q", url, dir], env.dataDir);
+    await agentGit("checkout", "-q", "-b", branch);
+    await commit("First", "legacy.txt", legacy);
+    await commit("Second", "a.txt", "one\n");
+    const first = (await pushBranch({ dir, base: "main", branch, lastPushed: null })).sha;
+    // The base moves on; the agent merges it, moves a file of the base, then leaks — in text, in a binary file, in a file it can't rewrite.
+    await agentGit("checkout", "-q", "main");
+    await commit("Base moves on", "old.js", `const a = 1;\nconst b = 2;\nconst c = 3;\nconst key = "${known}";\nconst d = 4;\n`);
+    await agentGit("push", "-q", "origin", "main");
+    await agentGit("checkout", "-q", branch);
+    await agentGit("merge", "-q", "--no-edit", "origin/main");
+    await agentGit("mv", "old.js", "new.js");
+    await commit("Move it", "new.js", `const a = 1;\nconst b = 2;\nconst c = 3;\nconst key = "${known}";\nconst d = 5;\n`);
+    await commit("Configure", "config.txt", `token=${secret}\n`);
+    await commit("Store it", "data.db", Buffer.concat([Buffer.from([0, 0, 1]), Buffer.from(`token=${secret}`)]));
+    await commit("Note it", "legacy.txt", Buffer.concat([legacy, Buffer.from(`token=${secret}\n`)]));
+
+    const { head, removed } = await removeSecrets({ dir, base: "main", lastPushed: first, message: "Task (#1)", clean: withoutSecrets });
+    expect(removed?.replaced).toEqual(["config.txt"]);
+    expect(removed?.left.sort()).toEqual(["data.db", "legacy.txt"]);
+    // The branch's own commit first: its history reads as the branch's, and left-out files keep the branch's version.
+    expect((await agentGit("log", "-1", "--format=%P")).split(" ")).toEqual([first, await agentGit("rev-parse", "origin/main")]);
+    expect((await pushBranch({ dir, base: "main", branch, lastPushed: first, head: head! })).pushed).toBe(true);
+    // What a pull request shows: the agent's work only — and nothing the remote had was replaced.
+    expect((await git(["diff", "--name-only", `main...${branch}`], bare)).split("\n").sort()).toEqual(["a.txt", "config.txt", "legacy.txt", "new.js"]);
+    expect(await git(["show", `${branch}:legacy.txt`], bare)).toBe("caf�");
+    expect(await git(["show", `${branch}:new.js`], bare)).toContain(known);
+    expect(await git(["merge-base", "--is-ancestor", first, branch], bare)).toBe("");
+    expect(await published(bare)).not.toContain(secret);
+    expect(await agentGit("show", `${removed!.kept}:config.txt`)).toBe(`token=${secret}`);
+  });
+
+  test("a file Godmode can't rewrite is left out instead of stopping the push", async () => {
+    rememberSecret(secret);
+    const { url, bare } = makeRemote("read-only");
+    const dir = mkdtempSync(join(env.dataDir, "read-only-"));
+    const agentGit = (...args: string[]) => git(["-c", "user.name=Agent", "-c", "user.email=agent@example.com", ...args], dir);
+    await git(["clone", "-q", url, dir], env.dataDir);
+    await agentGit("checkout", "-q", "-b", "godmode/2-task");
+    writeFileSync(join(dir, "config.txt"), `token=${secret}\n`);
+    writeFileSync(join(dir, "feature.txt"), "a feature\n");
+    chmodSync(join(dir, "config.txt"), 0o444);
+    await agentGit("add", "-A");
+    await agentGit("commit", "-qm", "Configure");
+
+    const { head, removed } = await removeSecrets({ dir, base: "main", lastPushed: null, message: "Task (#2)", clean: withoutSecrets });
+    expect(removed).toEqual({ left: ["config.txt"], replaced: [], kept: expect.stringContaining("refs/worktree/godmode/with-secrets/") });
+    expect((await pushBranch({ dir, base: "main", branch: "godmode/2-task", lastPushed: null, head: head! })).pushed).toBe(true);
+    expect((await git(["ls-tree", "-r", "--name-only", "godmode/2-task"], bare)).split("\n").sort()).toEqual(["README.md", "feature.txt"]);
+    expect(readFileSync(join(dir, "config.txt"), "utf8")).toBe(`token=${secret}\n`);
+  });
+
+  test("a binary file that held a secret only in an earlier commit is taken out of the history", async () => {
+    rememberSecret(secret);
+    const { url, bare } = makeRemote("binary-history");
+    const dir = mkdtempSync(join(env.dataDir, "binary-"));
+    const agentGit = (...args: string[]) => git(["-c", "user.name=Agent", "-c", "user.email=agent@example.com", ...args], dir);
+    await git(["clone", "-q", url, dir], env.dataDir);
+    await agentGit("checkout", "-q", "-b", "godmode/4-task");
+    writeFileSync(join(dir, "dump.bin"), Buffer.concat([Buffer.from([0, 1]), Buffer.from(`token=${secret}`)]));
+    writeFileSync(join(dir, "feature.txt"), "a feature\n");
+    await agentGit("add", "-A");
+    await agentGit("commit", "-qm", "Dump");
+    await agentGit("rm", "-q", "dump.bin");
+    await agentGit("commit", "-qm", "Drop the dump");
+
+    const { head, removed } = await removeSecrets({ dir, base: "main", lastPushed: null, message: "Task (#4)", clean: withoutSecrets });
+    expect(removed?.left).toEqual([]);
+    expect((await pushBranch({ dir, base: "main", branch: "godmode/4-task", lastPushed: null, head: head! })).pushed).toBe(true);
+    expect((await git(["ls-tree", "-r", "--name-only", "godmode/4-task"], bare)).split("\n").sort()).toEqual(["README.md", "feature.txt"]);
+    expect(await git(["cat-file", "--batch-all-objects", "--batch"], bare)).not.toContain(secret);
+  });
+
+  test("what a turn stages or commits while Godmode pushes is never pushed unchecked", async () => {
+    rememberSecret(secret);
+    const { url, bare } = makeRemote("busy-turn");
+    const dir = mkdtempSync(join(env.dataDir, "busy-"));
+    const agentGit = (...args: string[]) => git(["-c", "user.name=Agent", "-c", "user.email=agent@example.com", ...args], dir);
+    const branch = "godmode/3-task";
+    await git(["clone", "-q", url, dir], env.dataDir);
+    await agentGit("checkout", "-q", "-b", branch);
+    writeFileSync(join(dir, "config.txt"), `token=${secret}\n`);
+    await agentGit("add", "-A");
+    await agentGit("commit", "-qm", "Configure");
+    const old = await agentGit("rev-parse", "HEAD");
+
+    // The agent stages a file while Godmode rewrites config.txt: the fix is dropped, that turn's end pushes.
+    let staged = false;
+    const clean = (text: string) => {
+      if (!staged && text === `token=${secret}\n`) {
+        staged = true;
+        writeFileSync(join(dir, "agent-new.txt"), `token=${secret}\n`);
+        Bun.spawnSync(["git", "add", "agent-new.txt"], { cwd: dir });
+      }
+      return withoutSecrets(text);
+    };
+    expect(await removeSecrets({ dir, base: "main", lastPushed: null, message: "Task (#3)", clean })).toEqual({ head: null, removed: null });
+    expect(staged).toBe(true);
+    expect(await agentGit("rev-parse", "HEAD")).toBe(old);
+    expect(await git(["for-each-ref", "refs/worktree/godmode"], dir)).toBe("");
+
+    // The agent stages config.txt again, with the secret, right after Godmode cleaned it.
+    await agentGit("reset", "-q", "--hard", old);
+    let restaged = false;
+    const again = (text: string) => {
+      if (!restaged && text.startsWith("token=GODMODE_REMOVED_SECRET")) {
+        restaged = true;
+        writeFileSync(join(dir, "config.txt"), `token=${secret}\nmore=1\n`);
+        Bun.spawnSync(["git", "add", "config.txt"], { cwd: dir });
+      }
+      return withoutSecrets(text);
+    };
+    expect(await removeSecrets({ dir, base: "main", lastPushed: null, message: "Task (#3)", clean: again })).toEqual({ head: null, removed: null });
+    expect(restaged).toBe(true);
+    expect(await agentGit("rev-parse", "HEAD")).toBe(old);
+
+    // Someone else pushed to the branch, and the agent committed after the check: no merge of unchecked commits, no push.
+    await agentGit("reset", "-q", "--hard", old);
+    const checked = (await removeSecrets({ dir, base: "main", lastPushed: null, message: "Task (#3)", clean: withoutSecrets })).head!;
+    const first = (await pushBranch({ dir, base: "main", branch, lastPushed: null, head: checked })).sha;
+    const reviewer = mkdtempSync(join(env.dataDir, "reviewer-"));
+    await git(["clone", "-q", "--branch", branch, url, reviewer], env.dataDir);
+    writeFileSync(join(reviewer, "REVIEW.md"), "fix\n");
+    await git(["add", "-A"], reviewer);
+    await git(["-c", "user.name=Reviewer", "-c", "user.email=r@example.com", "commit", "-qm", "Review"], reviewer);
+    await git(["push", "-q", "origin", branch], reviewer);
+    writeFileSync(join(dir, "feature.txt"), "a feature\n");
+    await agentGit("add", "-A");
+    await agentGit("commit", "-qm", "Feature");
+    const head = await agentGit("rev-parse", "HEAD");
+    writeFileSync(join(dir, "leak.txt"), `token=${secret}\n`);
+    await agentGit("add", "-A");
+    await agentGit("commit", "-qm", "Leak after the check");
+    expect(await pushBranch({ dir, base: "main", branch, lastPushed: first, head })).toEqual({ pushed: false, sha: head });
+    expect(await published(bare)).not.toContain(secret);
   });
 
   test("task numbers are never reused", async () => {
@@ -985,18 +1285,22 @@ describe("attachments", () => {
     expect(summary).toContain(`\`\`\`sh\nopen ${dir}/light.png\n\`\`\``);
     expect(readTaskAttachment(light!.id).data).toEqual(Buffer.from(png));
 
-    // A new result brings its own copies; the earlier ones go.
+    // A new result brings its own copies; the earlier ones stay with the earlier result on the timeline.
     rmSync(join(dir, "dark mode.png"));
     await sendTaskMessage(task.id, `TASK_SHOTS:${dir}`);
     await until(() => !getTask(task.id).summary!.includes(light!.id), 10_000, "the new result");
     await settled(task.id, ["in_review"]);
-    expect(pictures().map((p) => p.name)).toEqual(["light.png"]);
-    expect(getTask(task.id).summary).toContain(`- ![light.png](${url(pictures()[0]!)})`);
+    expect(pictures().map((p) => p.name)).toEqual(["dark mode.png", "light.png", "light.png"]);
+    const fresh = pictures().find((p) => p.name === "light.png" && p.id !== light!.id)!;
+    expect(getTask(task.id).summary).toContain(`- ![light.png](${url(fresh)})`);
     expect(getTask(task.id).summary).toContain(`- ![Dark mode](<${dir}/dark mode.png>)`);
-    expect(existsSync(join(env.dataDir, "attachments", "tasks", light!.id))).toBe(false);
+    expect(existsSync(join(env.dataDir, "attachments", "tasks", light!.id))).toBe(true);
+    const delivered = listTaskEvents(task.id).filter((e) => e.kind === "delivered");
+    expect(delivered).toHaveLength(2);
+    expect(delivered[0]!.body).toContain(light!.id);
 
     // A picture the human copied into the description outlives the result it came from.
-    const kept = pictures()[0]!;
+    const kept = fresh;
     updateTask(task.id, { description: `Like this: ![light](${url(kept)})` });
     await sendTaskMessage(task.id, "Thanks");
     await until(() => !getTask(task.id).summary!.includes(kept.id), 10_000, "a result without pictures");

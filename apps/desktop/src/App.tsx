@@ -1,13 +1,15 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-import { Navigate, Route, Routes, useNavigate } from "react-router";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, setUnauthorizedHandler } from "@/lib/api";
-import { getCoreInfo, isTauri } from "@/lib/core";
+import { CloudErrorCode, type Bootstrap } from "@godmode/shared";
+import { ApiRequestError, api, isCloudError, setCloudIssueHandler, setUnauthorizedHandler, type CloudIssue } from "@/lib/api";
+import { cloudContext, getCoreInfo, isTauri } from "@/lib/core";
 import { qk } from "@/lib/queryKeys";
 import { startRealtime, onServerEvent } from "@/lib/realtime";
 import { notifyDesktop } from "@/lib/desktop";
 import { syncUpdater } from "@/stores/updater";
 import { AppShell } from "@/components/layout/app-shell";
+import { CloudStatePage, type CloudState } from "@/components/layout/cloud-state";
 import { SplashScreen } from "@/components/layout/splash";
 import { LoginPage } from "@/pages/auth/login";
 import { UnlockPage } from "@/pages/auth/unlock";
@@ -32,13 +34,20 @@ const BrowserPage = lazy(() => import("@/pages/browser/browser-page"));
 const ComputerPage = lazy(() => import("@/pages/computer/computer-page"));
 const VmsPage = lazy(() => import("@/pages/vms/vms-page"));
 const SshPage = lazy(() => import("@/pages/ssh/ssh-page"));
+const RunnersPage = lazy(() => import("@/pages/runners/runners-page"));
 const InboxPage = lazy(() => import("@/pages/inbox/inbox-page"));
 const SettingsPage = lazy(() => import("@/pages/settings/settings-page"));
 
 export function App() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  // The page on screen as the router sees it (through Godmode Cloud the address bar has a /d/<device> prefix).
+  const location = useLocation();
+  const onScreen = useRef("");
+  onScreen.current = `${location.pathname}${location.search}`;
   const [coreReady, setCoreReady] = useState(false);
   const [coreError, setCoreError] = useState<string | null>(null);
+  const [cloudIssue, setCloudIssue] = useState<CloudIssue | null>(null);
 
   useEffect(() => {
     getCoreInfo()
@@ -50,11 +59,27 @@ export function App() {
 
   useEffect(() => {
     setUnauthorizedHandler(() => qc.invalidateQueries({ queryKey: qk.authStatus }));
+    // Cloud mode: an offline computer or a used-up plan replaces the whole dashboard until it clears.
+    setCloudIssueHandler((issue) => setCloudIssue((prev) => (prev?.kind === issue.kind ? prev : issue)));
   }, [qc]);
 
-  const auth = useQuery({ queryKey: qk.authStatus, queryFn: api.auth.status, enabled: coreReady, retry: 30, retryDelay: 500 });
+  // The cloud's own answers (offline, signed out, plan limit) come back at once; retrying them only delays the page.
+  const auth = useQuery({
+    queryKey: qk.authStatus,
+    queryFn: api.auth.status,
+    enabled: coreReady,
+    retry: (count, err) => !isCloudError(err) && count < 30,
+    retryDelay: 500,
+  });
   const authed = auth.data?.authenticated ?? false;
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap, enabled: authed, staleTime: 5_000 });
+
+  const recheck = useCallback(async () => {
+    const status = await api.auth.status();
+    qc.setQueryData(qk.authStatus, status);
+    setCloudIssue(null);
+    await qc.invalidateQueries();
+  }, [qc]);
 
   // Desktop: tell the shell whether closing the window should keep Godmode running in the tray.
   const minimizeToTray = boot.data?.settings.general.minimizeToTray;
@@ -73,21 +98,72 @@ export function App() {
   useEffect(() => {
     if (!authed) return;
     return onServerEvent((event) => {
+      // A question that was answered or withdrawn (here, in another window, on the phone) takes its toast along.
+      if (event.type === "question.updated" && event.question.status !== "open") {
+        const q = event.question;
+        toast.dismiss(`question:${q.taskId ? `/tasks?task=${q.taskId}` : `/chat/${q.conversationId}`}`);
+        return;
+      }
+      if (event.type === "notification" && event.notification.kind === "question") {
+        // An agent waits for the human: a toast that leads to the question, unless it is on screen already.
+        const n = event.notification;
+        const here = !!n.link && onScreen.current === n.link && document.hasFocus();
+        if (here) {
+          void api.notifications.read([n.id]).catch(() => undefined);
+          return;
+        }
+        toast.warning(n.title, {
+          id: n.link ? `question:${n.link}` : undefined,
+          description: n.body || undefined,
+          duration: 20_000,
+          action: n.link ? { label: "Answer", onClick: () => navigate(n.link!) } : undefined,
+        });
+        const desktopOn = qc.getQueryData<{ settings?: { general?: { desktopNotifications?: boolean } } }>(qk.bootstrap)?.settings?.general
+          ?.desktopNotifications;
+        if (desktopOn !== false && !document.hasFocus()) void notifyDesktop(n.title, n.body);
+        return;
+      }
       if (event.type === "notification") {
         const n = event.notification;
         const fn = n.kind === "error" ? toast.error : n.kind === "warning" || n.kind === "missing_login" ? toast.warning : n.kind === "success" ? toast.success : toast;
-        fn(n.title, { description: n.body || undefined });
+        const here = !!n.link && onScreen.current === n.link && document.hasFocus();
+        // Already on screen: nothing to pop up, it's read.
+        if (here) {
+          void api.notifications.read([n.id]).catch(() => undefined);
+          return;
+        }
+        fn(n.title, {
+          description: n.body || undefined,
+          action: n.link
+            ? {
+                label: "Open",
+                onClick: () => {
+                  navigate(n.link!);
+                  void api.notifications.read([n.id]).catch(() => undefined);
+                },
+              }
+            : undefined,
+        });
         const desktopOn = qc.getQueryData<{ settings?: { general?: { desktopNotifications?: boolean } } }>(qk.bootstrap)?.settings?.general
           ?.desktopNotifications;
         if (desktopOn !== false && !document.hasFocus()) void notifyDesktop(n.title, n.body);
       }
     });
-  }, [authed, qc]);
+  }, [authed, qc, navigate]);
 
   if (coreError) return <SplashScreen error={coreError} />;
+  if (cloudContext) {
+    const state = cloudIssue ?? cloudBlock(auth.error, auth.data?.authenticated, boot.error, boot.data);
+    if (state) return <CloudStatePage cloud={cloudContext} state={state} onRetry={recheck} />;
+  }
   if (!coreReady || auth.isLoading) return <SplashScreen />;
-  if (auth.isError) return <SplashScreen error="Cannot reach the Godmode core." />;
-  if (!authed) return <LoginPage hasPassword={auth.data?.hasDashboardPassword ?? false} />;
+  if (auth.isError) {
+    // Signed out of the cloud: the browser is already on its way to the sign-in page.
+    if (auth.error instanceof ApiRequestError && auth.error.code === CloudErrorCode.CloudUnauthorized) return <SplashScreen />;
+    return <SplashScreen error={cloudContext ? "Cannot reach this computer through Godmode Cloud." : "Cannot reach the Godmode core."} />;
+  }
+  // In cloud mode the cloud signs people in; the core's own sign-in page never shows there.
+  if (!authed) return cloudContext ? <SplashScreen /> : <LoginPage hasPassword={auth.data?.hasDashboardPassword ?? false} />;
   if (!boot.data) return <SplashScreen />;
 
   const b = boot.data;
@@ -118,6 +194,7 @@ export function App() {
           <Route path="/computer" element={<ComputerPage />} />
           <Route path="/vms" element={<VmsPage />} />
           <Route path="/ssh" element={<SshPage />} />
+          <Route path="/runners" element={<RunnersPage />} />
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
           <Route path="/settings/:section" element={<SettingsPage />} />
@@ -126,6 +203,30 @@ export function App() {
       </Suspense>
     </AppShell>
   );
+}
+
+/** Cloud mode: the computer refuses this browser, or can't be used from here yet. */
+function cloudBlock(authError: unknown, authenticated: boolean | undefined, bootError: unknown, boot: Bootstrap | undefined): CloudState | null {
+  for (const err of [authError, bootError]) {
+    if (err instanceof ApiRequestError && (err.code === CloudErrorCode.CloudForbidden || err.code === CloudErrorCode.DeviceNotFound)) {
+      return { kind: "blocked", title: "Can't open this computer", message: err.message };
+    }
+  }
+  if (authenticated === false) {
+    return {
+      kind: "blocked",
+      title: "Browser access is off",
+      message: "Godmode on this computer doesn't accept browser access through the cloud right now. Turn it on there under Settings → Cloud.",
+    };
+  }
+  if (boot && (!boot.vault.initialized || !boot.settings.onboardingComplete)) {
+    return {
+      kind: "blocked",
+      title: "Godmode isn't set up on this computer yet",
+      message: "Finish the setup in Godmode on the computer itself, then open it here again.",
+    };
+  }
+  return null;
 }
 
 function NotFoundRedirect() {

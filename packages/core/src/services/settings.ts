@@ -1,5 +1,5 @@
 import type { Settings } from "@godmode/shared";
-import { DEFAULT_MODEL, DEFAULT_PORT, MOBILE_DEFAULT_PORT } from "@godmode/shared";
+import { DEFAULT_CLOUD_SETTINGS, DEFAULT_MODEL, DEFAULT_PORT, MOBILE_DEFAULT_PORT } from "@godmode/shared";
 import { all, run } from "../db";
 import { bus } from "../events/bus";
 import { parseJson } from "../util";
@@ -19,11 +19,13 @@ export const DEFAULT_SETTINGS: Settings = {
     model: DEFAULT_MODEL,
     fallbackModel: "claude-sonnet-5",
     effort: "high",
+    ultracode: false,
     bypassPermissions: true,
     maxConcurrentRuns: 3,
     runTimeoutMinutes: 60,
     autoContinueOnLimit: true,
     defaultMaxBudgetUsd: null,
+    monthlyBudgetUsd: null,
     extraArgs: [],
     appendSystemPrompt: "",
   },
@@ -98,10 +100,15 @@ export const DEFAULT_SETTINGS: Settings = {
   diagnostics: {
     verbose: false,
   },
+  maintenance: {
+    autoFix: true,
+    autoUpdate: true,
+  },
   mobile: {
     enabled: false,
     port: MOBILE_DEFAULT_PORT,
   },
+  cloud: { ...DEFAULT_CLOUD_SETTINGS },
   onboardingComplete: false,
 };
 

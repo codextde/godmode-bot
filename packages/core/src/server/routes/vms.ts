@@ -26,7 +26,8 @@ import { KeyError } from "../../computer/keys";
 import { badRequest, conflict, sleep } from "../../util";
 import { body, z } from "../validate";
 import { inputEvent } from "./computer";
-import { disableIdleTimeout } from "../../mcp/http";
+import { disableIdleTimeout, expectSlow } from "../../mcp/http";
+import { resetDoctorCache } from "../../services/doctor";
 
 const name = z.string().trim().min(1, "Name is required").max(60);
 const display = z.string().trim().regex(/^\d{3,4}x\d{3,4}$/, 'Display must look like "1440x900"');
@@ -66,7 +67,10 @@ export function registerVmRoutes(app: Hono): void {
   /** Download Godmode's own copy of Tart (pinned version, verified checksum). */
   app.post("/api/vms/install", async (c) => {
     disableIdleTimeout(c);
-    return c.json(await installTart());
+    const result = await installTart();
+    // Settings → System lists Tart among the installed tools.
+    resetDoctorCache();
+    return c.json(result);
   });
 
   app.get("/api/vms", async (c) => c.json(await listVms()));
@@ -91,6 +95,7 @@ export function registerVmRoutes(app: Hono): void {
 
   app.post("/api/vms/:id/start", async (c) => {
     const id = c.req.param("id");
+    expectSlow(c);
     await startSoon(id);
     return c.json(await getVm(id));
   });

@@ -1,12 +1,23 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { MAX_TASK_TITLE_LENGTH, TASK_TYPES, type Agent, type TaskType } from "@godmode/shared";
+import {
+  MAX_TASK_DESCRIPTION_LENGTH,
+  MAX_TASK_TITLE_LENGTH,
+  TASK_TYPES,
+  taskAttachmentMarkdown,
+  type Agent,
+  type TaskAttachment,
+  type TaskType,
+} from "@godmode/shared";
+import { AttachmentTray } from "@/components/attachments";
 import { CharacterAvatar } from "@/components/character";
+import { Icon } from "@/components/icon";
 import { TYPE_META } from "@/components/task-row";
 import { Button, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
+import { usePendingFiles } from "@/lib/attachments";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
@@ -25,15 +36,31 @@ export default function NewTask() {
   const [description, setDescription] = useState("");
   const [type, setType] = useState<TaskType>("general");
   const [picked, setPicked] = useState<string | undefined>(agentId);
+  const { files, attach, remove } = usePendingFiles();
   const [saving, setSaving] = useState(false);
+  const uploads = useRef(new Map<string, TaskAttachment>());
   const agent = picked === NONE ? undefined : (agents.find((a) => a.id === picked) ?? agents[0]);
 
   const create = async () => {
     const name = title.trim();
     if (!name) return;
+    // Every link takes its name twice plus the url; checked before anything is uploaded.
+    const links = files.reduce((sum, f) => sum + f.name.length * 3 + 64, 0);
+    if (description.trim().length + links > MAX_TASK_DESCRIPTION_LENGTH) {
+      Alert.alert("The details are too long", "Shorten the text or attach fewer files.");
+      return;
+    }
     setSaving(true);
     try {
-      const task = await api.tasks.create({ workspaceId, title: name, description: description.trim() || undefined, type, agentId: agent?.id ?? null });
+      const attachments = [];
+      for (const f of files) {
+        // A retry after a failed create doesn't upload the same file again.
+        const done = uploads.current.get(f.id) ?? (await api.tasks.upload(f));
+        uploads.current.set(f.id, done);
+        attachments.push(done);
+      }
+      const details = [description.trim(), ...attachments.map(taskAttachmentMarkdown)].filter(Boolean).join("\n\n");
+      const task = await api.tasks.create({ workspaceId, title: name, description: details || undefined, type, agentId: agent?.id ?? null });
       void queryClient.invalidateQueries({ queryKey: qk.tasks });
       router.dismiss();
       router.push({ pathname: "/task/[id]", params: { id: task.id } });
@@ -79,6 +106,27 @@ export default function NewTask() {
           multiline
           style={[styles.description, { color: c.text }]}
         />
+        {files.length > 0 && <AttachmentTray files={files} busy={saving} onRemove={remove} />}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={files.length ? `Add more files, ${files.length} added` : "Add photos or files"}
+          disabled={saving}
+          onPress={() => {
+            tap();
+            void attach();
+          }}
+          style={({ pressed }) => [styles.attach, { borderTopColor: c.border, opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Icon name="attach" size={15} color={c.textMuted} />
+          <T variant="subhead" muted style={{ flex: 1 }}>
+            {files.length ? "Add more" : "Add photos or files"}
+          </T>
+          {files.length > 0 && (
+            <T variant="footnote" color={c.textFaint}>
+              {files.length === 1 ? "1 file" : `${files.length} files`}
+            </T>
+          )}
+        </Pressable>
       </View>
 
       <View style={{ gap: space.sm }}>
@@ -170,6 +218,15 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     textAlignVertical: "top",
+  },
+  attach: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+    paddingHorizontal: space.lg,
+    paddingVertical: 13,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   chips: {
     flexDirection: "row",

@@ -21,10 +21,25 @@ import {
   TriangleAlert,
   UserRound,
   Users,
+  Workflow,
   Wrench,
 } from "lucide-react";
 import type { Agent, AgentCharacter, AgentInput, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
-import { DEFAULT_MODEL, EFFORT_LABELS, EFFORT_OPTIONS, characterGreeting, defaultCharacter, effortForModel, findModel } from "@godmode/shared";
+import {
+  DEFAULT_MODEL,
+  EFFORT_LABELS,
+  EFFORT_OPTIONS,
+  MAX_AGENT_ROLE_LENGTH,
+  ULTRACODE_HINT,
+  characterGreeting,
+  defaultCharacter,
+  effortForModel,
+  findModel,
+  leadProblem,
+  normalizeRole,
+  reportsOf,
+  withinReach,
+} from "@godmode/shared";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useModelCatalog, useSshServers, useVmChoices, useWorkspaces } from "@/lib/hooks";
@@ -67,14 +82,22 @@ export interface AgentFormValues {
   personality: string;
   description: string;
   instructions: string;
+  /** Job title on the team. */
+  role: string;
+  /** Its lead; null = the built-in agent. */
+  reportsTo: string | null;
   workspaceId: string | null;
   model: string;
   effort: Effort | null;
+  /** null = the global default. */
+  ultracode: boolean | null;
   secretAccess: SecretAccessMode;
   allowDelegation: boolean;
   delegateTo: string[];
   canManageAgents: boolean;
   maxBudgetUsd: string;
+  /** What it may cost per calendar month; "" = no budget. */
+  monthlyBudgetUsd: string;
   browserEnabled: boolean;
   browserProfileId: string | null;
   headless: boolean | null;
@@ -104,14 +127,18 @@ export function agentToValues(
     personality: source?.personality ?? "",
     description: source?.description ?? "",
     instructions: source?.instructions ?? "",
+    role: source?.role ?? "",
+    reportsTo: source?.reportsTo ?? null,
     workspaceId: source?.workspaceId !== undefined ? source.workspaceId : (defaults.workspaceId ?? null),
     model: source?.model ?? "",
     effort: source?.effort ?? null,
+    ultracode: source?.ultracode ?? null,
     secretAccess: source?.permissions?.secretAccess ?? defaults.secretAccess ?? "fill",
     allowDelegation: source?.permissions?.allowDelegation ?? true,
     delegateTo: source?.permissions?.delegateTo ?? [],
     canManageAgents: source?.permissions?.canManageAgents ?? false,
     maxBudgetUsd: source?.permissions?.maxBudgetUsd != null ? String(source.permissions.maxBudgetUsd) : "",
+    monthlyBudgetUsd: source?.permissions?.monthlyBudgetUsd != null ? String(source.permissions.monthlyBudgetUsd) : "",
     browserEnabled: source?.browser?.enabled ?? true,
     browserProfileId: source?.browser?.profileId ?? null,
     headless: source?.browser?.headless ?? null,
@@ -128,6 +155,7 @@ export function agentToValues(
 
 export function valuesToInput(v: AgentFormValues): AgentInput {
   const budget = v.maxBudgetUsd.trim() ? Number(v.maxBudgetUsd) : null;
+  const monthly = v.monthlyBudgetUsd.trim() ? Number(v.monthlyBudgetUsd) : null;
   return {
     workspaceId: v.workspaceId,
     name: v.name.trim(),
@@ -137,14 +165,18 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
     personality: v.personality.trim(),
     description: v.description.trim(),
     instructions: v.instructions,
+    role: normalizeRole(v.role),
+    reportsTo: v.reportsTo,
     model: v.model,
     effort: v.effort,
+    ultracode: v.ultracode,
     permissions: {
       secretAccess: v.secretAccess,
       allowDelegation: v.allowDelegation,
       delegateTo: v.allowDelegation ? v.delegateTo : [],
       canManageAgents: v.canManageAgents,
       maxBudgetUsd: budget != null && Number.isFinite(budget) && budget > 0 ? budget : null,
+      monthlyBudgetUsd: monthly != null && Number.isFinite(monthly) && monthly > 0 ? monthly : null,
     },
     browser: { enabled: v.browserEnabled, profileId: v.browserProfileId, headless: v.headless },
     computer: { enabled: v.computerEnabled, target: v.computerDisplayId ? { kind: "display", displayId: v.computerDisplayId } : null },
@@ -174,6 +206,10 @@ function validate(v: AgentFormValues): Record<string, string> {
     const n = Number(v.maxBudgetUsd);
     if (!Number.isFinite(n) || n <= 0) errors.maxBudgetUsd = "Enter a positive amount, or leave empty for no limit";
   }
+  if (v.monthlyBudgetUsd.trim()) {
+    const n = Number(v.monthlyBudgetUsd);
+    if (!Number.isFinite(n) || n <= 0) errors.monthlyBudgetUsd = "Enter a positive amount, or leave empty for no budget";
+  }
   const names = new Set<string>();
   v.subagents.forEach((s, i) => {
     const n = slugify(s.name);
@@ -187,6 +223,7 @@ function validate(v: AgentFormValues): Record<string, string> {
 
 const SECTIONS = [
   { id: "identity", label: "Identity" },
+  { id: "team", label: "Team" },
   { id: "personality", label: "Personality" },
   { id: "instructions", label: "Instructions" },
   { id: "brain", label: "Model" },
@@ -242,6 +279,9 @@ export function AgentForm({
   const dirty = JSON.stringify(values) !== JSON.stringify(seed);
   const effectiveModel = findModel(catalog.models, values.model || boot?.settings.runner.model || DEFAULT_MODEL);
   const efforts: readonly Effort[] = effectiveModel?.efforts ?? EFFORT_OPTIONS;
+  // A custom model id: possible whenever this Claude Code has Ultracode at all.
+  const anyUltracode = catalog.models.some((m) => m.ultracode);
+  const ultracodeAvailable = effectiveModel ? effectiveModel.ultracode : anyUltracode;
 
   const errors = validate(values);
   const hasErrors = Object.keys(errors).length > 0;
@@ -264,7 +304,7 @@ export function AgentForm({
     if (hasErrors) {
       setShowErrors(true);
       const first = Object.keys(errors)[0];
-      document.getElementById(first === "name" ? "agent-name" : first.startsWith("subagent") ? "subagents-list" : "agent-budget")?.focus();
+      document.getElementById(first === "name" ? "agent-name" : first.startsWith("subagent") ? "subagents-list" : first === "monthlyBudgetUsd" ? "agent-month-budget" : "agent-budget")?.focus();
       return;
     }
     onSubmit(valuesToInput(values));
@@ -337,6 +377,20 @@ export function AgentForm({
                   {err("name") && <p className="text-xs text-destructive">{err("name")}</p>}
                 </div>
                 <div className="space-y-1.5">
+                  <Label htmlFor="agent-role">Role</Label>
+                  <Input
+                    id="agent-role"
+                    value={values.role}
+                    onChange={(e) => set("role", e.target.value)}
+                    placeholder={isDefault ? "e.g. Chief of staff" : "e.g. Bookkeeper"}
+                    maxLength={MAX_AGENT_ROLE_LENGTH}
+                    aria-describedby="agent-role-hint"
+                  />
+                  <p id="agent-role-hint" className="text-xs text-muted-foreground">
+                    Its job title — shown under its name and told to its teammates.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
                   <Label htmlFor="agent-description">Short description</Label>
                   <Input
                     id="agent-description"
@@ -365,6 +419,21 @@ export function AgentForm({
           </FormSection>
 
           <FormSection
+            id="team"
+            title="Team"
+            description="Where it sits on your team. Every agent is told who leads it and who does what, so work goes to the right one."
+          >
+            <TeamField
+              agentId={agentId}
+              isDefault={isDefault}
+              name={values.name}
+              workspaceId={values.workspaceId}
+              value={values.reportsTo}
+              onChange={(v) => set("reportsTo", v)}
+            />
+          </FormSection>
+
+          <FormSection
             id="personality"
             title="Personality"
             description="How it talks to you — greetings, updates and reports. Goes into the agent's CLAUDE.md."
@@ -375,7 +444,7 @@ export function AgentForm({
           <FormSection
             id="instructions"
             title="Instructions"
-            description="Standing orders: its role, how it should work, what to always or never do. Goes into the agent's CLAUDE.md."
+            description="Standing orders: how it should work, what to always or never do. Goes into the agent's CLAUDE.md."
           >
             <Textarea
               id="agent-instructions"
@@ -449,6 +518,36 @@ export function AgentForm({
                   : `${effectiveModel?.label ?? "This model"} doesn't use effort levels.`}
               </p>
             </div>
+            <div className="mt-4 space-y-1.5">
+              <span id="agent-ultracode-label" className="flex items-center gap-1.5 text-sm font-medium">
+                <Workflow className="size-4 text-muted-foreground" /> Ultracode
+              </span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                value={values.ultracode === null ? "default" : values.ultracode ? "on" : "off"}
+                onValueChange={(v) => v && set("ultracode", v === "default" ? null : v === "on")}
+                aria-labelledby="agent-ultracode-label"
+                className="w-full"
+              >
+                <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
+                  Default
+                </ToggleGroupItem>
+                <ToggleGroupItem value="on" disabled={!ultracodeAvailable} className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
+                  On
+                </ToggleGroupItem>
+                <ToggleGroupItem value="off" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
+                  Off
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <p className="text-xs text-muted-foreground">
+                {ultracodeAvailable
+                  ? ULTRACODE_HINT
+                  : anyUltracode
+                    ? `${effectiveModel?.label ?? "This model"} doesn't support Ultracode.`
+                    : "The installed Claude Code doesn't offer Ultracode."}
+              </p>
+            </div>
           </FormSection>
 
           <FormSection
@@ -504,8 +603,8 @@ export function AgentForm({
               <ToggleRow
                 id="agent-delegation"
                 icon={<Users className="size-4" />}
-                title="Can delegate to other agents"
-                description="Hand sub-tasks to peer agents and use their results."
+                title="Can hand work to teammates"
+                description="Hand parts of a task to other agents and use their results."
                 checked={values.allowDelegation}
                 onChange={(v) => set("allowDelegation", v)}
               />
@@ -517,7 +616,13 @@ export function AgentForm({
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden"
                   >
-                    <DelegateField agentId={agentId} value={values.delegateTo} onChange={(v) => set("delegateTo", v)} />
+                    <DelegateField
+                      agentId={agentId}
+                      workspaceId={values.workspaceId}
+                      canManageAgents={values.canManageAgents}
+                      value={values.delegateTo}
+                      onChange={(v) => set("delegateTo", v)}
+                    />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -549,6 +654,28 @@ export function AgentForm({
                   <p className="text-xs text-destructive">{err("maxBudgetUsd")}</p>
                 ) : (
                   <p className="text-xs text-muted-foreground">A run stops when it would cost more than this.</p>
+                )}
+              </div>
+              <div className="grid gap-1.5 @md:max-w-xs">
+                <Label htmlFor="agent-month-budget">Monthly budget</Label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                  <Input
+                    id="agent-month-budget"
+                    inputMode="decimal"
+                    value={values.monthlyBudgetUsd}
+                    onChange={(e) => set("monthlyBudgetUsd", e.target.value.replace(",", "."))}
+                    placeholder="No budget"
+                    aria-invalid={!!err("monthlyBudgetUsd")}
+                    className="pl-7"
+                  />
+                </div>
+                {err("monthlyBudgetUsd") ? (
+                  <p className="text-xs text-destructive">{err("monthlyBudgetUsd")}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    What {values.name.trim() || "it"} may cost in a calendar month. When it's used up, its automations, follow-ups and board tickets wait for you — chats you start still run.
+                  </p>
                 )}
               </div>
             </div>
@@ -991,24 +1118,174 @@ function WorkspaceField({ value, onChange, disabled }: { value: string | null; o
   );
 }
 
-function DelegateField({ agentId, value, onChange }: { agentId?: string; value: string[]; onChange: (v: string[]) => void }) {
+function DelegateField({
+  agentId,
+  workspaceId,
+  canManageAgents,
+  value,
+  onChange,
+}: {
+  agentId?: string;
+  workspaceId: string | null;
+  canManageAgents: boolean;
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
   const { data: agents = [] } = useAllAgents();
-  const options = agents
-    .filter((a) => a.id !== agentId)
-    .map((a) => ({ value: a.id, label: a.name, icon: <AgentAvatar agent={a} size="sm" still className="size-5" />, hint: a.description }));
+  // The core's own rule (withinReach): global agents and its workspace; a manager reaches everyone.
+  const reach = { id: agentId ?? "", workspaceId, canManageAgents };
+  const inReach = agents.filter((a) => a.id !== agentId && withinReach(reach, a));
+  const options = inReach.map((a) => ({
+    value: a.id,
+    label: a.name,
+    icon: <AgentAvatar agent={a} size="sm" still className="size-5" />,
+    hint: [a.role, a.enabled ? "" : "switched off", a.description].filter(Boolean).join(" · "),
+  }));
+  const outOfReach = value.flatMap((id) => {
+    const a = agents.find((x) => x.id === id);
+    return a && !withinReach(reach, a) ? [a] : [];
+  });
+  const listed = value.flatMap((id) => inReach.filter((a) => a.id === id));
+  const names = (list: Agent[]) => (list.length > 4 ? `${list.slice(0, 4).map((a) => a.name).join(", ")} and ${list.length - 4} more` : list.map((a) => a.name).join(", "));
   return (
     <div className="space-y-1.5 pl-11">
       <Label htmlFor="agent-delegate-to" className="text-xs text-muted-foreground">
-        Allowed peers <span className="font-normal">(empty = any agent it can see)</span>
+        Can hand work to <span className="font-normal">(empty = any teammate in reach)</span>
       </Label>
       <MultiSelect
         id="agent-delegate-to"
         options={options}
-        value={value}
-        onChange={onChange}
-        placeholder="Any agent"
-        emptyText="No other agents yet."
+        value={value.filter((id) => inReach.some((a) => a.id === id))}
+        onChange={(next) => onChange([...next, ...outOfReach.map((a) => a.id)])}
+        placeholder="Any teammate in reach"
+        emptyText="No other agents in reach yet."
       />
+      <p className="text-xs text-muted-foreground">
+        {value.length === 0
+          ? inReach.length
+            ? `Reaches ${inReach.length} agent${inReach.length === 1 ? "" : "s"}: ${names(inReach)}.`
+            : "No other agents in reach yet."
+          : listed.length
+            ? `Hands work to: ${names(listed)}.`
+            : "Nobody on this list is in reach, so it can't hand work to anyone."}
+      </p>
+      {outOfReach.map((a) => (
+        <p key={a.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-warning/10 px-2 py-1 text-xs text-foreground">
+          <TriangleAlert className="size-3.5 shrink-0 text-warning" aria-hidden />
+          <span className="min-w-0 flex-1">{a.name} works in another workspace, so it can't be reached.</span>
+          <Button type="button" size="xs" variant="ghost" onClick={() => onChange(value.filter((id) => id !== a.id))}>
+            Remove
+          </Button>
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/** "Reports to": its lead on the org chart (the built-in agent by default), and who it leads. Grants nothing. */
+function TeamField({
+  agentId,
+  isDefault,
+  name,
+  workspaceId,
+  value,
+  onChange,
+}: {
+  agentId?: string;
+  isDefault: boolean;
+  name: string;
+  workspaceId: string | null;
+  value: string | null;
+  onChange: (v: string | null) => void;
+}) {
+  const { data: agents = [] } = useAllAgents();
+  const builtin = agents.find((a) => a.isDefault);
+  const self = { id: agentId ?? "__new", workspaceId, isDefault, reportsTo: value };
+  const team = agents.some((a) => a.id === self.id) ? agents.map((a) => (a.id === self.id ? { ...a, ...self } : a)) : [...agents, self];
+  const leads = agents.filter((a) => !a.isDefault && a.id !== agentId && !leadProblem(self, a, team));
+  const reports = agentId ? reportsOf(self, agents).filter((a) => a.id !== agentId) : [];
+  const current = value ? agents.find((a) => a.id === value) : null;
+  const [resetNote, setResetNote] = useState<string | null>(null);
+
+  // A new workspace can put the chosen lead out of bounds: back to the built-in agent, and say why.
+  useEffect(() => {
+    if (!current) return;
+    if (leadProblem(self, current, team) === "workspace") {
+      setResetNote(`Reset to ${builtin?.name ?? "Godmode"}: ${current.name} works in another workspace.`);
+      onChange(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId, current?.id]);
+
+  if (isDefault) {
+    return (
+      <div className="space-y-3 text-sm">
+        <p className="text-muted-foreground">{builtin?.name ?? "Godmode"} leads the team and reports to you. Every agent without a lead of its own reports to it.</p>
+        <LedBy agents={reportsOf({ ...self, isDefault: true }, agents)} />
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5 @md:max-w-sm">
+        <Label htmlFor="agent-reports-to">Reports to</Label>
+        <Select
+          value={value ?? "__builtin"}
+          onValueChange={(v) => {
+            setResetNote(null);
+            onChange(v === "__builtin" ? null : v);
+          }}
+        >
+          <SelectTrigger id="agent-reports-to" className="w-full" aria-describedby="agent-reports-to-hint">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            <SelectItem value="__builtin">
+              <span className="flex items-center gap-2">
+                {builtin && <AgentAvatar agent={builtin} size="sm" still className="size-5" />}
+                {builtin?.name ?? "Godmode"} <span className="text-muted-foreground">— built-in</span>
+              </span>
+            </SelectItem>
+            {leads.length > 0 && <SelectSeparator />}
+            {leads.map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                <span className="flex min-w-0 items-center gap-2">
+                  <AgentAvatar agent={a} size="sm" still className="size-5" />
+                  <span className="truncate">{a.name}</span>
+                  {(a.role || !a.enabled) && <span className="truncate text-muted-foreground">{[a.role, a.enabled ? "" : "switched off"].filter(Boolean).join(" · ")}</span>}
+                </span>
+              </SelectItem>
+            ))}
+            {current && !leads.some((a) => a.id === current.id) && (
+              <SelectItem value={current.id} disabled>
+                {current.name}
+              </SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+        <p id="agent-reports-to-hint" className="text-xs text-muted-foreground">
+          {resetNote ?? `Its lead on the org chart${name.trim() ? ` — ${name.trim()} hears who that is` : ""}. This doesn't change what it is allowed to do.`}
+        </p>
+      </div>
+      <LedBy agents={reports} />
+    </div>
+  );
+}
+
+function LedBy({ agents }: { agents: Agent[] }) {
+  if (!agents.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <span>Leads</span>
+      {agents.slice(0, 12).map((a) => (
+        <Link key={a.id} to={`/agents/${a.id}`} title={[a.name, a.role].filter(Boolean).join(" · ")} className="rounded-md focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+          <AgentAvatar agent={a} size="sm" still className="size-6" />
+        </Link>
+      ))}
+      {agents.length > 12 && <span>+{agents.length - 12}</span>}
+      <Link to="/agents?view=chart" className="ml-1 underline-offset-2 hover:underline">
+        Org chart
+      </Link>
     </div>
   );
 }

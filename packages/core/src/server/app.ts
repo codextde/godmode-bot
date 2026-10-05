@@ -9,15 +9,17 @@ import { registerSystemRoutes } from "./routes/system";
 import { registerVaultRoutes } from "./routes/vault";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
 import { registerAgentRoutes } from "./routes/agents";
+import { registerSpendRoutes } from "./routes/spend";
 import { registerChatRoutes } from "./routes/chat";
 import { registerMissingLoginRoutes } from "./routes/missingLogins";
+import { registerQuestionRoutes } from "./routes/questions";
 import { registerIntegrationRoutes } from "./routes/integrations";
 import { registerBrowserRoutes } from "./routes/browser";
 import { registerBackupRoutes } from "./routes/backup";
 import { registerVoiceRoutes } from "./routes/voice";
 import { registerFileRoutes } from "./routes/files";
 import { registerFolderRoutes } from "./routes/folders";
-import { registerMcpRoutes } from "../mcp/http";
+import { isExpectedSlow, registerMcpRoutes } from "../mcp/http";
 import { registerComputerRoutes } from "./routes/computer";
 import { registerVmRoutes } from "./routes/vms";
 import { registerSshRoutes } from "./routes/ssh";
@@ -28,6 +30,10 @@ import { handleWebhook } from "../automations/webhooks";
 import { registerMessagingRoutes } from "./routes/messaging";
 import { handleMessagingHook } from "../messaging/service";
 import { registerMobileRoutes } from "./routes/mobile";
+import { registerRunnerRoutes } from "./routes/runners";
+import { registerLinkRoutes } from "./routes/link";
+import { remoteRouting } from "../remote/routing";
+import { registerCloudRoutes } from "./routes/cloud";
 
 const log = logger("http");
 const SLOW_REQUEST_MS = 1000;
@@ -76,7 +82,8 @@ export function createApp() {
     if (!isApiPath(c.req.path)) return;
     const ms = Math.round(performance.now() - started);
     const details = { method: c.req.method, route: c.req.routePath, status: c.res.status, ms };
-    if (ms >= SLOW_REQUEST_MS) log.info("slow request", details);
+    // `expected`: the route waits for something by design (see `expectSlow`), so it says nothing about the core.
+    if (ms >= SLOW_REQUEST_MS) log.info("slow request", isExpectedSlow(c) ? { ...details, expected: true } : details);
     else if (!c.req.path.startsWith("/api/logs")) log.debug("request", details);
   });
 
@@ -134,13 +141,17 @@ export function createApp() {
     if (path === "/api/health" || path.startsWith("/api/auth/") || path === "/api/mobile/pair") return next();
     return requireAuth(c, next);
   });
+  // Requests about a chat that works on a runner (and the runner's screen) are answered by the runner.
+  app.use("/api/*", remoteRouting);
 
   registerSystemRoutes(app);
   registerVaultRoutes(app);
   registerWorkspaceRoutes(app);
   registerAgentRoutes(app);
+  registerSpendRoutes(app);
   registerChatRoutes(app);
   registerMissingLoginRoutes(app);
+  registerQuestionRoutes(app);
   registerIntegrationRoutes(app);
   registerMessagingRoutes(app);
   registerBrowserRoutes(app);
@@ -154,6 +165,9 @@ export function createApp() {
   registerFileRoutes(app);
   registerLogRoutes(app);
   registerMobileRoutes(app);
+  registerRunnerRoutes(app);
+  registerLinkRoutes(app);
+  registerCloudRoutes(app);
 
   app.all("/api/*", (c) => {
     if (!isPublicPath(c.req.path)) logRejection("warn", "unknown API route", { method: c.req.method, path: c.req.path.slice(0, 200) });

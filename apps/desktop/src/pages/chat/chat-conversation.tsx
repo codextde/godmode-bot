@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, SshServer, Vm } from "@godmode/shared";
 import { characterGreeting, computerTargetLabel } from "@godmode/shared";
-import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Sparkles, Wand2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Power, PowerOff, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,7 +14,7 @@ import { SpeechBubble } from "@/components/character";
 import { BrowserFocus, BrowserPanel, BrowserToggle, agentBrowserProfile, useChatBrowser, useChatTab, type BrowserFocusMode } from "@/components/chat/browser-panel";
 import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { ComputerFocus, ComputerPanel, ComputerShareChip, ComputerToggle, type ComputerFocusMode } from "@/components/computer/computer-panel";
-import { useStartAgentChat } from "@/components/agents/agent-actions";
+import { useStartAgentChat, useToggleAgent } from "@/components/agents/agent-actions";
 import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { QueueTray, type QueueTrayHandle } from "@/components/chat/queue-tray";
 import { useArchiveChat } from "@/components/chat/chat-actions";
@@ -22,13 +22,17 @@ import { ConversationHeader } from "@/components/chat/conversation-header";
 import { useConversationMood } from "@/components/chat/conversation-mood";
 import { FollowupBar } from "@/components/chat/followup";
 import { PauseBar, usePauseActions } from "@/components/chat/pause";
+import { QuestionScopeProvider } from "@/components/chat/question-card";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { InstructionsChip } from "@/components/instructions/instructions";
 import { SshChip } from "@/components/ssh/ssh-chip";
-import { VmChip } from "@/components/vms/vm-picker";
+import { RunnerOfflineBar, RunnerPill } from "@/components/runners/runner-chip";
+import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
-import { ChatDropZone, Thread } from "@/components/chat/thread";
+import { ChatDropZone } from "@/components/chat/drop-zone";
+import { Thread } from "@/components/chat/thread";
+import { TurnEnd } from "@/components/chat/turn-end";
 import { ChatFilesScope } from "@/components/chat/local-files";
 import { liveActivityLabel } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
@@ -37,11 +41,13 @@ import { useVoiceSettings } from "@/hooks/use-voice";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useConversation, useWorkspaces } from "@/lib/hooks";
-import { onServerEvent } from "@/lib/realtime";
+import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces } from "@/lib/hooks";
+import { onServerEvent, viewConversation } from "@/lib/realtime";
 import { speak, useVoicePrefs, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
+
+const NO_INHERITED_VMS: InheritedVm[] = [];
 
 export default function ChatConversation() {
   const { conversationId = "" } = useParams();
@@ -59,17 +65,25 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const agentWorkspace = agent?.workspaceId ? workspaces.find((w) => w.id === agent.workspaceId) : undefined;
   const live = useConversationLiveRun(conversationId);
   const voiceSettings = useVoiceSettings();
+  const voiceMode = useUi((s) => s.voiceMode);
   const setVoiceMode = useUi((s) => s.setVoiceMode);
   const armVoice = useVoiceSession((s) => s.arm);
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
   const composerRef = useRef<ComposerHandle>(null);
+  useViewing(conversationId);
   const queueRef = useRef<QueueTrayHandle>(null);
   const mountedAt = useRef(Date.now());
   // A profile picked mid-run applies from the next message: keep showing the browser the running agent drives.
   const [runProfile, setRunProfile] = useState<{ runId: string; profileId: string | null } | null>(null);
   if ((live?.runId ?? null) !== (runProfile?.runId ?? null)) setRunProfile(live ? { runId: live.runId, profileId: conv?.browserProfileId ?? null } : null);
   const chatProfileId = runProfile ? runProfile.profileId : (conv?.browserProfileId ?? null);
-  const browser = useChatBrowser(agent, chatProfileId, conv?.workspaceId ?? null);
+  const chatBrowser = useChatBrowser(agent, chatProfileId, conv?.workspaceId ?? null);
+  // A runner's chat browses in the runner's copy of this profile: its frames come over the link, and whether that
+  // browser runs is the runner's business — the panels show what arrives.
+  const browser = useMemo(
+    () => (conv?.runnerId && chatBrowser ? { ...chatBrowser, running: true, chats: [] } : chatBrowser),
+    [conv?.runnerId, chatBrowser],
+  );
   // The panel appears once the agent opens this chat's own tab (other chats browse in theirs).
   const chatTab = useChatTab(browser, conversationId);
   const browserPanel = useUi((s) => s.browserPanel);
@@ -79,7 +93,13 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const wide = useMediaQuery("(min-width: 1024px)");
   const [browserFocus, setBrowserFocus] = useState<BrowserFocusMode | null>(null);
   const { setArchived } = useArchiveChat();
-  const computerTarget = conv?.computerTarget ?? null;
+  // A chat that lives on a runner does its work there: this computer's folders, shared screens and VMs aren't part of
+  // it, and nothing can be sent while the runner is away.
+  const onRunner = !!conv?.runnerId;
+  const { data: runners } = useRunners();
+  const runner = conv?.runnerId ? (runners?.find((r) => r.id === conv.runnerId) ?? null) : null;
+  const runnerAway = !!runner && runner.state !== "online";
+  const computerTarget = onRunner ? null : (conv?.computerTarget ?? null);
   const computerPanel = useUi((s) => s.computerPanel);
   const setComputerPanel = useUi((s) => s.setComputerPanel);
   const [computerFocus, setComputerFocus] = useState<ComputerFocusMode | null>(null);
@@ -88,14 +108,16 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     agentWorkspace?.vmId ? { vmId: agentWorkspace.vmId, from: `the ${agentWorkspace.name} workspace` } : null,
   ];
   // A chat that works in a VM does everything there: its panel shows the VM, not this Mac's browser or screen.
-  const chatVm = useChatVm(conv?.vmId ?? null, vmInherited);
+  const chatVm = useChatVm(onRunner ? null : (conv?.vmId ?? null), onRunner ? NO_INHERITED_VMS : vmInherited);
   const vmPanel = useUi((s) => s.vmPanel);
   const setVmPanel = useUi((s) => s.setVmPanel);
   const [vmFocus, setVmFocus] = useState(false);
   const showVmPanel = !!chatVm && !!agent && wide && vmPanel;
   // Something shared takes the side panel; the browser stays one click away in the header.
   const showComputerPanel = !chatVm && !!computerTarget && !!agent && wide && computerPanel;
-  const showBrowserPanel = !chatVm && !!browser && !!agent && wide && !showComputerPanel && (browserOpened || (!!chatTab && browserPanel));
+  // On a runner this computer can't see the chat's tab before frames come: the panel shows while the agent works there.
+  const browserActive = !!chatTab || (onRunner && !!live);
+  const showBrowserPanel = !chatVm && !!browser && !!agent && wide && !showComputerPanel && (browserOpened || (browserActive && browserPanel));
   useEffect(() => setBrowserFocus(null), [browser?.id]);
   useEffect(() => {
     if (!computerTarget) setComputerFocus(null);
@@ -107,9 +129,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   // The chat's run stands still (one that continues is live again before the chat says so). Runs that came after it wait.
   const paused = (conv?.paused && conv.paused.runId !== activeRunId && conv.paused) || null;
   const liveMood = useConversationMood(conversationId, messages, live);
-  const mood = paused ? { mood: "idle" as const, label: paused.reason === "limit" ? "Waiting for the limit to reset" : "Paused" } : liveMood;
+  // The run waits for the human's answer to a question or an approval (the card in the thread asks it).
+  const waiting = paused?.reason === "question" ? paused : null;
+  const approval = waiting?.question?.kind === "approval";
+  const mood = waiting
+    ? { mood: "attention" as const, label: approval ? "Needs your OK" : "Needs your answer" }
+    : paused
+      ? { mood: "idle" as const, label: paused.reason === "limit" ? "Waiting for the limit to reset" : paused.reason === "budget" ? "Held — budget used up" : "Paused" }
+      : liveMood;
   const { pause } = usePauseActions(conversationId);
-  const pausing = pause.isPending || live?.activity === "Pausing…";
+  const pausing = pause.isPending || live?.activity === "Pausing…" || live?.activity === "Asking you…";
+  const answeringRef = useRef(false);
+  answeringRef.current = !!waiting;
   const busyRef = useRef(false);
   busyRef.current = !!activeRunId;
   // While the agent works, is paused or older messages still wait, a new message joins the queue.
@@ -153,6 +184,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       const tempId = `pending-${id}`;
       const attachments = (input.attachments ?? []).map((a) => ({ name: a.name, mime: a.mime, path: "", size: Math.round((a.data.length * 3) / 4) }));
       const draft = { conversationId, content: input.content, attachments, createdAt: new Date().toISOString() };
+      // A message to a chat that waits for an answer is the answer: no queue chip, no bubble — the card shows it.
+      if (answeringRef.current && !input.content.trim().startsWith("/")) return { id, tempId: null };
       const queueing = queueingRef.current;
       if (queueing) pendingQueued.set(id, { ...draft, id });
       qc.setQueryData<ConversationWithMessages>(key, (old) =>
@@ -185,6 +218,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         };
       });
       if ("run" in res && input.voice) markVoiceRun(res.run.id);
+      // It was the answer to a question: the card in the thread shows it now.
+      if ("question" in res && res.question) qc.invalidateQueries({ queryKey: key });
       // Also settles the queue when the agent took the message before this answer arrived.
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
     },
@@ -204,11 +239,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     onMutate: (patch) => {
       const old = qc.getQueryData<ConversationWithMessages>(key);
       qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...patch } : c));
-      return { prev: { model: old?.model ?? null, effort: old?.effort ?? null } };
+      return { prev: { model: old?.model ?? null, effort: old?.effort ?? null, ultracode: old?.ultracode ?? null } };
     },
-    onError: (err, _patch, ctx) => {
+    onError: (err, patch, ctx) => {
       if (ctx) qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...ctx.prev } : c));
-      toast.error("Couldn't switch the model", { description: errorMessage(err) });
+      toast.error(patch.ultracode !== undefined && patch.model === undefined ? "Couldn't switch Ultracode" : "Couldn't switch the model", { description: errorMessage(err) });
     },
   });
 
@@ -368,10 +403,13 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const lastMessage = messages[messages.length - 1] ?? null;
   // The agent's dream log: the core refuses messages here, so it reads like a transcript.
   const dreamLog = conv.origin === "dream";
+  // The latest turn, when nothing else is about to happen in the chat: if it ended early, the thread offers to pick it up.
+  const lastTurn =
+    !inflight && !paused && !queue.length && !dreamLog && !runnerAway && agent?.enabled !== false && lastMessage?.role === "assistant" && lastMessage.runId ? lastMessage : null;
 
   return (
     <div className="flex h-full min-h-0">
-      <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="@container flex h-full min-w-0 flex-1 flex-col">
+      <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} disabled={dreamLog || voiceMode} className="@container flex h-full min-w-0 flex-1 flex-col">
         <ConversationHeader
           conversation={conv}
           agent={agent}
@@ -400,24 +438,28 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           }
         />
 
-        <ChatFilesScope conversationId={conversationId}>
-          <Thread
-            messages={visibleMessages}
-            agent={agent}
-            inflight={inflight}
-            onStop={() => activeRunId && cancel.mutate(activeRunId)}
-            stopping={cancel.isPending}
-            onPause={conv.origin === "dream" || live?.trigger === "dream" || live?.trigger === "check" || paused ? undefined : () => pause.mutate()}
-            pausing={pausing}
-            empty={
-              <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
-            }
-          />
+        <ChatFilesScope conversationId={conversationId} runnerId={conv.runnerId}>
+          <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? "The agent", openId: waiting?.question?.id ?? null }}>
+            <Thread
+              messages={visibleMessages}
+              agent={agent}
+              delegatedFrom={conv.delegatedFrom}
+              inflight={inflight}
+              after={lastTurn && <TurnEnd key={lastTurn.id} conversation={conv} message={lastTurn} agent={agent} />}
+              onStop={() => activeRunId && cancel.mutate(activeRunId)}
+              stopping={cancel.isPending}
+              onPause={conv.origin === "dream" || live?.trigger === "dream" || live?.trigger === "check" || paused ? undefined : () => pause.mutate()}
+              pausing={pausing}
+              empty={
+                <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
+              }
+            />
+          </QuestionScopeProvider>
         </ChatFilesScope>
 
         {dreamLog ? (
           <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
-            <DreamLogNote agentId={conv.agentId} agentName={agent?.name ?? "The agent"} />
+            <DreamLogNote agent={agent ?? { id: conv.agentId, name: "The agent", enabled: true }} />
           </div>
         ) : (
           <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
@@ -443,6 +485,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     </div>
                   </motion.div>
                 )}
+                {agent && !agent.enabled && conv.origin !== "dream" && (
+                  <motion.div
+                    key="off"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <SwitchedOffBar agent={agent} />
+                  </motion.div>
+                )}
                 {paused && (
                   <motion.div
                     key="paused"
@@ -452,7 +506,19 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                     className="overflow-hidden"
                   >
-                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} queued={queue.length} />
+                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} agentId={agent?.id} queued={queue.length} />
+                  </motion.div>
+                )}
+                {runnerAway && (
+                  <motion.div
+                    key="runner-away"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <RunnerOfflineBar runner={runner} />
                   </motion.div>
                 )}
                 {conv.followup && (
@@ -484,16 +550,22 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 agentId={conv.agentId}
                 autoFocus
                 running={!!activeRunId && !paused}
+                blocked={agent && !agent.enabled ? `Switch ${agent.name} on to send` : undefined}
+                disabled={runnerAway}
                 onRecall={() => queueRef.current?.editLast() ?? false}
                 leading={
                   <>
-                    <FolderChip
-                      chatFolder={conv.workingDirectory}
-                      agentFolder={agent?.workingDirectory ?? null}
-                      agentName={agent?.name}
-                      onChange={(path) => setFolder.mutate(path)}
-                      busy={setFolder.isPending}
-                    />
+                    {onRunner ? (
+                      <RunnerPill runner={runner} />
+                    ) : (
+                      <FolderChip
+                        chatFolder={conv.workingDirectory}
+                        agentFolder={agent?.workingDirectory ?? null}
+                        agentName={agent?.name}
+                        onChange={(path) => setFolder.mutate(path)}
+                        busy={setFolder.isPending}
+                      />
+                    )}
                     {!chatVm && (
                       <>
                         <BrowserProfileChip
@@ -503,13 +575,15 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                           onChange={(id) => setBrowserProfile.mutateAsync(id).catch(() => undefined)}
                           busy={setBrowserProfile.isPending}
                         />
-                        <ComputerShareChip
-                          target={computerTarget}
-                          agentName={agent?.name}
-                          onShare={(t) => share.mutateAsync(t)}
-                          onWatch={() => setComputerFocus("watch")}
-                          busy={share.isPending}
-                        />
+                        {!onRunner && (
+                          <ComputerShareChip
+                            target={computerTarget}
+                            agentName={agent?.name}
+                            onShare={(t) => share.mutateAsync(t)}
+                            onWatch={() => setComputerFocus("watch")}
+                            busy={share.isPending}
+                          />
+                        )}
                       </>
                     )}
                     <SshChip
@@ -518,12 +592,14 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                       onChange={(ids) => setSshServers.mutateAsync(ids).catch(() => undefined)}
                       busy={setSshServers.isPending}
                     />
-                    <VmChip
-                      value={conv.vmId ?? null}
-                      inherited={vmInherited}
-                      onChange={(vmId) => setVm.mutateAsync(vmId).catch(() => undefined)}
-                      busy={setVm.isPending}
-                    />
+                    {!onRunner && (
+                      <VmChip
+                        value={conv.vmId ?? null}
+                        inherited={vmInherited}
+                        onChange={(vmId) => setVm.mutateAsync(vmId).catch(() => undefined)}
+                        busy={setVm.isPending}
+                      />
+                    )}
                     <InstructionsChip
                       value={conv.instructions ?? ""}
                       agent={agent}
@@ -532,18 +608,34 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     />
                   </>
                 }
-                sendHint={paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : undefined}
+                sendHint={waiting ? "Send answer" : paused ? (paused.reason === "limit" || paused.reason === "budget" ? "Queue message" : "Send and continue") : undefined}
                 placeholder={
-                  !agent
+                  runnerAway
+                    ? runner.state === "connecting"
+                      ? `Connecting to ${runner.name}…`
+                      : `${runner.name} ${runner.state === "offline" ? "is offline" : "needs an update"}`
+                    : !agent
                     ? "Message…"
+                    : !agent.enabled
+                      ? `${agent.name} is switched off — your message waits here as a draft`
+                    : waiting
+                      ? approval
+                        ? `Reply to ${agent.name} — or use Approve / Decline above`
+                        : `Answer ${agent.name}…`
                     : paused?.reason === "user"
                       ? `Message ${agent.name} to continue with new instructions…`
                       : paused
-                        ? `Message ${agent.name} — it goes along when the limit resets`
+                        ? paused.reason === "budget"
+                          ? `Message ${agent.name} — it goes along when the run continues`
+                          : `Message ${agent.name} — it goes along when the limit resets`
                         : `Message ${agent.name} — or type / for commands`
                 }
                 trailing={
-                  <ModelPicker agent={agent} value={{ model: conv.model ?? null, effort: conv.effort ?? null }} onChange={(patch) => choose.mutate(patch)} />
+                  <ModelPicker
+                    agent={agent}
+                    value={{ model: conv.model ?? null, effort: conv.effort ?? null, ultracode: conv.ultracode ?? null }}
+                    onChange={(patch) => choose.mutate(patch)}
+                  />
                 }
                 onSubmit={(input) => send.mutateAsync({ ...input, queueId: newQueueId() })}
               />
@@ -613,8 +705,28 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   );
 }
 
+/** A switched-off agent answers nothing: say so where the human types, with the way back. */
+function SwitchedOffBar({ agent }: { agent: Agent }) {
+  const toggle = useToggleAgent();
+  return (
+    <div className="mb-2 flex items-center gap-3 rounded-xl border bg-card py-2 pr-2 pl-2.5 shadow-card" role="status">
+      <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-muted text-muted-foreground">
+        <PowerOff className="size-4" aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1 leading-snug">
+        <p className="truncate text-[13px] font-medium">{agent.name} is switched off</p>
+        <p className="text-xs text-muted-foreground">It doesn't answer, run its automations or take handoffs until you switch it on.</p>
+      </div>
+      <Button size="sm" variant="outline" className="shrink-0" disabled={toggle.isPending} onClick={() => toggle.mutate({ id: agent.id, enabled: true })}>
+        {toggle.isPending ? <Spinner /> : <Power />} Switch on
+      </Button>
+    </div>
+  );
+}
+
 /** Footer of an agent's dream log: nothing to send here — point to a fresh chat instead. */
-function DreamLogNote({ agentId, agentName }: { agentId: string; agentName: string }) {
+function DreamLogNote({ agent }: { agent: Pick<Agent, "id" | "name" | "enabled"> }) {
+  const agentName = agent.name;
   const chat = useStartAgentChat();
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border bg-card px-4 py-3 text-[13px] text-muted-foreground shadow-card">
@@ -624,7 +736,7 @@ function DreamLogNote({ agentId, agentName }: { agentId: string; agentName: stri
       <span className="min-w-0 flex-1 basis-56">
         This is where <span className="font-medium text-foreground">{agentName}</span> dreams — start a new chat to talk to it.
       </span>
-      <Button size="sm" variant="outline" disabled={chat.isPending} onClick={() => chat.mutate(agentId)}>
+      <Button size="sm" variant="outline" disabled={chat.isPending} onClick={() => chat.mutate(agent)}>
         {chat.isPending ? <Spinner /> : <MessageSquarePlus />} New chat
       </Button>
     </div>
@@ -699,4 +811,22 @@ function ConversationSkeleton() {
       </div>
     </div>
   );
+}
+
+/** While this chat is on screen in a focused window, the core knows: it's read, and its runs don't notify. */
+function useViewing(conversationId: string | undefined) {
+  useEffect(() => {
+    if (!conversationId) return;
+    const update = () => viewConversation(document.visibilityState === "visible" && document.hasFocus() ? conversationId : null);
+    update();
+    window.addEventListener("focus", update);
+    window.addEventListener("blur", update);
+    document.addEventListener("visibilitychange", update);
+    return () => {
+      window.removeEventListener("focus", update);
+      window.removeEventListener("blur", update);
+      document.removeEventListener("visibilitychange", update);
+      viewConversation(null);
+    };
+  }, [conversationId]);
 }

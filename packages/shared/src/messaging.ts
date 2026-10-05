@@ -83,8 +83,20 @@ export interface MessagingUser {
   name: string;
   username: string | null;
   status: MessagingUserStatus;
+  /**
+   * "This is me": the human who owns this Godmode, writing from this platform account. Only they get an agent's
+   * questions and approval requests in their chat and can answer them there; everyone else is told the agent is
+   * checking with the owner. Marking someone as the owner also approves them.
+   */
+  isOwner: boolean;
   lastSeenAt: ISODate | null;
   createdAt: ISODate;
+}
+
+/** `status` and/or `isOwner`. Blocking someone takes the owner mark away. */
+export interface MessagingUserPatch {
+  status?: MessagingUserStatus;
+  isOwner?: boolean;
 }
 
 /** A chat on the platform (direct message, group, channel thread) and the conversation it continues. */

@@ -16,6 +16,8 @@ import { notify } from "../services/notifications";
 import { redact } from "../vault/vault";
 import { INTERRUPTED } from "../runner/runner";
 import { automationConversation } from "./conversation";
+import { pausedRun } from "../services/pauses";
+import { remindWaitingAutomation } from "../services/questions";
 import { onCheckRunFinished } from "./conditions";
 import { HttpError, badRequest, conflict, newId, now, parseJson, truncate } from "../util";
 
@@ -330,7 +332,7 @@ export function settleIfFinished(runId: string): void {
  * Start a run for the automation's waiting events when it is idle. Returns the run, or null when nothing started
  * (no events, busy, rate limited, paused). Throws when the run could not be created (the events are marked failed).
  */
-export async function dispatch(routineId: string): Promise<Run | null> {
+export async function dispatch(routineId: string, opts: { byHuman?: boolean } = {}): Promise<Run | null> {
   if (stopped) return null;
   ensureRunListener();
   if (dispatching.has(routineId)) return null;
@@ -340,7 +342,12 @@ export async function dispatch(routineId: string): Promise<Run | null> {
   } catch {
     return null; // deleted meanwhile
   }
-  if (activeMainRun(routineId)) return null;
+  const active = activeMainRun(routineId);
+  if (active) {
+    // Events keep waiting while the last run waits for the human's answer: remind them now and then.
+    if (pausedRun(active)?.reason === "question") remindWaitingAutomation(routineId);
+    return null;
+  }
   const waiting = all<EventRow>(
     "SELECT * FROM automation_events WHERE routine_id = ? AND status = 'pending' ORDER BY created_at ASC, rowid ASC LIMIT ?",
     routineId,
@@ -368,6 +375,9 @@ export async function dispatch(routineId: string): Promise<Run | null> {
       content: buildEventPrompt(routine, pending.map(toModel)),
       trigger: "routine",
       routineId,
+      source: "automation",
+      // Only the human's test event alone: a batch with real events is the automation's own work.
+      byHuman: opts.byHuman && firstTest === 0,
     });
     setEventStatus(ids, "running", null, run.id);
     // A run that failed right away finished before its events were linked to it (and before run.finished could
@@ -482,7 +492,8 @@ export function buildEventPrompt(routine: Routine, events: AutomationEvent[]): s
 /* ------------------------------------------------------------------ */
 
 /** Send a test event to an app or webhook automation and start it (run is null when it is busy). */
-export async function sendTestEvent(routineId: string, payload?: unknown): Promise<{ event: AutomationEvent; run: Run | null }> {
+/** `byHuman`: the human sent it (Run now, Send test event): the run isn't held for a used-up budget. */
+export async function sendTestEvent(routineId: string, payload?: unknown, opts: { byHuman?: boolean } = {}): Promise<{ event: AutomationEvent; run: Run | null }> {
   const routine = getRoutine(routineId);
   if (routine.trigger.type !== "app" && routine.trigger.type !== "webhook") {
     throw badRequest("Only automations started by an app event or a webhook take test events");
@@ -494,7 +505,7 @@ export async function sendTestEvent(routineId: string, payload?: unknown): Promi
     payload: payload ?? { test: true, note: "Sent from Godmode to try this automation" },
   });
   if (!event || event.status !== "pending") throw conflict(event?.note ?? "The test event was not accepted");
-  const run = await dispatch(routineId);
+  const run = await dispatch(routineId, { byHuman: opts.byHuman });
   return { event: getEvent(event.id) ?? event, run };
 }
 

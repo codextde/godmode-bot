@@ -1,10 +1,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { storageKey } from "@/lib/core";
 
 interface UiState {
   /** Workspace scope selected in the sidebar: "all" | "global" | workspace id */
   workspace: string;
   commandOpen: boolean;
+  /** The keyboard shortcuts list is open. */
+  shortcutsOpen: boolean;
   voiceMode: boolean;
   sidebarCollapsed: boolean;
   /** Show the live browser preview next to chats while the agent's browser is open. */
@@ -17,8 +20,13 @@ interface UiState {
   skippedClaudeVersion: string | null;
   /** Task board columns folded to a narrow strip. */
   collapsedColumns: string[];
+  /** The Agents page shows cards or the org chart. */
+  agentsView: "grid" | "chart";
+  /** The human came back after a while: from when to when they were away (Home sums up what happened). Not kept. */
+  away: { since: string; until: string } | null;
   setWorkspace: (id: string) => void;
   setCommandOpen: (open: boolean) => void;
+  setShortcutsOpen: (open: boolean) => void;
   setVoiceMode: (on: boolean) => void;
   setSidebarCollapsed: (v: boolean) => void;
   setBrowserPanel: (v: boolean) => void;
@@ -26,6 +34,8 @@ interface UiState {
   setVmPanel: (v: boolean) => void;
   skipClaudeVersion: (version: string | null) => void;
   toggleColumn: (status: string) => void;
+  setAgentsView: (v: "grid" | "chart") => void;
+  setAway: (away: { since: string; until: string } | null) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -33,6 +43,7 @@ export const useUi = create<UiState>()(
     (set) => ({
       workspace: "all",
       commandOpen: false,
+      shortcutsOpen: false,
       voiceMode: false,
       sidebarCollapsed: false,
       browserPanel: true,
@@ -40,8 +51,11 @@ export const useUi = create<UiState>()(
       vmPanel: true,
       skippedClaudeVersion: null,
       collapsedColumns: ["cancelled"],
+      agentsView: "grid",
+      away: null,
       setWorkspace: (workspace) => set({ workspace }),
       setCommandOpen: (commandOpen) => set({ commandOpen }),
+      setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
       setVoiceMode: (voiceMode) => set({ voiceMode }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setBrowserPanel: (browserPanel) => set({ browserPanel }),
@@ -52,9 +66,12 @@ export const useUi = create<UiState>()(
         set((s) => ({
           collapsedColumns: s.collapsedColumns.includes(status) ? s.collapsedColumns.filter((c) => c !== status) : [...s.collapsedColumns, status],
         })),
+      setAgentsView: (agentsView) => set({ agentsView }),
+      setAway: (away) => set({ away }),
     }),
     {
-      name: "godmode-ui",
+      // Per computer in cloud mode: the selected workspace id belongs to one computer.
+      name: storageKey("godmode-ui"),
       partialize: (s) => ({
         workspace: s.workspace,
         sidebarCollapsed: s.sidebarCollapsed,
@@ -64,6 +81,7 @@ export const useUi = create<UiState>()(
         vmPanel: s.vmPanel,
         skippedClaudeVersion: s.skippedClaudeVersion,
         collapsedColumns: s.collapsedColumns,
+        agentsView: s.agentsView,
       }),
     },
   ),

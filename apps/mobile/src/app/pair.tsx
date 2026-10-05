@@ -9,7 +9,7 @@ import { Button, Card, T } from "@/components/ui";
 import { api, errorText, pairWith } from "@/lib/api";
 import { hostOf } from "@/lib/format";
 import { queryClient } from "@/lib/query";
-import { useSession } from "@/lib/session";
+import { isGatewayUrl, useSession } from "@/lib/session";
 import { radius, space, useColors } from "@/lib/theme";
 
 export default function Pair() {
@@ -56,6 +56,10 @@ export default function Pair() {
 
   const expired = payload.exp * 1000 < Date.now();
   const switching = current && current.instance.id !== payload.id;
+  const routes = [
+    { label: "Tailscale", url: payload.urls.find((u) => !isGatewayUrl(u)) },
+    { label: "Godmode Cloud", url: payload.urls.find(isGatewayUrl) },
+  ].filter((route) => route.url);
 
   return (
     <View style={[styles.root, { backgroundColor: c.background }]}>
@@ -70,15 +74,17 @@ export default function Pair() {
       </View>
 
       <Card style={styles.details}>
-        <View style={styles.detailRow}>
-          <Icon name="network" size={16} color={c.textMuted} />
-          <T variant="subhead" muted>
-            Tailscale
-          </T>
-          <T variant="subhead" numberOfLines={1} style={{ flex: 1, textAlign: "right", fontWeight: "500" }}>
-            {hostOf(payload.urls[0])}
-          </T>
-        </View>
+        {routes.map((route) => (
+          <View key={route.label} style={styles.detailRow}>
+            <Icon name="network" size={16} color={c.textMuted} />
+            <T variant="subhead" muted>
+              {route.label}
+            </T>
+            <T variant="subhead" numberOfLines={1} style={{ flex: 1, textAlign: "right", fontWeight: "500" }}>
+              {hostOf(route.url)}
+            </T>
+          </View>
+        ))}
         {switching && (
           <View style={styles.detailRow}>
             <Icon name="warning" size={16} color={c.warning} />

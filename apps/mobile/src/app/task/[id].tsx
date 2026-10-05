@@ -1,3 +1,4 @@
+import { isWaiting, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets, type TaskBlockedKind } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -10,6 +11,7 @@ import { openChat } from "@/components/rows";
 import { STATUS_META, TaskStatusBadge, TYPE_META } from "@/components/task-row";
 import { Avatar, Badge, Button, Card, Row, SectionTitle, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { activityText } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
@@ -39,17 +41,26 @@ export default function TaskScreen() {
 
   const agent = t.agentId ? byId.get(t.agentId) : undefined;
   const workspace = workspaces.find((w) => w.id === t.workspaceId);
-  const working = t.status === "in_progress";
-  const canFollowUp = !!t.conversationId && !!t.agentId && !t.archivedAt && (t.status === "in_review" || t.status === "blocked" || t.status === "done");
+  // In progress isn't working: the ticket may wait for its follow-up, for an answer, or stand still.
+  const working = t.status === "in_progress" && (t.runStatus === "running" || t.runStatus === "queued" || !!t.activity);
+  const waiting = t.status === "in_progress" && (isWaiting(t) || waitsForAnswer(t) || !!t.pause);
+  const canFollowUp =
+    !!t.conversationId && !!t.agentId && !t.archivedAt && (t.status === "in_review" || t.status === "blocked" || t.status === "done" || isWaiting(t));
   const assignable = agentsFor(agents ?? [], t.workspaceId).filter((a) => a.enabled);
 
   const move = (status: TaskStatus) => {
     tap();
-    if (!working || status === "in_progress") return update.mutate({ status });
-    Alert.alert("Stop the agent?", `${agent?.name ?? "The agent"} is still working on it. Moving it to ${STATUS_META[status].label} stops the run.`, [
-      { text: "Keep working", style: "cancel" },
-      { text: "Stop", style: "destructive", onPress: () => update.mutate({ status }) },
-    ]);
+    if (!(working || waiting) || status === "in_progress") return update.mutate({ status });
+    Alert.alert(
+      "Stop the agent?",
+      working
+        ? `${agent?.name ?? "The agent"} is still working on it. Moving it to ${STATUS_META[status].label} stops the run.`
+        : `It waits to go on. Moving it to ${STATUS_META[status].label} stops that.`,
+      [
+        { text: "Keep working", style: "cancel" },
+        { text: "Stop", style: "destructive", onPress: () => update.mutate({ status }) },
+      ],
+    );
   };
 
   const archive = (archived: boolean) => {
@@ -61,9 +72,9 @@ export default function TaskScreen() {
     ]);
   };
 
-  const followUp = async (content: string) => {
+  const followUp = async (content: string, files: PendingFile[]) => {
     try {
-      onDone(await api.tasks.message(id, content));
+      onDone(await api.tasks.message(id, content, await encodeFiles(files)));
     } catch (err) {
       Alert.alert("Couldn't send it", errorText(err));
       throw err;
@@ -91,19 +102,54 @@ export default function TaskScreen() {
             {agent?.name ?? "No agent yet"}
           </T>
           <T variant="footnote" muted numberOfLines={2}>
-            {working ? (t.activity ? activityText(t.activity) : "Working on it") : t.status === "todo" ? "About to start" : agent ? "Assigned" : "Pick one below to start"}
+            {working
+              ? t.activity
+                ? activityText(t.activity)
+                : t.runStatus === "queued"
+                  ? "Queued — waiting for a free slot"
+                  : "Working on it"
+              : waitsForAnswer(t)
+                ? "Waiting for your answer"
+                : waitsForTickets(t)
+                  ? `Waits for ${t.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")} — starts once delivered`
+                : waitsForSubtasks(t)
+                  ? `Waiting for ${t.subtasks!.open === 1 ? "1 part" : `${t.subtasks!.open} parts`}`
+                : isWaiting(t)
+                  ? "Waiting for its follow-up"
+                  : t.pause
+                    ? "Paused"
+                    : t.status === "todo"
+                      ? "About to start"
+                      : agent
+                        ? "Assigned"
+                        : "Pick one below to start"}
           </T>
         </View>
         {agent && <Icon name="chevron" size={13} color={c.textFaint} />}
       </Card>
 
-      {t.status === "blocked" && t.blockedReason ? (
+      {t.status === "blocked" && (t.blockedReason || t.blockedKind) ? (
         <Card style={[styles.notice, { backgroundColor: c.dangerSoft, borderColor: "transparent" }]}>
           <Icon name="warning" size={16} color={c.danger} />
-          <T variant="subhead" style={{ flex: 1 }}>
-            {t.blockedReason}
-          </T>
+          <View style={{ flex: 1, gap: 2 }}>
+            {t.blockedKind && t.blockedKind !== "manual" ? (
+              <T variant="subhead" style={{ fontWeight: "600" }}>
+                {BLOCKED_TITLE[t.blockedKind]}
+              </T>
+            ) : null}
+            {t.blockedReason ? <T variant="subhead">{t.blockedReason}</T> : null}
+            {t.blockedKind === "publish" ? (
+              <T variant="footnote" muted>
+                Publishing failed — publish it again on your computer.
+              </T>
+            ) : null}
+          </View>
         </Card>
+      ) : null}
+      {t.runCount > 0 ? (
+        <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
+          {agent?.name ?? "The agent"} worked {Math.max(1, Math.round(t.workMs / 60_000))}m in {t.runCount} run{t.runCount === 1 ? "" : "s"} · ${t.costUsd.toFixed(2)}
+        </T>
       ) : null}
 
       <Actions
@@ -138,6 +184,8 @@ export default function TaskScreen() {
           </View>
         </View>
       )}
+
+      <Parts task={t} />
 
       {t.pullRequest && (
         <Card
@@ -182,7 +230,7 @@ export default function TaskScreen() {
       {canFollowUp && (
         <View>
           <SectionTitle title={t.status === "blocked" ? "Help it along" : "Ask for changes"} />
-          <Composer onSend={followUp} placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
+          <Composer draftKey={`task:${id}`} onSend={followUp} attachments placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
         </View>
       )}
     </ScrollView>
@@ -223,14 +271,18 @@ function Actions({
       buttons.push({ title: "Stop", icon: "stop", status: "backlog" });
       break;
     case "in_review":
-      buttons.push({ title: "Mark done", icon: "check", status: "done", primary: true });
+      buttons.push({ title: "Approve", icon: "check", status: "done", primary: true });
       break;
     case "blocked":
-      if (hasAgent) buttons.push({ title: "Try again", icon: "refresh", status: "todo", primary: true });
+      // When the agent asked for something, the answer goes in the message box below.
+      if (hasAgent && task.blockedKind !== "needs_input") {
+        const title = task.blockedKind === "interrupted" ? "Continue" : task.blockedKind === "stopped" || task.blockedKind === "manual" || task.blockedKind === "publish" ? "Start again" : "Try again";
+        buttons.push({ title, icon: "refresh", status: "todo", primary: true });
+      }
       break;
     case "done":
     case "cancelled":
-      buttons.push({ title: "Reopen", icon: "refresh", status: "backlog" });
+      buttons.push({ title: "Reopen", icon: "refresh", status: reopenStatus(task) });
       break;
   }
   if (onOpenChat) buttons.push({ title: "Open chat", icon: "chats", onPress: onOpenChat });
@@ -238,6 +290,16 @@ function Actions({
   if (task.status !== "done" && task.status !== "cancelled") buttons.push({ title: "Cancel task", icon: "close", status: "cancelled" });
   return <ActionButtons buttons={buttons} busy={busy} onMove={onMove} onArchive={onArchive} />;
 }
+
+const BLOCKED_TITLE: Record<TaskBlockedKind, string> = {
+  needs_input: "It needs something from you",
+  failed: "The run failed",
+  stopped: "Stopped",
+  interrupted: "Interrupted by a restart",
+  publish: "Couldn't publish the work",
+  setup: "Couldn't set it up",
+  manual: "Blocked",
+};
 
 function ActionButtons({
   buttons,
@@ -267,7 +329,61 @@ function ActionButtons({
   );
 }
 
+/** What the ticket is part of, and its own parts (a lead's ticket waits until they're finished). */
+function Parts({ task }: { task: Task }) {
+  const c = useColors();
+  const { byId } = useAgents();
+  const board = useQuery({ queryKey: qk.taskList(null), queryFn: () => api.tasks.list(), enabled: !!task.subtasks || !!task.parentId });
+  const parts = (board.data ?? []).filter((p) => p.parentId === task.id).sort((a, b) => a.number - b.number);
+  const parent = task.parentId ? board.data?.find((p) => p.id === task.parentId) : undefined;
+  if (!task.parentId && !task.subtasks) return null;
+  const open = (id: string) => {
+    tap();
+    router.push({ pathname: "/task/[id]", params: { id } });
+  };
+  return (
+    <View style={{ gap: space.sm }}>
+      {task.parentId ? (
+        <Card style={styles.pr} onPress={() => open(task.parentId!)}>
+          <Icon name="branch" size={17} color={c.textMuted} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <T variant="footnote" muted>
+              Part of
+            </T>
+            <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
+              #{task.parentNumber} {parent?.title ?? ""}
+            </T>
+          </View>
+          <Icon name="chevron" size={13} color={c.textFaint} />
+        </Card>
+      ) : null}
+      {task.subtasks ? (
+        <View>
+          <SectionTitle title={`Parts · ${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} finished`} />
+          <Card style={{ paddingVertical: 4 }}>
+            {parts.map((p) => (
+              <Pressable key={p.id} onPress={() => open(p.id)} accessibilityRole="button" style={({ pressed }) => [styles.part, { opacity: pressed ? 0.6 : 1 }]}>
+                <T variant="footnote" muted style={{ fontVariant: ["tabular-nums"] }}>
+                  #{p.number}
+                </T>
+                <T variant="subhead" numberOfLines={1} style={{ flex: 1 }}>
+                  {p.title}
+                </T>
+                <T variant="footnote" muted numberOfLines={1}>
+                  {STATUS_META[p.status].label}
+                  {p.agentId ? ` · ${byId.get(p.agentId)?.name ?? "an agent"}` : ""}
+                </T>
+              </Pressable>
+            ))}
+          </Card>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  part: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
   content: {
     paddingHorizontal: space.lg,
     paddingTop: space.md,

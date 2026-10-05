@@ -145,11 +145,12 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
       const file = e.dataTransfer?.files?.[0];
       if (file) readRef.current(file);
     };
-    window.addEventListener("dragover", onDragOver);
-    window.addEventListener("drop", onDrop);
+    // On the document: ahead of the app-wide drop guard on window.
+    document.addEventListener("dragover", onDragOver);
+    document.addEventListener("drop", onDrop);
     return () => {
-      window.removeEventListener("dragover", onDragOver);
-      window.removeEventListener("drop", onDrop);
+      document.removeEventListener("dragover", onDragOver);
+      document.removeEventListener("drop", onDrop);
     };
   }, [step.kind]);
 

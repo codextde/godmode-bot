@@ -7,11 +7,14 @@ import {
   CHARACTER_NECKS,
   CHARACTER_TOPS,
   EFFORT_OPTIONS,
+  MAX_AGENT_ROLE_LENGTH,
   isModelId,
 } from "@godmode/shared";
 import {
   createAgent,
   deleteAgent,
+  dismissFailedRun,
+  duplicateAgent,
   getAgent,
   listAgentCommits,
   listAgentFiles,
@@ -21,6 +24,7 @@ import {
   writeAgentFile,
 } from "../../agents/service";
 import { AGENT_TEMPLATES } from "../../agents/templates";
+import { TEAM_TEMPLATES, installTeam } from "../../agents/teams";
 import { listSlashCommands } from "../../runner/commands";
 import type { RoutineTrigger } from "@godmode/shared";
 import { createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigger, runRoutineNow, updateRoutine } from "../../services/routines";
@@ -53,6 +57,7 @@ const permissionsSchema = z
     credentialIds: z.array(id).max(1000).nullable(),
     totpIds: z.array(id).max(1000).nullable(),
     maxBudgetUsd: z.number().positive().max(10_000).nullable(),
+    monthlyBudgetUsd: z.number().positive().max(1_000_000).nullable(),
   })
   .partial();
 
@@ -104,8 +109,11 @@ export const agentSchema = z.object({
   personality: z.string().max(2000).optional(),
   description: z.string().max(2000).optional(),
   instructions: z.string().max(50_000).optional(),
+  role: z.string().max(MAX_AGENT_ROLE_LENGTH, `A role is at most ${MAX_AGENT_ROLE_LENGTH} characters`).optional(),
+  reportsTo: id.nullable().optional(),
   model: modelId,
   effort: z.enum(EFFORT_OPTIONS).nullable().optional(),
+  ultracode: z.boolean().nullable().optional(),
   enabled: z.boolean().optional(),
   permissions: permissionsSchema.optional(),
   browser: browserSchema.optional(),
@@ -147,6 +155,7 @@ export const routineSchema = z.object({
   filter: z.string().trim().max(2000).optional(),
   enabled: z.boolean().optional(),
   reuseConversation: z.boolean().optional(),
+  notify: z.enum(["always", "failures", "never"]).optional(),
 });
 
 function scopeParam(value: string | undefined): string | null | "all" {
@@ -161,6 +170,15 @@ export function registerAgentRoutes(app: Hono): void {
   app.get("/api/agents", (c) => c.json(listAgents({ workspaceId: scopeParam(c.req.query("workspaceId")) })));
 
   app.get("/api/agent-templates", (c) => c.json(AGENT_TEMPLATES));
+  // Whole teams: a lead and its reports, in one go.
+  app.get("/api/team-templates", (c) => c.json(TEAM_TEMPLATES));
+  app.post("/api/team-templates/:id/install", async (c) => {
+    const input = await body(
+      c,
+      z.object({ workspaceId: z.string().max(100).nullable().optional(), automations: z.boolean().optional(), timezone: z.string().max(100).optional() }),
+    );
+    return c.json(await installTeam(c.req.param("id"), input), 201);
+  });
 
   app.get("/api/agents/:id", (c) => c.json(getAgent(c.req.param("id"))));
 
@@ -183,6 +201,16 @@ export function registerAgentRoutes(app: Hono): void {
     return c.json({ ok: true });
   });
 
+  // Same setup, fresh memory, no chats or automations. A copy that reads secrets needs the passphrase like a new one.
+  app.post("/api/agents/:id/duplicate", async (c) => {
+    const source = getAgent(c.req.param("id"));
+    if (source.permissions.secretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
+    return c.json(await duplicateAgent(source.id));
+  });
+
+  // The human has seen the failure: the agent stops saying "Last run failed".
+  app.delete("/api/agents/:id/failed-run", (c) => c.json(dismissFailedRun(c.req.param("id"))));
+
   app.post("/api/agents/:id/run", async (c) => {
     const agent = getAgent(c.req.param("id"));
     const { prompt, workspaceId } = await body(
@@ -190,7 +218,7 @@ export function registerAgentRoutes(app: Hono): void {
       z.object({ prompt: z.string().trim().max(100_000).optional(), workspaceId: z.string().trim().max(100).nullable().optional() }),
     );
     if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
-    return c.json(await startChat({ agentId: agent.id, content: prompt || DEFAULT_TASK_PROMPT, origin: "api", workspaceId }));
+    return c.json(await startChat({ agentId: agent.id, content: prompt || DEFAULT_TASK_PROMPT, origin: "chat", workspaceId }));
   });
 
   // Pause everything the agent is working on; it continues where it stopped.
@@ -266,7 +294,7 @@ export function registerAgentRoutes(app: Hono): void {
     return c.json({ ok: true });
   });
 
-  app.post("/api/routines/:id/run", async (c) => c.json(await runRoutineNow(c.req.param("id"))));
+  app.post("/api/routines/:id/run", async (c) => c.json(await runRoutineNow(c.req.param("id"), { byHuman: true })));
 
   /* Automation events -------------------------------------------------- */
 
@@ -283,7 +311,7 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post("/api/routines/:id/test-event", async (c) => {
     const { payload } = await body(c, z.object({ payload: z.unknown().optional() }));
-    const { event } = await sendTestEvent(c.req.param("id"), payload);
+    const { event } = await sendTestEvent(c.req.param("id"), payload, { byHuman: true });
     return c.json(event);
   });
 

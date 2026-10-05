@@ -1,3 +1,4 @@
+import { gatewayDone } from "@godmode/shared";
 import { format, isThisYear, isToday, isYesterday } from "date-fns";
 import type { MessageBlock } from "@godmode/shared";
 import type { IconName } from "@/components/icon";
@@ -93,7 +94,16 @@ export function toolLabel(block: Extract<MessageBlock, { type: "tool_use" }>): T
     if (tool === "report_missing_login") return { icon: "warning", title: `Needs a login for ${str(input.service) || "a site"}` };
     if (tool === "agent_delegate") return { icon: "agents", title: "Handed a task to another agent", detail: clip(str(input.task)) || undefined };
     if (tool === "notify_user") return { icon: "bell", title: "Sent you a notification", detail: clip(str(input.title)) || undefined };
-    return { icon: "bolt", title: humanize(tool) };
+    if (tool === "ask_human") return { icon: "warning", title: "Asked you", detail: clip(str(input.question)) || undefined };
+    if (tool === "request_approval") return { icon: "warning", title: "Asked for your OK", detail: clip(str(input.action)) || undefined };
+    if (tool === "tasks_list") return { icon: "tasks", title: "Looked at the board" };
+    if (tool === "task_get") return { icon: "tasks", title: "Read a task" };
+    if (tool === "task_create") return { icon: "tasks", title: "Filed a task", detail: clip(str(input.title)) || undefined };
+    if (tool === "task_update") return { icon: "tasks", title: "Changed a task" };
+    if (tool === "task_message") return { icon: "tasks", title: "Sent a message into a task", detail: clip(str(input.content)) || undefined };
+    if (tool === "task_note") return { icon: "pencil", title: "Left a note on the task", detail: clip(str(input.text)) || undefined };
+    if (tool === "task_report_blocked") return { icon: "warning", title: "Reported what it needs", detail: clip(str(input.reason)) || undefined };
+    return { icon: "bolt", title: gatewayDone(tool) };
   }
   switch (tool) {
     case "Bash":
@@ -150,7 +160,8 @@ const DOING: [RegExp, string][] = [
 /** The core says "Using browser_navigate"; people read "Opening a page". */
 export function activityText(label: string | null | undefined): string {
   if (!label) return "Thinking";
-  const tool = /^Using (.+)$/.exec(label)?.[1];
+  // An older core sends "Using <tool id>" (no "…"); a current one sends plain words ending in "…" ("Using Linear…").
+  const tool = /^Using ([\w.-]+)$/.exec(label)?.[1];
   if (!tool) return label.replace(/…$/, "");
   return DOING.find(([re]) => re.test(tool))?.[1] ?? "Working";
 }

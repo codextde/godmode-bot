@@ -9,7 +9,7 @@ import { closeDb, openDb, run } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache } from "../src/services/settings";
 import { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../src/services/workspaces";
-import { gitFailure, prepareSources, reposDir, syncSource } from "../src/services/workspaceSources";
+import { __setRunSyncWaitForTests, gitFailure, prepareSources, reposDir, syncSource } from "../src/services/workspaceSources";
 import { buildSystemPrompt, resumeContextPrefix } from "../src/runner/prompt";
 import { getSettings } from "../src/services/settings";
 import { HttpError } from "../src/util";
@@ -210,6 +210,61 @@ describe("workspace repositories", () => {
     const again: string[] = [];
     await prepareSources(ws.id, { onActivity: (l) => again.push(l), signal: new AbortController().signal });
     expect(again).toEqual([]);
+  });
+
+  test("a run doesn't wait for a slow update: the fetch finishes behind it without touching the checkout", async () => {
+    const ws = createWorkspace({ name: "Slow", sources: [{ kind: "git", url: server.url }] });
+    const source = await settled(ws.id, ws.sources[0]!.id);
+    run("UPDATE workspace_sources SET synced_at = ? WHERE id = ?", "2020-01-01T00:00:00.000Z", source.id);
+    const next = server.commit("SLOW.md", "slow\n");
+    server.delayMs = 400;
+    __setRunSyncWaitForTests(150);
+    try {
+      const started = Date.now();
+      const first = await prepareSources(ws.id, { onActivity: () => {}, signal: new AbortController().signal });
+      expect(Date.now() - started).toBeLessThan(1500);
+      expect(first.sources.map((s) => s.path)).toEqual([source.path]);
+      // The run started with the files as they were: nothing changes under it.
+      const behind = await settled(ws.id, source.id);
+      expect(behind.error).toBeNull();
+      expect(behind.commit).toBe(source.commit);
+      expect(existsSync(join(source.path, "SLOW.md"))).toBe(false);
+
+      // Another run soon after leaves it alone too: the first may still work in that checkout.
+      server.delayMs = 0;
+      __setRunSyncWaitForTests(20_000);
+      const labels: string[] = [];
+      await prepareSources(ws.id, { onActivity: (l) => labels.push(l), signal: new AbortController().signal });
+      expect(labels).toEqual([]);
+      expect(existsSync(join(source.path, "SLOW.md"))).toBe(false);
+      // An update by hand fast-forwards to what was fetched.
+      syncSource(ws.id, source.id);
+      expect((await settled(ws.id, source.id)).commit).toBe(next);
+      expect(existsSync(join(source.path, "SLOW.md"))).toBe(true);
+    } finally {
+      server.delayMs = 0;
+      __setRunSyncWaitForTests(20_000);
+    }
+  });
+
+  test("an update by hand while a fetch runs behind a run fast-forwards once that fetch is done", async () => {
+    const ws = createWorkspace({ name: "Asked", sources: [{ kind: "git", url: server.url }] });
+    const source = await settled(ws.id, ws.sources[0]!.id);
+    run("UPDATE workspace_sources SET synced_at = ? WHERE id = ?", "2020-01-01T00:00:00.000Z", source.id);
+    const next = server.commit("ASKED.md", "asked\n");
+    server.delayMs = 400;
+    __setRunSyncWaitForTests(100);
+    try {
+      await prepareSources(ws.id, { onActivity: () => {}, signal: new AbortController().signal });
+      expect(getWorkspace(ws.id).sources[0]!.status).toBe("syncing");
+      syncSource(ws.id, source.id);
+      const done = await settled(ws.id, source.id);
+      expect(done.commit).toBe(next);
+      expect(existsSync(join(source.path, "ASKED.md"))).toBe(true);
+    } finally {
+      server.delayMs = 0;
+      __setRunSyncWaitForTests(20_000);
+    }
   });
 
   test("removing a repository while it clones stops the clone", async () => {

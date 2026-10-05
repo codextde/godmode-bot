@@ -1,13 +1,15 @@
 import { forwardRef, type HTMLAttributes } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, Hourglass, OctagonAlert, Paperclip, Pause } from "lucide-react";
+import { AlarmClock, CalendarDays, CornerDownRight, Link2, GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, Hourglass, ListTree, MessageCircleQuestion, OctagonAlert, Paperclip, Pause } from "lucide-react";
 import type { Agent, Task, Workspace } from "@godmode/shared";
-import { taskAttachmentIds } from "@godmode/shared";
+import { isOverdue, taskAttachmentIds, waitsForTickets } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { LiveDot } from "@/components/aicss/Motion";
 import { useLive } from "@/stores/live";
 import { cn } from "@/lib/utils";
-import { TYPE_META, TypeIcon, isWorking, pauseLabel } from "./task-meta";
+import { useNow } from "@/components/vault/use-now";
+import { LabelChip } from "./task-fields";
+import { BLOCKED_META, PRIORITY_META, PriorityIcon, STATUS_META, TYPE_META, TypeIcon, daysUntil, dueLabel, isWorking, pauseLabel, waitingLabel } from "./task-meta";
 
 export function useTaskActivity(task: Task): string | null {
   const live = useLive((s) => (task.runId ? s.runs[task.runId] : undefined));
@@ -64,13 +66,30 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
   const activity = useTaskActivity(task);
   const working = isWorking(task);
   const paused = pauseLabel(task);
+  const waiting = waitingLabel(task);
   const files = taskAttachmentIds(task.description).length;
+  const overdue = isOverdue(task);
+  const closed = task.status === "done" || task.status === "cancelled";
+  const due = task.dueDate ? (overdue ? `Overdue · ${-daysUntil(task.dueDate)}d` : dueLabel(task.dueDate)) : null;
+  const label = [
+    `#${task.number} ${task.title}`,
+    STATUS_META[task.status].label,
+    task.priority !== "none" ? PRIORITY_META[task.priority].label.toLowerCase() : null,
+    task.dueDate ? `due ${dueLabel(task.dueDate)}` : null,
+    overdue ? "overdue" : null,
+    task.parentNumber ? `part of #${task.parentNumber}` : null,
+    waitsForTickets(task) ? `waits for ${task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")}` : null,
+    task.subtasks ? `${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} parts finished` : null,
+    waiting,
+  ]
+    .filter(Boolean)
+    .join(", ");
   return (
     <div
       ref={ref}
       role="button"
       tabIndex={0}
-      aria-label={`#${task.number} ${task.title}`}
+      aria-label={label}
       className={cn(
         "group/card relative cursor-grab touch-none rounded-lg border bg-card p-3 text-left shadow-card outline-none select-none",
         "transition-[border-color,box-shadow,transform,opacity] duration-150 hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50",
@@ -86,6 +105,16 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
           <TypeIcon type={task.type} className="size-3.5" />
         </span>
         <span className="font-mono tabular-nums">#{task.number}</span>
+        {task.parentNumber && (
+          <span className="flex items-center gap-0.5 font-mono tabular-nums" title={`Part of #${task.parentNumber}`} aria-label={`part of #${task.parentNumber}`}>
+            <CornerDownRight className="size-3" aria-hidden />#{task.parentNumber}
+          </span>
+        )}
+        {task.priority !== "none" && (
+          <span title={PRIORITY_META[task.priority].label} aria-label={PRIORITY_META[task.priority].label}>
+            <PriorityIcon priority={task.priority} />
+          </span>
+        )}
         {workspace !== undefined && (
           <span className="ml-auto flex min-w-0 items-center gap-1 truncate">
             <span className="text-[11px]">{workspace?.icon ?? "🌐"}</span>
@@ -100,19 +129,49 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
         <p className="mt-2 flex min-w-0 items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
           <LiveDot className="bg-amber-500" />
           <span className="truncate">{activity}</span>
+          {task.runStatus === "running" && task.runStartedAt && <CardElapsed since={task.runStartedAt} />}
+        </p>
+      )}
+      {waitsForTickets(task) && (
+        <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number} ${w.title}`).join("\n")}>
+          <Link2 className="size-3 shrink-0" />
+          <span className="truncate">Waits for {task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")}</span>
+        </p>
+      )}
+      {waiting && !activity && !paused && (
+        <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={task.followup?.note}>
+          {task.subtasks?.open && !task.followup ? <ListTree className="size-3 shrink-0 text-brand-strong" /> : <AlarmClock className="size-3 shrink-0 text-brand-strong" />}
+          <span className="truncate">{waiting}</span>
         </p>
       )}
       {paused && !activity && (
-        <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          {task.pause?.reason === "limit" ? <Hourglass className="size-3 shrink-0 text-warning" /> : <Pause className="size-3 shrink-0 fill-current" />}
+        <p className={cn("mt-2 flex min-w-0 items-center gap-1.5 text-xs", task.pause?.reason === "question" ? "font-medium text-foreground" : "text-muted-foreground")}>
+          {task.pause?.reason === "question" ? (
+            <MessageCircleQuestion className="size-3 shrink-0 text-warning" />
+          ) : task.pause?.reason === "limit" ? (
+            <Hourglass className="size-3 shrink-0 text-warning" />
+          ) : (
+            <Pause className="size-3 shrink-0 fill-current" />
+          )}
           <span className="truncate">{paused}</span>
         </p>
       )}
-      {task.status === "blocked" && task.blockedReason && (
+      {task.status === "blocked" && (task.blockedReason || task.blockedKind) && (
         <p className="mt-2 flex gap-1.5 text-xs text-rose-600 dark:text-rose-400">
           <OctagonAlert className="mt-px size-3.5 shrink-0" />
-          <span className="line-clamp-2">{task.blockedReason}</span>
+          <span className="line-clamp-2">
+            {task.blockedKind && BLOCKED_META[task.blockedKind].cardPrefix && <span className="font-medium">{BLOCKED_META[task.blockedKind].cardPrefix} </span>}
+            {task.blockedReason ?? (task.blockedKind === "interrupted" ? "Godmode restarted mid-run." : "")}
+          </span>
         </p>
+      )}
+      {task.labels.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {task.labels.slice(0, 2).map((l) => (
+            <LabelChip key={l} label={l} />
+          ))}
+          {task.labels.length > 2 && <span className="text-[11px] text-muted-foreground">+{task.labels.length - 2}</span>}
+        </div>
       )}
 
       <div className="mt-3 flex items-center gap-2">
@@ -128,6 +187,27 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
           </span>
         )}
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          {due && (
+            <span
+              className={cn(
+                "flex items-center gap-0.5 rounded-[4px] px-1 text-[11px] tabular-nums",
+                closed ? "text-muted-foreground" : overdue ? "bg-rose-500/10 font-medium text-rose-600 dark:text-rose-400" : daysUntil(task.dueDate!) === 0 ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground",
+              )}
+              title={`Due ${task.dueDate}`}
+            >
+              <CalendarDays className="size-3" />
+              {closed ? dueLabel(task.dueDate!) : due}
+            </span>
+          )}
+          {task.subtasks && (
+            <span
+              className="flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums"
+              title={`${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} parts finished`}
+            >
+              <ListTree className="size-3" />
+              {task.subtasks.total - task.subtasks.open}/{task.subtasks.total}
+            </span>
+          )}
           {files > 0 && (
             <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums" title={`${files} attached file${files === 1 ? "" : "s"}`}>
               <Paperclip className="size-3" />
@@ -135,7 +215,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
             </span>
           )}
           <PullRequestChip task={task} />
-          {!task.pullRequest && (
+          {!task.pullRequest && !working && (
             <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
               {formatDistanceToNowStrict(new Date(task.updatedAt), { roundingMethod: "floor" }).replace(/ (\w)\w*$/, "$1")}
             </span>
@@ -145,3 +225,14 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
     </div>
   );
 });
+
+/** "4m 12s" on a working card, ticking every second. */
+function CardElapsed({ since }: { since: string }) {
+  const now = useNow(1000);
+  const s = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
+  return (
+    <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums opacity-80">
+      {s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`}
+    </span>
+  );
+}

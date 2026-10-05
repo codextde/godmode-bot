@@ -14,7 +14,7 @@ export default function TabsLayout() {
   const working = useLive((s) => Object.keys(s.runs).length > 0);
   const offline = useLive((s) => s.status === "offline");
   const { data: boot } = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
-  const needsYou = boot?.counts.openMissingLogins ?? 0;
+  const needsYou = (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.openQuestions ?? 0);
 
   return (
     <NativeTabs

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ComputerTarget, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
 import { ArrowRight, Bell, Pin, Receipt, Telescope, Mail } from "lucide-react";
 import { toast } from "sonner";
@@ -20,17 +20,21 @@ import { InstructionsChip } from "@/components/instructions/instructions";
 import { VmChip } from "@/components/vms/vm-picker";
 import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { SshChip } from "@/components/ssh/ssh-chip";
-import { ChatDropZone } from "@/components/chat/thread";
+import { ChatDropZone } from "@/components/chat/drop-zone";
+import { RunnerChip, RunnerNote } from "@/components/runners/runner-chip";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useConversations, useScopeWorkspace, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useConversations, useRunners, useScopeWorkspace, useWorkspaces, useAttention } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
+import { AttentionList } from "@/components/attention/attention-list";
+import { AwaySummaryCard } from "@/components/attention/away-summary";
 import { useLive, type LiveRun } from "@/stores/live";
+import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 
 const SUGGESTIONS = [
@@ -63,7 +67,7 @@ function greeting(date: Date): string {
   return "Good night";
 }
 
-const NO_MODEL_CHOICE: ModelChoice = { model: null, effort: null };
+const NO_MODEL_CHOICE: ModelChoice = { model: null, effort: null, ultracode: null };
 const SETUP_DRAFT = "chat:home-setup:";
 const NO_SSH_SERVERS: string[] = [];
 
@@ -80,6 +84,7 @@ export default function ChatHome() {
   const { data: boot } = useBootstrap();
   const { data: agents = [], isLoading: agentsLoading } = useAllAgents();
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
+  const voiceMode = useUi((s) => s.voiceMode);
   const composerRef = useRef<ComposerHandle>(null);
   // The new chat's setup is part of the draft: coming back to it must not send the message to another agent.
   const [agentId, setAgentId, agentDraft] = useDraft<string | null>(`${SETUP_DRAFT}agent`, null);
@@ -94,7 +99,9 @@ export default function ChatHome() {
   const [browserProfileId, setBrowserProfileId, browserDraft] = useDraft<string | null>(`${SETUP_DRAFT}browser`, null);
   /** SSH servers for the new chat, on top of the agent's. */
   const [sshServerIds, setSshServerIds, sshDraft] = useDraft<string[]>(`${SETUP_DRAFT}ssh`, NO_SSH_SERVERS);
-  const resetSetup = () => [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft].forEach((d) => d.discard());
+  /** The runner the new chat works on; null = this computer. */
+  const [runnerId, setRunnerId, runnerDraft] = useDraft<string | null>(`${SETUP_DRAFT}runner`, null);
+  const resetSetup = () => [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft, runnerDraft].forEach((d) => d.discard());
   const { data: workspaces = [] } = useWorkspaces();
   const scopeWorkspaceId = useScopeWorkspace()?.id ?? null;
 
@@ -105,6 +112,19 @@ export default function ChatHome() {
     available.find((a) => a.isDefault) ??
     available[0];
   const selectedWorkspace = selected?.workspaceId ? workspaces.find((w) => w.id === selected.workspaceId) : undefined;
+
+  const runners = useRunners();
+  const runner = runnerId ? (runners.data?.find((r) => r.id === runnerId) ?? null) : null;
+  // A runner picked earlier that was removed since (or a list that can't be loaded): back to this computer, visibly —
+  // the chat must never start somewhere other than where the composer says.
+  const runnerGone = !!runnerId && ((runners.isError && !runners.data) || (!!runners.data && !runner));
+  useEffect(() => {
+    if (runnerGone) setRunnerId(null);
+  }, [runnerGone, setRunnerId]);
+  const onRunner = !!runnerId && !runnerGone;
+  // A folder, a shared screen and a VM belong to this computer: a chat on a runner starts without them.
+  const place = (): Pick<StartChatInput, "runnerId" | "workingDirectory" | "computerTarget" | "vmId"> =>
+    onRunner ? { runnerId } : { workingDirectory: folder ?? undefined, computerTarget: shared ?? undefined, vmId: vmId ?? undefined };
 
   // Deep links: /?prompt=…&agent=…
   useEffect(() => {
@@ -141,7 +161,7 @@ export default function ChatHome() {
   const ready = available.length;
 
   return (
-    <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} className="relative min-h-full">
+    <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} disabled={voiceMode} className="relative min-h-full">
       <Backdrop />
 
       <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[8vh] pb-10 text-center @md:px-5 @xl:px-8 @2xl:pt-[12vh]">
@@ -183,23 +203,28 @@ export default function ChatHome() {
               ) : (
                 <>
                   <AgentPicker agents={available} value={selected?.id ?? null} onChange={setAgentId} />
-                  <FolderChip
-                    chatFolder={folder}
-                    agentFolder={selected?.workingDirectory ?? null}
-                    agentName={selected?.name}
-                    onChange={setFolder}
-                  />
+                  <RunnerChip value={onRunner ? runnerId : null} onChange={setRunnerId} />
+                  {!onRunner && (
+                    <FolderChip
+                      chatFolder={folder}
+                      agentFolder={selected?.workingDirectory ?? null}
+                      agentName={selected?.name}
+                      onChange={setFolder}
+                    />
+                  )}
                   <BrowserProfileChip agent={selected} value={browserProfileId} workspaceId={scopeWorkspaceId} onChange={setBrowserProfileId} />
-                  <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />
+                  {!onRunner && <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />}
                   <SshChip agent={selected} value={sshServerIds} onChange={setSshServerIds} />
-                  <VmChip
-                    value={vmId}
-                    inherited={[
-                      selected?.vmId ? { vmId: selected.vmId, from: selected.name } : null,
-                      selectedWorkspace?.vmId ? { vmId: selectedWorkspace.vmId, from: `the ${selectedWorkspace.name} workspace` } : null,
-                    ]}
-                    onChange={setVmId}
-                  />
+                  {!onRunner && (
+                    <VmChip
+                      value={vmId}
+                      inherited={[
+                        selected?.vmId ? { vmId: selected.vmId, from: selected.name } : null,
+                        selectedWorkspace?.vmId ? { vmId: selectedWorkspace.vmId, from: `the ${selectedWorkspace.name} workspace` } : null,
+                      ]}
+                      onChange={setVmId}
+                    />
+                  )}
                   <InstructionsChip value={instructions} agent={selected} onChange={setInstructions} />
                 </>
               )
@@ -212,9 +237,7 @@ export default function ChatHome() {
                 attachments: input.attachments.length ? input.attachments : undefined,
                 voice: input.voice || undefined,
                 ...choice,
-                workingDirectory: folder ?? undefined,
-                computerTarget: shared ?? undefined,
-                vmId: vmId ?? undefined,
+                ...place(),
                 browserProfileId: browserProfileId ?? undefined,
                 workspaceId: scopeWorkspaceId ?? undefined,
                 sshServerIds: sshServerIds.length ? sshServerIds : undefined,
@@ -222,6 +245,20 @@ export default function ChatHome() {
               })
             }
           />
+          <AnimatePresence initial={false}>
+            {onRunner && (
+              <motion.div
+                key="runner-note"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                className="overflow-hidden"
+              >
+                <RunnerNote runner={runner} />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
 
         <motion.div {...fade(0.18)} className="mt-4 flex flex-wrap justify-center gap-2">
@@ -240,11 +277,13 @@ export default function ChatHome() {
 
         <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
           <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
-          <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>/</Kbd> commands <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere
+          <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>/</Kbd> commands <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere <span className="opacity-40">·</span> <Kbd>?</Kbd> shortcuts
         </motion.p>
       </div>
 
       <div className="relative mx-auto w-full max-w-5xl space-y-10 px-4 pb-16 @md:px-5 @xl:px-8">
+        <AwaySummaryCard agents={agents} />
+        <NeedsYou agents={agents} />
         <RunningNow agents={agents} />
         <RecentChats agents={agents} />
       </div>
@@ -257,9 +296,7 @@ export default function ChatHome() {
             agentId: selected?.id,
             content: text,
             voice: true,
-            workingDirectory: folder ?? undefined,
-            computerTarget: shared ?? undefined,
-            vmId: vmId ?? undefined,
+            ...place(),
             browserProfileId: browserProfileId ?? undefined,
             workspaceId: scopeWorkspaceId ?? undefined,
             sshServerIds: sshServerIds.length ? sshServerIds : undefined,
@@ -272,9 +309,34 @@ export default function ChatHome() {
   );
 }
 
+/** What waits for the human, first thing on Home: the newest few, the rest in the Inbox. */
+function NeedsYou({ agents }: { agents: Agent[] }) {
+  const { data: items = [] } = useAttention();
+  const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
+  if (!items.length) return null;
+  const shown = items.slice(0, 5);
+  return (
+    <section aria-labelledby="needs-you-title">
+      <div className="mb-3 flex items-center gap-2">
+        <h2 id="needs-you-title" className="eyebrow flex items-center gap-2">
+          Needs you
+          <span className="rounded-[4px] bg-warning/12 px-1 font-mono text-[10px] font-medium text-warning tabular-nums">{items.length}</span>
+        </h2>
+        {items.length > shown.length && (
+          <Link to="/inbox" className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+            All {items.length} in the Inbox
+          </Link>
+        )}
+      </div>
+      <AttentionList items={shown} agentById={agentById} />
+    </section>
+  );
+}
+
 function RunningNow({ agents }: { agents: Agent[] }) {
   const runs = useLive((s) => s.runs);
-  const list = Object.values(runs);
+  const list = Object.values(runs).filter((r) => r.status === "running");
+  const queued = Object.values(runs).length - list.length;
   if (list.length === 0) return null;
   return (
     <section aria-label="Working now">
@@ -282,6 +344,7 @@ function RunningNow({ agents }: { agents: Agent[] }) {
         <LiveDot />
         Working now
         <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{list.length}</span>
+        {queued > 0 && <span className="text-[11px] font-normal tracking-normal text-muted-foreground normal-case">· {queued} queued</span>}
       </h2>
       <div className="-mx-2 flex gap-3 overflow-x-auto px-2 pt-1 pb-3">
         {list.map((r, i) => (
@@ -320,7 +383,7 @@ function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index
 function RecentChats({ agents }: { agents: Agent[] }) {
   const { data: conversations = [], isLoading } = useConversations();
   const liveRuns = useLive((s) => s.runs);
-  const running = useMemo(() => new Set(Object.values(liveRuns).map((r) => r.conversationId)), [liveRuns]);
+  const running = useMemo(() => new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.conversationId] : []))), [liveRuns]);
   const recent = useMemo(
     () =>
       [...conversations]

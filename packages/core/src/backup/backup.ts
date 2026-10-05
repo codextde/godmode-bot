@@ -24,6 +24,9 @@ import { isValidBranch, parseGitUrl } from "@godmode/shared";
 import { config, VERSION } from "../config";
 import { all, get, getDb, run as exec } from "../db";
 import { recoverInterruptedRuns } from "../runner/runner";
+import { SPEND_BACKFILL_SQL, TEAM_BACKFILL_SQL, TICKET_FACTS_SQL } from "../db/migrations";
+import { startBudgets, stopBudgets } from "../services/budgets";
+import { repairReportingLines } from "../agents/service";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
@@ -42,6 +45,7 @@ import { isSafeCloneDir } from "../services/workspaceSources";
 import * as vault from "../vault/vault";
 import { assertSafeKdf, openWithPassphrase, sealWithPassphrase } from "../vault/crypto";
 import { badRequest, conflict, HttpError, slugify } from "../util";
+import { reconcileTasks, recomputeTicketTotals } from "../tasks/service";
 
 const log = logger("backup");
 
@@ -49,16 +53,26 @@ export const BACKUP_EXTENSION = ".godmode-backup";
 export const MAX_BACKUP_BYTES = 2 * 1024 ** 3;
 const FILE_PREFIX = "godmode-backup-";
 
-/** Never exported: login sessions, paired phones and the migration ledger. */
-const EXCLUDED_TABLES = new Set(["sessions", "mobile_devices", "_migrations"]);
+/** Never exported: login sessions, paired phones, paired runners and controllers, and the migration ledger. */
+const EXCLUDED_TABLES = new Set(["sessions", "mobile_devices", "runners", "link_controllers", "runner_memory", "_migrations"]);
 /** Vault key material travels in vault.json, not db.json. */
 const VAULT_META_KEYS = new Set(["vault.kdf", "vault.wrapped_dek", "vault.canary"]);
-/** Settings sections that belong to this machine (bind address, remote access, allowed origins, phone access). */
-const DEVICE_SETTINGS = new Set(["server", "mobile"]);
+/** Settings sections that belong to this machine (bind address, remote access, allowed origins, phone and cloud access). */
+const DEVICE_SETTINGS = new Set(["server", "mobile", "cloud"]);
 
-/** Meta keys that stay with the machine: dashboard auth, remembered vault key, cached Composio sessions, phone pairing. */
+/**
+ * Meta keys that stay with the machine: dashboard auth, remembered vault key, cached Composio sessions, phone and
+ * runner pairing, the Godmode Cloud link (restoring it elsewhere would clone this computer's identity in the cloud).
+ */
 function isDeviceMetaKey(key: string): boolean {
-  return key.startsWith("auth.") || key.startsWith("vault.remember_") || key.startsWith("composio.session.") || key.startsWith("mobile.");
+  return (
+    key.startsWith("auth.") ||
+    key.startsWith("vault.remember_") ||
+    key.startsWith("composio.session.") ||
+    key.startsWith("mobile.") ||
+    key.startsWith("link.") ||
+    key.startsWith("cloud.")
+  );
 }
 
 /** Chromium profile content that is cache or lock files — never worth backing up. */
@@ -88,6 +102,7 @@ const ALL_ENTITIES: EntityName[] = [
   "composio",
   "browser-profiles",
   "missing-logins",
+  "questions",
   "notifications",
   "settings",
   "runs",
@@ -95,14 +110,15 @@ const ALL_ENTITIES: EntityName[] = [
   "ssh-servers",
   "messaging",
   "followups",
+  "tasks",
 ];
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
 /** Agent slugs and browser profile ids become directory names: restored ones must match this. */
-const SAFE_ID = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
+export const SAFE_ID = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
 
 /** Settings that point at programs or endpoints; a backup must not be able to set them. */
-const EXECUTABLE_SETTINGS: Record<string, string[]> = {
+export const EXECUTABLE_SETTINGS: Record<string, string[]> = {
   runner: ["extraArgs", "claudePath"],
   browser: ["chromePath", "browserUseCommand"],
   computer: ["cuaDriverCommand"],
@@ -132,7 +148,7 @@ interface ColumnInfo {
   pk: number;
 }
 
-type DumpValue = string | number | null | { $b64: string };
+export type DumpValue = string | number | null | { $b64: string };
 interface DbDump {
   tables: Record<string, Record<string, DumpValue>[]>;
 }
@@ -154,7 +170,7 @@ function tableInfo(table: string): ColumnInfo[] {
 
 const q = (ident: string) => `"${ident.replace(/"/g, '""')}"`;
 
-function encodeValue(v: unknown): DumpValue {
+export function encodeValue(v: unknown): DumpValue {
   if (v === null || v === undefined) return null;
   if (v instanceof Uint8Array) return { $b64: Buffer.from(v).toString("base64") };
   if (typeof v === "bigint") return Number(v);
@@ -163,7 +179,7 @@ function encodeValue(v: unknown): DumpValue {
   return JSON.stringify(v);
 }
 
-function decodeValue(v: unknown): string | number | null | Uint8Array {
+export function decodeValue(v: unknown): string | number | null | Uint8Array {
   if (v === null || v === undefined) return null;
   if (typeof v === "string" || typeof v === "number") return v;
   if (typeof v === "boolean") return v ? 1 : 0;
@@ -424,6 +440,12 @@ function sanitizeDump(dump: DbDump): string[] {
   // Computer use: shared windows/screens belong to the machine they were shared on, and unattended control of this
   // computer is something the human turns on here, not something a backup grants.
   for (const row of rowsOf("conversations")) if (row.computer_target != null) row.computer_target = null;
+  // Runners are paired with the machine, not the backup: their chats come back as chats of this computer.
+  for (const row of rowsOf("conversations")) {
+    row.runner_id = null;
+    row.runner_state = null;
+    row.runner_tools_id = null;
+  }
   let computerAgents = 0;
   for (const row of rowsOf("agents")) {
     let enabled = false;
@@ -695,6 +717,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
     stopScheduler();
     stopFollowups();
     stopPauses();
+    stopBudgets();
     stopAppTriggers();
     stopAutomationEvents();
     await stopMessaging();
@@ -708,10 +731,21 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       // Runs that were in progress when the backup was made will never finish, and events that were waiting then
       // are stale now: don't replay them.
       recoverInterruptedRuns();
+      // A backup from before the team package: who wrote old prompts, the built-in agent's role. Then fix reporting
+      // lines an edited or partial backup may have broken.
+      getDb().run(TEAM_BACKFILL_SQL);
+      repairReportingLines();
+      // A backup from before the ticket package: who filed each ticket, why it is blocked, what it cost.
+      getDb().run(TICKET_FACTS_SQL);
+      recomputeTicketTotals();
+      // A backup from before the spend ledger: what its runs cost, booked when they last ran.
+      getDb().run(SPEND_BACKFILL_SQL);
       exec("UPDATE automation_events SET status = 'skipped', note = 'Restored from a backup' WHERE status = 'pending'");
       exec("DELETE FROM followups WHERE due_at <= ?", new Date().toISOString());
       // Paused runs come back paused; none continues by itself after a restore.
       exec("UPDATE paused_runs SET auto = 0");
+      // Tickets that were being worked on in the backup (or waited for a follow-up the restore dropped): to be continued.
+      reconcileTasks("Interrupted (restored from a backup).");
       // The restored vault has a different key: a key remembered on this device is obsolete.
       try {
         await vault.setRememberDevice(false);
@@ -741,6 +775,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       startScheduler();
       startFollowups();
       startPauses();
+      startBudgets();
       startAutomationEvents();
       startAppTriggers();
       startMessaging();

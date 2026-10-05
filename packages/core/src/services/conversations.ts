@@ -9,13 +9,16 @@ import type {
   Agent,
   Attachment,
   Conversation,
+  ConversationFollowup,
   ConversationOrigin,
   Effort,
   Message,
   MessageBlock,
   MessageRole,
+  MessageSource,
   PauseReason,
   Run,
+  RunPause,
   RunTrigger,
 } from "@godmode/shared";
 import type { ComputerTarget, ConversationPatch, ConversationWithMessages, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
@@ -27,8 +30,9 @@ import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
 import { redact } from "../vault/vault";
-import { getAgent, getDefaultAgentId } from "../agents/service";
+import { getAgent, getDefaultAgentId, setAgentFailedRun } from "../agents/service";
 import { activeRunForConversation, cancelRun, listActiveRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
+import { remoteRunForConversation } from "../remote/activeRuns";
 import { closeChatTabs } from "../browser/manager";
 import { displayToolName } from "../runner/stream";
 import { normalizeWorkingDirectory } from "./folders";
@@ -36,7 +40,7 @@ import { parseComputerTarget } from "../computer/targets";
 import { audit } from "./audit";
 import { getSettings } from "./settings";
 import { clearQueue, listQueue } from "./messageQueue";
-import { continueConversation, pauseOf } from "./pauses";
+import { continueConversation, pauseOf, PAUSE_QUESTION_JOIN, PAUSE_QUESTION_SQL, toPause, type PauseQuestionCols } from "./pauses";
 
 const log = logger("chat");
 
@@ -45,7 +49,7 @@ export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const TITLE_MAX = 60;
 const PREVIEW_MAX = 140;
 
-interface ConversationRow {
+interface ConversationRow extends PauseQuestionCols {
   id: string;
   agent_id: string;
   title: string;
@@ -53,6 +57,7 @@ interface ConversationRow {
   claude_session_id: string | null;
   model: string | null;
   effort: Effort | null;
+  ultracode: number | null;
   working_directory: string | null;
   computer_target: string | null;
   vm_id: string | null;
@@ -60,6 +65,9 @@ interface ConversationRow {
   workspace_id: string | null;
   ssh_server_ids: string | null;
   instructions: string;
+  runner_id: string | null;
+  runner_state: string | null;
+  runner_tools_id: string | null;
   pinned: number;
   archived: number;
   last_message_at: string | null;
@@ -71,10 +79,17 @@ interface ConversationRow {
   followup_created_at?: string | null;
   paused_run_id?: string | null;
   paused_reason?: PauseReason | null;
+  paused_budget_scope?: "agent" | "team" | null;
+  unread_run_id?: string | null;
+  unread_status?: string | null;
+  paused_budget_usd?: number | null;
   paused_limit?: string | null;
   paused_resume_at?: string | null;
   paused_auto?: number | null;
   paused_at?: string | null;
+  from_run_id?: string | null;
+  from_agent_id?: string | null;
+  from_conversation_id?: string | null;
 }
 
 interface MessageRow {
@@ -85,8 +100,11 @@ interface MessageRow {
   blocks: string;
   run_id: string | null;
   attachments: string;
+  source?: string | null;
   created_at: string;
 }
+
+const MESSAGE_SOURCES: readonly MessageSource[] = ["automation", "delegation", "task"];
 
 /* ------------------------------------------------------------------ */
 /* Mapping                                                             */
@@ -109,7 +127,16 @@ function previewOf(text: string | null | undefined): string {
   return t.length > PREVIEW_MAX ? `${t.slice(0, PREVIEW_MAX - 1)}…` : t;
 }
 
+/** What a runner last said about a chat that works there (`runner_state`, written by remote/mirror.ts). */
+export interface RunnerChatState {
+  running: boolean;
+  paused: RunPause | null;
+  followup: ConversationFollowup | null;
+}
+
 function toConversation(r: ConversationRow): Conversation {
+  // A chat on a runner has its runs, its pause and its follow-up there: the local tables hold nothing about them.
+  const remote = r.runner_id ? (parseJson<Partial<RunnerChatState> | null>(r.runner_state, null) ?? {}) : null;
   return {
     id: r.id,
     agentId: r.agent_id,
@@ -118,6 +145,7 @@ function toConversation(r: ConversationRow): Conversation {
     claudeSessionId: r.claude_session_id,
     model: r.model || null,
     effort: r.effort || null,
+    ultracode: r.ultracode == null ? null : bool(r.ultracode),
     workingDirectory: r.working_directory,
     computerTarget: parseComputerTarget(parseJson<unknown>(r.computer_target, null)),
     vmId: r.vm_id ?? null,
@@ -125,18 +153,39 @@ function toConversation(r: ConversationRow): Conversation {
     workspaceId: r.workspace_id ?? null,
     sshServerIds: parseServerIds(r.ssh_server_ids),
     instructions: r.instructions,
+    runnerId: r.runner_id ?? null,
+    runnerToolsId: r.runner_tools_id ?? null,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
     lastMessageAt: r.last_message_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     preview: previewOf(r.preview),
-    running: activeRunForConversation(r.id) !== null,
-    followup: r.followup_due_at ? { note: r.followup_note ?? "", dueAt: r.followup_due_at, createdAt: r.followup_created_at ?? r.followup_due_at } : null,
-    paused:
-      r.paused_run_id && r.paused_reason && r.paused_at
-        ? { runId: r.paused_run_id, reason: r.paused_reason, pausedAt: r.paused_at, limit: r.paused_limit ?? null, resumeAt: r.paused_resume_at ?? null, auto: bool(r.paused_auto) }
+    running: remote ? remoteRunForConversation(r.id) !== null || remote.running === true : activeRunForConversation(r.id) !== null,
+    followup: remote
+      ? (remote.followup ?? null)
+      : r.followup_due_at
+        ? { note: r.followup_note ?? "", dueAt: r.followup_due_at, createdAt: r.followup_created_at ?? r.followup_due_at }
         : null,
+    paused: remote
+      ? (remote.paused ?? null)
+      : r.paused_run_id && r.paused_reason && r.paused_at
+        ? toPause(
+            {
+              run_id: r.paused_run_id,
+              reason: r.paused_reason,
+              created_at: r.paused_at,
+              limit_name: r.paused_limit ?? null,
+              resume_at: r.paused_resume_at ?? null,
+              auto: r.paused_auto ?? 0,
+              budget_scope: r.paused_budget_scope ?? null,
+              budget_usd: r.paused_budget_usd ?? null,
+            },
+            r,
+          )
+        : null,
+    delegatedFrom: r.from_run_id && r.from_agent_id ? { agentId: r.from_agent_id, conversationId: r.from_conversation_id ?? null, runId: r.from_run_id } : null,
+    unread: r.unread_run_id ? { runId: r.unread_run_id, failed: r.unread_status === "failed" } : null,
   };
 }
 
@@ -149,6 +198,8 @@ function toMessage(r: MessageRow): Message {
     blocks: parseJson<MessageBlock[]>(r.blocks, []),
     runId: r.run_id,
     attachments: parseJson<Attachment[]>(r.attachments, []),
+    // Only the three known values: a restored backup can't invent an author.
+    ...(r.role === "user" && MESSAGE_SOURCES.includes(r.source as MessageSource) ? { source: r.source as MessageSource } : {}),
     createdAt: r.created_at,
   };
 }
@@ -156,11 +207,20 @@ function toMessage(r: MessageRow): Message {
 const PREVIEW_SQL = `(SELECT m.content FROM messages m WHERE m.conversation_id = c.id AND m.content != '' ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1) AS preview`;
 const FOLLOWUP_SQL = "f.note AS followup_note, f.due_at AS followup_due_at, f.created_at AS followup_created_at";
 const PAUSE_SQL =
-  "p.run_id AS paused_run_id, p.reason AS paused_reason, p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at";
-const FROM_SQL = "conversations c LEFT JOIN followups f ON f.conversation_id = c.id LEFT JOIN paused_runs p ON p.conversation_id = c.id";
+  "p.run_id AS paused_run_id, p.reason AS paused_reason, p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at, " +
+  "p.budget_scope AS paused_budget_scope, p.budget_usd AS paused_budget_usd, " +
+  PAUSE_QUESTION_SQL;
+// A handed-over chat links back to the run (and through it the chat and agent) that asked. Derived, not stored: when
+// the asking agent or its chat is deleted the link goes null by itself.
+const DELEGATED_SQL =
+  "pr.id AS from_run_id, pr.agent_id AS from_agent_id, pc.id AS from_conversation_id, (SELECT ur.status FROM runs ur WHERE ur.id = c.unread_run_id) AS unread_status";
+const DELEGATED_JOIN =
+  "LEFT JOIN runs pr ON c.origin = 'delegation' AND pr.id = (SELECT r.parent_run_id FROM runs r WHERE r.conversation_id = c.id AND r.parent_run_id IS NOT NULL ORDER BY r.created_at, r.rowid LIMIT 1) " +
+  "LEFT JOIN conversations pc ON pc.id = pr.conversation_id";
+const FROM_SQL = `conversations c LEFT JOIN followups f ON f.conversation_id = c.id LEFT JOIN paused_runs p ON p.conversation_id = c.id ${PAUSE_QUESTION_JOIN} ${DELEGATED_JOIN}`;
 
 function conversationRow(id: string): ConversationRow | null {
-  return get<ConversationRow>(`SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL}, ${PAUSE_SQL} FROM ${FROM_SQL} WHERE c.id = ?`, id);
+  return get<ConversationRow>(`SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL}, ${PAUSE_SQL}, ${DELEGATED_SQL} FROM ${FROM_SQL} WHERE c.id = ?`, id);
 }
 
 function requireConversationRow(id: string): ConversationRow {
@@ -216,6 +276,8 @@ export interface ModelChoice {
   /** `claude --model` value; null/empty = the agent's model. */
   model?: string | null;
   effort?: Effort | null;
+  /** Ultracode for this chat; null = the agent's. */
+  ultracode?: boolean | null;
 }
 
 export function createConversation(
@@ -249,6 +311,7 @@ export function createConversation(
     claude_session_id: null,
     model: input.model?.trim() || null,
     effort: input.effort ?? null,
+    ultracode: input.ultracode == null ? null : int(input.ultracode)!,
     working_directory: workingDirectory,
     vm_id: vmId,
     browser_profile_id: browserProfileId,
@@ -280,7 +343,8 @@ export function chatFillOnly(conversationId: string): boolean {
 
 export function getConversation(id: string): ConversationWithMessages {
   const conversation = getConversationSummary(id);
-  return { ...conversation, messages: listMessages(id), activeRunId: activeRunForConversation(id), queue: listQueue(id) };
+  const activeRunId = conversation.runnerId ? remoteRunForConversation(id) : activeRunForConversation(id);
+  return { ...conversation, messages: listMessages(id), activeRunId, queue: listQueue(id) };
 }
 
 /** `workspaceId`: chats of the workspace's agents, and global agents' chats started in it. */
@@ -297,9 +361,9 @@ export function listConversations(
     where.push("(c.workspace_id = ? OR c.agent_id IN (SELECT id FROM agents WHERE workspace_id = ?))");
     params.push(opts.workspaceId, opts.workspaceId);
   }
-  const search = opts.search?.trim();
-  if (search) {
-    const like = `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  // Every word, in the title or in a message ("invoice march" finds "March invoice review"); at most six words.
+  for (const word of (opts.search ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 6)) {
+    const like = `%${word.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
     where.push(
       "(c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages m2 WHERE m2.conversation_id = c.id AND m2.content LIKE ? ESCAPE '\\'))",
     );
@@ -308,7 +372,7 @@ export function listConversations(
   const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? 100)), 500);
   params.push(limit);
   const rows = all<ConversationRow>(
-    `SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL}, ${PAUSE_SQL} FROM ${FROM_SQL} WHERE ${where.join(" AND ")}
+    `SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL}, ${PAUSE_SQL}, ${DELEGATED_SQL} FROM ${FROM_SQL} WHERE ${where.join(" AND ")}
      ORDER BY ${opts.archived ? "" : "c.pinned DESC, "}COALESCE(c.last_message_at, c.created_at) DESC LIMIT ?`,
     ...params,
   );
@@ -325,6 +389,7 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     archived: int(patch.archived),
     model: patch.model === undefined ? undefined : patch.model?.trim() || null,
     effort: patch.effort,
+    ultracode: patch.ultracode === null ? null : int(patch.ultracode),
     working_directory: patch.workingDirectory === undefined ? undefined : normalizeWorkingDirectory(patch.workingDirectory),
     computer_target: patch.computerTarget === undefined ? undefined : patch.computerTarget ? JSON.stringify(parseComputerTarget(patch.computerTarget)) : null,
     vm_id: normalizeVmId(patch.vmId),
@@ -348,6 +413,8 @@ export function setConversationState(
   id: string,
   patch: {
     claudeSessionId?: string | null;
+    /** What Claude Code has counted for that session so far. A session set without it starts uncounted. */
+    claudeSessionCostUsd?: number | null;
     /** `instructionsDigest` of the standing instructions the Claude session has seen. */
     instructionsDigest?: string;
     /** `memoryDigest` of the MEMORY.md the Claude session has seen. */
@@ -356,16 +423,19 @@ export function setConversationState(
     title?: string;
     model?: string | null;
     effort?: Effort | null;
+    ultracode?: boolean | null;
     archived?: boolean;
   },
 ) {
   update("conversations", id, {
     claude_session_id: patch.claudeSessionId,
+    claude_session_cost_usd: patch.claudeSessionCostUsd !== undefined ? patch.claudeSessionCostUsd : patch.claudeSessionId !== undefined ? null : undefined,
     instructions_digest: patch.instructionsDigest,
     memory_digest: patch.memoryDigest,
     archived: int(patch.archived),
     model: patch.model,
     effort: patch.effort,
+    ultracode: patch.ultracode === null ? null : int(patch.ultracode),
     last_message_at: patch.lastMessageAt,
     title: patch.title,
     updated_at: now(),
@@ -373,6 +443,28 @@ export function setConversationState(
 }
 
 /** Cancel any active run, then delete the conversation, its messages and its transcript file. */
+/**
+ * The human has seen these chats (opened them, or "Mark all read"): nothing is new there anymore, and a failure in them
+ * stops showing as "Last run failed" on the agent once its chat was read.
+ */
+export function markConversationsRead(ids: string[] | "all"): number {
+  const rows =
+    ids === "all"
+      ? all<{ id: string; unread_run_id: string }>("SELECT id, unread_run_id FROM conversations WHERE unread_run_id IS NOT NULL")
+      : ids.flatMap((id) => {
+          const r = get<{ id: string; unread_run_id: string | null }>("SELECT id, unread_run_id FROM conversations WHERE id = ?", id);
+          return r?.unread_run_id ? [{ id: r.id, unread_run_id: r.unread_run_id }] : [];
+        });
+  for (const r of rows) {
+    sql("UPDATE conversations SET unread_run_id = NULL WHERE id = ? AND unread_run_id = ?", r.id, r.unread_run_id);
+    // Seen: the agent stops saying "Last run failed" for it.
+    const failed = get<{ id: string }>("SELECT id FROM agents WHERE failed_run_id = ?", r.unread_run_id);
+    if (failed) setAgentFailedRun(failed.id, null);
+    emitConversationUpdated(r.id);
+  }
+  return rows.length;
+}
+
 export async function deleteConversation(id: string): Promise<void> {
   const row = requireConversationRow(id);
   // First, so the run that is cancelled below doesn't hand over to the queue.
@@ -387,6 +479,8 @@ export async function deleteConversation(id: string): Promise<void> {
   if (paused) await cancelRun(paused.run_id);
   sql("DELETE FROM messages WHERE conversation_id = ?", id);
   sql("DELETE FROM conversations WHERE id = ?", id);
+  // "Last run failed" would open a run whose chat is gone.
+  const forgot = sql("UPDATE agents SET failed_run_id = NULL WHERE failed_run_id IN (SELECT id FROM runs WHERE conversation_id = ?)", id).changes;
   try {
     const agent = getAgent(row.agent_id);
     rmSync(transcriptPath(agent, id), { force: true });
@@ -395,6 +489,7 @@ export async function deleteConversation(id: string): Promise<void> {
   }
   await closeChatTabs(id);
   bus.emit({ type: "conversation.deleted", id });
+  if (forgot) bus.changed("agents");
   if (parseServerIds(row.ssh_server_ids).length) bus.changed("ssh-servers");
 }
 
@@ -422,6 +517,8 @@ export function addMessage(
     blocks?: MessageBlock[];
     runId?: string | null;
     attachments?: Attachment[];
+    /** Who wrote a user message when it wasn't the human. Set by the core only. */
+    source?: MessageSource;
   },
   opts: { emit?: boolean } = {},
 ): Message {
@@ -433,6 +530,7 @@ export function addMessage(
     blocks: JSON.stringify(input.blocks ?? []),
     run_id: input.runId ?? null,
     attachments: JSON.stringify(input.attachments ?? []),
+    source: input.role === "user" ? (input.source ?? null) : null,
     created_at: now(),
   };
   insert("messages", { ...row });
@@ -546,6 +644,10 @@ export async function sendMessage(
     marker?: MessageBlock[];
     /** Files already in the agent's repository (e.g. a task's attachments), attached like uploads. */
     files?: Attachment[];
+    /** Who wrote it when it wasn't the human: an automation, an agent handing work over, the task board. */
+    source?: MessageSource;
+    /** The human started it by hand (Run now): a used-up monthly budget doesn't hold it. */
+    byHuman?: boolean;
   },
 ): Promise<SendMessageResult> {
   const { conv, agent } = messageTarget(conversationId, input.trigger);
@@ -554,7 +656,7 @@ export async function sendMessage(
   if (!content && files.length === 0 && !input.files?.length) throw badRequest("Message is empty");
 
   const attachments = [...(input.files ?? []), ...(files.length ? saveAttachments(agent, files) : [])];
-  const message = addMessage({ conversationId, role: input.marker ? "system" : "user", content: redact(content), blocks: input.marker, attachments });
+  const message = addMessage({ conversationId, role: input.marker ? "system" : "user", content: redact(content), blocks: input.marker, attachments, source: input.source });
   const prompt = promptWithFiles(input.prompt ?? content, agent, attachments);
 
   let started: Run;
@@ -570,6 +672,7 @@ export async function sendMessage(
       voice: input.voice ?? false,
       userMessageId: message.id,
       runId: input.runId,
+      byHuman: input.byHuman,
     });
   } catch (err) {
     sql("DELETE FROM messages WHERE id = ?", message.id);
@@ -635,6 +738,7 @@ export async function startChat(
     instructions: input.instructions,
     model: input.model,
     effort: input.effort,
+    ultracode: input.ultracode,
   });
   if (input.computerTarget) {
     update("conversations", conversation.id, { computer_target: JSON.stringify(parseComputerTarget(input.computerTarget)) });
@@ -673,10 +777,14 @@ function toolSummary(blocks: MessageBlock[]): string {
   return [...counts.entries()].map(([name, n]) => `\`${name}\`${n > 1 ? ` ×${n}` : ""}`).join(", ");
 }
 
-function speaker(runTrigger: RunTrigger): string {
-  if (runTrigger === "routine") return "Automation";
-  if (runTrigger === "delegation") return "Delegated task";
-  if (runTrigger === "task") return "Task";
+/**
+ * Who a turn's opening message is from. Read off the message, not the run: the human's feedback on a ticket also runs
+ * with the trigger "task".
+ */
+function speaker(m?: Pick<Message, "source">, runTrigger?: RunTrigger): string {
+  if (m?.source === "automation") return "Automation";
+  if (m?.source === "delegation") return "Delegated task";
+  if (m?.source === "task") return "Task";
   if (runTrigger === "followup") return "Follow-up";
   return getSettings().general.userName.trim() || "User";
 }
@@ -694,12 +802,22 @@ export function appendTranscript(conversationId: string, finishedRun: Run, userM
   }
   const files = (attachments: Attachment[]) => `Attachments: ${attachments.map((a) => `\`${a.path}\``).join(", ")}`;
   for (const m of userMessages) {
-    parts.push(`## ${speaker(finishedRun.trigger)} · ${fmtTime(m.createdAt)}\n\n${m.content || "_(no text)_"}`);
+    parts.push(`## ${speaker(m, finishedRun.trigger)} · ${fmtTime(m.createdAt)}\n\n${m.content || "_(no text)_"}`);
     if (m.attachments.length) parts.push(files(m.attachments));
   }
   for (const b of assistant?.blocks ?? []) {
+    if (b.type === "question") {
+      const options = b.options.map((o, i) => `${i + 1}. ${o.label}${o.description ? ` — ${o.description}` : ""}`).join("\n");
+      const asked = b.kind === "approval" ? `Asks for an OK: ${b.title}${b.body ? `\n\nWhy: ${b.body}` : ""}${b.affects ? `\n\nAffects: ${b.affects}` : ""}` : `${b.title}${b.body ? `\n\n${b.body}` : ""}${options ? `\n\n${options}` : ""}`;
+      parts.push(`## ${agent.name} asked · ${fmtTime(b.askedAt)}\n\n${asked}`);
+      if (b.answer) {
+        const said = b.status === "approved" ? "Approved" : b.status === "declined" ? "Declined" : "";
+        parts.push(`## ${speaker()} answered · ${fmtTime(b.answer.at)}\n\n${[said, b.answer.text].filter(Boolean).join(" — ") || "_(no text)_"}`);
+      } else if (b.status === "withdrawn") parts.push(`_The question was withdrawn${b.closedReason ? `: ${b.closedReason}` : "."}_`);
+      continue;
+    }
     if (b.type !== "user_message") continue;
-    parts.push(`## ${speaker("chat")} · ${fmtTime(b.sentAt)} · while ${agent.name} was working\n\n${b.text || "_(no text)_"}`);
+    parts.push(`## ${speaker()} · ${fmtTime(b.sentAt)} · while ${agent.name} was working\n\n${b.text || "_(no text)_"}`);
     if (b.attachments.length) parts.push(files(b.attachments));
   }
   const meta = [

@@ -7,13 +7,14 @@
  * `resumeRun`). A run that waits for the limit continues by itself once the limit has reset
  * (settings.runner.autoContinueOnLimit). Pauses survive a restart.
  */
-import type { PauseReason, Run, RunPause } from "@godmode/shared";
+import type { PauseReason, QuestionKind, Run, RunPause } from "@godmode/shared";
 import { all, bool, get, insert, run as exec } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { HttpError, badRequest, conflict, notFound, now } from "../util";
 import { LIMIT_TEXT, type StreamLimit } from "../runner/stream";
 import { cancelRun, listActiveRuns, pauseRun, resumeRun } from "../runner/runner";
+import { repairQuestions } from "./questions";
 import { emitConversationUpdated } from "./conversations";
 import { notify } from "./notifications";
 import { getSettings } from "./settings";
@@ -58,11 +59,42 @@ export interface PausedRow {
   retries: number;
   depth: number;
   voice: number;
+  /** `budget` pauses: whose monthly budget holds the run, and how much it was. */
+  budget_scope?: "agent" | "team" | null;
+  budget_usd?: number | null;
+  /** 1: the human started it or let it run — a used-up budget doesn't hold it again. */
+  exempt?: number;
   created_at: string;
 }
 
-export function toPause(r: Pick<PausedRow, "run_id" | "reason" | "limit_name" | "resume_at" | "auto" | "created_at">): RunPause {
-  return { runId: r.run_id, reason: r.reason, pausedAt: r.created_at, limit: r.limit_name, resumeAt: r.resume_at, auto: bool(r.auto) };
+/** The open question a paused run waits for, as joined by `PAUSE_QUESTION_SQL`. */
+export interface PauseQuestionCols {
+  paused_question_id?: string | null;
+  paused_question_kind?: QuestionKind | null;
+  paused_question_title?: string | null;
+}
+
+/**
+ * Join and columns that give a pause row (alias `p`) the open question its run waits for — what the chat, the task and
+ * the agent show while it stands still.
+ */
+export const PAUSE_QUESTION_JOIN = "LEFT JOIN questions pq ON pq.run_id = p.run_id AND pq.status = 'open'";
+export const PAUSE_QUESTION_SQL = "pq.id AS paused_question_id, pq.kind AS paused_question_kind, pq.title AS paused_question_title";
+
+export function toPause(
+  r: Pick<PausedRow, "run_id" | "reason" | "limit_name" | "resume_at" | "auto" | "created_at" | "budget_scope" | "budget_usd">,
+  q: PauseQuestionCols = {},
+): RunPause {
+  return {
+    runId: r.run_id,
+    reason: r.reason,
+    pausedAt: r.created_at,
+    limit: r.limit_name,
+    resumeAt: r.resume_at,
+    auto: bool(r.auto),
+    ...(r.reason === "question" ? { question: q.paused_question_id ? { id: q.paused_question_id, kind: q.paused_question_kind ?? "question", title: q.paused_question_title ?? "" } : null } : {}),
+    ...(r.reason === "budget" ? { budget: r.budget_scope ? { scope: r.budget_scope, limitUsd: r.budget_usd ?? 0 } : null } : {}),
+  };
 }
 
 /** The chat's paused run, if it has one. */
@@ -158,7 +190,8 @@ function announceLimit(row: PausedRow) {
 /** Pause what the agent is doing in the chat. */
 export async function pauseConversation(conversationId: string): Promise<void> {
   if (!get<{ id: string }>("SELECT id FROM conversations WHERE id = ?", conversationId)) throw notFound("Conversation");
-  if (pauseOf(conversationId)) throw conflict("This chat is paused already");
+  const paused = pauseOf(conversationId);
+  if (paused) throw conflict(paused.reason === "question" ? "This chat waits for your answer" : "This chat is paused already");
   const active = listActiveRuns().filter((r) => r.conversationId === conversationId);
   const target = active.find((r) => r.status === "running") ?? active[0];
   if (!target) throw conflict("Nothing is running in this chat");
@@ -203,9 +236,14 @@ export async function pauseAgent(agentId: string): Promise<number> {
   return paused;
 }
 
-/** Continue every paused run of the agent. Returns how many continued. */
+/** Continue every paused run of the agent. Returns how many continued. Runs that wait for an answer need that answer. */
 export function continueAgent(agentId: string): number {
-  const rows = all<PausedRow>("SELECT * FROM paused_runs WHERE agent_id = ? ORDER BY created_at", agentId);
+  // Not runs held for a budget: letting those through is its own decision (Let it run, or the budget's own button).
+  const rows = all<PausedRow>("SELECT * FROM paused_runs WHERE agent_id = ? AND reason NOT IN ('question', 'budget') ORDER BY created_at", agentId);
+  if (!rows.length && get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason = 'question'", agentId)?.n) {
+    const name = get<{ name: string }>("SELECT name FROM agents WHERE id = ?", agentId)?.name ?? "The agent";
+    throw new HttpError(409, `${name} is waiting for your answer — answer the question to continue.`, "needs_answer");
+  }
   let continued = 0;
   let failure: unknown = null;
   for (const row of rows) {
@@ -244,7 +282,7 @@ export function sweep(): void {
   for (const row of all<PausedRow>("SELECT * FROM paused_runs WHERE auto = 1 AND resume_at IS NOT NULL AND resume_at <= ? ORDER BY created_at", now())) {
     try {
       resumeRun(row, "auto");
-      log.info(`run ${row.run_id} continues: the limit has reset`);
+      log.info(`run ${row.run_id} continues: ${row.reason === "budget" ? "a new month started" : "the limit has reset"}`);
     } catch (err) {
       if (err instanceof HttpError && err.code === "shutting_down") continue;
       stopContinuing(row, err instanceof Error ? err.message : String(err));
@@ -270,6 +308,8 @@ export function startPauses(): void {
   const lost = all<{ id: string }>("SELECT id FROM runs WHERE status = 'paused' AND id NOT IN (SELECT run_id FROM paused_runs)");
   for (const { id } of lost) void cancelRun(id, "Paused, but what it needed to continue is gone").catch((err) => log.warn(`could not close run ${id}`, err));
   if (lost.length) log.warn(`closed ${lost.length} paused run(s) that couldn't be continued`);
+  // An open question belongs to a run that stands still for it, and the other way round.
+  repairQuestions();
   const waiting = get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs")?.n ?? 0;
   if (waiting) log.info(`${waiting} paused run(s)`);
   arm();

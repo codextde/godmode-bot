@@ -56,15 +56,36 @@ export function VoiceMode(props: VoiceModeProps) {
   return <AnimatePresence>{voiceMode && armed && <VoiceModeOverlay {...props} />}</AnimatePresence>;
 }
 
+const ORDINALS = ["one", "two", "three", "four"];
+
+/** What the agent asks, said out loud: the question and its suggested answers, or the step it wants an OK for. */
+function spokenQuestion(m: Message): string {
+  const q = m.blocks.findLast((b) => b.type === "question");
+  if (!q || q.type !== "question" || q.status !== "open") return "";
+  if (q.kind === "approval") return `I need your OK to ${q.title.replace(/^[A-Z]/, (c) => c.toLowerCase())}. Say approve or decline.`;
+  const options = q.options.map((o, i) => `Option ${ORDINALS[i] ?? i + 1}: ${o.label}.`).join(" ");
+  return `${q.title}${options ? ` ${options}` : ""}`;
+}
+
 function replyText(m: Message): string {
-  if (m.content.trim()) return m.content;
+  const asked = spokenQuestion(m);
+  if (m.content.trim()) return asked ? `${m.content}\n\n${asked}` : m.content;
   const text = m.blocks
     .filter((b) => b.type === "text")
     .map((b) => (b as { text: string }).text)
     .join("\n\n");
-  if (text.trim()) return text;
+  if (text.trim() || asked) return [text.trim(), asked].filter(Boolean).join("\n\n");
   if (m.blocks.some((b) => b.type === "error")) return "Sorry, something went wrong with that one.";
   return "";
+}
+
+/**
+ * One reply per stretch of a message: a run that asks a question and continues after the answer writes into the same
+ * message, and both the question and the final answer are spoken.
+ */
+function replyKey(m: Message): string {
+  const open = m.blocks.some((b) => b.type === "question" && b.status === "open");
+  return `${m.id}:${m.blocks.filter((b) => b.type === "pause").length}:${open ? "asking" : "done"}`;
 }
 
 function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }: VoiceModeProps) {
@@ -76,8 +97,8 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
 
   const [phase, setPhase] = useState<Phase>(() => {
     const pendingReply =
-      !busy && lastMessage?.role === "assistant" && !!lastMessage.runId && !!voiceRunIds[lastMessage.runId] && !handled.has(lastMessage.id);
-    if (!busy && !pendingReply && lastMessage?.role === "assistant") handled.add(lastMessage.id);
+      !busy && lastMessage?.role === "assistant" && !!lastMessage.runId && !!voiceRunIds[lastMessage.runId] && !handled.has(replyKey(lastMessage));
+    if (!busy && !pendingReply && lastMessage?.role === "assistant") handled.add(replyKey(lastMessage));
     return busy || pendingReply ? "thinking" : supported ? "listening" : "paused";
   });
   const [transcript, setTranscript] = useState("");
@@ -132,13 +153,13 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
   useEffect(() => {
     if (phase !== "thinking" || busy) return;
     const m = lastMessage;
-    if (!m || m.role !== "assistant" || handled.has(m.id)) {
+    if (!m || m.role !== "assistant" || handled.has(replyKey(m))) {
       const t = setTimeout(() => {
         if (phaseRef.current === "thinking") setPhase("listening");
       }, 6000);
       return () => clearTimeout(t);
     }
-    handled.add(m.id);
+    handled.add(replyKey(m));
     const text = replyText(m);
     if (!text) {
       setPhase("listening");

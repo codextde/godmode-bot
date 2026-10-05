@@ -3,11 +3,13 @@ import { Image } from "expo-image";
 import { memo, useEffect, useState } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
-import type { Message, MessageBlock } from "@godmode/shared";
+import type { Attachment, Message, MessageBlock } from "@godmode/shared";
+import { toolActivity } from "@godmode/shared";
+import { FileChip } from "./attachments";
 import { Icon } from "./icon";
 import { Markdown } from "./markdown";
 import { Row, T, tap } from "./ui";
-import { activityText, toolLabel } from "@/lib/format";
+import { toolLabel } from "@/lib/format";
 import { radius, space, useColors } from "@/lib/theme";
 
 type Step = Extract<MessageBlock, { type: "tool_use" | "thinking" }>;
@@ -27,19 +29,27 @@ function group(blocks: MessageBlock[]): Part[] {
   return parts;
 }
 
+const SOURCE_CAPTION = { automation: "Automation", delegation: "From another agent", task: "Board ticket" } as const;
+
 export const UserMessage = memo(function UserMessage({ message }: { message: Message }) {
   const c = useColors();
+  // A turn the human didn't write keeps the neutral surface and says who it came from.
+  const caption = message.source ? SOURCE_CAPTION[message.source] : null;
+  const fg = caption ? c.text : c.onPrimary;
   return (
-    <View style={styles.userWrap}>
-      <Pressable onLongPress={() => copy(message.content)} style={[styles.user, { backgroundColor: c.primary }]}>
-        <T variant="body" color={c.onPrimary} selectable>
-          {message.content}
+    <View style={[styles.userWrap, caption ? { alignItems: "flex-start" } : null]}>
+      {caption ? (
+        <T variant="caption" muted style={{ marginBottom: 4 }}>
+          {caption}
         </T>
-        {message.attachments.length > 0 && (
-          <T variant="caption" color={c.onPrimary} style={{ opacity: 0.7, marginTop: 4 }}>
-            {message.attachments.map((a) => a.name).join(", ")}
+      ) : null}
+      <Pressable onLongPress={() => copy(message.content)} style={[styles.user, { backgroundColor: caption ? c.sunken : c.primary }]}>
+        <Files attachments={message.attachments} spaced={!!message.content} color={fg} />
+        {message.content ? (
+          <T variant="body" color={fg} selectable>
+            {message.content}
           </T>
-        )}
+        ) : null}
       </Pressable>
     </View>
   );
@@ -56,6 +66,17 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
     </Pressable>
   );
 });
+
+function Files({ attachments, spaced, color }: { attachments: Attachment[]; spaced: boolean; color: string }) {
+  if (!attachments.length) return null;
+  return (
+    <View style={[styles.files, spaced && { marginBottom: 8 }]}>
+      {attachments.map((a, i) => (
+        <FileChip key={`${a.path}-${i}`} name={a.name} mime={a.mime} size={a.size} color={color} />
+      ))}
+    </View>
+  );
+}
 
 function copy(text: string) {
   if (!text) return;
@@ -103,20 +124,69 @@ function Block({ block }: { block: MessageBlock }) {
       return (
         <View style={styles.userWrap}>
           <View style={[styles.user, { backgroundColor: c.primary }]}>
-            <T variant="body" color={c.onPrimary} selectable>
-              {block.text}
-            </T>
-            {block.attachments.length > 0 && (
-              <T variant="caption" color={c.onPrimary} style={{ opacity: 0.7, marginTop: 4 }}>
-                {block.attachments.map((a) => a.name).join(", ")}
+            <Files attachments={block.attachments} spaced={!!block.text} color={c.onPrimary} />
+            {block.text ? (
+              <T variant="body" color={c.onPrimary} selectable>
+                {block.text}
               </T>
-            )}
+            ) : null}
           </View>
         </View>
       );
+    case "question": {
+      // Answered by writing into the chat: a suggested answer by its number or its words.
+      const open = block.status === "open";
+      const approval = block.kind === "approval";
+      const status =
+        block.status === "open"
+          ? approval
+            ? "Reply “approve” or “decline” below — or what to do instead."
+            : block.options.length
+              ? "Reply below with a number or your own answer."
+              : "Reply below to answer."
+          : block.status === "approved"
+            ? `Approved${block.answer?.text ? ` — ${block.answer.text}` : ""}`
+            : block.status === "declined"
+              ? `Declined${block.answer?.text ? ` — ${block.answer.text}` : ""}`
+              : block.status === "answered"
+                ? `Answered: ${block.answer?.text ?? ""}`
+                : "Withdrawn — the run was stopped before this was answered.";
+      return (
+        <View style={[styles.question, { backgroundColor: open ? c.warningSoft : c.sunken, borderColor: open ? c.warning : c.border }]}>
+          <T variant="caption" color={open ? c.warning : c.textMuted} style={{ fontWeight: "600" }}>
+            {approval ? "NEEDS YOUR OK" : "QUESTION"}
+          </T>
+          <T variant="body" style={{ fontWeight: "600" }} selectable>
+            {block.title}
+          </T>
+          {block.body ? (
+            <T variant="footnote" muted selectable>
+              {approval ? `Why: ${block.body}` : block.body}
+            </T>
+          ) : null}
+          {approval && block.affects ? (
+            <T variant="footnote" muted selectable>
+              Affects: {block.affects}
+            </T>
+          ) : null}
+          {block.options.map((o, i) => (
+            <T key={o.id} variant="subhead" style={{ opacity: !open && block.answer?.optionId !== o.id ? 0.55 : 1 }}>
+              {i + 1}. {o.label}
+              {o.recommended ? " (recommended)" : ""}
+              {o.description ? ` — ${o.description}` : ""}
+            </T>
+          ))}
+          <T variant="footnote" muted>
+            {status}
+          </T>
+        </View>
+      );
+    }
     case "pause": {
-      const limit = block.reason === "limit";
-      const what = limit ? `${block.limit ?? "Usage limit"} reached` : "Paused";
+      // The question card says why a run stands still for an answer.
+      if (block.reason === "question") return null;
+      const limit = block.reason === "limit" || block.reason === "budget";
+      const what = block.reason === "budget" ? "Held · budget used up" : limit ? `${block.limit ?? "Usage limit"} reached` : "Paused";
       return (
         <View style={[styles.callout, { backgroundColor: limit ? c.warningSoft : c.sunken }]}>
           <Icon name={limit ? "clock" : "pause"} size={14} color={limit ? c.warning : c.textMuted} />
@@ -140,7 +210,7 @@ function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
   const label = latest ? toolLabel(latest) : null;
   const failed = tools.some((t) => t.isError);
   const pending = live && latest && latest.result === undefined;
-  const summary = pending ? activityText(`Using ${latest.name.replace(/^mcp__.+?__/, "")}`) : label ? label.title : "Thought it through";
+  const summary = pending ? toolActivity(latest.name, latest.input).replace(/…$/, "") : label ? label.title : "Thought it through";
   const count = tools.length;
 
   return (
@@ -266,9 +336,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 10,
   },
+  files: {
+    gap: 6,
+    marginHorizontal: -7,
+    marginTop: -2,
+  },
   assistant: {
     gap: 12,
     paddingRight: 8,
+  },
+  question: {
+    gap: 6,
+    padding: space.md,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
   },
   callout: {
     flexDirection: "row",

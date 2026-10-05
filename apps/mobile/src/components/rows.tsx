@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { Agent, Conversation } from "@godmode/shared";
+import { agentPresence, presenceLabel } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { Badge, Card, LiveDot, Row, T, tap } from "./ui";
@@ -12,11 +13,11 @@ import { radius, space, useColors } from "@/lib/theme";
 
 const ORIGIN_LABEL: Partial<Record<Conversation["origin"], string>> = {
   routine: "Automation",
-  delegation: "Delegated",
+  delegation: "Handed over",
   slack: "Slack",
   telegram: "Telegram",
   teams: "Teams",
-  api: "API",
+  api: "Chat",
 };
 
 export function openChat(id: string) {
@@ -92,12 +93,16 @@ export function RunCard({ live, agent, title }: { live: LiveRun; agent?: Agent; 
   );
 }
 
-export function AgentRow({ agent, running, onPress }: { agent: Agent; running?: boolean; onPress: () => void }) {
+export function AgentRow({ agent, running, queued, onPress }: { agent: Agent; running?: number; queued?: number; onPress: () => void }) {
   const c = useColors();
-  const status = running ? "Working" : !agent.enabled ? "Paused" : agent.status === "error" ? "Last run failed" : agent.lastRunAt ? `Active ${shortTime(agent.lastRunAt)}` : "Ready";
+  // The same states as the desktop; an idle agent says when it last worked.
+  const presence = agentPresence(agent, { running, queued });
+  const status = presence.state === "idle" ? (agent.lastRunAt ? `Active ${shortTime(agent.lastRunAt)}` : "Ready") : presenceLabel(presence);
+  const busy = presence.state === "working";
+  const subtitle = agent.role || agent.description;
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.agent, pressed && { backgroundColor: c.sunken }]}>
-      <CharacterAvatar agent={agent} size={46} running={running} />
+      <CharacterAvatar agent={agent} size={46} running={busy} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Row style={{ gap: space.sm }}>
           <T variant="headline" numberOfLines={1} style={{ flexShrink: 1, fontSize: 16 }}>
@@ -106,11 +111,11 @@ export function AgentRow({ agent, running, onPress }: { agent: Agent; running?: 
           {agent.isDefault && <Badge label="Main" />}
         </Row>
         <T variant="subhead" muted numberOfLines={1}>
-          {agent.description || status}
+          {subtitle || status}
         </T>
       </View>
-      <T variant="footnote" color={running ? c.brandStrong : agent.status === "error" ? c.danger : c.textMuted}>
-        {running ? "Working" : agent.description ? status : ""}
+      <T variant="footnote" color={busy ? c.brandStrong : presence.state === "failed" ? c.danger : presence.state === "waiting" ? c.warning : c.textMuted}>
+        {busy ? (presence.running > 1 ? `${presence.running} chats` : "Working") : subtitle ? status : ""}
       </T>
       <Icon name="chevron" size={13} color={c.textFaint} />
     </Pressable>

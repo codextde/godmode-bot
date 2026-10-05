@@ -1,6 +1,10 @@
 # Keep the build context small and free of local state / secrets.
+# (apps/cloud/Dockerfile has its own list: apps/cloud/Dockerfile.dockerignore.)
 **/node_modules
 **/dist
+**/dist-cloud
+**/.next
+**/.data
 **/target
 **/.DS_Store
 **/*.log

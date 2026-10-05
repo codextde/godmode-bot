@@ -1,3 +1,4 @@
+import type { SpendPeriod } from "@godmode/shared";
 import { useQuery } from "@tanstack/react-query";
 import { BUILTIN_MODELS, type ModelCatalog } from "@godmode/shared";
 import { api, type ScopeFilter } from "./api";
@@ -78,6 +79,33 @@ export function useVaultStatus() {
   return useQuery({ queryKey: qk.vaultStatus, queryFn: api.vault.status });
 }
 
+/** What agents asked the human; "open" ones keep a run standing still until they are answered. */
+export function useSpend(period: SpendPeriod, agentId?: string | null) {
+  return useQuery({ queryKey: qk.spendReport(period, agentId ?? null), queryFn: () => api.spend.report(period, agentId) });
+}
+
+export function useAttention() {
+  return useQuery({ queryKey: qk.attention, queryFn: api.attention, staleTime: 2_000 });
+}
+
+/** What the team did while the human was away (null = not asked). */
+export function useAway(away: { since: string; until: string } | null) {
+  return useQuery({
+    queryKey: qk.away(away?.since ?? "", away?.until ?? ""),
+    queryFn: () => api.away(away!.since, away!.until),
+    enabled: !!away,
+    staleTime: 60_000,
+  });
+}
+
+export function useBudgets() {
+  return useQuery({ queryKey: qk.budgets, queryFn: api.budgets.get });
+}
+
+export function useQuestions(status = "open") {
+  return useQuery({ queryKey: [...qk.questions, status], queryFn: () => api.questions.list({ status }) });
+}
+
 export function useMissingLogins(status = "open") {
   return useQuery({ queryKey: [...qk.missingLogins, status], queryFn: () => api.missingLogins.list({ status }) });
 }
@@ -87,6 +115,18 @@ export function useTasks(workspaceId?: ScopeFilter) {
   const scope = useUi((s) => s.workspace);
   const ws = workspaceId ?? scope;
   return useQuery({ queryKey: qk.taskList(ws), queryFn: () => api.tasks.list({ workspaceId: ws }) });
+}
+
+/** Goals of the sidebar scope (a workspace sees its own and the global ones). */
+export function useGoals(workspaceId?: ScopeFilter) {
+  const scope = useUi((s) => s.workspace);
+  const ws = workspaceId ?? scope;
+  return useQuery({ queryKey: qk.goalList(ws), queryFn: () => api.goals.list({ workspaceId: ws }) });
+}
+
+/** A ticket's timeline, kept current by `task.event`. */
+export function useTaskEvents(taskId: string) {
+  return useQuery({ queryKey: qk.taskEvents(taskId), queryFn: () => api.tasks.events(taskId) });
 }
 
 export function useArchivedTasks(workspaceId?: ScopeFilter) {
@@ -186,6 +226,15 @@ export function useSshServers() {
   return useQuery({ queryKey: qk.sshServers, queryFn: api.ssh.list });
 }
 
+/** Runners: other computers that work for this one. Kept live by `runner.updated` events in realtime.ts. */
+export function useRunners() {
+  return useQuery({ queryKey: qk.runners, queryFn: api.runners.list });
+}
+
 export function useAgentTemplates() {
   return useQuery({ queryKey: qk.agentTemplates, queryFn: api.agents.templates, staleTime: 5 * 60_000 });
+}
+
+export function useTeamTemplates() {
+  return useQuery({ queryKey: qk.teamTemplates, queryFn: api.agents.teams, staleTime: 5 * 60_000 });
 }

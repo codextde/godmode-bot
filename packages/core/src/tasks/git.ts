@@ -8,7 +8,7 @@
  * Godmode's clone of a remote repository: one bare clone per URL (<data>/repos/.tasks), shared by its tasks' worktrees.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { PullRequestState, TaskPullRequest } from "@godmode/shared";
@@ -35,7 +35,7 @@ export function __setGhForTests(path: string | null | undefined) {
 
 export class GitError extends Error {}
 
-/** New files that look like secrets (env files, keys, keystores); they are never committed. */
+/** New files that look like secrets (env files, keys, keystores); they are never committed, and never pushed. */
 const SECRET_FILE = /(^|\/)(\.env(\.(?!example$|sample$|template$|dist$)[\w.-]+)?|[^/]*\.(pem|key|p12|pfx|keystore|jks)|id_(rsa|dsa|ecdsa|ed25519)|credentials\.json|\.netrc)$/i;
 
 function env() {
@@ -65,6 +65,11 @@ async function gitOk(args: string[], cwd: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Who Godmode's own commits are by, in a repository without a configured author. */
+async function identity(dir: string): Promise<string[]> {
+  return (await gitOk(["config", "user.email"], dir)) ? [] : ["-c", "user.name=Godmode", "-c", "user.email=godmode@localhost"];
 }
 
 function hasRef(dir: string, ref: string): Promise<boolean> {
@@ -99,9 +104,9 @@ async function baseRef(dir: string, base: string): Promise<string> {
   return (await hasRef(dir, `refs/remotes/origin/${base}`)) ? `origin/${base}` : base;
 }
 
-/** Commits the checked out branch has on top of its base. */
-export async function commitsAhead(dir: string, base: string): Promise<number> {
-  return Number(await git(["rev-list", "--count", `${await baseRef(dir, base)}..HEAD`], dir)) || 0;
+/** Commits the checked out branch (or `head`) has on top of its base. */
+export async function commitsAhead(dir: string, base: string, head = "HEAD"): Promise<number> {
+  return Number(await git(["rev-list", "--count", `${await baseRef(dir, base)}..${head}`], dir)) || 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -308,21 +313,159 @@ export async function commitWork(opts: { dir: string; message: string }): Promis
   await git(["add", "-A"], dir);
   if (skipped.length) await git(["reset", "-q", "--", ...skipped], dir);
   if (await git(["diff", "--cached", "--name-only"], dir)) {
-    const identity = (await gitOk(["config", "user.email"], dir)) ? [] : ["-c", "user.name=Godmode", "-c", "user.email=godmode@localhost"];
-    await git([...identity, "commit", "-m", opts.message], dir);
+    await git([...(await identity(dir)), "commit", "-m", opts.message], dir);
   }
   return { skipped };
 }
 
-/** Files the branch adds on top of its base that look like secrets (env files, keys) — committed by the agent itself. */
-export async function secretFilesAdded(dir: string, base: string): Promise<string[]> {
-  const added = await git(["diff", "--name-only", "--diff-filter=A", "-z", `${await baseRef(dir, base)}...HEAD`], dir);
-  return added.split("\0").filter((f) => f && SECRET_FILE.test(f));
+/** Text with its secrets replaced; text without one comes back unchanged. */
+type Clean = (text: string) => string;
+
+/** Patches as the lines they add, whatever the human's git config says. A moved file adds only the lines that changed (-M). */
+const ADDED = ["-U0", "-M", "--no-color", "--no-ext-diff", "--no-textconv"];
+/** Where the branch stays as the agent left it when Godmode rewrote it: refs of the task's worktree only, never pushed. */
+const WITH_SECRETS = "refs/worktree/godmode/with-secrets";
+/** Binary files show no lines, so they are read whole — up to this size (larger ones are media, not configuration). */
+const MAX_BINARY_READ = 20 * 1024 * 1024;
+
+/** The lines `-U0` patches add (in a merge: the ones none of its parents has), without their "+". */
+function addedLines(patch: string): string {
+  const lines: string[] = [];
+  let plus = "";
+  for (const line of patch.split("\n")) {
+    const hunk = /^@@+/.exec(line);
+    if (hunk) plus = "+".repeat(hunk[0].length - 1);
+    else if (line.startsWith("diff --")) plus = "";
+    else if (plus && line.startsWith(plus)) lines.push(line.slice(plus.length));
+  }
+  return lines.join("\n");
 }
 
-/** The branch's changes on top of its base (for checks before pushing). */
-export async function branchDiff(dir: string, base: string): Promise<string> {
-  return git(["diff", "--no-color", "--no-ext-diff", `${await baseRef(dir, base)}...HEAD`], dir);
+/**
+ * Take secrets out of what a push would publish — the commits that are neither on the base nor on the remote yet — so
+ * the branch can always be pushed. Only what those commits add counts: files that look like secrets, and what `clean`
+ * changes (a saved secret) in a file name, an added line, a binary file the branch ends with, or a commit message.
+ * Such files go back to what the remote has (new ones stay in the worktree, untracked), a secret in a text file is
+ * replaced there, and a file that still adds one (binary, not UTF-8, a link, unwritable) is left out too. Every commit
+ * is pushed, not only the last, so those commits become one on top of what the remote has; the branch as it was stays
+ * in the worktree as the ref `kept`. `head` is the commit to push — null when the branch moved meanwhile (a turn that
+ * started during the push committed): that turn's end pushes it. `removed` is null when there was nothing to take out.
+ */
+export async function removeSecrets(opts: {
+  dir: string;
+  base: string;
+  lastPushed: string | null;
+  message: string;
+  clean: Clean;
+}): Promise<{ head: string | null; removed: { left: string[]; replaced: string[]; kept: string } | null }> {
+  const { dir, clean } = opts;
+  const hit = (text: string) => clean(text) !== text;
+  const old = await git(["rev-parse", "HEAD"], dir);
+  const unpushed = ["--ignore-missing", old, "--not", await baseRef(dir, opts.base), "--remotes=origin", ...(opts.lastPushed ? [opts.lastPushed] : [])];
+  const log = (...args: string[]) => git(["log", "--no-show-signature", ...args, ...unpushed], dir);
+  const added = (await log("--cc", "--no-renames", "--diff-filter=A", "--name-only", "-z", "--format=")).split("\0");
+  const left = new Set(added.filter((f) => f && (SECRET_FILE.test(f) || hit(f))));
+  // Binary files (numstat "-") show no lines: every version the commits add is read whole; the last one is left out.
+  const binary = new Set((await log("--numstat", "--no-renames", "-z", "--format=")).split("\0").filter((l) => l.startsWith("-\t-\t")).map((l) => l.slice(4)));
+  let inBinary = false;
+  if (binary.size) {
+    const raw = (await log("--raw", "--no-abbrev", "--no-renames", "-z", "--format=")).split("\0"); // ":<modes> <old> <new> <status>", path
+    const hits = new Map<string, Set<string>>();
+    for (let i = 0; i + 1 < raw.length; i += 2) {
+      const [sha, path] = [raw[i]!.split(" ")[3], raw[i + 1]!];
+      if (!sha || /^0+$/.test(sha) || !binary.has(path) || hits.get(path)?.has(sha)) continue;
+      if (Number(await git(["cat-file", "-s", sha], dir)) > MAX_BINARY_READ || !hit(await git(["cat-file", "blob", sha], dir))) continue;
+      hits.set(path, (hits.get(path) ?? new Set()).add(sha));
+    }
+    inBinary = hits.size > 0;
+    if (inBinary) {
+      for (const entry of (await git(["--literal-pathspecs", "ls-tree", "-z", old, "--", ...hits.keys()], dir)).split("\0")) {
+        const tab = entry.indexOf("\t");
+        if (tab > 0 && hits.get(entry.slice(tab + 1))?.has(entry.slice(0, tab).split(" ")[2]!)) left.add(entry.slice(tab + 1));
+      }
+    }
+  }
+  const inText = hit(await log("--format=%B")) || hit(addedLines(await log("-p", "--cc", ...ADDED, "--format=")));
+  if (!left.size && !inText && !inBinary) return { head: old, removed: null };
+
+  const kept = `${WITH_SECRETS}/${old}`;
+  // With a reflog: git cleaning up from another checkout of the repository doesn't see this worktree's refs, only their logs.
+  await git(["update-ref", "--create-reflog", "-m", "godmode: before removing secrets", kept, old], dir);
+  // The commits the unpushed ones start from: all on the remote already, so pushing the new commit never overwrites anything.
+  const edges = (await git(["rev-list", "--boundary", ...unpushed], dir)).split("\n").filter((l) => l.startsWith("-"));
+  if (!edges.length) throw new GitError("The branch shares no history with its base.");
+  // The branch's own one first (git lists a merged base first): left-out files go back to the branch's version.
+  const line = (await git(["rev-list", "--first-parent", ...unpushed], dir)).split("\n").at(-1);
+  const own = await git(["rev-parse", "--verify", "--quiet", `${line}^`], dir).catch(() => "");
+  const parents = (await git(["merge-base", "--independent", ...edges.map((l) => l.slice(1))], dir)).split("\n").sort((a, b) => Number(b === own) - Number(a === own));
+  /** The changes from `parent` to what git has staged — or to `tree` once it is written. */
+  const diff = (parent: string, args: string[], paths: string[] = [], tree?: string) =>
+    git(["--literal-pathspecs", "diff", ...(tree ? [] : ["--cached"]), ...args, parent, ...(tree ? [tree] : []), "--", ...paths], dir);
+  /** Per parent, the staged files that were moved (new name → old one): checked together, a moved file adds only what changed. */
+  const moves = new Map<string, Map<string, string>>();
+  const movedFrom = async (parent: string, path: string) => {
+    if (!moves.has(parent)) {
+      const out = (await diff(parent, ["-M", "--diff-filter=R", "--name-status", "-z"])).split("\0");
+      const map = new Map<string, string>();
+      for (let i = 0; i + 2 < out.length; i += 3) map.set(out[i + 2]!, out[i + 1]!);
+      moves.set(parent, map);
+    }
+    return moves.get(parent)!.get(path);
+  };
+  /** Whether the new commit (staged, or `tree`) adds a secret (to `path`): only what none of the parents has counts. */
+  const adds = async (path?: string, tree?: string) => {
+    for (const parent of parents) {
+      const from = path && (await movedFrom(parent, path));
+      if (!hit(addedLines(await diff(parent, ADDED, [...(path ? [path] : []), ...(from ? [from] : [])], tree)))) return false;
+    }
+    return true;
+  };
+
+  const replaced: string[] = [];
+  const changed = inText && (await adds()) ? (await diff(parents[0]!, ["--no-renames", "--diff-filter=d", "--name-only", "-z"])).split("\0") : [];
+  for (const path of changed) {
+    if (!path || left.has(path) || !(await adds(path))) continue;
+    const file = join(dir, path);
+    try {
+      const bytes = lstatSync(file, { throwIfNoEntry: false })?.isFile() ? readFileSync(file) : null;
+      const text = bytes?.toString() ?? "";
+      // Only plain text is rewritten: never through a link, never binary data or a file that wouldn't come back byte for byte.
+      if (bytes && !bytes.includes(0) && Buffer.from(text).equals(bytes) && hit(text)) {
+        writeFileSync(file, clean(text));
+        if ((await gitOk(["--literal-pathspecs", "add", "--", path], dir)) && !(await adds(path))) {
+          replaced.push(path);
+          continue;
+        }
+      }
+    } catch {
+      /* can't be read or written: left out */
+    }
+    left.add(path);
+  }
+  if (left.size) await git(["--literal-pathspecs", "reset", "-q", parents[0]!, "--", ...left], dir);
+
+  const tree = await git(["write-tree"], dir);
+  /** The tree is the checked commit plus the files taken care of, as they were left — nothing a turn staged meanwhile. */
+  const checked = async () => {
+    const touched = new Set([...replaced, ...left]);
+    if ((await git(["diff", "--name-only", "--no-renames", "-z", old, tree], dir)).split("\0").some((f) => f && !touched.has(f))) return false;
+    if (left.size && (await diff(parents[0]!, ["--name-only"], [...left], tree))) return false;
+    for (const path of replaced) if (await adds(path, tree)) return false;
+    return true;
+  };
+  if (await checked()) {
+    // Nothing but secrets on top of what the remote has: the branch goes back to that.
+    const nothing = parents.length === 1 && tree === (await git(["rev-parse", `${parents[0]}^{tree}`], dir));
+    const message = clean(`${opts.message}\n\n${await log("--reverse", "--format=- %s")}`);
+    const commit = nothing ? parents[0]! : await git([...(await identity(dir)), "commit-tree", tree, ...parents.flatMap((p) => ["-p", p]), "-m", message], dir);
+    // HEAD must still be the checked commit.
+    if (await gitOk(["update-ref", "-m", "godmode: secrets removed before pushing", "HEAD", commit, old], dir)) {
+      return { head: commit, removed: { left: [...left].filter((f) => lstatSync(join(dir, f), { throwIfNoEntry: false })), replaced, kept } };
+    }
+  }
+  // A turn that started meanwhile staged or committed something unchecked: nothing is pushed now, its end pushes the branch.
+  await gitOk(["update-ref", "-d", kept], dir);
+  return { head: null, removed: null };
 }
 
 /**
@@ -331,23 +474,32 @@ export async function branchDiff(dir: string, base: string): Promise<string> {
  * nothing that arrived meanwhile is overwritten; the agent's own rewrites of what Godmode pushed may replace it. Only
  * the task's branch is fetched, and nothing is written to the repository's config (it may be the human's own).
  */
-export async function pushBranch(opts: { dir: string; base: string; branch: string; lastPushed: string | null }): Promise<{ pushed: boolean; sha: string }> {
+export async function pushBranch(opts: {
+  dir: string;
+  base: string;
+  branch: string;
+  lastPushed: string | null;
+  /** The commit to push (the one checked for secrets) — not what a turn that started meanwhile commits. Default: HEAD. */
+  head?: string;
+}): Promise<{ pushed: boolean; sha: string }> {
   const { dir, base, branch } = opts;
   return serialized(await repoKey(dir), async () => {
-    const sha = () => git(["rev-parse", "HEAD"], dir);
-    if (!(await commitsAhead(dir, base))) return { pushed: false, sha: await sha() };
+    let head = opts.head ?? (await git(["rev-parse", "HEAD"], dir));
+    if (!(await commitsAhead(dir, base, head))) return { pushed: false, sha: head };
     const listed = await git(["ls-remote", "origin", `refs/heads/${branch}`], dir, PUSH_TIMEOUT_MS);
     const remote = listed.split(/\s/)[0] || null;
-    if (remote && remote !== opts.lastPushed && !(await gitOk(["merge-base", "--is-ancestor", remote, "HEAD"], dir))) {
+    if (remote && remote !== opts.lastPushed && !(await gitOk(["merge-base", "--is-ancestor", remote, head], dir))) {
+      // Merged in the worktree, so only while it still has the checked commit: a turn that started meanwhile pushes when it ends.
+      if ((await git(["rev-parse", "HEAD"], dir)) !== head) return { pushed: false, sha: head };
       await git(["fetch", "--quiet", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`], dir, CLONE_TIMEOUT_MS);
-      const identity = (await gitOk(["config", "user.email"], dir)) ? [] : ["-c", "user.name=Godmode", "-c", "user.email=godmode@localhost"];
-      if (!(await gitOk([...identity, "merge", "--no-edit", `origin/${branch}`], dir))) {
+      if (!(await gitOk([...(await identity(dir)), "merge", "--no-edit", `origin/${branch}`], dir))) {
         await gitOk(["merge", "--abort"], dir);
         throw new GitError(`Someone pushed to ${branch} and it conflicts with the agent's work — resolve it on the branch, then move the task to Todo.`);
       }
+      head = await git(["rev-parse", "HEAD"], dir);
     }
-    await git(["push", `--force-with-lease=refs/heads/${branch}:${remote ?? ""}`, "origin", `HEAD:refs/heads/${branch}`], dir, PUSH_TIMEOUT_MS);
-    return { pushed: true, sha: await sha() };
+    await git(["push", `--force-with-lease=refs/heads/${branch}:${remote ?? ""}`, "origin", `${head}:refs/heads/${branch}`], dir, PUSH_TIMEOUT_MS);
+    return { pushed: true, sha: head };
   });
 }
 

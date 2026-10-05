@@ -1,24 +1,32 @@
 import type { Hono } from "hono";
 import { existsSync, readFileSync } from "node:fs";
-import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, isModelId } from "@godmode/shared";
+import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, RUN_STOPPED_BY_USER, isModelId } from "@godmode/shared";
 import {
   createConversation,
   deleteConversation,
   getConversation,
   getConversationSummary,
   listConversations,
+  markConversationsRead,
   sendMessage,
   startChat,
   updateConversation,
 } from "../../services/conversations";
 import { editQueued, removeQueued, sendQueuedNow, submitMessage } from "../../services/messageQueue";
+import { answerByMessage } from "../../services/questions";
+import { answererOf } from "./questions";
 import { continueConversation, pauseConversation, setAutoContinue } from "../../services/pauses";
-import { cancelRun, findRunLog, getRun, listRuns } from "../../runner/runner";
+import { cancelRun, findRunLog, getRun, listRuns, untilAsked } from "../../runner/runner";
 import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } from "../../services/followups";
-import { notFound } from "../../util";
+import { conflict, notFound } from "../../util";
+import { getAgent } from "../../agents/service";
+import { listAttention } from "../../services/attention";
+import { awaySummary } from "../../services/away";
+import { retryRun } from "../../services/retries";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
 import { validateTarget } from "../../computer/service";
+import { startRemoteChat } from "../../remote/runners";
 
 const attachmentSchema = z.object({
   name: z.string().min(1).max(255),
@@ -26,7 +34,7 @@ const attachmentSchema = z.object({
   data: z.string().min(1),
 });
 
-/** Per-chat model/effort. null or "" = use the agent's. */
+/** Per-chat model/effort/Ultracode. null or "" = use the agent's. */
 const modelChoice = {
   model: z
     .string()
@@ -35,6 +43,7 @@ const modelChoice = {
     .nullable()
     .optional(),
   effort: z.enum(EFFORT_OPTIONS).nullable().optional(),
+  ultracode: z.boolean().nullable().optional(),
 };
 
 const folder = z.string().trim().max(4096).nullable().optional();
@@ -88,10 +97,31 @@ export function registerChatRoutes(app: Hono): void {
       c,
       z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, workspaceId, sshServerIds, instructions, ...modelChoice }),
     );
+    // A switched-off agent answers nothing: don't leave an empty chat behind.
+    const agent = getAgent(input.agentId);
+    if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
     return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
   app.get("/api/conversations/:id", (c) => c.json(getConversation(c.req.param("id"))));
+
+  // The human has seen these chats ("Mark all read", or a client without a live socket).
+  app.post("/api/conversations/read", async (c) => {
+    const { ids } = await body(c, z.object({ ids: z.union([z.literal("all"), z.array(z.string().min(1).max(100)).max(500)]) }));
+    return c.json({ read: markConversationsRead(ids) });
+  });
+
+  // Pick up a turn that ended early: continue where it stopped, or send it again.
+  app.post("/api/conversations/:id/retry", async (c) => {
+    const { runId } = await body(c, z.object({ runId: z.string().min(1).max(100) }));
+    return c.json(await retryRun(c.req.param("id"), runId), 201);
+  });
+
+  // Everything that waits for the human, from live state.
+  app.get("/api/attention", (c) => c.json(listAttention()));
+
+  // What the team did since the human was last here (Home's "while you were away").
+  app.get("/api/away", (c) => c.json(awaySummary(c.req.query("since") ?? "", c.req.query("until") || undefined)));
 
   app.patch("/api/conversations/:id", async (c) => {
     const patch = await body(
@@ -123,6 +153,10 @@ export function registerChatRoutes(app: Hono): void {
     const id = c.req.param("id");
     getConversationSummary(id); // 404 early, before parsing a potentially large body
     const { queue, queueId, ...input } = await body(c, sendSchema);
+    // The chat waits for the human's answer: this message is that answer, and the run that asked continues with it.
+    await untilAsked(id);
+    const answered = answerByMessage(id, input, answererOf(c));
+    if (answered) return c.json(answered, 201);
     if (!queue) return c.json(await sendMessage(id, { ...input, trigger: "chat" }), 201);
     const outcome = await submitMessage(id, { ...input, queueId });
     return c.json(outcome, "queued" in outcome ? 202 : 201);
@@ -184,9 +218,12 @@ export function registerChatRoutes(app: Hono): void {
         workspaceId,
         sshServerIds,
         instructions,
+        /** Work on this runner (another computer) instead of this one. */
+        runnerId: z.string().trim().min(1).max(100).nullable().optional(),
         ...modelChoice,
       }),
     );
+    if (input.runnerId) return c.json(await startRemoteChat(input.runnerId, input), 201);
     // Check the shared window/screen/tab before the chat exists, so a stale pick doesn't leave an empty chat.
     const computerTarget = input.computerTarget ? await validateTarget(input.computerTarget) : null;
     return c.json(await startChat({ ...input, computerTarget, origin: "chat" }), 201);
@@ -198,6 +235,7 @@ export function registerChatRoutes(app: Hono): void {
         agentId: c.req.query("agentId") || undefined,
         status: c.req.query("status") || undefined,
         conversationId: c.req.query("conversationId") || undefined,
+        parentRunId: c.req.query("parentRunId") || undefined,
         limit: num(c.req.query("limit")),
       }),
     ),
@@ -209,7 +247,7 @@ export function registerChatRoutes(app: Hono): void {
   });
 
   app.post("/api/runs/:id/cancel", async (c) => {
-    await cancelRun(c.req.param("id"), "Cancelled by user");
+    await cancelRun(c.req.param("id"), RUN_STOPPED_BY_USER, { byHuman: true });
     return c.json({ ok: true as const });
   });
 

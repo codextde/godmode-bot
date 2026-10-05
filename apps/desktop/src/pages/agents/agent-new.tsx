@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { AgentForm, agentToValues, type AgentFormValues } from "@/components/agents/agent-form";
 import { cronToHuman, localTimezone } from "@/components/agents/cron";
 import { randomLook } from "@/components/agents/character-studio";
+import { TeamTemplates } from "@/components/agents/team-templates";
 
 const EXAMPLES = [
   "Download my invoices from all vendor portals on the 1st of every month",
@@ -183,6 +184,14 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
         </section>
 
         <section>
+          <div className="mb-4">
+            <h2 className="text-lg font-medium tracking-[-0.02em]">Or start a whole team</h2>
+            <p className="text-sm text-muted-foreground">A lead and its reports, wired up in the org chart: the lead hands out the work and reviews it.</p>
+          </div>
+          <TeamTemplates />
+        </section>
+
+        <section>
           <div className="mb-4 flex items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-medium tracking-[-0.02em]">Or pick a starting point</h2>
@@ -291,6 +300,7 @@ function TemplateCard({ template, index, onPick }: { template: AgentTemplate; in
     >
       <AgentAvatar agent={{ id: template.id, avatar: template.avatar, color: template.color, character: template.character }} size="lg" />
       <span className="mt-4 block font-medium tracking-[-0.01em]">{template.name}</span>
+      {template.role && <span className="block text-xs text-muted-foreground">{template.role}</span>}
       <span className="mt-1 line-clamp-3 block flex-1 text-sm text-muted-foreground">{template.description}</span>
       {template.routine && (
         <span className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -327,6 +337,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
             personality: template.personality,
             description: template.description,
             instructions: template.instructions,
+            role: template.role,
           }
         : isScratch
           ? { ...randomLook(), personality: "buddy" }

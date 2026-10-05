@@ -4,12 +4,16 @@ import { mkdirSync, chmodSync } from "node:fs";
 import { DEFAULT_PORT } from "@godmode/shared";
 
 export const VERSION = "0.1.0";
+/** The commit a compiled core was built from (scripts/build.ts); "dev" when it runs from source. */
+export const BUILD = process.env.GODMODE_BUILD || "dev";
 
 export type RunMode = "desktop" | "server";
 
 export interface CoreConfig {
   version: string;
   mode: RunMode;
+  /** `main`: the Godmode the human uses · `runner`: a headless core on another computer that works for a main one. */
+  role: "main" | "runner";
   dev: boolean;
   dataDir: string;
   dbPath: string;
@@ -32,7 +36,19 @@ export interface CoreConfig {
   arch: string;
 }
 
-function defaultDataDir(): string {
+/** Where a runner keeps its data unless told otherwise. */
+export function defaultRunnerDataDir(): string {
+  return join(homedir(), ".godmode-runner");
+}
+
+/** A runner has a data dir of its own, so it never shares a database with a Godmode app on the same computer. */
+export function runnerDataDir(): string {
+  if (process.env.GODMODE_RUNNER_HOME) return resolve(process.env.GODMODE_RUNNER_HOME);
+  return defaultRunnerDataDir();
+}
+
+function defaultDataDir(role: CoreConfig["role"]): string {
+  if (role === "runner") return runnerDataDir();
   if (process.env.GODMODE_HOME) return resolve(process.env.GODMODE_HOME);
   return join(homedir(), ".godmode");
 }
@@ -50,10 +66,12 @@ export function ensureDir(path: string, mode = 0o700): string {
 let current: CoreConfig | null = null;
 
 export function loadConfig(overrides: Partial<CoreConfig> = {}): CoreConfig {
-  const dataDir = overrides.dataDir ?? defaultDataDir();
+  const role = overrides.role ?? (process.env.GODMODE_ROLE === "runner" ? "runner" : "main");
+  const dataDir = overrides.dataDir ?? defaultDataDir(role);
   const cfg: CoreConfig = {
     version: VERSION,
     mode: (process.env.GODMODE_MODE as RunMode) || "server",
+    role,
     dev: process.env.GODMODE_DEV === "1",
     dataDir,
     dbPath: join(dataDir, "godmode.db"),

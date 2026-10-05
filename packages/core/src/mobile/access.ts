@@ -2,6 +2,8 @@
  * Phones reach Godmode over Tailscale: while phone access is on, a second listener runs on this computer's Tailscale
  * address only (never on the LAN or the internet). It answers the API under /api (no dashboard, no sign-in, no MCP
  * gateway, no webhooks) and only to paired phones; the address is re-checked every 30 s and the listener follows it.
+ * A computer linked to Godmode Cloud is also reachable through the cloud's phone gateway (cloud/dispatch.ts), which
+ * passes through the same gate (`servePhoneRequest`).
  */
 import type { Server, WebSocketHandler } from "bun";
 import type { Hono } from "hono";
@@ -10,6 +12,7 @@ import { logger } from "../log";
 import { getSettings } from "../services/settings";
 import { newId } from "../util";
 import type { WsData } from "../server/ws";
+import { isCloudOnline, phoneGatewayUrl } from "../cloud/state";
 import { authenticateDevice, cancelPairingOffer, instanceInfo, listDevices } from "./devices";
 import { tailscaleStatus } from "./tailscale";
 
@@ -139,16 +142,30 @@ function handle(h: Handler, req: Request, srv: Server<WsData>): Response | Promi
     const data: WsData = { id: newId("ws"), subscriptions: new Set(), auth: "device", deviceId: device.id };
     return srv.upgrade(req, { data }) ? undefined : new Response("Upgrade failed", { status: 400 });
   }
+  return servePhoneRequest(h.app, req, { server: srv, channel: "mobile" });
+}
+
+/**
+ * What phones may reach (after the Tailscale listener's Host check, or as relayed by the cloud gateway): the API
+ * under /api, without sign-in; `/api/health` names this instance.
+ */
+export function servePhoneRequest(
+  app: { fetch(request: Request, env: object): Response | Promise<Response> },
+  req: Request,
+  env: object,
+): Response | Promise<Response> {
+  const path = new URL(req.url).pathname;
   // The phone checks the instance before it sends its token to an address.
   if (path === "/api/health") return Response.json({ ok: true, name: "godmode-bot", instance: instanceInfo().id });
   if (!path.startsWith("/api/") || path.startsWith("/api/auth/")) return json(404, "Not found", "not_found");
-  return h.app.fetch(req, { server: srv, channel: "mobile" });
+  return app.fetch(req, env);
 }
 
-/** Where phones reach Godmode right now, best first. */
+/** Where phones reach Godmode right now, best first: Tailscale, then the Godmode Cloud gateway. */
 export function mobileUrls(): string[] {
-  if (!bound) return [];
-  return [...(bound.dnsName ? [`http://${bound.dnsName}:${bound.port}`] : []), `http://${bound.ip}:${bound.port}`];
+  const urls = bound ? [...(bound.dnsName ? [`http://${bound.dnsName}:${bound.port}`] : []), `http://${bound.ip}:${bound.port}`] : [];
+  const gateway = getSettings().mobile.enabled ? phoneGatewayUrl() : null;
+  return gateway ? [...urls, gateway] : urls;
 }
 
 export async function mobileStatus(refresh = false): Promise<MobileStatus> {
@@ -160,7 +177,8 @@ export async function mobileStatus(refresh = false): Promise<MobileStatus> {
     port: bound?.port ?? settings.port,
     tailscale,
     urls: mobileUrls(),
-    error: settings.enabled ? lastError : null,
+    // Tailscale being off is no problem while phones get through the cloud gateway.
+    error: settings.enabled && !(isCloudOnline() && phoneGatewayUrl()) ? lastError : null,
     devices: listDevices(),
   };
 }
