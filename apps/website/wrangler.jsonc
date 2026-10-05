@@ -7,7 +7,12 @@
   "main": "@astrojs/cloudflare/entrypoints/server",
   "assets": { "binding": "ASSETS", "directory": "./dist" },
   "observability": { "enabled": true },
-  "routes": [{ "pattern": "godmode.codext.de", "custom_domain": true }],
+  "routes": [
+    { "pattern": "usegodmode.com", "custom_domain": true },
+    { "pattern": "www.usegodmode.com", "custom_domain": true },
+    // Old home: installed apps, Stripe webhooks and runner scripts still call /api/* here; pages 301 to usegodmode.com
+    { "pattern": "godmode.codext.de", "custom_domain": true }
+  ],
   // Per-IP limits: Stripe-backed endpoints, and the analytics beacon.
   "ratelimits": [
     { "name": "CHECKOUT_LIMIT", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } },

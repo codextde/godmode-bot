@@ -133,7 +133,7 @@ export function AddRunnerDialog({ open, onOpenChange }: { open: boolean; onOpenC
                         <Tabs value={source} onValueChange={(v) => setSource(v as Source)} className="gap-2.5">
                           <TabsList className="grid w-full grid-cols-2">
                             <TabsTrigger value="local">Install from {THIS_COMPUTER_INLINE}</TabsTrigger>
-                            <TabsTrigger value="website">Install from godmode.codext.de</TabsTrigger>
+                            <TabsTrigger value="website">Install from usegodmode.com</TabsTrigger>
                           </TabsList>
                           <TabsContent value="local" className="space-y-2.5">
                             <CommandBlock text={command} title="Terminal on the other Mac" />
@@ -225,7 +225,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   );
 }
 
-/** The install command through godmode.codext.de, with the license placeholder marked: that part is the human's to fill in. */
+/** The install command through usegodmode.com, with the license placeholder marked: that part is the human's to fill in. */
 function WebsiteCommand({ command }: { command: string }) {
   const match = LICENSE_PLACEHOLDER.exec(command);
   return (
@@ -245,7 +245,7 @@ function WebsiteCommand({ command }: { command: string }) {
             Replace the <mark className="rounded-[3px] bg-warning/20 px-1 py-px font-medium text-foreground">highlighted part</mark> with your license key.{" "}
           </>
         ) : null}
-        The other Mac downloads Godmode from godmode.codext.de, installs it as a runner and pairs it. The command works once.
+        The other Mac downloads Godmode from usegodmode.com, installs it as a runner and pairs it. The command works once.
       </p>
     </>
   );

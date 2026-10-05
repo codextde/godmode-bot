@@ -287,7 +287,7 @@ describe("pairing offers", () => {
   test("outside a compiled build there is no self-hosted install command, the website one is always there", async () => {
     const offer = await createOffer(async () => ({ name: "Controller" }));
     expect(offer.command).toBeNull();
-    expect(offer.websiteCommand).toStartWith("curl -fsSL https://godmode.codext.de/runner.sh | GODMODE_LICENSE=");
+    expect(offer.websiteCommand).toStartWith("curl -fsSL https://usegodmode.com/runner.sh | GODMODE_LICENSE=");
     cancelOffer();
   });
 });

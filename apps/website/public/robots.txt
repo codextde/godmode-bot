@@ -3,4 +3,4 @@ Disallow: /admin
 Disallow: /api/
 Disallow: /checkout/
 
-Sitemap: https://godmode.codext.de/sitemap-index.xml
+Sitemap: https://usegodmode.com/sitemap-index.xml

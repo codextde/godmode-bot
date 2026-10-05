@@ -3,7 +3,7 @@ import cloudflare from '@astrojs/cloudflare';
 import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 
-const site = process.env.SITE_URL ?? 'https://godmode.codext.de';
+const site = process.env.SITE_URL ?? 'https://usegodmode.com';
 
 export default defineConfig({
   site,

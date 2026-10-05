@@ -46,5 +46,5 @@ Deliverables (projects live in this folder, renders land in `../public/media/`):
 - Audio: the brief allows a music bed only if the skill workflow can legitimately generate/source royalty-free
   audio. HeyGen is signed out, the Gemini/Google keys in the environment were rejected by Lyria, and MusicGen's
   weights are non-commercial — so every deliverable ships silent.
-- Ad end cards: "Godmode Bot · $500 once or $50/mo", "Get Godmode" CTA, and the live domain "godmode.codext.de"
+- Ad end cards: "Godmode Bot · $500 once or $50/mo", "Get Godmode" CTA, and the live domain "usegodmode.com"
   (Geist Mono, warm paper at 70%) under the CTA.

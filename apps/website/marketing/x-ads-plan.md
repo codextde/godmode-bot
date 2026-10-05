@@ -1,6 +1,6 @@
 # X Ads launch plan — Godmode
 
-Ads account: https://ads.x.com/manager/18ce55kuefv/campaigns · Landing page: https://godmode.codext.de
+Ads account: https://ads.x.com/manager/18ce55kuefv/campaigns · Landing page: https://usegodmode.com
 
 Goal: sell $500 lifetime / $50 monthly licenses to founders, operators and tech-savvy professionals with
 budget. Optimise for **purchases**, not clicks. Every campaign starts **paused** until the pixel is verified
@@ -23,7 +23,7 @@ and the daily budget is confirmed.
 5. Audiences → create **Website visitors (30 days)** and **Purchasers (180 days)** from the pixel.
 
 Attribution is also captured first-party: every ad URL carries UTMs, X appends `twclid`, and both are stored on
-the Stripe session and shown per campaign at https://godmode.codext.de/admin (sources table).
+the Stripe session and shown per campaign at https://usegodmode.com/admin (sources table).
 
 ## 2. Campaign structure
 
@@ -83,7 +83,7 @@ Card: **Website card**, headline ≤ 70 chars, CTA "Get it" / "Learn more".
 
 ## 4. Ad copy (post text)
 
-Every destination URL: `https://godmode.codext.de/?utm_source=x&utm_medium=paid&utm_campaign={campaign}&utm_content={ad}`
+Every destination URL: `https://usegodmode.com/?utm_source=x&utm_medium=paid&utm_campaign={campaign}&utm_content={ad}`
 
 1. **Founder story** (`utm_content=founder`)
    > I automated my company with one app.

@@ -89,7 +89,7 @@ export interface RunnerPairingOffer {
   command: string | null;
   /** Every address of this computer the other Mac can download from, best first. */
   routes: RunnerOfferRoute[];
-  /** The same through godmode.codext.de (needs the license key in place of the placeholder). */
+  /** The same through usegodmode.com (needs the license key in place of the placeholder). */
   websiteCommand: string;
   /** Where the runner reaches this computer while pairing. */
   urls: string[];

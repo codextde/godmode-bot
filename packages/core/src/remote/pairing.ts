@@ -391,6 +391,6 @@ export async function createOffer(onCode: (code: string, from: string | null) =>
         ].join(" && ")
       : null,
   }));
-  const websiteCommand = `curl -fsSL https://godmode.codext.de/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX GODMODE_PAIR=${pair} sh`;
+  const websiteCommand = `curl -fsSL https://usegodmode.com/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX GODMODE_PAIR=${pair} sh`;
   return { offerId: id, command: routes[0]?.command ?? null, routes, websiteCommand, urls, tailscale, expiresAt: new Date(expiresAt).toISOString() };
 }

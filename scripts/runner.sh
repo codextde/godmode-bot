@@ -2,7 +2,7 @@
 # Sets this computer up as a Godmode runner: installs the standalone `godmode` binary (macOS or Linux) and starts
 # the runner, which then works for the Godmode on your own computer — also while that one sleeps.
 #
-#   curl -fsSL https://godmode.codext.de/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX GODMODE_PAIR=gmo1.… sh
+#   curl -fsSL https://usegodmode.com/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX GODMODE_PAIR=gmo1.… sh
 #
 # Environment:
 #   GODMODE_LICENSE       your license key (welcome page, invoice or billing portal) — required
@@ -13,7 +13,7 @@
 # This is scripts/install.sh plus the last step. The two share nothing by sourcing: each is piped to `sh` on its own.
 set -eu
 
-SITE="https://godmode.codext.de"
+SITE="https://usegodmode.com"
 LICENSE_KEY="${GODMODE_LICENSE:-}"
 VERSION="${GODMODE_VERSION:-latest}"
 INSTALL_DIR="${GODMODE_INSTALL_DIR:-$HOME/.local/bin}"
