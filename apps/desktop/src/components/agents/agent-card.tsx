@@ -20,22 +20,22 @@ import { AgentStatus, useAgentLiveRun, useAgentMood, useAgentPause, useDuplicate
 export function AgentCard({
   agent,
   routineCount,
+  showScope = true,
   onRunTask,
   onDelete,
 }: {
   agent: Agent;
   routineCount: number;
+  /** Off where the card sits under its workspace's heading. */
+  showScope?: boolean;
   onRunTask: (agent: Agent) => void;
   onDelete: (agent: Agent) => void;
 }) {
-  const navigate = useNavigate();
   const modelLabel = useModelLabel();
   const live = useAgentLiveRun(agent.id);
   const running = !!live || agent.status === "running";
   const mood = useAgentMood(agent);
   const chat = useStartAgentChat();
-  const toggle = useToggleAgent();
-  const duplicate = useDuplicateAgent();
   const { pause, resume } = useAgentPause();
   const paused = (agent.pausedRuns ?? 0) > 0;
   const chatting = chat.isPending && chat.variables?.agent.id === agent.id;
@@ -71,89 +71,120 @@ export function AgentCard({
           <AgentStatus agent={agent} interactive className="mt-0.5 max-w-full" />
         </div>
         {running && <WorkingTicks count={6} className="mt-1 h-3 shrink-0 text-brand-strong" />}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" className="relative z-10 -mt-1 -mr-1 text-muted-foreground" aria-label={`Actions for ${agent.name}`}>
-              <Ellipsis />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => chat.mutate(agent)}>
-              <MessageSquare /> New chat
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onRunTask(agent)} disabled={!agent.enabled}>
-              <Play /> Run task…
-            </DropdownMenuItem>
-            {running && (
-              <DropdownMenuItem onClick={() => pause.mutate(agent)}>
-                <Pause /> Pause
-              </DropdownMenuItem>
-            )}
-            {paused && (
-              <DropdownMenuItem onClick={() => resume.mutate(agent)} disabled={!agent.enabled}>
-                <StepForward /> Continue
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/routines`)}>
-              <Workflow /> Automations
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/settings`)}>
-              <Pencil /> Edit
-            </DropdownMenuItem>
-            {!agent.isDefault && (
-              <DropdownMenuItem onClick={() => duplicate.mutate(agent)} disabled={duplicate.isPending}>
-                <Copy /> Duplicate
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => toggle.mutate({ id: agent.id, enabled: !agent.enabled })}>
-              {agent.enabled ? <PowerOff /> : <Power />} {agent.enabled ? "Switch off" : "Switch on"}
-            </DropdownMenuItem>
-            {!agent.isDefault && (
-              <DropdownMenuItem variant="destructive" onClick={() => onDelete(agent)}>
-                <Trash2 /> Delete
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <AgentMenu agent={agent} chat={chat} onRunTask={onRunTask} onDelete={onDelete} className="-mt-1 -mr-1" />
       </div>
 
-      <p className="mt-3 line-clamp-2 min-h-10 text-sm text-muted-foreground">
+      <p className="mt-2.5 line-clamp-2 min-h-10 flex-1 text-[13px] leading-5 text-muted-foreground">
         {agent.description || <span className="italic opacity-70">No description</span>}
       </p>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-        <ScopeBadge workspaceId={agent.workspaceId} />
-        <span className="flex items-center gap-1" title="Model">
-          <Cpu className="size-3.5" /> {agent.model ? modelLabel(agent.model) : "Default model"}
-        </span>
-        <span className="flex items-center gap-1" title="Automations">
-          <Workflow className="size-3.5" /> {routineCount}
-        </span>
-        <span className="flex items-center gap-1" title={agent.lastRunAt ? new Date(agent.lastRunAt).toLocaleString() : "Never ran"}>
-          <History className="size-3.5" />
-          {agent.lastRunAt ? formatDistanceToNowStrict(new Date(agent.lastRunAt), { addSuffix: true }) : "Never"}
-        </span>
-      </div>
-
-      <div className="relative z-10 mt-4 flex gap-2 border-t pt-3">
-        <Button size="sm" variant="secondary" className="flex-1" onClick={() => chat.mutate(agent)} disabled={chatting}>
-          {chatting ? <Spinner /> : <MessageSquare />} Chat
-        </Button>
-        {paused ? (
-          <Button size="sm" variant="outline" className="flex-1" onClick={() => resume.mutate(agent)} disabled={resume.isPending || !agent.enabled}>
-            {resume.isPending ? <Spinner /> : <StepForward />} Continue
+      <div className="mt-3 flex items-center gap-3 border-t pt-3 text-xs text-muted-foreground">
+        <div className="flex min-w-0 flex-1 items-center gap-x-3 overflow-hidden whitespace-nowrap">
+          {showScope && <ScopeBadge workspaceId={agent.workspaceId} className="min-w-0 truncate" />}
+          <span className="flex shrink-0 items-center gap-1" title={`${routineCount} automation${routineCount === 1 ? "" : "s"}`}>
+            <Workflow className="size-3.5" /> {routineCount}
+          </span>
+          <span className="flex min-w-0 items-center gap-1" title={agent.lastRunAt ? `Last run ${new Date(agent.lastRunAt).toLocaleString()}` : "Never ran"}>
+            <History className="size-3.5 shrink-0" />
+            <span className="truncate">{agent.lastRunAt ? formatDistanceToNowStrict(new Date(agent.lastRunAt), { addSuffix: true }) : "Never"}</span>
+          </span>
+          {agent.model && (
+            <span className="flex min-w-0 items-center gap-1" title="Model">
+              <Cpu className="size-3.5 shrink-0" /> <span className="truncate">{modelLabel(agent.model)}</span>
+            </span>
+          )}
+        </div>
+        <div className="relative z-10 flex shrink-0 gap-1.5">
+          <Button size="xs" variant="secondary" className="h-7 px-2.5" onClick={() => chat.mutate(agent)} disabled={chatting}>
+            {chatting ? <Spinner /> : <MessageSquare />} Chat
           </Button>
-        ) : running ? (
-          <Button size="sm" variant="outline" className="flex-1" onClick={() => pause.mutate(agent)} disabled={pause.isPending}>
-            {pause.isPending ? <Spinner /> : <Pause className="fill-current" />} Pause
-          </Button>
-        ) : (
-          <Button size="sm" variant="outline" className="flex-1" onClick={() => onRunTask(agent)} disabled={!agent.enabled}>
-            <Play /> Run task
-          </Button>
-        )}
+          {paused ? (
+            <Button size="xs" variant="outline" className="h-7 px-2.5" onClick={() => resume.mutate(agent)} disabled={resume.isPending || !agent.enabled}>
+              {resume.isPending ? <Spinner /> : <StepForward />} Continue
+            </Button>
+          ) : running ? (
+            <Button size="xs" variant="outline" className="h-7 px-2.5" onClick={() => pause.mutate(agent)} disabled={pause.isPending}>
+              {pause.isPending ? <Spinner /> : <Pause className="fill-current" />} Pause
+            </Button>
+          ) : (
+            <Button size="xs" variant="outline" className="h-7 px-2.5" onClick={() => onRunTask(agent)} disabled={!agent.enabled}>
+              <Play /> Run
+            </Button>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+/** Everything you can do with an agent, behind its "…" button. */
+export function AgentMenu({
+  agent,
+  chat,
+  onRunTask,
+  onDelete,
+  className,
+}: {
+  agent: Agent;
+  /** The chat starter of the card or row, so both show the same pending state. */
+  chat: ReturnType<typeof useStartAgentChat>;
+  onRunTask: (agent: Agent) => void;
+  onDelete: (agent: Agent) => void;
+  className?: string;
+}) {
+  const navigate = useNavigate();
+  const live = useAgentLiveRun(agent.id);
+  const running = !!live || agent.status === "running";
+  const chatting = chat.isPending && chat.variables?.agent.id === agent.id;
+  const toggle = useToggleAgent();
+  const duplicate = useDuplicateAgent();
+  const { pause, resume } = useAgentPause();
+  const paused = (agent.pausedRuns ?? 0) > 0;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" className={cn("relative z-10 text-muted-foreground", className)} aria-label={`Actions for ${agent.name}`}>
+          <Ellipsis />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuItem onClick={() => chat.mutate(agent)} disabled={chatting}>
+          <MessageSquare /> New chat
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onRunTask(agent)} disabled={!agent.enabled}>
+          <Play /> Run task…
+        </DropdownMenuItem>
+        {running && (
+          <DropdownMenuItem onClick={() => pause.mutate(agent)}>
+            <Pause /> Pause
+          </DropdownMenuItem>
+        )}
+        {paused && (
+          <DropdownMenuItem onClick={() => resume.mutate(agent)} disabled={!agent.enabled}>
+            <StepForward /> Continue
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/routines`)}>
+          <Workflow /> Automations
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/settings`)}>
+          <Pencil /> Edit
+        </DropdownMenuItem>
+        {!agent.isDefault && (
+          <DropdownMenuItem onClick={() => duplicate.mutate(agent)} disabled={duplicate.isPending}>
+            <Copy /> Duplicate
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => toggle.mutate({ id: agent.id, enabled: !agent.enabled })}>
+          {agent.enabled ? <PowerOff /> : <Power />} {agent.enabled ? "Switch off" : "Switch on"}
+        </DropdownMenuItem>
+        {!agent.isDefault && (
+          <DropdownMenuItem variant="destructive" onClick={() => onDelete(agent)}>
+            <Trash2 /> Delete
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
