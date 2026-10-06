@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { storageKey } from "@/lib/core";
 
+export type AgentsView = "grid" | "list" | "chart";
+
 export type RecentTab = "all" | "running" | "scheduled" | "done";
 
 interface UiState {
@@ -22,8 +24,10 @@ interface UiState {
   skippedClaudeVersion: string | null;
   /** Task board columns folded to a narrow strip. */
   collapsedColumns: string[];
-  /** The Agents page shows cards or the org chart. */
-  agentsView: "grid" | "chart";
+  /** The Agents page shows cards, rows or the org chart. */
+  agentsView: AgentsView;
+  /** Workspace groups folded on the Agents page ("global" or a workspace id). */
+  collapsedAgentGroups: string[];
   /** Which chats the sidebar's Recent list shows. */
   recentTab: RecentTab;
   /** The human came back after a while: from when to when they were away (Home sums up what happened). Not kept. */
@@ -38,7 +42,8 @@ interface UiState {
   setVmPanel: (v: boolean) => void;
   skipClaudeVersion: (version: string | null) => void;
   toggleColumn: (status: string) => void;
-  setAgentsView: (v: "grid" | "chart") => void;
+  setAgentsView: (v: AgentsView) => void;
+  toggleAgentGroup: (key: string) => void;
   setRecentTab: (tab: RecentTab) => void;
   setAway: (away: { since: string; until: string } | null) => void;
 }
@@ -57,6 +62,7 @@ export const useUi = create<UiState>()(
       skippedClaudeVersion: null,
       collapsedColumns: ["cancelled"],
       agentsView: "grid",
+      collapsedAgentGroups: [],
       recentTab: "all",
       away: null,
       setWorkspace: (workspace) => set({ workspace }),
@@ -73,6 +79,10 @@ export const useUi = create<UiState>()(
           collapsedColumns: s.collapsedColumns.includes(status) ? s.collapsedColumns.filter((c) => c !== status) : [...s.collapsedColumns, status],
         })),
       setAgentsView: (agentsView) => set({ agentsView }),
+      toggleAgentGroup: (key) =>
+        set((s) => ({
+          collapsedAgentGroups: s.collapsedAgentGroups.includes(key) ? s.collapsedAgentGroups.filter((k) => k !== key) : [...s.collapsedAgentGroups, key],
+        })),
       setRecentTab: (recentTab) => set({ recentTab }),
       setAway: (away) => set({ away }),
     }),
@@ -89,6 +99,7 @@ export const useUi = create<UiState>()(
         skippedClaudeVersion: s.skippedClaudeVersion,
         collapsedColumns: s.collapsedColumns,
         agentsView: s.agentsView,
+        collapsedAgentGroups: s.collapsedAgentGroups,
         recentTab: s.recentTab,
       }),
     },

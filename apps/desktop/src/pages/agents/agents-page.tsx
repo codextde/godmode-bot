@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { motion } from "motion/react";
-import { Bot, LayoutGrid, Network, Plus, Search, Sparkles } from "lucide-react";
+import { Bot, LayoutGrid, List, Network, Plus, Search, Sparkles } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
 import { useAgents, useAllAgents, useMissingLogins, useRoutines, useWorkspaces } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
 import { useLive } from "@/stores/live";
-import { useUi } from "@/stores/ui";
+import { useUi, type AgentsView } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
 import { Character } from "@/components/character";
@@ -18,6 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AgentCard } from "@/components/agents/agent-card";
 import { DeleteAgentDialog, RunTaskDialog } from "@/components/agents/agent-actions";
 import { OrgChart } from "@/components/agents/org-chart";
+import { AgentList } from "@/components/agents/agent-list";
+import { groupByWorkspace, WorkspaceSection } from "@/components/agents/agent-groups";
 import { TeamTemplates } from "@/components/agents/team-templates";
 
 type Filter = "all" | "running" | "needs" | "scheduled" | "disabled";
@@ -35,8 +37,9 @@ export default function AgentsPage() {
   const [params, setParams] = useSearchParams();
   const storedView = useUi((s) => s.agentsView);
   const setStoredView = useUi((s) => s.setAgentsView);
-  const view = params.get("view") === "chart" ? "chart" : params.get("view") === "grid" ? "grid" : storedView;
-  const setView = (v: "grid" | "chart") => {
+  const asked = params.get("view");
+  const view: AgentsView = asked === "chart" || asked === "grid" || asked === "list" ? asked : storedView;
+  const setView = (v: AgentsView) => {
     setStoredView(v);
     setParams((p) => {
       const next = new URLSearchParams(p);
@@ -111,6 +114,12 @@ export default function AgentsPage() {
   const chartAgents = useMemo(() => agents.filter(passesFilter), [agents, filter, routineCounts, running, missingFor]);
   const matches = useMemo(() => (search.trim() ? new Set(visible.map((a) => a.id)) : null), [visible, search]);
 
+  const stats = (list: Agent[]) => ({ working: list.filter(isRunning).length, needsYou: list.filter(needsYou).length });
+  // In "All workspaces" every view sorts agents under their workspace.
+  const byWorkspace = scope === "all" && agents.some((a) => a.workspaceId);
+  const narrowed = !!search.trim() || filter !== "all";
+  const groups = useMemo(() => (byWorkspace ? groupByWorkspace(visible, workspaces) : []), [byWorkspace, visible, workspaces]);
+
   const scopeName =
     scope === "all" ? "all workspaces" : scope === "global" ? "the global scope" : (workspaces.find((w) => w.id === scope)?.name ?? "this workspace");
 
@@ -143,7 +152,7 @@ export default function AgentsPage() {
       />
       <PageBody>
         <div className="mb-5 flex flex-wrap items-center gap-3">
-          <div className="relative w-full max-w-sm">
+          <div className="relative w-full max-w-sm min-w-48 @3xl:w-auto @3xl:flex-1">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={searchRef}
@@ -185,6 +194,7 @@ export default function AgentsPage() {
             {(
               [
                 { id: "grid", label: "Grid", icon: LayoutGrid },
+                { id: "list", label: "List", icon: List },
                 { id: "chart", label: "Org chart", icon: Network },
               ] as const
             ).map((v) => (
@@ -192,13 +202,15 @@ export default function AgentsPage() {
                 key={v.id}
                 type="button"
                 aria-pressed={view === v.id}
+                aria-label={v.label}
+                title={v.label}
                 onClick={() => setView(v.id)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none [&_svg]:size-3.5",
+                  "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm @7xl:px-2.5 @7xl:py-1 transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none [&_svg]:size-3.5",
                   view === v.id ? "border bg-card text-foreground shadow-card" : "border border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
-                <v.icon aria-hidden /> {v.label}
+                <v.icon aria-hidden /> <span className="hidden @7xl:inline">{v.label}</span>
               </button>
             ))}
           </div>
@@ -259,7 +271,7 @@ export default function AgentsPage() {
                 </Button>
               </p>
             )}
-            <OrgChart shown={chartAgents} all={allAgents.length ? allAgents : agents} byWorkspace={scope === "all" && agents.some((a) => a.workspaceId)} matches={matches} />
+            <OrgChart shown={chartAgents} all={allAgents.length ? allAgents : agents} byWorkspace={byWorkspace} matches={matches} stats={stats} forceOpen={narrowed} />
           </>
         ) : visible.length === 0 ? (
           <EmptyState
@@ -278,36 +290,34 @@ export default function AgentsPage() {
               </Button>
             }
           />
+        ) : view === "list" ? (
+          byWorkspace ? (
+            <div className="space-y-6">
+              {groups.map((g) => {
+                const st = stats(g.agents);
+                return (
+                  <WorkspaceSection key={g.key} group={g} working={st.working} needsYou={st.needsYou} forceOpen={narrowed}>
+                    <AgentList agents={g.agents} all={allAgents.length ? allAgents : agents} routineCounts={routineCounts} onRunTask={setRunTaskFor} onDelete={setDeleteFor} />
+                  </WorkspaceSection>
+                );
+              })}
+            </div>
+          ) : (
+            <AgentList agents={visible} all={allAgents.length ? allAgents : agents} routineCounts={routineCounts} onRunTask={setRunTaskFor} onDelete={setDeleteFor} />
+          )
+        ) : byWorkspace ? (
+          <div className="space-y-8">
+            {groups.map((g) => {
+              const st = stats(g.agents);
+              return (
+                <WorkspaceSection key={g.key} group={g} working={st.working} needsYou={st.needsYou} forceOpen={narrowed}>
+                  <CardGrid agents={g.agents} routineCounts={routineCounts} grouped onRunTask={setRunTaskFor} onDelete={setDeleteFor} />
+                </WorkspaceSection>
+              );
+            })}
+          </div>
         ) : (
-          <motion.div layout className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
-            {visible.map((agent, i) => (
-              <motion.div
-                key={agent.id}
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i, 12) * 0.035, duration: 0.25 }}
-              >
-                <AgentCard
-                  agent={agent}
-                  routineCount={routineCounts.get(agent.id) ?? 0}
-                  onRunTask={setRunTaskFor}
-                  onDelete={setDeleteFor}
-                />
-              </motion.div>
-            ))}
-            <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-              <Link
-                to="/agents/new"
-                className="flex h-full min-h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground transition hover:border-foreground/25 hover:bg-card hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                <span className="grid size-9 place-items-center rounded-lg border bg-card text-foreground shadow-card">
-                  <Plus className="size-4" />
-                </span>
-                New agent
-              </Link>
-            </motion.div>
-          </motion.div>
+          <CardGrid agents={visible} routineCounts={routineCounts} onRunTask={setRunTaskFor} onDelete={setDeleteFor} />
         )}
         {/* Just the built-in agent so far: offer a whole team to start with. */}
         {!agentsQ.isLoading && allAgents.length > 0 && allAgents.every((a) => a.isDefault) && (
@@ -324,6 +334,44 @@ export default function AgentsPage() {
       <RunTaskDialog agent={runTaskFor} open={!!runTaskFor} onOpenChange={(o) => !o && setRunTaskFor(null)} />
       <DeleteAgentDialog agent={deleteFor} open={!!deleteFor} onOpenChange={(o) => !o && setDeleteFor(null)} />
     </>
+  );
+}
+
+function CardGrid({
+  agents,
+  routineCounts,
+  grouped,
+  onRunTask,
+  onDelete,
+}: {
+  agents: Agent[];
+  routineCounts: Map<string, number>;
+  /** Under a workspace heading: the card doesn't repeat the workspace, and "New agent" sits in the page header. */
+  grouped?: boolean;
+  onRunTask: (agent: Agent) => void;
+  onDelete: (agent: Agent) => void;
+}) {
+  return (
+    <motion.div layout className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3 @[96rem]:grid-cols-4">
+      {agents.map((agent, i) => (
+        <motion.div key={agent.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.035, duration: 0.25 }}>
+          <AgentCard agent={agent} routineCount={routineCounts.get(agent.id) ?? 0} showScope={!grouped} onRunTask={onRunTask} onDelete={onDelete} />
+        </motion.div>
+      ))}
+      {!grouped && (
+        <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+          <Link
+            to="/agents/new"
+            className="flex h-full min-h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground transition hover:border-foreground/25 hover:bg-card hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <span className="grid size-9 place-items-center rounded-lg border bg-card text-foreground shadow-card">
+              <Plus className="size-4" />
+            </span>
+            New agent
+          </Link>
+        </motion.div>
+      )}
+    </motion.div>
   );
 }
 
