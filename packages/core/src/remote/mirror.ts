@@ -89,9 +89,9 @@ const QUEUE_MAX = 200;
 
 const TERMINAL: ReadonlySet<RunStatus> = new Set(["succeeded", "failed", "cancelled"]);
 const RUN_STATUSES: readonly RunStatus[] = ["queued", "running", "paused", "succeeded", "failed", "cancelled"];
-const RUN_TRIGGERS: readonly RunTrigger[] = ["chat", "routine", "check", "dream", "delegation", "manual", "api", "followup", "task"];
+const RUN_TRIGGERS: readonly RunTrigger[] = ["chat", "routine", "check", "dream", "delegation", "manual", "api", "followup", "task", "heartbeat"];
 /** Without "dream": a runner doesn't dream, and a copied dream chat would be taken for the agent's own (memory/dreaming.ts). */
-const ORIGINS: readonly ConversationOrigin[] = ["chat", "routine", "delegation", "api", "slack", "telegram", "teams", "task"];
+const ORIGINS: readonly ConversationOrigin[] = ["chat", "routine", "delegation", "api", "slack", "telegram", "teams", "task", "heartbeat"];
 const ROLES: readonly MessageRole[] = ["user", "assistant", "system"];
 const NOTIFICATION_KINDS: readonly NotificationKind[] = ["info", "success", "warning", "error", "missing_login", "run"];
 const LOGIN_KINDS: readonly MissingLoginKind[] = ["missing_credential", "invalid_credential", "missing_totp", "missing_account", "other"];

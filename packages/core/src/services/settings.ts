@@ -1,5 +1,5 @@
 import type { Settings } from "@godmode/shared";
-import { DEFAULT_CLOUD_SETTINGS, DEFAULT_MODEL, DEFAULT_PORT, MOBILE_DEFAULT_PORT } from "@godmode/shared";
+import { DEFAULT_CLOUD_SETTINGS, DEFAULT_LOOP_REPEATS, DEFAULT_MODEL, DEFAULT_PORT, DEFAULT_STALL_MINUTES, MOBILE_DEFAULT_PORT } from "@godmode/shared";
 import { all, run } from "../db";
 import { bus } from "../events/bus";
 import { parseJson } from "../util";
@@ -24,6 +24,9 @@ export const DEFAULT_SETTINGS: Settings = {
     maxConcurrentRuns: 3,
     runTimeoutMinutes: 60,
     autoContinueOnLimit: true,
+    watchdog: true,
+    stallMinutes: DEFAULT_STALL_MINUTES,
+    loopRepeats: DEFAULT_LOOP_REPEATS,
     defaultMaxBudgetUsd: null,
     monthlyBudgetUsd: null,
     extraArgs: [],

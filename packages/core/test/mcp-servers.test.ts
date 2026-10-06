@@ -64,6 +64,7 @@ function agentModel(p: Partial<Agent> & { id: string }): Agent {
     workingDirectory: null,
     vmId: null,
     sshServerIds: [],
+    heartbeat: { enabled: false, intervalMinutes: 60, hours: null, weekdays: false, checklist: "", since: null },
     repoPath: "",
     lastRunAt: null,
     createdAt: "",

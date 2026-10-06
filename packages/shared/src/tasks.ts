@@ -383,6 +383,7 @@ export function taskEventText(e: TaskEvent, o: { you: string; youObject: string;
       if (e.data.retry) return e.data.retry > 1 ? `${a} tried once more on its own` : `${a} tried again on its own after the run failed`;
       if (!e.data.again) return `${a} started working`;
       if (e.data.trigger === "followup") return `${a} continued as planned`;
+      if (e.data.trigger === "heartbeat") return `${a} picked it up on its heartbeat`;
       if (e.data.trigger === "task") return `${a} started over`;
       return `${a} picked it up again`;
     case "waiting":

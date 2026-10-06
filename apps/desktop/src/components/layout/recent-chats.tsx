@@ -215,6 +215,7 @@ function originLine(c: Conversation, agents: Agent[]): string | null {
     return from ? `From ${from.name}` : "Handed over";
   }
   if (c.origin === "routine") return "Automation";
+  if (c.origin === "heartbeat") return "Heartbeat";
   return null;
 }
 

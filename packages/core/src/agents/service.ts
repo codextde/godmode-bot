@@ -9,6 +9,8 @@ import type {
   AgentBrowserConfig,
   AgentCharacter,
   AgentFileEntry,
+  AgentHeartbeat,
+  AgentHeartbeatInput,
   AgentInput,
   AgentPermissions,
   AgentStatus,
@@ -19,6 +21,7 @@ import type {
 } from "@godmode/shared";
 import {
   DEFAULT_AGENT_SLUG,
+  DEFAULT_HEARTBEAT,
   EFFORT_OPTIONS,
   MASCOT_CHARACTER,
   MASCOT_COLOR,
@@ -27,6 +30,7 @@ import {
   leadOf,
   leadProblem,
   normalizeCharacter,
+  normalizeHeartbeat,
   normalizeRole,
   parseCharacter,
   reportsOf,
@@ -90,6 +94,7 @@ interface AgentRow {
   working_directory: string | null;
   vm_id: string | null;
   ssh_server_ids: string;
+  heartbeat: string | null;
   repo_path: string;
   last_run_at: string | null;
   created_at: string;
@@ -188,6 +193,7 @@ function toModel(r: AgentRow): Agent {
     workingDirectory: r.working_directory,
     vmId: r.vm_id ?? null,
     sshServerIds: parseServerIds(r.ssh_server_ids),
+    heartbeat: normalizeHeartbeat(parseJson<Partial<AgentHeartbeat>>(r.heartbeat, {})),
     // Derived from the slug so the data dir can move (backup restore, GODMODE_HOME change).
     repoPath: repoPathFor(r.slug),
     pausedRuns: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason NOT IN ('question', 'budget')", r.id)?.n ?? 0,
@@ -229,11 +235,19 @@ function toRow(a: Agent): Record<string, string | number | null> {
     working_directory: a.workingDirectory,
     vm_id: a.vmId,
     ssh_server_ids: json(a.sshServerIds)!,
+    heartbeat: json(a.heartbeat)!,
     repo_path: a.repoPath,
     last_run_at: a.lastRunAt,
     created_at: a.createdAt,
     updated_at: a.updatedAt,
   };
+}
+
+/** The heartbeat after a change: switching it on (or changing its rhythm) starts the clock again. */
+function heartbeatFrom(current: AgentHeartbeat, patch: AgentHeartbeatInput | null | void): AgentHeartbeat {
+  const next = normalizeHeartbeat({ ...current, ...(patch ?? {}), since: current.since });
+  const restart = next.enabled && (!current.enabled || next.intervalMinutes !== current.intervalMinutes);
+  return { ...next, since: restart ? now() : next.enabled ? current.since : null };
 }
 
 function stringList(v: unknown): string[] {
@@ -596,6 +610,7 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     vmId: normalizeVmId(input.vmId) ?? null,
     // Human-only: signing in to remote machines.
     sshServerIds: isAgentActor(actor) ? [] : (normalizeSshServerIds(input.sshServerIds) ?? []),
+    heartbeat: heartbeatFrom(DEFAULT_HEARTBEAT, input.heartbeat),
     repoPath: repoPathFor(slug),
     lastRunAt: null,
     createdAt: ts,
@@ -681,6 +696,7 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   // Moving an agent into a VM only narrows what it reaches on this computer; taking it out is human-only.
   if (patch.vmId !== undefined && (patch.vmId || !isAgentActor(actor))) next.vmId = normalizeVmId(patch.vmId) ?? null;
   if (patch.sshServerIds !== undefined && !isAgentActor(actor)) next.sshServerIds = normalizeSshServerIds(patch.sshServerIds) ?? [];
+  if (patch.heartbeat !== undefined) next.heartbeat = heartbeatFrom(current.heartbeat, patch.heartbeat);
 
   next.updatedAt = now();
 
@@ -709,6 +725,7 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   if (detached) bus.changed("agents");
   if (current.vmId !== agent.vmId) assignmentsChanged();
   if (JSON.stringify(current.sshServerIds) !== JSON.stringify(agent.sshServerIds)) bus.changed("ssh-servers");
+  if (JSON.stringify(current.heartbeat) !== JSON.stringify(agent.heartbeat)) bus.changed("heartbeats");
   if (current.enabled !== agent.enabled || current.workspaceId !== agent.workspaceId) {
     reloadSchedules();
     requestAppTriggerSync();

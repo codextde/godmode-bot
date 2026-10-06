@@ -1,3 +1,4 @@
+import type { AgentHeartbeat } from "./heartbeat";
 import type { AttentionCounts } from "./attention";
 import type { AgentCharacter } from "./character";
 /**
@@ -163,6 +164,8 @@ export interface Agent {
   vmId: ID | null;
   /** SSH servers the agent may sign in to and control in every run. */
   sshServerIds: ID[];
+  /** Wakes up on its own rhythm to move its tickets forward and run its checklist (see heartbeat.ts). */
+  heartbeat: AgentHeartbeat;
   /** Absolute path of the agent's git repository. */
   repoPath: string;
   /** Runs of the agent that stand still: paused by the human, or waiting for Claude's usage limit to reset. */
@@ -316,7 +319,7 @@ export interface ComposioTriggerType {
  * `dream`: the archived conversation an agent's dreams (memory consolidation) run in ·
  * `slack` / `telegram` / `teams`: a chat on that platform (see Messaging) · `task`: an agent works on a board task.
  */
-export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream" | "slack" | "telegram" | "teams" | "task";
+export type ConversationOrigin = "chat" | "routine" | "delegation" | "api" | "dream" | "slack" | "telegram" | "teams" | "task" | "heartbeat";
 
 export interface Conversation {
   id: ID;
@@ -639,7 +642,7 @@ export type RunStatus = "queued" | "running" | "paused" | "succeeded" | "failed"
  * `dream`: the agent consolidated its memory in the background · `followup`: the agent continued a chat at the time it set ·
  * `task`: the agent worked on a board task.
  */
-export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api" | "followup" | "task";
+export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api" | "followup" | "task" | "heartbeat";
 
 export interface RunUsage {
   inputTokens: number;
@@ -1109,6 +1112,12 @@ export interface RunnerSettings {
   runTimeoutMinutes: number;
   /** A run that hit Claude's usage limit continues by itself once the limit has reset. */
   autoContinueOnLimit: boolean;
+  /** The watchdog stops runs that stall or go in circles (see heartbeat.ts). */
+  watchdog: boolean;
+  /** No sign of life for this long (a tool that runs: three times as long, at least 30 minutes) = stalled. */
+  stallMinutes: number;
+  /** The same tool with the same input and the same result this many times in a row = going in circles. */
+  loopRepeats: number;
   defaultMaxBudgetUsd: number | null;
   /** What the whole team may cost per calendar month in USD; used up = unattended work waits. null = no budget. */
   monthlyBudgetUsd: number | null;

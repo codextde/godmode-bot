@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { ArrowLeft, Bot, Brain, Copy, Cpu, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
+import { ArrowLeft, Bot, Brain, Copy, Cpu, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, HeartPulse, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { leadOf, reportsOf } from "@godmode/shared";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
@@ -35,6 +35,7 @@ import {
 import { OverviewTab } from "@/components/agents/detail/overview-tab";
 import { ChatsTab } from "@/components/agents/detail/chats-tab";
 import { RoutinesTab } from "@/components/agents/detail/routines-tab";
+import { HeartbeatTab } from "@/components/agents/detail/heartbeat-tab";
 import { MemoryTab } from "@/components/agents/detail/memory-tab";
 import { HistoryTab } from "@/components/agents/detail/history-tab";
 import { SettingsTab } from "@/components/agents/detail/settings-tab";
@@ -43,6 +44,7 @@ const TABS = [
   { id: "", label: "Overview", icon: LayoutGrid },
   { id: "chats", label: "Chats", icon: MessagesSquare },
   { id: "routines", label: "Automations", icon: Workflow },
+  { id: "heartbeat", label: "Heartbeat", icon: HeartPulse },
   { id: "memory", label: "Memory", icon: Brain },
   { id: "history", label: "History", icon: GitCommitHorizontal },
   { id: "settings", label: "Settings", icon: Settings2 },
@@ -101,6 +103,7 @@ export default function AgentDetailPage() {
           {tab === "" && <OverviewTab agent={agent} />}
           {tab === "chats" && <ChatsTab agent={agent} />}
           {tab === "routines" && <RoutinesTab agent={agent} />}
+          {tab === "heartbeat" && <HeartbeatTab agent={agent} />}
           {tab === "memory" && <MemoryTab agent={agent} />}
           {tab === "history" && <HistoryTab agent={agent} />}
           {tab === "settings" && <SettingsTab agent={agent} />}

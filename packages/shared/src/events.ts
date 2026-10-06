@@ -155,6 +155,8 @@ export type EntityName =
   /** Goals: added, changed, deleted (their progress follows the tickets). */
   | "goals"
   | "followups"
+  /** Heartbeat beats and watchdog interventions. */
+  | "heartbeats"
   | "mobile"
   /** A connected app (Claude Code, another MCP client) was added, removed or used. */
   | "connectors"

@@ -801,6 +801,7 @@ function speaker(m?: Pick<Message, "source">, runTrigger?: RunTrigger): string {
   if (m?.source === "delegation") return "Delegated task";
   if (m?.source === "task") return "Task";
   if (runTrigger === "followup") return "Follow-up";
+  if (runTrigger === "heartbeat") return "Heartbeat";
   return getSettings().general.userName.trim() || "User";
 }
 

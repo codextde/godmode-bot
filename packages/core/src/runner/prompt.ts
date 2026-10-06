@@ -644,6 +644,8 @@ export function retryWhy(end: RunEnd | null, error: string, userName: string): s
       return end.byUser ? `${human} stopped it` : `it was stopped (${line(error, 200)})`;
     case "timeout":
       return `it reached the time limit of ${end.minutes ?? "some"} minutes for one turn`;
+    case "stalled":
+      return `the watchdog stopped it (${line(error, 300)})`;
     case "turns":
       return "it reached the maximum number of turns";
     case "budget":
@@ -654,7 +656,7 @@ export function retryWhy(end: RunEnd | null, error: string, userName: string): s
   }
 }
 
-const STARTED_BY: Partial<Record<RunTrigger, string>> = { routine: "an automation", followup: "your own follow-up", delegation: "another agent" };
+const STARTED_BY: Partial<Record<RunTrigger, string>> = { routine: "an automation", followup: "your own follow-up", delegation: "another agent", heartbeat: "your heartbeat" };
 
 function startedBySentence(startedBy: RunTrigger, human: string): string {
   const who = STARTED_BY[startedBy];

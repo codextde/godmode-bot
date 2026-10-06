@@ -1,4 +1,5 @@
 import type { MessageBlock, RetryMode } from "./models";
+import { RUN_WATCHDOG } from "./heartbeat";
 
 /** Godmode's own sentences for a turn that ended early (the core writes them; clients recognise them with runEndOf). */
 export const RUN_INTERRUPTED = "Interrupted (Godmode restarted)";
@@ -8,7 +9,7 @@ export const RUN_CLI_MISSING = "Claude Code CLI not found. Install it from Setti
 export const RUN_MAX_TURNS = "Stopped after reaching the maximum number of turns.";
 export const RUN_COST_LIMIT = "Stopped: the run reached its cost budget.";
 
-export type RunEndKind = "interrupted" | "stopped" | "timeout" | "turns" | "budget" | "auth" | "cli" | "folder" | "vm" | "model" | "context";
+export type RunEndKind = "interrupted" | "stopped" | "timeout" | "stalled" | "turns" | "budget" | "auth" | "cli" | "folder" | "vm" | "model" | "context";
 
 export interface RunEnd {
   kind: RunEndKind;
@@ -26,6 +27,7 @@ export function runEndOf(text: string): RunEnd | null {
   const timeout = /^Timed out after (\d+) minutes/.exec(t);
   if (timeout) return { kind: "timeout", minutes: Number(timeout[1]) };
   if (t.startsWith(RUN_MAX_TURNS)) return { kind: "turns" };
+  if (t.startsWith(RUN_WATCHDOG)) return { kind: "stalled" };
   if (/prompt is too long|context (?:length|window)|conversation is too long/i.test(t)) return { kind: "context" };
   if (t.startsWith(RUN_COST_LIMIT)) return { kind: "budget" };
   if (/^Claude Code is not signed in/.test(t) || /^(?:invalid api key|authentication_error|oauth token (?:has )?expired|credit balance is too low)/i.test(t)) return { kind: "auth" };
