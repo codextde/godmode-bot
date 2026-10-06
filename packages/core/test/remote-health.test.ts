@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ComputerStatus, DependencyId, DependencyStatus, DoctorReport, Run } from "@godmode/shared";
@@ -7,6 +7,7 @@ import { defaultRunnerDataDir, loadConfig } from "../src/config";
 import { closeDb, openDb, setMeta } from "../src/db";
 import { bus } from "../src/events/bus";
 import { setLogLevel } from "../src/log";
+import { probeFullDiskAccess, protectedPaths } from "../src/services/fullDiskAccess";
 import { bootstrapDependencies, fixCheck, runnerHealth, setHealthDeps, type HealthDeps } from "../src/remote/health";
 import { keepAwakeStatus, restartKeepAwake, setKeepAwakeDeps, setWorking, startKeepAwake, stopKeepAwake } from "../src/remote/keepAwake";
 import {
@@ -515,6 +516,15 @@ describe("runner health", () => {
     for (const id of MAC_CHECKS) expect(await fixCheck(id)).toEqual({ ok: false, output: `Unknown check: ${id}` });
   });
 
+  test("Full Disk Access that can't be checked is unknown, not a warning", async () => {
+    machine({ fullDiskAccess: () => null });
+    const health = await runnerHealth(true);
+    expect(health.checks.find((c) => c.id === "full-disk-access")).toMatchObject({
+      status: "unknown",
+      detail: "Couldn't check — none of the protected folders exist here",
+    });
+  });
+
   test("a report is reused for a moment unless a fresh one is asked for", async () => {
     const m = machine();
     const first = await runnerHealth();
@@ -543,6 +553,48 @@ describe("runner health", () => {
     } finally {
       closeDb();
     }
+  });
+});
+
+describe("the Full Disk Access probe", () => {
+  const place = (name: string) => mkdtempSync(join(tmp, `${name}-`));
+
+  test("nothing protected exists: unknown instead of not allowed", () => {
+    const home = place("empty-home");
+    expect(probeFullDiskAccess([{ path: join(home, "Library", "Application Support", "com.apple.TCC", "TCC.db"), dir: false }, { path: join(home, "Library", "Mail"), dir: true }])).toBeNull();
+  });
+
+  test("one readable place is enough, even when the privacy database is missing", () => {
+    const home = place("mail-home");
+    const mail = join(home, "Library", "Mail");
+    mkdirSync(mail, { recursive: true });
+    expect(probeFullDiskAccess([{ path: join(home, "TCC.db"), dir: false }, { path: mail, dir: true }])).toBe(true);
+  });
+
+  test.if(process.getuid?.() !== 0)("refused everywhere it exists: not allowed", () => {
+    const home = place("locked-home");
+    const db = join(home, "TCC.db");
+    const mail = join(home, "Mail");
+    writeFileSync(db, "");
+    mkdirSync(mail);
+    chmodSync(db, 0o000);
+    chmodSync(mail, 0o000);
+    try {
+      expect(probeFullDiskAccess([{ path: db, dir: false }, { path: join(home, "Safari"), dir: true }, { path: mail, dir: true }])).toBe(false);
+    } finally {
+      chmodSync(db, 0o600);
+      chmodSync(mail, 0o700);
+    }
+  });
+
+  test("checks the per-user and the system privacy database before the folders", () => {
+    expect(protectedPaths("/Users/alex").map((p) => p.path)).toEqual([
+      "/Users/alex/Library/Application Support/com.apple.TCC/TCC.db",
+      "/Library/Application Support/com.apple.TCC/TCC.db",
+      "/Users/alex/Library/Safari",
+      "/Users/alex/Library/Mail",
+      "/Users/alex/Library/Messages",
+    ]);
   });
 });
 
