@@ -7,6 +7,7 @@ import type {
   SpendReport,
   Agent,
   AgentFileEntry,
+  AgentHeartbeatState,
   AgentInput,
   AgentQuestion,
   AgentTemplate,
@@ -68,6 +69,7 @@ import type {
   GoalInput,
   LicenseState,
   GitCommit,
+  HeartbeatBeat,
   LocalChromeProfile,
   LogEntry,
   LogLevel,
@@ -483,6 +485,10 @@ export const api = {
     duplicate: (id: string, grant?: string) => request<Agent>("POST", `/api/agents/${id}/duplicate`, {}, withGrant(grant)),
     /** Stop showing "Last run failed". */
     dismissFailure: (id: string) => del<Agent>(`/api/agents/${id}/failed-run`),
+    /** Heartbeat settings, when it beats next, recent beats, watchdog interventions and the agent's board. */
+    heartbeat: (id: string) => get<AgentHeartbeatState>(`/api/agents/${id}/heartbeat`),
+    /** "Wake now": one beat right away (400 when the agent is switched off). */
+    beat: (id: string) => post<HeartbeatBeat>(`/api/agents/${id}/heartbeat/beat`),
   },
 
   dreams: {

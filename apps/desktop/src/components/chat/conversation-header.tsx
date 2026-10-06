@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, Conversation, ConversationWithMessages } from "@godmode/shared";
 import { EFFORT_LABELS } from "@godmode/shared";
-import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, Moon, Pencil, Pin, PinOff, Share2, SquareKanban, Trash2, Plug, Workflow } from "lucide-react";
+import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, HeartPulse, Moon, Pencil, Pin, PinOff, Share2, SquareKanban, Trash2, Plug, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +37,7 @@ const ORIGIN_META = {
   telegram: { label: "Telegram", icon: PLATFORMS.telegram.glyph },
   teams: { label: "Teams", icon: PLATFORMS.teams.glyph },
   task: { label: "Task", icon: SquareKanban },
+  heartbeat: { label: "Heartbeat", icon: HeartPulse },
 } as const;
 
 export function ConversationHeader({
@@ -153,9 +154,9 @@ export function ConversationHeader({
             </TooltipTrigger>
             <TooltipContent>{conversation.delegatedFrom.conversationId ? `${from.name} handed this over — open the chat it came from` : "The chat this came from was deleted"}</TooltipContent>
           </Tooltip>
-        ) : origin && conversation.origin === "routine" && agent ? (
+        ) : origin && (conversation.origin === "routine" || conversation.origin === "heartbeat") && agent ? (
           <Link
-            to={`/agents/${agent.id}/routines`}
+            to={`/agents/${agent.id}/${conversation.origin === "heartbeat" ? "heartbeat" : "routines"}`}
             className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:border-foreground/25 hover:text-foreground @xl:inline-flex"
           >
             <origin.icon className="size-3" /> {origin.label}

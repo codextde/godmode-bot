@@ -46,6 +46,8 @@ import { closeGuestTunnels } from "./vm/guest";
 import { startTasks, stopTasks } from "./tasks/service";
 import { runDoctor } from "./services/doctor";
 import { checkPermissions } from "./services/permissions";
+import { startHeartbeats, stopHeartbeats } from "./services/heartbeats";
+import { startWatchdog, stopWatchdog } from "./runner/watchdog";
 import { cleanUp, fixAll, installUpdates, startMaintenance, stopMaintenance } from "./services/maintenance";
 import { RECOMMENDED, scanCleanup } from "./services/cleanup";
 import { checkUpdates } from "./services/updates";
@@ -180,6 +182,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   startFollowups();
   startPauses();
   startBudgets();
+  startWatchdog();
   if (!runner) {
     // A runner's runs are told by the computer it works for (they arrive there as its own runs).
     startRunNotices();
@@ -188,6 +191,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     startAppTriggers();
     startMessaging();
     startTasks();
+    startHeartbeats();
   }
   // Adopt VMs that kept running while Godmode was closed.
   startVms().catch((err) => log.warn("could not check VMs", err));
@@ -299,6 +303,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopFollowups();
     stopPauses();
     stopBudgets();
+    stopWatchdog();
     if (runner) {
       stopLinkServer();
       stopKeepAwake();
@@ -316,6 +321,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       removeCoreFile(cfg.dataDir);
       await stopMessaging();
       stopTasks();
+      stopHeartbeats();
     }
     await shutdownRunner();
     await shutdownBrowsers();

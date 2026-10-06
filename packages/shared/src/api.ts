@@ -1,3 +1,4 @@
+import type { AgentHeartbeatInput } from "./heartbeat";
 import type { SpendKind } from "./budget";
 import type { AgentCharacter } from "./character";
 import type { AgentComputerConfig, ComputerTarget } from "./computer";
@@ -81,6 +82,8 @@ export interface AgentInput {
   vmId?: ID | null;
   /** SSH servers the agent may use in every run. */
   sshServerIds?: ID[];
+  /** Missing parts keep their current value. */
+  heartbeat?: AgentHeartbeatInput;
 }
 
 export interface AgentTemplate {

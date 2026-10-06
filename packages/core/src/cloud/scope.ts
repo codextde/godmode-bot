@@ -117,6 +117,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/agents/:id/files", A],
   ["GET|PUT", "/api/agents/:id/file", A],
   ["GET", "/api/agents/:id/commits", A],
+  ["GET", "/api/agents/:id/heartbeat", A],
+  ["POST", "/api/agents/:id/heartbeat/beat", agentPermissions],
   ["GET", "/api/agents/:id/dreams", A],
   ["POST", "/api/agents/:id/dreams", agentPermissions],
   ["GET", "/api/dreams/:id", A],

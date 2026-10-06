@@ -8,6 +8,7 @@ import {
   CHARACTER_TOPS,
   EFFORT_OPTIONS,
   MAX_AGENT_ROLE_LENGTH,
+  MAX_HEARTBEAT_CHECKLIST_LENGTH,
   isModelId,
 } from "@godmode/shared";
 import {
@@ -32,6 +33,7 @@ import { listEvents, sendTestEvent } from "../../automations/events";
 import { rotateWebhookToken } from "../../automations/webhooks";
 import { startChat } from "../../services/conversations";
 import { continueAgent, pauseAgent } from "../../services/pauses";
+import { beatNow, heartbeatState } from "../../services/heartbeats";
 import { dreamOverview, getDream, isDreaming, revertDream, startDream } from "../../memory/dreaming";
 import { isMemoryPath } from "../../memory/files";
 import { resolveRepoPath } from "../../agents/repo";
@@ -73,6 +75,16 @@ const computerSchema = z
   .object({
     enabled: z.boolean(),
     target: computerTargetSchema.nullable(),
+  })
+  .partial();
+
+const heartbeatSchema = z
+  .object({
+    enabled: z.boolean(),
+    intervalMinutes: z.number().int().min(1).max(1440),
+    hours: z.object({ from: z.number().int().min(0).max(23), to: z.number().int().min(0).max(24) }).nullable(),
+    weekdays: z.boolean(),
+    checklist: z.string().max(MAX_HEARTBEAT_CHECKLIST_LENGTH),
   })
   .partial();
 
@@ -124,6 +136,7 @@ export const agentSchema = z.object({
   workingDirectory: z.string().trim().max(4096).nullable().optional(),
   vmId: id.nullable().optional(),
   sshServerIds: z.array(id).max(50).optional(),
+  heartbeat: heartbeatSchema.optional(),
 });
 
 const triggerSchema = z.discriminatedUnion("type", [
@@ -259,6 +272,12 @@ export function registerAgentRoutes(app: Hono): void {
     const limit = Math.min(Math.max(Number(c.req.query("limit") ?? 50) || 50, 1), 500);
     return c.json(await listAgentCommits(c.req.param("id"), limit));
   });
+
+  /* Heartbeat ---------------------------------------------------------- */
+
+  app.get("/api/agents/:id/heartbeat", (c) => c.json(heartbeatState(c.req.param("id"))));
+
+  app.post("/api/agents/:id/heartbeat/beat", async (c) => c.json(await beatNow(c.req.param("id"))));
 
   /* Dreams (background memory consolidation) ------------------------- */
 
