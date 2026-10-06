@@ -3,7 +3,9 @@
  * Authenticated with per-run bearer tokens (mcp/tokens.ts) or, on `/mcp` only, the key of a connected app
  * (connect/connectors.ts) — never with the user's access token.
  * `tools/call` answers over SSE when the client accepts it, with keepalives, so long calls
- * (agent_delegate waiting for a peer) survive idle timeouts; everything else answers with JSON.
+ * (agent_delegate waiting for a peer) survive idle timeouts: progress notifications when the call carries a
+ * progressToken (Claude Code aborts a tool that sends neither a response nor progress for 5 minutes), comments
+ * otherwise. Everything else answers with JSON.
  */
 import type { Context, Hono } from "hono";
 import { VERSION } from "../config";
@@ -23,7 +25,7 @@ import { SSH_INSTRUCTIONS, UnknownSshToolError, callSshTool, listSshTools } from
 const log = logger("mcp");
 
 const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
-const KEEPALIVE_MS = 15_000;
+let keepaliveMs = 15_000;
 const SLOW_TOOL_MS = 10_000;
 
 function toolResultText(result: Record<string, unknown>): string {
@@ -189,9 +191,21 @@ export function disableIdleTimeout(c: Context) {
   }
 }
 
-/** Answer one tools/call over SSE: headers go out immediately, keepalive comments until the result is ready. */
+export function __setKeepaliveForTests(ms: number | null) {
+  keepaliveMs = ms ?? 15_000;
+}
+
+function progressTokenOf(msg: unknown): string | number | null {
+  const meta = isObj(msg) && isObj(msg.params) && isObj(msg.params._meta) ? msg.params._meta : null;
+  const token = meta?.progressToken;
+  return typeof token === "string" || typeof token === "number" ? token : null;
+}
+
+/** Answer one tools/call over SSE: headers go out immediately, keepalives until the result is ready. */
 function sseCall(ctx: RunContext, msg: unknown, server: McpServerDef): Response {
   const encoder = new TextEncoder();
+  const progressToken = progressTokenOf(msg);
+  const started = Date.now();
   let keepalive: ReturnType<typeof setInterval> | null = null;
   let closed = false;
   const stream = new ReadableStream<Uint8Array>({
@@ -205,7 +219,13 @@ function sseCall(ctx: RunContext, msg: unknown, server: McpServerDef): Response 
         }
       };
       send(": godmode\n\n");
-      keepalive = setInterval(() => send(": keepalive\n\n"), KEEPALIVE_MS);
+      let beats = 0;
+      keepalive = setInterval(() => {
+        if (progressToken === null) return send(": keepalive\n\n");
+        const seconds = Math.round((Date.now() - started) / 1000);
+        const params = { progressToken, progress: ++beats, message: `Still working (${seconds}s)` };
+        send(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/progress", params })}\n\n`);
+      }, keepaliveMs);
       try {
         const response = await handleRpc(ctx, msg, server);
         if (response) send(`event: message\ndata: ${JSON.stringify(response)}\n\n`);
