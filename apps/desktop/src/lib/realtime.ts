@@ -67,7 +67,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   mods: [qk.mods],
   // Bot status, access requests and chats (the sidebar badge counts requests).
   messaging: [qk.messaging, qk.bootstrap],
-  tasks: [qk.tasks, qk.goals],
+  tasks: [qk.tasks, qk.goals, qk.heartbeats],
   goals: [qk.goals],
   // A phone was paired, removed, or connected.
   mobile: [qk.mobile],
@@ -82,6 +82,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
   followups: [qk.followups],
+  // A beat was recorded, the watchdog stepped in, or an agent's heartbeat settings changed.
+  heartbeats: [qk.heartbeats],
   // The background upkeep repaired, updated or cleaned up: system check, permissions, updates, cleanup.
   system: [qk.doctor, qk.cleanup],
 };

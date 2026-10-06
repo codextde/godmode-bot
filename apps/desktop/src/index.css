@@ -186,6 +186,7 @@
   --animate-dream-halo: dream-halo 3.2s ease-in-out infinite;
   --animate-dream-dot: dream-dot 2s ease-out infinite;
   --animate-march: march 0.6s linear infinite;
+  --animate-ekg: ekg 2.8s cubic-bezier(0.45, 0, 0.3, 1) infinite;
 
   @keyframes shimmer {
     0% { background-position: 200% 0; }
@@ -219,6 +220,11 @@
   /* Dashes travel along a stroke: one dash plus one gap (8 + 7) per round. */
   @keyframes march {
     to { stroke-dashoffset: -15; }
+  }
+  /* A bright trace runs along the heartbeat line (pathLength 100, dash 28), then rests before the next beat. */
+  @keyframes ekg {
+    0% { stroke-dashoffset: 28; }
+    70%, 100% { stroke-dashoffset: -100; }
   }
 }
 

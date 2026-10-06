@@ -16,10 +16,13 @@ import {
   CHARACTER_MOUTHS,
   CHARACTER_NECKS,
   CHARACTER_TOPS,
+  HEARTBEAT_INTERVALS,
+  heartbeatIntervalText,
   isModelId,
   leadOf,
   modState,
   MAX_AGENT_ROLE_LENGTH,
+  MAX_HEARTBEAT_CHECKLIST_LENGTH,
   MAX_START_WINDOW_MINUTES,
   normalizeRole,
   reportsOf,
@@ -462,6 +465,22 @@ const agentFields = {
   subagents: z
     .array(z.object({ name: z.string(), description: z.string(), prompt: z.string(), model: z.string().optional() }))
     .optional(),
+  heartbeat: z
+    .object({
+      enabled: z.boolean().optional(),
+      intervalMinutes: z.number().int().min(15).max(1440).optional().describe(`Minutes between beats: ${HEARTBEAT_INTERVALS.join(", ")}`),
+      hours: z
+        .object({ from: z.number().int().min(0).max(23), to: z.number().int().min(0).max(24) })
+        .nullable()
+        .optional()
+        .describe("Local hours it may wake in (e.g. 8 to 18); null = any time"),
+      weekdays: z.boolean().optional().describe("Monday to Friday only"),
+      checklist: z.string().max(MAX_HEARTBEAT_CHECKLIST_LENGTH).optional().describe("Standing duties for every beat; empty = only its tickets"),
+    })
+    .optional()
+    .describe(
+      "Heartbeat: the agent wakes on its own rhythm, moves its board tickets forward (stalled, failed or unstarted ones, with what changed since) and runs its checklist. A beat with nothing to do costs nothing. For recurring duties tied to its tickets; use a routine for a fixed-time job.",
+    ),
 };
 
 const triggerSchema = z
@@ -1142,6 +1161,9 @@ const TOOLS: ToolDef[] = [
         },
         browserEnabled: target.browser.enabled,
         subagents: target.subagents.map((s) => s.name),
+        heartbeat: target.heartbeat.enabled
+          ? { every: heartbeatIntervalText(target.heartbeat.intervalMinutes), hours: target.heartbeat.hours, weekdays: target.heartbeat.weekdays, checklist: snippet(target.heartbeat.checklist, 1000) }
+          : "off",
         routines,
       });
     },
@@ -1263,7 +1285,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "agent_update",
     description:
-      "Update an agent's name, role, who it reports to, look (emoji, colour, character), personality, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope) or subagents. Workspace, browser profile, secret access and login permissions can only be changed by the human in Settings.",
+      "Update an agent's name, role, who it reports to, look (emoji, colour, character), personality, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope), subagents or heartbeat. Workspace, browser profile, secret access and login permissions can only be changed by the human in Settings.",
     schema: z.object({ agentId: z.string(), name: z.string().min(1).max(100).optional(), ...agentFields }),
     when: managesSetup,
     run: async ({ agentId, ...patch }, { agent, ctx }) => {

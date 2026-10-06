@@ -388,6 +388,11 @@ interface Job {
    */
   sessionCostBefore?: number | null;
   timedOut: boolean;
+  /** The watchdog stopped it: its report (the run's error). */
+  stalled?: string;
+  /** Last line Claude Code wrote, and when the process started (ms) — what the watchdog looks at. */
+  lastOutputAt?: number;
+  spawnedAt?: number;
   lastLabel: string;
   lastDeltaAt: number;
   lastPersistAt: number;
@@ -448,6 +453,46 @@ export function activeRunForConversation(conversationId: string): string | null 
     queued ??= job.runId;
   }
   return queued;
+}
+
+/** A running run as the watchdog sees it. `waiting`: it stands still on purpose (a pause, the usage limit, compacting). */
+export interface WatchedRun {
+  runId: string;
+  agentId: string;
+  conversationId: string;
+  trigger: RunTrigger;
+  startedAt: number;
+  lastOutputAt: number;
+  blocks: readonly MessageBlock[];
+  waiting: boolean;
+}
+
+export function watchedRuns(): WatchedRun[] {
+  const out: WatchedRun[] = [];
+  for (const j of jobs.values()) {
+    if (j.status !== "running" || !j.proc || j.cancelReason || j.timedOut || j.stalled || !j.lastOutputAt) continue;
+    out.push({
+      runId: j.runId,
+      agentId: j.agentId,
+      conversationId: j.conversationId,
+      trigger: j.trigger,
+      startedAt: j.spawnedAt ?? j.lastOutputAt,
+      lastOutputAt: j.lastOutputAt,
+      blocks: j.acc.blocks,
+      waiting: !!j.pause || !!j.acc.limit || j.acc.isCompacting,
+    });
+  }
+  return out;
+}
+
+/** The watchdog stops a run that stalled or goes in circles: it fails with `report` as its error. */
+export function stopStalledRun(runId: string, report: string): boolean {
+  const job = jobs.get(runId);
+  if (!job || job.status !== "running" || !job.proc || job.cancelReason || job.timedOut || job.stalled) return false;
+  job.stalled = report;
+  log.warn(`watchdog stopped run ${runId}: ${report}`);
+  killTree(job.proc);
+  return true;
 }
 
 export function listActiveRuns(): {
@@ -660,7 +705,7 @@ export function pauseAtStep(runId: string): PauseReason | null {
 /** Why the run can't ask the human right now (`ask_human`, `request_approval`), or null when it can. */
 export function questionRefusal(runId: string, human: string): string | null {
   const job = jobs.get(runId);
-  if (!job || job.status !== "running" || job.cancelReason || job.timedOut) return "This run is being stopped — nothing was asked.";
+  if (!job || job.status !== "running" || job.cancelReason || job.timedOut || job.stalled) return "This run is being stopped — nothing was asked.";
   if (job.pause?.question) {
     return `You already asked “${job.pause.question.block.title}” in this step and it hasn't been answered. One at a time: stop now, and ask the next one after the answer.`;
   }
@@ -819,7 +864,7 @@ function closePaused(row: RunRow, reason: string, byHuman = false): void {
 export function deliverQueued(runId: string): string | null {
   const job = jobs.get(runId);
   // A run that is ending (stopped, timed out, being paused) takes nothing: the message would go down with it.
-  if (!job || job.status !== "running" || job.cancelReason || job.timedOut || job.pause) return null;
+  if (!job || job.status !== "running" || job.cancelReason || job.timedOut || job.stalled || job.pause) return null;
   const taken = takeQueued(job.conversationId, getAgent(job.agentId));
   if (!taken.length) return null;
   for (const { message } of taken) job.acc.addUserMessage(message);
@@ -1019,8 +1064,8 @@ function pump() {
   }
 }
 
-/** Automations, follow-ups and board tickets: work nobody waits for at the screen, held while a budget is used up. */
-const HELD_TRIGGERS: ReadonlySet<RunTrigger> = new Set(["routine", "followup", "task"]);
+/** Automations, follow-ups, heartbeats and board tickets: work nobody waits for at the screen, held while a budget is used up. */
+const HELD_TRIGGERS: ReadonlySet<RunTrigger> = new Set(["routine", "followup", "task", "heartbeat"]);
 
 /** A message from Slack, Telegram or Teams: anyone in that channel could spend past the owner's budget. */
 function platformChat(job: Job): boolean {
@@ -1544,6 +1589,8 @@ async function spawnClaude(
     detached: process.platform !== "win32",
   });
   job.proc = proc;
+  job.spawnedAt ??= Date.now();
+  job.lastOutputAt = Date.now();
   if (halted(job)) killTree(proc);
   try {
     proc.stdin.write(prompt);
@@ -1554,6 +1601,7 @@ async function spawnClaude(
   const stderrP = readTail(proc.stderr, STDERR_TAIL_BYTES);
   await readLines(proc.stdout, (raw) => {
     const line = raw.trim();
+    job.lastOutputAt = Date.now();
     if (!line) return;
     logSink.write(`${redact(line)}\n`);
     let event: unknown;
@@ -2038,6 +2086,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       resuming &&
       !halted(job) &&
       !job.timedOut &&
+      !job.stalled &&
       (!job.acc.final || job.acc.final.isError) &&
       SESSION_MISSING.test([job.acc.final?.errors.join("\n") ?? "", attempt.stderr, attempt.noise.join("\n")].join("\n"));
     if (lostSession) {
@@ -2065,13 +2114,14 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     // A run that asked the human stands still for the answer however its process ended — stopped at the next step, after
     // the grace, by itself, or at the usage limit (the answer then goes along) — unless it was stopped, timed out or
     // broke off before it could ask properly.
-    if (job.pause?.reason === "question" && !job.cancelReason && !job.timedOut && (job.pause.applied || answer || limitOf(job, attempt))) {
+    if (job.pause?.reason === "question" && !job.cancelReason && !job.timedOut && !job.stalled && (job.pause.applied || answer || limitOf(job, attempt))) {
       job.pause.applied = true;
       return { status: "paused", error: null };
     }
     const ended = halted(job);
     // A run that finished while it was being stopped for a pause is finished (stopped between two steps, it never is).
     if (ended && !(ended.status === "paused" && !job.pause?.atStep && answer && !limited)) return ended;
+    if (job.stalled) return { status: "failed", error: job.stalled };
     if (job.timedOut) return { status: "failed", error: `Timed out after ${timeoutMinutes} minutes` };
     if (answer && !limited) return { status: "succeeded", error: null };
     // Claude's usage limit ended the run: it stands still until the limit has reset.
@@ -2495,6 +2545,7 @@ function logRunFinished(job: Job, run: Run, agent: Agent | null, status: Outcome
     ...(job.slowestPersistMs && job.slowestPersistMs >= 20 ? { slowestSaveMs: Math.round(job.slowestPersistMs) } : {}),
     ...(job.depth ? { depth: job.depth } : {}),
     ...(job.timedOut ? { timedOut: true } : {}),
+    ...(job.stalled ? { watchdog: true } : {}),
     ...(error ? { error: excerpt(error, 1000) } : {}),
   };
   if (status === "failed") log.warn(`run failed: ${excerpt((error ?? "unknown error").split("\n")[0], 160)}`, details);

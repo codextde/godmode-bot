@@ -63,6 +63,9 @@ export const qk = {
   conversation: (id: string) => ["conversations", "detail", id],
   /** Times agents set to continue their chats on their own. */
   followups: ["followups"] as unknown[],
+  /** Heartbeats: settings, recent beats and watchdog interventions per agent. */
+  heartbeats: ["heartbeats"] as unknown[],
+  agentHeartbeat: (agentId: string) => ["heartbeats", "agent", agentId],
   runs: ["runs"] as unknown[],
   /** Spend and budgets (refreshed when runs end or stand still, and when settings or agents change). */
   spend: ["spend"] as unknown[],

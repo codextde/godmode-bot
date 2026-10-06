@@ -92,6 +92,7 @@ function makeAgent(workspaceId: string | null, permissions: Partial<AgentPermiss
     workingDirectory: null,
     vmId: null,
     sshServerIds: [],
+    heartbeat: { enabled: false, intervalMinutes: 60, hours: null, weekdays: false, checklist: "", since: null },
     repoPath: "/tmp/agent",
     lastRunAt: null,
     createdAt: ts,

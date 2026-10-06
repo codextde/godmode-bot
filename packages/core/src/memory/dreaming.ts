@@ -230,6 +230,7 @@ function speaker(trigger: RunTrigger, human: string): string {
   if (trigger === "delegation") return "Delegated task (from another agent)";
   if (trigger === "api" || trigger === "manual") return "Request (API)";
   if (trigger === "followup") return "Follow-up (you continued on your own)";
+  if (trigger === "heartbeat") return "Heartbeat (you woke up on your own rhythm)";
   return human;
 }
 

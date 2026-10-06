@@ -241,6 +241,11 @@ export class StreamAccumulator {
     }
   }
 
+  /** Claude Code is compacting the conversation (it writes nothing meanwhile). */
+  get isCompacting(): boolean {
+    return this.compacting;
+  }
+
   /** Text appended to top-level (non-subagent) text blocks since the last call. */
   takeTextDelta(): string {
     const d = this.pendingTextDelta;

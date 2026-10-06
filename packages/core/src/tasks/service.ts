@@ -1399,9 +1399,11 @@ function onBusEvent(event: ServerEvent) {
           const pending = retrying.get(task.id);
           const retry = pending?.firing ? pending : undefined;
           if (retry) retrying.delete(task.id);
+          const woke = event.run.trigger === "heartbeat" ? wakeReasons.get(task.id) : null;
+          wakeReasons.delete(task.id);
           record(task.id, "started", agentActor(event.run.agentId), {
             runId: event.run.id,
-            body: retry?.reason ?? "",
+            body: retry?.reason ?? woke ?? "",
             data: { trigger: event.run.trigger, again, ...(retry ? { retry: retry.n } : {}) },
           });
         }
@@ -1537,6 +1539,36 @@ async function finished(id: string, run: Run): Promise<void> {
 const MAX_AUTO_RETRIES = 2;
 let RETRY_DELAYS_MS = [30_000, 120_000];
 
+/** Why the heartbeat woke a ticket, until its run's start is on the timeline. */
+const wakeReasons = new Map<string, string>();
+
+/**
+ * The agent's heartbeat wakes it on a ticket: one that never started is started, one that stands still or failed gets
+ * `prompt` (what changed since, and why it woke) in its own conversation. False when the ticket isn't free for it: it
+ * works, waits for something, stands still, is being prepared, or would try again on its own anyway.
+ */
+export async function wakeTask(id: string, opts: { why: string; content: string; prompt: string }): Promise<boolean> {
+  const task = row(id);
+  if (!task || task.archived_at || !task.agent_id || busy.has(id) || retrying.has(id)) return false;
+  if (task.status === "todo") {
+    if (unfinishedDependencies(id).length || (task.conversation_id && openRuns(task.conversation_id).length)) return false;
+    await dispatch(id);
+    return true;
+  }
+  if (task.status !== "in_progress" && task.status !== "blocked") return false;
+  const conv = task.conversation_id;
+  if (!conv || !conversationExists(conv) || openRuns(conv).length || pauseOf(conv)) return false;
+  if (get<{ agent_id: string }>("SELECT agent_id FROM conversations WHERE id = ?", conv)?.agent_id !== task.agent_id) return false;
+  wakeReasons.set(id, opts.why);
+  try {
+    await sendMessage(conv, { content: opts.content, prompt: opts.prompt, trigger: "heartbeat", source: "task" });
+  } catch (err) {
+    wakeReasons.delete(id);
+    throw err;
+  }
+  return true;
+}
+
 /** Tests: shorter pauses (null = the real ones), and nothing left waiting when a test ends. */
 export function __setTaskRetryDelaysForTests(ms: number[] | null): void {
   RETRY_DELAYS_MS = ms ?? [30_000, 120_000];
@@ -1583,10 +1615,10 @@ function retriesSoFar(id: string): number {
  */
 function retryLater(id: string, reason: string, conversationId: string | null, delayMs?: number): boolean {
   const end = runEndOf(reason);
-  if (end && !["interrupted", "timeout", "turns"].includes(end.kind)) return false;
+  if (end && !["interrupted", "timeout", "turns", "stalled"].includes(end.kind)) return false;
   const n = retriesSoFar(id) + 1;
-  // A run that hit the time limit gets one more go (each can take the whole limit).
-  const max = end?.kind === "timeout" ? 1 : MAX_AUTO_RETRIES;
+  // A run that hit the time limit gets one more go (each can take the whole limit), as does one the watchdog stopped.
+  const max = end?.kind === "timeout" || end?.kind === "stalled" ? 1 : MAX_AUTO_RETRIES;
   if (n > max || retrying.has(id)) return false;
   const runId = conversationId ? latestRunId(conversationId) : null;
   const wait = delayMs ?? RETRY_DELAYS_MS[n - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;

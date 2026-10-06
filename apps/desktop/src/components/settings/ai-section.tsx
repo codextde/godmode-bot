@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Cpu, Gauge, ShieldAlert, SlidersHorizontal, Sparkles, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
-import { EFFORT_LABELS, EFFORT_OPTIONS, ULTRACODE_HINT, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
+import { DEFAULT_LOOP_REPEATS, DEFAULT_STALL_MINUTES, EFFORT_LABELS, EFFORT_OPTIONS, ULTRACODE_HINT, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
 import { ReasoningEffort } from "@/components/aicss/ReasoningEffort";
 import {
   AlertDialog,
@@ -258,6 +258,37 @@ export function AiSection({ settings }: { settings: Settings }) {
         >
           <Switch id="auto-continue" checked={r.autoContinueOnLimit ?? true} onCheckedChange={(autoContinueOnLimit) => patch({ runner: { autoContinueOnLimit } })} />
         </SettingRow>
+        <SettingRow
+          label="Watchdog"
+          htmlFor="watchdog"
+          description="Stops runs that stall or go in circles, with a report of where they stood. Board tickets try again once on their own."
+        >
+          <Switch id="watchdog" checked={r.watchdog ?? true} onCheckedChange={(watchdog) => patch({ runner: { watchdog } })} />
+        </SettingRow>
+        {(r.watchdog ?? true) && (
+          <>
+            <SettingRow label="Stalled after" htmlFor="stall-minutes" description="No sign of life for this long. A tool that is still running gets three times as long, at least 30 minutes.">
+              <NumberField
+                id="stall-minutes"
+                min={3}
+                max={240}
+                suffix="min"
+                value={r.stallMinutes ?? DEFAULT_STALL_MINUTES}
+                onCommit={(v) => v !== null && patch({ runner: { stallMinutes: v } })}
+              />
+            </SettingRow>
+            <SettingRow label="Same step repeated" htmlFor="loop-repeats" description="The same tool with the same input and result, this many times in a row.">
+              <NumberField
+                id="loop-repeats"
+                min={3}
+                max={50}
+                suffix="times"
+                value={r.loopRepeats ?? DEFAULT_LOOP_REPEATS}
+                onCommit={(v) => v !== null && patch({ runner: { loopRepeats: v } })}
+              />
+            </SettingRow>
+          </>
+        )}
         <SettingRow label="Default budget per run" htmlFor="budget" description="Hard spending cap passed to Claude Code. Leave empty for unlimited.">
           <NumberField
             id="budget"

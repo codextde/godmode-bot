@@ -15,6 +15,7 @@ export const SPEND_KIND_OF: Record<RunTrigger, SpendKind> = {
   task: "task",
   delegation: "delegation",
   followup: "followup",
+  heartbeat: "automation",
   dream: "memory",
 };
 

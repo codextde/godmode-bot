@@ -1149,4 +1149,41 @@ CREATE TABLE IF NOT EXISTS mods (
 );
 `,
   },
+  {
+    id: 72,
+    name: "heartbeats",
+    sql: /* sql */ `
+-- Heartbeats: the agent wakes on its own rhythm (agents.heartbeat, JSON). One row per beat: what it woke the agent on
+-- (wakes), the tickets waiting for the human then (waiting), and the checklist's run.
+ALTER TABLE agents ADD COLUMN heartbeat TEXT NOT NULL DEFAULT '{}';
+CREATE TABLE IF NOT EXISTS heartbeats (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  reason TEXT NOT NULL DEFAULT 'scheduled',
+  outcome TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  wakes TEXT NOT NULL DEFAULT '[]',
+  waiting TEXT NOT NULL DEFAULT '[]',
+  changes INTEGER NOT NULL DEFAULT 0,
+  run_id TEXT,
+  conversation_id TEXT,
+  retried INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_heartbeats_agent ON heartbeats(agent_id, created_at);
+-- Runs the watchdog stopped: where and why (report), and whether something tries again (action).
+CREATE TABLE IF NOT EXISTS watchdog_events (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  conversation_id TEXT NOT NULL,
+  task_id TEXT,
+  kind TEXT NOT NULL,
+  report TEXT NOT NULL,
+  action TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_watchdog_events_agent ON watchdog_events(agent_id, created_at);
+`,
+  },
 ];
