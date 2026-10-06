@@ -37,10 +37,14 @@ export default function TaskScreen() {
   });
   const approve = useMutation({
     mutationFn: () => api.tasks.approve(id),
-    onSuccess: onDone,
+    onSuccess: (next) => {
+      onDone(next);
+      if (next.pullRequest?.state === "open") Alert.alert(`#${next.pullRequest.number} is queued to merge`, "The ticket moves to Done once GitHub merges it.");
+    },
     onError: (err) => {
       // A computer on an older Godmode: approving only marks it done.
       if (err instanceof ApiError && err.status === 404) return update.mutate({ status: "done" });
+      if (!(err instanceof ApiError && err.code === "merge_failed")) return Alert.alert("Couldn't approve it", errorText(err));
       Alert.alert(`Couldn't merge #${task.data?.pullRequest?.number ?? ""}`, errorText(err), [
         { text: "Cancel", style: "cancel" },
         { text: "Mark done anyway", onPress: () => update.mutate({ status: "done" }) },

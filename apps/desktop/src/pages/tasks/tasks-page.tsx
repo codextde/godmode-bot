@@ -224,7 +224,10 @@ export default function TasksPage() {
     mutationFn: (task: Task) => api.tasks.approve(task.id),
     onSuccess: (t, task) => {
       upsertTask(qc, t);
-      toast.success(`#${t.number} merged into ${t.baseBranch}`, { description: `Pull request #${task.pullRequest?.number} is merged and the ticket is done.` });
+      const pr = task.pullRequest?.number;
+      if (t.pullRequest?.state === "merged") {
+        toast.success(`#${t.number} merged into ${t.baseBranch}`, { description: t.status === "done" ? `Pull request #${pr} is merged and the ticket is done.` : `Pull request #${pr} is merged.` });
+      } else toast.info(`#${pr} is queued to merge`, { description: "The ticket moves to Done once GitHub merges it." });
     },
     onError: (e, task) => {
       void qc.invalidateQueries({ queryKey: qk.tasks });
@@ -237,8 +240,8 @@ export default function TasksPage() {
     },
   });
 
-  const requestMove = (task: Task, status: TaskStatus, beforeId: string | null = null) => {
-    if (status === "done" && mergesOnApprove(task)) approve.mutate(task);
+  const requestMove = (task: Task, status: TaskStatus, beforeId: string | null = null, merge = false) => {
+    if (merge && status === "done" && mergesOnApprove(task)) approve.mutate(task);
     else if (needsConfirm(task) && status !== "in_progress") setStopping({ task, status, beforeId });
     else move.mutate({ task, status, beforeId });
   };
@@ -507,7 +510,7 @@ export default function TasksPage() {
         agents={agents}
         workspaces={workspaces}
         onClose={() => openTask(null)}
-        onMove={(task, status) => requestMove(task, status)}
+        onMove={(task, status, merge) => requestMove(task, status, null, merge)}
         onArchive={(task, value) => (value ? archive([task]) : setArchived(task, false))}
         onDelete={setDeleting}
         onReassign={requestReassign}

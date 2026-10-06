@@ -57,7 +57,8 @@ export interface TaskBoardProps {
   /** Given when the board spans several workspaces: cards show theirs. */
   workspaces?: Map<string, Workspace>;
   onOpen: (task: Task) => void;
-  onMove: (task: Task, status: TaskStatus, beforeId: string | null) => void;
+  /** merge: Approve — its open pull request is merged first. */
+  onMove: (task: Task, status: TaskStatus, beforeId: string | null, merge?: boolean) => void;
   onQuickAdd: (status: TaskStatus, title: string) => Promise<unknown>;
   onArchive: (tasks: Task[]) => void;
   onDelete: (task: Task) => void;
@@ -220,7 +221,7 @@ function Column({
   dragging: boolean;
   activeId: string | null;
   onOpen: (task: Task) => void;
-  onMove: (task: Task, status: TaskStatus, beforeId: string | null) => void;
+  onMove: (task: Task, status: TaskStatus, beforeId: string | null, merge?: boolean) => void;
   onArchive: (tasks: Task[]) => void;
   onDelete: (task: Task) => void;
   onCollapse: () => void;
@@ -346,7 +347,7 @@ function SortableCard({
   workspace?: Workspace | null;
   ghost: boolean;
   onOpen: (task: Task) => void;
-  onMove: (task: Task, status: TaskStatus, beforeId: string | null) => void;
+  onMove: (task: Task, status: TaskStatus, beforeId: string | null, merge?: boolean) => void;
   onArchive: (tasks: Task[]) => void;
   onDelete: (task: Task) => void;
 }) {
@@ -396,7 +397,7 @@ function SortableCard({
         {task.status === "in_review" && (
           <>
             <ContextMenuSeparator />
-            <ContextMenuItem onSelect={() => onMove(task, "done", null)}>
+            <ContextMenuItem onSelect={() => onMove(task, "done", null, true)}>
               {mergesOnApprove(task) ? (
                 <>
                   <GitMerge /> Approve &amp; merge

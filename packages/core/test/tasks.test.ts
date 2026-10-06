@@ -1039,6 +1039,7 @@ if [ "$1 $2" = "pr view" ]; then
   echo "no pull requests found" >&2; exit 1
 fi
 if [ "$1 $2" = "pr merge" ]; then
+  if [ -n "$FAKE_GH_MERGE_POLICY" ]; then echo "X Pull request acme/app#7 is not mergeable: the base branch policy prohibits the merge." >&2; exit 1; fi
   if [ -n "$FAKE_GH_MERGE_CONFLICT" ]; then echo "Pull request acme/app#7 is not mergeable: the merge commit cannot be cleanly created." >&2; exit 1; fi
   if [ -n "$FAKE_GH_SQUASH_ONLY" ] && [ "$4" != "--squash" ]; then echo "GraphQL: Merge commits are not allowed on this repository. (mergePullRequest)" >&2; exit 1; fi
   exit 0
@@ -1127,6 +1128,17 @@ exit 1
       const merged = listTaskEvents(approved.id).find((e) => e.kind === "pr_merged");
       expect(merged?.actor).toBe("user");
 
+      // Branch rules: not called a conflict. A merge queue takes it: it stays in review until GitHub merges it.
+      const ruled = reviewed();
+      process.env.FAKE_GH_MERGE_POLICY = "1";
+      expect((await catchHttp(() => approveTask(ruled.id))).message).toContain("rules don't allow");
+      delete process.env.FAKE_GH_MERGE_POLICY;
+      process.env.FAKE_GH_STATE = "OPEN";
+      const queued = await approveTask(ruled.id);
+      delete process.env.FAKE_GH_STATE;
+      expect(queued.status).toBe("in_review");
+      expect(queued.pullRequest?.state).toBe("open");
+
       // Only squash allowed: it's squashed.
       const squashed = reviewed();
       process.env.FAKE_GH_SQUASH_ONLY = "1";
@@ -1135,6 +1147,8 @@ exit 1
       expect(readFileSync(log, "utf8")).toContain("pr merge https://github.com/acme/app/pull/7 --squash");
     } finally {
       delete process.env.FAKE_GH_MERGE_CONFLICT;
+      delete process.env.FAKE_GH_MERGE_POLICY;
+      delete process.env.FAKE_GH_STATE;
       delete process.env.FAKE_GH_SQUASH_ONLY;
       __setGhForTests(null);
     }

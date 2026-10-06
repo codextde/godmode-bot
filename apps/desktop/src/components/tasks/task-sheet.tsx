@@ -79,7 +79,7 @@ export function TaskSheet({
   agents: Agent[];
   workspaces: Map<string, Workspace>;
   onClose: () => void;
-  onMove: (task: Task, status: TaskStatus) => void;
+  onMove: (task: Task, status: TaskStatus, merge?: boolean) => void;
   onArchive: (task: Task, archived: boolean) => void;
   onDelete: (task: Task) => void;
   onReassign: (task: Task, agentId: string | null) => void;
@@ -222,7 +222,7 @@ function TaskDetail({
   workspaces: Map<string, Workspace>;
   onClose: () => void;
   onUploading: (uploading: boolean) => void;
-  onMove: (task: Task, status: TaskStatus) => void;
+  onMove: (task: Task, status: TaskStatus, merge?: boolean) => void;
   onArchive: (task: Task, archived: boolean) => void;
   onDelete: (task: Task) => void;
   onReassign: (task: Task, agentId: string | null) => void;
@@ -621,7 +621,7 @@ function WorkPanel({
 }: {
   task: Task;
   agent?: Agent;
-  onMove: (task: Task, status: TaskStatus) => void;
+  onMove: (task: Task, status: TaskStatus, merge?: boolean) => void;
   onReason: (reason: string) => void;
   /** Drop what it waits for (it starts then). */
   onStartWithoutWaiting: () => void;
@@ -640,7 +640,7 @@ function WorkPanel({
   });
   const merging = useMutationState({ filters: { mutationKey: APPROVE_KEY, status: "pending" }, select: (m) => (m.state.variables as Task).id }).includes(task.id);
   const approve = (t: Task) => {
-    onMove(t, "done");
+    onMove(t, "done", true);
     // Merging can't be undone; the page tells how that went.
     if (!mergesOnApprove(t)) toast.success(`#${t.number} approved`, { action: { label: "Undo", onClick: () => onMove(t, "in_review") } });
   };

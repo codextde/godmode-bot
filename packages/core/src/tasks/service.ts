@@ -1993,15 +1993,16 @@ async function publish(task: TaskRow, summary: string | null, runId: string): Pr
 
 const mergeable = (task: TaskRow) => !!task.pr_url && !!task.pr_number && task.pr_state === "open";
 
-/** Merge the task's open pull request. Null when it was merged, else why not. */
-async function mergeTaskPullRequest(task: TaskRow, actor: TaskActor): Promise<string | null> {
+/** Merge the task's open pull request: merged, queued (GitHub merges it later; the watcher moves it to Done), or why not. */
+async function mergeTaskPullRequest(task: TaskRow, actor: TaskActor): Promise<{ queued: boolean; problem: string | null }> {
   setActivity(task.id, "Merging the pull request…");
   try {
-    const { merged, problem } = await mergePullRequest(checkoutDir(task.id), task.pr_url!);
-    if (!merged) return problem;
-    sql("UPDATE tasks SET pr_state = 'merged', updated_at = ? WHERE id = ?", now(), task.id);
-    record(task.id, "pr_merged", actor, { data: { number: task.pr_number!, url: task.pr_url!, ...(actor === "system" ? { auto: true } : {}) } });
-    return null;
+    const { merged, queued, problem } = await mergePullRequest(checkoutDir(task.id), task.pr_url!);
+    if (!merged) return { queued, problem };
+    if (sql("UPDATE tasks SET pr_state = 'merged', updated_at = ? WHERE id = ? AND pr_state = 'open'", now(), task.id).changes) {
+      record(task.id, "pr_merged", actor, { data: { number: task.pr_number!, url: task.pr_url!, ...(actor === "system" ? { auto: true } : {}) } });
+    }
+    return { queued: false, problem: null };
   } finally {
     activity.delete(task.id);
     emit(task.id);
@@ -2017,7 +2018,11 @@ async function autoMerge(id: string): Promise<boolean> {
   if (task.status !== "in_review" || !mergeable(task) || !task.workspace_id) return false;
   if (!get<{ auto_merge: number }>("SELECT auto_merge FROM workspaces WHERE id = ?", task.workspace_id)?.auto_merge) return false;
   const link = `/tasks?task=${id}`;
-  const problem = await mergeTaskPullRequest(task, "system");
+  const { queued, problem } = await mergeTaskPullRequest(task, "system");
+  if (queued) {
+    notify("success", `Task #${task.number}: pull request #${task.pr_number} is queued to merge`, "It moves to Done once GitHub merges it.", link);
+    return true;
+  }
   if (problem) {
     record(id, "note", "system", { body: `Not merged automatically. ${problem}` });
     emit(id);
@@ -2032,7 +2037,7 @@ async function autoMerge(id: string): Promise<boolean> {
 
 /**
  * The human approves the delivered work: its open pull request is merged first (an error says why it couldn't be, and
- * the ticket stays in review), then the ticket is done.
+ * the ticket stays in review), then the ticket is done. A pull request a merge queue takes stays in review until merged.
  */
 export async function approveTask(id: string): Promise<Task> {
   const task = requireRow(id);
@@ -2041,8 +2046,9 @@ export async function approveTask(id: string): Promise<Task> {
     if (busy.has(id)) throw conflict(`Godmode is ${activity.get(id)?.replace(/…$/, "").toLowerCase() ?? "busy with the task"} — try again in a moment`);
     busy.add(id);
     try {
-      const problem = await mergeTaskPullRequest(task, "user");
+      const { queued, problem } = await mergeTaskPullRequest(task, "user");
       if (problem) throw new HttpError(409, redact(problem), "merge_failed");
+      if (queued) return getTask(id);
     } finally {
       release(id);
     }
@@ -2102,9 +2108,11 @@ export async function checkPullRequests(): Promise<void> {
   // Approved tickets too: their pull request may be merged after the human marked them done.
   const open = all<TaskRow>("SELECT * FROM tasks WHERE status IN ('in_review', 'done') AND pr_number IS NOT NULL AND pr_state = 'open' AND pr_url IS NOT NULL");
   for (const task of open) {
+    if (busy.has(task.id)) continue;
     const state = await pullRequestState(checkoutDir(task.id), task.pr_url!).catch(() => null);
     if (!state || state === "open") continue;
-    sql("UPDATE tasks SET pr_state = ?, updated_at = ? WHERE id = ?", state, now(), task.id);
+    // Approving merged it meanwhile: noted there.
+    if (!sql("UPDATE tasks SET pr_state = ?, updated_at = ? WHERE id = ? AND pr_state = 'open'", state, now(), task.id).changes) continue;
     record(task.id, state === "merged" ? "pr_merged" : "pr_closed", "system", { data: { number: task.pr_number!, url: task.pr_url! } });
     if (state === "merged" && transition(task.id, "done", ["in_review"])) {
       sql("UPDATE tasks SET completed_at = ? WHERE id = ?", now(), task.id);
