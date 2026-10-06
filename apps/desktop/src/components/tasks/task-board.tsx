@@ -20,9 +20,9 @@ import {
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Link } from "react-router";
-import { Archive, Check, ChevronsLeftRight, MessageSquareReply, MessagesSquare, PanelRightOpen, Play, Plus, RotateCcw, RotateCw, Trash2 } from "lucide-react";
+import { Archive, Check, ChevronsLeftRight, GitMerge, MessageSquareReply, MessagesSquare, PanelRightOpen, Play, Plus, RotateCcw, RotateCw, Trash2 } from "lucide-react";
 import type { Agent, Task, TaskStatus, Workspace } from "@godmode/shared";
-import { reopenStatus } from "@godmode/shared";
+import { mergesOnApprove, reopenStatus } from "@godmode/shared";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -397,7 +397,15 @@ function SortableCard({
           <>
             <ContextMenuSeparator />
             <ContextMenuItem onSelect={() => onMove(task, "done", null)}>
-              <Check /> Approve
+              {mergesOnApprove(task) ? (
+                <>
+                  <GitMerge /> Approve &amp; merge
+                </>
+              ) : (
+                <>
+                  <Check /> Approve
+                </>
+              )}
             </ContextMenuItem>
             {task.agentId && task.conversationId && (
               <ContextMenuItem onSelect={reply}>

@@ -1149,4 +1149,12 @@ CREATE TABLE IF NOT EXISTS mods (
 );
 `,
   },
+  {
+    id: 72,
+    name: "workspace_auto_merge",
+    sql: /* sql */ `
+-- 1: a delivered ticket's pull request is merged into its base branch right away (no review step).
+ALTER TABLE workspaces ADD COLUMN auto_merge INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];

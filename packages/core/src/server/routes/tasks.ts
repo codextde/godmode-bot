@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { requestDevice } from "../auth";
 import { MAX_GOAL_TITLE_LENGTH, MAX_GOAL_WHY_LENGTH, MAX_TASK_ATTACHMENT_BYTES, MAX_TASK_DESCRIPTION_LENGTH, MAX_TASK_TITLE_LENGTH, TASK_PRIORITIES, TASK_STATUSES, TASK_TYPES } from "@godmode/shared";
-import { archiveTasks, createTask, deleteTask, getTask, listTaskEvents, listTasks, pushTaskBranch, sendTaskMessage, updateTask } from "../../tasks/service";
+import { approveTask, archiveTasks, createTask, deleteTask, getTask, listTaskEvents, listTasks, pushTaskBranch, sendTaskMessage, updateTask } from "../../tasks/service";
 import { readTaskAttachment, saveTaskAttachment } from "../../tasks/attachments";
 import { HttpError, badRequest } from "../../util";
 import { body, z } from "../validate";
@@ -148,6 +148,11 @@ export function registerTaskRoutes(app: Hono): void {
     );
     // From a phone the answer to a question counts as given from the phone.
     return c.json(await sendTaskMessage(c.req.param("id"), content, attachments, { actor: "user", via: requestDevice(c) ? "phone" : "task" }));
+  });
+
+  app.post("/api/tasks/:id/approve", async (c) => {
+    expectSlow(c);
+    return c.json(await approveTask(c.req.param("id")));
   });
 
   app.post("/api/tasks/:id/push", async (c) => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useMutationState, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -15,6 +15,7 @@ import {
   CornerDownRight,
   EllipsisVertical,
   GitBranch,
+  GitMerge,
   GitPullRequestCreateArrow,
   Hourglass,
   ListTree,
@@ -31,7 +32,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { Agent, Task, TaskEvent, TaskPatch, TaskStatus, Workspace } from "@godmode/shared";
-import { MAX_TASK_TITLE_LENGTH, githubBranchUrl, isWaiting, reopenStatus, waitsForTickets } from "@godmode/shared";
+import { MAX_TASK_TITLE_LENGTH, githubBranchUrl, isWaiting, mergesOnApprove, reopenStatus, waitsForTickets } from "@godmode/shared";
 import { WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { ChatFilesScope } from "@/components/chat/local-files";
@@ -58,7 +59,7 @@ import { AgentSelect, DueDateField, LabelsInput, PrioritySelect, StatusSelect, a
 import { TaskTimeline } from "./task-timeline";
 import { TaskDialog } from "./task-dialog";
 import { PullRequestChip, useTaskActivity } from "./task-card";
-import { BLOCKED_META, StatusIcon, TYPE_META, TypeIcon, formatCost, formatWork, isWorking, pauseLabel, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
+import { APPROVE_KEY, BLOCKED_META, StatusIcon, TYPE_META, TypeIcon, formatCost, formatWork, isWorking, pauseLabel, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
 import { followupWhen, useFollowupActions } from "@/components/chat/followup";
 import { useNow } from "@/components/vault/use-now";
 import { usePauseActions } from "@/components/chat/pause";
@@ -637,9 +638,11 @@ function WorkPanel({
     onSuccess: (t) => qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((x) => (x.id === t.id ? t : x))),
     onError: (e) => toastApiError(e, "Couldn't publish", qc),
   });
+  const merging = useMutationState({ filters: { mutationKey: APPROVE_KEY, status: "pending" }, select: (m) => (m.state.variables as Task).id }).includes(task.id);
   const approve = (t: Task) => {
     onMove(t, "done");
-    toast.success(`#${t.number} approved`, { action: { label: "Undo", onClick: () => onMove(t, "in_review") } });
+    // Merging can't be undone; the page tells how that went.
+    if (!mergesOnApprove(t)) toast.success(`#${t.number} approved`, { action: { label: "Undo", onClick: () => onMove(t, "in_review") } });
   };
   const reopen = (t: Task) => {
     const back = reopenStatus(t);
@@ -900,8 +903,8 @@ function WorkPanel({
           </div>
         )}
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => approve(task)}>
-            <Check /> Approve
+          <Button size="sm" disabled={merging} onClick={() => approve(task)}>
+            {merging ? <Spinner /> : mergesOnApprove(task) ? <GitMerge /> : <Check />} {merging ? "Merging…" : mergesOnApprove(task) ? "Approve & merge" : "Approve"}
           </Button>
           {task.agentId && task.conversationId && (
             <Button size="sm" variant="outline" onClick={() => focusReply(task.id)}>
@@ -909,9 +912,10 @@ function WorkPanel({
             </Button>
           )}
         </div>
-        {pr?.number && pr.state === "open" && (
+        {mergesOnApprove(task) && (
           <p className="mt-2.5 text-xs text-muted-foreground">
-            Approve marks it done here — merging stays on {new URL(pr.url).hostname}. A merged pull request also moves it to Done.
+            Merges #{pr!.number} into <span className="font-mono text-[11px] text-foreground/80">{task.baseBranch}</span> on {new URL(pr!.url).hostname} and moves the
+            ticket to Done.
           </p>
         )}
       </Panel>

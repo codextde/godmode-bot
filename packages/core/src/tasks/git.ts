@@ -609,3 +609,28 @@ export async function pullRequestState(dir: string, prUrl: string): Promise<Pull
   if (!ghBin()) return null;
   return (await viewPullRequest(existsSync(dir) ? dir : tmpdir(), prUrl))?.state ?? null;
 }
+
+/**
+ * Merge an open GitHub pull request with a merge commit — or squash/rebase when the repository allows only those.
+ * `problem` says why it couldn't be merged (null when it was).
+ */
+export async function mergePullRequest(dir: string, prUrl: string): Promise<{ merged: boolean; problem: string | null }> {
+  if (!ghBin()) return { merged: false, problem: "Install the GitHub CLI (gh) and run `gh auth login` to merge pull requests from Godmode." };
+  const cwd = existsSync(dir) ? dir : tmpdir();
+  let last = "";
+  for (const method of ["--merge", "--squash", "--rebase"]) {
+    const res = await gh(["pr", "merge", prUrl, method], cwd);
+    if (res.ok || (await viewPullRequest(cwd, prUrl))?.state === "merged") return { merged: true, problem: null };
+    last = res.err;
+    if (!/not allowed|not enabled|method/i.test(res.err)) break;
+  }
+  return { merged: false, problem: mergeProblem(last) };
+}
+
+function mergeProblem(err: string): string {
+  if (/not mergeable|cannot be cleanly created|conflict/i.test(err)) return "It has merge conflicts with its base branch — request changes so the agent resolves them.";
+  if (/required status check|checks? (are|is) (pending|failing|expected)|review is required|approving review|protected branch|base branch policy/i.test(err)) {
+    return `The base branch's rules don't allow merging it yet: ${err}`;
+  }
+  return `gh couldn't merge it: ${err || "unknown error"}`;
+}

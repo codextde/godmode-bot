@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, FolderGit2, ListFilter, Plus, Search, SquareKanban } from "lucide-react";
 import { toast } from "sonner";
 import type { Task, TaskPriority, TaskStatus, Workspace } from "@godmode/shared";
-import { TASK_PRIORITIES, isOverdue, localDay } from "@godmode/shared";
+import { TASK_PRIORITIES, isOverdue, localDay, mergesOnApprove } from "@godmode/shared";
 import { AgentAvatar, EmptyState, PageHeader } from "@/components/common";
 import {
   DropdownMenu,
@@ -36,11 +36,11 @@ import { useArchiveTasks } from "@/components/tasks/task-actions";
 import { TaskBoard } from "@/components/tasks/task-board";
 import { TaskDialog } from "@/components/tasks/task-dialog";
 import { TaskSheet } from "@/components/tasks/task-sheet";
-import { PRIORITY_META, PriorityIcon, STATUS_META, isWorking, needsConfirm, workspaceRepos } from "@/components/tasks/task-meta";
+import { APPROVE_KEY, PRIORITY_META, PriorityIcon, STATUS_META, isWorking, needsConfirm, workspaceRepos } from "@/components/tasks/task-meta";
 import { followupWhen } from "@/components/chat/followup";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
-import { api, errorMessage } from "@/lib/api";
+import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { useAllAgents, useArchivedTasks, useGoals, useTasks, useWorkspaces } from "@/lib/hooks";
 import { GoalsStrip } from "@/components/tasks/goals-strip";
 import { qk } from "@/lib/queryKeys";
@@ -218,8 +218,28 @@ export default function TasksPage() {
     },
   });
 
+  // Approving a ticket with an open pull request merges it: it moves to Done once that worked.
+  const approve = useMutation({
+    mutationKey: APPROVE_KEY,
+    mutationFn: (task: Task) => api.tasks.approve(task.id),
+    onSuccess: (t, task) => {
+      upsertTask(qc, t);
+      toast.success(`#${t.number} merged into ${t.baseBranch}`, { description: `Pull request #${task.pullRequest?.number} is merged and the ticket is done.` });
+    },
+    onError: (e, task) => {
+      void qc.invalidateQueries({ queryKey: qk.tasks });
+      if (!(e instanceof ApiRequestError && e.code === "merge_failed")) return toastApiError(e, "Could not approve the task", qc);
+      toast.error(`Couldn't merge #${task.pullRequest?.number}`, {
+        description: e.message,
+        duration: 12_000,
+        action: { label: "Mark done anyway", onClick: () => move.mutate({ task, status: "done", beforeId: null }) },
+      });
+    },
+  });
+
   const requestMove = (task: Task, status: TaskStatus, beforeId: string | null = null) => {
-    if (needsConfirm(task) && status !== "in_progress") setStopping({ task, status, beforeId });
+    if (status === "done" && mergesOnApprove(task)) approve.mutate(task);
+    else if (needsConfirm(task) && status !== "in_progress") setStopping({ task, status, beforeId });
     else move.mutate({ task, status, beforeId });
   };
 

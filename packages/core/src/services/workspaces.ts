@@ -26,6 +26,7 @@ interface WorkspaceRow {
   icon: string;
   instructions: string;
   vm_id: string | null;
+  auto_merge: number;
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +46,7 @@ function toModel(r: WorkspaceRow & { browser_profile_id?: string | null }, sourc
     vmId: r.vm_id ?? null,
     browserProfileId: r.browser_profile_id ?? null,
     sources,
+    autoMerge: !!r.auto_merge,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -86,6 +88,7 @@ export function createWorkspace(input: WorkspaceInput): Workspace {
     icon: input.icon?.trim() || "🗂️",
     instructions: input.instructions?.trim() ?? "",
     vm_id: normalizeVmId(input.vmId) ?? null,
+    auto_merge: input.autoMerge ? 1 : 0,
     created_at: ts,
     updated_at: ts,
   };
@@ -123,6 +126,7 @@ export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Wor
       icon: patch.icon !== undefined ? patch.icon.trim() || "🗂️" : undefined,
       instructions: patch.instructions?.trim(),
       vm_id: vmId,
+      auto_merge: patch.autoMerge === undefined ? undefined : patch.autoMerge ? 1 : 0,
       updated_at: now(),
     });
     const apply = patch.sources ? setSources(id, patch.sources) : undefined;

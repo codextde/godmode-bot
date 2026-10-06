@@ -427,6 +427,8 @@ export const api = {
     /** Follow-up for the agent in the task's conversation (review feedback); the task goes back to work. */
     message: (id: string, content: string, attachments?: SendMessageInput["attachments"]) =>
       post<Task>(`/api/tasks/${id}/messages`, { content, attachments }),
+    /** Approve a ticket in review: its open pull request is merged first, then it's done. */
+    approve: (id: string) => post<Task>(`/api/tasks/${id}/approve`),
     /** Push the task's branch (only coding tasks push theirs by themselves). */
     push: (id: string) => post<Task>(`/api/tasks/${id}/push`),
     /** Push the branch and open its pull request — or, when gh can't, link to the page that opens one. */
