@@ -340,6 +340,8 @@ export const api = {
     /** Moving to To do starts the agent; moving away from In progress stops it. Archived tasks are off the board. */
     update: (id: string, input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null; archived?: boolean }) =>
       patch<Task>(`/api/tasks/${id}`, input),
+    /** Approve a ticket in review: its open pull request is merged first, then it's done. */
+    approve: (id: string) => post<Task>(`/api/tasks/${id}/approve`),
     /** Feedback for the agent in the task's chat; the task goes back to work. */
     message: (id: string, content: string, attachments?: UploadFile[]) =>
       post<Task>(`/api/tasks/${id}/messages`, attachments?.length ? { content, attachments } : { content }),

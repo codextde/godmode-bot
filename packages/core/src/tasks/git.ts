@@ -609,3 +609,31 @@ export async function pullRequestState(dir: string, prUrl: string): Promise<Pull
   if (!ghBin()) return null;
   return (await viewPullRequest(existsSync(dir) ? dir : tmpdir(), prUrl))?.state ?? null;
 }
+
+/**
+ * Merge an open GitHub pull request with a merge commit — or squash/rebase when the repository allows only those.
+ * `queued`: a merge queue (or auto-merge) takes it — it isn't merged yet. `problem` says why it couldn't be merged.
+ */
+export async function mergePullRequest(dir: string, prUrl: string): Promise<{ merged: boolean; queued: boolean; problem: string | null }> {
+  if (!ghBin()) return { merged: false, queued: false, problem: "Install the GitHub CLI (gh) and run `gh auth login` to merge pull requests from Godmode." };
+  const cwd = existsSync(dir) ? dir : tmpdir();
+  let last = "";
+  for (const method of ["--merge", "--squash", "--rebase"]) {
+    const res = await gh(["pr", "merge", prUrl, method], cwd);
+    const state = (await viewPullRequest(cwd, prUrl))?.state;
+    if (state === "merged") return { merged: true, queued: false, problem: null };
+    if (res.ok) return state === "open" ? { merged: false, queued: true, problem: null } : { merged: true, queued: false, problem: null };
+    last = res.err;
+    if (!/not allowed|not enabled|merge method/i.test(res.err)) break;
+  }
+  return { merged: false, queued: false, problem: mergeProblem(last) };
+}
+
+function mergeProblem(err: string): string {
+  if (/policy|required status check|checks? (are|is) (pending|failing|expected)|review is required|approving review|protected branch/i.test(err)) {
+    return `The base branch's rules don't allow merging it yet: ${err}`;
+  }
+  if (/not up to date|behind/i.test(err)) return `The branch is behind its base branch, which must be up to date to merge: ${err}`;
+  if (/cannot be cleanly created|conflict/i.test(err)) return "It has merge conflicts with its base branch — request changes so the agent resolves them.";
+  return `gh couldn't merge it: ${err || "unknown error"}`;
+}

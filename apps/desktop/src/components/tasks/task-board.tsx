@@ -20,9 +20,9 @@ import {
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Link } from "react-router";
-import { Archive, Check, ChevronsLeftRight, MessageSquareReply, MessagesSquare, PanelRightOpen, Play, Plus, RotateCcw, RotateCw, Trash2 } from "lucide-react";
+import { Archive, Check, ChevronsLeftRight, GitMerge, MessageSquareReply, MessagesSquare, PanelRightOpen, Play, Plus, RotateCcw, RotateCw, Trash2 } from "lucide-react";
 import type { Agent, Task, TaskStatus, Workspace } from "@godmode/shared";
-import { reopenStatus } from "@godmode/shared";
+import { mergesOnApprove, reopenStatus } from "@godmode/shared";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -57,7 +57,8 @@ export interface TaskBoardProps {
   /** Given when the board spans several workspaces: cards show theirs. */
   workspaces?: Map<string, Workspace>;
   onOpen: (task: Task) => void;
-  onMove: (task: Task, status: TaskStatus, beforeId: string | null) => void;
+  /** merge: Approve — its open pull request is merged first. */
+  onMove: (task: Task, status: TaskStatus, beforeId: string | null, merge?: boolean) => void;
   onQuickAdd: (status: TaskStatus, title: string) => Promise<unknown>;
   onArchive: (tasks: Task[]) => void;
   onDelete: (task: Task) => void;
@@ -220,7 +221,7 @@ function Column({
   dragging: boolean;
   activeId: string | null;
   onOpen: (task: Task) => void;
-  onMove: (task: Task, status: TaskStatus, beforeId: string | null) => void;
+  onMove: (task: Task, status: TaskStatus, beforeId: string | null, merge?: boolean) => void;
   onArchive: (tasks: Task[]) => void;
   onDelete: (task: Task) => void;
   onCollapse: () => void;
@@ -346,7 +347,7 @@ function SortableCard({
   workspace?: Workspace | null;
   ghost: boolean;
   onOpen: (task: Task) => void;
-  onMove: (task: Task, status: TaskStatus, beforeId: string | null) => void;
+  onMove: (task: Task, status: TaskStatus, beforeId: string | null, merge?: boolean) => void;
   onArchive: (tasks: Task[]) => void;
   onDelete: (task: Task) => void;
 }) {
@@ -396,8 +397,16 @@ function SortableCard({
         {task.status === "in_review" && (
           <>
             <ContextMenuSeparator />
-            <ContextMenuItem onSelect={() => onMove(task, "done", null)}>
-              <Check /> Approve
+            <ContextMenuItem onSelect={() => onMove(task, "done", null, true)}>
+              {mergesOnApprove(task) ? (
+                <>
+                  <GitMerge /> Approve &amp; merge
+                </>
+              ) : (
+                <>
+                  <Check /> Approve
+                </>
+              )}
             </ContextMenuItem>
             {task.agentId && task.conversationId && (
               <ContextMenuItem onSelect={reply}>

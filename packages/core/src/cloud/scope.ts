@@ -256,6 +256,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/tasks/attachments/:id/:name", A],
   ["GET|PATCH|DELETE", "/api/tasks/:id", A],
   ["POST", "/api/tasks/:id/messages", A],
+  ["POST", "/api/tasks/:id/approve", A],
   ["POST", "/api/tasks/:id/push", A],
   ["POST", "/api/tasks/:id/pull-request", A],
 

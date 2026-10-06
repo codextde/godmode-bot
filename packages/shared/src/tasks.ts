@@ -92,7 +92,8 @@ export interface TaskEventData {
   /** body: the note. */
   note: Record<string, never>;
   pr_opened: { number: number | null; url: string };
-  pr_merged: { number: number; url: string };
+  /** auto: merged by Godmode because its workspace merges delivered work automatically. */
+  pr_merged: { number: number; url: string; auto?: boolean };
   pr_closed: { number: number; url: string };
   /** body: what was asked (see AgentQuestion). */
   asked: { questionId: ID; kind: "question" | "approval" };
@@ -337,6 +338,11 @@ export function reopenStatus(t: Pick<Task, "summary" | "conversationId" | "agent
   return t.summary && t.conversationId && t.agentId ? "in_review" : "backlog";
 }
 
+/** Approving this ticket merges its pull request first (POST /api/tasks/:id/approve). */
+export function mergesOnApprove(t: Pick<Task, "status" | "pullRequest">): boolean {
+  return t.status === "in_review" && !!t.pullRequest?.number && t.pullRequest.state === "open";
+}
+
 /** One label, cleaned: no leading #, single spaces, at most MAX_TASK_LABEL_LENGTH characters. "" = drop it. */
 export function cleanTaskLabel(label: string): string {
   return label.replace(/^#+/, "").replace(/\s+/g, " ").trim().slice(0, MAX_TASK_LABEL_LENGTH).trim();
@@ -418,7 +424,8 @@ export function taskEventText(e: TaskEvent, o: { you: string; youObject: string;
     case "pr_opened":
       return e.data.number ? `Pull request #${e.data.number} opened` : "Branch pushed — the pull request still has to be opened";
     case "pr_merged":
-      return `Pull request #${e.data.number} merged`;
+      if (e.data.auto) return `Pull request #${e.data.number} merged automatically`;
+      return e.actor === "user" ? `${a} merged pull request #${e.data.number}` : `Pull request #${e.data.number} merged`;
     case "pr_closed":
       return `Pull request #${e.data.number} closed without merging`;
     case "asked":

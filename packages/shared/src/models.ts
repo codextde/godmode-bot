@@ -35,6 +35,8 @@ export interface Workspace {
   browserProfileId: ID | null;
   /** Folders and git repositories every agent in the workspace works with. */
   sources: WorkspaceSource[];
+  /** A ticket's pull request is merged as soon as its agent delivers it, and the ticket is done — no review step. */
+  autoMerge: boolean;
   createdAt: ISODate;
   updatedAt: ISODate;
 }

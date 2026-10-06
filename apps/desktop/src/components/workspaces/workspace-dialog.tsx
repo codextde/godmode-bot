@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceProfileField } from "@/components/browser/workspace-profile-field";
@@ -42,6 +43,7 @@ interface WorkspaceForm {
   vmId: string | null;
   browserProfileId: string | null;
   sources: WorkspaceSourceInput[];
+  autoMerge: boolean;
 }
 
 function randomLook() {
@@ -58,6 +60,7 @@ function formFrom(workspace: Workspace | null | undefined, look: { icon: string;
     vmId: workspace?.vmId ?? null,
     browserProfileId: workspace?.browserProfileId ?? null,
     sources: workspace?.sources.map(toSourceInput) ?? [],
+    autoMerge: workspace?.autoMerge ?? false,
   };
 }
 const CONTEXT_EXAMPLE = "We are ACME GmbH. Write to clients in German.\nInvoices go to finance@acme.example.\nNever touch the production database.";
@@ -88,7 +91,7 @@ export function WorkspaceDialog({
   const closing = useRef(live);
   if (open) closing.current = live;
   const form = open ? live : closing.current;
-  const { name, icon, color, description, instructions, vmId, browserProfileId, sources } = form;
+  const { name, icon, color, description, instructions, vmId, browserProfileId, sources, autoMerge } = form;
   const set =
     <K extends keyof WorkspaceForm>(key: K) =>
     (value: WorkspaceForm[K]) =>
@@ -130,6 +133,7 @@ export function WorkspaceDialog({
         description: description.trim(),
         instructions: instructions.trim(),
         sources,
+        autoMerge,
         // Only when the VM control is shown: otherwise leave the assignment as it is.
         ...(vmChoices.available ? { vmId } : {}),
         ...(browserProfileId !== (workspace?.browserProfileId ?? null) ? { browserProfileId } : {}),
@@ -320,6 +324,16 @@ export function WorkspaceDialog({
                 </p>
               </div>
               <WorkspaceSourcesField workspaceId={workspace?.id ?? null} value={sources} onChange={set("sources")} />
+            </div>
+            <div className="flex items-start justify-between gap-4 rounded-xl border bg-card px-4 py-3">
+              <div className="min-w-0 space-y-0.5">
+                <Label htmlFor="ws-auto-merge">Merge delivered tickets automatically</Label>
+                <p className="text-xs text-muted-foreground">
+                  When an agent delivers a ticket with a pull request, Godmode merges it into its base branch and moves the ticket to Done — no
+                  approval needed.
+                </p>
+              </div>
+              <Switch id="ws-auto-merge" className="mt-0.5" checked={autoMerge} onCheckedChange={set("autoMerge")} />
             </div>
             <WorkspaceProfileField id="ws-browser" workspaceId={workspace?.id ?? null} value={browserProfileId} onChange={set("browserProfileId")} />
             {vmChoices.available && (

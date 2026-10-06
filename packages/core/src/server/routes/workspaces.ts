@@ -17,6 +17,7 @@ const workspaceSchema = z.object({
   instructions: z.string().max(MAX_INSTRUCTIONS_LENGTH).optional(),
   vmId: z.string().trim().max(100).nullable().optional(),
   browserProfileId: z.string().trim().max(100).nullable().optional(),
+  autoMerge: z.boolean().optional(),
   sources: z.array(sourceSchema).max(MAX_SOURCES, `A workspace can have up to ${MAX_SOURCES} folders and repositories.`).optional(),
 });
 

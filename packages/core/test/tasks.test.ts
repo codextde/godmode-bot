@@ -12,6 +12,7 @@ import { createWorkspace, deleteWorkspace, updateWorkspace } from "../src/servic
 import { workingDirectoryProblem } from "../src/services/folders";
 import {
   __setTaskRetryDelaysForTests,
+  approveTask,
   archiveTasks,
   checkPullRequests,
   checkoutDir,
@@ -1037,6 +1038,12 @@ if [ "$1 $2" = "pr view" ]; then
   if [ -n "$FAKE_GH_STATE" ]; then echo "{\\"url\\":\\"https://github.com/acme/app/pull/7\\",\\"number\\":7,\\"state\\":\\"$FAKE_GH_STATE\\"}"; exit 0; fi
   echo "no pull requests found" >&2; exit 1
 fi
+if [ "$1 $2" = "pr merge" ]; then
+  if [ -n "$FAKE_GH_MERGE_POLICY" ]; then echo "X Pull request acme/app#7 is not mergeable: the base branch policy prohibits the merge." >&2; exit 1; fi
+  if [ -n "$FAKE_GH_MERGE_CONFLICT" ]; then echo "Pull request acme/app#7 is not mergeable: the merge commit cannot be cleanly created." >&2; exit 1; fi
+  if [ -n "$FAKE_GH_SQUASH_ONLY" ] && [ "$4" != "--squash" ]; then echo "GraphQL: Merge commits are not allowed on this repository. (mergePullRequest)" >&2; exit 1; fi
+  exit 0
+fi
 if [ "$1 $2" = "pr create" ]; then
   if [ -n "$FAKE_GH_CREATE_FAIL" ]; then echo "GraphQL: Resource not accessible by integration" >&2; exit 1; fi
   echo "Creating pull request"; echo "https://github.com/acme/app/pull/7"; exit 0
@@ -1093,6 +1100,93 @@ exit 1
     expect(t.pullRequest?.state).toBe("merged");
     expect(t.completedAt).not.toBeNull();
   });
+
+  test("approving merges the open pull request first, then the ticket is done", async () => {
+    const reviewed = () => {
+      const task = createTask({ workspaceId, title: "Approve me", status: "backlog" });
+      sql("UPDATE tasks SET status = 'in_review', pr_url = ?, pr_number = 7, pr_state = 'open' WHERE id = ?", "https://github.com/acme/app/pull/7", task.id);
+      return task;
+    };
+    const log = join(env.dataDir, "gh-calls.log");
+    __setGhForTests(fakeGh());
+    try {
+      const conflicted = reviewed();
+      process.env.FAKE_GH_MERGE_CONFLICT = "1";
+      const err = await catchHttp(() => approveTask(conflicted.id));
+      delete process.env.FAKE_GH_MERGE_CONFLICT;
+      expect(err.status).toBe(409);
+      expect(err.code).toBe("merge_failed");
+      expect(err.message).toContain("merge conflicts");
+      expect(getTask(conflicted.id).status).toBe("in_review");
+      expect(getTask(conflicted.id).pullRequest?.state).toBe("open");
+
+      const approved = await approveTask(conflicted.id);
+      expect(approved.status).toBe("done");
+      expect(approved.pullRequest?.state).toBe("merged");
+      expect(approved.completedAt).not.toBeNull();
+      expect(readFileSync(log, "utf8")).toContain("pr merge https://github.com/acme/app/pull/7 --merge");
+      const merged = listTaskEvents(approved.id).find((e) => e.kind === "pr_merged");
+      expect(merged?.actor).toBe("user");
+
+      // Branch rules: not called a conflict. A merge queue takes it: it stays in review until GitHub merges it.
+      const ruled = reviewed();
+      process.env.FAKE_GH_MERGE_POLICY = "1";
+      expect((await catchHttp(() => approveTask(ruled.id))).message).toContain("rules don't allow");
+      delete process.env.FAKE_GH_MERGE_POLICY;
+      process.env.FAKE_GH_STATE = "OPEN";
+      const queued = await approveTask(ruled.id);
+      delete process.env.FAKE_GH_STATE;
+      expect(queued.status).toBe("in_review");
+      expect(queued.pullRequest?.state).toBe("open");
+
+      // Only squash allowed: it's squashed.
+      const squashed = reviewed();
+      process.env.FAKE_GH_SQUASH_ONLY = "1";
+      expect((await approveTask(squashed.id)).pullRequest?.state).toBe("merged");
+      delete process.env.FAKE_GH_SQUASH_ONLY;
+      expect(readFileSync(log, "utf8")).toContain("pr merge https://github.com/acme/app/pull/7 --squash");
+    } finally {
+      delete process.env.FAKE_GH_MERGE_CONFLICT;
+      delete process.env.FAKE_GH_MERGE_POLICY;
+      delete process.env.FAKE_GH_STATE;
+      delete process.env.FAKE_GH_SQUASH_ONLY;
+      __setGhForTests(null);
+    }
+    // Nothing to merge: approving marks it done.
+    const plain = createTask({ workspaceId, title: "No pull request", status: "backlog" });
+    sql("UPDATE tasks SET status = 'in_review' WHERE id = ?", plain.id);
+    expect((await approveTask(plain.id)).status).toBe("done");
+    expect((await catchHttp(() => approveTask(plain.id))).status).toBe(409);
+  });
+
+  test("a workspace that merges automatically merges delivered pull requests", async () => {
+    const { url } = makeRemote("auto-merge");
+    const ws = createWorkspace({ name: "Ship it", autoMerge: true });
+    expect(ws.autoMerge).toBe(true);
+    const task = createTask({ workspaceId: ws.id, title: "TASK_EDIT merged without review", type: "coding", repoUrl: url, agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+    // Its pull request is open on GitHub (the push still goes to the task's origin).
+    sql("UPDATE tasks SET repo_url = ?, pr_url = ?, pr_number = 7, pr_state = 'open' WHERE id = ?", "https://github.com/acme/app.git", "https://github.com/acme/app/pull/7", task.id);
+    __setGhForTests(fakeGh());
+    try {
+      process.env.FAKE_GH_MERGE_CONFLICT = "1";
+      await sendTaskMessage(task.id, "TASK_EDIT once more");
+      await until(() => listTaskEvents(task.id).some((e) => e.kind === "note" && e.body.includes("Not merged automatically")), 20_000, "merge attempt");
+      await settled(task.id, ["in_review"]);
+      expect(getTask(task.id).pullRequest?.state).toBe("open");
+      delete process.env.FAKE_GH_MERGE_CONFLICT;
+
+      await sendTaskMessage(task.id, "TASK_EDIT and again");
+      await settled(task.id, ["done"]);
+    } finally {
+      delete process.env.FAKE_GH_MERGE_CONFLICT;
+      __setGhForTests(null);
+    }
+    const done = getTask(task.id);
+    expect(done.pullRequest?.state).toBe("merged");
+    expect(listTaskEvents(task.id).find((e) => e.kind === "pr_merged")?.data).toMatchObject({ number: 7, auto: true });
+    expect(updateWorkspace(ws.id, { autoMerge: false }).autoMerge).toBe(false);
+   }, 60_000);
 
   test("the board pushes a task's branch and opens its pull request", async () => {
     const { url, bare } = makeRemote("board-push");

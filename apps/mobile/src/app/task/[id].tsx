@@ -1,4 +1,4 @@
-import { isWaiting, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets, type TaskBlockedKind } from "@godmode/shared";
+import { isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets, type TaskBlockedKind } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
@@ -10,7 +10,7 @@ import { Markdown } from "@/components/markdown";
 import { openChat } from "@/components/rows";
 import { STATUS_META, TaskStatusBadge, TYPE_META } from "@/components/task-row";
 import { Avatar, Badge, Button, Card, Row, SectionTitle, T, tap } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { ApiError, api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { activityText } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
@@ -35,6 +35,22 @@ export default function TaskScreen() {
     onSuccess: onDone,
     onError: (err) => Alert.alert("Couldn't change the task", errorText(err)),
   });
+  const approve = useMutation({
+    mutationFn: () => api.tasks.approve(id),
+    onSuccess: (next) => {
+      onDone(next);
+      if (next.pullRequest?.state === "open") Alert.alert(`#${next.pullRequest.number} is queued to merge`, "The ticket moves to Done once GitHub merges it.");
+    },
+    onError: (err) => {
+      // A computer on an older Godmode: approving only marks it done.
+      if (err instanceof ApiError && err.status === 404) return update.mutate({ status: "done" });
+      if (!(err instanceof ApiError && err.code === "merge_failed")) return Alert.alert("Couldn't approve it", errorText(err));
+      Alert.alert(`Couldn't merge #${task.data?.pullRequest?.number ?? ""}`, errorText(err), [
+        { text: "Cancel", style: "cancel" },
+        { text: "Mark done anyway", onPress: () => update.mutate({ status: "done" }) },
+      ]);
+    },
+  });
 
   const t = task.data;
   if (!t) return <Stack.Title>{task.isError ? "Task not found" : "Task"}</Stack.Title>;
@@ -50,6 +66,7 @@ export default function TaskScreen() {
 
   const move = (status: TaskStatus) => {
     tap();
+    if (status === "done" && mergesOnApprove(t)) return approve.mutate();
     if (!(working || waiting) || status === "in_progress") return update.mutate({ status });
     Alert.alert(
       "Stop the agent?",
@@ -154,7 +171,7 @@ export default function TaskScreen() {
 
       <Actions
         task={t}
-        busy={update.isPending}
+        busy={update.isPending || approve.isPending}
         hasAgent={!!agent}
         onMove={move}
         onArchive={archive}
@@ -271,7 +288,7 @@ function Actions({
       buttons.push({ title: "Stop", icon: "stop", status: "backlog" });
       break;
     case "in_review":
-      buttons.push({ title: "Approve", icon: "check", status: "done", primary: true });
+      buttons.push({ title: busy && mergesOnApprove(task) ? "Merging…" : mergesOnApprove(task) ? "Approve & merge" : "Approve", icon: "check", status: "done", primary: true });
       break;
     case "blocked":
       // When the agent asked for something, the answer goes in the message box below.

@@ -1186,4 +1186,12 @@ CREATE TABLE IF NOT EXISTS watchdog_events (
 CREATE INDEX IF NOT EXISTS idx_watchdog_events_agent ON watchdog_events(agent_id, created_at);
 `,
   },
+  {
+    id: 73,
+    name: "workspace_auto_merge",
+    sql: /* sql */ `
+-- 1: a delivered ticket's pull request is merged into its base branch right away (no review step).
+ALTER TABLE workspaces ADD COLUMN auto_merge INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];

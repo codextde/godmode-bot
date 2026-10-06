@@ -186,6 +186,9 @@ export function waitingLabel(task: Task): string | null {
   return isWaiting(task) && task.followup ? `Waiting — continues ${followupWhen(task.followup.dueAt)}` : null;
 }
 
+/** The approve mutation (tasks page); its variables are the ticket being approved. */
+export const APPROVE_KEY = ["tasks", "approve"] as const;
+
 /** Moving the ticket away from In progress would end something: a run working, standing still, or a follow-up. */
 export function needsConfirm(task: Task): boolean {
   return task.status === "in_progress" && (isWorking(task) || !!task.pause || !!task.followup);

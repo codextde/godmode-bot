@@ -45,6 +45,8 @@ export interface WorkspaceInput {
   browserProfileId?: ID | null;
   /** Every attached folder and repository, in order. One naming an existing source keeps it (and its clone). */
   sources?: WorkspaceSourceInput[];
+  /** Merge tickets' pull requests as soon as they're delivered. */
+  autoMerge?: boolean;
 }
 
 export type WorkspaceSourceInput = { kind: "folder"; path: string } | { kind: "git"; url: string; branch?: string | null };
