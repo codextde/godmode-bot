@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { storageKey } from "@/lib/core";
 
+export type RecentTab = "all" | "running" | "scheduled" | "done";
+
 interface UiState {
   /** Workspace scope selected in the sidebar: "all" | "global" | workspace id */
   workspace: string;
@@ -22,6 +24,8 @@ interface UiState {
   collapsedColumns: string[];
   /** The Agents page shows cards or the org chart. */
   agentsView: "grid" | "chart";
+  /** Which chats the sidebar's Recent list shows. */
+  recentTab: RecentTab;
   /** The human came back after a while: from when to when they were away (Home sums up what happened). Not kept. */
   away: { since: string; until: string } | null;
   setWorkspace: (id: string) => void;
@@ -35,6 +39,7 @@ interface UiState {
   skipClaudeVersion: (version: string | null) => void;
   toggleColumn: (status: string) => void;
   setAgentsView: (v: "grid" | "chart") => void;
+  setRecentTab: (tab: RecentTab) => void;
   setAway: (away: { since: string; until: string } | null) => void;
 }
 
@@ -52,6 +57,7 @@ export const useUi = create<UiState>()(
       skippedClaudeVersion: null,
       collapsedColumns: ["cancelled"],
       agentsView: "grid",
+      recentTab: "all",
       away: null,
       setWorkspace: (workspace) => set({ workspace }),
       setCommandOpen: (commandOpen) => set({ commandOpen }),
@@ -67,6 +73,7 @@ export const useUi = create<UiState>()(
           collapsedColumns: s.collapsedColumns.includes(status) ? s.collapsedColumns.filter((c) => c !== status) : [...s.collapsedColumns, status],
         })),
       setAgentsView: (agentsView) => set({ agentsView }),
+      setRecentTab: (recentTab) => set({ recentTab }),
       setAway: (away) => set({ away }),
     }),
     {
@@ -82,6 +89,7 @@ export const useUi = create<UiState>()(
         skippedClaudeVersion: s.skippedClaudeVersion,
         collapsedColumns: s.collapsedColumns,
         agentsView: s.agentsView,
+        recentTab: s.recentTab,
       }),
     },
   ),
