@@ -5,7 +5,7 @@
  * Every problem says how it gets solved: Godmode repairs it itself ("auto": its own files and folders), the human
  * allows it in a system dialog ("request": macOS privacy), or only the human can ("manual": files of another user).
  */
-import { accessSync, chmodSync, closeSync, constants, lstatSync, openSync, readdirSync, realpathSync, statSync, type Stats } from "node:fs";
+import { accessSync, chmodSync, constants, lstatSync, readdirSync, realpathSync, statSync, type Stats } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, sep } from "node:path";
 import type { FixResult, PermissionId, PermissionReport, PermissionStatus } from "@godmode/shared";
@@ -18,6 +18,7 @@ import { now } from "../util";
 import { managedTartPath } from "../vm/tart";
 import { claudeConfigDir } from "./claudeUpdate";
 import { isWin, resetDoctorCache, resolveClaudeBinary, resolveUvx, runCommand } from "./doctor";
+import { probeFullDiskAccess } from "./fullDiskAccess";
 import { getSettings } from "./settings";
 
 const log = logger("permissions");
@@ -250,17 +251,6 @@ type PrivacyId = keyof typeof PRIVACY_PANES;
 
 const isPrivacyId = (id: PermissionId): id is PrivacyId => id in PRIVACY_PANES;
 
-/** Full Disk Access can't be queried; macOS's own privacy database is only readable with it. */
-function fullDiskAccess(): boolean | null {
-  try {
-    closeSync(openSync(join(homedir(), "Library", "Application Support", "com.apple.TCC", "TCC.db"), "r"));
-    return true;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    return code === "EPERM" || code === "EACCES" ? false : null;
-  }
-}
-
 async function privacyChecks(): Promise<PermissionStatus[]> {
   if (process.platform !== "darwin") return [];
   const out: PermissionStatus[] = [];
@@ -293,7 +283,7 @@ async function privacyChecks(): Promise<PermissionStatus[]> {
     });
   }
   // Only worth a row once it matters: it is on, or macOS has kept Godmode out of a browser's data folder.
-  const fda = fullDiskAccess();
+  const fda = probeFullDiskAccess();
   const blocked = blockedProfileRoots();
   if (fda === true || (fda === false && blocked.length)) {
     out.push({

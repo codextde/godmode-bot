@@ -4,15 +4,14 @@
  *
  * Every look at the machine goes through `deps`, so tests decide what it finds.
  */
-import { closeSync, openSync, statfsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { statfsSync } from "node:fs";
 import type { ComputerStatus, DependencyId, DependencyStatus, DoctorReport, RunnerCheck, RunnerCheckGroup, RunnerCheckStatus, RunnerHealth } from "@godmode/shared";
 import { computerStatus, requestComputerPermissions } from "../computer/service";
 import { config } from "../config";
 import { getMeta } from "../db";
 import { logger } from "../log";
 import { installDependency, resolveGh, runCommand, runDoctor, toolPath } from "../services/doctor";
+import { probeFullDiskAccess } from "../services/fullDiskAccess";
 import { childEnv } from "../util";
 import * as vault from "../vault/vault";
 import { keepAwakeStatus, restartKeepAwake, type KeepAwakeStatus } from "./keepAwake";
@@ -44,8 +43,8 @@ export interface HealthDeps {
   exec(argv: string[]): Promise<Probe>;
   computer(): Promise<ComputerStatus>;
   requestPermissions(): Promise<ComputerStatus>;
-  /** Can this process read files macOS keeps behind Full Disk Access? */
-  fullDiskAccess(): boolean;
+  /** Can this process read files macOS keeps behind Full Disk Access? null = nothing protected to try here. */
+  fullDiskAccess(): boolean | null;
   vault(): { initialized: boolean; unlocked: boolean };
   /** Digest of the setup last copied here; null = nothing was copied yet. */
   configDigest(): string | null;
@@ -65,15 +64,7 @@ const defaults: HealthDeps = {
   exec: (argv) => runCommand(argv, { timeoutMs: PROBE_TIMEOUT_MS, env: childEnv({ PATH: toolPath() }) }),
   computer: computerStatus,
   requestPermissions: requestComputerPermissions,
-  fullDiskAccess: () => {
-    // The privacy database itself is the one file that is only readable with Full Disk Access.
-    try {
-      closeSync(openSync(join(homedir(), "Library", "Application Support", "com.apple.TCC", "TCC.db"), "r"));
-      return true;
-    } catch {
-      return false;
-    }
-  },
+  fullDiskAccess: () => probeFullDiskAccess(),
   vault: () => vault.status(),
   configDigest: () => getMeta("link.config_digest"),
   service: () => serviceStatus(),
@@ -192,10 +183,17 @@ async function ghCheck(): Promise<RunnerCheck> {
   return make("gh", "software", name, "ok", account ? `Signed in to ${account[1]} as ${account[2]}` : "Signed in to GitHub", false);
 }
 
-function permissionCheck(id: string, name: string, granted: boolean | null | undefined, required: boolean, missing: string): RunnerCheck {
+function permissionCheck(
+  id: string,
+  name: string,
+  granted: boolean | null | undefined,
+  required: boolean,
+  missing: string,
+  unknown = "Couldn't check — the screen helper isn't available",
+): RunnerCheck {
   if (granted === true) return make(id, "permissions", name, "ok", "Allowed", required);
   if (granted === false) return make(id, "permissions", name, failing(required), missing, required);
-  return make(id, "permissions", name, "unknown", "Couldn't check — the screen helper isn't available", required);
+  return make(id, "permissions", name, "unknown", unknown, required);
 }
 
 function vaultCheck(): RunnerCheck {
@@ -264,7 +262,14 @@ async function inspect(refresh: boolean): Promise<RunnerHealth> {
       ? [
           permissionCheck("accessibility", "Accessibility", computer?.permissions.accessibility, screen, "Not allowed — agents can't click or type"),
           permissionCheck("screen-recording", "Screen Recording", computer?.permissions.screenRecording, screen, "Not allowed — agents can't see the screen"),
-          permissionCheck("full-disk-access", "Full Disk Access", deps.fullDiskAccess(), false, "Not allowed — some folders stay closed to agents"),
+          permissionCheck(
+            "full-disk-access",
+            "Full Disk Access",
+            deps.fullDiskAccess(),
+            false,
+            "Not allowed — some folders stay closed to agents",
+            "Couldn't check — none of the protected folders exist here",
+          ),
         ]
       : []),
     vaultCheck(),
