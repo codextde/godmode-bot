@@ -3,13 +3,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
 import { AlertTriangle, Coins, KanbanSquare, KeyRound, MessageCircleQuestion, OctagonAlert, Pause, Play, UserPlus, Workflow, type LucideIcon } from "lucide-react";
-import type { Agent, AttentionItem } from "@godmode/shared";
+import type { Agent, AttentionItem, Workspace } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 
 export const ATTENTION_ICON: Record<AttentionItem["kind"], LucideIcon> = {
   question: MessageCircleQuestion,
@@ -36,17 +37,28 @@ const TONE: Partial<Record<AttentionItem["kind"], string>> = {
  * Things that wait for the human, one row each: who, what, since when, and the one thing to do. A row leaves when the
  * thing is handled, wherever that happened.
  */
-export function AttentionList({ items, agentById, className }: { items: AttentionItem[]; agentById: Map<string, Agent>; className?: string }) {
+export function AttentionList({
+  items,
+  agentById,
+  workspaceOf,
+  className,
+}: {
+  items: AttentionItem[];
+  agentById: Map<string, Agent>;
+  /** Shows which workspace each row belongs to (when the list mixes them). */
+  workspaceOf?: (item: AttentionItem) => Workspace | undefined;
+  className?: string;
+}) {
   return (
     <ul className={cn("divide-y overflow-hidden rounded-xl border bg-card shadow-card", className)}>
       {items.map((item) => (
-        <AttentionRow key={item.id} item={item} agent={item.agentId ? agentById.get(item.agentId) : undefined} />
+        <AttentionRow key={item.id} item={item} agent={item.agentId ? agentById.get(item.agentId) : undefined} workspace={workspaceOf?.(item)} />
       ))}
     </ul>
   );
 }
 
-function AttentionRow({ item, agent }: { item: AttentionItem; agent?: Agent }) {
+function AttentionRow({ item, agent, workspace }: { item: AttentionItem; agent?: Agent; workspace?: Workspace }) {
   const qc = useQueryClient();
   const Icon = ATTENTION_ICON[item.kind];
   const resume = useMutation({
@@ -77,9 +89,18 @@ function AttentionRow({ item, agent }: { item: AttentionItem; agent?: Agent }) {
         <p className="truncate text-[13px] font-medium" title={item.title}>
           {item.title}
         </p>
-        <p className="truncate text-xs text-muted-foreground" title={item.detail}>
+        <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={item.detail}>
+          {workspace && (
+            <span className="inline-flex shrink-0 items-center gap-1 text-foreground/70">
+              <WorkspaceTile icon={workspace.icon} color={workspace.color} size="sm" className="size-3.5 rounded-[4px] text-[8px]" />
+              {workspace.name}
+              <span className="text-muted-foreground/60">·</span>
+            </span>
+          )}
+          <span className="truncate">
           {item.detail ? `${item.detail} · ` : ""}
           <time dateTime={item.since}>{formatDistanceToNowStrict(new Date(item.since), { addSuffix: true })}</time>
+          </span>
         </p>
       </div>
       {item.kind === "paused" && item.conversationId ? (

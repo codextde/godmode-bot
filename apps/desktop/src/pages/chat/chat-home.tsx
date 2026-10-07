@@ -27,11 +27,12 @@ import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useInScope, useRunners, useScopedConversations, useScopeWorkspace, useWorkspaces, useAttention } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useInScope, useRunners, useScopedConversations, useScopeWorkspace, useWorkspaces } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
 import { AttentionList } from "@/components/attention/attention-list";
+import { useScopedAttention } from "@/components/workspaces/workspace-activity";
 import { AwaySummaryCard } from "@/components/attention/away-summary";
 import { useLive, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
@@ -311,10 +312,23 @@ export default function ChatHome() {
 
 /** What waits for the human, first thing on Home: the newest few, the rest in the Inbox. */
 function NeedsYou({ agents }: { agents: Agent[] }) {
-  const { data: items = [] } = useAttention();
+  const { items, elsewhere, workspaceOf } = useScopedAttention();
+  const scope = useUi((s) => s.workspace);
+  const { data: workspaces = [] } = useWorkspaces();
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
-  if (!items.length) return null;
+  if (!items.length && !elsewhere) return null;
   const shown = items.slice(0, 5);
+  if (!items.length)
+    return (
+      <Link
+        to="/inbox"
+        className="flex items-center gap-2 rounded-xl border border-dashed px-4 py-3 text-[13px] text-muted-foreground transition hover:border-foreground/20 hover:text-foreground"
+      >
+        <span className="size-1.5 rounded-full bg-warning" aria-hidden />
+        Nothing waits for you here. {elsewhere} {elsewhere === 1 ? "thing waits" : "things wait"} in other workspaces
+        <ArrowRight className="ml-auto size-3.5" />
+      </Link>
+    );
   return (
     <section aria-labelledby="needs-you-title">
       <div className="mb-3 flex items-center gap-2">
@@ -322,13 +336,17 @@ function NeedsYou({ agents }: { agents: Agent[] }) {
           Needs you
           <span className="rounded-[4px] bg-warning/12 px-1 font-mono text-[10px] font-medium text-warning tabular-nums">{items.length}</span>
         </h2>
-        {items.length > shown.length && (
+        {(items.length > shown.length || elsewhere > 0) && (
           <Link to="/inbox" className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
-            All {items.length} in the Inbox
+            {elsewhere > 0 ? `+${elsewhere} in other workspaces · Inbox` : `All ${items.length} in the Inbox`}
           </Link>
         )}
       </div>
-      <AttentionList items={shown} agentById={agentById} />
+      <AttentionList
+        items={shown}
+        agentById={agentById}
+        workspaceOf={scope === "all" ? (item) => workspaces.find((w) => w.id === workspaceOf(item)) : undefined}
+      />
     </section>
   );
 }

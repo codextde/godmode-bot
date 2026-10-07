@@ -34,8 +34,8 @@ export function WorkspaceSwitcher() {
 
   const sorted = useMemo(() => [...workspaces].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })), [workspaces]);
   const recent = useMemo(
-    () => (sorted.length > 6 ? recentIds.flatMap((id) => sorted.find((w) => w.id === id) ?? []).slice(0, 3) : []),
-    [sorted, recentIds],
+    () => (sorted.length > 6 ? recentIds.flatMap((id) => (id === scope ? [] : (sorted.find((w) => w.id === id) ?? []))).slice(0, 3) : []),
+    [sorted, recentIds, scope],
   );
 
   useEffect(() => {
@@ -224,13 +224,13 @@ function ScopeRow({
     <CommandItem value={value} keywords={keywords} onSelect={onSelect} className="group/row gap-2.5 py-1.5" aria-current={selected || undefined}>
       {children}
       <RowBadges activity={activity} />
-      {selected ? (
-        <Check className="size-3.5 text-foreground" />
-      ) : shortcut ? (
-        <span className="w-6 text-right font-mono text-[10px] text-muted-foreground/70 opacity-0 transition group-data-[selected=true]/row:opacity-100">{shortcut}</span>
-      ) : (
-        <span className="w-3.5" />
-      )}
+      <span className="flex w-7 shrink-0 justify-end">
+        {selected ? (
+          <Check className="size-3.5 text-foreground" />
+        ) : shortcut ? (
+          <span className="font-mono text-[10px] text-muted-foreground/70 opacity-0 transition group-data-[selected=true]/row:opacity-100">{shortcut}</span>
+        ) : null}
+      </span>
     </CommandItem>
   );
 }

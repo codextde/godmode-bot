@@ -1,9 +1,11 @@
 import { useMemo } from "react";
+import type { AttentionItem } from "@godmode/shared";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAllAgents, useAttention, useConversations } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { useLive } from "@/stores/live";
+import { useUi } from "@/stores/ui";
 
 export interface WorkspaceActivity {
   /** Runs working or queued right now. */
@@ -49,10 +51,7 @@ export function useWorkspaceActivity(): { of: (scope: string | null) => Workspac
       if (r.status !== "running" && r.status !== "queued") continue;
       at(chatWs.has(r.conversationId) ? chatWs.get(r.conversationId) : agentWs.get(r.agentId)).running++;
     }
-    for (const item of attention ?? []) {
-      const ws = item.task ? item.task.workspaceId : item.conversationId && chatWs.has(item.conversationId) ? chatWs.get(item.conversationId) : item.agentId ? agentWs.get(item.agentId) : null;
-      at(ws).needsYou++;
-    }
+    for (const item of attention ?? []) at(workspaceOfItem(item, chatWs, agentWs)).needsYou++;
     for (const t of tasks ?? []) if (!t.archivedAt && t.status !== "done" && t.status !== "cancelled") at(t.workspaceId).openTasks++;
     return out;
   }, [agents, conversations, attention, tasks, runs]);
@@ -70,4 +69,26 @@ export function useWorkspaceActivity(): { of: (scope: string | null) => Workspac
   }, [map]);
 
   return useMemo(() => ({ of: (scope: string | null) => map.get(scope ?? "global") ?? EMPTY, total }), [map, total]);
+}
+
+function workspaceOfItem(item: AttentionItem, chatWs: Map<string, string | null>, agentWs: Map<string, string | null>): string | null {
+  if (item.task) return item.task.workspaceId ?? null;
+  if (item.conversationId && chatWs.has(item.conversationId)) return chatWs.get(item.conversationId) ?? null;
+  return item.agentId ? (agentWs.get(item.agentId) ?? null) : null;
+}
+
+/** What waits for the human in the workspace picked in the sidebar, how many wait elsewhere, and where each one belongs. */
+export function useScopedAttention() {
+  const scope = useUi((s) => s.workspace);
+  const { data: agents } = useAllAgents();
+  const { data: conversations } = useConversations();
+  const { data: attention = [] } = useAttention();
+  return useMemo(() => {
+    const agentWs = new Map((agents ?? []).map((a) => [a.id, a.workspaceId ?? null]));
+    const chatWs = new Map((conversations ?? []).map((c) => [c.id, c.workspaceId ?? agentWs.get(c.agentId) ?? null]));
+    const workspaceOf = (item: AttentionItem) => workspaceOfItem(item, chatWs, agentWs);
+    const target = scope === "global" ? null : scope;
+    const items = scope === "all" ? attention : attention.filter((i) => workspaceOf(i) === target);
+    return { items, elsewhere: attention.length - items.length, workspaceOf };
+  }, [scope, agents, conversations, attention]);
 }

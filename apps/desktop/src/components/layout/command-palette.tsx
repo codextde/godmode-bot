@@ -52,7 +52,8 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
-import { useAllAgents, useConversations } from "@/lib/hooks";
+import { useAllAgents, useConversations, useWorkspaces } from "@/lib/hooks";
+import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { ATTENTION_ICON } from "@/components/attention/attention-list";
 import { useUi } from "@/stores/ui";
@@ -103,6 +104,9 @@ export function CommandPalette() {
   const { resolved, setTheme } = useTheme();
   const { data: agents = [] } = useAllAgents();
   const { data: conversations = [] } = useConversations();
+  const { data: workspaces = [] } = useWorkspaces();
+  const scope = useUi((s) => s.workspace);
+  const setScope = useUi((s) => s.setWorkspace);
   const startChat = useStartAgentChat();
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
@@ -166,6 +170,29 @@ export function CommandPalette() {
             </CommandGroup>
             <CommandSeparator />
           </>
+        )}
+        {searching && workspaces.length > 0 && (
+          <CommandGroup heading="Switch workspace">
+            {workspaces.map((w) => (
+              <CommandItem
+                key={w.id}
+                value={unique(`workspace switch ${w.name}`, w.id)}
+                onSelect={() => {
+                  setScope(w.id);
+                  setOpen(false);
+                }}
+              >
+                <WorkspaceTile icon={w.icon} color={w.color} size="sm" className="size-5 rounded-[5px] text-[11px]" />
+                <span className="truncate">{w.name}</span>
+                {scope === w.id && <span className="ml-2 text-xs text-muted-foreground">current</span>}
+              </CommandItem>
+            ))}
+            {scope !== "all" && (
+              <CommandItem value="workspace switch all workspaces everything" onSelect={() => { setScope("all"); setOpen(false); }}>
+                <Layers /> All workspaces <CommandShortcut>{modKey}0</CommandShortcut>
+              </CommandItem>
+            )}
+          </CommandGroup>
         )}
         {ticketHits.length > 0 && (
           <CommandGroup heading="Tickets">
