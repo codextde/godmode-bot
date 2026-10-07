@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Bot, CalendarClock, Plus, Sparkles, Wand2, X } from "lucide-react";
-import type { Agent, AgentInput, AgentTemplate } from "@godmode/shared";
+import type { Agent, AgentInput, AgentTemplate, AgentTemplateCategory } from "@godmode/shared";
+import { AGENT_TEMPLATE_CATEGORIES, AGENT_TEMPLATE_CATEGORY_LABELS } from "@godmode/shared";
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { qk } from "@/lib/queryKeys";
@@ -40,7 +41,7 @@ export default function AgentNewPage() {
   return templateId ? (
     <FormStep templateId={templateId} onBack={() => setParams({})} />
   ) : (
-    <ChooseStep onPick={(id) => setParams({ template: id })} />
+    <ChooseStep onPick={(id) => setParams({ template: id })} focusStructures={params.get("start") === "structures"} />
   );
 }
 
@@ -48,7 +49,7 @@ export default function AgentNewPage() {
 /* Step 1: describe it, or pick a template                              */
 /* ------------------------------------------------------------------ */
 
-function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
+function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) => void; focusStructures: boolean }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: boot } = useBootstrap();
@@ -77,6 +78,12 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
     onError: (err) => !isLicenseRequired(err) && toast.error("Couldn't reach Godmode", { description: errorMessage(err) }),
   });
   const canDescribe = description.trim().length > 3 && !describe.isPending;
+  const [category, setCategory] = useState<AgentTemplateCategory | "all">("all");
+  const roles = (templates.data ?? []).filter((t) => category === "all" || t.category === category);
+  const structuresRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (focusStructures) structuresRef.current?.scrollIntoView({ block: "start" });
+  }, [focusStructures]);
 
   return (
     <>
@@ -183,19 +190,45 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
           </div>
         </section>
 
-        <section>
+        <section ref={structuresRef} className="scroll-mt-6" aria-labelledby="structures-title">
           <div className="mb-4">
-            <h2 className="text-lg font-medium tracking-[-0.02em]">Or start a whole team</h2>
-            <p className="text-sm text-muted-foreground">A lead and its reports, wired up in the org chart: the lead hands out the work and reviews it.</p>
+            <h2 id="structures-title" className="text-lg font-medium tracking-[-0.02em]">
+              Or start a whole company
+            </h2>
+            <p className="text-sm text-muted-foreground">An org chart hired in one go: every agent has its job, every lead hands out the work and reviews it.</p>
           </div>
           <TeamTemplates />
         </section>
 
-        <section>
-          <div className="mb-4 flex items-end justify-between gap-4">
+        <section aria-labelledby="roles-title">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
             <div>
-              <h2 className="text-lg font-medium tracking-[-0.02em]">Or pick a starting point</h2>
-              <p className="text-sm text-muted-foreground">Templates come with instructions and, where it makes sense, a schedule.</p>
+              <h2 id="roles-title" className="text-lg font-medium tracking-[-0.02em]">
+                Or hire one role
+              </h2>
+              <p className="text-sm text-muted-foreground">Each comes with a job description, instructions and, where it makes sense, a schedule.</p>
+            </div>
+            <div role="tablist" aria-label="Department" className="flex flex-wrap gap-1.5">
+              {(["all", ...AGENT_TEMPLATE_CATEGORIES] as const).map((c) => {
+                const count = c === "all" ? (templates.data?.length ?? 0) : (templates.data ?? []).filter((t) => t.category === c).length;
+                if (c !== "all" && !count) return null;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    role="tab"
+                    aria-selected={category === c}
+                    onClick={() => setCategory(c)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                      category === c ? "border-foreground/80 bg-foreground text-background" : "bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
+                    )}
+                  >
+                    {c === "all" ? "All" : AGENT_TEMPLATE_CATEGORY_LABELS[c]}
+                    <span className={cn("tabular-nums", category === c ? "text-background/60" : "text-muted-foreground/70")}>{count}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
@@ -225,7 +258,7 @@ function ChooseStep({ onPick }: { onPick: (templateId: string) => void }) {
                 </div>
               ))}
 
-            {(templates.data ?? []).map((t, i) => (
+            {roles.map((t, i) => (
               <TemplateCard key={t.id} template={t} index={i} onPick={() => onPick(t.id)} />
             ))}
           </div>
@@ -300,7 +333,12 @@ function TemplateCard({ template, index, onPick }: { template: AgentTemplate; in
     >
       <AgentAvatar agent={{ id: template.id, avatar: template.avatar, color: template.color, character: template.character }} size="lg" />
       <span className="mt-4 block font-medium tracking-[-0.01em]">{template.name}</span>
-      {template.role && <span className="block text-xs text-muted-foreground">{template.role}</span>}
+      {template.role && (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {template.role}
+          {template.leads && <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium">Leads a team</span>}
+        </span>
+      )}
       <span className="mt-1 line-clamp-3 block flex-1 text-sm text-muted-foreground">{template.description}</span>
       {template.routine && (
         <span className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">

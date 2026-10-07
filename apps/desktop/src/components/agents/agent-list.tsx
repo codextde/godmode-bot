@@ -10,6 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { AgentStatus, useAgentLiveRun, useAgentMood, useStartAgentChat } from "./agent-actions";
 import { AgentMenu } from "./agent-card";
+import { useAgentDrag } from "./agent-dnd";
 
 const COLUMNS = "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,11rem)_6.5rem_auto] @5xl:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,11rem)_3.5rem_6.5rem_auto]";
 
@@ -55,8 +56,18 @@ function AgentRow({
   const chat = useStartAgentChat();
   const chatting = chat.isPending && chat.variables?.agent.id === agent.id;
   const lead = leadOf(agent, all);
+  const drag = useAgentDrag(agent);
   return (
-    <li className={cn("group relative px-3 py-2 transition-colors hover:bg-foreground/[0.025]", COLUMNS, (!!live || agent.status === "running") && "bg-brand/[0.04]")}>
+    <li
+      ref={drag.ref}
+      {...drag.props}
+      className={cn(
+        "group relative px-3 py-2 transition-[background-color,opacity] hover:bg-foreground/[0.025]",
+        COLUMNS,
+        (!!live || agent.status === "running") && "bg-brand/[0.04]",
+        drag.isDragging && "opacity-35",
+      )}
+    >
       <div className={cn("flex min-w-0 items-center gap-3", !agent.enabled && "opacity-60")}>
         <AgentAvatar agent={agent} size="md" mood={mood} />
         <div className="min-w-0">

@@ -59,6 +59,8 @@ export function WorkspaceSection({
   forceOpen,
   aside,
   className,
+  dropRef,
+  dropState = "none",
   children,
 }: {
   group: AgentGroup;
@@ -75,6 +77,9 @@ export function WorkspaceSection({
   /** Extra line under the heading, e.g. who the group reports to. */
   aside?: ReactNode;
   className?: string;
+  /** Takes dragged agents (agent-dnd). */
+  dropRef?: (el: HTMLElement | null) => void;
+  dropState?: "none" | "available" | "valid" | "invalid";
   children: ReactNode;
 }) {
   const folded = useUi((s) => s.collapsedAgentGroups.includes(group.key));
@@ -87,17 +92,25 @@ export function WorkspaceSection({
   const faces = group.agents.slice(0, 5);
   return (
     <section
+      ref={dropRef}
       aria-label={label}
-      className={cn(panel ? "overflow-hidden rounded-xl border bg-card shadow-card" : "", className)}
+      className={cn(
+        "transition-[box-shadow,border-color,background-color,outline-color] duration-150",
+        panel ? "overflow-hidden rounded-xl border bg-card shadow-card" : "rounded-xl outline-2 outline-offset-[6px] outline-transparent outline-dashed",
+        dropState === "available" && (panel ? "border-brand/30" : "outline-brand/25"),
+        dropState === "valid" && (panel ? "border-brand/60 ring-4 ring-brand/15" : "bg-brand/[0.03] outline-brand/60"),
+        className,
+      )}
     >
-      <div className={cn("group/head flex min-h-9 items-center gap-2", panel ? "h-12 px-3" : !collapsed && "mb-3", panel && !collapsed && "border-b")}>
+      <div className={cn("group/head @container/head flex min-h-9 items-center gap-2", panel ? "h-12 px-3" : !collapsed && "mb-3", panel && !collapsed && "border-b")}>
         <h2 className="min-w-0">
           <button
             type="button"
             onClick={() => toggle(group.key)}
+            title={label}
             aria-expanded={!collapsed}
             aria-controls={collapsed ? undefined : bodyId}
-            className="-ml-1 flex min-w-0 items-center gap-2 rounded-md py-0.5 pr-1.5 pl-1 text-left transition hover:bg-foreground/[0.04] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="-ml-1 flex max-w-full min-w-0 items-center gap-2 rounded-md py-0.5 pr-1.5 pl-1 text-left transition hover:bg-foreground/[0.04] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <ChevronRight aria-hidden className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform duration-200", !collapsed && "rotate-90")} />
             {icon ?? <GroupIcon workspace={group.workspace} isGlobal={group.key === "global"} />}
@@ -106,6 +119,11 @@ export function WorkspaceSection({
           </button>
         </h2>
         <GroupStats working={working} needsYou={needsYou} />
+        {dropState === "valid" && (
+          <motion.span initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="shrink-0 rounded-full bg-brand-strong px-2 py-0.5 text-[11px] font-medium text-white dark:bg-brand dark:text-black">
+            Drop here
+          </motion.span>
+        )}
         <AnimatePresence initial={false}>
           {collapsed && (
             <motion.span initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} aria-hidden className="ml-1 hidden items-center @sm:flex">
@@ -156,18 +174,21 @@ export function WorkspaceSection({
 
 function GroupStats({ working, needsYou }: { working: number; needsYou: number }) {
   if (!working && !needsYou) return null;
+  // In a narrow heading the name keeps the room: just dot and number, the words on hover.
   return (
     <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
       {working > 0 && (
-        <span className="inline-flex items-center gap-1">
+        <span className="inline-flex items-center gap-1" title={`${working} working`}>
           <span aria-hidden className="size-1.5 rounded-full bg-brand animate-live-dot" />
-          {working} working
+          {working}
+          <span className="hidden @[26rem]/head:inline">working</span>
         </span>
       )}
       {needsYou > 0 && (
-        <span className="inline-flex items-center gap-1 text-foreground">
+        <span className="inline-flex items-center gap-1 text-foreground" title={`${needsYou} need${needsYou === 1 ? "s" : ""} you`}>
           <span aria-hidden className="size-1.5 rounded-full bg-warning" />
-          {needsYou} need{needsYou === 1 ? "s" : ""} you
+          {needsYou}
+          <span className="hidden @[26rem]/head:inline">need{needsYou === 1 ? "s" : ""} you</span>
         </span>
       )}
     </span>
