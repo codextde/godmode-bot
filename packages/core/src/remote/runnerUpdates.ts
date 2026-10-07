@@ -92,11 +92,12 @@ export async function prepareRunnerUpdates(): Promise<void> {
 
 const samePlatform = (r: { platform: string | null; arch: string | null }) => r.platform === process.platform && r.arch === process.arch;
 
-/** The command that installs this Godmode's release on the runner by hand. */
+/** The command that installs this Godmode's release on the runner by hand. The key stays out: phones read the runner list too. */
 function manualCommand(): string {
-  const key = licenseKey() ?? "GM-XXXXX-XXXXX-XXXXX-XXXXX";
-  return `curl -fsSL https://usegodmode.com/runner.sh | GODMODE_LICENSE=${key} GODMODE_VERSION=v${VERSION} sh`;
+  return `curl -fsSL https://usegodmode.com/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX GODMODE_VERSION=v${VERSION} sh`;
 }
+
+const ONCE_BY_HAND = "Its Godmode is older than the updater. Install the new one there once with this command, with your licence key from Settings → License.";
 
 interface Plan {
   needed: boolean;
@@ -130,9 +131,9 @@ export function planUpdate(r: { platform: string | null; arch: string | null; ve
   if (sameProgram && legacy) {
     return r.platform === "darwin"
       ? { needed, source: "bridge", reason: null, command: null, key }
-      : { needed, source: null, reason: "Its Godmode is older than the updater. Install the new one there once with this command.", command: manualCommand(), key };
+      : { needed, source: null, reason: ONCE_BY_HAND, command: manualCommand(), key };
   }
-  if (legacy) return { needed, source: null, reason: "Its Godmode is older than the updater. Install the new one there once with this command.", command: manualCommand(), key };
+  if (legacy) return { needed, source: null, reason: ONCE_BY_HAND, command: manualCommand(), key };
   if (!releaseAsset(r.platform ?? "", r.arch ?? "")) return { needed, source: null, reason: `There is no Godmode download for ${r.platform ?? "its system"} ${r.arch ?? ""}.`.trim(), command: null, key };
   if (!licenseKey()) return { needed, source: null, reason: "Add your licence key (Settings → License): the runner downloads Godmode from usegodmode.com with it.", command: manualCommand(), key };
   return { needed, source: "website", reason: null, command: null, key };
@@ -146,7 +147,7 @@ function dueTools(id: string): RunnerUpdate["tools"] {
 export function runnerUpdate(r: { id: string; platform: string | null; arch: string | null; version: string | null; auto_update: number }, linkState: RemoteRunner["state"]): RunnerUpdate {
   const base = { target: target(), autoUpdate: r.auto_update === 1, tools: dueTools(r.id), command: null, source: null, progress: null, detail: null };
   if (linkState === "update_required") {
-    return { ...base, state: "unsupported", detail: "It runs a Godmode that can't talk to this one. Install the new one there with this command.", command: manualCommand() };
+    return { ...base, state: "unsupported", detail: "It runs a Godmode that can't talk to this one. Install the new one there with this command, with your licence key from Settings → License.", command: manualCommand() };
   }
   const attempt = attempts.get(r.id);
   const info = host?.info(r.id);
