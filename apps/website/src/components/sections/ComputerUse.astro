@@ -1,0 +1,112 @@
+---
+import Words from '../ui/Words.astro';
+import Icon from '../ui/Icon.astro';
+import Logo from '../ui/Logo.astro';
+import { SITE } from '@/config/site';
+
+interface Props {
+  eyebrow: string;
+}
+const { eyebrow } = Astro.props;
+
+const modes = [
+  {
+    icon: 'globe',
+    title: 'Your browser, signed in',
+    text: 'A real Chromium with your imported Chrome profile. No bot-flagged sandbox, no starting from zero.',
+    how: 'cookies · sessions · tabs',
+  },
+  {
+    icon: 'app-window',
+    title: 'Any app, in the background',
+    text: 'Share one window and Claude reads its controls and types into it while it’s covered. Your cursor never moves.',
+    how: 'ui elements · no cursor',
+  },
+  {
+    icon: 'monitor',
+    title: 'Your whole desktop',
+    text: 'When a job spans apps, share a display and it works like a person on screen-share. You see every move.',
+    how: 'every display · take over',
+  },
+  {
+    icon: 'monitor-smartphone',
+    title: 'Its own Mac',
+    text: 'An isolated macOS VM on your Mac for installs, builds and risky experiments. Your machine stays untouched.',
+    how: 'one click · shared folder',
+  },
+];
+
+const versus: [string, string, string][] = [
+  ['Logins', 'You build a way to sign in, then paste passwords into a prompt', 'Vault fills passwords and 2FA codes; the model sees [secret hidden]'],
+  ['Where it clicks', 'A demo container with an empty browser', 'Your sessions, your apps, or its own Mac'],
+  ['Your mouse', 'Taken over while it works', 'Stays yours: background input to the shared window'],
+  ['When it’s stuck', 'The script fails', 'Asks you in chat, or you hit “Take control” and it carries on'],
+  ['Running it again', 'Your own cron, your own glue code', 'Schedules, email and Slack triggers, plain-language conditions'],
+];
+---
+
+<section id="computer-use" class="relative py-20 sm:py-28" data-track-view="computer_use">
+  <div class="container-x">
+    <div class="grid items-end gap-8 lg:grid-cols-[1.15fr_0.85fr]">
+      <div class="max-w-[760px]">
+        <p class="eyebrow" data-reveal><span class="n">{eyebrow}</span> Computer use</p>
+        <Words text="The best computer use for Claude, *built in.*" class="h-section mt-6" />
+      </div>
+      <p class="lead max-w-[440px]" data-reveal style="--d:150">
+        {SITE.model} is one of the strongest computer-use models there is. Godmode gives it the best computer to use:
+        yours, already signed in, with four ways to work and zero setup.
+      </p>
+    </div>
+
+    <div class="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {
+        modes.map((m, i) => (
+          <article class="card flex flex-col p-7" data-reveal style={`--d:${i * 70}`}>
+            <span class="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand ring-1 ring-[var(--brand-line)]">
+              <Icon name={m.icon} size={18} />
+            </span>
+            <h3 class="h-card mt-5">{m.title}</h3>
+            <p class="mt-2.5 flex-1 text-[15px] leading-relaxed text-muted">{m.text}</p>
+            <p class="mt-5 border-t border-line pt-4 font-mono text-[11px] tracking-[0.02em] text-dim">{m.how}</p>
+          </article>
+        ))
+      }
+    </div>
+
+    <div class="card mt-3 overflow-hidden" data-reveal style="--d:100">
+      <div class="overflow-x-auto">
+        <table class="compare w-full min-w-[720px] border-collapse text-left">
+          <caption class="sr-only">Claude computer use on its own compared with Claude computer use in Godmode</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="w-[18%]"><span class="sr-only">Topic</span></th>
+              <th scope="col" class="col-head w-[41%]">Claude computer use, do-it-yourself</th>
+              <th scope="col" class="col-head is-us w-[41%]"><span class="flex items-center gap-2"><Logo size={20} /> Claude computer use in Godmode</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              versus.map(([topic, diy, us]) => (
+                <tr>
+                  <th scope="row">{topic}</th>
+                  <td>
+                    <span class="flex items-start gap-2.5">
+                      <Icon name="minus" size={16} stroke={2.2} class="mt-0.5 flex-none text-warn" />
+                      <span class="text-[13.5px] leading-snug text-muted">{diy}</span>
+                    </span>
+                  </td>
+                  <td class="is-us">
+                    <span class="flex items-start gap-2.5">
+                      <Icon name="check" size={16} stroke={2.2} class="mt-0.5 flex-none text-brand" />
+                      <span class="text-[13.5px] leading-snug text-text-2">{us}</span>
+                    </span>
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>

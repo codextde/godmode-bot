@@ -1,0 +1,283 @@
+---
+import Base from '@/layouts/Base.astro';
+import Nav from '@/components/Nav.astro';
+import Footer from '@/components/Footer.astro';
+import Icon from '@/components/ui/Icon.astro';
+import Words from '@/components/ui/Words.astro';
+import CheckoutButton from '@/components/ui/CheckoutButton.astro';
+import { PRICING, SITE, yearlySavings } from '@/config/site';
+
+type How = 'browser' | 'app' | 'desktop' | 'vm' | 'chat';
+const howLabel: Record<How, [string, string]> = {
+  browser: ['globe', 'Browser, signed in'],
+  app: ['app-window', 'App in the background'],
+  desktop: ['monitor', 'Whole desktop'],
+  vm: ['monitor-smartphone', 'Its own Mac'],
+  chat: ['message-circle', 'From Slack or Telegram'],
+};
+
+type Case = [problem: string, message: string, how: How, when: string];
+const groups: { key: string; name: string; icon: string; items: Case[] }[] = [
+  {
+    key: 'admin',
+    name: 'Inbox & admin',
+    icon: 'inbox',
+    items: [
+      ['I have 400 unread emails and no idea what matters.', 'Go through my inbox from the last two weeks. Archive newsletters, draft replies to anything a customer or colleague is waiting on, and give me a list of the 10 that need me.', 'browser', 'Once'],
+      ['Scheduling a meeting takes six emails.', 'Find a 45-minute slot next week that works for me, Anna and Tom, send the invite and put the agenda from this thread in it.', 'browser', 'Once'],
+      ['Every government portal wants a different login and a 2FA code.', 'Log into the tax office portal, download every notice from this year and save them in Documents › Tax › 2026 with readable names.', 'browser', 'Quarterly'],
+      ['My Downloads folder is a landfill.', 'Sort my Downloads folder: invoices into Finance, screenshots into Pictures › Screenshots, installers into the trash. Show me the plan before you move anything.', 'app', 'Monthly'],
+      ['Forms, forms, forms.', 'Fill the supplier onboarding form at this link with our company data from the shared drive. Stop before submitting and show me a screenshot.', 'browser', 'Once'],
+      ['I forget to renew things until they break.', 'Every month, check when our domains, SSL certificates, insurance and software licences expire and tell me on Telegram about anything due in the next 30 days.', 'chat', 'Monthly'],
+    ],
+  },
+  {
+    key: 'finance',
+    name: 'Finance',
+    icon: 'landmark',
+    items: [
+      ['Collecting invoices from portals eats my Monday.', 'Log into each supplier portal in my vault, download last month’s invoices, file them in Drive › Invoices › {month} and post the totals to #finance.', 'browser', 'Monthly'],
+      ['Stripe payouts never match the bank statement.', 'Match last week’s Stripe payouts against our online banking. List every payout that doesn’t add up, with links to both sides.', 'browser', 'Weekly'],
+      ['Our accountant keeps asking for missing receipts.', 'Find every card transaction from September without a receipt in our accounting tool, search my email for each one and upload what you find.', 'browser', 'Monthly'],
+      ['Customers pay late and I hate chasing them.', 'Find invoices more than 14 days overdue and draft a friendly reminder for each customer in Gmail drafts. Don’t send.', 'browser', 'Weekly'],
+      ['We pay for SaaS nobody uses.', 'List every subscription charged to the company card last quarter with its price and last login. Flag anything unused for 60 days.', 'browser', 'Quarterly'],
+      ['The budget spreadsheet is always out of date.', 'Open the budget workbook in Excel, update the actuals sheet from this month’s bank export and highlight every line more than 10% over plan.', 'app', 'Monthly'],
+    ],
+  },
+  {
+    key: 'sales',
+    name: 'Sales',
+    icon: 'handshake',
+    items: [
+      ['My CRM is always a week behind.', 'After each call in my calendar, update the deal in HubSpot with notes, next step and close date, and draft the follow-up in Gmail.', 'browser', 'After every call'],
+      ['Researching leads takes longer than talking to them.', 'For each company in this sheet, find website, headcount, recent news and the right contact on LinkedIn. Fill in the columns.', 'browser', 'Once'],
+      ['Deals go quiet and I notice too late.', 'Every evening, list prospects who haven’t replied in 3 days and send me a one-line nudge suggestion for each on Telegram.', 'chat', 'Daily'],
+      ['Proposals take a whole afternoon.', 'Build a proposal for {company} in our Google Docs template from my last call notes and the pricing sheet. Leave it as a draft.', 'browser', 'Once'],
+      ['I want to know who visited our pricing page.', 'Every morning, check which target accounts visited our pricing page yesterday in our analytics and add them to the “warm” list in the CRM.', 'browser', 'Daily'],
+      ['Trade-show leads rot in a spreadsheet.', 'Import the 140 leads from this booth scan export into our CRM, dedupe against existing contacts and draft a personal follow-up for the top 20.', 'browser', 'Once'],
+    ],
+  },
+  {
+    key: 'marketing',
+    name: 'Marketing',
+    icon: 'megaphone',
+    items: [
+      ['Ad reporting is four dashboards and a copy-paste job.', 'Pull spend, clicks and conversions from Meta, Google and X Ads into our reporting sheet and flag every campaign with a CPA above $80.', 'browser', 'Fridays'],
+      ['Competitors change prices and I hear about it from customers.', 'Watch the pricing pages of these three competitors. When anything changes, send me a screenshot and a two-line summary.', 'browser', 'When it changes'],
+      ['One blog post should be ten posts.', 'Turn today’s blog post into a LinkedIn post, an X thread and a newsletter blurb in our voice. Save them as drafts for my review.', 'browser', 'When a post goes live'],
+      ['Our search traffic dropped and nobody knows why.', 'Check Search Console for pages that lost more than 20% clicks week over week and suggest one concrete fix for each.', 'browser', 'Weekly'],
+      ['Reviews go unanswered for weeks.', 'Reply to new Google reviews in our voice. Send me anything under 3 stars before you answer it.', 'browser', 'Daily'],
+      ['Design tweaks wait for the designer.', 'Open our banner file in Figma, make the five size variants in this list with the new headline and export them as PNG to the shared folder.', 'app', 'Once'],
+    ],
+  },
+  {
+    key: 'ecommerce',
+    name: 'E-commerce',
+    icon: 'shopping-bag',
+    items: [
+      ['Where is my order? Fifty times a day.', 'Answer new “where is my order” tickets with the live tracking link from Shopify and our shipping policy. Escalate anything older than 10 days to me.', 'browser', 'When a ticket arrives'],
+      ['We run out of best-sellers.', 'Every morning, check Shopify stock against the last 30 days of sales and draft purchase orders for anything with less than two weeks left.', 'browser', 'Daily'],
+      ['Product pages are thin and inconsistent.', 'Rewrite the descriptions of these 25 products in our tone, add size and material details from the supplier PDFs and save them as drafts.', 'browser', 'Once'],
+      ['Marketplace listings drift out of sync.', 'Compare prices and stock between our Shopify store and our Amazon listings and fix every mismatch in Seller Central. Show me the list first.', 'browser', 'Daily'],
+      ['Returns are a manual mess.', 'Process today’s return requests: check the order, create the return label in our shipping tool, email it to the customer and log it in the returns sheet.', 'browser', 'Daily'],
+      ['Supplier orders still go by email.', 'For every new order with dropship items, place the order in the supplier’s portal and paste the tracking number back into Shopify when it arrives.', 'browser', 'When an order comes in'],
+    ],
+  },
+  {
+    key: 'support',
+    name: 'Support',
+    icon: 'life-buoy',
+    items: [
+      ['The same five questions fill the support queue.', 'Answer new Zendesk tickets that our help center already covers, link the article, and leave the rest assigned to me.', 'browser', 'When a ticket arrives'],
+      ['Bug reports from customers are vague.', 'For each new bug ticket, reproduce it on staging in a clean browser, attach screenshots and steps, and file it in Linear.', 'vm', 'When a ticket arrives'],
+      ['Refunds need three tools.', 'For refund requests under $50, check the order in Shopify, refund it in Stripe and reply to the customer. Ask me for anything bigger.', 'browser', 'When a ticket arrives'],
+      ['Our help center is outdated.', 'Read last month’s tickets, find the 10 most common questions without a good article, and draft those articles in our help center as unpublished.', 'browser', 'Monthly'],
+      ['Nobody reads the weekly support numbers.', 'Every Monday, post five lines to #support: volume, first response time, top three topics and one thing we should fix.', 'chat', 'Weekly'],
+      ['Phone notes never reach the ticket.', 'Take the call notes I paste in Slack, find the customer’s ticket and add them as an internal note with the next step.', 'chat', 'When I paste notes'],
+    ],
+  },
+  {
+    key: 'engineering',
+    name: 'Engineering',
+    icon: 'code-xml',
+    items: [
+      ['A bug that only happens in Safari.', 'In your Mac VM, clone the repo, reproduce the checkout bug from issue #42 in Safari, fix it, run the tests and open a pull request.', 'vm', 'Once'],
+      ['Nobody tests signup before a release.', 'Every night, go through signup, checkout and cancellation on staging in a fresh browser and post anything broken with screenshots to #eng.', 'browser', 'Nightly'],
+      ['Dependency updates pile up.', 'In your VM, update our dependencies one by one, run the test suite after each, and open one pull request with everything that passes.', 'vm', 'Weekly'],
+      ['Setting up a new Mac takes a day.', 'Install our dev setup in your VM from the onboarding doc, note every step that’s wrong or missing, and send me a fixed version of the doc.', 'vm', 'Once'],
+      ['Vendor dashboards have no API.', 'Every morning, open the hosting dashboard, the error tracker and the uptime tool and send me one message with anything red.', 'browser', 'Daily'],
+      ['App Store screenshots for every device size.', 'Run the app in the simulators in your VM, take the screenshots from our list for each device size and put them in the shared folder.', 'vm', 'Each release'],
+    ],
+  },
+  {
+    key: 'research',
+    name: 'Research',
+    icon: 'search',
+    items: [
+      ['I need a market overview by Friday.', 'Find every company selling AI bookkeeping to small businesses in Germany. For each: website, pricing, funding and one sentence on the angle. Put it in a sheet.', 'browser', 'Once'],
+      ['Which tool should we buy?', 'Compare these four project-management tools for a 12-person agency: price, Gantt, client access, time tracking. Sign up for trials if you need to and give me a recommendation.', 'browser', 'Once'],
+      ['Tenders slip past us.', 'Every morning, search the public tender portals for Shopify and e-commerce projects in DACH and send me new ones with deadline and budget.', 'browser', 'Daily'],
+      ['Long PDFs I’ll never read.', 'Read the 80-page contract in my Downloads folder and list every clause about termination, liability and auto-renewal with page numbers.', 'app', 'Once'],
+      ['I want a price alert, not a tab I refresh.', 'Watch the price of this flight and this monitor. Tell me when either drops by more than 10%.', 'browser', 'When it changes'],
+      ['Hiring takes forever to start.', 'Find 30 senior Shopify developers in Europe who are open to work, with links and why each fits, and put them in our hiring sheet.', 'browser', 'Once'],
+    ],
+  },
+  {
+    key: 'it',
+    name: 'IT & ops',
+    icon: 'server',
+    items: [
+      ['Onboarding a new hire touches ten tools.', 'Create accounts for our new hire Lisa in Google Workspace, Slack, Notion and GitHub, add her to the right groups and send me the checklist when done.', 'browser', 'When someone joins'],
+      ['Offboarding is where security leaks.', 'Remove Max from every tool on our offboarding list, transfer his files to me and confirm each step in #ops.', 'browser', 'When someone leaves'],
+      ['The office runs out of coffee. Again.', 'When someone writes “we’re out of …” in #office, reorder it from our Amazon Business account and confirm in the thread.', 'chat', 'When someone asks'],
+      ['Legacy desktop software with no API.', 'Open our old ERP client, export yesterday’s orders as CSV and upload the file to the shared drive.', 'app', 'Daily'],
+      ['Backups that nobody checks.', 'Every Sunday, check that last night’s backups exist in each storage console and that the newest file is under 24 hours old. Tell me only if one isn’t.', 'browser', 'Weekly'],
+      ['Server alerts at 3 a.m.', 'When the uptime monitor reports downtime, check the status page and the server logs and tell me on Telegram what you found before I wake up.', 'chat', 'When it’s down'],
+    ],
+  },
+  {
+    key: 'personal',
+    name: 'Personal',
+    icon: 'heart',
+    items: [
+      ['My mornings start with 20 apps.', 'Every morning at 06:30, read my inbox, calendar and yesterday’s revenue and send me a five-line briefing on Telegram.', 'chat', 'Daily'],
+      ['Booking travel is a maze.', 'Find the best flight to Lisbon next month that fits my calendar and a hotel near the venue under €180. Ask before you pay anything.', 'browser', 'Once'],
+      ['The appointment I need has no free slot.', 'Check the citizen office booking page for a free appointment in the next four weeks and book the first one that fits my calendar.', 'browser', 'When a slot opens'],
+      ['Cancelling a subscription is designed to be painful.', 'Cancel my streaming subscription that I haven’t used since June. Take screenshots of the confirmation.', 'browser', 'Once'],
+      ['Family photos everywhere.', 'Find all photos from our trip to Italy on my Mac, put them in one album in Photos and share it with my partner.', 'app', 'Once'],
+      ['Bills and contracts I never compare.', 'Compare our electricity and internet contracts with current offers and tell me how much we’d save by switching. Don’t switch anything.', 'browser', 'Yearly'],
+    ],
+  },
+];
+
+const total = groups.reduce((n, g) => n + g.items.length, 0);
+---
+
+<Base
+  title={`${total} AI agent use cases: problems you solve with one message`}
+  description={`${total} real problems Godmode solves from a single chat message: inbox, invoices, CRM, ads, Shopify, support, QA, research and personal errands. Claude computer use on your own computer, already signed in.`}
+>
+  <Nav home={false} />
+  <main class="pt-36 pb-16" data-track-view="use_case_library">
+    <div class="container-x">
+      <div class="max-w-[860px]">
+        <p class="eyebrow" data-reveal><span class="n">●</span> Use cases</p>
+        <Words as="h1" text={`${total} problems you solve *with one message.*`} class="h-section mt-6" />
+        <p class="lead mt-6 max-w-[640px]" data-reveal style="--d:200">
+          Type the problem the way you’d tell a coworker. Godmode works out the clicks, signs in with your saved logins,
+          and does the work with {SITE.model} in your browser, your apps, or its own Mac. Every example below is a
+          real message you can paste.
+        </p>
+      </div>
+
+      <div class="mt-10 flex flex-wrap gap-2" data-reveal style="--d:300">
+        {(Object.keys(howLabel) as How[]).map((h) => (
+          <span class="chip"><Icon name={howLabel[h][0]} size={11} /> {howLabel[h][1]}</span>
+        ))}
+      </div>
+
+      <div class="uc-filter sticky top-[68px] z-30 -mx-4 mt-10 px-4 py-3 sm:mx-0 sm:px-0" data-uc-filter>
+        <div role="toolbar" aria-label="Filter use cases" class="tablist flex gap-1.5 overflow-x-auto">
+          <button type="button" class="tab" aria-pressed="true" data-uc="all">All <span class="text-dim">{total}</span></button>
+          {groups.map((g) => (
+            <button type="button" class="tab" aria-pressed="false" data-uc={g.key}>
+              <Icon name={g.icon} size={14} /> {g.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {
+        groups.map((g) => (
+          <section class="mt-14 scroll-mt-40" id={g.key} data-uc-group={g.key}>
+            <h2 class="flex items-center gap-3 text-[22px] font-semibold tracking-[-0.03em]">
+              <span class="grid size-9 place-items-center rounded-lg bg-brand-soft text-brand">
+                <Icon name={g.icon} size={17} />
+              </span>
+              {g.name}
+            </h2>
+            <div class="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {g.items.map(([problem, message, how, when]) => (
+                <article class="card flex flex-col p-6">
+                  <p class="text-[16.5px] leading-snug font-medium tracking-[-0.015em]">{problem}</p>
+                  <p class="mt-4 flex-1 rounded-xl bg-[rgb(0_0_0/0.28)] p-4 text-[14px] leading-relaxed text-text-2 ring-1 ring-line">
+                    {message}
+                  </p>
+                  <div class="mt-4 flex flex-wrap items-center gap-1.5">
+                    <span class="chip chip-brand"><Icon name={howLabel[how][0]} size={11} /> {howLabel[how][1]}</span>
+                    <span class="chip"><Icon name="repeat" size={11} /> {when}</span>
+                    <button type="button" class="btn btn-ghost btn-sm ml-auto !h-8 !px-3" data-copy={message} data-track={`uc_copy_${g.key}`}>
+                      <Icon name="copy" size={13} /> <span data-copy-label>Copy</span>
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ))
+      }
+
+      <div class="mt-24 grid gap-3 md:grid-cols-2">
+        <a href="/vs/grok-bot" class="card group flex items-center justify-between gap-6 p-7 sm:p-9" data-track="uc_to_grok">
+          <div>
+            <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Coming from Grok Bot?</p>
+            <p class="h-card mt-3 text-[22px]">See how Godmode compares</p>
+            <p class="mt-2 text-[15px] text-muted">Your own computer, your sessions, 2FA filled for you.</p>
+          </div>
+          <Icon name="arrow-up-right" size={22} class="flex-none text-dim transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand" />
+        </a>
+        <a href="/playbook" class="card group flex items-center justify-between gap-6 p-7 sm:p-9" data-track="uc_to_playbook">
+          <div>
+            <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Want it on autopilot?</p>
+            <p class="h-card mt-3 text-[22px]">25 ready-made automations</p>
+            <p class="mt-2 text-[15px] text-muted">Prompts with schedules and triggers, ready to paste.</p>
+          </div>
+          <Icon name="arrow-up-right" size={22} class="flex-none text-dim transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand" />
+        </a>
+      </div>
+
+      <div class="card mt-3 p-8 text-center sm:p-12" data-reveal>
+        <h2 class="text-[clamp(26px,3.4vw,40px)] font-semibold tracking-[-0.04em]">Which one is first for you?</h2>
+        <p class="mx-auto mt-3 max-w-[520px] text-muted">
+          {PRICING.trialDays} days free, then ${PRICING.plans.monthly.price}/month or ${PRICING.plans.yearly.perMonth}/month billed yearly. Cancel anytime.
+        </p>
+        <div class="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+          <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="use_cases" size="lg" />
+          <CheckoutButton plan="yearly" label={`Or yearly — $${PRICING.plans.yearly.perMonth}/mo, save ${yearlySavings}%`} source="use_cases" variant="ghost" size="lg" />
+        </div>
+      </div>
+    </div>
+  </main>
+  <Footer />
+</Base>
+
+<style>
+  .uc-filter {
+    background: linear-gradient(180deg, var(--bg) 70%, transparent);
+  }
+  .uc-filter .tab[aria-pressed="true"] {
+    color: var(--text);
+    background: var(--surface-2);
+    box-shadow: 0 0 0 1px var(--line-2) inset;
+  }
+</style>
+
+<script>
+  const root = document.querySelector<HTMLElement>('[data-uc-filter]');
+  const buttons = [...(root?.querySelectorAll<HTMLButtonElement>('[data-uc]') ?? [])];
+  const groups = [...document.querySelectorAll<HTMLElement>('[data-uc-group]')];
+  const show = (key: string) => {
+    buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.uc === key)));
+    groups.forEach((g) => (g.hidden = key !== 'all' && g.dataset.ucGroup !== key));
+  };
+  buttons.forEach((b) =>
+    b.addEventListener('click', () => {
+      const key = b.dataset.uc ?? 'all';
+      show(key);
+      history.replaceState(null, '', key === 'all' ? location.pathname : `#${key}`);
+      root?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }),
+  );
+  const initial = location.hash.slice(1);
+  if (groups.some((g) => g.dataset.ucGroup === initial)) show(initial);
+</script>
