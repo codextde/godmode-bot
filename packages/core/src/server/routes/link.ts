@@ -6,10 +6,13 @@ import { logger } from "../../log";
 import { fixCheck, runnerHealth } from "../../remote/health";
 import { forgetController, runnerInfo } from "../../remote/linkServer";
 import { readMemoryState, writeMemoryState } from "../../remote/memorySync";
+import { MAX_UPDATE_BYTES, applyUpdate, downloadUpdate, receiveChunk } from "../../remote/selfUpdate";
 import { applySnapshot, type ConfigSnapshot } from "../../remote/snapshot";
 import { audit } from "../../services/audit";
+import { installUpdates } from "../../services/maintenance";
+import { checkUpdates } from "../../services/updates";
 import { runCommand, toolPath } from "../../services/doctor";
-import { childEnv, notFound } from "../../util";
+import { badRequest, childEnv, notFound } from "../../util";
 import { body, z } from "../validate";
 
 const log = logger("link");
@@ -81,6 +84,30 @@ export function registerLinkRoutes(app: Hono): void {
     });
     return c.json(res);
   });
+
+  // A new Godmode from the controller, in pieces (remote/selfUpdate.ts), then installed once nothing works.
+  app.put("/api/link/update/chunk", async (c) => {
+    const offset = Number(c.req.query("offset"));
+    const total = Number(c.req.query("total"));
+    if (!Number.isInteger(offset) || offset < 0 || offset > MAX_UPDATE_BYTES) throw badRequest("offset");
+    return c.json(receiveChunk(offset, total, new Uint8Array(await c.req.arrayBuffer())));
+  });
+
+  const target = z.object({ version: z.string().min(1).max(64), build: z.string().max(128) });
+
+  app.post("/api/link/update/apply", async (c) => {
+    const input = await body(c, z.object({ sha256: z.string().regex(/^[0-9a-fA-F]{64}$/), size: z.number().int().positive().max(MAX_UPDATE_BYTES), target }));
+    return c.json(await applyUpdate(input));
+  });
+
+  app.post("/api/link/update/download", async (c) => {
+    const input = await body(c, z.object({ key: z.string().min(1).max(200), target, site: z.string().url().max(200).optional() }));
+    return c.json(await downloadUpdate(input));
+  });
+
+  app.get("/api/link/updates", async (c) => c.json(await checkUpdates(c.req.query("refresh") === "1")));
+
+  app.post("/api/link/updates/install", async (c) => c.json(await installUpdates()));
 
   app.post("/api/link/forget", (c) => {
     const controllerId = viaLink(c);

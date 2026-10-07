@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { upsertRunner } from "@/lib/realtime";
 
-type RunnerAction = "connect" | "sync" | "health" | "autofix" | "update" | "remove";
+type RunnerAction = "connect" | "sync" | "health" | "autofix" | "update" | "upgrade" | "remove";
 
 /**
  * Reconnect, copy the setup, check health, fix with Claude, change and remove runners — with toasts, and the answer
@@ -83,16 +83,38 @@ export function useRunnerActions() {
     onSettled: (_res, _e, { runner }) => mark("autofix", runner.id, false),
   });
 
+  /** Its Godmode to this computer's, its tools to their newest. The card follows the progress (runner.updated). */
+  const upgrade = useMutation({
+    mutationFn: (runner: RemoteRunner) => api.runners.upgrade(runner.id),
+    onMutate: (runner) => mark("upgrade", runner.id, true),
+    onSuccess: (next) => {
+      void upsertRunner(qc, next);
+      const u = next.update;
+      if (u.state === "failed") toast.error(`Couldn't update ${next.name}`, { description: u.detail ?? undefined });
+      else if (u.state === "waiting") toast.success(`${next.name} installs the update next`, { description: u.detail ?? undefined });
+      else if (u.state === "current" && !u.tools.length) toast.success(`${next.name} is up to date`, { description: `Godmode ${u.target.version} and all of its tools.` });
+    },
+    onError: (e, runner) => toastApiError(e, `Couldn't update ${runner.name}`, qc),
+    onSettled: (_res, _e, runner) => mark("upgrade", runner.id, false),
+  });
+
   const update = useMutation({
     mutationFn: ({ runner, patch }: { runner: RemoteRunner; patch: RunnerPatch }) => api.runners.update(runner.id, patch),
     onMutate: ({ runner, patch }) => {
       mark("update", runner.id, true);
       // The switch in the menu answers at once.
       if (patch.syncBrowser !== undefined) void upsertRunner(qc, { ...runner, syncBrowser: patch.syncBrowser });
+      if (patch.autoUpdate !== undefined) void upsertRunner(qc, { ...runner, update: { ...runner.update, autoUpdate: patch.autoUpdate } });
     },
     onSuccess: (next, { patch }) => {
       void upsertRunner(qc, next);
       if (patch.name !== undefined) toast.success(`Renamed to ${next.name}`);
+      else if (patch.autoUpdate !== undefined)
+        toast.success(next.update.autoUpdate ? "Updates install by themselves" : "Updates wait for you", {
+          description: next.update.autoUpdate
+            ? `${next.name} gets this computer's Godmode whenever it runs another one, once its chats are done.`
+            : `${next.name} keeps its Godmode until you click Update.`,
+        });
       else if (patch.syncBrowser !== undefined)
         toast.success(next.syncBrowser ? "Browser sessions are copied along" : "Browser sessions stay on this computer", {
           description: next.syncBrowser
@@ -121,7 +143,7 @@ export function useRunnerActions() {
     onSettled: (_res, _e, runner) => mark("remove", runner.id, false),
   });
 
-  return { connect, sync, checkHealth, autofix, update, remove, isBusy };
+  return { connect, sync, checkHealth, autofix, upgrade, update, remove, isBusy };
 }
 
 export type RunnerActions = ReturnType<typeof useRunnerActions>;

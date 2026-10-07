@@ -114,6 +114,7 @@ import type {
   RunnerHealth,
   RunnerPairingOffer,
   RunnerPatch,
+  RunnerUpdateInput,
   SendMessageInput,
   SendMessageOutcome,
   SendMessageResult,
@@ -680,6 +681,8 @@ export const api = {
     /** `refresh` runs the checks on the runner again instead of answering from its last result. */
     health: (id: string, refresh = false) => get<RunnerHealth>(`/api/runners/${id}/health`, { refresh: refresh ? 1 : undefined }),
     fix: (id: string, checkId: string) => post<RunnerFixResult>(`/api/runners/${id}/health/fix`, { id: checkId }),
+    /** Its Godmode to this computer's and its tools to their newest; the progress follows as `runner.updated`. */
+    upgrade: (id: string, input: RunnerUpdateInput = {}) => post<RemoteRunner>(`/api/runners/${id}/update`, input),
     /** Starts a chat here whose agent diagnoses and repairs the runner. */
     autofix: (id: string, input: RunnerAutofixInput = {}) => post<StartChatResult>(`/api/runners/${id}/autofix`, input),
     /** Any API call answered by the runner instead of this computer: `path` is the route without `/api`, e.g. "/computer/sources". */

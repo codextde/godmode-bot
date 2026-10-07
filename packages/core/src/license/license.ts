@@ -162,6 +162,11 @@ function staleSince(v: Verdict, now: number): number | null {
   return Math.max(checked + LICENSE_STALE_MS, end);
 }
 
+/** The stored key, for what needs it besides the licence check (a runner downloading Godmode from the site). */
+export function licenseKey(): string | null {
+  return getMeta(META.key);
+}
+
 export function licenseState(): LicenseState {
   const now = clock();
   const key = getMeta(META.key);

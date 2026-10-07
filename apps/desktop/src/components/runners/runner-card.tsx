@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Cookie, Ellipsis, HeartPulse, KeyRound, Monitor, MonitorSmartphone, Network, Pencil, RefreshCw, Sparkles, Trash2, TriangleAlert } from "lucide-react";
+import { CircleArrowUp, CircleCheck, Cookie, Ellipsis, HeartPulse, KeyRound, Monitor, MonitorSmartphone, Network, Pencil, RefreshCw, Sparkles, Trash2, TriangleAlert } from "lucide-react";
 import type { RemoteRunner } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,7 @@ import {
   runnerVerdict,
   runnerWorkLine,
 } from "./runner-parts";
+import { RunnerUpdateStrip, hasUpdateNews, shortBuild } from "./runner-update";
 import type { RunnerActions } from "./use-runner-actions";
 
 const FOOTER_BUTTON = "h-7 gap-1.5 px-2 text-[12.5px] font-normal text-muted-foreground hover:text-foreground [&_svg]:size-3.5";
@@ -112,7 +113,15 @@ export function RunnerCard({
                 <span aria-hidden className="opacity-40">
                   ·
                 </span>
-                <span>Godmode {runner.version}</span>
+                <span title={runner.build ?? undefined}>
+                  Godmode {runner.version}
+                  {shortBuild(runner.build) && <span className="font-mono text-[11px] opacity-75"> {shortBuild(runner.build)}</span>}
+                </span>
+                {online && runner.update.state === "current" && !runner.update.tools.length && (
+                  <span className="inline-flex items-center gap-1 text-success">
+                    <CircleCheck className="size-3" aria-hidden /> Up to date
+                  </span>
+                )}
               </>
             )}
           </p>
@@ -177,6 +186,8 @@ export function RunnerCard({
           )}
         </div>
       )}
+
+      {hasUpdateNews(runner.update) && <RunnerUpdateStrip runner={runner} actions={actions} className="mx-4 mb-4" />}
 
       <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-3">
         <div className="min-w-0 flex-1 basis-48">
@@ -310,6 +321,25 @@ function RunnerMenu({ runner, actions, onRename, onAddresses, onRemove }: { runn
             <span className="block text-[11px] leading-snug text-muted-foreground">Chats start there signed in to the same sites as here.</span>
           </span>
           <Switch size="sm" checked={runner.syncBrowser} tabIndex={-1} aria-hidden className="pointer-events-none mt-0.5" />
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          role="menuitemcheckbox"
+          aria-checked={runner.update.autoUpdate}
+          className="items-start"
+          onSelect={(e) => {
+            e.preventDefault();
+            actions.update.mutate({ runner, patch: { autoUpdate: !runner.update.autoUpdate } });
+          }}
+        >
+          <CircleArrowUp className="mt-0.5" />
+          <span className="min-w-0 flex-1">
+            <span className="block">Update automatically</span>
+            <span className="block text-[11px] leading-snug text-muted-foreground">Gets this computer's Godmode once its chats are done.</span>
+          </span>
+          <Switch size="sm" checked={runner.update.autoUpdate} tabIndex={-1} aria-hidden className="pointer-events-none mt-0.5" />
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={runner.state !== "online" || actions.isBusy("upgrade", runner.id)} onClick={() => actions.upgrade.mutate(runner)}>
+          <RefreshCw /> {runner.update.state === "available" || runner.update.tools.length ? "Update now" : "Check for updates"}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={onRemove}>

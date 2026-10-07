@@ -1474,6 +1474,21 @@ A **runner** is a headless Godmode core on another computer (macOS for now) that
   `godmode runner status` asks the serving runner (`/api/runner/health` on loopback) for its own view. **Fix with
   Claude** starts a chat on this computer with `conversations.runner_tools_id`: its agent gets `runner_health`,
   `runner_fix` and `runner_exec` (a login shell on the runner, in its data dir) and the health report and log tail.
+* **Updates** (`runnerUpdates.ts` on the controller, `selfUpdate.ts` on the runner). A runner gets the Godmode this
+  computer runs: the same program when both are the same platform and architecture (compared by SHA-256, `RunnerInfo.digest`;
+  sent over the link in 4 MiB pieces, `PUT /api/link/update/chunk`), else the release of the same version from
+  usegodmode.com with this computer's licence key (`/api/link/update/download`, compared by version). Never an older
+  one. The runner stages it next to its executable (`.godmode-update`), checks size and SHA-256, starts it once with
+  `version`, waits until no run works, renames it over the executable and restarts: under launchd it exits with 75 so
+  KeepAlive starts the new program, otherwise a shell waits for the old process and starts the new one with the same
+  arguments. Meta `update.pending` lets the restarted runner report a build that didn't take. Runners from before the
+  updater (no `build` in RunnerInfo) fetch this computer's program once from a short-lived token URL through
+  `/api/link/exec` (the bridge, macOS service only). Each runner has `auto_update` (default on): it is updated when it
+  connects, every 15 minutes while connected and when the switch goes on; a failed automatic attempt isn't repeated for
+  the same build for 6 hours. `POST /api/runners/:id/update` (the Update button) does the same at once and then installs
+  the runner's tool updates (`/api/link/updates`, `/api/link/updates/install`; runners also keep their tools current
+  through their own background upkeep). What it can't do from here (a runner from source, another link protocol, no
+  licence key) comes back as `unsupported` with a command to run there.
 * **Removing a runner** tells it to forget this computer, fails its working runs and turns its chats into chats of this
   computer. Backups carry no runners, controllers or `link.*` meta, and restored chats lose their runner.
 
