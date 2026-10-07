@@ -19,7 +19,7 @@ import { AgentAvatar, colorGradient } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { followupWhen } from "@/components/chat/followup";
 import { api } from "@/lib/api";
-import { useAllAgents, useConversations, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useScopeWorkspace, useScopedConversations, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
@@ -29,10 +29,13 @@ const ROW_ACTION =
   "top-1/2! size-6 -translate-y-1/2 text-muted-foreground after:inset-x-0 hover:bg-background hover:text-foreground hover:shadow-card [&>svg]:size-3.5";
 
 export function RecentChats() {
-  const { data: conversations = [] } = useConversations();
+  const scope = useUi((s) => s.workspace);
+  const scopeWorkspace = useScopeWorkspace();
+  const scopeName = scope === "all" ? null : scope === "global" ? "Global" : (scopeWorkspace?.name ?? null);
+  const { data: conversations = [] } = useScopedConversations();
   const { data: hasArchived = false } = useQuery({
-    queryKey: [...qk.conversationsAll, "has-archived"],
-    queryFn: async () => (await api.conversations.list({ archived: true, limit: 1 })).length > 0,
+    queryKey: [...qk.conversationsAll, "has-archived", scope],
+    queryFn: async () => (await api.conversations.list({ archived: true, limit: 1, workspaceId: scope })).length > 0,
   });
   const { data: agents = [] } = useAllAgents();
   const { data: workspaces = [] } = useWorkspaces();
@@ -65,7 +68,7 @@ export function RecentChats() {
     )
     .slice(0, 30);
 
-  if (visible.length === 0 && !hasArchived) return deleteDialog;
+  if (visible.length === 0 && !hasArchived && !scopeName) return deleteDialog;
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -73,7 +76,9 @@ export function RecentChats() {
       {visible.some((c) => c.unread) && (
         <button
           type="button"
-          onClick={() => void api.conversations.read("all").catch(() => undefined)}
+          onClick={() =>
+            void api.conversations.read(scope === "all" ? "all" : visible.flatMap((c) => (c.unread ? [c.id] : []))).catch(() => undefined)
+          }
           className="absolute top-3.5 right-3 text-[11px] text-muted-foreground transition hover:text-foreground"
         >
           Mark all read
@@ -82,11 +87,11 @@ export function RecentChats() {
       <RecentTabs value={recentTab} onChange={setRecentTab} counts={counts} needsYou={needsYou} />
       <SidebarGroupContent id="recent-chats-panel" role="tabpanel" aria-labelledby={`recent-tab-${recentTab}`}>
         <SidebarMenu>
-          {items.length === 0 && <EmptyTab tab={recentTab} />}
+          {items.length === 0 && <EmptyTab tab={recentTab} scopeName={scopeName} hasArchived={hasArchived} />}
           {items.map((c) => {
             const agent = agents.find((a) => a.id === c.agentId);
             const workspaceId = c.workspaceId ?? agent?.workspaceId;
-            const workspace = workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
+            const workspace = scope === "all" && workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
             const running = runningConversations.has(c.id) || (c.running && !queuedConversations.has(c.id));
             const queued = !running && queuedConversations.has(c.id);
             return (
@@ -350,8 +355,11 @@ const EMPTY: Record<RecentTab, { icon: typeof Zap; title: string; text: string }
   done: { icon: CircleCheck, title: "Nothing finished yet", text: "Finished chats land here." },
 };
 
-function EmptyTab({ tab }: { tab: RecentTab }) {
-  const { icon: Icon, title, text } = EMPTY[tab];
+function EmptyTab({ tab, scopeName, hasArchived }: { tab: RecentTab; scopeName: string | null; hasArchived: boolean }) {
+  const { icon: Icon, title, text } =
+    tab === "all" && scopeName
+      ? { ...EMPTY.all, title: `No chats in ${scopeName} yet`, text: hasArchived ? "Its archived chats are below." : "New chats you start here land in this list." }
+      : EMPTY[tab];
   return (
     <li className="flex flex-col items-center gap-1 rounded-lg border border-dashed px-4 py-5 text-center">
       <Icon className="mb-0.5 size-4 text-muted-foreground/70" aria-hidden />

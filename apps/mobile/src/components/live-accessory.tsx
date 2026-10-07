@@ -11,17 +11,17 @@ import { useLive } from "@/lib/live";
 import { qk } from "@/lib/query";
 import { reconnectNow } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
+import { useWorkspaceRuns } from "@/lib/workspace";
 import { space, useColors } from "@/lib/theme";
 
 /** Floats above the tab bar: what the agents are doing right now, or that the computer can't be reached. */
 export function LiveAccessory() {
   const placement = NativeTabs.BottomAccessory.usePlacement();
   const c = useColors();
-  const runs = useLive((s) => s.runs);
   const offline = useLive((s) => s.status === "offline");
   const computer = useSession((s) => s.connection?.instance.name ?? "your computer");
   const { data: agents } = useQuery({ queryKey: qk.agents, queryFn: api.agents.list });
-  const list = Object.values(runs).sort((a, b) => (a.run.createdAt < b.run.createdAt ? 1 : -1));
+  const list = useWorkspaceRuns();
   const first = list[0];
   const agent = first ? agents?.find((a) => a.id === first.run.agentId) : undefined;
   const inline = placement === "inline";

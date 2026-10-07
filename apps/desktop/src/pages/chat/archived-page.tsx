@@ -14,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useDebouncedValue } from "@/components/vault/use-debounced-value";
 import { errorMessage } from "@/lib/api";
 import { useAllAgents, useArchivedConversations } from "@/lib/hooks";
+import { useUi } from "@/stores/ui";
 
 const LIMIT = 200;
 
@@ -30,7 +31,8 @@ export default function ArchivedPage() {
   const [search, setSearch] = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
   const q = useDebouncedValue(search.trim());
-  const archived = useArchivedConversations(agentFilter === "all" ? undefined : agentFilter, q, { limit: LIMIT });
+  const scope = useUi((s) => s.workspace);
+  const archived = useArchivedConversations(agentFilter === "all" ? undefined : agentFilter, q, { limit: LIMIT, workspaceId: scope });
   const { data: agents = [] } = useAllAgents();
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const { setArchived } = useArchiveChat();
