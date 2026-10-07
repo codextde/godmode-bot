@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router";
 import { formatDistanceToNowStrict } from "date-fns";
-import { Copy, Cpu, Ellipsis, History, MessageSquare, Pause, Pencil, Play, Power, PowerOff, StepForward, Trash2, Workflow } from "lucide-react";
+import { Check, Copy, Cpu, Ellipsis, FolderInput, History, MessageSquare, Pause, Pencil, Play, Power, PowerOff, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { AgentAvatar, ScopeBadge } from "@/components/common";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -12,8 +12,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAllAgents, useWorkspaces } from "@/lib/hooks";
+import { GroupIcon } from "./agent-groups";
+import { planMove, useMoveAgent } from "./agent-dnd";
 import { cn } from "@/lib/utils";
 import { AgentStatus, useAgentLiveRun, useAgentMood, useAgentPause, useDuplicateAgent, useStartAgentChat, useToggleAgent } from "./agent-actions";
 
@@ -175,6 +181,7 @@ export function AgentMenu({
             <Copy /> Duplicate
           </DropdownMenuItem>
         )}
+        {!agent.isDefault && <MoveToMenu agent={agent} />}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => toggle.mutate({ id: agent.id, enabled: !agent.enabled })}>
           {agent.enabled ? <PowerOff /> : <Power />} {agent.enabled ? "Switch off" : "Switch on"}
@@ -186,5 +193,35 @@ export function AgentMenu({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** The menu's way to move an agent to another workspace, with its team (the same as dragging it there). */
+function MoveToMenu({ agent }: { agent: Agent }) {
+  const { data: workspaces = [] } = useWorkspaces();
+  const { data: all = [] } = useAllAgents();
+  const move = useMoveAgent();
+  const to = (workspaceId: string | null) => {
+    const plan = planMove(agent, { kind: "workspace", workspaceId }, all.length ? all : [agent], workspaces);
+    if (plan?.ok) move.mutate({ agent, plan });
+  };
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <FolderInput /> Move to
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="max-h-80 w-52 overflow-y-auto">
+        {[null, ...workspaces].map((w) => {
+          const here = agent.workspaceId === (w?.id ?? null);
+          return (
+            <DropdownMenuItem key={w?.id ?? "global"} disabled={here || move.isPending} onClick={() => to(w?.id ?? null)}>
+              <GroupIcon workspace={w} isGlobal={!w} className="size-4.5 rounded-[4px] text-[10px] [&_svg]:size-3" />
+              <span className="truncate">{w?.name ?? "Global"}</span>
+              {here && <Check className="ml-auto" />}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }

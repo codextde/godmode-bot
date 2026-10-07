@@ -126,8 +126,11 @@ import type {
   SshGeneratedKey,
   SshLocalKey,
   SshServer,
+  TeamInstallInput,
   TeamInstallResult,
   TeamTemplate,
+  AgentMoveInput,
+  AgentMoveResult,
   SshServerInput,
   SshServerPatch,
   SshTestInput,
@@ -468,8 +471,9 @@ export const api = {
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
     /** Whole teams to start with: a lead and its reports. */
     teams: () => get<TeamTemplate[]>("/api/team-templates"),
-    installTeam: (id: string, input: { workspaceId?: string | null; automations?: boolean; timezone?: string }) =>
-      post<TeamInstallResult>(`/api/team-templates/${id}/install`, input),
+    installTeam: (id: string, input: TeamInstallInput) => post<TeamInstallResult>(`/api/team-templates/${id}/install`, input),
+    /** Another workspace and/or another lead; its team moves along unless `withTeam` is false. */
+    move: (id: string, input: AgentMoveInput) => post<AgentMoveResult>(`/api/agents/${id}/move`, input),
     /** Start a fresh task conversation for the agent */
     run: (id: string, prompt?: string, workspaceId?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt, workspaceId }),
     files: (id: string, path = "") => get<AgentFileEntry[]>(`/api/agents/${id}/files`, { path }),

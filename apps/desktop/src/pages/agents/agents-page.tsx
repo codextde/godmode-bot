@@ -19,7 +19,8 @@ import { AgentCard } from "@/components/agents/agent-card";
 import { DeleteAgentDialog, RunTaskDialog } from "@/components/agents/agent-actions";
 import { OrgChart } from "@/components/agents/org-chart";
 import { AgentList } from "@/components/agents/agent-list";
-import { groupByWorkspace, WorkspaceSection } from "@/components/agents/agent-groups";
+import { groupByWorkspace } from "@/components/agents/agent-groups";
+import { AgentDnd, DraggableAgent, DroppableSection } from "@/components/agents/agent-dnd";
 import { TeamTemplates } from "@/components/agents/team-templates";
 
 type Filter = "all" | "running" | "needs" | "scheduled" | "disabled";
@@ -261,7 +262,9 @@ export default function AgentsPage() {
               </div>
             }
           />
-        ) : view === "chart" && chartAgents.length > 0 ? (
+        ) : (
+          <AgentDnd all={allAgents.length ? allAgents : agents} workspaces={workspaces}>
+        {view === "chart" && chartAgents.length > 0 ? (
           <>
             {matches && matches.size === 0 && (
               <p className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
@@ -296,9 +299,9 @@ export default function AgentsPage() {
               {groups.map((g) => {
                 const st = stats(g.agents);
                 return (
-                  <WorkspaceSection key={g.key} group={g} working={st.working} needsYou={st.needsYou} forceOpen={narrowed}>
+                  <DroppableSection key={g.key} group={g} working={st.working} needsYou={st.needsYou} forceOpen={narrowed} target={wsTarget(g.key)} dropId={`ws:${g.key}`}>
                     <AgentList agents={g.agents} all={allAgents.length ? allAgents : agents} routineCounts={routineCounts} onRunTask={setRunTaskFor} onDelete={setDeleteFor} />
-                  </WorkspaceSection>
+                  </DroppableSection>
                 );
               })}
             </div>
@@ -310,22 +313,34 @@ export default function AgentsPage() {
             {groups.map((g) => {
               const st = stats(g.agents);
               return (
-                <WorkspaceSection key={g.key} group={g} working={st.working} needsYou={st.needsYou} forceOpen={narrowed}>
+                <DroppableSection key={g.key} group={g} working={st.working} needsYou={st.needsYou} forceOpen={narrowed} target={wsTarget(g.key)} dropId={`ws:${g.key}`}>
                   <CardGrid agents={g.agents} routineCounts={routineCounts} grouped onRunTask={setRunTaskFor} onDelete={setDeleteFor} />
-                </WorkspaceSection>
+                </DroppableSection>
               );
             })}
           </div>
         ) : (
           <CardGrid agents={visible} routineCounts={routineCounts} onRunTask={setRunTaskFor} onDelete={setDeleteFor} />
         )}
+            {agents.some((a) => !a.isDefault) && (
+              <p className="mt-6 text-xs text-muted-foreground">
+                {view === "chart"
+                  ? "Drag an agent onto another to change who it reports to, or onto a workspace to move it with its team."
+                  : "Drag an agent onto a workspace to move it there with its team."}{" "}
+                <Link to="/agents/new?start=structures" className="font-medium text-foreground underline-offset-2 hover:underline">
+                  Add a team or a whole company
+                </Link>
+              </p>
+            )}
+          </AgentDnd>
+        )}
         {/* Just the built-in agent so far: offer a whole team to start with. */}
         {!agentsQ.isLoading && allAgents.length > 0 && allAgents.every((a) => a.isDefault) && (
           <section className="mt-10" aria-labelledby="start-team">
             <h2 id="start-team" className="text-lg font-medium tracking-[-0.02em]">
-              Start a team
+              Start a company
             </h2>
-            <p className="mb-4 text-sm text-muted-foreground">A lead and its reports in one go — the lead hands out the work, reviews it and tells you what needs you.</p>
+            <p className="mb-4 text-sm text-muted-foreground">A whole org chart in one go — every agent has its job, and every lead hands out the work, reviews it and tells you what needs you.</p>
             <TeamTemplates />
           </section>
         )}
@@ -336,6 +351,8 @@ export default function AgentsPage() {
     </>
   );
 }
+
+const wsTarget = (key: string) => ({ kind: "workspace" as const, workspaceId: key === "global" ? null : key });
 
 function CardGrid({
   agents,
@@ -355,7 +372,9 @@ function CardGrid({
     <motion.div layout className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3 @[96rem]:grid-cols-4">
       {agents.map((agent, i) => (
         <motion.div key={agent.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.035, duration: 0.25 }}>
-          <AgentCard agent={agent} routineCount={routineCounts.get(agent.id) ?? 0} showScope={!grouped} onRunTask={onRunTask} onDelete={onDelete} />
+          <DraggableAgent agent={agent}>
+            <AgentCard agent={agent} routineCount={routineCounts.get(agent.id) ?? 0} showScope={!grouped} onRunTask={onRunTask} onDelete={onDelete} />
+          </DraggableAgent>
         </motion.div>
       ))}
       {!grouped && (
