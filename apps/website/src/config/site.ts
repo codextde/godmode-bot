@@ -5,9 +5,9 @@ export const SITE = {
   name: 'Godmode',
   product: 'Godmode Bot',
   url: import.meta.env.SITE ?? 'https://usegodmode.com',
-  title: 'Godmode — the AI coworker that works like a human on your Mac',
+  title: 'Godmode — like Grok Bot, but with Claude',
   description:
-    'Godmode turns Claude Opus 5.5 into a coworker that uses your computer like you do: your browser and logins, apps in the background, even its own Mac. Hand over the work. Get it back done.',
+    'Godmode is like Grok Bot, but with Claude: Claude Opus 5.5 as a coworker that uses your own computer like you do. Your browser and logins, apps in the background, even its own Mac. Hand over the work. Get it back done.',
   email: 'kontakt@codext.de',
   model: 'Claude Opus 5.5',
 } as const;
