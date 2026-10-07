@@ -49,7 +49,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } from "@/components/chat/attachments";
 import { api } from "@/lib/api";
 import { modKey, openExternal } from "@/lib/desktop";
-import { draftKeys, saveDraft, useDraft } from "@/lib/drafts";
+import { clearDraft, draftKeys, saveDraft, useDraft } from "@/lib/drafts";
 import { useGoals, useQuestions, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { QuestionCard, viewOfQuestion } from "@/components/chat/question-card";
@@ -1096,7 +1096,9 @@ function EditableTitle({ value, onSave, ...rest }: { value: string; onSave: (v: 
   );
 }
 
-/** Click to edit; leaving the editor saves. Files pasted, dropped or picked are uploaded and linked in the Markdown. */
+const AUTOSAVE_DELAY = 700;
+
+/** Click to edit; the text saves as you type and when you leave. Files pasted, dropped or picked are uploaded and linked in the Markdown. */
 function EditableDescription({
   taskId,
   value: stored,
@@ -1114,7 +1116,10 @@ function EditableDescription({
   const [saved, setSaved] = useState<string | null>(null);
   if (saved !== null && stored.trim() === saved) setSaved(null);
   const value = saved ?? stored;
-  const [draft, setDraft, kept] = useDraft(editing ? draftKey : undefined, value);
+  /** The text when the edit began: the draft's base. Fixed while editing, so a save coming back never resets the text. */
+  const [start, setStart] = useState(stored);
+  const [draft, setDraft, kept] = useDraft(editing ? draftKey : undefined, start);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
   const editor = useRef<DescriptionEditorHandle>(null);
   /** The text's height when editing starts: the editor opens at least that tall, so nothing below jumps. */
   const [shownHeight, setShownHeight] = useState(0);
@@ -1122,6 +1127,73 @@ function EditableDescription({
   /** Save once the uploads are done (asked to while they ran). */
   const finishLater = useRef(false);
   const setText = useCallback((update: TextUpdate) => setDraft((d) => (typeof update === "function" ? update(d) : update)), [setDraft]);
+
+  /** The last text sent (null: the last save failed). One save at a time, the newest text waits for it. */
+  const sent = useRef<string | null>(stored.trim());
+  const inFlight = useRef(false);
+  const queued = useRef<string | null>(null);
+  const live = useRef({ editing, draft, stored, mounted: true });
+  Object.assign(live.current, { editing, draft, stored });
+
+  const push = (next: string) => {
+    if (next === sent.current) return;
+    if (inFlight.current) {
+      queued.current = next;
+      return;
+    }
+    sent.current = next;
+    inFlight.current = true;
+    setSaved(next);
+    setStatus("saving");
+    onSave(next)
+      .then(
+        () => {
+          if (queued.current === null) setStatus("saved");
+          if (!live.current.mounted && queued.current === null) clearDraft(draftKey);
+        },
+        () => {
+          sent.current = null;
+          setSaved(null);
+          setStatus("failed");
+          const { editing, stored } = live.current;
+          // Not saved: the text comes back as a draft in the editor instead of being lost.
+          if (!editing && queued.current === null) {
+            saveDraft(draftKey, next, stored);
+            setStart(stored);
+            setEditing(true);
+          }
+        },
+      )
+      .finally(() => {
+        inFlight.current = false;
+        const q = queued.current;
+        queued.current = null;
+        if (q !== null) push(q);
+      });
+  };
+  const pushRef = useRef(push);
+  pushRef.current = push;
+
+  useEffect(() => {
+    if (!editing || uploading) return;
+    const t = setTimeout(() => {
+      if (!editor.current?.uploading()) pushRef.current(withoutPlaceholders(live.current.draft));
+    }, AUTOSAVE_DELAY);
+    return () => clearTimeout(t);
+  }, [draft, editing, uploading]);
+
+  // Closed or switched to another task mid-edit: what's typed is saved, not left behind.
+  useEffect(() => {
+    const state = live.current;
+    state.mounted = true;
+    return () => {
+      state.mounted = false;
+      if (!state.editing) return;
+      const next = withoutPlaceholders(state.draft);
+      if (next === sent.current && !inFlight.current) clearDraft(draftKey);
+      else pushRef.current(next);
+    };
+  }, [draftKey]);
 
   const finish = () => {
     // Still uploading (or picking a file): the edit finishes when that's done.
@@ -1131,16 +1203,7 @@ function EditableDescription({
       return;
     }
     finishLater.current = false;
-    const next = withoutPlaceholders(draft);
-    if (next !== value.trim()) {
-      setSaved(next);
-      onSave(next).catch(() => {
-        // Not saved: the text comes back as a draft in the editor instead of being lost.
-        setSaved(null);
-        saveDraft(draftKey, next, stored);
-        setEditing(true);
-      });
-    }
+    push(withoutPlaceholders(draft));
     kept.discard();
     setEditing(false);
   };
@@ -1153,12 +1216,11 @@ function EditableDescription({
     onUploading(uploading);
     return () => onUploading(false);
   }, [uploading, onUploading]);
-  const cancel = () => {
-    kept.discard();
-    setEditing(false);
-  };
   const edit = (shown: HTMLElement) => {
     setShownHeight(shown.getBoundingClientRect().height);
+    setStart(value);
+    sent.current = value.trim();
+    setStatus("idle");
     setEditing(true);
   };
 
@@ -1221,10 +1283,7 @@ function EditableDescription({
       // keys that are. Not from the link popover either (a portal: its Esc closes just the popover).
       onKeyDown={(e) => {
         if (!e.currentTarget.contains(e.target as Node)) return;
-        if (e.key === "Escape" && !e.nativeEvent.isComposing) {
-          e.preventDefault();
-          cancel();
-        } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        if ((e.key === "Escape" && !e.nativeEvent.isComposing) || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
           e.preventDefault();
           finish();
         }
@@ -1247,17 +1306,43 @@ function EditableDescription({
       />
       {/* Clicks here keep the focus in the text (WebKit doesn't focus buttons), so they don't end the edit. */}
       <div className="flex items-center gap-2 border-t bg-paper-2/60 px-3 py-2 rounded-b-xl" onMouseDown={(e) => e.preventDefault()}>
-        <span className="truncate text-xs text-muted-foreground">{uploading ? "Uploading…" : "Paste or drop screenshots and files anywhere in the text"}</span>
-        <Button type="button" variant="ghost" size="sm" className="ml-auto h-7 px-2.5 text-xs" onClick={cancel}>
-          Cancel
-        </Button>
-        <Button type="button" size="sm" className="h-7 gap-1.5 px-3 text-xs" onClick={finish} disabled={uploading}>
-          {uploading ? <Spinner className="size-3" /> : null}
-          Save
-          {!uploading && <kbd className="font-sans text-[10px] opacity-60">{modKey}↵</kbd>}
+        <SaveStatus
+          status={uploading ? "uploading" : status === "failed" ? status : withoutPlaceholders(draft) !== sent.current ? "saving" : status}
+          onRetry={() => push(withoutPlaceholders(draft))}
+        />
+        <Button type="button" size="sm" variant="secondary" className="ml-auto h-7 gap-1.5 px-3 text-xs" onClick={finish} disabled={uploading}>
+          Done
+          <kbd className="font-sans text-[10px] opacity-60">{modKey}↵</kbd>
         </Button>
       </div>
     </div>
+  );
+}
+
+function SaveStatus({ status, onRetry }: { status: "idle" | "saving" | "saved" | "failed" | "uploading"; onRetry: () => void }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+      {status === "uploading" || status === "saving" ? (
+        <>
+          <Spinner className="size-3 shrink-0" />
+          <span className="truncate">{status === "uploading" ? "Uploading…" : "Saving…"}</span>
+        </>
+      ) : status === "saved" ? (
+        <>
+          <Check className="size-3.5 shrink-0 text-success" />
+          <span className="truncate">Saved</span>
+        </>
+      ) : status === "failed" ? (
+        <>
+          <span className="truncate text-destructive">Not saved</span>
+          <button type="button" onClick={onRetry} className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline">
+            Retry
+          </button>
+        </>
+      ) : (
+        <span className="truncate">Saves as you type · paste or drop screenshots and files</span>
+      )}
+    </span>
   );
 }
 
