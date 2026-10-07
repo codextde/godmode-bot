@@ -27,7 +27,7 @@ import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useConversations, useRunners, useScopeWorkspace, useWorkspaces, useAttention } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useInScope, useRunners, useScopedConversations, useScopeWorkspace, useWorkspaces, useAttention } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
@@ -334,9 +334,10 @@ function NeedsYou({ agents }: { agents: Agent[] }) {
 }
 
 function RunningNow({ agents }: { agents: Agent[] }) {
-  const runs = useLive((s) => s.runs);
-  const list = Object.values(runs).filter((r) => r.status === "running");
-  const queued = Object.values(runs).length - list.length;
+  const inScope = useInScope();
+  const runs = Object.values(useLive((s) => s.runs)).filter(inScope);
+  const list = runs.filter((r) => r.status === "running");
+  const queued = runs.length - list.length;
   if (list.length === 0) return null;
   return (
     <section aria-label="Working now">
@@ -381,7 +382,7 @@ function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index
 }
 
 function RecentChats({ agents }: { agents: Agent[] }) {
-  const { data: conversations = [], isLoading } = useConversations();
+  const { data: conversations = [], isLoading } = useScopedConversations();
   const liveRuns = useLive((s) => s.runs);
   const running = useMemo(() => new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.conversationId] : []))), [liveRuns]);
   const recent = useMemo(
