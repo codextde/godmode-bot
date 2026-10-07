@@ -1,7 +1,7 @@
 import { attribution, initConsent, track, xEvent } from './analytics';
 import { initDotField } from './dotfield';
 import { initCharacters } from './characters';
-import { isPlan, PRICING } from '@/config/site';
+import { FOUNDING, isPlan, PRICING } from '@/config/site';
 
 window.__gm = true;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -347,20 +347,35 @@ document.querySelectorAll<HTMLFormElement>('form[data-checkout]').forEach((form)
     xEvent('checkout', { value: PRICING.plans[plan].price, currency: PRICING.currency, contents: [{ content_id: plan }] });
   });
 });
-// Founding 100: seats left; on any failure the counters keep their static text.
+// Founding 100: time left until the deadline, or seats left once enough are taken; on failure the static text stays.
 const foundingSlots = document.querySelectorAll<HTMLElement>('[data-founding-slot]');
+
+function showFounding(text: string, filled: number) {
+  foundingSlots.forEach((slot) => {
+    const out = slot.querySelector<HTMLElement>('[data-founding-left]');
+    if (out) out.textContent = text;
+    slot.style.setProperty('--taken', `${Math.max(0, Math.min(100, filled * 100))}%`);
+  });
+}
+
+function showDeadline() {
+  const now = Date.now();
+  if (now >= FOUNDING.end) return showFounding('Founding offer closed', 1);
+  const days = Math.floor((FOUNDING.end - now) / 86_400_000);
+  const when = days < 1 ? 'Last day' : days === 1 ? '1 day left' : `${days} days left`;
+  showFounding(`${when} · closes ${FOUNDING.endLabel}`, (now - FOUNDING.start) / (FOUNDING.end - FOUNDING.start));
+}
+
 if (foundingSlots.length) {
+  showDeadline();
   fetch('/api/offer', { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
     .then((res: unknown) => {
       const data = (res ?? {}) as { seats?: unknown; left?: unknown; open?: unknown };
-      if (typeof data.left !== 'number' || typeof data.seats !== 'number') return;
-      const { left, seats } = data;
-      foundingSlots.forEach((slot) => {
-        const out = slot.querySelector<HTMLElement>('[data-founding-left]');
-        if (out) out.textContent = data.open ? `${left} of ${seats} left` : 'Founding seats are gone';
-        slot.style.setProperty('--taken', `${Math.min(100, ((seats - left) / seats) * 100)}%`);
-      });
+      if (data.open === false) return showFounding('Founding seats are gone', 1);
+      if (typeof data.left === 'number' && typeof data.seats === 'number') {
+        showFounding(`${data.left} of ${data.seats} seats left`, (data.seats - data.left) / data.seats);
+      }
     })
     .catch(() => {});
 }
