@@ -17,7 +17,7 @@ export function Favicon({
 }: {
   domain?: string | null;
   name: string;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   className?: string;
 }) {
   const [failed, setFailed] = useState(() => !!domain && missingIcons.has(domain));
@@ -27,7 +27,7 @@ export function Favicon({
   };
   const { data: settings } = useSettings();
   const iconsAllowed = settings?.security.fetchSiteIcons !== false;
-  const sizes = { sm: "size-6 rounded-md text-[11px]", md: "size-9 rounded-lg text-sm", lg: "size-12 rounded-xl text-lg" };
+  const sizes = { xs: "size-5 rounded-[5px] text-[10px]", sm: "size-6 rounded-md text-[11px]", md: "size-9 rounded-lg text-sm", lg: "size-12 rounded-xl text-lg" };
   const initial = (name || domain || "?").trim().charAt(0).toUpperCase() || "?";
   const hue = hueFor((domain || name || "?").toLowerCase());
   const showImg = !!domain && !failed && iconsAllowed && !isPrivateHost(domain);
