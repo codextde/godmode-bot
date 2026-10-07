@@ -13,7 +13,7 @@ import { hostname as osHostname, platform, arch } from "node:os";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import type { Hono } from "hono";
 import { LINK_PROTOCOL, RUNNER_DEFAULT_PORT, type ClientEvent, type RunnerInfo } from "@godmode/shared";
-import { VERSION } from "../config";
+import { BUILD, COMPILED, VERSION } from "../config";
 import { all, get, getMeta, insert, run as sql, setMeta } from "../db";
 import { logger } from "../log";
 import { computerName } from "../mobile/devices";
@@ -27,6 +27,7 @@ import { LinkError, SecureChannel, type LinkPeer, type Transport } from "./chann
 import { canonicalKey, controllerLookupId } from "./crypto";
 import { loadIdentity } from "./identity";
 import { consumePairing, lookupPairing } from "./pairing";
+import { knownExecutableDigest, selfUpdateStatus } from "./selfUpdate";
 import { appliedDigest } from "./snapshot";
 
 const log = logger("link");
@@ -126,6 +127,10 @@ export function runnerInfo(): RunnerInfo {
     platform: platform(),
     arch: arch(),
     version: VERSION,
+    build: BUILD,
+    compiled: COMPILED,
+    digest: knownExecutableDigest(),
+    update: selfUpdateStatus(),
     protocol: LINK_PROTOCOL,
     vault: { initialized: v.initialized, unlocked: v.unlocked },
     configDigest: appliedDigest(),

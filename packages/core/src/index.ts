@@ -56,6 +56,7 @@ import { getModelCatalog } from "./runner/models";
 import { refreshMobileAccess, startMobileAccess, stopMobileAccess } from "./mobile/access";
 import { answerHealth, HEALTH_PATH, runnerFile, runningRunner, runRunnerCli, servingRunner, USAGE as RUNNER_USAGE, type RunnerProcess } from "./remote/cli";
 import { startLinkServer, stopLinkServer } from "./remote/linkServer";
+import { RESTART_EXIT_CODE, executableDigest, setRestartHandler, settleUpdate } from "./remote/selfUpdate";
 import { startRunners, stopRunners } from "./remote/runners";
 import { bootstrapDependencies } from "./remote/health";
 import { startKeepAwake, stopKeepAwake } from "./remote/keepAwake";
@@ -248,6 +249,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   if (runner) {
     // The way in for the computers it works for: encrypted, on every interface, at the port they were paired with.
     if (typeof values["link-port"] === "number") setMeta("link.port", String(values["link-port"]));
+    settleUpdate();
+    void executableDigest()?.catch((err) => log.warn("could not hash this program", err));
     const linkPort = startLinkServer({ app, websocket: websocketHandler });
     // Tells `godmode runner install` and `status` that this runner is up; gone again when it stops.
     const info: RunnerProcess = {
@@ -293,7 +296,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   if (runner && process.env.GODMODE_RUNNER_BOOTSTRAP !== "0") void bootstrapDependencies();
 
   let stopping = false;
-  const shutdown = async (signal: string) => {
+  const shutdown = async (signal: string, exitCode = 0) => {
     if (stopping) return;
     stopping = true;
     log.info(`received ${signal}, shutting down`, resourceSnapshot());
@@ -331,8 +334,10 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     closeAllConnections();
     server.stop(true);
     closeDb();
-    process.exit(0);
+    process.exit(exitCode);
   };
+  // A runner that installed a new Godmode stops like this, and comes back as the new program (remote/selfUpdate.ts).
+  if (runner) setRestartHandler(() => void shutdown("update", RESTART_EXIT_CODE));
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
   // Desktop shell closes our stdin when it exits — treat as shutdown signal.

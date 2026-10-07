@@ -12,6 +12,7 @@ import {
   startAutofix,
   syncRunner,
   updateRunner,
+  updateRunnerNow,
 } from "../../remote/runners";
 import { body, z } from "../validate";
 
@@ -42,6 +43,7 @@ export function registerRunnerRoutes(app: Hono): void {
         addresses: z.array(z.string().max(253)).max(10).optional(),
         port: z.number().int().min(1).max(65535).optional(),
         syncBrowser: z.boolean().optional(),
+        autoUpdate: z.boolean().optional(),
       }),
     );
     return c.json(updateRunner(c.req.param("id"), patch));
@@ -58,6 +60,12 @@ export function registerRunnerRoutes(app: Hono): void {
     const id = c.req.param("id");
     await syncRunner(id, { force: true });
     return c.json(getRunner(id));
+  });
+
+  // Its Godmode to this computer's, its tools to their newest; the progress follows as runner.updated.
+  app.post("/api/runners/:id/update", async (c) => {
+    const input = await body(c, z.object({ tools: z.boolean().optional() }));
+    return c.json(await updateRunnerNow(c.req.param("id"), input));
   });
 
   app.get("/api/runners/:id/health", async (c) => c.json(await runnerHealth(c.req.param("id"), c.req.query("refresh") === "1")));

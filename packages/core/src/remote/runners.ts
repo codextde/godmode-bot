@@ -8,6 +8,7 @@
  *               chat's browser sessions are copied
  *  health       the runner's own checks, passed through, with a summary kept for the list
  *  autofix      a local chat whose agent may run commands on the runner to repair it
+ *  updates      the runner's Godmode brought to this computer's, its tools to their newest (runnerUpdates.ts)
  */
 import { createHash } from "node:crypto";
 import {
@@ -44,6 +45,7 @@ import { RemoteLink, type LinkState } from "./linkClient";
 import { mergeMemory, readMemoryState, writeMemoryState } from "./memorySync";
 import { adoptChat, applyRunnerEvent, catchUp, runnerDisconnected, setMirrorHooks } from "./mirror";
 import { cancelOffer, createOffer } from "./pairing";
+import { forgetRunnerUpdates, maybeAutoUpdate, prepareRunnerUpdates, resetRunnerUpdates, runnerConnected, runnerUpdate, setUpdateHost, updateRunnerSoftware } from "./runnerUpdates";
 import { buildSnapshot, snapshotDigest } from "./snapshot";
 import { requireLicense } from "../license/license";
 
@@ -54,6 +56,8 @@ const SETUP_ENTITIES = new Set(["workspaces", "agents", "credentials", "totp", "
 const SYNC_DEBOUNCE_MS = 5_000;
 const SYNC_TIMEOUT_MS = 5 * 60_000;
 const MAX_ADDRESSES = 10;
+/** Runners with auto-update are looked at this often besides their connects (one that had to wait for its chats). */
+const AUTO_UPDATE_EVERY_MS = 15 * 60_000;
 const ADDRESS = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?)(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?)*$|^[0-9a-fA-F:]{2,45}$/;
 
 interface RunnerRow {
@@ -67,6 +71,7 @@ interface RunnerRow {
   arch: string | null;
   version: string | null;
   sync_browser: number;
+  auto_update: number;
   last_address: string | null;
   last_seen_at: string | null;
   synced_at: string | null;
@@ -90,6 +95,7 @@ let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let forceNextSync = false;
 let offBus: (() => void) | null = null;
 let started = false;
+let autoUpdateTimer: ReturnType<typeof setInterval> | null = null;
 
 /* ------------------------------------------------------------------ */
 /* Registry                                                             */
@@ -137,6 +143,7 @@ function toRunner(r: RunnerRow): RemoteRunner {
     platform: r.platform,
     arch: r.arch,
     version: r.version,
+    build: infos.get(r.id)?.build ?? null,
     addresses: parseJson<string[]>(r.addresses, []),
     port: r.port,
     fingerprint: fingerprint(r.public_key),
@@ -155,6 +162,7 @@ function toRunner(r: RunnerRow): RemoteRunner {
     activeRuns: remoteRuns(r.id).filter((x) => x.status !== "paused").length,
     conversations: get<{ c: number }>("SELECT COUNT(*) AS c FROM conversations WHERE runner_id = ?", r.id)?.c ?? 0,
     syncBrowser: r.sync_browser === 1,
+    update: runnerUpdate(r, state.state),
   };
 }
 
@@ -202,11 +210,20 @@ export function updateRunner(id: string, patch: RunnerPatch): RemoteRunner {
     addresses: addresses ? JSON.stringify(addresses) : undefined,
     port: patch.port,
     sync_browser: patch.syncBrowser === undefined ? undefined : patch.syncBrowser ? 1 : 0,
+    auto_update: patch.autoUpdate === undefined ? undefined : patch.autoUpdate ? 1 : 0,
     updated_at: now(),
   });
   links.get(id)?.update({ ...(addresses ? { addresses } : {}), ...(patch.port ? { port: patch.port } : {}), ...(name ? { name } : {}) });
   audit("user", "runner.update", id, { name: name ?? r.name });
   emit(id);
+  if (patch.autoUpdate) void maybeAutoUpdate(id);
+  return getRunner(id);
+}
+
+/** Bring the runner's Godmode to this computer's and (with `tools`) its tools to their newest versions. */
+export async function updateRunnerNow(id: string, opts: { tools?: boolean } = {}): Promise<RemoteRunner> {
+  requireRow(id);
+  await updateRunnerSoftware(id, opts);
   return getRunner(id);
 }
 
@@ -223,6 +240,7 @@ export async function removeRunner(id: string): Promise<void> {
   infos.delete(id);
   healths.delete(id);
   subscriptions.delete(id);
+  forgetRunnerUpdates(id);
   runnerDisconnected(id);
   const ts = now();
   const chats = all<{ id: string }>("SELECT id FROM conversations WHERE runner_id = ?", id).map((c) => c.id);
@@ -377,6 +395,7 @@ async function connected(id: string, state: LinkState) {
   } catch (err) {
     log.warn(`could not check runner ${id}`, err instanceof Error ? err.message : err);
   }
+  await runnerConnected(id).catch((err) => log.warn(`could not look at the updates of runner ${id}`, err instanceof Error ? err.message : err));
 }
 
 let hubWired = false;
@@ -421,6 +440,28 @@ export function startRunners(): void {
   if (started) return;
   started = true;
   wireHub();
+  setUpdateHost({
+    row,
+    link: (id) => links.get(id) ?? null,
+    info: (id) => infos.get(id),
+    setInfo: (id, info) => {
+      infos.set(id, info);
+      emit(id);
+    },
+    activeRuns: (id) => remoteRuns(id).filter((x) => x.status !== "paused").length,
+    emit,
+  });
+  // Until this program's digest is known every runner looks current: tell the UI (and auto-update) once it is.
+  void prepareRunnerUpdates().then(() => {
+    for (const id of links.keys()) {
+      emit(id);
+      void maybeAutoUpdate(id);
+    }
+  });
+  autoUpdateTimer = setInterval(() => {
+    for (const id of links.keys()) void maybeAutoUpdate(id);
+  }, AUTO_UPDATE_EVERY_MS);
+  autoUpdateTimer.unref?.();
   for (const r of all<RunnerRow>("SELECT * FROM runners")) startLink(r);
   setMirrorHooks({
     runFinished: (runnerId, run) => {
@@ -437,6 +478,10 @@ export function stopRunners(): void {
   started = false;
   offBus?.();
   offBus = null;
+  if (autoUpdateTimer) clearInterval(autoUpdateTimer);
+  autoUpdateTimer = null;
+  resetRunnerUpdates();
+  setUpdateHost(null);
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = null;
   for (const l of links.values()) l.stop();
