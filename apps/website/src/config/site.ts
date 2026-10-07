@@ -53,6 +53,8 @@ export const PRICING = {
  */
 export const FOUNDING = {
   seats: 100,
+  // Below this many seats taken the page shows the deadline instead of the seat count.
+  showCountFrom: 10,
   start: Date.UTC(2026, 9, 5, 20, 0),
   // End of October 31 in US Pacific time, so the deadline is never early anywhere.
   end: Date.UTC(2026, 10, 1, 7, 0),
