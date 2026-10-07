@@ -4,6 +4,8 @@ import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import type { Agent, Workspace } from "@godmode/shared";
 import { api } from "./api";
+import { useAgents } from "./hooks";
+import { type LiveRun, useLive } from "./live";
 import { qk } from "./query";
 
 const KEY = "godmode.workspace";
@@ -57,4 +59,22 @@ export function useWorkspace() {
 export function agentsFor(agents: Agent[], workspaceId: string | null): Agent[] {
   if (!workspaceId) return agents;
   return [...agents.filter((a) => a.workspaceId === workspaceId), ...agents.filter((a) => !a.workspaceId)];
+}
+
+/** Live runs of the picked workspace, newest first: its chats', and its agents' anywhere. All runs when none is picked. */
+export function useWorkspaceRuns(): LiveRun[] {
+  const { id } = useWorkspace();
+  const runs = useLive((s) => s.runs);
+  const { byId } = useAgents();
+  const chats = useQuery({
+    queryKey: qk.conversationList("", id),
+    queryFn: () => api.conversations.list({ limit: 100, workspaceId: id }),
+    enabled: !!id,
+  });
+  return useMemo(() => {
+    const ids = new Set(chats.data?.map((c) => c.id));
+    return Object.values(runs)
+      .filter(({ run }) => !id || ids.has(run.conversationId) || byId.get(run.agentId)?.workspaceId === id)
+      .sort((a, b) => (a.run.createdAt < b.run.createdAt ? 1 : -1));
+  }, [runs, id, chats.data, byId]);
 }

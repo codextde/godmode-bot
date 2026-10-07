@@ -348,7 +348,10 @@ export function getConversation(id: string): ConversationWithMessages {
   return { ...conversation, messages: listMessages(id), activeRunId, queue: listQueue(id) };
 }
 
-/** `workspaceId`: chats of the workspace's agents, and global agents' chats started in it. */
+/**
+ * `workspaceId`: "all"/undefined = every chat; "global" = global agents' chats started outside any workspace;
+ * a workspace id = chats of the workspace's agents, and global agents' chats started in it.
+ */
 export function listConversations(
   opts: { agentId?: string; workspaceId?: string; search?: string; limit?: number; archived?: boolean } = {},
 ): Conversation[] {
@@ -358,7 +361,9 @@ export function listConversations(
     where.push("c.agent_id = ?");
     params.push(opts.agentId);
   }
-  if (opts.workspaceId) {
+  if (opts.workspaceId === "global") {
+    where.push("c.workspace_id IS NULL AND c.agent_id IN (SELECT id FROM agents WHERE workspace_id IS NULL)");
+  } else if (opts.workspaceId && opts.workspaceId !== "all") {
     where.push("(c.workspace_id = ? OR c.agent_id IN (SELECT id FROM agents WHERE workspace_id = ?))");
     params.push(opts.workspaceId, opts.workspaceId);
   }
