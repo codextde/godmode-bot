@@ -16,6 +16,7 @@ import {
   deleteAgent,
   dismissFailedRun,
   duplicateAgent,
+  moveAgent,
   getAgent,
   listAgentCommits,
   listAgentFiles,
@@ -188,7 +189,15 @@ export function registerAgentRoutes(app: Hono): void {
   app.post("/api/team-templates/:id/install", async (c) => {
     const input = await body(
       c,
-      z.object({ workspaceId: z.string().max(100).nullable().optional(), automations: z.boolean().optional(), timezone: z.string().max(100).optional() }),
+      z.object({
+        workspaceId: z.string().max(100).nullable().optional(),
+        newWorkspace: z
+          .object({ name: z.string().trim().min(1, "Name the workspace").max(80), icon: z.string().trim().max(16).optional(), color: z.string().trim().max(20).optional() })
+          .optional(),
+        automations: z.boolean().optional(),
+        timezone: z.string().max(100).optional(),
+        skip: z.array(z.string().max(40)).max(100).optional(),
+      }),
     );
     return c.json(await installTeam(c.req.param("id"), input), 201);
   });
@@ -212,6 +221,15 @@ export function registerAgentRoutes(app: Hono): void {
   app.delete("/api/agents/:id", async (c) => {
     await deleteAgent(c.req.param("id"));
     return c.json({ ok: true });
+  });
+
+  // Drag and drop: another workspace and/or another lead, its team along.
+  app.post("/api/agents/:id/move", async (c) => {
+    const input = await body(
+      c,
+      z.object({ workspaceId: z.string().max(100).nullable().optional(), reportsTo: z.string().max(100).nullable().optional(), withTeam: z.boolean().optional() }),
+    );
+    return c.json(await moveAgent(c.req.param("id"), input));
   });
 
   // Same setup, fresh memory, no chats or automations. A copy that reads secrets needs the passphrase like a new one.

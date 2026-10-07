@@ -86,6 +86,19 @@ export interface AgentInput {
   heartbeat?: AgentHeartbeatInput;
 }
 
+export const AGENT_TEMPLATE_CATEGORIES = ["leadership", "engineering", "product", "marketing", "sales", "operations", "finance"] as const;
+export type AgentTemplateCategory = (typeof AGENT_TEMPLATE_CATEGORIES)[number];
+
+export const AGENT_TEMPLATE_CATEGORY_LABELS: Record<AgentTemplateCategory, string> = {
+  leadership: "Leadership",
+  engineering: "Engineering",
+  product: "Product & research",
+  marketing: "Marketing",
+  sales: "Sales",
+  operations: "Operations",
+  finance: "Finance",
+};
+
 export interface AgentTemplate {
   id: string;
   name: string;
@@ -97,19 +110,42 @@ export interface AgentTemplate {
   instructions: string;
   /** Its job title on the team. */
   role: string;
+  category: AgentTemplateCategory;
+  /** Made to lead others: hands out work and reviews it. */
+  leads?: boolean;
   routine?: { name: string; cron: string; prompt: string };
 }
 
-/** A whole team to start with: a lead and its reports (agent templates), wired up in the org chart. */
+/** One seat of an org chart template: an agent template and who reports to it. */
+export interface OrgTemplateNode {
+  template: string;
+  reports?: OrgTemplateNode[];
+}
+
+/**
+ * A structure to start with, built from agent templates and wired up in the org chart: a team (a lead and its reports)
+ * or a whole company (a CEO, its executives and their teams).
+ */
 export interface TeamTemplate {
   id: string;
+  kind: "team" | "company";
   name: string;
+  /** lucide icon name, drawn by the app. */
   icon: string;
   description: string;
-  /** Leads the team: hands out the work, reviews it and reports to the human. */
-  lead: AgentTemplate;
-  /** Its reports, by agent template id (`GET /api/agent-templates`). */
-  members: string[];
+  /** The top of the chart; reports to the built-in agent. */
+  root: OrgTemplateNode;
+}
+
+export interface TeamInstallInput {
+  /** Where they work: a workspace id, null = global. Ignored with `newWorkspace`. */
+  workspaceId?: ID | null;
+  /** Create a workspace for them first. */
+  newWorkspace?: { name: string; icon?: string; color?: string };
+  automations?: boolean;
+  timezone?: string;
+  /** Seats to leave out, by path ("0", "0.1" = the second report of the first report). Their reports move up. */
+  skip?: string[];
 }
 
 /** What installing a team created. */
@@ -118,6 +154,31 @@ export interface TeamInstallResult {
   members: Agent[];
   /** Automations created from the members' templates (when asked for). */
   automations: number;
+  /** The workspace made for them, when asked for. */
+  workspace: Workspace | null;
+}
+
+/** Where an agent sits: its workspace and its lead (null = the built-in agent). */
+export interface AgentPlacement {
+  id: ID;
+  workspaceId: ID | null;
+  reportsTo: ID | null;
+}
+
+export interface AgentMoveInput {
+  /** Omit to stay in its workspace. */
+  workspaceId?: ID | null;
+  /** Omit to keep its lead where it still can. */
+  reportsTo?: ID | null;
+  /** Its reports, and theirs, move along into the new workspace. Default true. */
+  withTeam?: boolean;
+}
+
+export interface AgentMoveResult {
+  /** Every agent that moved, the dragged one first. */
+  moved: Agent[];
+  /** Where they were before, in the order to put them back. */
+  previous: AgentPlacement[];
 }
 
 export interface RoutineInput {

@@ -109,6 +109,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET|DELETE", "/api/agents/:id", A],
   ["PATCH", "/api/agents/:id", agentPermissions],
   ["POST", "/api/agents/:id/run", agentPermissions],
+  ["POST", "/api/agents/:id/move", A],
   ["POST", "/api/agents/:id/duplicate", A],
   ["DELETE", "/api/agents/:id/failed-run", A],
   ["POST", "/api/agents/:id/pause", agentPermissions],
