@@ -7,7 +7,9 @@ import Icon from '@/components/ui/Icon.astro';
 import Logo from '@/components/ui/Logo.astro';
 import Words from '@/components/ui/Words.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
-import { FOUNDING, PRICING, SITE, yearlySavings } from '@/config/site';
+import Countdown from '@/components/ui/Countdown.astro';
+import CouponCode from '@/components/ui/CouponCode.astro';
+import { COUPON, FOUNDING, PRICING, SITE, yearlySavings } from '@/config/site';
 import icon from '@/assets/showcase/radiowelle/icon.png';
 import player from '@/assets/showcase/radiowelle/01-player.png';
 import home from '@/assets/showcase/radiowelle/02-home.png';
@@ -105,9 +107,15 @@ const faqs = [
               <Icon name="git-branch" size={16} /> See the code
             </a>
           </div>
-          <p class="mt-5 text-[13px] text-muted" data-reveal style="--d:400">
-            Founding 100 closes {FOUNDING.endLabel}: price locked for life, the founder sets up your first {FOUNDING.setupAutomations} automations.
-          </p>
+          <div class="mt-6" data-reveal style="--d:400">
+            <a href="/#pricing" class="founding-strip" data-track="showcase_countdown">
+              <span class="flex items-center gap-2"><span class="live-dot !size-1.5"></span> Founding price ends in</span>
+              <Countdown variant="boxes" />
+            </a>
+            <p class="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-muted">
+              Extra {COUPON.percentOff}% off with <CouponCode size="sm" /> · price locked for life
+            </p>
+          </div>
         </div>
         <div class="sc-phones relative mx-auto flex w-full max-w-[520px] justify-center" data-reveal="scale" style="--d:200">
           <Image src={home} alt="Radiowelle home screen" width={300} class="sc-phone sc-phone-back" loading="eager" />
@@ -238,7 +246,7 @@ const faqs = [
             <CheckoutButton plan="yearly" label={`Or yearly — $${yearly.perMonth}/mo, save ${yearlySavings}%`} source="showcase_radiowelle_final" variant="ghost" size="lg" />
           </div>
           <p class="mt-6 flex items-center justify-center gap-2 text-[13px] text-muted">
-            <Icon name="shield-check" size={14} class="text-brand" /> $0 today · cancel anytime · price locked for life
+            <Icon name="shield-check" size={14} class="text-brand" /> $0 today · price locked for life · founding offer ends in <Countdown />
           </p>
         </div>
       </div>

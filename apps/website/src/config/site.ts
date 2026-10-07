@@ -69,6 +69,15 @@ export const FOUNDING = {
   bookingUrl: import.meta.env.PUBLIC_FOUNDING_BOOKING_URL ?? '',
 } as const;
 
+/** Launch coupon (Stripe promotion code, Godmode Pro only): expires together with the founding offer. */
+export const COUPON = {
+  code: 'FOUNDING20',
+  percentOff: 20,
+  months: 3,
+  maxRedemptions: 100,
+  expires: FOUNDING.end,
+} as const;
+
 export const foundingOpen = (taken: number, now = Date.now()) => now < FOUNDING.end && taken < FOUNDING.seats;
 
 /** Percent saved by paying yearly instead of monthly, rounded down so the claim is never overstated. */
