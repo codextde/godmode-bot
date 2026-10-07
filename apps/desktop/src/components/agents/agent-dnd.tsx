@@ -292,7 +292,7 @@ function Dock({
           <div
             onPointerEnter={() => onInside(true)}
             onPointerLeave={() => onInside(false)}
-            className="pointer-events-auto flex max-w-full items-center gap-1 overflow-x-auto rounded-2xl border bg-card/90 p-1.5 shadow-float backdrop-blur-xl" role="group" aria-label="Move to workspace">
+            className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-2xl border bg-card/90 p-1.5 shadow-float backdrop-blur-xl" role="group" aria-label="Move to workspace">
             <span className="flex shrink-0 items-center gap-1.5 px-2 text-xs text-muted-foreground">
               <FolderInput className="size-3.5" aria-hidden /> Move to
             </span>

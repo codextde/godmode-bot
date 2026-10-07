@@ -103,14 +103,14 @@ export function WorkspaceSection({
       )}
     >
       <div className={cn("group/head @container/head flex min-h-9 items-center gap-2", panel ? "h-12 px-3" : !collapsed && "mb-3", panel && !collapsed && "border-b")}>
-        <h2 className="min-w-0">
+        <h2 className="flex min-w-0">
           <button
             type="button"
             onClick={() => toggle(group.key)}
             title={label}
             aria-expanded={!collapsed}
             aria-controls={collapsed ? undefined : bodyId}
-            className="-ml-1 flex max-w-full min-w-0 items-center gap-2 rounded-md py-0.5 pr-1.5 pl-1 text-left transition hover:bg-foreground/[0.04] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            className="-ml-1 flex min-w-0 items-center gap-2 rounded-md py-0.5 pr-1.5 pl-1 text-left transition hover:bg-foreground/[0.04] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <ChevronRight aria-hidden className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform duration-200", !collapsed && "rotate-90")} />
             {icon ?? <GroupIcon workspace={group.workspace} isGlobal={group.key === "global"} />}

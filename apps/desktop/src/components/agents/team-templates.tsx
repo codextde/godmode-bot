@@ -219,7 +219,7 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
       qc.invalidateQueries({ queryKey: qk.bootstrap });
       if (res.workspace) qc.invalidateQueries({ queryKey: qk.workspaces });
       const place = res.workspace ? ` in ${res.workspace.name}` : "";
-      toast.success(`Your ${team.name.toLowerCase()} is ready`, {
+      toast.success(`${team.name} is ready`, {
         description: `${res.lead.name} leads ${res.members.length} agent${res.members.length === 1 ? "" : "s"}${place}.${res.automations ? ` ${res.automations} automation${res.automations === 1 ? "" : "s"} set up.` : ""}`,
       });
       onClose();
@@ -228,7 +228,7 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
       if (scope !== "all") setWorkspace(res.workspace?.id ?? (where === GLOBAL ? "global" : where));
       navigate("/agents");
     },
-    onError: (err) => toast.error(`Couldn't set up the ${team.name.toLowerCase()}`, { description: errorMessage(err) }),
+    onError: (err) => toast.error(`Couldn't set up ${team.name}`, { description: errorMessage(err) }),
   });
 
   const toggle = (path: string) =>
@@ -244,7 +244,8 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2.5">
-          <StructureIcon icon={team.icon} className="size-8" /> {team.kind === "company" ? `Start a ${team.name.toLowerCase()}` : `Start the ${team.name} team`}
+          <StructureIcon icon={team.icon} className="size-8" /> {team.name}
+          <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[11px] font-medium text-muted-foreground">{team.kind === "company" ? "Company" : "Team"}</span>
         </DialogTitle>
         <DialogDescription>{team.description}</DialogDescription>
       </DialogHeader>
