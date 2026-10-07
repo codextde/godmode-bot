@@ -23,7 +23,7 @@ const rows: { label: string; cells: Cell[] }[] = [
   },
   {
     label: 'Encrypted vault + 2FA, hidden from the model',
-    cells: [['yes', 'AES-256-GCM · TOTP'], ['?', ''], ['partial', 'Passwords; 2FA not stated'], ['no', 'Not encrypted at rest'], ['no', 'Display-only redaction'], ['?', '']],
+    cells: [['yes', 'AES-256-GCM · TOTP'], ['no', 'You type them in yourself'], ['partial', 'Passwords; 2FA not stated'], ['no', 'Not encrypted at rest'], ['no', 'Display-only redaction'], ['?', '']],
   },
   {
     label: 'Persistent agents with memory',
@@ -61,7 +61,7 @@ const mark = {
 <section id="compare" class="relative py-20 sm:py-28" data-track-view="compare">
   <div class="container-x">
     <div class="mx-auto max-w-[820px] text-center">
-      <p class="eyebrow justify-center" data-reveal><span class="n">08</span> Compare</p>
+      <p class="eyebrow justify-center" data-reveal><span class="n">09</span> Compare</p>
       <Words text="The best of every agent. *On a machine you own.*" class="h-section mx-auto mt-6" />
       <p class="lead mx-auto mt-6 max-w-[620px]" data-reveal style="--d:200">
         Grok Bot’s teammates, Dots’ own computer, OpenClaw’s local control, Hermes’ memory — plus a vault for passwords
@@ -69,8 +69,21 @@ const mark = {
       </p>
     </div>
 
-    <p class="mt-12 flex items-center justify-end gap-1.5 text-[12px] text-dim md:hidden">Swipe to compare <Icon name="arrow-right" size={12} /></p>
-    <div class="card mt-3 overflow-hidden md:mt-14" data-reveal style="--d:100">
+    <a href="/vs/grok-bot" class="card group mt-12 grid gap-6 p-7 sm:p-8 md:mt-14 md:grid-cols-[1fr_auto] md:items-center" data-reveal data-track="compare_grok">
+      <div>
+        <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Coming from Grok Bot?</p>
+        <p class="h-card mt-3 text-[22px]">Same AI teammates. Your computer, your logins, no weekly meter.</p>
+        <ul class="mt-4 flex flex-wrap gap-2">
+          {['Already signed in via Chrome import', '2FA filled from the vault', 'Real desktop apps, in the background', 'Claude Opus 5.5'].map((t) => (
+            <li class="chip"><Icon name="check" size={11} stroke={2.4} class="text-brand" /> {t}</li>
+          ))}
+        </ul>
+      </div>
+      <span class="btn btn-ghost self-start md:self-center">Godmode vs Grok Bot <Icon name="arrow-right" size={16} class="transition-transform group-hover:translate-x-0.5" /></span>
+    </a>
+
+    <p class="mt-8 flex items-center justify-end gap-1.5 text-[12px] text-dim md:hidden">Swipe to compare <Icon name="arrow-right" size={12} /></p>
+    <div class="card mt-3 overflow-hidden" data-reveal style="--d:100">
       <div class="overflow-x-auto">
         <table class="compare w-full min-w-[980px] border-collapse text-left">
           <caption class="sr-only">Godmode compared with other AI agents</caption>
