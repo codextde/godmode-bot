@@ -347,7 +347,8 @@ document.querySelectorAll<HTMLFormElement>('form[data-checkout]').forEach((form)
     xEvent('checkout', { value: PRICING.plans[plan].price, currency: PRICING.currency, contents: [{ content_id: plan }] });
   });
 });
-// Founding 100: seats left; on any failure the counters keep their static text.
+// Founding 100: seats left, shown only once enough are taken to read as proof; otherwise the deadline stays.
+const SHOW_SEATS_FROM = 10;
 const foundingSlots = document.querySelectorAll<HTMLElement>('[data-founding-slot]');
 if (foundingSlots.length) {
   fetch('/api/offer', { cache: 'no-store' })
@@ -356,6 +357,7 @@ if (foundingSlots.length) {
       const data = (res ?? {}) as { seats?: unknown; left?: unknown; open?: unknown };
       if (typeof data.left !== 'number' || typeof data.seats !== 'number') return;
       const { left, seats } = data;
+      if (data.open && seats - left < SHOW_SEATS_FROM) return;
       foundingSlots.forEach((slot) => {
         const out = slot.querySelector<HTMLElement>('[data-founding-left]');
         if (out) out.textContent = data.open ? `${left} of ${seats} left` : 'Founding seats are gone';
