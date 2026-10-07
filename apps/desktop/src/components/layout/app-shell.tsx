@@ -52,7 +52,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Logo, Wordmark } from "@/components/brand";
 import { LiveDot } from "@/components/aicss/Motion";
-import { WorkspaceSwitcher } from "@/components/layout/workspace-switcher";
+import { WorkspaceSwitcher, useWorkspaceShortcuts } from "@/components/layout/workspace-switcher";
 import { RecentChats } from "@/components/layout/recent-chats";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
@@ -122,6 +122,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Notices when the human comes back after a while (Home then sums up what happened).
   useEffect(() => startPresence(), []);
+  useWorkspaceShortcuts();
 
   // Global shortcuts
   useEffect(() => {

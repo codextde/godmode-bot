@@ -13,13 +13,28 @@ import { isMac, modKey } from "@/lib/desktop";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 
-/** Typing somewhere ⌘1 could mean something else (a remote screen, a field): the shortcut stays out of it. */
-function busyTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  return !!el?.closest("[role=application]");
+/** ⌘0 is all workspaces, ⌘1–9 the workspaces in A–Z order. Not behind dialogs or on a remote screen the human controls. */
+export function useWorkspaceShortcuts() {
+  const { data: workspaces = [] } = useWorkspaces();
+  const setScope = useUi((s) => s.setWorkspace);
+  useEffect(() => {
+    const sorted = [...workspaces].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    const onKey = (e: KeyboardEvent) => {
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (!mod || e.shiftKey || e.altKey || !/^Digit[0-9]$/.test(e.code)) return;
+      if ((e.target as HTMLElement | null)?.closest?.("[role=application],[role=dialog],[role=alertdialog]")) return;
+      const n = Number(e.code.slice(5));
+      const next = n === 0 ? "all" : sorted[n - 1]?.id;
+      if (!next) return;
+      e.preventDefault();
+      setScope(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [workspaces, setScope]);
 }
 
-/** Switches the active scope: all workspaces, global only, or a single workspace. ⌘0 is all, ⌘1–9 the workspaces in order. */
+/** Switches the active scope: all workspaces, global only, or a single workspace. */
 export function WorkspaceSwitcher() {
   const { data: workspaces = [] } = useWorkspaces();
   const scope = useUi((s) => s.workspace);
@@ -37,21 +52,6 @@ export function WorkspaceSwitcher() {
     () => (sorted.length > 6 ? recentIds.flatMap((id) => (id === scope ? [] : (sorted.find((w) => w.id === id) ?? []))).slice(0, 3) : []),
     [sorted, recentIds, scope],
   );
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const mod = isMac ? e.metaKey : e.ctrlKey;
-      if (!mod || e.shiftKey || e.altKey || !/^Digit[0-9]$/.test(e.code) || busyTarget(e.target)) return;
-      const n = Number(e.code.slice(5));
-      const next = n === 0 ? "all" : sorted[n - 1]?.id;
-      if (!next) return;
-      e.preventDefault();
-      setScope(next);
-      setOpen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sorted, setScope]);
 
   useEffect(() => {
     if (!open) setQuery("");

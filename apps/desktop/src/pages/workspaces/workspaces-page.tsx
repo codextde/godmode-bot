@@ -748,8 +748,8 @@ function ScopeListRow({
           {activity.lastActive ? `Active ${formatDistanceToNowStrict(new Date(activity.lastActive), { addSuffix: true })}` : description || "No activity yet"}
         </span>
       </button>
-      <ActivityChips activity={activity} compact className="hidden shrink-0 flex-nowrap @3xl:flex" />
-      <div className="hidden shrink-0 items-center gap-3 @5xl:flex">
+      <ActivityChips activity={activity} compact className="pointer-events-none hidden shrink-0 flex-nowrap @3xl:flex" />
+      <div className="relative z-10 hidden shrink-0 items-center gap-3 @5xl:flex">
         {stats.map((s) => (
           <Tooltip key={s.label}>
             <TooltipTrigger asChild>
