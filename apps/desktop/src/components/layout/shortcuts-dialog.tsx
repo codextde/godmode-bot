@@ -23,6 +23,8 @@ const GROUPS: { title: string; rows: { keys: ReactNode[]; what: string }[] }[] =
       { keys: [`${modKey}K`], what: "Search chats, tickets, automations, settings — and what waits for you" },
       { keys: [`${modKey}N`], what: "New chat" },
       { keys: [`${modKey}B`], what: "Show or hide the sidebar" },
+      { keys: [`${modKey}1–9`], what: "Switch to a workspace (in A–Z order)" },
+      { keys: [`${modKey}0`], what: "All workspaces" },
       { keys: [`${modKey},`], what: "Settings" },
       { keys: ["?"], what: "This list" },
     ],
@@ -45,7 +47,7 @@ const GROUPS: { title: string; rows: { keys: ReactNode[]; what: string }[] }[] =
     title: "Lists",
     rows: [
       { keys: ["C"], what: "New ticket (Tasks)" },
-      { keys: ["/"], what: "Search (Agents, Logins)" },
+      { keys: ["/"], what: "Search (Agents, Logins, Workspaces)" },
     ],
   },
 ];

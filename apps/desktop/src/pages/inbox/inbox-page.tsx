@@ -13,7 +13,8 @@ import { NotificationList } from "@/components/inbox/notification-list";
 import { InboxQuestion } from "@/components/inbox/question-item";
 import { isVaultLocked } from "@/components/vault/vault-utils";
 import { errorMessage } from "@/lib/api";
-import { useAllAgents, useAttention, useMissingLogins, useQuestions } from "@/lib/hooks";
+import { useAllAgents, useAttention, useMissingLogins, useQuestions, useWorkspaces } from "@/lib/hooks";
+import { useScopedAttention } from "@/components/workspaces/workspace-activity";
 import { AttentionList } from "@/components/attention/attention-list";
 
 type Entry = { kind: "login"; item: MissingLogin; at: number } | { kind: "question"; item: AgentQuestion; at: number };
@@ -64,6 +65,8 @@ export default function InboxPage() {
   );
   // The rest of what waits (tickets, paused chats, budgets, failures, people): questions and logins have their cards below.
   const attention = useAttention();
+  const { workspaceOf } = useScopedAttention();
+  const { data: workspaces = [] } = useWorkspaces();
   const others = (attention.data ?? []).filter((i) => i.kind !== "question" && i.kind !== "login");
   const openCount = (open.data?.length ?? 0) + (qOpen.data?.length ?? 0) + others.length;
 
@@ -116,7 +119,7 @@ export default function InboxPage() {
 
             {tab === "open" && others.length > 0 && (
               <div className="mb-4">
-                <AttentionList items={others} agentById={agentById} />
+                <AttentionList items={others} agentById={agentById} workspaceOf={workspaces.length ? (item) => workspaces.find((w) => w.id === workspaceOf(item)) : undefined} />
               </div>
             )}
             {current.isLoading && currentQuestions.isLoading ? (

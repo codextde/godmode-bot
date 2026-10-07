@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Bot,
   Box,
+  ChevronRight,
   Globe,
   MonitorUp,
   Inbox,
@@ -51,7 +52,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Logo, Wordmark } from "@/components/brand";
 import { LiveDot } from "@/components/aicss/Motion";
-import { WorkspaceSwitcher } from "@/components/layout/workspace-switcher";
+import { WorkspaceSwitcher, useWorkspaceShortcuts } from "@/components/layout/workspace-switcher";
 import { RecentChats } from "@/components/layout/recent-chats";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
@@ -121,6 +122,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Notices when the human comes back after a while (Home then sums up what happened).
   useEffect(() => startPresence(), []);
+  useWorkspaceShortcuts();
 
   // Global shortcuts
   useEffect(() => {
@@ -166,18 +168,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [navigate, setCommandOpen]);
 
   const workNav: NavItem[] = [
+    { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
     { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
     { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
-    { to: "/mods", label: "Mods", icon: <Puzzle />, badge: modsWaiting || undefined },
     { to: "/activity", label: "Activity", icon: <Activity /> },
-    { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
+    { to: "/mods", label: "Mods", icon: <Puzzle />, badge: modsWaiting || undefined },
   ];
   const accessNav: NavItem[] = [
-    { to: "/vault/logins", label: "Logins", icon: <KeyRound />, badge: undefined },
+    { to: "/vault/logins", label: "Logins", icon: <KeyRound /> },
     { to: "/vault/2fa", label: "2FA Codes", icon: <ShieldCheck /> },
     { to: "/integrations", label: "Integrations", icon: <Plug /> },
     { to: "/messaging", label: "Messaging", icon: <MessageCircle />, badge: boot?.counts.messagingRequests || undefined },
+  ];
+  const machineNav: NavItem[] = [
     { to: "/browser", label: "Browser", icon: <Globe /> },
     { to: "/computer", label: "Computer", icon: <MonitorUp /> },
     { to: "/vms", label: "Virtual machines", icon: <Box /> },
@@ -237,16 +241,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-          <SidebarGroup>
-            <SidebarGroupLabel className="eyebrow text-[10.5px]">Access</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu className="group-data-[collapsible=icon]:items-center">
-                {accessNav.map((item) => (
-                  <NavMenuItem key={item.to} item={item} />
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <NavSection id="access" label="Access" items={accessNav} />
+          <NavSection id="machines" label="Machines" items={machineNav} />
           <RecentChats />
         </SidebarContent>
 
@@ -357,6 +353,73 @@ function DesktopDragStrip() {
   const { isMobile } = useSidebar();
   if (!isTauri || !isMac || isMobile) return null;
   return <div className="absolute inset-x-0 top-0 z-50 h-7" data-tauri-drag-region />;
+}
+
+/** A sidebar section that folds to its label and a row of icons, so chats keep the room. The rail always lists every item. */
+function NavSection({ id, label, items }: { id: string; label: string; items: NavItem[] }) {
+  const expanded = useUi((s) => s.expandedNav.includes(id));
+  const toggle = useUi((s) => s.toggleNavSection);
+  const { state, isMobile } = useSidebar();
+  const railed = state === "collapsed" && !isMobile;
+  const { pathname } = useLocation();
+  const listId = `nav-section-${id}`;
+  const open = expanded || railed;
+  const header = (
+    <button
+      type="button"
+      onClick={() => toggle(id)}
+      aria-expanded={open}
+      aria-controls={listId}
+      className="eyebrow group/label flex h-7 min-w-0 shrink items-center gap-1 rounded-md px-2 text-[10.5px] text-sidebar-foreground/70 outline-none transition hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:hidden"
+    >
+      {label}
+      <ChevronRight className={cn("size-3 opacity-0 transition group-hover/label:opacity-100 group-focus-visible/label:opacity-100", open && "rotate-90")} />
+    </button>
+  );
+  if (open)
+    return (
+      <SidebarGroup className="py-1">
+        {header}
+        <SidebarGroupContent id={listId}>
+          <SidebarMenu className="group-data-[collapsible=icon]:items-center">
+            {items.map((item) => (
+              <NavMenuItem key={item.to} item={item} />
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    );
+  return (
+    <SidebarGroup className="flex-row items-center justify-between gap-1 py-0.5">
+      {header}
+      <div id={listId} className="flex items-center">
+        {items.map((item) => {
+          const active = pathname.startsWith(item.to);
+          return (
+            <Tooltip key={item.to}>
+              <TooltipTrigger asChild>
+                <NavLink
+                  to={item.to}
+                  aria-label={item.badge ? `${item.label} (${item.badge})` : item.label}
+                  className={cn(
+                    "relative grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring [&>svg]:size-4",
+                    active && "bg-card text-foreground shadow-card ring-1 ring-border",
+                  )}
+                >
+                  {item.icon}
+                  {item.badge ? <span className="absolute top-1 right-1 size-1.5 rounded-full bg-brand ring-2 ring-sidebar" aria-hidden /> : null}
+                </NavLink>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {item.label}
+                {item.badge ? ` · ${item.badge}` : ""}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </SidebarGroup>
+  );
 }
 
 function NavMenuItem({ item }: { item: NavItem }) {
