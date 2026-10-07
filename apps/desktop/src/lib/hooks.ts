@@ -46,17 +46,32 @@ export function useAgent(id: string | undefined) {
   return useQuery({ queryKey: qk.agent(id ?? ""), queryFn: () => api.agents.get(id!), enabled: !!id });
 }
 
-export function useConversations(agentId?: string, search = "") {
+export function useConversations(agentId?: string, search = "", workspaceId: ScopeFilter = "all") {
   return useQuery({
-    queryKey: qk.conversations(agentId ?? "all", search),
-    queryFn: () => api.conversations.list({ agentId, search, limit: 100 }),
+    queryKey: qk.conversations(agentId ?? "all", search, workspaceId),
+    queryFn: () => api.conversations.list({ agentId, search, limit: 100, workspaceId }),
   });
 }
 
-export function useArchivedConversations(agentId?: string, search = "", { enabled = true, limit = 200 } = {}) {
+/** Chats of the workspace picked in the sidebar. */
+export function useScopedConversations() {
+  return useConversations(undefined, "", useUi((s) => s.workspace));
+}
+
+/** Whether a run belongs to the workspace picked in the sidebar: its chat is listed there, or its agent works there. */
+export function useInScope() {
+  const scope = useUi((s) => s.workspace);
+  const { data: conversations } = useScopedConversations();
+  const { data: agents } = useAllAgents();
+  const ids = new Set(conversations?.map((c) => c.id));
+  return ({ conversationId, agentId }: { conversationId: string; agentId: string }) =>
+    scope === "all" || ids.has(conversationId) || (scope !== "global" && agents?.find((a) => a.id === agentId)?.workspaceId === scope);
+}
+
+export function useArchivedConversations(agentId?: string, search = "", { enabled = true, limit = 200, workspaceId = "all" } = {}) {
   return useQuery({
-    queryKey: [...qk.archivedConversations(agentId ?? "all", search), limit],
-    queryFn: () => api.conversations.list({ agentId, search, limit, archived: true }),
+    queryKey: [...qk.archivedConversations(agentId ?? "all", search, workspaceId), limit],
+    queryFn: () => api.conversations.list({ agentId, search, limit, archived: true, workspaceId }),
     enabled,
   });
 }

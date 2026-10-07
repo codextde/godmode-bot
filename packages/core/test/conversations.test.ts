@@ -89,6 +89,12 @@ describe("conversation list", () => {
     expect(ids).not.toContain(elsewhere.id);
     expect(ids).not.toContain(unscoped.id);
     expect(listConversations({ workspaceId: other.id }).map((x) => x.id)).toEqual([elsewhere.id]);
+
+    const global = listConversations({ workspaceId: "global" }).map((x) => x.id);
+    expect(global).toContain(unscoped.id);
+    expect(global).not.toContain(own.id);
+    expect(global).not.toContain(started.id);
+    expect(listConversations({ workspaceId: "all" }).map((x) => x.id)).toEqual(expect.arrayContaining([own.id, started.id, elsewhere.id, unscoped.id]));
   });
 
   test("archived chats are listed by last activity, pinned or not", () => {

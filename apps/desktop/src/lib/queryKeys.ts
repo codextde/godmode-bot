@@ -57,9 +57,9 @@ export const qk = {
   automationEventList: (routineId: string, limit: number) => ["automation-events", "list", routineId, limit],
   conversationsAll: ["conversations"] as unknown[],
   conversationLists: ["conversations", "list"] as unknown[],
-  conversations: (agentId: string, search: string) => ["conversations", "list", agentId, search],
+  conversations: (agentId: string, search: string, workspace: string = "all") => ["conversations", "list", agentId, search, workspace],
   archivedConversationLists: ["conversations", "archived"] as unknown[],
-  archivedConversations: (agentId: string, search: string) => ["conversations", "archived", agentId, search],
+  archivedConversations: (agentId: string, search: string, workspace: string = "all") => ["conversations", "archived", agentId, search, workspace],
   conversation: (id: string) => ["conversations", "detail", id],
   /** Times agents set to continue their chats on their own. */
   followups: ["followups"] as unknown[],

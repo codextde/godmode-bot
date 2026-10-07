@@ -19,7 +19,7 @@ import { reconnectNow } from "@/lib/realtime";
 import { isLive, useLiveScreens } from "@/lib/screens";
 import { useSession } from "@/lib/session";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
-import { useWorkspace } from "@/lib/workspace";
+import { useWorkspace, useWorkspaceRuns } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
 export default function Home() {
@@ -27,7 +27,6 @@ export default function Home() {
   const computer = useSession((s) => s.connection?.instance.name ?? "Your computer");
   const status = useLive((s) => s.status);
   const offlineReason = useLive((s) => s.offlineReason);
-  const runs = useLive((s) => s.runs);
   const { byId: agents } = useAgents();
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
   const { id: workspaceId, workspace } = useWorkspace();
@@ -41,7 +40,7 @@ export default function Home() {
     await queryClient.invalidateQueries();
   });
 
-  const working = Object.values(runs).sort((a, b) => (a.run.createdAt < b.run.createdAt ? 1 : -1));
+  const working = useWorkspaceRuns();
   const liveScreens = screens.filter(isLive);
   const runningConversations = new Set(working.map((w) => w.run.conversationId));
   const chats = (recent.data ?? []).filter((conv) => conv.origin !== "dream").slice(0, 5);
