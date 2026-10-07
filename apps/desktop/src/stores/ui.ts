@@ -6,6 +6,10 @@ export type AgentsView = "grid" | "list" | "chart";
 
 export type RecentTab = "all" | "running" | "scheduled" | "done";
 
+export type WorkspacesView = "grid" | "list";
+
+export type WorkspacesSort = "name" | "active" | "attention";
+
 interface UiState {
   /** Workspace scope selected in the sidebar: "all" | "global" | workspace id */
   workspace: string;
@@ -30,6 +34,13 @@ interface UiState {
   collapsedAgentGroups: string[];
   /** Which chats the sidebar's Recent list shows. */
   recentTab: RecentTab;
+  /** Workspace ids picked lately, newest first (the switcher lists them on top). */
+  recentWorkspaces: string[];
+  /** The Workspaces page shows cards or rows, in this order. */
+  workspacesView: WorkspacesView;
+  workspacesSort: WorkspacesSort;
+  /** Sidebar sections shown as full lists (the rest are a row of icons). */
+  expandedNav: string[];
   /** The human came back after a while: from when to when they were away (Home sums up what happened). Not kept. */
   away: { since: string; until: string } | null;
   setWorkspace: (id: string) => void;
@@ -45,6 +56,9 @@ interface UiState {
   setAgentsView: (v: AgentsView) => void;
   toggleAgentGroup: (key: string) => void;
   setRecentTab: (tab: RecentTab) => void;
+  toggleNavSection: (key: string) => void;
+  setWorkspacesView: (v: WorkspacesView) => void;
+  setWorkspacesSort: (v: WorkspacesSort) => void;
   setAway: (away: { since: string; until: string } | null) => void;
 }
 
@@ -64,8 +78,16 @@ export const useUi = create<UiState>()(
       agentsView: "grid",
       collapsedAgentGroups: [],
       recentTab: "all",
+      recentWorkspaces: [],
+      expandedNav: [],
+      workspacesView: "grid",
+      workspacesSort: "name",
       away: null,
-      setWorkspace: (workspace) => set({ workspace }),
+      setWorkspace: (workspace) =>
+        set((s) => ({
+          workspace,
+          recentWorkspaces: workspace === "all" || workspace === "global" ? s.recentWorkspaces : [workspace, ...s.recentWorkspaces.filter((id) => id !== workspace)].slice(0, 6),
+        })),
       setCommandOpen: (commandOpen) => set({ commandOpen }),
       setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
       setVoiceMode: (voiceMode) => set({ voiceMode }),
@@ -84,6 +106,10 @@ export const useUi = create<UiState>()(
           collapsedAgentGroups: s.collapsedAgentGroups.includes(key) ? s.collapsedAgentGroups.filter((k) => k !== key) : [...s.collapsedAgentGroups, key],
         })),
       setRecentTab: (recentTab) => set({ recentTab }),
+      setWorkspacesView: (workspacesView) => set({ workspacesView }),
+      setWorkspacesSort: (workspacesSort) => set({ workspacesSort }),
+      toggleNavSection: (key) =>
+        set((s) => ({ expandedNav: s.expandedNav.includes(key) ? s.expandedNav.filter((k) => k !== key) : [...s.expandedNav, key] })),
       setAway: (away) => set({ away }),
     }),
     {
@@ -101,6 +127,10 @@ export const useUi = create<UiState>()(
         agentsView: s.agentsView,
         collapsedAgentGroups: s.collapsedAgentGroups,
         recentTab: s.recentTab,
+        recentWorkspaces: s.recentWorkspaces,
+        expandedNav: s.expandedNav,
+        workspacesView: s.workspacesView,
+        workspacesSort: s.workspacesSort,
       }),
     },
   ),
