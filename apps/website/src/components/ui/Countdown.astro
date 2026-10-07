@@ -1,0 +1,32 @@
+---
+import { FOUNDING } from '@/config/site';
+
+interface Props {
+  variant?: 'boxes' | 'inline';
+  class?: string;
+}
+const { variant = 'inline', class: className = '' } = Astro.props;
+const units = [
+  ['d', 'days'],
+  ['h', 'hours'],
+  ['m', 'min'],
+  ['s', 'sec'],
+] as const;
+---
+
+<span
+  class:list={['countdown', `countdown-${variant}`, className]}
+  data-countdown
+  data-end={FOUNDING.end}
+  role="timer"
+  aria-label={`Founding offer closes ${FOUNDING.endLabel}`}
+>
+  {
+    units.map(([key, label]) => (
+      <span class="cd-unit">
+        <b data-cd={key}>--</b>
+        <i>{variant === 'boxes' ? label : key}</i>
+      </span>
+    ))
+  }
+</span>

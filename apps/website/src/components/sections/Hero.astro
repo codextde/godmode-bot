@@ -4,7 +4,9 @@ import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import Character from '../ui/Character.astro';
 import CheckoutButton from '../ui/CheckoutButton.astro';
-import { FOUNDING, PRICING } from '@/config/site';
+import Countdown from '../ui/Countdown.astro';
+import CouponCode from '../ui/CouponCode.astro';
+import { COUPON, FOUNDING, PRICING } from '@/config/site';
 import chat from '@/assets/shots/chat.png';
 ---
 
@@ -58,6 +60,16 @@ import chat from '@/assets/shots/chat.png';
       <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> {FOUNDING.outcomeHours} hours back in {FOUNDING.outcomeDays} days, or full refund</li>
       <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> Then ${PRICING.plans.yearly.perMonth}/mo, locked for life</li>
     </ul>
+
+    <div class="mt-7 flex flex-col items-center gap-3" data-reveal style="--d:800">
+      <div class="founding-strip">
+        <span class="flex items-center gap-2"><span class="live-dot !size-1.5"></span> Founding price ends in</span>
+        <Countdown variant="boxes" />
+      </div>
+      <p class="flex flex-wrap items-center justify-center gap-2 text-[13px] text-muted">
+        Extra {COUPON.percentOff}% off with code <CouponCode size="sm" /> at checkout
+      </p>
+    </div>
   </div>
 
   <!-- Product window -->

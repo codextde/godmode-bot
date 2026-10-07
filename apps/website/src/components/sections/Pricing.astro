@@ -1,8 +1,10 @@
 ---
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
+import Countdown from '../ui/Countdown.astro';
+import CouponCode from '../ui/CouponCode.astro';
 import CheckoutButton from '../ui/CheckoutButton.astro';
-import { FOUNDING, PRICING, SITE } from '@/config/site';
+import { COUPON, FOUNDING, PRICING, SITE } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
 const included = [
@@ -106,9 +108,12 @@ const guarantees = [
 
     <div class="founder-slot mx-auto mt-10 max-w-[560px]" data-founding-slot data-reveal style="--d:250">
       <i aria-hidden="true"></i>
-      <span class="flex items-center gap-2 text-text-2"><span class="live-dot !size-1.5"></span> Founding offer</span>
-      <span class="founder-left" data-founding-left>Closes {FOUNDING.endLabel}</span>
+      <span class="flex items-center gap-2 text-text-2"><span class="live-dot !size-1.5"></span> <span data-founding-label>Founding offer ends in</span></span>
+      <Countdown class="founder-left" />
     </div>
+    <p class="mx-auto mt-4 flex max-w-[620px] flex-wrap items-center justify-center gap-x-2 gap-y-2 text-center text-[13.5px] text-muted" data-reveal style="--d:300">
+      Extra {COUPON.percentOff}% off with <CouponCode size="sm" /> · first {COUPON.months} months or first year, until the timer hits zero
+    </p>
 
     <div class="mx-auto mt-8 grid max-w-[980px] gap-4 md:grid-cols-2 md:items-stretch">
       {

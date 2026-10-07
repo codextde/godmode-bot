@@ -347,35 +347,51 @@ document.querySelectorAll<HTMLFormElement>('form[data-checkout]').forEach((form)
     xEvent('checkout', { value: PRICING.plans[plan].price, currency: PRICING.currency, contents: [{ content_id: plan }] });
   });
 });
-// Founding 100: time left until the deadline, or seats left once enough are taken; on failure the static text stays.
+// Founding 100: live countdown to the real deadline, and seats left once enough are taken.
+const countdowns = document.querySelectorAll<HTMLElement>('[data-countdown]');
+if (countdowns.length) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const tick = () => {
+    const ms = Number(countdowns[0].dataset.end) - Date.now();
+    if (ms <= 0) {
+      countdowns.forEach((el) => el.setAttribute('data-ended', ''));
+      return false;
+    }
+    const s = Math.floor(ms / 1000);
+    const parts = { d: String(Math.floor(s / 86400)), h: pad(Math.floor(s / 3600) % 24), m: pad(Math.floor(s / 60) % 60), s: pad(s % 60) };
+    countdowns.forEach((el) =>
+      el.querySelectorAll<HTMLElement>('[data-cd]').forEach((b) => {
+        const v = parts[b.dataset.cd as keyof typeof parts];
+        if (b.textContent !== v) b.textContent = v;
+      }),
+    );
+    return true;
+  };
+  if (tick()) {
+    const timer = setInterval(() => {
+      if (!tick()) clearInterval(timer);
+    }, 1000);
+  }
+}
+
 const foundingSlots = document.querySelectorAll<HTMLElement>('[data-founding-slot]');
-
-function showFounding(text: string, filled: number) {
-  foundingSlots.forEach((slot) => {
-    const out = slot.querySelector<HTMLElement>('[data-founding-left]');
-    if (out) out.textContent = text;
-    slot.style.setProperty('--taken', `${Math.max(0, Math.min(100, filled * 100))}%`);
-  });
-}
-
-function showDeadline() {
-  const now = Date.now();
-  if (now >= FOUNDING.end) return showFounding('Founding offer closed', 1);
-  const days = Math.floor((FOUNDING.end - now) / 86_400_000);
-  const when = days < 1 ? 'Last day' : days === 1 ? '1 day left' : `${days} days left`;
-  showFounding(`${when} · closes ${FOUNDING.endLabel}`, (now - FOUNDING.start) / (FOUNDING.end - FOUNDING.start));
-}
-
 if (foundingSlots.length) {
-  showDeadline();
+  const elapsed = (Date.now() - FOUNDING.start) / (FOUNDING.end - FOUNDING.start);
+  foundingSlots.forEach((slot) => slot.style.setProperty('--taken', `${Math.max(0, Math.min(100, elapsed * 100))}%`));
   fetch('/api/offer', { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
     .then((res: unknown) => {
       const data = (res ?? {}) as { seats?: unknown; left?: unknown; open?: unknown };
-      if (data.open === false) return showFounding('Founding seats are gone', 1);
-      if (typeof data.left === 'number' && typeof data.seats === 'number') {
-        showFounding(`${data.left} of ${data.seats} seats left`, (data.seats - data.left) / data.seats);
-      }
+      foundingSlots.forEach((slot) => {
+        const label = slot.querySelector<HTMLElement>('[data-founding-label]');
+        if (data.open === false) {
+          if (label) label.textContent = 'Founding seats are gone';
+          slot.style.setProperty('--taken', '100%');
+        } else if (typeof data.left === 'number' && typeof data.seats === 'number') {
+          if (label) label.textContent = `${data.left} of ${data.seats} seats left`;
+          slot.style.setProperty('--taken', `${Math.min(100, ((data.seats - data.left) / data.seats) * 100)}%`);
+        }
+      });
     })
     .catch(() => {});
 }

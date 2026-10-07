@@ -3,7 +3,9 @@ import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import Character from '../ui/Character.astro';
 import CheckoutButton from '../ui/CheckoutButton.astro';
-import { FOUNDING, PRICING, yearlySavings } from '@/config/site';
+import Countdown from '../ui/Countdown.astro';
+import CouponCode from '../ui/CouponCode.astro';
+import { COUPON, FOUNDING, PRICING, yearlySavings } from '@/config/site';
 ---
 
 <section class="relative overflow-hidden py-24 sm:py-32">
@@ -27,7 +29,10 @@ import { FOUNDING, PRICING, yearlySavings } from '@/config/site';
     </div>
     <p class="mt-6 flex items-center justify-center gap-2 text-[13px] text-muted" data-reveal style="--d:550">
       <Icon name="shield-check" size={14} class="text-brand" />
-      $0 today · price locked for life · {FOUNDING.seats} founding seats, closes {FOUNDING.endLabel}
+      $0 today · price locked for life · founding offer ends in <Countdown />
+    </p>
+    <p class="mt-4 flex flex-wrap items-center justify-center gap-2 text-[13px] text-muted" data-reveal style="--d:600">
+      Extra {COUPON.percentOff}% off with <CouponCode size="sm" />
     </p>
   </div>
 </section>
