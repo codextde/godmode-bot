@@ -2055,6 +2055,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     // Another chat, a dream or the human changed the memory since this session last saw it.
     const memoryChanged = resuming && !dreaming && conv.memory_digest != null && conv.memory_digest !== memoryNow;
     const followup = get<{ dueAt: string; note: string }>("SELECT due_at AS dueAt, note FROM followups WHERE conversation_id = ?", job.conversationId);
+    const humanTasks = all<{ number: number; title: string; status: string }>(
+      "SELECT number, title, status FROM human_tasks WHERE conversation_id = ? AND status IN ('open', 'doing') ORDER BY number",
+      job.conversationId,
+    );
     // The human answered a question, but the run that took the answer broke off before Claude read it.
     const late = !command && !dreaming && !job.resumed?.answer ? owedAnswer(job.conversationId) : null;
     if (late) job.lateAnswer = late.questionId;
@@ -2063,7 +2067,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const lateNote = late && !carried ? lateAnswerContext(settings.general.userName, late) : "";
     const prompt =
       resuming && !command
-        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, apiTools, ssh }) +
+        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, humanTasks, apiTools, ssh }) +
           lateNote +
           body
         : lateNote + body;

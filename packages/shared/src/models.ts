@@ -535,6 +535,8 @@ export type MessageBlock =
   | { type: "command"; name: string; args: string; output: string }
   /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
   | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason }
+  /** Where the human closed a task the agent gave them (see HumanTask) and the chat continued with it. */
+  | { type: "human_task"; id: ID; number: number; title: string; outcome: "done" | "declined"; note: string; at: ISODate }
   /** The human picked up a turn that ended early: `continue` where it stopped, or `again` from its prompt. */
   | { type: "retry"; mode: RetryMode; runId: ID; at: ISODate; masked?: boolean }
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */

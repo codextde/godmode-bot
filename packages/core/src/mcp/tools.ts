@@ -30,6 +30,7 @@ import {
   TASK_PRIORITIES,
   TASK_STATUSES,
   TASK_TYPES,
+  humanTaskRef,
   isOverdue,
   isWaiting,
   taskEventText,
@@ -85,6 +86,7 @@ import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, 
 import { describeNow } from "../runner/prompt";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { askQuestion, listQuestions } from "../services/questions";
+import { MAX_OPEN_PER_CHAT, createAgentHumanTask, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
 import { createMod, findMod, listMods, updateMod } from "../mods/service";
 import { noteConnectorCall } from "../connect/connectors";
 
@@ -983,6 +985,64 @@ const TOOLS: ToolDef[] = [
     run: ({ action, reason, affects }, { ctx }) => {
       const out = askQuestion(ctx, { kind: "approval", action, reason, affects });
       return out.ok ? out.text : fail(out.text);
+    },
+  }),
+
+  defineTool({
+    name: "human_task_create",
+    description: `Give the human a task: something you can't do yourself and they have to — create a passkey or solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, change a setting only they reach, give you access. It goes on their task list ("My tasks") with a notification. Write \`title\` as an imperative ("Create a passkey for Google Ads"), \`instructions\` as exact steps plus what you need back, and link the page where they do it. Finish what doesn't depend on it, then end your turn with a short summary of what you're waiting for: when they mark it done (or say they can't), this chat continues by itself with their note — don't poll and don't schedule a follow-up for it. On a board task the ticket waits in Blocked until then. One task per thing to do (at most ${MAX_OPEN_PER_CHAT} open per chat). For a decision or an OK use ask_human / request_approval instead.`,
+    schema: z.object({
+      title: z.string().min(1).max(200).describe("What to do, as an imperative, self-contained — also shown in a notification"),
+      instructions: z.string().max(6000).optional().describe("How: exact steps, where, what you found, and what you need back. Markdown, short."),
+      url: z.string().max(2000).optional().describe("The page where they do it (https://…)"),
+      priority: z.enum(["normal", "high"]).optional().describe("high: it blocks something urgent"),
+    }),
+    when: (agent, ctx) => canAsk(agent, ctx) && followupsAllowed(ctx.conversationId),
+    run: ({ title, instructions, url, priority }, { agent, ctx }) => {
+      const t = createAgentHumanTask(
+        { agentId: agent.id, conversationId: ctx.conversationId, runId: ctx.runId, workspaceId: ctx.workspaceId },
+        { title, body: instructions, url, priority },
+      );
+      const human = getSettings().general.userName.trim() || "the human";
+      return `Added to ${human}'s tasks as ${humanTaskRef(t)} and ${human} is notified. Finish whatever doesn't depend on it, then end your turn with a short summary of what you're waiting for. This chat continues by itself once ${human} marks it done${t.taskId ? "; your board task waits in Blocked until then" : ""}.`;
+    },
+  }),
+
+  defineTool({
+    name: "human_tasks_list",
+    description: "Tasks you gave the human (human_task_create) and whether they are still open, being worked on, done or declined, with their note.",
+    schema: z.object({ status: z.enum(["active", "closed", "all"]).optional().describe("active (default) = open or being worked on") }),
+    when: (agent, ctx) => canAsk(agent, ctx) && followupsAllowed(ctx.conversationId),
+    run: ({ status }, { agent }) => {
+      const tasks = listHumanTasks({ status: status ?? "active", agentId: isManager(agent) ? undefined : agent.id });
+      if (!tasks.length) return status === "active" || !status ? "No open tasks for the human." : "None.";
+      return json(tasks.map((t) => ({
+        id: t.id,
+        ref: humanTaskRef(t),
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        ...(t.agentId !== agent.id ? { agent: t.agentName ?? null } : {}),
+        ...(t.conversationTitle ? { chat: t.conversationTitle } : {}),
+        ...(t.taskNumber != null ? { ticket: t.taskNumber } : {}),
+        ...(t.response?.text ? { note: snippet(t.response.text, 500) } : {}),
+        ...(t.closedReason ? { closedReason: t.closedReason } : {}),
+        createdAt: t.createdAt,
+      })));
+    },
+  }),
+
+  defineTool({
+    name: "human_task_cancel",
+    description: "Take back a task you gave the human when you don't need it anymore (you found another way, or the work was dropped). It leaves their list.",
+    schema: z.object({
+      id: z.string().min(1).max(100).describe('The task\'s id or its ref, e.g. "H-12"'),
+      reason: z.string().max(500).optional().describe("Why it isn't needed anymore"),
+    }),
+    when: (agent, ctx) => canAsk(agent, ctx) && followupsAllowed(ctx.conversationId),
+    run: ({ id, reason }, { agent }) => {
+      const t = withdrawHumanTask(findHumanTask(id).id, reason ?? "", { agentId: agent.id });
+      return `${humanTaskRef(t)} is off the list.`;
     },
   }),
 

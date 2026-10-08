@@ -32,6 +32,7 @@ import { clearRunMods } from "./mods/service";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
+import { startHumanTasks, stopHumanTasks } from "./services/humanTasks";
 import { startPauses, stopPauses } from "./services/pauses";
 import { startBudgets, stopBudgets } from "./services/budgets";
 import { startRunNotices, stopRunNotices } from "./services/runNotices";
@@ -181,6 +182,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   if (runner) startKeepAwake();
   else startScheduler();
   startFollowups();
+  startHumanTasks();
   startPauses();
   startBudgets();
   startWatchdog();
@@ -304,6 +306,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopMaintenance();
     if (!runner) stopScheduler();
     stopFollowups();
+    stopHumanTasks();
     stopPauses();
     stopBudgets();
     stopWatchdog();

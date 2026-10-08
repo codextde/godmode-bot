@@ -30,6 +30,8 @@
  *   TASK_BLOCKED  call the gateway's task_report_blocked and answer "BLOCKED {json}"
  *   TASK_FOLLOWUP call the gateway's followup_schedule (in 60 minutes, "Check the reply") and answer "Waiting for the reply"
  *   TASK_NOTE   call the gateway's task_note ("Halfway") and answer "NOTE {json}"
+ *   HUMAN_TASK  call the gateway's human_task_create ("Create the passkey", with steps and a link) and answer
+ *              "HUMAN_TASK {json}" with the tool's result
  *   SPLIT_TO:<agent id>  split the ticket into two parts for that agent with task_split and answer "SPLIT <reply>"
  *   DELEGATE_TO:<agent id>  hand "Say hello" to that agent with agent_delegate (wait: false) as a tool step and answer
  *              "DELEGATED <tool result>"
@@ -560,7 +562,7 @@ if (slash?.[1] === "clear") {
   ].join("\n");
   textTurn(text);
   result(text);
-} else if (prompt.includes("TASK_FOLLOWUP") || prompt.includes("TASK_NOTE")) {
+} else if (prompt.includes("TASK_FOLLOWUP") || prompt.includes("TASK_NOTE") || prompt.includes("HUMAN_TASK")) {
   out(init);
   const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
     mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
@@ -576,6 +578,12 @@ if (slash?.[1] === "clear") {
     await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "followup_schedule", arguments: { inMinutes: 60, note: "Check the reply" } } });
     textTurn("Waiting for the reply");
     result("Waiting for the reply");
+  } else if (prompt.includes("HUMAN_TASK")) {
+    const input = { title: "Create the passkey", instructions: "1. Open Google Ads\n2. Add a passkey", url: "https://ads.google.com/security" };
+    const call = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "human_task_create", arguments: input } });
+    const text = `HUMAN_TASK ${JSON.stringify({ text: call.result.content[0].text, isError: call.result.isError === true })}`;
+    textTurn(text);
+    result(text);
   } else {
     const call = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "task_note", arguments: { text: "Halfway" } } });
     const text = `NOTE ${JSON.stringify({ text: call.result.content[0].text, isError: call.result.isError === true })}`;

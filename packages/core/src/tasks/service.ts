@@ -485,6 +485,25 @@ function record<K extends TaskEventKind>(
   }
 }
 
+/** What the ticket's agent gave the human to do (services/humanTasks.ts), and how the human closed it, on the timeline. */
+export function noteHumanTask(
+  taskId: string,
+  kind: "asked" | "answered",
+  actor: TaskActor,
+  opts: { body: string; questionId: string; runId?: string | null; status?: string },
+): void {
+  if (kind === "asked") record(taskId, "asked", actor, { body: opts.body, runId: opts.runId ?? null, data: { questionId: opts.questionId, kind: "task" } });
+  else record(taskId, "answered", actor, { body: opts.body, data: { questionId: opts.questionId, status: opts.status ?? "done", kind: "task" } });
+}
+
+/** Tasks the agent gave the human in the ticket's chat that are still open. */
+function waitingHumanTasks(conversationId: string): { number: number; title: string }[] {
+  return all<{ number: number; title: string }>(
+    "SELECT number, title FROM human_tasks WHERE conversation_id = ? AND status IN ('open', 'doing') ORDER BY number",
+    conversationId,
+  );
+}
+
 /** A ticket's timeline: the newest `limit` rows, oldest first. */
 export function listTaskEvents(taskId: string, limit = 300): TaskEvent[] {
   requireRow(taskId);
@@ -1166,7 +1185,7 @@ function taskPrompt(task: TaskRow, worktree: Worktree | null, restarted: boolean
     ...partOfBrief(task),
     ...partsBrief(task),
     TYPE_BRIEF[task.type],
-    "If you need a decision or an OK to go on, ask with `ask_human` or `request_approval` — the task waits and continues with the answer. If you can't finish at all because something is missing (access, an account, information nobody can give you now), call `task_report_blocked` with what you need, then stop.",
+    "If you need a decision or an OK to go on, ask with `ask_human` or `request_approval` — the task waits and continues with the answer. If the human has to do something you can't (a passkey, a CAPTCHA, a login only they have, a signature, a payment), give it to them with `human_task_create` and end your turn — the task waits and continues once they mark it done. If you can't finish at all because something is missing (access, an account, information nobody can give you now), call `task_report_blocked` with what you need, then stop.",
     "On long work, leave a short progress note with the `task_note` tool at milestones — the human reads it on the task. If you have to wait for something (a reply, a build, office hours), schedule a follow-up: the task shows when you continue, and it goes to review once you finish.",
   ];
   return lines.join("\n");
@@ -1467,6 +1486,18 @@ async function finished(id: string, run: Run): Promise<void> {
   if (task.blocked_reason) {
     block(id, task.blocked_reason, { kind: "needs_input", runId: run.id, actor: agent });
     notify("warning", `Task #${task.number} needs you`, task.blocked_reason, link);
+    return;
+  }
+  // The agent gave the human something to do: the ticket waits in Blocked and continues once it is done (the task
+  // itself notified the human already).
+  const forHuman = waitingHumanTasks(run.conversationId);
+  if (forHuman.length) {
+    const what = forHuman.map((h) => `H-${h.number} “${h.title}”`).join(", ");
+    block(id, `Waiting for you: ${what}. It continues once you mark ${forHuman.length === 1 ? "it" : "them"} done under My tasks.`, {
+      kind: "needs_input",
+      runId: run.id,
+      actor: agent,
+    });
     return;
   }
   // The agent set itself a time to continue: the ticket waits (In progress, nothing running) instead of going to

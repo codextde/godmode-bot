@@ -13,6 +13,7 @@ import { registerSpendRoutes } from "./routes/spend";
 import { registerChatRoutes } from "./routes/chat";
 import { registerMissingLoginRoutes } from "./routes/missingLogins";
 import { registerQuestionRoutes } from "./routes/questions";
+import { registerHumanTaskRoutes } from "./routes/humanTasks";
 import { registerIntegrationRoutes } from "./routes/integrations";
 import { registerBrowserRoutes } from "./routes/browser";
 import { registerBackupRoutes } from "./routes/backup";
@@ -155,6 +156,7 @@ export function createApp() {
   registerChatRoutes(app);
   registerMissingLoginRoutes(app);
   registerQuestionRoutes(app);
+  registerHumanTaskRoutes(app);
   registerIntegrationRoutes(app);
   registerMessagingRoutes(app);
   registerBrowserRoutes(app);

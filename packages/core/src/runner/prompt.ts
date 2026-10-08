@@ -310,6 +310,11 @@ Don't ask for things you can find out yourself, for confirmation of what ${human
 This task was handed to you by another agent, so you can't ask ${human} from here. Decide what you reasonably can. If a step really needs ${human}'s decision or OK, don't take it: say exactly what needs deciding in your answer — the agent that handed you the task gets it and can ask.`);
   }
 
+  if (ctx.asking && ctx.followups) {
+    out.push(`### Tasks for ${human}
+When you can't go on because ${human} has to do something themselves — create a passkey or solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, give you access — don't just mention it in your summary: give it to them with \`human_task_create({ title, instructions, url })\`. It lands on ${human}'s task list (My tasks) with a notification. Write the title as an imperative, the instructions as exact steps plus what you need back, and link the page where they do it. Finish whatever doesn't depend on it, then end your turn saying what you're waiting for. When ${human} marks it done — or says they can't — this chat continues by itself with their note, in a note from Godmode in \`<godmode-human-task>\` tags; don't poll for it or schedule a follow-up. A board task waits in Blocked meanwhile. One task per thing to do; \`human_tasks_list\` shows yours, \`human_task_cancel\` takes one back once you no longer need it. For a decision or an OK, ask instead.`);
+  }
+
   if (ctx.followups) {
     out.push(`### Following up later
 When a task can't be finished now because you have to wait — for a reply to an email or message, a delivery, a build or deployment, a status or price change, office hours, another person — don't leave it to ${human} to remind you. Schedule a follow-up with \`followup_schedule({ at | inMinutes, note })\`, like a coworker who says "I'll check back tomorrow at 10": at that time Godmode continues this chat on its own and you pick up where you left off, with the whole conversation. Pick a realistic time (when the answer is likely there; business hours when people are involved) and write the note so you know exactly what to check and do. Then end your turn with a short summary of what you're waiting for and when you'll continue. A chat has one follow-up: scheduling again moves it, \`followup_cancel\` removes it. Don't schedule follow-ups for work you can do now or for things that repeat on a schedule${perms.canManageAgents ? " (those are automations)" : ""}.`);
@@ -473,11 +478,13 @@ export function resumeContextPrefix(
     sources?: PromptSources | null;
     /** The chat's pending follow-up. */
     followup?: { dueAt: string; note: string } | null;
+    /** Tasks the agent gave the human in this chat that are still open. */
+    humanTasks?: { number: number; title: string; status: string }[];
     apiTools?: PromptApiTool[];
     ssh?: PromptSshServer[];
   } = {},
 ): string {
-  const { now = new Date(), instructions, memoryChanged, vm, sources, followup, apiTools, ssh } = opts;
+  const { now = new Date(), instructions, memoryChanged, vm, sources, followup, humanTasks, apiTools, ssh } = opts;
   const where = folder
     ? `Working directory: \`${folder}\` (the folder attached to this chat). Your own repository with CLAUDE.md and MEMORY.md: \`${repoPath}\`.`
     : `Working directory: your own repository \`${repoPath}\`.`;
@@ -507,7 +514,10 @@ export function resumeContextPrefix(
   const pending = followup
     ? `\n\nYou scheduled a follow-up in this chat for ${describeNow(new Date(followup.dueAt))}: "${oneLine(followup.note, 300)}". If this message settles or changes that, move it with followup_schedule or remove it with followup_cancel.`
     : "";
-  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${tools}${machine}${remote}${update}${memory}${pending}</godmode-context>\n\n`;
+  const waiting = humanTasks?.length
+    ? `\n\nStill open on the human's task list from this chat: ${humanTasks.map((t) => `H-${t.number} "${oneLine(t.title, 120)}"${t.status === "doing" ? " (they are on it)" : ""}`).join(", ")}. If this message settles one, take it back with human_task_cancel.`
+    : "";
+  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${tools}${machine}${remote}${update}${memory}${pending}${waiting}</godmode-context>\n\n`;
 }
 
 /** The human's answer to what the run asked (ask_human, request_approval), as the run reads it when it continues. */
