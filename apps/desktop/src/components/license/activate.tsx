@@ -136,7 +136,7 @@ export function ActivatePanel({
             void openExternal(checkoutUrl(source));
           }}
         >
-          <Sparkles /> Start 7-day free trial
+          <Sparkles /> Start 14-day free trial
         </Button>
         <Button size="lg" variant="outline" className="sm:w-36" onClick={() => void openExternal(PLANS_URL)}>
           See plans <ArrowUpRight className="text-muted-foreground" />

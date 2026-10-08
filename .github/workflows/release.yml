@@ -31,6 +31,8 @@ concurrency:
 
 env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  # Official builds check for a Godmode Pro licence; builds from source and of your own don't (MIT).
+  GODMODE_OFFICIAL_BUILD: "1"
 
 jobs:
   create-release:
@@ -290,7 +292,7 @@ jobs:
           labels: |
             org.opencontainers.image.title=Godmode Bot
             org.opencontainers.image.description=Godmode Bot headless server with the web dashboard, Chromium, uv and Claude Code
-            org.opencontainers.image.licenses=LicenseRef-Proprietary
+            org.opencontainers.image.licenses=MIT
 
       - uses: docker/build-push-action@v7
         with:
@@ -299,5 +301,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: GODMODE_OFFICIAL_BUILD=1
           cache-from: type=gha
           cache-to: type=gha,mode=max

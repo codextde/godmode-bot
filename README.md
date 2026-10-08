@@ -10,7 +10,7 @@ Godmode Bot gives Claude a real browser, your logins and your 2FA codes — **sa
 end-to-end without interrupting you. Start with one chat, or build a team of persistent agents with their own
 memory, routines and history.
 
-[![License: Commercial](https://img.shields.io/badge/license-commercial-8b5cf6.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-22c55e.svg)](LICENSE)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-06b6d4.svg)](#-install)
 [![Built with Claude Code](https://img.shields.io/badge/brain-Claude%20Code%20·%20Opus%205.5-d97757.svg)](https://code.claude.com)
 [![browser-use](https://img.shields.io/badge/browser-browser--use-111.svg)](https://github.com/browser-use/browser-use)
@@ -202,11 +202,19 @@ needs to be useful:
 
 ## 📦 Install
 
+Godmode is open source under the [MIT License](LICENSE). Two ways to run it:
+
+- **Build it yourself — free.** Clone this repo and run it from source or build your own app
+  ([Build from source](#build-from-source)). Every feature, no licence key, no limits.
+- **Godmode Pro — the official app.** Signed, ready-to-install apps for macOS, Windows and Linux, automatic updates,
+  the install script and Docker image, and support from the people who build it. Start a 14-day free trial at
+  [**usegodmode.com**](https://usegodmode.com) ($39/month, or $29/month billed yearly). Pro pays for Godmode's
+  development.
+
 ### Desktop app
 
-Start a 7-day free trial at [**usegodmode.com**](https://usegodmode.com) ($39/month, or $29/month billed yearly) and download the app
-from your welcome page — or later from [usegodmode.com/download](https://usegodmode.com/download) with your
-license key:
+Start the free trial at [**usegodmode.com**](https://usegodmode.com) and download the app from your welcome page — or
+later from [usegodmode.com/download](https://usegodmode.com/download) with your license key:
 
 - **macOS** — `.dmg` (Apple Silicon & Intel)
 - **Windows** — `.msi` / `.exe`
@@ -242,6 +250,20 @@ docker compose up -d   # dashboard on http://localhost:7777
 ```
 
 > Put the dashboard behind TLS (Caddy, Traefik, Tailscale…) when you expose it beyond your machine.
+
+### Build from source
+
+```bash
+git clone https://github.com/codextde/godmode-bot && cd godmode-bot
+pnpm install
+pnpm dev          # core + web UI on http://localhost:1420
+pnpm build:app    # or build your own desktop app (apps/desktop/src-tauri/target/release/bundle)
+pnpm build        # or a standalone server binary (packages/core/bin/godmode)
+docker build -t godmode-bot .   # or your own Docker image
+```
+
+Needs [Node 22+](https://nodejs.org), [pnpm](https://pnpm.io), [Bun](https://bun.sh) and, for the desktop app,
+[Rust](https://rustup.rs). Builds of your own never ask for a licence key.
 
 ### Phone app (iOS and Android)
 
@@ -535,5 +557,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 📄 License
 
-Commercial — see [LICENSE](LICENSE) and the [Terms](https://usegodmode.com/legal/terms). © 2026 Codext GmbH.
-Versions published before the switch remain available under the MIT License to those who received them.
+[MIT](LICENSE) © 2026 Codext GmbH. Use it, change it, ship it. The official Godmode Pro builds and subscription at
+[usegodmode.com](https://usegodmode.com) follow the [Terms](https://usegodmode.com/legal/terms).

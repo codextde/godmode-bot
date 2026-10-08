@@ -52,7 +52,7 @@
     "targets": "all",
     "publisher": "Codext GmbH",
     "copyright": "© 2026 Codext GmbH",
-    "license": "Proprietary",
+    "license": "MIT",
     "licenseFile": "../../../LICENSE",
     "homepage": "https://usegodmode.com",
     "category": "Productivity",

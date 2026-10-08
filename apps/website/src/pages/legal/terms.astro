@@ -1,6 +1,6 @@
 ---
 import Legal from '@/layouts/Legal.astro';
-import { COUPON, FOUNDING, LEGAL, PRICING } from '@/config/site';
+import { COUPON, FOUNDING, LEGAL, PRICING, SITE } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
 ---
@@ -51,9 +51,14 @@ const { monthly, yearly } = PRICING.plans;
 
   <h2>3. License</h2>
   <p>
-    We grant you a non-exclusive, non-transferable license to install and use the Software on devices you own or control,
-    for your own or your organisation’s internal purposes. You may not resell or sublicense your license key. Parts of the
-    Software may be subject to open-source licenses, whose terms take precedence for those parts.
+    The source code of Godmode is open source under the MIT License and available at
+    <a href={SITE.repo} rel="noopener">{SITE.repo.replace('https://', '')}</a>. You may use, copy, change and distribute
+    it under that license, with or without a subscription.
+  </p>
+  <p>
+    Godmode Pro gives you the official builds of the Software (the signed apps, the server binaries and the Docker image),
+    their updates, a license key that activates them, and support, for as long as your subscription or license is active.
+    Your license key is personal to you or your organisation; you may not resell, sublicense or publish it.
   </p>
 
   <h2>4. What you need, and what you’re responsible for</h2>
