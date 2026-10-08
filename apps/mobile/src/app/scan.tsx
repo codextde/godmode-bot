@@ -70,10 +70,12 @@ export default function Scan() {
               Camera access
             </T>
             <T variant="subhead" color="rgba(255,255,255,0.75)" style={{ textAlign: "center" }}>
-              Godmode only uses the camera to read the pairing code on your computer.
+              {permission.canAskAgain
+                ? "Godmode only uses the camera to read the pairing code on your computer."
+                : "Camera access is off. Turn it on in Settings, or paste the pairing link instead."}
             </T>
             <Button
-              title={permission.canAskAgain ? "Allow camera" : "Open Settings"}
+              title={permission.canAskAgain ? "Continue" : "Open Settings"}
               icon="camera"
               variant="glass" dark
               onPress={() => (permission.canAskAgain ? void requestPermission() : void Linking.openSettings())}

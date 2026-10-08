@@ -57,7 +57,8 @@ export default function Pair() {
   const expired = payload.exp * 1000 < Date.now();
   const switching = current && current.instance.id !== payload.id;
   const routes = [
-    { label: "Tailscale", url: payload.urls.find((u) => !isGatewayUrl(u)) },
+    { label: "Tailscale", url: payload.urls.find((u) => !isGatewayUrl(u) && u.startsWith("http:")) },
+    { label: "Server", url: payload.urls.find((u) => !isGatewayUrl(u) && u.startsWith("https:")) },
     { label: "Godmode Cloud", url: payload.urls.find(isGatewayUrl) },
   ].filter((route) => route.url);
 

@@ -4,10 +4,12 @@
  * gateway, no webhooks) and only to paired phones; the address is re-checked every 30 s and the listener follows it.
  * A computer linked to Godmode Cloud is also reachable through the cloud's phone gateway (cloud/dispatch.ts), which
  * passes through the same gate (`servePhoneRequest`).
+ * A headless server behind an HTTPS reverse proxy can set GODMODE_PHONE_URL instead: the listener then runs on
+ * GODMODE_PHONE_HOST (default 0.0.0.0) and only answers requests for that URL's host.
  */
 import type { Server, WebSocketHandler } from "bun";
 import type { Hono } from "hono";
-import type { MobileStatus } from "@godmode/shared";
+import { isPhoneUrlAllowed, type MobileStatus } from "@godmode/shared";
 import { logger } from "../log";
 import { getSettings } from "../services/settings";
 import { newId } from "../util";
@@ -18,6 +20,16 @@ import { tailscaleStatus } from "./tailscale";
 
 const log = logger("mobile");
 const RECHECK_MS = 30_000;
+let warnedUrl: string | null = null;
+
+function publicPhoneUrl(): URL | null {
+  const url = process.env.GODMODE_PHONE_URL?.trim().replace(/\/+$/, "");
+  if (!url) return null;
+  if (url.startsWith("https://") && isPhoneUrlAllowed(url)) return new URL(url);
+  if (warnedUrl !== url) log.warn("GODMODE_PHONE_URL must be an https address; ignoring it", { url });
+  warnedUrl = url;
+  return null;
+}
 
 interface Handler {
   app: Hono;
@@ -80,7 +92,9 @@ async function reconcile() {
     lastError = null;
     return;
   }
-  const ts = await tailscaleStatus();
+  const ts = publicPhoneUrl()
+    ? { running: true, ip: process.env.GODMODE_PHONE_HOST?.trim() || "0.0.0.0", dnsName: null, detail: null }
+    : await tailscaleStatus();
   if (!ts.running || !ts.ip) {
     close();
     lastError = ts.detail ?? "Tailscale isn't connected.";
@@ -123,6 +137,8 @@ async function reconcile() {
 }
 
 function hostsFor(b: { ip: string; dnsName: string | null; port: number }): Set<string> {
+  const url = publicPhoneUrl();
+  if (url) return new Set([url.host.toLowerCase()]);
   return new Set([b.ip, `${b.ip}:${b.port}`, ...(b.dnsName ? [b.dnsName, `${b.dnsName}:${b.port}`] : [])]);
 }
 
@@ -163,6 +179,8 @@ export function servePhoneRequest(
 
 /** Where phones reach Godmode right now, best first: Tailscale, then the Godmode Cloud gateway. */
 export function mobileUrls(): string[] {
+  const url = bound ? publicPhoneUrl() : null;
+  if (url) return [url.origin];
   const urls = bound ? [...(bound.dnsName ? [`http://${bound.dnsName}:${bound.port}`] : []), `http://${bound.ip}:${bound.port}`] : [];
   const gateway = getSettings().mobile.enabled ? phoneGatewayUrl() : null;
   return gateway ? [...urls, gateway] : urls;
