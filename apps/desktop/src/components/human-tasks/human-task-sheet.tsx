@@ -102,6 +102,11 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
         <span className="font-mono text-[13px] font-medium tabular-nums">{humanTaskRef(task)}</span>
         <StatusPill task={task} />
+        {active && task.priority === "high" && (
+          <span className="flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[11.5px] font-medium text-rose-600 dark:text-rose-400">
+            <Flag className="size-3 fill-current" /> Urgent
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

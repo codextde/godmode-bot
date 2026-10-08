@@ -22,6 +22,11 @@ export function plainPreview(body: string, max = 160): string {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/^\s*(?:[-*+]|\d+\.)\s+/gm, "")
     .replace(/[#>*_`~]/g, "")
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l, i, all) => (i < all.length - 1 && !/[.!?:;,]$/.test(l) ? `${l}.` : l))
+    .join(" ")
     .replace(/\s+/g, " ")
     .trim();
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
