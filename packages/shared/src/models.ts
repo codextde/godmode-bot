@@ -578,6 +578,14 @@ export interface ToolTask {
   durationMs: number;
   /** The agents of a workflow in the order they were queued. Empty for other kinds of work. */
   agents: ToolTaskAgent[];
+  /** It runs on its own: its tool call returned at once and the run goes on meanwhile (a subagent in the background). */
+  background?: boolean;
+  /** When it started (epoch ms), for a live timer. */
+  startedAt?: number;
+  /** The tool it used last, e.g. "Bash". */
+  lastTool?: string;
+  /** A subagent's final report, from Claude Code's notification that it ended. */
+  summary?: string;
 }
 
 export interface ToolTaskAgent {

@@ -261,8 +261,8 @@ export class StreamAccumulator {
     if (this.compacting) return "Compacting conversation…";
     const last = this.blocks[this.blocks.length - 1];
     if (!last) return "Starting…";
-    const workflow = this.backgroundWorkflow();
-    if (workflow) return `Running workflow · ${workflow.activity || workflow.description}`;
+    const background = this.backgroundWork();
+    if (background) return background;
     switch (last.type) {
       case "tool_use":
         return last.result === undefined ? toolActivity(last.name, last.input, names) : "Thinking…";
@@ -367,9 +367,23 @@ export class StreamAccumulator {
     const id = str(e.task_id);
     if (!id) return false;
     if (e.subtype === "task_started") {
-      const idx = this.findToolUse(str(e.tool_use_id) ?? "");
+      // A subagent resumed with SendMessage starts again under its id: its own card shows it, not the SendMessage call.
+      const resumed = this.tasks.get(id);
+      const idx = resumed ? this.blocks.findIndex((b) => b.type === "tool_use" && b.task === resumed) : this.findToolUse(str(e.tool_use_id) ?? "");
       if (idx < 0) return false;
-      const task: ToolTask = { id, kind: str(e.task_type) ?? "task", status: "running", description: str(e.description) ?? "", activity: "", totalTokens: 0, toolUses: 0, durationMs: 0, agents: [] };
+      const task: ToolTask = {
+        id,
+        kind: str(e.task_type) ?? "task",
+        status: "running",
+        description: str(e.description) ?? "",
+        activity: "",
+        totalTokens: 0,
+        toolUses: 0,
+        durationMs: 0,
+        agents: [],
+        startedAt: Date.now(),
+        ...(e.is_backgrounded === true ? { background: true } : {}),
+      };
       (this.blocks[idx] as ToolUseBlock).task = task;
       this.tasks.set(id, task);
       return true;
@@ -381,8 +395,14 @@ export class StreamAccumulator {
       task.activity = str(e.description) ?? task.activity;
       // Not every progress event lists the agents.
       task.agents = workflowAgents(e.workflow_progress) ?? task.agents;
+      const lastTool = str(e.last_tool_name);
+      if (lastTool && task.kind === "local_agent") task.lastTool = lastTool;
     } else {
-      task.status = taskEnd(e.subtype === "task_updated" ? (isObj(e.patch) ? e.patch.status : null) : e.status) ?? task.status;
+      const patch = isObj(e.patch) ? e.patch : null;
+      if (patch?.is_backgrounded === true && task.kind === "local_agent") task.background = true;
+      task.status = taskEnd(e.subtype === "task_updated" ? patch?.status : e.status) ?? task.status;
+      const summary = str(e.summary);
+      if (e.subtype === "task_notification" && task.kind === "local_agent" && summary) task.summary = truncateResult(summary);
     }
     const usage = isObj(e.usage) ? e.usage : {};
     task.totalTokens = num(usage.total_tokens) ?? task.totalTokens;
@@ -391,18 +411,24 @@ export class StreamAccumulator {
     return JSON.stringify(task) !== before;
   }
 
-  /** The workflow that runs in the background while no top-level tool call waits for its result. */
-  private backgroundWorkflow(): ToolTask | null {
+  /** What runs in the background (a workflow, subagents) while no top-level tool call waits for its result. */
+  private backgroundWork(): string | null {
     let workflow: ToolTask | null = null;
-    for (const task of this.tasks.values()) if (task.kind === "local_workflow" && task.status === "running") workflow = task;
-    if (!workflow) return null;
+    const agents: ToolTask[] = [];
+    for (const task of this.tasks.values()) {
+      if (task.status !== "running") continue;
+      if (task.kind === "local_workflow") workflow = task;
+      else if (task.kind === "local_agent" && task.background) agents.push(task);
+    }
+    if (!workflow && agents.length === 0) return null;
     for (let i = this.blocks.length - 1; i >= 0; i--) {
       const b = this.blocks[i]!;
       // Steps an earlier stretch of the run left cut off don't count.
       if (b.type === "pause") break;
       if (b.type === "tool_use" && !b.parentToolUseId && b.result === undefined) return null;
     }
-    return workflow;
+    if (workflow) return `Running workflow · ${workflow.activity || workflow.description}`;
+    return agents.length === 1 ? `Subagent working · ${agents[0]!.description}` : `${agents.length} subagents working`;
   }
 
   private stream(parent: string | null): StreamState {
@@ -686,7 +712,15 @@ export function redactBlock(b: MessageBlock, redact: (s: string) => string): Mes
         input: redactDeep(b.input, redact),
         ...(b.result !== undefined ? { result: redact(b.result) } : {}),
         ...(b.task
-          ? { task: { ...b.task, description: redact(b.task.description), activity: redact(b.task.activity), agents: b.task.agents.map((a) => ({ ...a, label: redact(a.label), phase: redact(a.phase) })) } }
+          ? {
+              task: {
+                ...b.task,
+                description: redact(b.task.description),
+                activity: redact(b.task.activity),
+                agents: b.task.agents.map((a) => ({ ...a, label: redact(a.label), phase: redact(a.phase) })),
+                ...(b.task.summary !== undefined ? { summary: redact(b.task.summary) } : {}),
+              },
+            }
           : {}),
       };
     case "text":
