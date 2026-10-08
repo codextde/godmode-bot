@@ -115,6 +115,7 @@ const subagentSchema = z.object({
 
 export const agentSchema = z.object({
   workspaceId: id.nullable().optional(),
+  projectId: id.nullable().optional(),
   name: z.string().trim().min(1, "Name is required").max(80),
   avatar: z.string().trim().max(32).optional(),
   color: z.string().trim().max(32).optional(),

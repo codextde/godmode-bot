@@ -2,7 +2,7 @@
  * Workspaces: groups of agents, logins, 2FA entries, MCP servers and browser profiles, plus the folders and
  * repositories their agents work with.
  */
-import type { Workspace } from "@godmode/shared";
+import type { Project, Workspace } from "@godmode/shared";
 import type { WorkspaceInput } from "@godmode/shared";
 import { all, get, insert, run, tx, update } from "../db";
 import { bus } from "../events/bus";
@@ -12,7 +12,8 @@ import { deleteProfile, updateProfile } from "../browser/manager";
 import { reloadSchedules } from "../scheduler/scheduler";
 import { HttpError, badRequest, newId, notFound, now, slugify } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
-import { gitSourceRows, listSources, setSources, sourcesByWorkspace, trashClones } from "./workspaceSources";
+import { gitSourceRows, listSources, setSources, sourcesByOwner, trashClones } from "./workspaceSources";
+import { listProjects, projectsByWorkspace } from "./projects";
 import { removeWorkspaceTasks } from "../tasks/service";
 
 const log = logger("workspaces");
@@ -34,7 +35,11 @@ interface WorkspaceRow {
 const SELECT = `SELECT w.*, (SELECT b.id FROM browser_profiles b WHERE b.workspace_id = w.id AND b.is_default = 1 ORDER BY b.created_at LIMIT 1) AS browser_profile_id
   FROM workspaces w`;
 
-function toModel(r: WorkspaceRow & { browser_profile_id?: string | null }, sources = listSources(r.id)): Workspace {
+function toModel(
+  r: WorkspaceRow & { browser_profile_id?: string | null },
+  sources = listSources(r.id),
+  projects: Project[] = listProjects(r.id),
+): Workspace {
   return {
     id: r.id,
     name: r.name,
@@ -47,6 +52,7 @@ function toModel(r: WorkspaceRow & { browser_profile_id?: string | null }, sourc
     browserProfileId: r.browser_profile_id ?? null,
     sources,
     autoMerge: !!r.auto_merge,
+    projects,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -66,8 +72,11 @@ function cleanName(name: string | undefined): string {
 }
 
 export function listWorkspaces(): Workspace[] {
-  const sources = sourcesByWorkspace();
-  return all<WorkspaceRow>(`${SELECT} ORDER BY w.name COLLATE NOCASE ASC`).map((r) => toModel(r, sources.get(r.id) ?? []));
+  const sources = sourcesByOwner();
+  const projects = projectsByWorkspace(sources.projects);
+  return all<WorkspaceRow>(`${SELECT} ORDER BY w.name COLLATE NOCASE ASC`).map((r) =>
+    toModel(r, sources.workspaces.get(r.id) ?? [], projects.get(r.id) ?? []),
+  );
 }
 
 export function getWorkspace(id: string): Workspace {
@@ -153,6 +162,7 @@ export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Wor
 }
 
 const DEPENDENTS = [
+  { table: "projects", key: "projects" },
   { table: "agents", key: "agents" },
   { table: "credentials", key: "credentials" },
   { table: "totp", key: "totp" },
@@ -175,6 +185,7 @@ function countDependents(id: string): DependentCounts {
 
 function describeCounts(counts: DependentCounts): string {
   const labels: Record<keyof DependentCounts, [string, string]> = {
+    projects: ["project", "projects"],
     agents: ["agent", "agents"],
     credentials: ["login", "logins"],
     totp: ["2FA entry", "2FA entries"],

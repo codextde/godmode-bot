@@ -66,6 +66,7 @@ import { isUnlocked, redact, redactionEpoch } from "../vault/vault";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentFailedRun, setAgentStatus, teamOf, touchAgentRun } from "../agents/service";
 import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
+import { projectOfChat } from "../services/projects";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
 import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, onLaunchProblem, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
@@ -1810,17 +1811,24 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         "SELECT repo_url, repo_path, branch FROM tasks WHERE conversation_id = ? AND branch IS NOT NULL",
         job.conversationId,
       );
-  // The workspace's folders and repositories; a missing clone is cloned first. A dream only works on its memory.
+  // The project the chat works on (its own, else the agent's).
+  const project = dreaming ? null : projectOfChat(job.conversationId, agent);
+  // The workspace's and the project's folders and repositories; a missing clone is cloned first. A dream only works on its memory.
   let sources: RunSource[] = [];
-  if (!dreaming && agent.workspaceId) {
+  const owners = [
+    ...(agent.workspaceId ? [{ workspaceId: agent.workspaceId, projectId: null }] : []),
+    ...(project ? [{ workspaceId: project.workspaceId, projectId: project.id }] : []),
+  ];
+  if (!dreaming && owners.length) {
     const cancelled = new AbortController();
     const watch = setInterval(() => halted(job) && cancelled.abort(), 250);
     try {
-      const prepared = await prepareSources(agent.workspaceId, { onActivity: (label) => emitActivity(job, label), signal: cancelled.signal });
+      const prepared = await prepareSources(owners, { onActivity: (label) => emitActivity(job, label), signal: cancelled.signal });
       // A task works in its own worktree: the workspace's shared copy of that repository (the human's folder or the
       // clone) stays out of reach, so tasks never edit each other's files.
       const taskRepo = (s: RunSource) => !!task && ((!!task.repo_path && s.path === task.repo_path) || (!!task.repo_url && s.url === task.repo_url));
-      sources = prepared.sources.filter((s) => s.path !== cwd && s.path !== agent.repoPath && !taskRepo(s));
+      const seen = new Set<string>();
+      sources = prepared.sources.filter((s) => s.path !== cwd && s.path !== agent.repoPath && !taskRepo(s) && !seen.has(s.path) && !!seen.add(s.path));
       for (const text of prepared.notices) job.acc.addNotice("warning", text);
     } finally {
       clearInterval(watch);
@@ -1886,7 +1894,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const workspace = agent.workspaceId
     ? get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", agent.workspaceId)
     : null;
-  const promptSources = workspace && sources.length ? { workspace: workspace.name, items: sources } : null;
+  const projectWorkspace = project
+    ? project.workspaceId === agent.workspaceId
+      ? workspace
+      : get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", project.workspaceId)
+    : null;
+  const promptSources = (workspace || project) && sources.length ? { workspace: workspace?.name ?? null, project: project?.name ?? null, items: sources } : null;
   // Keys in the environment are only for Bash on this computer (and need an open vault).
   const toolKeysInEnv = !dreaming && !(vm && settings.vm.isolateHostShell);
   const toolList = dreaming ? [] : apiToolsForAgent(agent);
@@ -1900,6 +1913,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   }));
   const standing = instructionsSection(settings, {
     workspace: workspace ? { name: workspace.name, text: workspace.instructions } : null,
+    project: project
+      ? { name: project.name, workspace: projectWorkspace?.name ?? "", description: project.description, text: project.instructions }
+      : null,
     chat: conv.instructions ?? "",
   });
   const digest = instructionsDigest(standing);

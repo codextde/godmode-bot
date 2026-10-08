@@ -1202,4 +1202,32 @@ ALTER TABLE workspaces ADD COLUMN auto_merge INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE runners ADD COLUMN auto_update INTEGER NOT NULL DEFAULT 1;
 `,
   },
+  {
+    id: 77,
+    name: "projects",
+    sql: /* sql */ `
+-- Optional projects inside a workspace, with their own context, folders/repositories (workspace_sources.project_id)
+-- and browser profile. Chats, tickets and agents may belong to one.
+CREATE TABLE IF NOT EXISTS projects (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  color TEXT NOT NULL DEFAULT 'violet',
+  icon TEXT NOT NULL DEFAULT '📁',
+  instructions TEXT NOT NULL DEFAULT '',
+  browser_profile_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_slug ON projects(workspace_id, slug);
+ALTER TABLE workspace_sources ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE CASCADE;
+ALTER TABLE agents ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+ALTER TABLE conversations ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+ALTER TABLE tasks ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+`,
+  },
 ];

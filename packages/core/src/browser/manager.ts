@@ -29,6 +29,7 @@ import { initFocusGuard } from "./focusGuard";
 import { TabRegistry } from "./tabs";
 import { leasedChats, openChatLease, releaseChatLease, stopChatProxy } from "./proxy";
 import * as importer from "./importer";
+import { projectOfChat } from "../services/projects";
 
 const log = logger("browser");
 
@@ -248,10 +249,13 @@ export async function deleteProfile(id: string): Promise<void> {
   const r = requireRow(id);
   if (!r.workspace_id && r.is_default) throw badRequest("The global default profile can't be deleted. Make another global profile the default first.");
   await stopBrowser(id);
+  let projects = 0;
   tx(() => {
     run("DELETE FROM browser_profiles WHERE id = ?", id);
     run("UPDATE conversations SET browser_profile_id = NULL WHERE browser_profile_id = ?", id);
+    projects = run("UPDATE projects SET browser_profile_id = NULL WHERE browser_profile_id = ?", id).changes;
   });
+  if (projects) bus.changed("workspaces");
   // Only ever delete directories Godmode created.
   const cfg = config();
   for (const dir of [r.user_data_dir, join(cfg.dataDir, "browser-use", id)]) {
@@ -292,7 +296,10 @@ export function resolveProfileForAgent(agent: Agent, conversationId?: string | n
   const pinned = agent.browser?.profileId ? row(agent.browser.profileId) : null;
   if (pinned) return toProfile(pinned);
   if (agent.browser?.profileId) log.warn(`agent ${agent.id} references missing browser profile ${agent.browser.profileId}; using default`);
-  const workspaceId = agent.workspaceId ?? chat?.workspace_id ?? null;
+  const project = projectOfChat(conversationId, agent);
+  const forProject = project?.browserProfileId ? row(project.browserProfileId) : null;
+  if (forProject && (!forProject.workspace_id || forProject.workspace_id === project!.workspaceId)) return toProfile(forProject);
+  const workspaceId = agent.workspaceId ?? project?.workspaceId ?? chat?.workspace_id ?? null;
   if (workspaceId) {
     const wsDefault = get<ProfileRow>("SELECT * FROM browser_profiles WHERE workspace_id = ? AND is_default = 1 ORDER BY created_at LIMIT 1", workspaceId);
     if (wsDefault) return toProfile(wsDefault);

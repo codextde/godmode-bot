@@ -51,6 +51,7 @@ interface TableSpec {
  */
 const TABLES: TableSpec[] = [
   { table: "workspaces", own: [], entity: "workspaces" },
+  { table: "projects", own: [], entity: "workspaces" },
   {
     table: "agents",
     // failed_run_id: the agent's last failed run on this computer ("error" in the list) — the runner's are its own.

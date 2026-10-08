@@ -82,6 +82,7 @@ import {
 import { notify } from "../services/notifications";
 import { workingDirectoryProblem } from "../services/folders";
 import { isRepoFolder, listSources, reposDir } from "../services/workspaceSources";
+import { chatSourcePaths, checkProject } from "../services/projects";
 import {
   commitWork,
   commitsAhead,
@@ -110,6 +111,7 @@ const STARTABLE: readonly TaskStatus[] = ["todo", "in_progress"];
 interface TaskRow extends PauseQuestionCols {
   id: string;
   workspace_id: string | null;
+  project_id: string | null;
   number: number;
   title: string;
   description: string;
@@ -204,6 +206,7 @@ function toModel(r: TaskRow): Task {
   return {
     id: r.id,
     workspaceId: r.workspace_id,
+    projectId: r.project_id ?? null,
     number: r.number,
     title: r.title,
     description: r.description,
@@ -662,6 +665,11 @@ export function createTask(input: TaskInput, actor: TaskActor = "user"): Task {
   // A part serves its ticket's goal.
   const goalId = parentId ? (get<{ goal_id: string | null }>("SELECT goal_id FROM tasks WHERE id = ?", parentId)?.goal_id ?? null) : checkGoal(input.goalId, workspaceId);
   const agentId = checkAgent(input.agentId, workspaceId);
+  // A part works on its ticket's project unless it names another.
+  const projectId =
+    input.projectId === undefined && parentId
+      ? (get<{ project_id: string | null }>("SELECT project_id FROM tasks WHERE id = ?", parentId)?.project_id ?? null)
+      : checkProject(input.projectId, workspaceId);
   const status = input.status ? cleanStatus(input.status) : agentId ? "todo" : "backlog";
   const ts = now();
   const id = newId("tsk");
@@ -675,6 +683,7 @@ export function createTask(input: TaskInput, actor: TaskActor = "user"): Task {
   insert("tasks", {
     id,
     workspace_id: workspaceId,
+    project_id: projectId,
     number,
     title: cleanTitle(input.title),
     description,
@@ -756,6 +765,7 @@ export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "use
   const waitsFor = patch.waitsFor !== undefined ? checkDependencies(id, patch.waitsFor, current.workspace_id) : undefined;
   update("tasks", id, {
     goal_id: goalId,
+    project_id: patch.projectId !== undefined ? checkProject(patch.projectId, current.workspace_id) : undefined,
     title: patch.title !== undefined ? cleanTitle(patch.title) : undefined,
     description,
     type: patch.type !== undefined ? cleanType(patch.type) : undefined,
@@ -1043,13 +1053,14 @@ function block(id: string, reason: string, opts: { kind: TaskBlockedKind; from?:
 }
 
 /**
- * The repository a task works in: the one it names (a URL or one of the workspace's folders), else the workspace's
- * first git repository — a cloned URL or a folder that is a git repository. null = the task has none.
+ * The repository a task works in: the one it names (a URL or one of the workspace's or project's folders), else its
+ * project's first git repository, else the workspace's — a cloned URL or a folder that is a git repository. null = none.
  */
 function taskRepo(task: TaskRow): { repo: TaskRepo; branch: string } | { error: string } | null {
+  // The project's repositories come first, then the workspace's own.
   const sources = task.workspace_id
-    ? all<{ kind: "folder" | "git"; path: string; url: string | null; branch: string | null }>(
-        "SELECT kind, path, url, branch FROM workspace_sources WHERE workspace_id = ? ORDER BY position, created_at",
+    ? all<{ kind: "folder" | "git"; path: string; url: string | null; branch: string | null; project_id: string | null }>(
+        "SELECT kind, path, url, branch, project_id FROM workspace_sources WHERE workspace_id = ? ORDER BY project_id IS NULL, position, created_at",
         task.workspace_id,
       )
     : [];
@@ -1061,6 +1072,7 @@ function taskRepo(task: TaskRow): { repo: TaskRepo; branch: string } | { error: 
   }
   if (task.repo_url) return { repo: { kind: "remote", url: task.repo_url }, branch: "" };
   for (const s of sources) {
+    if (s.project_id && s.project_id !== task.project_id) continue;
     if (s.kind === "git" && s.url) return { repo: { kind: "remote", url: s.url }, branch: s.branch ?? "" };
     if (s.kind === "folder" && usable(s.path)) return { repo: { kind: "local", path: s.path }, branch: "" };
   }
@@ -1261,6 +1273,8 @@ export async function dispatch(id: string, resume?: Resume): Promise<void> {
       sql("UPDATE conversations SET archived = 1 WHERE id = ?", conversationId);
       sql("UPDATE tasks SET conversation_id = ? WHERE id = ?", conversationId, id);
     }
+    // The agent works with the ticket's project (or its own when the ticket has none).
+    sql("UPDATE conversations SET project_id = ? WHERE id = ?", task.project_id ?? null, conversationId);
     // The conversation shows the files attached to the message; Claude gets the description with their local copies.
     const staged = stageTaskAttachments(agent, task.number, task.description);
     activity.delete(id);
@@ -1876,11 +1890,11 @@ function resultFolders(task: TaskRow, conversationId: string): string[] {
     /* deleted meanwhile */
   }
   const folder = get<{ working_directory: string | null }>("SELECT working_directory FROM conversations WHERE id = ?", conversationId)?.working_directory;
-  const workspaceId = task.workspace_id ?? agent?.workspaceId;
   return [
     ...(agent ? [agent.repoPath] : []),
     ...[folder ?? agent?.workingDirectory].filter((f): f is string => !!f),
-    ...(workspaceId ? listSources(workspaceId).map((s) => s.path) : []),
+    ...(agent ? chatSourcePaths(conversationId, agent) : []),
+    ...(task.workspace_id && !agent?.workspaceId ? listSources(task.workspace_id).map((s) => s.path) : []),
     tmpdir(),
     ...(process.platform === "win32" ? [] : ["/tmp"]),
   ];

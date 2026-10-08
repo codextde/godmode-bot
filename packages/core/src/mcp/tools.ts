@@ -68,7 +68,7 @@ import { currentVmPage, fillIntoVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
 import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
-import { listSources } from "../services/workspaceSources";
+import { chatSources } from "../services/projects";
 import { get } from "../db";
 import { config } from "../config";
 import { fixRunner, runnerExec, runnerHealth } from "../remote/runners";
@@ -188,6 +188,7 @@ function agentSummary(a: Agent, names: Map<string, string>, team: Agent[] = list
     reportsTo: a.isDefault ? null : lead ? { id: lead.id, name: lead.name } : null,
     description: a.description,
     workspace: scopeName(a.workspaceId, names),
+    ...(a.projectId ? { projectId: a.projectId } : {}),
     status: a.status,
     enabled: a.enabled,
     lastRunAt: a.lastRunAt,
@@ -313,7 +314,9 @@ function apiCallPlaces(agent: Agent, ctx: RunContext): CallPlaces {
   const shared = vmId ? sharedDirOf(vmId) : null;
   // Like the runner: a coding task works in its own checkout, not in the workspace's shared clone.
   const taskRepo = get<{ repo_url: string }>("SELECT repo_url FROM tasks WHERE conversation_id = ? AND type = 'coding'", ctx.conversationId)?.repo_url;
-  const sources = agent.workspaceId ? listSources(agent.workspaceId).filter((s) => !(taskRepo && s.url === taskRepo)).map((s) => s.path) : [];
+  const sources = chatSources(ctx.conversationId, agent)
+    .filter((s) => !(taskRepo && s.url === taskRepo))
+    .map((s) => s.path);
   return {
     roots: [agent.repoPath, ...(folder ? [folder] : []), ...(shared ? [shared] : []), ...sources],
     cwd: folder ?? agent.repoPath,
@@ -419,6 +422,7 @@ const PERSONALITY_HELP =
 /** Agent fields an orchestrator may set. Secret access and management rights stay human-only. */
 const agentFields = {
   workspaceId: z.string().nullable().optional().describe("Workspace id, or null for a global agent (agent_create only; moving agents is human-only)"),
+  projectId: z.string().nullable().optional().describe("Project of its workspace it works on by default (workspaces_list shows them); null = none"),
   avatar: z.string().max(16).optional().describe("Emoji shown where only text fits (chat apps, file titles)"),
   color: z.string().max(32).optional().describe(`Character colour: ${AGENT_COLORS.join(", ")}`),
   character: characterSchema.optional(),
@@ -685,6 +689,7 @@ function taskSummary(t: Task, names: Map<string, string>, agentNames: Map<string
     ...(t.labels.length ? { labels: t.labels } : {}),
     workspace: scopeName(t.workspaceId, names),
     workspaceId: t.workspaceId,
+    ...(t.projectId ? { projectId: t.projectId } : {}),
     agent: t.agentId ? (agentNames.get(t.agentId) ?? t.agentId) : null,
     agentId: t.agentId,
     ...(t.createdBy.startsWith("agent:") ? { filedBy: agentNames.get(t.createdBy.slice(6)) ?? "an agent" } : {}),
@@ -1285,7 +1290,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "agent_update",
     description:
-      "Update an agent's name, role, who it reports to, look (emoji, colour, character), personality, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope), subagents or heartbeat. Workspace, browser profile, secret access and login permissions can only be changed by the human in Settings.",
+      "Update an agent's name, role, who it reports to, look (emoji, colour, character), personality, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope), subagents, heartbeat or project (within its workspace). Workspace, browser profile, secret access and login permissions can only be changed by the human in Settings.",
     schema: z.object({ agentId: z.string(), name: z.string().min(1).max(100).optional(), ...agentFields }),
     when: managesSetup,
     run: async ({ agentId, ...patch }, { agent, ctx }) => {
@@ -1551,6 +1556,7 @@ const TOOLS: ToolDef[] = [
       description: z.string().max(20_000).optional(),
       type: z.enum(TASK_TYPES as [string, ...string[]]).optional(),
       workspaceId: z.string().nullable().optional().describe("Workspace of the task; null/omitted = global"),
+      projectId: z.string().nullable().optional().describe("Project of that workspace (workspaces_list): its agent gets the project's context, folders and repositories"),
       agentId: z.string().nullable().optional().describe("Agent of that workspace (or a global one) to work on it"),
       start: z.boolean().optional(),
       priority: z.enum(TASK_PRIORITIES as [string, ...string[]]).optional(),
@@ -1671,6 +1677,7 @@ const TOOLS: ToolDef[] = [
       type: z.enum(TASK_TYPES as [string, ...string[]]).optional(),
       status: z.enum(TASK_STATUSES as [string, ...string[]]).optional(),
       agentId: z.string().nullable().optional(),
+      projectId: z.string().nullable().optional().describe("Project of the task's workspace, or null for none"),
       archived: z.boolean().optional(),
       priority: z.enum(TASK_PRIORITIES as [string, ...string[]]).optional(),
       dueDate: z.string().max(10).nullable().optional().describe("YYYY-MM-DD, or null to remove it"),
@@ -1865,7 +1872,8 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "workspaces_list",
-    description: "List workspaces (groups of agents, logins and integrations) with the folders and git repositories their agents work with.",
+    description:
+      "List workspaces (groups of agents, logins and integrations) with the folders and git repositories their agents work with, and their optional projects (each with its own context, folders and repositories; tasks, chats and agents can belong to one).",
     schema: z.object({}),
     when: isManager,
     run: () =>
@@ -1875,6 +1883,12 @@ const TOOLS: ToolDef[] = [
           name: w.name,
           description: w.description,
           sources: w.sources.map((s) => ({ kind: s.kind, name: s.name, path: s.path, url: s.url, branch: s.branch, status: s.status })),
+          projects: w.projects.map((p) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            sources: p.sources.map((s) => ({ kind: s.kind, name: s.name, path: s.path, url: s.url, branch: s.branch, status: s.status })),
+          })),
         })),
       ),
   }),

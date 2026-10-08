@@ -41,6 +41,8 @@ const NO_GIT = "git isn't installed on this computer. Install it (Settings → S
 interface SourceRow {
   id: string;
   workspace_id: string;
+  /** null = the workspace's own; else one of its projects'. */
+  project_id: string | null;
   kind: "folder" | "git";
   path: string;
   url: string | null;
@@ -140,23 +142,31 @@ function toModel(row: SourceRow): WorkspaceSource {
   };
 }
 
-function rowsOf(workspaceId: string): SourceRow[] {
-  return all<SourceRow>("SELECT * FROM workspace_sources WHERE workspace_id = ? ORDER BY position, created_at", workspaceId);
+/** The workspace's own sources (projectId null) or one project's. */
+function rowsOf(workspaceId: string, projectId: string | null = null): SourceRow[] {
+  return all<SourceRow>(
+    "SELECT * FROM workspace_sources WHERE workspace_id = ? AND project_id IS ? ORDER BY position, created_at",
+    workspaceId,
+    projectId,
+  );
 }
 
-export function listSources(workspaceId: string): WorkspaceSource[] {
-  return rowsOf(workspaceId).map(toModel);
+export function listSources(workspaceId: string, projectId: string | null = null): WorkspaceSource[] {
+  return rowsOf(workspaceId, projectId).map(toModel);
 }
 
-/** Every workspace's sources, by workspace id. */
-export function sourcesByWorkspace(): Map<string, WorkspaceSource[]> {
-  const out = new Map<string, WorkspaceSource[]>();
+/** Every workspace's own sources by workspace id, and every project's by project id. */
+export function sourcesByOwner(): { workspaces: Map<string, WorkspaceSource[]>; projects: Map<string, WorkspaceSource[]> } {
+  const workspaces = new Map<string, WorkspaceSource[]>();
+  const projects = new Map<string, WorkspaceSource[]>();
   for (const row of all<SourceRow>("SELECT * FROM workspace_sources ORDER BY workspace_id, position, created_at")) {
-    const list = out.get(row.workspace_id) ?? [];
+    const map = row.project_id ? projects : workspaces;
+    const key = row.project_id ?? row.workspace_id;
+    const list = map.get(key) ?? [];
     list.push(toModel(row));
-    out.set(row.workspace_id, list);
+    map.set(key, list);
   }
-  return out;
+  return { workspaces, projects };
 }
 
 function cloneDirName(name: string, taken: Set<string>, workspaceId: string): string {
@@ -173,10 +183,11 @@ function cloneDirName(name: string, taken: Set<string>, workspaceId: string): st
  * missing can still be saved. Call inside the caller's transaction; run the returned function once it committed — it
  * starts cloning new repositories and moves removed clones to the trash.
  */
-export function setSources(workspaceId: string, inputs: WorkspaceSourceInput[]): () => void {
-  if (inputs.length > MAX_SOURCES) throw badRequest(`A workspace can have up to ${MAX_SOURCES} folders and repositories.`);
-  const current = rowsOf(workspaceId);
-  const taken = new Set(current.filter((r) => r.kind === "git").map((r) => r.path.toLowerCase()));
+export function setSources(workspaceId: string, inputs: WorkspaceSourceInput[], projectId: string | null = null): () => void {
+  if (inputs.length > MAX_SOURCES) throw badRequest(`A ${projectId ? "project" : "workspace"} can have up to ${MAX_SOURCES} folders and repositories.`);
+  const current = rowsOf(workspaceId, projectId);
+  // Clones of the workspace and all its projects share one folder.
+  const taken = new Set(gitSourceRows(workspaceId).map((r) => r.path.toLowerCase()));
   const kept = new Map<string, number>();
   const added: SourceRow[] = [];
   const seen = new Set<string>();
@@ -200,7 +211,7 @@ export function setSources(workspaceId: string, inputs: WorkspaceSourceInput[]):
       if (!path) throw badRequest("Pick a folder to add.");
       if (known(`folder:${path}`, (r) => r.kind === "folder" && r.path === path, position)) return;
       seen.add(`folder:${path}`);
-      added.push(newRow(workspaceId, { kind: "folder", path, url: null, branch: null, position }, ts));
+      added.push(newRow(workspaceId, projectId, { kind: "folder", path, url: null, branch: null, position }, ts));
       return;
     }
     const parsed = parseGitUrl(input.url ?? "");
@@ -211,7 +222,7 @@ export function setSources(workspaceId: string, inputs: WorkspaceSourceInput[]):
     if (known(key, (r) => r.kind === "git" && r.url === parsed.url && (r.branch ?? null) === branch, position)) return;
     seen.add(key);
     const dir = cloneDirName(parsed.name, taken, workspaceId);
-    added.push(newRow(workspaceId, { kind: "git", path: dir, url: parsed.url, branch, position }, ts));
+    added.push(newRow(workspaceId, projectId, { kind: "git", path: dir, url: parsed.url, branch, position }, ts));
   });
 
   const removed = current.filter((r) => !kept.has(r.id));
@@ -228,10 +239,11 @@ export function setSources(workspaceId: string, inputs: WorkspaceSourceInput[]):
   };
 }
 
-function newRow(workspaceId: string, v: Pick<SourceRow, "kind" | "path" | "url" | "branch" | "position">, ts: string): SourceRow {
+function newRow(workspaceId: string, projectId: string | null, v: Pick<SourceRow, "kind" | "path" | "url" | "branch" | "position">, ts: string): SourceRow {
   return {
     id: newId("src"),
     workspace_id: workspaceId,
+    project_id: projectId,
     ...v,
     error: null,
     note: null,
@@ -269,9 +281,11 @@ export async function trashClones(rows: SourceRow[]): Promise<void> {
   }
 }
 
-/** Git sources of a workspace, for trashing their clones once the workspace is deleted. */
-export function gitSourceRows(workspaceId: string): SourceRow[] {
-  return rowsOf(workspaceId).filter((r) => r.kind === "git");
+/** Git sources of a workspace and its projects (or of one project), for trashing their clones once it is deleted. */
+export function gitSourceRows(workspaceId: string, projectId?: string): SourceRow[] {
+  return projectId
+    ? rowsOf(workspaceId, projectId).filter((r) => r.kind === "git")
+    : all<SourceRow>("SELECT * FROM workspace_sources WHERE workspace_id = ? AND kind = 'git'", workspaceId);
 }
 
 /** Clone the repository now, or update the clone. Returns right away; the source's status shows the progress. */
@@ -511,7 +525,7 @@ async function prepareSource(
   if (row.kind === "folder") {
     const problem = workingDirectoryProblem(row.path);
     return problem
-      ? { notice: `The workspace folder "${name}" was skipped: ${problem}` }
+      ? { notice: `The ${row.project_id ? "project" : "workspace"} folder "${name}" was skipped: ${problem}` }
       : { source: { kind: "folder", name, path: row.path, url: null, branch: null } };
   }
   const path = clonePath(row);
@@ -551,11 +565,11 @@ async function prepareSource(
  * on without it.
  */
 export async function prepareSources(
-  workspaceId: string | null,
+  owners: { workspaceId: string; projectId: string | null }[],
   opts: { onActivity: (label: string) => void; signal: AbortSignal },
 ): Promise<{ sources: RunSource[]; notices: string[] }> {
-  if (!workspaceId) return { sources: [], notices: [] };
-  const prepared = await Promise.all(rowsOf(workspaceId).map((row) => prepareSource(row, opts)));
+  const rows = owners.flatMap((o) => rowsOf(o.workspaceId, o.projectId));
+  const prepared = await Promise.all(rows.map((row) => prepareSource(row, opts)));
   return {
     sources: prepared.flatMap((p) => (p.source ? [p.source] : [])),
     notices: prepared.flatMap((p) => (p.notice ? [p.notice] : [])),

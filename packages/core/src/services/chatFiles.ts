@@ -14,7 +14,7 @@ import { get } from "../db";
 import { sniffType } from "../integrations/apiToolRequest";
 import { SHOWN_IMAGE } from "../tasks/attachments";
 import { HttpError, badRequest, notFound } from "../util";
-import { listSources } from "./workspaceSources";
+import { chatSourcePaths } from "./projects";
 
 type Kind = ChatFile["kind"];
 
@@ -34,7 +34,7 @@ function chatFolders(conversationId: string): string[] {
     conv.working_directory ?? agent?.workingDirectory,
     agent?.repoPath,
     agent && join(agent.repoPath, "workspace"),
-    ...(agent?.workspaceId ? listSources(agent.workspaceId).map((s) => s.path) : []),
+    ...(agent ? chatSourcePaths(conversationId, agent) : []),
   ];
   return [...new Set(folders.filter((f): f is string => !!f))];
 }
