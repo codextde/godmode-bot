@@ -1,26 +1,21 @@
-Godmode Bot — Commercial License
+MIT License
 
-Copyright (c) 2026 Codext GmbH, Frankenstraße 10, 74549 Wolpertshausen, Germany. All rights reserved.
+Copyright (c) 2026 Codext GmbH
 
-This software, including its source code, binaries, documentation and assets (the "Software"), is proprietary
-to Codext GmbH. It is licensed, not sold.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. License. If you bought a license at https://usegodmode.com, Codext GmbH grants you a non-exclusive,
-   non-transferable license to install and use the Software on devices you own or control, for your own or your
-   organisation's internal purposes, under the Terms of Sale & License at https://usegodmode.com/legal/terms.
-   A lifetime license is perpetual; a monthly license lasts while your subscription is active.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-2. Restrictions. Unless Codext GmbH agrees in writing, you may not copy (beyond installation and backups),
-   modify, distribute, sublicense, rent, sell or publish the Software or your license key, or use the source code
-   to build a competing product.
-
-3. Third-party components. The Software includes open-source components under their own licenses (for example
-   MIT, Apache-2.0 and BSD). Those licenses govern those components and take precedence for them.
-
-4. Earlier versions. Copies of Godmode Bot published before this license took effect under the MIT License remain
-   available to their recipients under the MIT License; this license applies to all later versions.
-
-5. No warranty beyond the Terms. Except as stated in the Terms of Sale & License and required by law, the Software
-   is provided "as is". Liability is governed by the Terms.
-
-Contact: kontakt@codext.de
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -10,6 +10,7 @@ export const SITE = {
     'Godmode is like Grok Bot, but with Claude: Claude Opus 5.5 as a coworker that uses your own computer like you do. Your browser and logins, apps in the background, even its own Mac. Hand over the work. Get it back done.',
   email: 'kontakt@codext.de',
   model: 'Claude Opus 5.5',
+  repo: 'https://github.com/codextde/godmode-bot',
 } as const;
 
 /**

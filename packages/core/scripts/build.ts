@@ -226,7 +226,12 @@ async function compile(opts: {
       bytecode: opts.bytecode,
       naming: { asset: "[dir]/[name].[ext]" },
       // GODMODE_BUILD: which commit this binary is (every build of a version says the same number otherwise).
-      define: { "process.env.NODE_ENV": JSON.stringify("production"), "process.env.GODMODE_BUILD": JSON.stringify(buildStamp()) },
+      // GODMODE_OFFICIAL_BUILD: only the release workflow sets it; it turns on the Pro licence check.
+      define: {
+        "process.env.NODE_ENV": JSON.stringify("production"),
+        "process.env.GODMODE_BUILD": JSON.stringify(buildStamp()),
+        "process.env.GODMODE_OFFICIAL_BUILD": JSON.stringify(process.env.GODMODE_OFFICIAL_BUILD === "1" ? "1" : ""),
+      },
       throw: false,
     });
   } catch (err) {

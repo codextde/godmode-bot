@@ -75,6 +75,8 @@ const defaultFetch: Fetch = (url, init) => fetch(url, init);
 let fetchImpl = defaultFetch;
 let enforcedOverride: boolean | null = null;
 let compiled = COMPILED;
+const OFFICIAL = process.env.GODMODE_OFFICIAL_BUILD === "1";
+let official = OFFICIAL;
 /** A `GODMODE_LICENSE` key that differs from the stored one: it replaces it once the server has answered for it. */
 let pendingEnvKey: string | null = null;
 let clock = () => Date.now();
@@ -96,6 +98,10 @@ export function __setLicenseCompiledForTests(value: boolean | null) {
   compiled = value ?? COMPILED;
 }
 
+export function __setLicenseOfficialForTests(value: boolean | null) {
+  official = value ?? OFFICIAL;
+}
+
 export function __setLicenseClockForTests(fn: (() => number) | null) {
   clock = fn ?? (() => Date.now());
 }
@@ -110,8 +116,9 @@ export function __resetLicenseForTests() {
 }
 
 /**
- * Only release builds (the compiled app sidecar, server binary and Docker image) refuse runs; Godmode run from source
- * never does. `GODMODE_LICENSE_ENFORCE=1` turns it on from source (to try it out); nothing turns it off in a release.
+ * Godmode is MIT licensed: only the official builds from usegodmode.com (compiled with GODMODE_OFFICIAL_BUILD=1 by the
+ * release workflow) refuse runs without a Pro licence. Runs from source and builds of your own never do.
+ * `GODMODE_LICENSE_ENFORCE=1` turns it on from source (to try it out); nothing turns it off in an official build.
  * A runner works for another Godmode, which holds the licence.
  */
 export function licenseEnforced(): boolean {
@@ -121,7 +128,7 @@ export function licenseEnforced(): boolean {
   } catch {
     return false;
   }
-  return compiled || process.env.GODMODE_LICENSE_ENFORCE === "1";
+  return (compiled && official) || process.env.GODMODE_LICENSE_ENFORCE === "1";
 }
 
 /** `GODMODE_LICENSE_URL` is for tests and builds from source: a release build only asks the real site. */
@@ -202,7 +209,7 @@ export function licenseState(): LicenseState {
   if (blocked) {
     if (status === "missing" && graceEndsAt) {
       message = `The 7 days to add a licence key ended on ${shortDate(graceEndsAt)}. Add your key or start the free trial to keep your agents working.`;
-    } else if (status === "missing") message = "Godmode needs a licence to start new work. Add your licence key or start the 7-day free trial.";
+    } else if (status === "missing") message = "Godmode needs a licence to start new work. Add your licence key or start the 14-day free trial.";
     else if (status === "unverified") message = "Godmode couldn't check your licence key for 7 days. Connect to the internet, then refresh the licence.";
     else if (status === "invalid") message = refusedKeyMessage(verdict!);
     else message = "Your Godmode licence has ended. Renew it or add another key to keep your agents working.";

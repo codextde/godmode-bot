@@ -19,6 +19,7 @@ import {
   __setLicenseClockForTests,
   __setLicenseCompiledForTests,
   __setLicenseEnforcedForTests,
+  __setLicenseOfficialForTests,
   __setLicenseFetchForTests,
   initLicense,
   licenseEnforced,
@@ -150,6 +151,21 @@ describe("the gate", () => {
     expect(s.blocked).toBe(false);
     const chat = await startChat({ content: "Say hello" });
     expect((await waitForRun(chat.run.id, 20_000)).status).toBe("succeeded");
+  });
+
+  test("only official builds enforce it; builds of your own stay free (MIT)", () => {
+    __setLicenseEnforcedForTests(null);
+    try {
+      __setLicenseCompiledForTests(true);
+      __setLicenseOfficialForTests(false);
+      expect(licenseEnforced()).toBe(false);
+      __setLicenseOfficialForTests(true);
+      expect(licenseEnforced()).toBe(true);
+    } finally {
+      __setLicenseCompiledForTests(null);
+      __setLicenseOfficialForTests(null);
+      __setLicenseEnforcedForTests(true);
+    }
   });
 
   test("on: a new run is refused with 402 license_required, and nothing is left behind", async () => {
