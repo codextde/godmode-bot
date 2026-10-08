@@ -335,7 +335,7 @@ export function AgentForm({
   const err = (k: string) => (showErrors ? errors[k] : undefined);
   const preview = { id: agentId, name: values.name, avatar: values.avatar, color: values.color, character: values.character };
   const human = boot?.settings.general.userName;
-  const inherited = useInheritedInstructions(values.workspaceId);
+  const inherited = useInheritedInstructions(values.workspaceId, undefined, values.projectId);
   const vmChoices = useVmChoices();
   const sections = vmChoices.available ? SECTIONS : SECTIONS.filter((s) => s.id !== "vm");
 
