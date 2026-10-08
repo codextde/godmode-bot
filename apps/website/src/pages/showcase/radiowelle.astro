@@ -45,6 +45,7 @@ const timeline = [
   ['18:38', 'package-check', 'Signs and uploads the Android bundle and sends the app to Google Play review.'],
   ['19:00', 'hand', 'Apple doesn’t let any API create a new app. Godmode asks once; you log in to App Store Connect with your 2FA. That’s the only human step.'],
   ['19:07', 'rocket', 'Creates the App Store record, uploads the build, sets privacy, price and availability and submits it to App Review.'],
+  ['Oct 8', 'badge-check', 'Apple approves it on the first try. Radiowelle is live on the App Store. Google Play is still reviewing.'],
 ] as const;
 
 const did = [
@@ -66,7 +67,7 @@ const shots = [
 const faqs = [
   {
     q: 'Did it really publish an app to both stores by itself?',
-    a: 'It built the app, created both store listings, filled every form and submitted the app to Apple and Google. You still own the developer accounts: Godmode used the Apple Developer and Google Play accounts already set up on the computer. Apple and Google then review the app as usual.',
+    a: 'It built the app, created both store listings, filled every form and submitted the app to Apple and Google. Apple approved it on the first try the next day; Google Play is still reviewing it. You still own the developer accounts: Godmode used the Apple Developer and Google Play accounts already set up on the computer.',
   },
   {
     q: 'What did the human do?',
@@ -99,8 +100,13 @@ const faqs = [
           <p class="lead mt-7 max-w-[600px]" data-reveal style="--d:200">
             Daniel sent Godmode one message: build the best free radio app and publish it. 2 hours and 45 minutes later
             Radiowelle was built, tested, listed and submitted to the App Store and Google Play. He touched the keyboard
-            once, for Apple’s 2FA.
+            once, for Apple’s 2FA. Apple approved it on the first try the next day.
           </p>
+          <a href="https://apps.apple.com/app/id6820185211" rel="noopener" class="founding-strip mt-6 !py-2" data-reveal style="--d:260" data-track="showcase_radiowelle_live">
+            <span class="flex items-center gap-2"><span class="live-dot !size-1.5"></span> Live on the App Store</span>
+            <span class="text-muted">· Google Play in review</span>
+            <Icon name="arrow-up-right" size={14} class="text-dim" />
+          </a>
           <div class="mt-9 flex flex-col gap-3 sm:flex-row" data-reveal style="--d:320">
             <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="showcase_radiowelle_hero" size="lg" />
             <a href="https://github.com/codextde/radiowelle" rel="noopener" class="btn btn-ghost btn-lg" data-track="showcase_radiowelle_github">
@@ -169,7 +175,7 @@ const faqs = [
             </li>
           ))}
         </ol>
-        <p class="mt-6 text-[13px] text-dim" data-reveal>Times in Berlin, October 7, 2026. Store review by Apple and Google comes after submission and takes its usual few days.</p>
+        <p class="mt-6 text-[13px] text-dim" data-reveal>Times in Berlin, October 7, 2026. The store reviews came after that: Apple approved the app on October 8, Google Play is still reviewing it.</p>
       </div>
     </section>
 
@@ -204,8 +210,8 @@ const faqs = [
           <div class="flex flex-wrap gap-2">
             <a href="https://github.com/codextde/radiowelle" rel="noopener" class="chip" data-track="showcase_radiowelle_repo"><Icon name="git-branch" size={12} /> GitHub</a>
             <a href="https://radiowelle.codext.de" rel="noopener" class="chip" data-track="showcase_radiowelle_site"><Icon name="globe" size={12} /> Website</a>
-            <a href="https://apps.apple.com/app/id6820185211" rel="noopener" class="chip" data-track="showcase_radiowelle_ios"><Icon name="apple" size={12} /> App Store</a>
-            <a href="https://play.google.com/store/apps/details?id=de.codext.radiowelle" rel="noopener" class="chip" data-track="showcase_radiowelle_play"><Icon name="smartphone" size={12} /> Google Play</a>
+            <a href="https://apps.apple.com/app/id6820185211" rel="noopener" class="chip" data-track="showcase_radiowelle_ios"><Icon name="apple" size={12} /> App Store (live)</a>
+            <a href="https://play.google.com/store/apps/details?id=de.codext.radiowelle" rel="noopener" class="chip" data-track="showcase_radiowelle_play"><Icon name="smartphone" size={12} /> Google Play (in review)</a>
           </div>
         </div>
       </div>
