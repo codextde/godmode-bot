@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { CharacterAvatar } from "@/components/character";
 import { Composer, type ComposerHandle } from "@/components/composer";
 import { ModelButton } from "@/components/model-button";
@@ -32,6 +32,8 @@ export default function Compose() {
   const [idea, setIdea] = useState("");
 
   const composer = useRef<ComposerHandle>(null);
+  const rail = useRef<ScrollView>(null);
+  const revealed = useRef(false);
   const choice = useNewChatChoice((s) => s.choice);
   // The model belongs to the agent picked here: a new pick starts from that agent's default.
   useEffect(() => useNewChatChoice.getState().reset(), [current?.id]);
@@ -58,31 +60,51 @@ export default function Compose() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: c.background }]}>
+    <ScrollView
+      style={{ backgroundColor: c.background }}
+      contentContainerStyle={styles.root}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      automaticallyAdjustKeyboardInsets
+    >
       <View style={{ paddingHorizontal: space.xl, gap: space.sm }}>
         <T variant="title">New chat</T>
         <WorkspaceChip />
       </View>
-      <View style={styles.agents}>
+      {/* One scrolling row, so a big team never pushes the message field off the sheet. */}
+      <ScrollView
+        ref={rail}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.agents}
+      >
         {enabled.map((a) => {
           const active = a.id === current?.id;
           return (
             <Pressable
               key={a.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
               onPress={() => {
                 tap();
                 setPicked(a.id);
               }}
+              onLayout={(e) => {
+                if (!active || revealed.current) return;
+                revealed.current = true;
+                rail.current?.scrollTo({ x: Math.max(0, e.nativeEvent.layout.x - space.xl), animated: false });
+              }}
               style={[styles.chip, { backgroundColor: active ? c.primary : c.sunken }]}
             >
               <CharacterAvatar agent={a} size={24} />
-              <T variant="subhead" color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
+              <T variant="subhead" numberOfLines={1} color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
                 {a.name}
               </T>
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
       <View style={{ paddingHorizontal: space.md }}>
         <Composer
           ref={composer}
@@ -115,19 +137,17 @@ export default function Compose() {
           </Pressable>
         ))}
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
-    flex: 1,
     paddingTop: 28,
+    paddingBottom: 40,
     gap: space.lg,
   },
   agents: {
-    flexDirection: "row",
-    flexWrap: "wrap",
     gap: space.sm,
     paddingHorizontal: space.xl,
   },
