@@ -1,1 +1,0 @@
-implement a feature to control the claude code config (profiles) like plugins, it should also be possible to install something like oh my claudecode (and similar projects) but from the user interface with nice enable disable feature
