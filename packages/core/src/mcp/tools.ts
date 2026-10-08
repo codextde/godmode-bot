@@ -68,7 +68,7 @@ import { currentVmPage, fillIntoVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
 import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
-import { chatSources } from "../services/projects";
+import { chatSources, projectOfChat } from "../services/projects";
 import { get } from "../db";
 import { config } from "../config";
 import { fixRunner, runnerExec, runnerHealth } from "../remote/runners";
@@ -1216,7 +1216,19 @@ const TOOLS: ToolDef[] = [
       const inherited = target.browser.profileId ? null : runChatBrowserProfile(ctx.runId);
       const reach = target.workspaceId ?? workspaceId;
       const browserProfileId = inherited && (!inherited.workspaceId || inherited.workspaceId === reach) ? inherited.id : null;
-      const conversation = createConversation({ agentId: target.id, title: `Task from ${agent.name}`, origin: "delegation", vmId, browserProfileId, workspaceId, fillOnly });
+      // So does the caller's project, when the target may work on it.
+      const project = projectOfChat(ctx.conversationId, agent);
+      const projectId = project && (!target.workspaceId || target.workspaceId === project.workspaceId) ? project.id : null;
+      const conversation = createConversation({
+        agentId: target.id,
+        title: `Task from ${agent.name}`,
+        origin: "delegation",
+        vmId,
+        browserProfileId,
+        workspaceId,
+        projectId,
+        fillOnly,
+      });
       // The chat shows the bare task under "From <agent>"; Claude also learns who asked and where its answer goes.
       const { run } = await sendMessage(conversation.id, {
         content: task,

@@ -545,7 +545,7 @@ export const api = {
   conversations: {
     /** The human has seen these chats ("all" = every chat). */
     read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),
-    list: (q: { agentId?: string; workspaceId?: ScopeFilter; search?: string; limit?: number; archived?: boolean } = {}) =>
+    list: (q: { agentId?: string; workspaceId?: ScopeFilter; projectId?: string; search?: string; limit?: number; archived?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
     create: (input: { agentId: string; title?: string; workspaceId?: string | null; projectId?: string | null }) => post<Conversation>("/api/conversations", input),

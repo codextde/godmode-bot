@@ -213,7 +213,8 @@ export function projectOfChat(conversationId: string | null | undefined, agent: 
 /** Folders and repositories a chat's runs work with: its workspace's and its project's. */
 export function chatSources(conversationId: string | null | undefined, agent: Pick<Agent, "workspaceId" | "projectId">): WorkspaceSource[] {
   const project = projectOfChat(conversationId, agent);
-  return [...(agent.workspaceId ? listSources(agent.workspaceId) : []), ...(project ? listSources(project.workspaceId, project.id) : [])];
+  const workspaceId = agent.workspaceId ?? project?.workspaceId ?? null;
+  return [...(workspaceId ? listSources(workspaceId) : []), ...(project ? listSources(project.workspaceId, project.id) : [])];
 }
 
 export function chatSourcePaths(conversationId: string | null | undefined, agent: Pick<Agent, "workspaceId" | "projectId">): string[] {

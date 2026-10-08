@@ -122,6 +122,8 @@ export default function ChatHome() {
     available[0];
   const selectedWorkspace = selected?.workspaceId ? workspaces.find((w) => w.id === selected.workspaceId) : undefined;
   const sidebarProject = scopeProject && selected && (!selected.workspaceId || selected.workspaceId === scopeProject.workspaceId) ? scopeProject.id : null;
+  // A pick made for another agent doesn't carry over.
+  useEffect(() => setProjectPick(undefined), [selected?.id]);
   const projectId = projectPick !== undefined ? projectPick : sidebarProject;
 
   const runners = useRunners();

@@ -1815,8 +1815,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const project = dreaming ? null : projectOfChat(job.conversationId, agent);
   // The workspace's and the project's folders and repositories; a missing clone is cloned first. A dream only works on its memory.
   let sources: RunSource[] = [];
+  // A global agent working on a project works in the project's workspace.
+  const workspaceId = agent.workspaceId ?? project?.workspaceId ?? null;
   const owners = [
-    ...(agent.workspaceId ? [{ workspaceId: agent.workspaceId, projectId: null }] : []),
+    ...(workspaceId ? [{ workspaceId, projectId: null }] : []),
     ...(project ? [{ workspaceId: project.workspaceId, projectId: project.id }] : []),
   ];
   if (!dreaming && owners.length) {
@@ -1891,14 +1893,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       log.warn(`could not list peers of agent ${agent.id}`, err);
     }
   }
-  const workspace = agent.workspaceId
-    ? get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", agent.workspaceId)
-    : null;
-  const projectWorkspace = project
-    ? project.workspaceId === agent.workspaceId
-      ? workspace
-      : get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", project.workspaceId)
-    : null;
+  const workspace = workspaceId ? get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", workspaceId) : null;
   const promptSources = (workspace || project) && sources.length ? { workspace: workspace?.name ?? null, project: project?.name ?? null, items: sources } : null;
   // Keys in the environment are only for Bash on this computer (and need an open vault).
   const toolKeysInEnv = !dreaming && !(vm && settings.vm.isolateHostShell);
@@ -1914,7 +1909,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const standing = instructionsSection(settings, {
     workspace: workspace ? { name: workspace.name, text: workspace.instructions } : null,
     project: project
-      ? { name: project.name, workspace: projectWorkspace?.name ?? "", description: project.description, text: project.instructions }
+      ? { name: project.name, workspace: workspace?.name ?? "", description: project.description, text: project.instructions }
       : null,
     chat: conv.instructions ?? "",
   });

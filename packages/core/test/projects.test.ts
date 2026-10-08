@@ -7,7 +7,7 @@ import { closeDb, get, openDb } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache, getSettings } from "../src/services/settings";
 import { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces } from "../src/services/workspaces";
-import { createProject, deleteProject, getProject, projectOfChat, updateProject } from "../src/services/projects";
+import { chatSourcePaths, createProject, deleteProject, getProject, projectOfChat, updateProject } from "../src/services/projects";
 import { prepareSources } from "../src/services/workspaceSources";
 import { createAgent, updateAgent } from "../src/agents/service";
 import { createConversation, listConversations, updateConversation } from "../src/services/conversations";
@@ -147,6 +147,17 @@ describe("chats, agents and tickets in a project", () => {
     const chat = createConversation({ agentId: agent.id, projectId: project.id });
     expect(chat).toMatchObject({ projectId: project.id, workspaceId: ws.id });
     expect(listConversations({ workspaceId: ws.id }).map((c) => c.id)).toContain(chat.id);
+  });
+
+  test("a global agent in a project works with the workspace's folders too", async () => {
+    const shared = folder("global-shared");
+    const own = folder("global-own");
+    const ws = createWorkspace({ name: "Global reach", sources: [{ kind: "folder", path: shared }] });
+    const project = createProject({ workspaceId: ws.id, name: "Reach", sources: [{ kind: "folder", path: own }] });
+    const agent = await createAgent({ name: "Roamer" });
+    const chat = createConversation({ agentId: agent.id, projectId: project.id });
+    expect(chatSourcePaths(chat.id, agent)).toEqual([shared, own]);
+    expect(chatSourcePaths(createConversation({ agentId: agent.id }).id, agent)).toEqual([]);
   });
 
   test("a workspace agent can't work on another workspace's project", async () => {

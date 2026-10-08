@@ -1,5 +1,4 @@
 import type { Agent, Conversation, Project, SpendPeriod } from "@godmode/shared";
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BUILTIN_MODELS, type ModelCatalog } from "@godmode/shared";
 import { api, type ScopeFilter } from "./api";
@@ -68,14 +67,12 @@ export function chatProject(c: Pick<Conversation, "projectId" | "agentId">, agen
 
 /** Chats of the workspace (and project) picked in the sidebar. */
 export function useScopedConversations() {
-  const query = useConversations(undefined, "", useUi((s) => s.workspace));
-  const project = useScopeProject();
-  const { data: agents } = useAllAgents();
-  const data = useMemo(
-    () => (project && query.data ? query.data.filter((c) => chatProject(c, agents) === project.id) : query.data),
-    [project, query.data, agents],
-  );
-  return { ...query, data };
+  const scope = useUi((s) => s.workspace);
+  const projectId = useScopeProject()?.id;
+  return useQuery({
+    queryKey: [...qk.conversations("all", "", scope), projectId ?? null],
+    queryFn: () => api.conversations.list({ search: "", limit: 100, workspaceId: scope, projectId }),
+  });
 }
 
 /** Whether a run belongs to the workspace (and project) picked in the sidebar: its chat is listed there, or its agent works there. */

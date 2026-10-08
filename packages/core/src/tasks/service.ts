@@ -791,6 +791,10 @@ export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "use
   });
   if (waitsFor !== undefined) writeDependencies(id, waitsFor);
   if (description !== undefined) claimTaskAttachments(id, description);
+  // Its chat follows: the next message there works with the new project.
+  if (patch.projectId !== undefined && current.conversation_id) {
+    sql("UPDATE conversations SET project_id = ? WHERE id = ?", getTask(id).projectId, current.conversation_id);
+  }
 
   const wasWorking = current.status === "in_progress";
   const starts =
@@ -1071,8 +1075,10 @@ function taskRepo(task: TaskRow): { repo: TaskRepo; branch: string } | { error: 
     return { repo: { kind: "local", path: task.repo_path }, branch: "" };
   }
   if (task.repo_url) return { repo: { kind: "remote", url: task.repo_url }, branch: "" };
+  // A ticket without a project works on its agent's, as its chat does.
+  const project = task.project_id ?? (task.agent_id ? (get<{ project_id: string | null }>("SELECT project_id FROM agents WHERE id = ?", task.agent_id)?.project_id ?? null) : null);
   for (const s of sources) {
-    if (s.project_id && s.project_id !== task.project_id) continue;
+    if (s.project_id && s.project_id !== project) continue;
     if (s.kind === "git" && s.url) return { repo: { kind: "remote", url: s.url }, branch: s.branch ?? "" };
     if (s.kind === "folder" && usable(s.path)) return { repo: { kind: "local", path: s.path }, branch: "" };
   }
