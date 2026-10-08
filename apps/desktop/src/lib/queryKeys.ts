@@ -77,6 +77,8 @@ export const qk = {
   run: (id: string) => ["runs", "detail", id],
   missingLogins: ["missing-logins"] as unknown[],
   questions: ["questions"] as unknown[],
+  /** Tasks agents gave the human, and the human's own. */
+  humanTasks: ["human-tasks"] as unknown[],
   mcpServers: ["mcp-servers"] as unknown[],
   apiTools: ["api-tools"] as unknown[],
   composio: ["composio"] as unknown[],

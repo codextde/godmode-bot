@@ -29,6 +29,7 @@ const ModsPage = lazy(() => import("@/pages/mods/mods-page"));
 const ActivityPage = lazy(() => import("@/pages/activity/activity-page"));
 const WorkspacesPage = lazy(() => import("@/pages/workspaces/workspaces-page"));
 const TasksPage = lazy(() => import("@/pages/tasks/tasks-page"));
+const HumanTasksPage = lazy(() => import("@/pages/human-tasks/human-tasks-page"));
 const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
 const TotpPage = lazy(() => import("@/pages/vault/totp-page"));
 const IntegrationsPage = lazy(() => import("@/pages/integrations/integrations-page"));
@@ -131,7 +132,7 @@ export function App() {
           id: n.link ? `question:${n.link}` : undefined,
           description: n.body || undefined,
           duration: 20_000,
-          action: n.link ? { label: "Answer", onClick: () => navigate(n.link!) } : undefined,
+          action: n.link ? { label: n.link.startsWith("/my-tasks") ? "Open" : "Answer", onClick: () => navigate(n.link!) } : undefined,
         });
         const desktopOn = qc.getQueryData<{ settings?: { general?: { desktopNotifications?: boolean } } }>(qk.bootstrap)?.settings?.general
           ?.desktopNotifications;
@@ -197,6 +198,7 @@ export function App() {
           <Route path="/agents/new" element={<AgentNewPage />} />
           <Route path="/agents/:agentId/*" element={<AgentDetailPage />} />
           <Route path="/tasks" element={<TasksPage />} />
+          <Route path="/my-tasks" element={<HumanTasksPage />} />
           <Route path="/automations" element={<AutomationsPage />} />
           <Route path="/routines" element={<Navigate to="/automations" replace />} />
           <Route path="/mods" element={<ModsPage />} />

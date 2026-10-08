@@ -126,6 +126,11 @@ export function useQuestions(status = "open") {
   return useQuery({ queryKey: [...qk.questions, status], queryFn: () => api.questions.list({ status }) });
 }
 
+/** Tasks for the human: the open ones and the latest closed ones. */
+export function useHumanTasks() {
+  return useQuery({ queryKey: qk.humanTasks, queryFn: () => api.humanTasks.list({ status: "all" }) });
+}
+
 export function useMissingLogins(status = "open") {
   return useQuery({ queryKey: [...qk.missingLogins, status], queryFn: () => api.missingLogins.list({ status }) });
 }
