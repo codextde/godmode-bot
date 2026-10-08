@@ -289,8 +289,13 @@ export function gitSourceRows(workspaceId: string, projectId?: string): SourceRo
 }
 
 /** Clone the repository now, or update the clone. Returns right away; the source's status shows the progress. */
-export function syncSource(workspaceId: string, sourceId: string): WorkspaceSource {
-  const row = get<SourceRow>("SELECT * FROM workspace_sources WHERE id = ? AND workspace_id = ?", sourceId, workspaceId);
+export function syncSource(workspaceId: string, sourceId: string, projectId: string | null = null): WorkspaceSource {
+  const row = get<SourceRow>(
+    "SELECT * FROM workspace_sources WHERE id = ? AND workspace_id = ? AND project_id IS ?",
+    sourceId,
+    workspaceId,
+    projectId,
+  );
   if (!row) throw notFound("Folder or repository");
   if (row.kind !== "git") throw badRequest("Only repositories can be updated.");
   if (!busy.has(row.id)) {

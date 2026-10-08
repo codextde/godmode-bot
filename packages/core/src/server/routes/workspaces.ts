@@ -51,7 +51,7 @@ export function registerWorkspaceRoutes(app: Hono): void {
 
   app.post("/api/projects/:id/sources/:sourceId/sync", (c) => {
     const project = getProject(c.req.param("id"));
-    return c.json(syncSource(project.workspaceId, c.req.param("sourceId")));
+    return c.json(syncSource(project.workspaceId, c.req.param("sourceId"), project.id));
   });
 
   app.delete("/api/projects/:id", async (c) => {

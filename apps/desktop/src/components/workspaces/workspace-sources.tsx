@@ -114,7 +114,7 @@ export function WorkspaceSourcesField({
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
               >
-                <SourceRow workspaceId={workspaceId} source={source} live={saved.find((s) => sameSource(source, s))} onRemove={() => remove(source)} />
+                <SourceRow workspaceId={workspaceId} projectId={projectId} source={source} live={saved.find((s) => sameSource(source, s))} onRemove={() => remove(source)} />
               </motion.li>
             ))}
           </AnimatePresence>
@@ -184,11 +184,13 @@ export function WorkspaceSourcesField({
 
 function SourceRow({
   workspaceId,
+  projectId,
   source,
   live,
   onRemove,
 }: {
   workspaceId: string | null;
+  projectId: string | null;
   source: WorkspaceSourceInput;
   live: WorkspaceSource | undefined;
   onRemove: () => void;
@@ -198,7 +200,7 @@ function SourceRow({
   const git = source.kind === "git";
   const name = git ? (live?.name ?? ("error" in parseGitUrl(source.url) ? source.url : (parseGitUrl(source.url) as { name: string }).name)) : folderName(source.path);
   const sync = useMutation({
-    mutationFn: () => api.workspaces.syncSource(workspaceId!, live!.id),
+    mutationFn: () => (projectId ? api.projects.syncSource(projectId, live!.id) : api.workspaces.syncSource(workspaceId!, live!.id)),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.workspaces }),
     onError: (e) => toastApiError(e, "Couldn't update the repository", qc),
   });
