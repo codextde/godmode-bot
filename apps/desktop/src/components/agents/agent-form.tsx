@@ -87,6 +87,8 @@ export interface AgentFormValues {
   /** Its lead; null = the built-in agent. */
   reportsTo: string | null;
   workspaceId: string | null;
+  /** One of its workspace's projects it works on by default; null = none. */
+  projectId: string | null;
   model: string;
   effort: Effort | null;
   /** null = the global default. */
@@ -117,7 +119,7 @@ export interface AgentFormValues {
 /** Seed values for the form from an existing agent, a template, or nothing. */
 export function agentToValues(
   source: Partial<Agent> | undefined,
-  defaults: { workspaceId?: string | null; secretAccess?: SecretAccessMode } = {},
+  defaults: { workspaceId?: string | null; projectId?: string | null; secretAccess?: SecretAccessMode } = {},
 ): AgentFormValues {
   return {
     name: source?.name ?? "",
@@ -130,6 +132,7 @@ export function agentToValues(
     role: source?.role ?? "",
     reportsTo: source?.reportsTo ?? null,
     workspaceId: source?.workspaceId !== undefined ? source.workspaceId : (defaults.workspaceId ?? null),
+    projectId: source?.projectId !== undefined ? source.projectId : (defaults.projectId ?? null),
     model: source?.model ?? "",
     effort: source?.effort ?? null,
     ultracode: source?.ultracode ?? null,
@@ -158,6 +161,7 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
   const monthly = v.monthlyBudgetUsd.trim() ? Number(v.monthlyBudgetUsd) : null;
   return {
     workspaceId: v.workspaceId,
+    projectId: v.workspaceId ? v.projectId : null,
     name: v.name.trim(),
     avatar: v.avatar,
     color: v.color,
@@ -265,12 +269,14 @@ export function AgentForm({
   const { data: boot } = useBootstrap();
   const { catalog } = useModelCatalog();
   const scope = useUi((s) => s.workspace);
+  const scopeProject = useUi((s) => s.project);
   const defaults = useMemo(
     () => ({
       workspaceId: scope !== "all" && scope !== "global" ? scope : null,
+      projectId: scope !== "all" && scope !== "global" ? scopeProject : null,
       secretAccess: boot?.settings.security.defaultSecretAccess ?? ("fill" as const),
     }),
-    [scope, boot?.settings.security.defaultSecretAccess],
+    [scope, scopeProject, boot?.settings.security.defaultSecretAccess],
   );
   const seed = useMemo(() => agentToValues(initial, defaults), [initial, defaults]);
   // Realtime updates flow into the fields that haven't been edited.
@@ -489,7 +495,15 @@ export function AgentForm({
                   </SelectContent>
                 </Select>
               </div>
-              <WorkspaceField value={values.workspaceId} onChange={(v) => set("workspaceId", v)} disabled={isDefault} />
+              <WorkspaceField
+                value={values.workspaceId}
+                onChange={(v) => {
+                  set("workspaceId", v);
+                  set("projectId", null);
+                }}
+                disabled={isDefault}
+              />
+              <ProjectField workspaceId={values.workspaceId} value={values.projectId} onChange={(v) => set("projectId", v)} />
             </div>
             <div className="mt-4 space-y-1.5">
               <span id="agent-effort-label" className="flex items-center gap-1.5 text-sm font-medium">
@@ -1114,6 +1128,34 @@ function WorkspaceField({ value, onChange, disabled }: { value: string | null; o
           ))}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+function ProjectField({ workspaceId, value, onChange }: { workspaceId: string | null; value: string | null; onChange: (v: string | null) => void }) {
+  const { data: workspaces = [] } = useWorkspaces();
+  const projects = workspaces.find((w) => w.id === workspaceId)?.projects ?? [];
+  if (!projects.length) return null;
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="agent-project">
+        Project <span className="font-normal text-muted-foreground">(optional)</span>
+      </Label>
+      <Select value={value && projects.some((p) => p.id === value) ? value : "__none"} onValueChange={(v) => onChange(v === "__none" ? null : v)}>
+        <SelectTrigger id="agent-project" className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent position="popper">
+          <SelectItem value="__none">No project — the whole workspace</SelectItem>
+          <SelectSeparator />
+          {projects.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.icon} {p.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">Its chats work on this project unless a chat picks another.</p>
     </div>
   );
 }

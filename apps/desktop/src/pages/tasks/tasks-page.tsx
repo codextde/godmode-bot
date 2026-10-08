@@ -41,7 +41,7 @@ import { followupWhen } from "@/components/chat/followup";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
-import { useAllAgents, useArchivedTasks, useGoals, useTasks, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useArchivedTasks, useGoals, useScopeProject, useTasks, useWorkspaces } from "@/lib/hooks";
 import { GoalsStrip } from "@/components/tasks/goals-strip";
 import { qk } from "@/lib/queryKeys";
 import { upsertTask } from "@/lib/realtime";
@@ -74,6 +74,7 @@ export default function TasksPage() {
   const scope = useUi((s) => s.workspace);
   const [params, setParams] = useSearchParams();
   const tasksQ = useTasks();
+  const scopeProject = useScopeProject();
   const archivedQ = useArchivedTasks();
   const { data: goals = [] } = useGoals();
   const { setArchived } = useArchiveTasks();
@@ -149,12 +150,13 @@ export default function TasksPage() {
       if (dueFilter === "week" && !(t.dueDate && t.dueDate >= today && t.dueDate <= week)) return false;
       if (dueFilter === "none" && t.dueDate) return false;
       if (labelFilter.size && !t.labels.some((l) => labelFilter.has(l))) return false;
+      if (scopeProject && t.projectId !== scopeProject.id) return false;
       // The goal filter is the board's (its strip isn't shown in the archive).
       if (goalFilter && view !== ARCHIVED && t.goalId !== goalFilter) return false;
       if (!q) return true;
       return `#${t.number} ${t.title} ${t.description} ${t.labels.join(" ")} ${t.agentId ? (agentById.get(t.agentId)?.name ?? "") : ""}`.toLowerCase().includes(q);
     };
-  }, [search, agentFilter, agentById, priorities, dueFilter, labelFilter, goalFilter, view]);
+  }, [search, agentFilter, agentById, priorities, dueFilter, labelFilter, goalFilter, view, scopeProject]);
   const labelsInUse = useMemo(() => [...new Set(tasks.flatMap((t) => t.labels))].sort((a, b) => a.localeCompare(b)), [tasks]);
   const overdueCount = useMemo(() => tasks.filter((t) => isOverdue(t)).length, [tasks]);
   const visible = useMemo(() => tasks.filter(matches), [tasks, matches]);
@@ -270,7 +272,7 @@ export default function TasksPage() {
 
   const quickAdd = useMutation({
     mutationFn: ({ status, title }: { status: TaskStatus; title: string }) =>
-      api.tasks.create({ workspaceId: workspace?.id ?? null, title, status }),
+      api.tasks.create({ workspaceId: workspace?.id ?? null, projectId: scopeProject?.id ?? null, title, status }),
     onSuccess: (t) => qc.setQueryData<Task[]>(listKey, (list) => (list && !list.some((x) => x.id === t.id) ? [...list, t] : list)),
     onError: (e) => toastApiError(e, "Could not add the task", qc),
   });
@@ -503,6 +505,7 @@ export default function TasksPage() {
         workspaces={workspaceList}
         agents={agents}
         defaultWorkspaceId={workspace?.id ?? null}
+        defaultProjectId={scopeProject?.id ?? null}
         defaultGoalId={goalFilter}
       />
       <TaskSheet

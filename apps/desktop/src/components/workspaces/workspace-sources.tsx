@@ -75,15 +75,19 @@ async function revealInFileManager(path: string) {
  */
 export function WorkspaceSourcesField({
   workspaceId,
+  projectId = null,
   value,
   onChange,
 }: {
   workspaceId: string | null;
+  /** The sources are a project's (of `workspaceId`); null = the workspace's own. */
+  projectId?: string | null;
   value: WorkspaceSourceInput[];
   onChange: (next: WorkspaceSourceInput[]) => void;
 }) {
   const { data: workspaces } = useWorkspaces();
-  const saved = workspaceId ? (workspaces?.find((w) => w.id === workspaceId)?.sources ?? []) : [];
+  const workspace = workspaceId ? workspaces?.find((w) => w.id === workspaceId) : undefined;
+  const saved = (projectId ? workspace?.projects.find((p) => p.id === projectId)?.sources : workspace?.sources) ?? [];
   const [picking, setPicking] = useState(false);
   const [adding, setAdding] = useState(false);
 

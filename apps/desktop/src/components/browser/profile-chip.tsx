@@ -14,6 +14,7 @@ import { useSettings, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { CreateProfileDialog } from "./profile-list";
+import { effectiveProject, useProjectIndex } from "@/components/projects/project-utils";
 
 function ProfileTile({ profile, quiet }: { profile: BrowserProfile | null; quiet?: boolean }) {
   return (
@@ -33,6 +34,7 @@ export function BrowserProfileChip({
   agent,
   value,
   workspaceId = null,
+  projectId = null,
   onChange,
   busy,
 }: {
@@ -41,6 +43,8 @@ export function BrowserProfileChip({
   value: string | null;
   /** Workspace the chat is in: a global agent browses with its default. */
   workspaceId?: string | null;
+  /** The chat's own project (null = the agent's): its profile comes before the workspace's. */
+  projectId?: string | null;
   onChange: (profileId: string | null) => void | Promise<unknown>;
   busy?: boolean;
 }) {
@@ -52,16 +56,19 @@ export function BrowserProfileChip({
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const project = effectiveProject(agent, projectId, useProjectIndex())?.project ?? null;
   if (!enabled || !agent) return null;
 
   const scopeName = (p: BrowserProfile) => (p.workspaceId ? (workspaces.find((w) => w.id === p.workspaceId)?.name ?? "Workspace") : "Global");
   const own = value ? (profiles.find((p) => p.id === value) ?? null) : null;
-  const fallback = agentBrowserProfile(agent, profiles, null, workspaceId);
+  const fallback = agentBrowserProfile(agent, profiles, null, workspaceId, project);
   const fallbackFrom = !fallback
     ? "Loading profiles…"
     : agent.browser.profileId === fallback.id
       ? `Pinned in ${agent.name}'s settings`
-      : fallback.workspaceId
+      : project?.browserProfileId === fallback.id
+        ? `Set for the ${project.name} project`
+        : fallback.workspaceId
         ? `Default of the ${scopeName(fallback)} workspace`
         : "Your default profile";
   const shown = own ?? (fallback && (fallback.workspaceId || !fallback.isDefault) ? fallback : null);

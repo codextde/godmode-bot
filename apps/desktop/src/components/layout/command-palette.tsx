@@ -107,6 +107,7 @@ export function CommandPalette() {
   const { data: workspaces = [] } = useWorkspaces();
   const scope = useUi((s) => s.workspace);
   const setScope = useUi((s) => s.setWorkspace);
+  const projectScope = useUi((s) => s.project);
   const startChat = useStartAgentChat();
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
@@ -184,9 +185,26 @@ export function CommandPalette() {
               >
                 <WorkspaceTile icon={w.icon} color={w.color} size="sm" className="size-5 rounded-[5px] text-[11px]" />
                 <span className="truncate">{w.name}</span>
-                {scope === w.id && <span className="ml-2 text-xs text-muted-foreground">current</span>}
+                {scope === w.id && !projectScope && <span className="ml-2 text-xs text-muted-foreground">current</span>}
               </CommandItem>
             ))}
+            {workspaces.flatMap((w) =>
+              (w.projects ?? []).map((p) => (
+                <CommandItem
+                  key={p.id}
+                  value={unique(`project switch ${p.name} ${w.name}`, p.id)}
+                  onSelect={() => {
+                    setScope(w.id, p.id);
+                    setOpen(false);
+                  }}
+                >
+                  <WorkspaceTile icon={p.icon} color={p.color} size="sm" className="size-5 rounded-[5px] text-[11px]" />
+                  <span className="truncate">{p.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">in {w.name}</span>
+                  {projectScope === p.id && <span className="ml-2 text-xs text-muted-foreground">current</span>}
+                </CommandItem>
+              )),
+            )}
             {scope !== "all" && (
               <CommandItem value="workspace switch all workspaces everything" onSelect={() => { setScope("all"); setOpen(false); }}>
                 <Layers /> All workspaces <CommandShortcut>{modKey}0</CommandShortcut>

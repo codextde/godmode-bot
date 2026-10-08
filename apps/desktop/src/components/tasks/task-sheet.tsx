@@ -200,6 +200,7 @@ function PartsSection({ task, board, agents, workspaces }: { task: Task; board: 
         workspaces={[...workspaces.values()]}
         agents={agents}
         defaultWorkspaceId={task.workspaceId}
+        defaultProjectId={task.projectId}
         parent={task}
       />
     </section>
@@ -234,7 +235,7 @@ function TaskDetail({
   const agent = agents.find((a) => a.id === task.agentId);
   const reachable = agentsInReach(agents, task.workspaceId, task.agentId);
   const started = !!task.conversationId;
-  const defaultRepo = workspaceRepos(workspace)[0];
+  const defaultRepo = workspaceRepos(workspace, task.projectId)[0];
   const github = task.branch ? githubBranchUrl(task.repoUrl, task.branch) : null;
 
   const put = (next: (t: Task) => Task) =>
@@ -348,6 +349,11 @@ function TaskDetail({
             <Prop label="Goal">
               <GoalSelect task={task} onChange={(goalId) => save.mutate({ goalId })} className={PROP_CONTROL} />
             </Prop>
+            {(workspace?.projects.length ?? 0) > 0 && (
+              <Prop label="Project">
+                <ProjectSelect task={task} workspace={workspace!} onChange={(projectId) => save.mutate({ projectId })} className={PROP_CONTROL} />
+              </Prop>
+            )}
             <Prop label="Labels">
               <LabelsInput value={task.labels} onChange={(labels) => save.mutate({ labels })} suggestions={labelsInUse} />
             </Prop>
@@ -518,6 +524,38 @@ function GoalSelect({ task, onChange, className }: { task: Task; onChange: (goal
         {choices.map((g) => (
           <SelectItem key={g.id} value={g.id}>
             <Target className="size-3.5 text-brand-strong" /> {g.title}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** The project of its workspace a ticket belongs to: its agent gets the project's context and repositories. */
+function ProjectSelect({
+  task,
+  workspace,
+  onChange,
+  className,
+}: {
+  task: Task;
+  workspace: Workspace;
+  onChange: (projectId: string | null) => void;
+  className?: string;
+}) {
+  const NONE = "none";
+  return (
+    <Select value={task.projectId ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)}>
+      <SelectTrigger aria-label="Project" className={className}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper">
+        <SelectItem value={NONE}>
+          <span className="text-muted-foreground">No project</span>
+        </SelectItem>
+        {workspace.projects.map((p) => (
+          <SelectItem key={p.id} value={p.id}>
+            <span>{p.icon}</span> {p.name}
           </SelectItem>
         ))}
       </SelectContent>
