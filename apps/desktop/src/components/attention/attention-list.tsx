@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
-import { AlertTriangle, Coins, KanbanSquare, KeyRound, MessageCircleQuestion, OctagonAlert, Pause, Play, UserPlus, Workflow, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Coins, KanbanSquare, KeyRound, ListTodo, MessageCircleQuestion, OctagonAlert, Pause, Play, UserPlus, Workflow, type LucideIcon } from "lucide-react";
 import type { Agent, AttentionItem, Workspace } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -14,6 +14,7 @@ import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 
 export const ATTENTION_ICON: Record<AttentionItem["kind"], LucideIcon> = {
   question: MessageCircleQuestion,
+  todo: ListTodo,
   login: KeyRound,
   review: KanbanSquare,
   blocked: OctagonAlert,
@@ -26,6 +27,7 @@ export const ATTENTION_ICON: Record<AttentionItem["kind"], LucideIcon> = {
 
 const TONE: Partial<Record<AttentionItem["kind"], string>> = {
   question: "text-warning",
+  todo: "text-warning",
   login: "text-warning",
   held: "text-warning",
   blocked: "text-rose-600 dark:text-rose-400",
@@ -113,7 +115,7 @@ function AttentionRow({ item, agent, workspace }: { item: AttentionItem; agent?:
           </Button>
         </span>
       ) : (
-        <Button size="xs" variant={item.kind === "question" || item.kind === "review" ? "default" : "outline"} asChild className="shrink-0">
+        <Button size="xs" variant={item.kind === "question" || item.kind === "todo" || item.kind === "review" ? "default" : "outline"} asChild className="shrink-0">
           <Link to={item.link}>{item.action}</Link>
         </Button>
       )}

@@ -62,6 +62,7 @@ import { PullRequestChip, useTaskActivity } from "./task-card";
 import { APPROVE_KEY, BLOCKED_META, StatusIcon, TYPE_META, TypeIcon, formatCost, formatWork, isWorking, pauseLabel, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
 import { followupWhen, useFollowupActions } from "@/components/chat/followup";
 import { useNow } from "@/components/vault/use-now";
+import { HumanTaskBar } from "@/components/human-tasks/human-task-chat";
 import { usePauseActions } from "@/components/chat/pause";
 import { TASK_TYPES } from "@godmode/shared";
 
@@ -422,6 +423,8 @@ function TaskDetail({
             onReason={(blockedReason) => save.mutate({ blockedReason })}
             onStartWithoutWaiting={() => save.mutate({ waitsFor: task.waitsFor.filter((w) => w.finished).map((w) => w.id) })}
           />
+
+          {task.conversationId && <HumanTaskBar conversationId={task.conversationId} agentName={agent?.name ?? "The agent"} />}
 
           <PartsSection task={task} board={board} agents={agents} workspaces={workspaces} />
 

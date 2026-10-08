@@ -96,9 +96,9 @@ export interface TaskEventData {
   pr_merged: { number: number; url: string; auto?: boolean };
   pr_closed: { number: number; url: string };
   /** body: what was asked (see AgentQuestion). */
-  asked: { questionId: ID; kind: "question" | "approval" };
-  /** body: the answer. */
-  answered: { questionId: ID; status: string };
+  asked: { questionId: ID; kind: "question" | "approval" | "task" };
+  /** body: the answer. status "done" / "declined" + kind "task": a task the agent gave the human (questionId is its id). */
+  answered: { questionId: ID; status: string; kind?: "task" };
 }
 
 /** Something that happened on a ticket — its timeline, oldest first. Append-only. */
@@ -435,8 +435,10 @@ export function taskEventText(e: TaskEvent, o: { you: string; youObject: string;
     case "pr_closed":
       return `Pull request #${e.data.number} closed without merging`;
     case "asked":
+      if (e.data.kind === "task") return `${a} gave ${o.youObject} a task`;
       return e.data.kind === "approval" ? `${a} asked ${o.youObject} for an OK` : `${a} asked ${o.youObject}`;
     case "answered":
+      if (e.data.kind === "task") return e.data.status === "declined" ? `${a} couldn't do the task` : `${a} did the task`;
       return e.data.status === "approved" ? `${a} approved` : e.data.status === "declined" ? `${a} declined` : `${a} answered`;
   }
 }

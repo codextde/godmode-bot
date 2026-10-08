@@ -21,6 +21,7 @@ import { useArchiveChat } from "@/components/chat/chat-actions";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { useConversationMood } from "@/components/chat/conversation-mood";
 import { FollowupBar } from "@/components/chat/followup";
+import { HumanTaskBar } from "@/components/human-tasks/human-task-chat";
 import { PauseBar, usePauseActions } from "@/components/chat/pause";
 import { QuestionScopeProvider } from "@/components/chat/question-card";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
@@ -550,6 +551,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                   </motion.div>
                 )}
               </AnimatePresence>
+              {!conv.runnerId && <HumanTaskBar conversationId={conversationId} agentName={agent?.name ?? "The agent"} />}
               <QueueTray
                 ref={queueRef}
                 conversationId={conversationId}

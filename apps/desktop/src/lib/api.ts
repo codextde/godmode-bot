@@ -13,6 +13,11 @@ import type {
   AgentTemplate,
   AnswerQuestionInput,
   AnswerQuestionResult,
+  HumanTask,
+  HumanTaskCloseInput,
+  HumanTaskCloseResult,
+  HumanTaskInput,
+  HumanTaskPatch,
   ApiError,
   ApiTool,
   ApiToolInput,
@@ -754,6 +759,16 @@ export const api = {
     list: (q: { status?: string; conversationId?: string; agentId?: string; limit?: number } = {}) => get<AgentQuestion[]>("/api/questions", q),
     /** The run that asked continues with the answer. */
     answer: (id: string, input: AnswerQuestionInput) => post<AnswerQuestionResult>(`/api/questions/${id}/answer`, input),
+  },
+
+  humanTasks: {
+    /** `active` = open or doing, `closed` = the latest done, declined or withdrawn ones. */
+    list: (q: { status?: "active" | "closed" | "all"; conversationId?: string } = {}) => get<HumanTask[]>("/api/human-tasks", q),
+    create: (input: HumanTaskInput) => post<HumanTask>("/api/human-tasks", input),
+    update: (id: string, input: HumanTaskPatch) => patch<HumanTask>(`/api/human-tasks/${id}`, input),
+    /** The agent that gave it continues its chat with the outcome and the note. */
+    close: (id: string, input: HumanTaskCloseInput) => post<HumanTaskCloseResult>(`/api/human-tasks/${id}/close`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/human-tasks/${id}`),
   },
 
   missingLogins: {

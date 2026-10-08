@@ -7,6 +7,7 @@ import { formatUsd, monthName } from "@godmode/shared";
 import { all, get } from "../db";
 import { parseJson } from "../util";
 import { listQuestions } from "./questions";
+import { listHumanTasks } from "./humanTasks";
 import { listTasks } from "../tasks/service";
 import { listRoutines } from "./routines";
 import { toPause, type PausedRow } from "./pauses";
@@ -14,7 +15,7 @@ import { toPause, type PausedRow } from "./pauses";
 const shorten = (s: string, max = 140) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 /** Group order: waiting, review, blocked, went wrong, people; newest first within a group. */
-const RANK: Record<AttentionItem["kind"], number> = { question: 0, login: 0, paused: 0, held: 0, review: 1, blocked: 2, failed: 3, automation: 3, access: 4 };
+const RANK: Record<AttentionItem["kind"], number> = { question: 0, todo: 0, login: 0, paused: 0, held: 0, review: 1, blocked: 2, failed: 3, automation: 3, access: 4 };
 
 export function listAttention(): AttentionItem[] {
   const items: AttentionItem[] = [];
@@ -33,6 +34,24 @@ export function listAttention(): AttentionItem[] {
       action: q.kind === "approval" ? "Review" : "Answer",
       question: q,
       conversationId: q.conversationId,
+    });
+  }
+
+  // What agents gave the human to do. A ticket that waits for one shows as the task, not also as blocked.
+  const waitingTickets = new Set<string>();
+  for (const h of listHumanTasks({ status: "active" })) {
+    if (h.taskId) waitingTickets.add(h.taskId);
+    items.push({
+      id: `todo:${h.id}`,
+      kind: "todo",
+      agentId: h.agentId,
+      title: h.agentId ? `${nameOf(h.agentId)} needs you to: ${shorten(h.title, 100)}` : shorten(h.title),
+      detail: h.status === "doing" ? "You're on it" : h.taskNumber != null ? `For task #${h.taskNumber}` : (h.conversationTitle ?? ""),
+      since: h.createdAt,
+      link: `/my-tasks?task=${h.id}`,
+      action: "Open",
+      humanTask: h,
+      conversationId: h.conversationId,
     });
   }
 
@@ -59,6 +78,7 @@ export function listAttention(): AttentionItem[] {
 
   for (const t of listTasks({ archived: false })) {
     if (t.status !== "in_review" && t.status !== "blocked") continue;
+    if (t.status === "blocked" && t.blockedKind === "needs_input" && waitingTickets.has(t.id)) continue;
     const review = t.status === "in_review";
     items.push({
       id: `${review ? "review" : "blocked"}:${t.id}`,

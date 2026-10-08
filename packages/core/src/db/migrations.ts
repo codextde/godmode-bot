@@ -1230,4 +1230,37 @@ CREATE INDEX IF NOT EXISTS idx_conversations_project ON conversations(project_id
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 `,
   },
+  {
+    id: 78,
+    name: "human_tasks",
+    sql: /* sql */ `
+-- Tasks for the human (services/humanTasks.ts): what an agent can't do itself. Closing one (done / declined) continues
+-- the agent's chat with the human's note. agent_id and conversation_id are NULL for the human's own tasks.
+CREATE TABLE IF NOT EXISTS human_tasks (
+  id TEXT PRIMARY KEY,
+  number INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  url TEXT,
+  priority TEXT NOT NULL DEFAULT 'normal',  -- normal | high
+  status TEXT NOT NULL DEFAULT 'open',      -- open | doing | done | declined | withdrawn
+  agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+  run_id TEXT,
+  task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  workspace_id TEXT,
+  response TEXT,                            -- saved secrets masked
+  response_attachments TEXT NOT NULL DEFAULT '[]',
+  closed_reason TEXT,
+  notification_id TEXT,
+  position REAL NOT NULL DEFAULT 0,
+  started_at TEXT,
+  closed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_human_tasks_status ON human_tasks(status, position);
+CREATE INDEX IF NOT EXISTS idx_human_tasks_conversation ON human_tasks(conversation_id, status);
+`,
+  },
 ];

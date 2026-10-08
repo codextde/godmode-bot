@@ -155,6 +155,8 @@ export type EntityName =
   /** Goals: added, changed, deleted (their progress follows the tickets). */
   | "goals"
   | "followups"
+  /** Tasks agents gave the human (and the human's own): added, moved, closed. */
+  | "human-tasks"
   /** Heartbeat beats and watchdog interventions. */
   | "heartbeats"
   | "mobile"

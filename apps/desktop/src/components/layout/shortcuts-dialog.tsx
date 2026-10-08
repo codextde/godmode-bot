@@ -8,6 +8,7 @@ import { useUi } from "@/stores/ui";
 export const GO_TO: readonly { key: string; to: string; label: string }[] = [
   { key: "c", to: "/", label: "Chat" },
   { key: "t", to: "/tasks", label: "Tasks" },
+  { key: "m", to: "/my-tasks", label: "My tasks" },
   { key: "a", to: "/agents", label: "Agents" },
   { key: "u", to: "/automations", label: "Automations" },
   { key: "i", to: "/inbox", label: "Inbox" },

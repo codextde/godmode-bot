@@ -1,8 +1,9 @@
 import type { AgentQuestion, ID, ISODate, RunPause } from "./models";
 import type { Task } from "./tasks";
+import type { HumanTask } from "./humanTasks";
 
 /** What waits for the human. Computed by the core from live state (never from notifications), so it can't go stale. */
-export type AttentionKind = "question" | "login" | "review" | "blocked" | "paused" | "held" | "failed" | "automation" | "access";
+export type AttentionKind = "question" | "todo" | "login" | "review" | "blocked" | "paused" | "held" | "failed" | "automation" | "access";
 
 export interface AttentionItem {
   /** "<kind>:<id of the thing>", stable while it waits. */
@@ -21,6 +22,7 @@ export interface AttentionItem {
   /** What the main button says. */
   action: string;
   question?: AgentQuestion;
+  humanTask?: HumanTask;
   task?: Task;
   pause?: RunPause;
   /** The chat it is about, when there is one. */
@@ -29,10 +31,10 @@ export interface AttentionItem {
 
 export type AttentionCounts = Record<AttentionKind, number> & { total: number };
 
-export const ATTENTION_KINDS: readonly AttentionKind[] = ["question", "login", "review", "blocked", "paused", "held", "failed", "automation", "access"];
+export const ATTENTION_KINDS: readonly AttentionKind[] = ["question", "todo", "login", "review", "blocked", "paused", "held", "failed", "automation", "access"];
 
 export const ATTENTION_GROUPS: readonly { id: string; label: string; kinds: readonly AttentionKind[] }[] = [
-  { id: "waiting", label: "Waiting for you", kinds: ["question", "login", "paused", "held"] },
+  { id: "waiting", label: "Waiting for you", kinds: ["question", "todo", "login", "paused", "held"] },
   { id: "review", label: "Ready for review", kinds: ["review"] },
   { id: "blocked", label: "Blocked", kinds: ["blocked"] },
   { id: "problems", label: "Went wrong", kinds: ["failed", "automation"] },
@@ -40,7 +42,7 @@ export const ATTENTION_GROUPS: readonly { id: string; label: string; kinds: read
 ];
 
 export function emptyAttentionCounts(): AttentionCounts {
-  return { question: 0, login: 0, review: 0, blocked: 0, paused: 0, held: 0, failed: 0, automation: 0, access: 0, total: 0 };
+  return { question: 0, todo: 0, login: 0, review: 0, blocked: 0, paused: 0, held: 0, failed: 0, automation: 0, access: 0, total: 0 };
 }
 
 export function countAttention(items: readonly Pick<AttentionItem, "kind">[]): AttentionCounts {

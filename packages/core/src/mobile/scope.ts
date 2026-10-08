@@ -20,6 +20,10 @@ const ROUTES: [method: string, path: RegExp][] = [
   // Questions and approvals agents wait for: listed and answered (no files from the phone).
   ["GET", /^\/api\/questions$/],
   ["POST", new RegExp(`^/api/questions/${ID}/answer$`)],
+  // Tasks agents gave the human: listed, moved and closed (no files from the phone).
+  ["GET", /^\/api\/human-tasks$/],
+  ["PATCH", new RegExp(`^/api/human-tasks/${ID}$`)],
+  ["POST", new RegExp(`^/api/human-tasks/${ID}/close$`)],
 
   ["GET", /^\/api\/agents$/],
   ["GET", new RegExp(`^/api/agents/${ID}$`)],
@@ -75,6 +79,8 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content", "attachments"]],
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
   ["POST", new RegExp(`^/api/questions/${ID}/answer$`), ["optionId", "decision", "note", "text"]],
+  ["PATCH", new RegExp(`^/api/human-tasks/${ID}$`), ["status", "beforeId"]],
+  ["POST", new RegExp(`^/api/human-tasks/${ID}/close$`), ["outcome", "note"]],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],
   ["POST", /^\/api\/computer\/input$/, ["view", "event", "frame"]],
   ["POST", new RegExp(`^/api/vms/${ID}/input$`), ["event", "frame"]],
