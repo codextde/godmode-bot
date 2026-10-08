@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, FolderGit2, ListFilter, Plus, Search, SquareKanban } from "lucide-react";
@@ -40,8 +40,9 @@ import { APPROVE_KEY, PRIORITY_META, PriorityIcon, STATUS_META, isWorking, needs
 import { followupWhen } from "@/components/chat/followup";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
+import { ProjectDialog } from "@/components/projects/project-dialog";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
-import { useAllAgents, useArchivedTasks, useGoals, useTasks, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useArchivedTasks, useGoals, useScopeProject, useTasks, useWorkspaces } from "@/lib/hooks";
 import { GoalsStrip } from "@/components/tasks/goals-strip";
 import { qk } from "@/lib/queryKeys";
 import { upsertTask } from "@/lib/realtime";
@@ -74,6 +75,7 @@ export default function TasksPage() {
   const scope = useUi((s) => s.workspace);
   const [params, setParams] = useSearchParams();
   const tasksQ = useTasks();
+  const scopeProject = useScopeProject();
   const archivedQ = useArchivedTasks();
   const { data: goals = [] } = useGoals();
   const { setArchived } = useArchiveTasks();
@@ -113,14 +115,17 @@ export default function TasksPage() {
   const [deleting, setDeleting] = useState<Task | null>(null);
 
   const workspace = workspaceList.find((w) => w.id === scope) ?? null;
-  const repos = workspaceRepos(workspace);
+  const repos = workspaceRepos(workspace, scopeProject?.id ?? null);
+  const [editingProject, setEditingProject] = useState(false);
   const workspaces = useMemo(() => new Map(workspaceList.map((w) => [w.id, w])), [workspaceList]);
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const listKey = qk.taskList(scope);
-  const tasks = useMemo(() => tasksQ.data ?? [], [tasksQ.data]);
+  // A project picked in the sidebar: its board is the project's tickets.
+  const inProject = useCallback((t: Task) => !scopeProject || t.projectId === scopeProject.id, [scopeProject]);
+  const tasks = useMemo(() => (tasksQ.data ?? []).filter(inProject), [tasksQ.data, inProject]);
   const archived = useMemo(
-    () => [...(archivedQ.data ?? [])].sort((a, b) => (b.archivedAt ?? "").localeCompare(a.archivedAt ?? "") || b.number - a.number),
-    [archivedQ.data],
+    () => (archivedQ.data ?? []).filter(inProject).sort((a, b) => (b.archivedAt ?? "").localeCompare(a.archivedAt ?? "") || b.number - a.number),
+    [archivedQ.data, inProject],
   );
   const view = params.get("view") === ARCHIVED ? ARCHIVED : "board";
   // Another workspace in the sidebar: a goal picked in the last one would leave an empty board.
@@ -270,7 +275,7 @@ export default function TasksPage() {
 
   const quickAdd = useMutation({
     mutationFn: ({ status, title }: { status: TaskStatus; title: string }) =>
-      api.tasks.create({ workspaceId: workspace?.id ?? null, title, status }),
+      api.tasks.create({ workspaceId: workspace?.id ?? null, projectId: scopeProject?.id ?? null, title, status }),
     onSuccess: (t) => qc.setQueryData<Task[]>(listKey, (list) => (list && !list.some((x) => x.id === t.id) ? [...list, t] : list)),
     onError: (e) => toastApiError(e, "Could not add the task", qc),
   });
@@ -298,7 +303,7 @@ export default function TasksPage() {
         title="Tasks"
         description={
           workspace
-            ? `${workspace.icon} ${workspace.name} — create tickets, assign an agent, and it gets to work.`
+            ? `${workspace.icon} ${workspace.name}${scopeProject ? ` / ${scopeProject.icon} ${scopeProject.name}` : ""} — create tickets, assign an agent, and it gets to work.`
             : scope === "global"
               ? "Global tasks — create tickets, assign an agent, and it gets to work."
               : "Every workspace's board. Create tickets, assign an agent, and it gets to work."
@@ -306,7 +311,11 @@ export default function TasksPage() {
         actions={
           <>
             {workspace && (
-              <Button variant="outline" className="max-w-64 font-normal" onClick={() => setEditingWorkspace(workspace)}>
+              <Button
+                variant="outline"
+                className="max-w-64 font-normal"
+                onClick={() => (scopeProject ? setEditingProject(true) : setEditingWorkspace(workspace))}
+              >
                 <FolderGit2 className="text-muted-foreground" />
                 {repos[0] ? (
                   <span className="truncate font-mono text-[13px]">
@@ -503,6 +512,7 @@ export default function TasksPage() {
         workspaces={workspaceList}
         agents={agents}
         defaultWorkspaceId={workspace?.id ?? null}
+        defaultProjectId={scopeProject?.id ?? null}
         defaultGoalId={goalFilter}
       />
       <TaskSheet
@@ -515,6 +525,9 @@ export default function TasksPage() {
         onDelete={setDeleting}
         onReassign={requestReassign}
       />
+      {workspace && scopeProject && (
+        <ProjectDialog open={editingProject} onOpenChange={setEditingProject} workspace={workspace} project={scopeProject} />
+      )}
       {editingWorkspace && (
         <WorkspaceDialog open onOpenChange={(open) => !open && setEditingWorkspace(null)} workspace={editingWorkspace} focus="sources" />
       )}

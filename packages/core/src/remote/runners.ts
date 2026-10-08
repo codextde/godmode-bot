@@ -29,6 +29,7 @@ import {
 import { getAgent, getDefaultAgentId } from "../agents/service";
 import { exportProfileCookies, resolveProfileForAgent } from "../browser/manager";
 import { all, get, getMeta, insert, run as sql, setMeta, update } from "../db";
+import { projectOfChat } from "../services/projects";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { computerName } from "../mobile/devices";
@@ -704,7 +705,10 @@ export async function startRemoteChat(runnerId: string, input: StartChatInput): 
   let profileId: string | null = input.browserProfileId ?? null;
   if (!profileId && agent.browser.enabled) {
     try {
-      profileId = resolveProfileForAgent(agent, null).id;
+      // The chat doesn't exist here yet: the project it starts in decides like a chat's would.
+      const project = input.projectId ? projectOfChat(null, { workspaceId: agent.workspaceId, projectId: input.projectId }) : null;
+      const forProject = !agent.browser.profileId && project?.browserProfileId && get("SELECT 1 FROM browser_profiles WHERE id = ?", project.browserProfileId);
+      profileId = forProject ? project!.browserProfileId : resolveProfileForAgent(agent, null).id;
     } catch {
       profileId = null;
     }
@@ -725,7 +729,7 @@ export async function prepareRemoteMessage(conversationId: string): Promise<void
   if (!profileId) {
     try {
       const agent = getAgent(conv.agentId);
-      if (agent.browser.enabled) profileId = resolveProfileForAgent(agent, null).id;
+      if (agent.browser.enabled) profileId = resolveProfileForAgent(agent, conversationId).id;
     } catch {
       profileId = null;
     }

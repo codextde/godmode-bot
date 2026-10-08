@@ -36,6 +36,7 @@ const ticket = {
   priority: z.enum(TASK_PRIORITIES as [string, ...string[]]).optional(),
   dueDate: z.string().max(10).nullable().optional(),
   labels: z.array(z.string().max(100)).max(50).optional(),
+  projectId: id.nullable().optional(),
 };
 
 const createSchema = z.object({

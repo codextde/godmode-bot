@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { browserView, type Agent, type BrowserProfile } from "@godmode/shared";
+import { browserView, type Agent, type BrowserProfile, type Project } from "@godmode/shared";
 import { ArrowUpRight, Globe, Hand, Layers, Maximize2, PanelRightClose, PanelRightOpen, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -16,6 +16,7 @@ import { domainFromUrl } from "@/components/vault/vault-utils";
 import { useNow } from "@/components/vault/use-now";
 import { api } from "@/lib/api";
 import { useSettings, useWorkspaceName } from "@/lib/hooks";
+import { effectiveProject, useProjectIndex } from "@/components/projects/project-utils";
 import { isTauri } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
@@ -40,20 +41,29 @@ export function agentBrowserProfile(
   profiles: BrowserProfile[],
   chatProfileId: string | null = null,
   chatWorkspaceId: string | null = null,
+  project: Pick<Project, "browserProfileId" | "workspaceId"> | null = null,
 ): BrowserProfile | null {
   const own = chatProfileId ? profiles.find((p) => p.id === chatProfileId) : undefined;
   if (own) return own;
   const pinned = agent.browser.profileId ? profiles.find((p) => p.id === agent.browser.profileId) : undefined;
   if (pinned) return pinned;
-  return defaultProfileFor(profiles, agent.workspaceId ?? chatWorkspaceId);
+  const forProject = project?.browserProfileId ? profiles.find((p) => p.id === project.browserProfileId) : undefined;
+  if (forProject && (!forProject.workspaceId || forProject.workspaceId === project!.workspaceId)) return forProject;
+  return defaultProfileFor(profiles, agent.workspaceId ?? project?.workspaceId ?? chatWorkspaceId);
 }
 
 /** The browser profile this chat drives (null when its agent has no browser). */
-export function useChatBrowser(agent: Agent | undefined, chatProfileId: string | null = null, chatWorkspaceId: string | null = null): BrowserProfile | null {
+export function useChatBrowser(
+  agent: Agent | undefined,
+  chatProfileId: string | null = null,
+  chatWorkspaceId: string | null = null,
+  chatProjectId: string | null = null,
+): BrowserProfile | null {
   const { data: settings } = useSettings();
   const enabled = !!agent?.browser.enabled && settings?.browser.enabled !== false;
   const { data: profiles } = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles, enabled });
-  return enabled && agent && profiles ? agentBrowserProfile(agent, profiles, chatProfileId, chatWorkspaceId) : null;
+  const project = effectiveProject(agent, chatProjectId, useProjectIndex())?.project ?? null;
+  return enabled && agent && profiles ? agentBrowserProfile(agent, profiles, chatProfileId, chatWorkspaceId, project) : null;
 }
 
 /** The chat's own tab in its agent's browser (undefined until the agent opens one). */

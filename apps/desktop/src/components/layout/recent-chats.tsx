@@ -19,7 +19,8 @@ import { AgentAvatar, colorGradient } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { followupWhen } from "@/components/chat/followup";
 import { api } from "@/lib/api";
-import { useAllAgents, useScopeWorkspace, useScopedConversations, useWorkspaces } from "@/lib/hooks";
+import { chatProject, useAllAgents, useScopeProject, useScopeWorkspace, useScopedConversations, useWorkspaces } from "@/lib/hooks";
+import { useProjectIndex } from "@/components/projects/project-utils";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
@@ -44,7 +45,9 @@ const ROW_ACTION =
 export function RecentChats() {
   const scope = useUi((s) => s.workspace);
   const scopeWorkspace = useScopeWorkspace();
-  const scopeName = scope === "all" ? null : scope === "global" ? "Global" : (scopeWorkspace?.name ?? null);
+  const scopeProject = useScopeProject();
+  const projectIndex = useProjectIndex();
+  const scopeName = scope === "all" ? null : scope === "global" ? "Global" : (scopeProject?.name ?? scopeWorkspace?.name ?? null);
   const { data: conversations = [] } = useScopedConversations();
   const { data: hasArchived = false } = useQuery({
     queryKey: [...qk.conversationsAll, "has-archived", scope],
@@ -112,6 +115,8 @@ export function RecentChats() {
             const agent = agents.find((a) => a.id === c.agentId);
             const workspaceId = c.workspaceId ?? agent?.workspaceId;
             const workspace = scope === "all" && workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
+            const projectId = !workspace && !scopeProject ? chatProject(c, agents) : null;
+            const project = projectId ? projectIndex.get(projectId)?.project : undefined;
             const running = runningConversations.has(c.id) || (c.running && !queuedConversations.has(c.id));
             const queued = !running && queuedConversations.has(c.id);
             return (
@@ -143,6 +148,7 @@ export function RecentChats() {
                       </span>
                       <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
                         {workspace && <WorkspaceChip workspace={workspace} />}
+                        {project && <WorkspaceChip workspace={project} kind="Project" />}
                         <span className="block min-w-0 flex-1 truncate">
                           {running && !c.paused ? (
                             <span className="text-shimmer font-medium">Working…</span>
@@ -267,11 +273,11 @@ function originLine(c: Conversation, agents: Agent[]): string | null {
 }
 
 /** Which workspace a chat belongs to, in the workspace's colour. Global chats go without. */
-function WorkspaceChip({ workspace }: { workspace: Workspace }) {
+function WorkspaceChip({ workspace, kind = "Workspace" }: { workspace: Pick<Workspace, "name" | "icon" | "color">; kind?: string }) {
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(workspace.color);
   return (
     <span
-      title={`Workspace: ${workspace.name}`}
+      title={`${kind}: ${workspace.name}`}
       className={cn(
         "inline-flex h-4 max-w-22 shrink-0 items-center gap-1 rounded-[5px] px-1 text-[10px] font-medium text-foreground/75 ring-1 ring-inset",
         hex ? "ring-foreground/10" : colorGradient(workspace.color),

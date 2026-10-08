@@ -1,4 +1,4 @@
-import type { SpendPeriod } from "@godmode/shared";
+import type { Agent, Conversation, Project, SpendPeriod } from "@godmode/shared";
 import { useQuery } from "@tanstack/react-query";
 import { BUILTIN_MODELS, type ModelCatalog } from "@godmode/shared";
 import { api, type ScopeFilter } from "./api";
@@ -53,19 +53,40 @@ export function useConversations(agentId?: string, search = "", workspaceId: Sco
   });
 }
 
-/** Chats of the workspace picked in the sidebar. */
-export function useScopedConversations() {
-  return useConversations(undefined, "", useUi((s) => s.workspace));
+/** The project picked in the sidebar (within the picked workspace); null = none. */
+export function useScopeProject(): Project | null {
+  const id = useUi((s) => s.project);
+  const workspace = useScopeWorkspace();
+  return (id && workspace?.projects.find((p) => p.id === id)) || null;
 }
 
-/** Whether a run belongs to the workspace picked in the sidebar: its chat is listed there, or its agent works there. */
+/** The project a chat works on: its own, else its agent's. */
+export function chatProject(c: Pick<Conversation, "projectId" | "agentId">, agents: Pick<Agent, "id" | "projectId">[] | undefined): string | null {
+  return c.projectId ?? agents?.find((a) => a.id === c.agentId)?.projectId ?? null;
+}
+
+/** Chats of the workspace (and project) picked in the sidebar. */
+export function useScopedConversations() {
+  const scope = useUi((s) => s.workspace);
+  const projectId = useScopeProject()?.id;
+  return useQuery({
+    queryKey: [...qk.conversations("all", "", scope), projectId ?? null],
+    queryFn: () => api.conversations.list({ search: "", limit: 100, workspaceId: scope, projectId }),
+  });
+}
+
+/** Whether a run belongs to the workspace (and project) picked in the sidebar: its chat is listed there, or its agent works there. */
 export function useInScope() {
   const scope = useUi((s) => s.workspace);
+  const project = useScopeProject();
   const { data: conversations } = useScopedConversations();
   const { data: agents } = useAllAgents();
   const ids = new Set(conversations?.map((c) => c.id));
-  return ({ conversationId, agentId }: { conversationId: string; agentId: string }) =>
-    scope === "all" || ids.has(conversationId) || (scope !== "global" && agents?.find((a) => a.id === agentId)?.workspaceId === scope);
+  return ({ conversationId, agentId }: { conversationId: string; agentId: string }) => {
+    if (scope === "all" || ids.has(conversationId)) return true;
+    const agent = agents?.find((a) => a.id === agentId);
+    return scope !== "global" && agent?.workspaceId === scope && (!project || agent.projectId === project.id);
+  };
 }
 
 export function useArchivedConversations(agentId?: string, search = "", { enabled = true, limit = 200, workspaceId = "all" } = {}) {

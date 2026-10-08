@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Folder, FolderGit2, Globe2, Maximize2, Minimize2, Paperclip, Target, X } from "lucide-react";
+import { ChevronRight, Folder, FolderGit2, FolderKanban, Globe2, Maximize2, Minimize2, Paperclip, Target, X } from "lucide-react";
 import { toast } from "sonner";
 import type { Agent, Task, TaskPriority, TaskStatus, TaskType, Workspace } from "@godmode/shared";
 import { MAX_TASK_TITLE_LENGTH, TASK_PRIORITIES, TASK_TYPES } from "@godmode/shared";
@@ -35,6 +35,7 @@ interface TaskForm {
   type: TaskType;
   status: TaskStatus;
   workspaceId: string | null;
+  projectId: string | null;
   agentId: string | null;
   repoChoice: string;
   repoUrl: string;
@@ -53,6 +54,7 @@ export function TaskDialog({
   workspaces,
   agents,
   defaultWorkspaceId,
+  defaultProjectId = null,
   defaultStatus,
   onCreated,
   parent,
@@ -63,6 +65,8 @@ export function TaskDialog({
   workspaces: Workspace[];
   agents: Agent[];
   defaultWorkspaceId: string | null;
+  /** The project the board shows: the new ticket belongs to it. */
+  defaultProjectId?: string | null;
   defaultStatus?: TaskStatus;
   onCreated?: (task: Task) => void;
   /** A part of this ticket (it waits for it). */
@@ -85,6 +89,7 @@ export function TaskDialog({
       type: "general",
       status: defaultStatus && START_STATUSES.includes(defaultStatus) ? defaultStatus : "todo",
       workspaceId: defaultWorkspaceId,
+      projectId: defaultProjectId,
       agentId: null,
       repoChoice: "",
       repoUrl: "",
@@ -94,7 +99,7 @@ export function TaskDialog({
       labels: [],
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [open, defaultWorkspaceId, defaultStatus],
+    [open, defaultWorkspaceId, defaultProjectId, defaultStatus],
   );
   // A part keeps its own draft (per ticket): it never turns up as a plain new task, or the other way round.
   const draftKey = parent ? `${DRAFT}:part:${parent.id}` : DRAFT;
@@ -129,7 +134,11 @@ export function TaskDialog({
   const goal = filterGoal && !goalOff && (!filterGoal.workspaceId || filterGoal.workspaceId === workspaceId) ? filterGoal : null;
 
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
-  const repos = workspaceRepos(workspace);
+  const projects = workspace?.projects ?? [];
+  // Drafts saved before tickets had projects, or a project deleted since.
+  const projectId = form.projectId && projects.some((p) => p.id === form.projectId) ? form.projectId : null;
+  const project = projects.find((p) => p.id === projectId) ?? null;
+  const repos = workspaceRepos(workspace, projectId);
   const choice = repos.length ? (repoChoice === OTHER_REPO || repos.some((r) => r.id === repoChoice) ? repoChoice : repos[0]!.id) : OTHER_REPO;
   const picked = repos.find((r) => r.id === choice);
   const chosenUrl = choice === OTHER_REPO ? repoUrl.trim() : (picked?.url ?? "");
@@ -143,6 +152,7 @@ export function TaskDialog({
     mutationFn: () =>
       api.tasks.create({
         workspaceId,
+        ...(parent ? {} : { projectId }),
         title: title.trim(),
         description: withoutPlaceholders(description),
         type,
@@ -217,6 +227,14 @@ export function TaskDialog({
                   "Global"
                 )}
               </span>
+              {project && (
+                <>
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" />
+                  <span className="truncate text-muted-foreground">
+                    {project.icon} {project.name}
+                  </span>
+                </>
+              )}
               <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" />
               <span className="font-medium">{parent ? `New part of #${parent.number}` : "New task"}</span>
             </DialogTitle>
@@ -386,6 +404,7 @@ export function TaskDialog({
                     setForm((f) => ({
                       ...f,
                       workspaceId: next,
+                      projectId: null,
                       agentId: f.agentId && agentsInReach(agents, next).some((a) => a.id === f.agentId) ? f.agentId : null,
                     }));
                   }}
@@ -397,6 +416,19 @@ export function TaskDialog({
                   {workspaces.map((w) => (
                     <SelectItem key={w.id} value={w.id}>
                       <span>{w.icon}</span> {w.name}
+                    </SelectItem>
+                  ))}
+                </Pill>
+              )}
+              {!parent && projects.length > 0 && (
+                <Pill value={projectId ?? NONE} label="Project" onChange={(v) => set("projectId", v === NONE ? null : v)}>
+                  <SelectItem value={NONE}>
+                    <FolderKanban className="size-4 text-muted-foreground" /> No project
+                  </SelectItem>
+                  <SelectSeparator />
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <span>{p.icon}</span> {p.name}
                     </SelectItem>
                   ))}
                 </Pill>

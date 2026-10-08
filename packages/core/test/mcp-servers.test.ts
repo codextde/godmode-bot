@@ -30,6 +30,7 @@ function agentModel(p: Partial<Agent> & { id: string }): Agent {
   return {
     id: p.id,
     workspaceId: p.workspaceId ?? null,
+    projectId: p.projectId ?? null,
     name: p.id,
     slug: p.id,
     avatar: "🤖",

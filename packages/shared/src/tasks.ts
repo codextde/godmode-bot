@@ -169,6 +169,8 @@ export interface Task {
   id: ID;
   /** null = a global task. */
   workspaceId: ID | null;
+  /** One of its workspace's projects: its agent works with the project's context, folders and repositories. */
+  projectId: ID | null;
   /** Sequential, shown as #12. */
   number: number;
   title: string;
@@ -241,6 +243,8 @@ export interface Task {
 
 export interface TaskInput {
   workspaceId?: ID | null;
+  /** One of the workspace's projects. */
+  projectId?: ID | null;
   title: string;
   description?: string;
   type?: TaskType;
@@ -263,6 +267,8 @@ export interface TaskInput {
 }
 
 export interface TaskPatch {
+  /** One of its workspace's projects; null = none. */
+  projectId?: ID | null;
   /** The goal it serves; null = none. */
   goalId?: ID | null;
   /** Tickets it waits for before it starts (replaces the list). */

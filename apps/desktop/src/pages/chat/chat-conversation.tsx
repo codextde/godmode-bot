@@ -43,6 +43,8 @@ import { api, ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces } from "@/lib/hooks";
+import { ProjectChip } from "@/components/projects/project-chip";
+import { effectiveProject, useProjectIndex } from "@/components/projects/project-utils";
 import { onServerEvent, viewConversation } from "@/lib/realtime";
 import { speak, useVoicePrefs, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
@@ -59,6 +61,7 @@ export default function ChatConversation() {
 function ConversationView({ conversationId }: { conversationId: string }) {
   const qc = useQueryClient();
   const key = qk.conversation(conversationId);
+  const projectIndex = useProjectIndex();
   const { data: conv, isLoading, error } = useConversation(conversationId);
   const { data: agents = [] } = useAllAgents();
   const agent = agents.find((a) => a.id === conv?.agentId);
@@ -78,7 +81,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const [runProfile, setRunProfile] = useState<{ runId: string; profileId: string | null } | null>(null);
   if ((live?.runId ?? null) !== (runProfile?.runId ?? null)) setRunProfile(live ? { runId: live.runId, profileId: conv?.browserProfileId ?? null } : null);
   const chatProfileId = runProfile ? runProfile.profileId : (conv?.browserProfileId ?? null);
-  const chatBrowser = useChatBrowser(agent, chatProfileId, conv?.workspaceId ?? null);
+  const chatBrowser = useChatBrowser(agent, chatProfileId, conv?.workspaceId ?? null, conv?.projectId ?? null);
   // A runner's chat browses in the runner's copy of this profile: its frames come over the link, and whether that
   // browser runs is the runner's business — the panels show what arrives.
   const browser = useMemo(
@@ -288,6 +291,19 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     onError: (err) => toast.error("Couldn't change the VM", { description: errorMessage(err) }),
   });
 
+  const setProject = useMutation({
+    mutationFn: (projectId: string | null) => api.conversations.update(conversationId, { projectId }),
+    onSuccess: (updated) => {
+      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
+      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      const project = updated.projectId ? projectIndex.get(updated.projectId)?.project : undefined;
+      const when = busyRef.current ? "From your next message on" : "From now on";
+      if (project) toast.success(`Working on ${project.name}`, { description: `${when} runs get its context, folders and repositories.` });
+      else toast.success("Back to the default", { description: `${agent?.name ?? "The agent"} works on its own project again, if it has one.` });
+    },
+    onError: (err) => toast.error("Couldn't change the project", { description: errorMessage(err) }),
+  });
+
   const setBrowserProfile = useMutation({
     mutationFn: (browserProfileId: string | null) => api.conversations.update(conversationId, { browserProfileId }),
     onSuccess: (updated) => {
@@ -295,7 +311,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       const profiles = qc.getQueryData<BrowserProfile[]>(qk.browserProfiles) ?? [];
       const profile = updated.browserProfileId
         ? profiles.find((p) => p.id === updated.browserProfileId)
-        : agent && agentBrowserProfile(agent, profiles, null, updated.workspaceId);
+        : agent && agentBrowserProfile(agent, profiles, null, updated.workspaceId, effectiveProject(agent, updated.projectId, projectIndex)?.project ?? null);
       const when = busyRef.current ? "Your next message uses" : "The next messages use";
       if (updated.browserProfileId) toast.success(`Browsing in ${profile?.name ?? "the new profile"}`, { description: `${when} its cookies and logins.` });
       else toast.success("Back to the default profile", { description: `${agent?.name ?? "The agent"} browses in ${profile?.name ?? "its own profile"} again.` });
@@ -568,12 +584,19 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                         busy={setFolder.isPending}
                       />
                     )}
+                    <ProjectChip
+                      agent={agent}
+                      value={conv.projectId ?? null}
+                      onChange={(id) => setProject.mutateAsync(id).catch(() => undefined)}
+                      busy={setProject.isPending}
+                    />
                     {!chatVm && (
                       <>
                         <BrowserProfileChip
                           agent={agent}
                           value={conv.browserProfileId ?? null}
                           workspaceId={conv.workspaceId ?? null}
+                          projectId={conv.projectId ?? null}
                           onChange={(id) => setBrowserProfile.mutateAsync(id).catch(() => undefined)}
                           busy={setBrowserProfile.isPending}
                         />

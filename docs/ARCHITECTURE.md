@@ -110,6 +110,26 @@ system prompt, and a one-line restatement on resumed turns. Dreams don't get the
   hold unpushed work). Backups carry the records, not the clones: restored repositories are cloned again, restored
   folders must exist on the new machine.
 
+### Projects
+
+A workspace can optionally be split into projects (`projects`, `Workspace.projects`, `services/projects.ts`,
+`GET/POST /api/projects`, `PATCH/DELETE /api/projects/:id`, `POST /api/projects/:id/sources/:sourceId/sync`). A project
+has its own description, agent context, folders and repositories (`workspace_sources.project_id`, cloned next to the
+workspace's in `repos/<workspace-id>/`) and browser profile (a global one or the workspace's; nothing moves). A workspace
+without projects works exactly as before.
+
+* Chats (`conversations.project_id`), tickets (`tasks.project_id`, parts inherit their ticket's) and agents
+  (`agents.project_id`, their default) may belong to one of their workspace's projects. A chat works on its own project,
+  else its agent's (`projectOfChat`); a global agent's chat may pick any project and then counts to that workspace.
+* A run in a project gets the project's description and context as a standing-instructions layer after the
+  workspace's, its folders and repositories next to the workspace's (`--add-dir`, prompt section), and browses with its
+  profile unless the chat or the agent has its own. A ticket's worktree comes from the project's first repository,
+  else the workspace's.
+* Deleting a project keeps its chats, tickets and agents in the workspace without one and trashes its clones; deleting
+  the workspace takes its projects along. Projects travel with the `workspaces` entity (UI events, runner mirror).
+* Desktop: the sidebar switcher nests foldable projects under their workspace; picking one scopes Recent, Home and the
+  board to it and preselects it for new chats and tickets.
+
 ### Files and folders in chat messages
 
 A chat shows the pictures its messages name and links every other file or folder to the file manager — the message

@@ -13,6 +13,8 @@ export type WorkspacesSort = "name" | "active" | "attention";
 interface UiState {
   /** Workspace scope selected in the sidebar: "all" | "global" | workspace id */
   workspace: string;
+  /** Project of that workspace picked in the sidebar; null = the whole workspace. */
+  project: string | null;
   commandOpen: boolean;
   /** The keyboard shortcuts list is open. */
   shortcutsOpen: boolean;
@@ -43,7 +45,8 @@ interface UiState {
   expandedNav: string[];
   /** The human came back after a while: from when to when they were away (Home sums up what happened). Not kept. */
   away: { since: string; until: string } | null;
-  setWorkspace: (id: string) => void;
+  /** Pick a scope; a project only goes with its workspace (omitted = the whole workspace). */
+  setWorkspace: (id: string, project?: string | null) => void;
   setCommandOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
   setVoiceMode: (on: boolean) => void;
@@ -66,6 +69,7 @@ export const useUi = create<UiState>()(
   persist(
     (set) => ({
       workspace: "all",
+      project: null,
       commandOpen: false,
       shortcutsOpen: false,
       voiceMode: false,
@@ -83,9 +87,10 @@ export const useUi = create<UiState>()(
       workspacesView: "grid",
       workspacesSort: "name",
       away: null,
-      setWorkspace: (workspace) =>
+      setWorkspace: (workspace, project = null) =>
         set((s) => ({
           workspace,
+          project: workspace === "all" || workspace === "global" ? null : project,
           recentWorkspaces: workspace === "all" || workspace === "global" ? s.recentWorkspaces : [workspace, ...s.recentWorkspaces.filter((id) => id !== workspace)].slice(0, 6),
         })),
       setCommandOpen: (commandOpen) => set({ commandOpen }),
@@ -117,6 +122,7 @@ export const useUi = create<UiState>()(
       name: storageKey("godmode-ui"),
       partialize: (s) => ({
         workspace: s.workspace,
+        project: s.project,
         sidebarCollapsed: s.sidebarCollapsed,
         voiceMode: s.voiceMode,
         browserPanel: s.browserPanel,

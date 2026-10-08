@@ -6,6 +6,8 @@ import { isOverdue, taskAttachmentIds, waitsForTickets } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { LiveDot } from "@/components/aicss/Motion";
 import { useLive } from "@/stores/live";
+import { useUi } from "@/stores/ui";
+import { useProjectIndex } from "@/components/projects/project-utils";
 import { cn } from "@/lib/utils";
 import { useNow } from "@/components/vault/use-now";
 import { LabelChip } from "./task-fields";
@@ -64,6 +66,9 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
   ref,
 ) {
   const activity = useTaskActivity(task);
+  const scopedProject = useUi((s) => s.project);
+  const project = useProjectIndex().get(task.projectId ?? "")?.project;
+  const showProject = !!project && scopedProject !== project.id;
   const working = isWorking(task);
   const paused = pauseLabel(task);
   const waiting = waitingLabel(task);
@@ -115,10 +120,21 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
             <PriorityIcon priority={task.priority} />
           </span>
         )}
-        {workspace !== undefined && (
+        {(workspace !== undefined || showProject) && (
           <span className="ml-auto flex min-w-0 items-center gap-1 truncate">
-            <span className="text-[11px]">{workspace?.icon ?? "🌐"}</span>
-            <span className="truncate">{workspace?.name ?? "Global"}</span>
+            {workspace !== undefined && (
+              <>
+                <span className="text-[11px]">{workspace?.icon ?? "🌐"}</span>
+                <span className={cn("truncate", showProject && "max-w-[45%] shrink-[2]")}>{workspace?.name ?? "Global"}</span>
+              </>
+            )}
+            {showProject && (
+              <>
+                {workspace !== undefined && <span className="opacity-50">/</span>}
+                <span className="text-[11px]">{project.icon}</span>
+                <span className="truncate">{project.name}</span>
+              </>
+            )}
           </span>
         )}
       </div>
