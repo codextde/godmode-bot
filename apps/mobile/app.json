@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "de.codext.godmode",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "icon": "./assets/godmode.icon",
       "supportsTablet": true,
       "infoPlist": {

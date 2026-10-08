@@ -33,6 +33,11 @@ interface DeviceRow {
 }
 
 let offer: { hash: string; expiresAt: number } | null = null;
+/** A reusable code for a public demo server (App Review): every phone that presents it gets its own device. */
+function reviewCodeHash(): string | null {
+  const code = process.env.GODMODE_REVIEW_PAIRING_CODE?.trim();
+  return code && code.length >= 24 ? sha256(code) : null;
+}
 const lastSeenWrites = new Map<string, number>();
 let onlineCheck: (deviceId: string) => boolean = () => false;
 let onRevoked: (deviceId: string) => void = () => {};
@@ -110,11 +115,14 @@ export function hasPairingOffer(): boolean {
 
 /** The phone presents the scanned code; a valid one is used up and the phone gets its device token. */
 export function claimPairing(input: MobilePairInput, address: string): MobilePairResult {
-  const current = getSettings().mobile.enabled ? offer : null;
-  if (!current || current.expiresAt <= Date.now() || current.hash !== sha256(input.code)) {
+  const enabled = getSettings().mobile.enabled;
+  const hash = sha256(input.code);
+  const current = enabled ? offer : null;
+  const review = enabled && hash === reviewCodeHash();
+  if (!review && (!current || current.expiresAt <= Date.now() || current.hash !== hash)) {
     throw new HttpError(401, "This pairing code is invalid or has expired. Show a new QR code on your computer.", "pairing_invalid");
   }
-  offer = null;
+  if (!review) offer = null;
   const token = MOBILE_TOKEN_PREFIX + randomToken(32);
   const id = newId("dev");
   const ts = now();
