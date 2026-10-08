@@ -101,16 +101,15 @@ export function WorkspaceSwitcher() {
             >
               <ScopeTile scope={scope} workspace={currentProject ?? current} className="size-8 rounded-md text-base group-data-[collapsible=icon]:size-7" />
               <span className="min-w-0 flex-1 leading-tight group-data-[collapsible=icon]:hidden">
-                {currentProject && current ? (
-                  <span className="flex min-w-0 items-baseline gap-1 text-[13.5px]">
-                    <span className="min-w-0 shrink truncate font-medium">{currentProject.name}</span>
-                    <span className="min-w-0 shrink-[2] truncate text-[11px] text-muted-foreground">in {current.name}</span>
-                  </span>
-                ) : (
-                  <span className="block truncate text-[13.5px] font-medium">{label}</span>
-                )}
+                <span className="block truncate text-[13.5px] font-medium">{label}</span>
                 <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
-                  <ActivityLine activity={shown} fallback={scope === "all" ? `${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}` : "All quiet"} />
+                  {currentProject && current && (
+                    <span className={cn("truncate", (shown.running > 0 || shown.needsYou > 0) && "max-w-[45%]")}>{current.name}</span>
+                  )}
+                  {currentProject && current && (shown.running > 0 || shown.needsYou > 0) && <span aria-hidden className="opacity-50">·</span>}
+                  {!(currentProject && !shown.running && !shown.needsYou) && (
+                    <ActivityLine activity={shown} fallback={scope === "all" ? `${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}` : "All quiet"} />
+                  )}
                 </span>
               </span>
               <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" />

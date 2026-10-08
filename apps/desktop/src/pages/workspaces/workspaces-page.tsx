@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Bot,
   EllipsisVertical,
+  FolderGit2,
   FolderPlus,
   Globe2,
   KeyRound,
@@ -703,8 +704,18 @@ function ScopeCard({
             )}
           </button>
         )}
+        {projects && !projects.list.length && (
+          <button
+            type="button"
+            onClick={projects.onAdd}
+            className="mt-1.5 flex max-w-full items-center gap-1.5 rounded-md text-xs text-muted-foreground transition hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <FolderPlus className="size-3.5 shrink-0" />
+            <span className="truncate">Add a project (optional)</span>
+          </button>
+        )}
       </div>
-      {projects && <ProjectStrip {...projects} />}
+      {projects && projects.list.length > 0 && <ProjectStrip {...projects} />}
       <div className="relative mt-4 grid grid-cols-4 gap-1.5">
         {stats.map((s) => {
           const n = counts[s.key];
@@ -867,36 +878,37 @@ function ProjectStrip({
           <Plus className="size-3.5" /> New
         </button>
       </div>
-      {list.length === 0 ? (
-        <p className="px-1 pb-0.5 text-xs text-muted-foreground">Optional — split the work into projects with their own context and repositories.</p>
-      ) : (
-        <ul className="flex flex-col gap-0.5">
-          {shown.map((p) => (
-            <li key={p.id} className="group/project relative flex items-center rounded-md transition hover:bg-card">
-              <button
-                type="button"
-                onClick={() => onOpen(p)}
-                className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-                aria-current={current === p.id || undefined}
-              >
-                <WorkspaceTile icon={p.icon} color={p.color} size="sm" className="size-5 rounded text-[11px]" />
-                <span className="truncate">{p.name}</span>
-                {current === p.id && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />}
-                {p.sources.length > 0 && <span className="ml-auto shrink-0 font-mono text-[10.5px] text-muted-foreground tabular-nums">{p.sources.length} src</span>}
-              </button>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Edit ${p.name}`}
-                onClick={() => onEdit(p)}
-                className="mr-0.5 size-6 text-muted-foreground opacity-0 transition group-hover/project:opacity-100 focus-visible:opacity-100 [&_svg]:size-3.5"
-              >
-                <Pencil />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="flex flex-col gap-0.5">
+        {shown.map((p) => (
+          <li key={p.id} className="group/project relative flex items-center rounded-md transition hover:bg-card">
+            <button
+              type="button"
+              onClick={() => onOpen(p)}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              aria-current={current === p.id || undefined}
+            >
+              <WorkspaceTile icon={p.icon} color={p.color} size="sm" className="size-5 rounded text-[11px]" />
+              <span className="truncate">{p.name}</span>
+              {current === p.id && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />}
+              {p.sources.length > 0 && (
+                <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10.5px] text-muted-foreground tabular-nums" title={p.sources.map((x) => x.name).join(", ")}>
+                  <FolderGit2 className="size-3" aria-hidden />
+                  {p.sources.length}
+                </span>
+              )}
+            </button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${p.name}`}
+              onClick={() => onEdit(p)}
+              className="mr-0.5 size-6 text-muted-foreground opacity-0 transition group-hover/project:opacity-100 focus-visible:opacity-100 [&_svg]:size-3.5"
+            >
+              <Pencil />
+            </Button>
+          </li>
+        ))}
+      </ul>
       {(hidden > 0 || all) && list.length > STRIP_MAX && (
         <button type="button" onClick={() => setAll((v) => !v)} className="mt-0.5 px-1.5 text-xs text-muted-foreground transition hover:text-foreground">
           {all ? "Show less" : `${hidden} more`}

@@ -12,8 +12,13 @@ import { cn } from "@/lib/utils";
 import { effectiveProject, projectsFor, useProjectIndex } from "./project-utils";
 
 export function projectMeta(project: Project): string {
-  const parts = [project.description.trim().split("\n")[0]];
-  if (project.sources.length) parts.push(`${project.sources.length} folder${project.sources.length === 1 ? "" : "s"} & repos`);
+  const repos = project.sources.filter((s) => s.kind === "git").length;
+  const folders = project.sources.length - repos;
+  const parts = [
+    project.description.trim().split("\n")[0],
+    folders ? `${folders} folder${folders === 1 ? "" : "s"}` : null,
+    repos ? `${repos} repo${repos === 1 ? "" : "s"}` : null,
+  ];
   return parts.filter(Boolean).join(" · ") || "No details yet";
 }
 
