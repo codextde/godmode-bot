@@ -10,7 +10,7 @@ import ComputerUse from '@/components/sections/ComputerUse.astro';
 import { PRICING, SITE, yearlySavings } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
-const checked = 'October 7, 2026';
+const checked = 'October 8, 2026';
 
 type Mark = 'yes' | 'no' | 'partial';
 const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
@@ -41,8 +41,8 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Model',
-    us: ['yes', `${SITE.model} on Anthropic’s official Claude Code, and every newer Claude the day you get it`],
-    them: ['partial', 'Grok models. The app doesn’t show which model ran a task'],
+    us: ['yes', `${SITE.model} on every task, through Anthropic’s official Claude Code, and every newer Claude the day you get it`],
+    them: ['partial', 'Picked per task by xAI: a fast Grok 4.8 for most requests, Claude Opus 5.5 and others for some'],
   },
   {
     label: 'Usage limits',
@@ -150,11 +150,15 @@ const steps = [
 const faqs = [
   {
     q: 'Is Godmode a good Grok Bot alternative?',
-    a: `Yes, if you want an AI coworker that works on your own computer with the logins you already have. Both give you persistent agents with memory that use a browser and apps to finish real work. Grok Bot does it on a cloud computer with Grok models; Godmode does it on your device with ${SITE.model}, an encrypted vault for passwords and 2FA, and no usage cap of its own.`,
+    a: `Yes, if you want an AI coworker that works on your own computer with the logins you already have. Both give you persistent agents with memory that use a browser and apps to finish real work. Grok Bot does it on a cloud computer with a model xAI picks for each task; Godmode does it on your device with ${SITE.model}, an encrypted vault for passwords and 2FA, and no usage cap of its own.`,
   },
   {
     q: 'Is Godmode cheaper than Grok Bot?',
     a: `Godmode is $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly, after a ${PRICING.trialDays}-day free trial, plus the Claude plan or API key you already have. Grok Bot comes inside Cursor plans (from $20 a month) or SuperGrok (from $30 a month) with a weekly allowance; heavy users report hitting limits even on $200–$300 plans. If you run agents every day, a predictable Godmode subscription plus Claude Max is usually the calmer bill.`,
+  },
+  {
+    q: 'Doesn’t Grok Bot use Claude now?',
+    a: `For some tasks. On October 7, 2026 xAI announced that Grok Bot will route each request to the model it judges best, including Claude Opus 5.5, while most simple requests go to a fast Grok 4.8. Godmode runs Claude on every task, on the Claude plan or API key you choose, so you always know which model did the work. The bigger difference is where the work happens: on your own computer with the logins you already have, and a vault that fills passwords and 2FA codes.`,
   },
   {
     q: 'Does Godmode use Grok?',
@@ -174,7 +178,7 @@ const faqs = [
   },
   {
     q: 'When is Grok Bot the better choice?',
-    a: 'If you already pay for Cursor or SuperGrok, want Grok specifically, need agents on your phone without any computer at home, or never want to run anything on your own hardware, Grok Bot is a fine pick. Godmode is for people who want the agent where their logins, files and apps already are.',
+    a: 'If you already pay for Cursor or SuperGrok, want xAI to pick the model for each task, need agents on your phone without any computer at home, or never want to run anything on your own hardware, Grok Bot is a fine pick. Godmode is for people who want the agent where their logins, files and apps already are.',
   },
 ];
 
@@ -224,14 +228,14 @@ const jsonLd = {
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Agents that use the accounts you are already signed into</li>
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Scheduled jobs behind 2FA that finish without you</li>
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Computer use on your real desktop apps, not a cloud copy</li>
-            <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Claude doing the thinking, with no extra weekly cap</li>
+            <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Claude doing the thinking on every task, with no extra weekly cap</li>
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Logins, files and memory that never leave your machine</li>
           </ul>
         </div>
         <div class="card p-7 sm:p-9" data-reveal style="--d:80">
           <p class="flex items-center gap-2.5 text-[15px] font-medium text-text-2"><Icon name="cloud" size={20} class="text-muted" /> Grok Bot is fine if you want</p>
           <ul class="mt-6 space-y-3.5 text-[15px] leading-relaxed text-muted">
-            <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />Grok models specifically</li>
+            <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />xAI picking the model for each task, mostly Grok</li>
             <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />Agents without any computer of your own switched on</li>
             <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />Something bundled into a Cursor or SuperGrok plan you already pay for</li>
             <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />To sign in and type 2FA codes yourself whenever a session expires</li>
