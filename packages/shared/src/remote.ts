@@ -4,7 +4,7 @@
  * it and mirrors its chats; everything between the two travels over an end-to-end encrypted link.
  */
 import type { TailscaleStatus } from "./mobile";
-import type { ID, ISODate } from "./models";
+import type { ID, ISODate, ToolUpdateStatus } from "./models";
 
 /** Port the runner listens on for the encrypted link (phones use 7787). */
 export const RUNNER_DEFAULT_PORT = 7788;
@@ -37,6 +37,8 @@ export interface RemoteRunner {
   arch: string | null;
   /** Godmode version running there; null until first connected. */
   version: string | null;
+  /** The commit its Godmode was built from ("dev" from source); null for a runner older than its updater. */
+  build: string | null;
   /** Hosts or IPs to dial, best first (LAN address, Tailscale address, `name.local`). */
   addresses: string[];
   port: number;
@@ -58,6 +60,7 @@ export interface RemoteRunner {
   conversations: number;
   /** Copy the browser sessions (cookies) of the profile a chat uses before it starts. */
   syncBrowser: boolean;
+  update: RunnerUpdate;
 }
 
 export interface RunnerPatch {
@@ -65,6 +68,56 @@ export interface RunnerPatch {
   addresses?: string[];
   port?: number;
   syncBrowser?: boolean;
+  autoUpdate?: boolean;
+}
+
+/**
+ * Bringing a runner's Godmode to the one this computer runs, and its tools to their newest versions.
+ *
+ *  current      the same Godmode as here (tools may still have updates: `tools`)
+ *  available    another build than here; `Update` installs this computer's
+ *  sending      the new Godmode is on its way over the link (`progress`)
+ *  waiting      it is there and installs once the runner's runs are done
+ *  installing   the runner replaces its program, or updates its tools
+ *  restarting   it restarted with the new Godmode and comes back in a moment
+ *  failed       the last attempt didn't work (`detail`); `Update` tries again
+ *  unsupported  can't be updated from here (`detail` says what to do instead)
+ */
+export type RunnerUpdateState = "current" | "available" | "sending" | "waiting" | "installing" | "restarting" | "failed" | "unsupported";
+
+/** How the new Godmode gets there: this computer's own program, a download from usegodmode.com, or (runners from before the updater) fetched from here once. */
+export type RunnerUpdateSource = "controller" | "website" | "bridge";
+
+export interface RunnerUpdate {
+  state: RunnerUpdateState;
+  /** The Godmode it gets: this computer's. */
+  target: { version: string; build: string };
+  source: RunnerUpdateSource | null;
+  /** 0..1 while the new Godmode is sent. */
+  progress: number | null;
+  detail: string | null;
+  /** Install a new Godmode by itself once it connects (and its runs are done). */
+  autoUpdate: boolean;
+  /** Tools on the runner with an update it can install (Claude Code, uv, Chromium…), from its last report. */
+  tools: Pick<ToolUpdateStatus, "id" | "name" | "current" | "latest">[];
+  /** A command to run on the runner when it can't be updated from here; null otherwise. */
+  command: string | null;
+}
+
+/** POST /api/runners/:id/update */
+export interface RunnerUpdateInput {
+  /** Also install the runner's tool updates (default true). */
+  tools?: boolean;
+}
+
+/** What a runner says about the update it is installing (in RunnerInfo). */
+export interface RunnerSelfUpdate {
+  state: "idle" | "receiving" | "waiting" | "installing" | "failed";
+  /** The build it installs (or failed to). */
+  target: { version: string; build: string } | null;
+  error: string | null;
+  /** Runs it waits for. */
+  waitingFor: number;
 }
 
 /** How a runner reaches this computer: the local network, a virtual machine's bridge, or Tailscale. */
@@ -134,6 +187,13 @@ export interface RunnerInfo {
   platform: string;
   arch: string;
   version: string;
+  /** Missing on runners older than their updater. */
+  build?: string;
+  /** One compiled program (can replace itself); false when it runs from source. */
+  compiled?: boolean;
+  /** SHA-256 of that program, once known: two runners with the same digest run the same Godmode. */
+  digest?: string | null;
+  update?: RunnerSelfUpdate;
   protocol: number;
   vault: { initialized: boolean; unlocked: boolean };
   /** Digest of the config snapshot it last applied; null = never synced. */

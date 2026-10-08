@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 
-// Downloads and app updates are served from the (soon private) GitHub releases through this site:
+// Downloads and app updates are served from the GitHub releases through this site:
 // the Worker reads them with a read-only token and hands the browser a short-lived signed asset URL.
 const REPO = 'codextde/godmode-bot';
 

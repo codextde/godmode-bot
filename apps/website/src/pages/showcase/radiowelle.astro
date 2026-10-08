@@ -1,0 +1,301 @@
+---
+import { Image } from 'astro:assets';
+import Base from '@/layouts/Base.astro';
+import Nav from '@/components/Nav.astro';
+import Footer from '@/components/Footer.astro';
+import Icon from '@/components/ui/Icon.astro';
+import Logo from '@/components/ui/Logo.astro';
+import Words from '@/components/ui/Words.astro';
+import CheckoutButton from '@/components/ui/CheckoutButton.astro';
+import Countdown from '@/components/ui/Countdown.astro';
+import CouponCode from '@/components/ui/CouponCode.astro';
+import { COUPON, FOUNDING, PRICING, SITE, yearlySavings } from '@/config/site';
+import icon from '@/assets/showcase/radiowelle/icon.png';
+import player from '@/assets/showcase/radiowelle/01-player.png';
+import home from '@/assets/showcase/radiowelle/02-home.png';
+import search from '@/assets/showcase/radiowelle/03-search.png';
+import library from '@/assets/showcase/radiowelle/04-library.png';
+
+const { monthly, yearly } = PRICING.plans;
+
+const prompt = [
+  'fully develop and publish the App to AppStore and PlayStore, it should be the best Radio App on the Market mainly German Radio but can be used worldwide with multilanguage support and the most common radio stations in the contry already included, start with germany and then we can do the rest later',
+  '- Free',
+  '- Build with Expo for Android and iOS',
+  '- Pulished under Codext GmbH Play Store and AppStore Connect',
+  '- Complelty develop and publish the App on your own It’s a radio App like radio.de but for free without Ads with the best User Experience possible.',
+];
+
+const stats = [
+  ['2 h 45 min', 'from the message to both stores'],
+  ['1', 'time a human had to step in'],
+  ['265', 'German stations, every stream checked'],
+  ['14', 'languages, translated by sub-agents'],
+];
+
+const timeline = [
+  ['16:22', 'code-xml', 'Reads the goal, scaffolds an Expo app and writes a native audio engine in Swift and Kotlin: lock screen, live song titles, reconnects, sleep timer.'],
+  ['16:36', 'list-checks', 'Hands the station catalog to a sub-agent: 265 German stations from all 16 states, each stream tested, each logo cleaned up.'],
+  ['16:58', 'languages', 'A second sub-agent translates the app into 12 more languages while the first iOS and Android builds compile.'],
+  ['17:01', 'smartphone', 'Taps a station in the iPhone and Android simulators: 1LIVE plays, the song title shows up, the media notification works.'],
+  ['17:08', 'globe', 'Opens Play Console with your saved login and creates the app under Codext GmbH. Builds the app website with privacy policy and imprint and deploys it.'],
+  ['17:20', 'file-check', 'Fills every Play Console declaration: ads, app access, data safety, target audience, IARC age rating.'],
+  ['17:50', 'image', 'Captures store screenshots in the simulator, composes them for both stores and uploads the listing in German and English.'],
+  ['18:20', 'scan-eye', 'Asks a reviewer agent to audit the player, fixes all 12 issues it found, then rebuilds and retests the release builds.'],
+  ['18:38', 'package-check', 'Signs and uploads the Android bundle and sends the app to Google Play review.'],
+  ['19:00', 'hand', 'Apple doesn’t let any API create a new app. Godmode asks once; you log in to App Store Connect with your 2FA. That’s the only human step.'],
+  ['19:07', 'rocket', 'Creates the App Store record, uploads the build, sets privacy, price and availability and submits it to App Review.'],
+] as const;
+
+const did = [
+  ['code-xml', 'The app', 'Expo + React Native, native tabs, a mini player, favorites with drag and drop, search across more than 50,000 stations, dark mode.'],
+  ['radio', 'The audio engine', 'AVPlayer on iOS, Media3 on Android. Lock screen controls, AirPlay, ICY song titles, reconnect with backoff.'],
+  ['languages', '14 languages', 'German and English written first, then twelve more by parallel sub-agents, checked against every key.'],
+  ['globe', 'Website and legal', 'Landing page, privacy policy and imprint, deployed to Cloudflare on its own subdomain.'],
+  ['store', 'Both store listings', 'Texts, keywords, icon, feature graphic and screenshots, uploaded through the App Store Connect and Play APIs.'],
+  ['key-round', 'Signing and review', 'Upload keystore, provisioning profile, every compliance form, review notes. Then: submit.'],
+] as const;
+
+const shots = [
+  { img: home, alt: 'Radiowelle home screen' },
+  { img: player, alt: 'Radiowelle player with live song title' },
+  { img: search, alt: 'Radiowelle genre browser' },
+  { img: library, alt: 'Radiowelle favorites' },
+];
+
+const faqs = [
+  {
+    q: 'Did it really publish an app to both stores by itself?',
+    a: 'It built the app, created both store listings, filled every form and submitted the app to Apple and Google. You still own the developer accounts: Godmode used the Apple Developer and Google Play accounts already set up on the computer. Apple and Google then review the app as usual.',
+  },
+  {
+    q: 'What did the human do?',
+    a: 'Wrote one message, and logged in to App Store Connect once when Godmode asked, because Apple only allows creating a new app in the browser with 2FA. Everything else, including the Play Console forms, ran without anyone at the keyboard.',
+  },
+  {
+    q: 'Is the code any good?',
+    a: 'Judge for yourself: Radiowelle is open source under the MIT license on GitHub. It has native audio modules in Swift and Kotlin, typed TypeScript throughout and a station catalog that is rebuilt and stream-checked by script.',
+  },
+  {
+    q: 'Can it do this for my app?',
+    a: `Godmode works with the same tools you do: Xcode, Gradle, Expo, App Store Connect, Play Console and your browser, with ${SITE.model} doing the thinking. Give it your goal, your developer accounts and your brand, and it works through it the same way.`,
+  },
+];
+---
+
+<Base
+  title="One prompt. Two app stores. How Godmode shipped Radiowelle"
+  description="One message to Godmode: build a radio app and publish it. 2 hours 45 minutes later it was submitted to the App Store and Google Play. The prompt, the timeline and the open source code."
+  image="/media/showcase-radiowelle.png"
+>
+  <Nav home={false} />
+  <main data-track-view="showcase_radiowelle">
+    <section class="relative overflow-hidden pt-36 pb-16 sm:pt-44 sm:pb-20">
+      <div class="sc-glow pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
+      <div class="container-x grid items-center gap-14 lg:grid-cols-[1.1fr_0.9fr]">
+        <div>
+          <p class="eyebrow" data-reveal><span class="n">case</span> Built and shipped by Godmode</p>
+          <Words as="h1" text="One prompt. *Two app stores.*" class="h-section mt-6 !text-[clamp(42px,6.6vw,84px)]" />
+          <p class="lead mt-7 max-w-[600px]" data-reveal style="--d:200">
+            Daniel sent Godmode one message: build the best free radio app and publish it. 2 hours and 45 minutes later
+            Radiowelle was built, tested, listed and submitted to the App Store and Google Play. He touched the keyboard
+            once, for Apple’s 2FA.
+          </p>
+          <div class="mt-9 flex flex-col gap-3 sm:flex-row" data-reveal style="--d:320">
+            <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="showcase_radiowelle_hero" size="lg" />
+            <a href="https://github.com/codextde/radiowelle" rel="noopener" class="btn btn-ghost btn-lg" data-track="showcase_radiowelle_github">
+              <Icon name="git-branch" size={16} /> See the code
+            </a>
+          </div>
+          <div class="mt-6" data-reveal style="--d:400">
+            <a href="/#pricing" class="founding-strip" data-track="showcase_countdown">
+              <span class="flex items-center gap-2"><span class="live-dot !size-1.5"></span> Founding price ends in</span>
+              <Countdown variant="boxes" />
+            </a>
+            <p class="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-muted">
+              Extra {COUPON.percentOff}% off with <CouponCode size="sm" /> · price locked for life
+            </p>
+          </div>
+        </div>
+        <div class="sc-phones relative mx-auto flex w-full max-w-[520px] justify-center" data-reveal="scale" style="--d:200">
+          <Image src={home} alt="Radiowelle home screen" width={300} class="sc-phone sc-phone-back" loading="eager" />
+          <Image src={player} alt="Radiowelle player" width={300} class="sc-phone sc-phone-front" loading="eager" />
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-16 sm:pb-24">
+      <div class="container-x">
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {stats.map(([value, label], i) => (
+            <div class="card p-6 sm:p-7" data-reveal style={`--d:${i * 60}`}>
+              <p class="text-[clamp(30px,3.6vw,44px)] leading-none font-semibold tracking-[-0.04em] text-brand">{value}</p>
+              <p class="mt-3 text-[14px] leading-snug text-muted">{label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-20 sm:pb-28">
+      <div class="container-x">
+        <div class="max-w-[760px]">
+          <p class="eyebrow" data-reveal><span class="n">01</span> The prompt</p>
+          <Words text="Typos included. *That was the whole brief.*" class="h-section mt-6" />
+        </div>
+        <div class="card mt-12 p-6 sm:p-9" data-reveal style="--d:100">
+          <p class="flex items-center gap-2 font-mono text-[11px] tracking-[0.12em] text-dim uppercase"><Logo size={16} /> To Godmode, Oct 7, 16:22</p>
+          <div class="prompt-box mt-5 space-y-2 px-5 py-5 font-mono text-[14px] leading-relaxed text-text sm:text-[15px]">
+            {prompt.map((line) => <p>{line}</p>)}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-20 sm:pb-28">
+      <div class="container-x">
+        <div class="max-w-[760px]">
+          <p class="eyebrow" data-reveal><span class="n">02</span> The afternoon</p>
+          <Words text="What happened *between 16:22 and 19:07.*" class="h-section mt-6" />
+        </div>
+        <ol class="sc-timeline mt-12">
+          {timeline.map(([time, ic, text], i) => (
+            <li class:list={['sc-step', ic === 'hand' && 'is-human']} data-reveal style={`--d:${Math.min(i, 5) * 50}`}>
+              <span class="sc-dot"><Icon name={ic} size={15} /></span>
+              <div class="card flex flex-col gap-2 p-5 sm:flex-row sm:items-start sm:gap-6 sm:p-6">
+                <span class="font-mono text-[13px] text-brand sm:w-14 sm:flex-none sm:pt-0.5">{time}</span>
+                <p class="text-[15px] leading-relaxed text-text-2">{text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p class="mt-6 text-[13px] text-dim" data-reveal>Times in Berlin, October 7, 2026. Store review by Apple and Google comes after submission and takes its usual few days.</p>
+      </div>
+    </section>
+
+    <section class="pb-20 sm:pb-28">
+      <div class="container-x">
+        <div class="max-w-[760px]">
+          <p class="eyebrow" data-reveal><span class="n">03</span> The result</p>
+          <Words text="Not a demo. *Real code, real store listings.*" class="h-section mt-6" />
+        </div>
+        <div class="mt-12 grid grid-cols-2 gap-3 md:grid-cols-4">
+          {shots.map((s, i) => (
+            <Image src={s.img} alt={s.alt} width={300} class="w-full rounded-[22px] ring-1 ring-line" data-reveal style={`--d:${i * 60}`} />
+          ))}
+        </div>
+        <div class="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {did.map(([ic, title, text], i) => (
+            <article class="card p-7" data-reveal style={`--d:${(i % 3) * 70}`}>
+              <span class="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand ring-1 ring-[var(--brand-line)]">
+                <Icon name={ic} size={18} />
+              </span>
+              <h3 class="h-card mt-5">{title}</h3>
+              <p class="mt-2.5 text-[15px] leading-relaxed text-muted">{text}</p>
+            </article>
+          ))}
+        </div>
+        <div class="card mt-3 flex flex-col items-start gap-5 p-7 sm:flex-row sm:items-center sm:p-8" data-reveal>
+          <Image src={icon} alt="" width={64} class="rounded-[16px]" />
+          <div class="flex-1">
+            <p class="text-[17px] font-medium">Radiowelle: Radio &amp; Webradio</p>
+            <p class="mt-1 text-[14px] text-muted">Free, no ads in the app, no account. Open source under MIT.</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <a href="https://github.com/codextde/radiowelle" rel="noopener" class="chip" data-track="showcase_radiowelle_repo"><Icon name="git-branch" size={12} /> GitHub</a>
+            <a href="https://radiowelle.codext.de" rel="noopener" class="chip" data-track="showcase_radiowelle_site"><Icon name="globe" size={12} /> Website</a>
+            <a href="https://apps.apple.com/app/id6820185211" rel="noopener" class="chip" data-track="showcase_radiowelle_ios"><Icon name="apple" size={12} /> App Store</a>
+            <a href="https://play.google.com/store/apps/details?id=de.codext.radiowelle" rel="noopener" class="chip" data-track="showcase_radiowelle_play"><Icon name="smartphone" size={12} /> Google Play</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-20 sm:pb-28">
+      <div class="container-x grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
+        <div class="lg:sticky lg:top-28 lg:self-start">
+          <p class="eyebrow" data-reveal><span class="n">04</span> FAQ</p>
+          <Words text="The honest *fine print.*" class="h-section mt-6 !text-[clamp(30px,4vw,48px)]" />
+        </div>
+        <div class="divide-y divide-line border-y border-line">
+          {faqs.map((f, i) => (
+            <details class="faq group" data-faq={`showcase_radiowelle_${i}`} data-reveal style={`--d:${i * 40}`}>
+              <summary class="flex cursor-pointer items-center justify-between gap-6 py-6 text-[17px] font-medium tracking-[-0.015em] transition-colors hover:text-white">
+                {f.q}
+                <span class="plus grid size-8 flex-none place-items-center rounded-full ring-1 ring-line-2 transition-colors group-hover:ring-line-3" aria-hidden="true">
+                  <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+                </span>
+              </summary>
+              <p class="max-w-[640px] pb-7 text-[15px] leading-[1.7] text-muted">{f.a}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    <section class="pb-8">
+      <div class="container-x">
+        <div class="card p-8 text-center sm:p-14" data-reveal>
+          <h2 class="mx-auto max-w-[18ch] text-[clamp(28px,4vw,48px)] leading-[1.05] font-semibold tracking-[-0.04em]">What would you ship with one message?</h2>
+          <p class="mx-auto mt-4 max-w-[560px] text-muted">
+            {PRICING.trialDays} days free, then ${monthly.price}/month or ${yearly.perMonth}/month billed yearly. Founding 100 closes
+            {FOUNDING.endLabel}: after that it’s ${FOUNDING.listPrice.monthly}/month.
+          </p>
+          <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="showcase_radiowelle_final" size="lg" />
+            <CheckoutButton plan="yearly" label={`Or yearly — $${yearly.perMonth}/mo, save ${yearlySavings}%`} source="showcase_radiowelle_final" variant="ghost" size="lg" />
+          </div>
+          <p class="mt-6 flex items-center justify-center gap-2 text-[13px] text-muted">
+            <Icon name="shield-check" size={14} class="text-brand" /> $0 today · price locked for life · founding offer ends in <Countdown />
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</Base>
+
+<style>
+  .sc-glow {
+    background:
+      radial-gradient(55% 45% at 80% 10%, rgb(47 214 144 / 0.16), transparent 70%),
+      radial-gradient(40% 40% at 10% 0%, rgb(255 250 240 / 0.05), transparent 70%);
+  }
+  .sc-phones { height: clamp(380px, 46vw, 560px); }
+  .sc-phone {
+    position: absolute;
+    width: clamp(190px, 22vw, 260px);
+    height: auto;
+    border-radius: 28px;
+    box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.7);
+    outline: 1px solid rgb(255 250 240 / 0.08);
+  }
+  .sc-phone-back { left: 6%; top: 6%; transform: rotate(-6deg); opacity: 0.85; }
+  .sc-phone-front { right: 6%; top: 0; transform: rotate(4deg); }
+  .sc-timeline { position: relative; display: grid; gap: 12px; padding-left: 44px; }
+  .sc-timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    background: linear-gradient(to bottom, var(--brand-line), rgb(255 250 240 / 0.06));
+  }
+  .sc-step { position: relative; }
+  .sc-dot {
+    position: absolute;
+    left: -44px;
+    top: 18px;
+    display: grid;
+    place-items: center;
+    width: 31px;
+    height: 31px;
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--brand);
+    box-shadow: inset 0 0 0 1px var(--brand-line);
+  }
+  .sc-step.is-human .sc-dot { color: var(--warn, #f5b84b); box-shadow: inset 0 0 0 1px rgb(245 184 75 / 0.45); }
+  .sc-step.is-human .card { box-shadow: inset 0 0 0 1px rgb(245 184 75 / 0.3); }
+</style>

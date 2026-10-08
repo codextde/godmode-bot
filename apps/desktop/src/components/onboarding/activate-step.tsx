@@ -20,7 +20,11 @@ export function ActivateStep({ onBack, onDone }: { onBack: () => void; onDone: (
       <StepHeader
         eyebrow="Godmode Pro"
         title="Activate Godmode."
-        description="Start your 7-day free trial, or enter the licence key you got after checkout. Every plan has every feature."
+        description={
+          state && !state.enforced
+            ? "This build of your own is free under the MIT License, so you can skip this. Have a Godmode Pro key? Add it here."
+            : "Start your 14-day free trial, or enter the licence key you got after checkout. Every plan has every feature."
+        }
       />
       <StepCard>
         {ready ? (

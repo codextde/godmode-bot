@@ -27,7 +27,7 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   {
     label: 'Passwords and 2FA codes',
     us: ['yes', 'Encrypted vault on your device fills them into the page. The model only sees [secret hidden]'],
-    them: ['partial', 'You take over the cloud computer and type passwords, passkeys and 2FA codes yourself'],
+    them: ['partial', 'Passwords from 1Password once you approve each fill. For passkeys and 2FA codes you take over and type them'],
   },
   {
     label: 'Desktop apps',
@@ -129,7 +129,7 @@ const sameTask = {
   prompt: 'On the 1st of every month, download last month’s invoices from our 6 supplier portals, file them in Drive and send the totals to #finance.',
   them: [
     ['cloud', 'Opens a fresh browser on its cloud computer'],
-    ['hand', 'Asks you to take over and sign in to portal 1 of 6'],
+    ['hand', 'Asks you to approve the login at portal 1 of 6'],
     ['smartphone', 'Waits while you type each 2FA code yourself'],
     ['clock', 'Next month: sessions expired, you are needed again'],
   ],
@@ -162,7 +162,7 @@ const faqs = [
   },
   {
     q: 'What happens to my logins in Grok Bot compared with Godmode?',
-    a: 'Grok Bot asks you to take over its cloud computer and type passwords, passkeys and 2FA codes yourself; the signed-in session then persists on that shared cloud computer. In Godmode, logins and 2FA secrets sit in an AES-256-GCM vault on your device and are typed straight into the page. The model only learns that a secret was filled, never its value.',
+    a: 'Grok Bot can fill passwords from a shared 1Password vault after you approve each fill; for passkeys and 2FA codes you take over its cloud computer and type them yourself. The signed-in session then persists on that shared cloud computer. In Godmode, logins and 2FA secrets sit in an AES-256-GCM vault on your device and are typed straight into the page. The model only learns that a secret was filled, never its value.',
   },
   {
     q: 'Can Godmode keep working when my laptop is closed, like Grok Bot?',

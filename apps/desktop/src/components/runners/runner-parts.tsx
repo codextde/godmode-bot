@@ -219,6 +219,7 @@ export function HealthPill({
 
 /** One line that answers "can I give it work right now?". */
 export function runnerVerdict(runner: RemoteRunner, summary: RunnerHealthSummary | null): { tone: CheckTone | "busy"; label: string } {
+  if (runner.update.state === "restarting") return { tone: "busy", label: "Restarting with the new Godmode…" };
   switch (runner.state) {
     case "connecting":
       return { tone: "busy", label: "Looking for it on the network…" };
@@ -251,7 +252,7 @@ export interface RunnerProblem {
  * runner itself is the checks' business.)
  */
 export function runnerProblem(runner: RemoteRunner): RunnerProblem | null {
-  if (runner.state === "offline") {
+  if (runner.state === "offline" && runner.update.state !== "restarting") {
     return {
       kind: "connection",
       tone: "fail",
@@ -259,14 +260,8 @@ export function runnerProblem(runner: RemoteRunner): RunnerProblem | null {
       detail: `${sentence(runner.error ?? "Is it awake and on the same network?")} Godmode keeps trying — its chats continue when it's back.`,
     };
   }
-  if (runner.state === "update_required") {
-    return {
-      kind: "connection",
-      tone: "warn",
-      title: `${runner.name} runs another version of Godmode`,
-      detail: `${runner.error ? `${sentence(runner.error)} ` : ""}Update Godmode on both computers to the same version, then try again.`,
-    };
-  }
+  // The update strip says what to do (and has the command).
+  if (runner.state === "update_required") return null;
   if (runner.state !== "online") return null;
   if (runner.sync.state === "failed") {
     return {

@@ -1,10 +1,10 @@
 import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { formatDistanceToNowStrict } from "date-fns";
+import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Conversation, Workspace } from "@godmode/shared";
-import { type KeyboardEvent, useRef } from "react";
+import { Fragment, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { AlarmClock, Archive, CircleCheck, Hourglass, MessageCircleQuestion, MessagesSquare, Pause, Pin, Trash2, Zap } from "lucide-react";
+import { AlarmClock, Archive, ChevronDown, CircleCheck, Hourglass, MessageCircleQuestion, MessagesSquare, Pause, Pin, Trash2, Zap } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -24,6 +24,19 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
 import { type RecentTab, useUi } from "@/stores/ui";
+
+const PAGE = 25;
+
+/** "Today", "Yesterday", "Previous 7 days", "Previous 30 days", then the month. */
+function dayLabel(iso: string): string {
+  const date = new Date(iso);
+  const days = differenceInCalendarDays(new Date(), date);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return "Previous 7 days";
+  if (days < 30) return "Previous 30 days";
+  return date.toLocaleDateString(undefined, { month: "long", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+}
 
 const ROW_ACTION =
   "top-1/2! size-6 -translate-y-1/2 text-muted-foreground after:inset-x-0 hover:bg-background hover:text-foreground hover:shadow-card [&>svg]:size-3.5";
@@ -59,14 +72,20 @@ export function RecentChats() {
     counts[bucketOf(c)]++;
     if (c.paused?.reason === "question") needsYou++;
   }
-  const items = visible
+  const [limit, setLimit] = useState(PAGE);
+  useEffect(() => setLimit(PAGE), [recentTab, scope]);
+  const matching = visible
     .filter((c) => recentTab === "all" || bucketOf(c) === recentTab)
     .sort((a, b) =>
       recentTab === "scheduled"
         ? continuesAt(a).localeCompare(continuesAt(b))
         : Number(b.pinned) - Number(a.pinned) || (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt),
-    )
-    .slice(0, 30);
+    );
+  const items = matching.slice(0, limit);
+  const more = matching.length - items.length;
+  // Long lists read by day; the running and scheduled tabs are short and ordered by what comes next.
+  const dated = recentTab === "all" || recentTab === "done";
+  const dayOf = (c: Conversation) => (c.pinned ? "Pinned" : dayLabel(c.lastMessageAt ?? c.createdAt));
 
   if (visible.length === 0 && !hasArchived && !scopeName) return deleteDialog;
 
@@ -88,14 +107,21 @@ export function RecentChats() {
       <SidebarGroupContent id="recent-chats-panel" role="tabpanel" aria-labelledby={`recent-tab-${recentTab}`}>
         <SidebarMenu>
           {items.length === 0 && <EmptyTab tab={recentTab} scopeName={scopeName} hasArchived={hasArchived} />}
-          {items.map((c) => {
+          {items.map((c, i) => {
+            const day = dated && (i === 0 || dayOf(items[i - 1]!) !== dayOf(c)) ? dayOf(c) : null;
             const agent = agents.find((a) => a.id === c.agentId);
             const workspaceId = c.workspaceId ?? agent?.workspaceId;
             const workspace = scope === "all" && workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
             const running = runningConversations.has(c.id) || (c.running && !queuedConversations.has(c.id));
             const queued = !running && queuedConversations.has(c.id);
             return (
-              <SidebarMenuItem key={c.id}>
+              <Fragment key={c.id}>
+              {day && (
+                <li role="presentation" className={cn("px-2 pb-0.5 text-[10.5px] font-medium text-muted-foreground/80", i > 0 ? "pt-3" : "pt-1")}>
+                  {day}
+                </li>
+              )}
+              <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
                   isActive={conversationId === c.id}
@@ -189,8 +215,24 @@ export function RecentChats() {
                   <TooltipContent side="top">Delete</TooltipContent>
                 </Tooltip>
               </SidebarMenuItem>
+              </Fragment>
             );
           })}
+          {more > 0 && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                size="sm"
+                onClick={() => setLimit((n) => n + PAGE)}
+                className="mt-1 gap-2 text-[12.5px] text-muted-foreground [&>svg]:size-3.5"
+              >
+                <ChevronDown />
+                <span>
+                  Show {Math.min(more, PAGE)} more
+                  <span className="ml-1 text-muted-foreground/60">of {more}</span>
+                </span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
           {hasArchived && (
             <SidebarMenuItem>
               <SidebarMenuButton

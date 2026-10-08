@@ -1,0 +1,21 @@
+---
+import Icon from './Icon.astro';
+import { COUPON } from '@/config/site';
+
+interface Props {
+  size?: 'sm' | 'md';
+  class?: string;
+}
+const { size = 'md', class: className = '' } = Astro.props;
+---
+
+<button
+  type="button"
+  class:list={['coupon', `coupon-${size}`, className]}
+  data-copy={COUPON.code}
+  data-track="coupon_copy"
+  aria-label={`Copy code ${COUPON.code}`}
+>
+  <span class="coupon-code">{COUPON.code}</span>
+  <span class="coupon-copy"><Icon name="copy" size={size === 'sm' ? 12 : 13} /> <span data-copy-label>Copy</span></span>
+</button>

@@ -5,11 +5,17 @@ import { minLivemode } from '@/lib/entitlement';
 
 export const prerender = false;
 
-/** GET /api/offer → founding seats left, for the counters on the page. */
+/** GET /api/offer → offer state for the counters on the page; seats left only once enough seats are taken. */
 export const GET: APIRoute = async () => {
   const taken = await foundingTaken(minLivemode(), FOUNDING.start);
+  const showCount = taken >= FOUNDING.showCountFrom;
   return Response.json(
-    { seats: FOUNDING.seats, left: Math.max(0, FOUNDING.seats - taken), open: foundingOpen(taken) },
+    {
+      seats: FOUNDING.seats,
+      open: foundingOpen(taken),
+      end: FOUNDING.end,
+      ...(showCount ? { left: Math.max(0, FOUNDING.seats - taken) } : {}),
+    },
     { headers: { 'cache-control': 'no-store' } },
   );
 };

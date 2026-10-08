@@ -109,6 +109,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET|DELETE", "/api/agents/:id", A],
   ["PATCH", "/api/agents/:id", agentPermissions],
   ["POST", "/api/agents/:id/run", agentPermissions],
+  ["POST", "/api/agents/:id/move", A],
   ["POST", "/api/agents/:id/duplicate", A],
   ["DELETE", "/api/agents/:id/failed-run", A],
   ["POST", "/api/agents/:id/pause", agentPermissions],
@@ -227,8 +228,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["PATCH|DELETE", "/api/goals/:id", A],
   ["GET", "/api/tasks/:id/events", A],
   // Questions agents ask before they act: reading and answering them is ordinary use of the dashboard.
-  // Runners: seeing them is fine from anywhere. Pairing, copying the setup (logins, 2FA, sessions) to them, fixing
-  // and removing them, and the runner's own link API (/api/link/*, which includes running commands) stay on the
+  // Runners: seeing them is fine from anywhere. Pairing, copying the setup (logins, 2FA, sessions) to them, fixing,
+  // updating and removing them, and the runner's own link API (/api/link/*, which includes running commands) stay on the
   // computer. The proxy to a runner (/api/runners/:id/proxy/…) matches no entry, so it is refused as well.
   ["GET", "/api/runners", A],
   ["GET", "/api/runners/:id", A],
@@ -240,6 +241,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/runners/:id/sync", refused(COMPUTER_ONLY)],
   ["POST", "/api/runners/:id/health/fix", refused(COMPUTER_ONLY)],
   ["POST", "/api/runners/:id/autofix", refused(COMPUTER_ONLY)],
+  ["POST", "/api/runners/:id/update", refused(COMPUTER_ONLY)],
   ["GET", "/api/link/info", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/sync", refused(COMPUTER_ONLY)],
   ["GET", "/api/link/health", refused(COMPUTER_ONLY)],
@@ -248,6 +250,11 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/link/browser/:profileId/cookies", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/exec", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/forget", refused(COMPUTER_ONLY)],
+  ["PUT", "/api/link/update/chunk", refused(COMPUTER_ONLY)],
+  ["POST", "/api/link/update/apply", refused(COMPUTER_ONLY)],
+  ["POST", "/api/link/update/download", refused(COMPUTER_ONLY)],
+  ["GET", "/api/link/updates", refused(COMPUTER_ONLY)],
+  ["POST", "/api/link/updates/install", refused(COMPUTER_ONLY)],
   ["GET", "/api/questions", A],
   ["GET", "/api/questions/:id", A],
   ["POST", "/api/questions/:id/answer", A],

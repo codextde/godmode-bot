@@ -44,6 +44,8 @@ pnpm --filter @godmode/desktop build
 - UI: use the existing design tokens (`index.css`) and shadcn/ui components; support dark + light themes.
 - Small, focused PRs with a clear description. Add tests for core logic.
 
+By contributing you agree that your contributions are licensed under the [MIT License](LICENSE).
+
 ## Reporting security issues
 
 Please do **not** open public issues for vulnerabilities — see [SECURITY.md](SECURITY.md).

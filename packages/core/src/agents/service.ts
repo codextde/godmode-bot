@@ -12,7 +12,10 @@ import type {
   AgentHeartbeat,
   AgentHeartbeatInput,
   AgentInput,
+  AgentMoveInput,
+  AgentMoveResult,
   AgentPermissions,
+  AgentPlacement,
   AgentStatus,
   Effort,
   GitCommit,
@@ -923,6 +926,45 @@ export function repairReportingLines(): number {
   }
   return changed;
 }
+
+/**
+ * Move an agent to another workspace and/or under another lead (drag and drop in the agents view). Moving workspaces
+ * takes its team along by default: everyone under it follows, top-down, and keeps their lead. Returns where everyone
+ * was, in the order to put them back.
+ */
+export async function moveAgent(id: string, input: AgentMoveInput, actor = "user"): Promise<AgentMoveResult> {
+  const agent = getAgent(id);
+  if (agent.isDefault) throw badRequest("Godmode leads the team and reports to you");
+  const workspaceId = input.workspaceId === undefined ? agent.workspaceId : input.workspaceId;
+  if (workspaceId) assertWorkspace(workspaceId);
+  const agents = listAgents();
+  const team: Agent[] = [];
+  if (workspaceId !== agent.workspaceId) {
+    const seen = new Set([agent.id]);
+    const queue = [agent];
+    while (queue.length) {
+      const lead = queue.shift()!;
+      for (const r of agents) {
+        if (r.reportsTo !== lead.id || seen.has(r.id)) continue;
+        seen.add(r.id);
+        // Without its team, only the reports that lose it (another workspace) are touched — by updateAgent.
+        if (input.withTeam !== false) {
+          team.push(r);
+          queue.push(r);
+        } else if (workspaceId && r.workspaceId !== workspaceId) team.push(r);
+      }
+    }
+  }
+  const followers = input.withTeam !== false ? team : [];
+  const placement = (a: Agent): AgentPlacement => ({ id: a.id, workspaceId: a.workspaceId, reportsTo: a.reportsTo });
+  const previous = [agent, ...team].map(placement);
+
+  const moved = [await updateAgent(agent.id, { workspaceId, ...(input.reportsTo !== undefined ? { reportsTo: input.reportsTo } : {}) }, actor)];
+  for (const a of followers) moved.push(await updateAgent(a.id, { workspaceId, reportsTo: a.reportsTo }, actor));
+  audit(actor, "agent.move", agent.id, { workspaceId, reportsTo: moved[0]!.reportsTo, team: followers.map((a) => a.id) });
+  return { moved, previous };
+}
+
 
 /**
  * A copy of the agent's setup under "<Name> copy" (then "copy 2", …): look, personality, role, lead, instructions,

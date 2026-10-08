@@ -198,5 +198,10 @@ function LicenseCard({ state: s }: { state: LicenseState }) {
 }
 
 function NotEnforced() {
-  return <Callout tone="muted">This copy of Godmode runs from source, so it doesn't need a licence. Release builds do.</Callout>;
+  return (
+    <Callout tone="muted">
+      This is a build of your own, so it doesn't need a licence: Godmode is open source under the MIT License. Godmode Pro
+      is for the official apps from usegodmode.com.
+    </Callout>
+  );
 }

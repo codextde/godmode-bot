@@ -10,6 +10,7 @@ export const SITE = {
     'Godmode is like Grok Bot, but with Claude: Claude Opus 5.5 as a coworker that uses your own computer like you do. Your browser and logins, apps in the background, even its own Mac. Hand over the work. Get it back done.',
   email: 'kontakt@codext.de',
   model: 'Claude Opus 5.5',
+  repo: 'https://github.com/codextde/godmode-bot',
 } as const;
 
 /**
@@ -53,6 +54,8 @@ export const PRICING = {
  */
 export const FOUNDING = {
   seats: 100,
+  // Below this many seats taken the page shows the deadline instead of the seat count.
+  showCountFrom: 10,
   start: Date.UTC(2026, 9, 5, 20, 0),
   // End of October 31 in US Pacific time, so the deadline is never early anywhere.
   end: Date.UTC(2026, 10, 1, 7, 0),
@@ -65,6 +68,15 @@ export const FOUNDING = {
   listPrice: { monthly: 59, yearly: 49 },
   // Optional scheduling page (Cal.com, Calendly…) for the setup call; without it founders book by email.
   bookingUrl: import.meta.env.PUBLIC_FOUNDING_BOOKING_URL ?? '',
+} as const;
+
+/** Launch coupon (Stripe promotion code, Godmode Pro only): expires together with the founding offer. */
+export const COUPON = {
+  code: 'FOUNDING20',
+  percentOff: 20,
+  months: 3,
+  maxRedemptions: 100,
+  expires: FOUNDING.end,
 } as const;
 
 export const foundingOpen = (taken: number, now = Date.now()) => now < FOUNDING.end && taken < FOUNDING.seats;

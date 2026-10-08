@@ -114,6 +114,7 @@ import type {
   RunnerHealth,
   RunnerPairingOffer,
   RunnerPatch,
+  RunnerUpdateInput,
   SendMessageInput,
   SendMessageOutcome,
   SendMessageResult,
@@ -126,8 +127,11 @@ import type {
   SshGeneratedKey,
   SshLocalKey,
   SshServer,
+  TeamInstallInput,
   TeamInstallResult,
   TeamTemplate,
+  AgentMoveInput,
+  AgentMoveResult,
   SshServerInput,
   SshServerPatch,
   SshTestInput,
@@ -468,8 +472,9 @@ export const api = {
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
     /** Whole teams to start with: a lead and its reports. */
     teams: () => get<TeamTemplate[]>("/api/team-templates"),
-    installTeam: (id: string, input: { workspaceId?: string | null; automations?: boolean; timezone?: string }) =>
-      post<TeamInstallResult>(`/api/team-templates/${id}/install`, input),
+    installTeam: (id: string, input: TeamInstallInput) => post<TeamInstallResult>(`/api/team-templates/${id}/install`, input),
+    /** Another workspace and/or another lead; its team moves along unless `withTeam` is false. */
+    move: (id: string, input: AgentMoveInput) => post<AgentMoveResult>(`/api/agents/${id}/move`, input),
     /** Start a fresh task conversation for the agent */
     run: (id: string, prompt?: string, workspaceId?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt, workspaceId }),
     files: (id: string, path = "") => get<AgentFileEntry[]>(`/api/agents/${id}/files`, { path }),
@@ -676,6 +681,8 @@ export const api = {
     /** `refresh` runs the checks on the runner again instead of answering from its last result. */
     health: (id: string, refresh = false) => get<RunnerHealth>(`/api/runners/${id}/health`, { refresh: refresh ? 1 : undefined }),
     fix: (id: string, checkId: string) => post<RunnerFixResult>(`/api/runners/${id}/health/fix`, { id: checkId }),
+    /** Its Godmode to this computer's and its tools to their newest; the progress follows as `runner.updated`. */
+    upgrade: (id: string, input: RunnerUpdateInput = {}) => post<RemoteRunner>(`/api/runners/${id}/update`, input),
     /** Starts a chat here whose agent diagnoses and repairs the runner. */
     autofix: (id: string, input: RunnerAutofixInput = {}) => post<StartChatResult>(`/api/runners/${id}/autofix`, input),
     /** Any API call answered by the runner instead of this computer: `path` is the route without `/api`, e.g. "/computer/sources". */

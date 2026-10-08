@@ -1194,4 +1194,12 @@ CREATE INDEX IF NOT EXISTS idx_watchdog_events_agent ON watchdog_events(agent_id
 ALTER TABLE workspaces ADD COLUMN auto_merge INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    id: 76,
+    name: "runner_auto_update",
+    sql: /* sql */ `
+-- 1: the runner gets this computer's Godmode by itself when it runs another one (remote/runnerUpdates.ts).
+ALTER TABLE runners ADD COLUMN auto_update INTEGER NOT NULL DEFAULT 1;
+`,
+  },
 ];

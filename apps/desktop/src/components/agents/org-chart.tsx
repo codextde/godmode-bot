@@ -1,13 +1,14 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
-import { Plus, Users } from "lucide-react";
+import { Ban, CornerDownRight, Plus, Users } from "lucide-react";
 import type { Agent, TeamNode } from "@godmode/shared";
 import { leadOf, presenceLabel, teamTree } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { useWorkspaces } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { AgentStatus, useAgentMood, useAgentPresence } from "./agent-actions";
-import { WorkspaceSection, type AgentGroup } from "./agent-groups";
+import { type AgentGroup } from "./agent-groups";
+import { DroppableSection, useAgentDrag, useAgentDrop, type AgentDropTarget } from "./agent-dnd";
 
 interface Panel {
   group: AgentGroup;
@@ -82,8 +83,17 @@ export function OrgChart({
             <div key={c} className="flex min-w-0 flex-col gap-4">
               {col.map((p) => {
                 const s = stats(p.group.agents);
+                const target: AgentDropTarget | null = byWorkspace
+                  ? { kind: "workspace", workspaceId: p.group.key === "global" ? null : p.group.key }
+                  : p.lead
+                    ? { kind: "agent", agent: p.lead }
+                    : p.group.key === "org:direct" && hub
+                      ? { kind: "hub", agent: hub.agent }
+                      : null;
                 return (
-                  <WorkspaceSection
+                  <DroppableSection
+                    target={target}
+                    dropId={`panel:${p.group.key}`}
                     key={p.group.key}
                     group={p.group}
                     working={s.working}
@@ -98,7 +108,7 @@ export function OrgChart({
                         <Branch key={n.agent.id} node={n} depth={0} all={all} matches={matches} />
                       ))}
                     </ul>
-                  </WorkspaceSection>
+                  </DroppableSection>
                 );
               })}
             </div>
@@ -119,7 +129,6 @@ export function OrgChart({
           </span>
         </Link>
       )}
-      <p className="text-xs text-muted-foreground">Change who an agent reports to in its settings, under Team.</p>
     </div>
   );
 }
@@ -167,13 +176,17 @@ function Hub({ agent, dim, reports }: { agent: Agent; dim: boolean; reports: Age
   const workspaces = new Set(reports.flatMap((a) => (a.workspaceId ? [a.workspaceId] : []))).size;
   const where = [global && "Global", workspaces > 0 && `${workspaces} workspace${workspaces === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
   const label = `${agent.name}, ${agent.role || "no role yet"}, ${presenceLabel(presence)}, reports to you`;
+  const drop = useAgentDrop({ kind: "hub", agent }, "hub");
   return (
     <div className="flex flex-col items-start gap-3 @2xl:flex-row @2xl:items-center">
       <div
+        ref={drop.ref}
         className={cn(
           "group relative flex w-full max-w-sm items-center gap-3 rounded-xl border bg-card p-3 pr-4 shadow-card transition-[box-shadow,border-color,opacity] hover:border-foreground/15 hover:shadow-float",
           presence.state === "working" && "glow-border",
           dim && "opacity-40",
+          drop.state === "available" && "border-brand/30",
+          drop.state === "valid" && "border-brand/60 ring-4 ring-brand/15",
         )}
       >
         <AgentAvatar agent={agent} size="lg" mood={mood} still={dim} />
@@ -232,13 +245,23 @@ function Row({ node, all, dim }: { node: TeamNode<Agent>; all: Agent[]; dim: boo
   const lead = leadOf(agent, all);
   const label = `${agent.name}, ${agent.role || "no role yet"}, ${presenceLabel(presence)}, reports to ${lead?.name ?? "Godmode"}`;
   const team = node.reports.length;
+  const drag = useAgentDrag(agent, `row:${agent.id}`);
+  const drop = useAgentDrop({ kind: "agent", agent }, `lead:${agent.id}`);
   return (
     <div
+      ref={(el) => {
+        drag.ref(el);
+        drop.ref(el);
+      }}
+      {...drag.props}
       className={cn(
-        "group relative flex items-start gap-2.5 rounded-lg px-1.5 py-1.5 transition-colors hover:bg-foreground/[0.035]",
+        "group relative flex items-start gap-2.5 rounded-lg px-1.5 py-1.5 transition-[background-color,box-shadow] hover:bg-foreground/[0.035]",
         presence.state === "working" && "bg-brand/[0.05]",
         !agent.enabled && "[&>:not([data-line])]:opacity-60",
         dim && "[&>:not([data-line])]:opacity-35",
+        drag.isDragging && "[&>:not([data-line])]:opacity-30",
+        drop.state === "valid" && "bg-brand/[0.08] ring-2 ring-brand/50 hover:bg-brand/[0.08]",
+        drop.state === "invalid" && "bg-destructive/[0.05] ring-2 ring-destructive/40",
         "[&>*]:transition-opacity",
       )}
     >
@@ -274,7 +297,17 @@ function Row({ node, all, dim }: { node: TeamNode<Agent>; all: Agent[]; dim: boo
         )}
       </div>
       {/* Idle is the norm: just the dot, so whoever is working or needs you stands out. */}
-      {presence.state === "idle" ? (
+      {drop.state === "valid" || drop.state === "invalid" ? (
+        <span
+          className={cn(
+            "mt-1.5 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+            drop.state === "valid" ? "bg-brand-strong text-white dark:bg-brand dark:text-black" : "bg-destructive/10 text-destructive",
+          )}
+        >
+          {drop.state === "valid" ? <CornerDownRight className="size-3" aria-hidden /> : <Ban className="size-3" aria-hidden />}
+          {drop.state === "valid" ? "Report here" : "Not here"}
+        </span>
+      ) : presence.state === "idle" ? (
         <span className="mt-[0.8125rem] mr-1 size-1.5 shrink-0 rounded-full bg-success/70" title="Idle">
           <span className="sr-only">Idle</span>
         </span>

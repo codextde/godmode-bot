@@ -285,6 +285,19 @@ describe("a runner, end to end", () => {
     expect(existsSync(join(runnerDir, "fake-claude", "finish"))).toBe(true);
   }, 90_000);
 
+  test("the runner tells its build and tools; one running from source refuses a new program with a clear answer", async () => {
+    const runner = getRunner(runnerId);
+    expect(runner.build).toBeTruthy();
+    expect(runner.update).toMatchObject({ state: "current", autoUpdate: true, target: { version: runner.version } });
+    const report = await link(runnerId).json<{ tools: unknown[] }>("GET", "/api/link/updates");
+    expect(Array.isArray(report.tools)).toBe(true);
+    const res = await link(runnerId).request("PUT", "/api/link/update/chunk?offset=0&total=4", { body: new Uint8Array([1, 2, 3, 4]), headers: { "content-type": "application/octet-stream" } });
+    expect(res.status).toBe(409);
+    expect(JSON.parse(Buffer.from(res.body).toString("utf8"))).toMatchObject({ code: "runner_from_source" });
+    const off = await api(`/api/runners/${runnerId}`, { method: "PATCH", body: JSON.stringify({ autoUpdate: false }) });
+    expect(((await off.json()) as { update: { autoUpdate: boolean } }).update.autoUpdate).toBe(false);
+  }, 120_000);
+
   test("removing the runner makes it forget this computer; its chats stay here as this computer's", async () => {
     const chats = all<{ id: string }>("SELECT id FROM conversations WHERE runner_id = ?", runnerId).map((c) => c.id);
     expect(chats.length).toBeGreaterThan(0);

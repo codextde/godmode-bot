@@ -1,6 +1,6 @@
 ---
 import Legal from '@/layouts/Legal.astro';
-import { FOUNDING, LEGAL, PRICING } from '@/config/site';
+import { COUPON, FOUNDING, LEGAL, PRICING, SITE } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
 ---
@@ -51,9 +51,14 @@ const { monthly, yearly } = PRICING.plans;
 
   <h2>3. License</h2>
   <p>
-    We grant you a non-exclusive, non-transferable license to install and use the Software on devices you own or control,
-    for your own or your organisation’s internal purposes. You may not resell or sublicense your license key. Parts of the
-    Software may be subject to open-source licenses, whose terms take precedence for those parts.
+    The source code of Godmode is open source under the MIT License and available at
+    <a href={SITE.repo} rel="noopener">{SITE.repo.replace('https://', '')}</a>. You may use, copy, change and distribute
+    it under that license, with or without a subscription.
+  </p>
+  <p>
+    Godmode Pro gives you the official builds of the Software (the signed apps, the server binaries and the Docker image),
+    their updates, a license key that activates them, and support, for as long as your subscription or license is active.
+    Your license key is personal to you or your organisation; you may not resell, sublicense or publish it.
   </p>
 
   <h2>4. What you need, and what you’re responsible for</h2>
@@ -78,6 +83,12 @@ const { monthly, yearly } = PRICING.plans;
     If you’re not happy, email us within {PRICING.guaranteeDays} days of your first payment on any plan (for Godmode Pro,
     the first payment after the free trial) and we’ll refund it in full.
     This voluntary guarantee is in addition to any statutory rights. See <a href="/legal/refunds">Refunds & cancellation</a>.
+  </p>
+  <p>
+    <strong>Code {COUPON.code}.</strong> Entering the code {COUPON.code} at checkout gives {COUPON.percentOff}% off the first
+    {COUPON.months} months of a new monthly Godmode Pro subscription, or off the first year of a new yearly one. It can be
+    redeemed until the end of {FOUNDING.endLabel}, 2026 (US Pacific time), at most {COUPON.maxRedemptions} times in
+    total, and can’t be combined with other codes. The discount is shown in checkout before you pay.
   </p>
   <p>
     <strong>Founding 100.</strong> Subscriptions started through the Founding 100 offer (the first {FOUNDING.seats} checkouts
