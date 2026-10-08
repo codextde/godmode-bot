@@ -54,6 +54,8 @@ const vmId = z.string().trim().max(100).nullable().optional();
 const browserProfileId = z.string().trim().max(100).nullable().optional();
 /** Workspace the chat is started in; a global agent browses with its default profile. */
 const workspaceId = z.string().trim().max(100).nullable().optional();
+/** Project the chat works on; null = the agent's. */
+const projectId = z.string().trim().max(100).nullable().optional();
 /** SSH servers of the chat (the whole list); the agent's apply anyway. */
 const sshServerIds = z.array(z.string().trim().min(1).max(100)).max(50).optional();
 
@@ -85,6 +87,7 @@ export function registerChatRoutes(app: Hono): void {
       listConversations({
         agentId: c.req.query("agentId") || undefined,
         workspaceId: c.req.query("workspaceId") || undefined,
+        projectId: c.req.query("projectId") || undefined,
         search: c.req.query("search") || undefined,
         limit: num(c.req.query("limit")),
         archived: flag(c.req.query("archived")),
@@ -95,7 +98,7 @@ export function registerChatRoutes(app: Hono): void {
   app.post("/api/conversations", async (c) => {
     const input = await body(
       c,
-      z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, workspaceId, sshServerIds, instructions, ...modelChoice }),
+      z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, workspaceId, projectId, sshServerIds, instructions, ...modelChoice }),
     );
     // A switched-off agent answers nothing: don't leave an empty chat behind.
     const agent = getAgent(input.agentId);
@@ -135,6 +138,7 @@ export function registerChatRoutes(app: Hono): void {
         computerTarget: computerTargetSchema.nullable().optional(),
         vmId,
         browserProfileId,
+        projectId,
         sshServerIds,
         instructions,
       }),
@@ -216,6 +220,7 @@ export function registerChatRoutes(app: Hono): void {
         vmId,
         browserProfileId,
         workspaceId,
+        projectId,
         sshServerIds,
         instructions,
         /** Work on this runner (another computer) instead of this one. */

@@ -37,6 +37,31 @@ export interface Workspace {
   sources: WorkspaceSource[];
   /** A ticket's pull request is merged as soon as its agent delivers it, and the ticket is done — no review step. */
   autoMerge: boolean;
+  /** Optional projects inside the workspace, A–Z. */
+  projects: Project[];
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
+/**
+ * A project inside a workspace (optional). Chats, tickets and agents may belong to one: their runs get the workspace's
+ * context, folders and repositories plus the project's, and browse with the project's profile unless the chat or the
+ * agent has its own.
+ */
+export interface Project {
+  id: ID;
+  workspaceId: ID;
+  name: string;
+  slug: string;
+  description: string;
+  color: string;
+  icon: string;
+  /** Agent context for every run in the project, on top of the workspace's. */
+  instructions: string;
+  /** Browser profile for runs in the project (global or of its workspace); null = the workspace's default. */
+  browserProfileId: ID | null;
+  /** Folders and git repositories of the project, on top of the workspace's. */
+  sources: WorkspaceSource[];
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -124,6 +149,8 @@ export interface AgentBrowserConfig {
 export interface Agent {
   id: ID;
   workspaceId: ID | null;
+  /** The project of its workspace it works on by default (chats and tickets may pick another). null = none. */
+  projectId: ID | null;
   name: string;
   slug: string;
   /** Emoji — the agent's glyph where only text fits (chat apps, CLAUDE.md). The app shows `character`. */
@@ -346,6 +373,8 @@ export interface Conversation {
   browserProfileId: ID | null;
   /** Workspace a global agent's chat was started in; it browses with that workspace's default profile. */
   workspaceId: ID | null;
+  /** Project the chat works on (one of its workspace's); null = the agent's project, if any. */
+  projectId: ID | null;
   /** SSH servers runs in this chat may use, in addition to the agent's. */
   sshServerIds: ID[];
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */

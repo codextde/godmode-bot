@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
@@ -27,7 +27,8 @@ import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useInScope, useRunners, useScopedConversations, useScopeWorkspace, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useInScope, useRunners, useScopedConversations, useScopeProject, useScopeWorkspace, useWorkspaces } from "@/lib/hooks";
+import { ProjectChip } from "@/components/projects/project-chip";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
@@ -102,9 +103,16 @@ export default function ChatHome() {
   const [sshServerIds, setSshServerIds, sshDraft] = useDraft<string[]>(`${SETUP_DRAFT}ssh`, NO_SSH_SERVERS);
   /** The runner the new chat works on; null = this computer. */
   const [runnerId, setRunnerId, runnerDraft] = useDraft<string | null>(`${SETUP_DRAFT}runner`, null);
-  const resetSetup = () => [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft, runnerDraft].forEach((d) => d.discard());
+  const resetSetup = () => {
+    [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft, runnerDraft].forEach((d) => d.discard());
+    setProjectPick(undefined);
+  };
   const { data: workspaces = [] } = useWorkspaces();
   const scopeWorkspaceId = useScopeWorkspace()?.id ?? null;
+  const scopeProject = useScopeProject();
+  /** Project picked for the new chat; undefined = the sidebar's (when the agent may work on it). */
+  const [projectPick, setProjectPick] = useState<string | null | undefined>(undefined);
+  useEffect(() => setProjectPick(undefined), [scopeProject?.id]);
 
   const available = useMemo(() => agents.filter((a) => a.enabled), [agents]);
   const selected =
@@ -113,6 +121,10 @@ export default function ChatHome() {
     available.find((a) => a.isDefault) ??
     available[0];
   const selectedWorkspace = selected?.workspaceId ? workspaces.find((w) => w.id === selected.workspaceId) : undefined;
+  const sidebarProject = scopeProject && selected && (!selected.workspaceId || selected.workspaceId === scopeProject.workspaceId) ? scopeProject.id : null;
+  // A pick made for another agent doesn't carry over.
+  useEffect(() => setProjectPick(undefined), [selected?.id]);
+  const projectId = projectPick !== undefined ? projectPick : sidebarProject;
 
   const runners = useRunners();
   const runner = runnerId ? (runners.data?.find((r) => r.id === runnerId) ?? null) : null;
@@ -213,7 +225,8 @@ export default function ChatHome() {
                       onChange={setFolder}
                     />
                   )}
-                  <BrowserProfileChip agent={selected} value={browserProfileId} workspaceId={scopeWorkspaceId} onChange={setBrowserProfileId} />
+                  <ProjectChip agent={selected} value={projectId} onChange={setProjectPick} />
+                  <BrowserProfileChip agent={selected} value={browserProfileId} workspaceId={scopeWorkspaceId} projectId={projectId} onChange={setBrowserProfileId} />
                   {!onRunner && <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />}
                   <SshChip agent={selected} value={sshServerIds} onChange={setSshServerIds} />
                   {!onRunner && (
@@ -241,6 +254,7 @@ export default function ChatHome() {
                 ...place(),
                 browserProfileId: browserProfileId ?? undefined,
                 workspaceId: scopeWorkspaceId ?? undefined,
+                projectId: projectId ?? undefined,
                 sshServerIds: sshServerIds.length ? sshServerIds : undefined,
                 instructions: instructions || undefined,
               })
@@ -300,6 +314,7 @@ export default function ChatHome() {
             ...place(),
             browserProfileId: browserProfileId ?? undefined,
             workspaceId: scopeWorkspaceId ?? undefined,
+            projectId: projectId ?? undefined,
             sshServerIds: sshServerIds.length ? sshServerIds : undefined,
             instructions: instructions || undefined,
             ...choice,

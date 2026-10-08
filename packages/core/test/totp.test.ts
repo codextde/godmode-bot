@@ -41,6 +41,7 @@ function makeAgent(workspaceId: string | null, permissions: Partial<AgentPermiss
   return {
     id: "agt_test",
     workspaceId,
+    projectId: null,
     name: "Test agent",
     slug: "test-agent",
     avatar: "🤖",

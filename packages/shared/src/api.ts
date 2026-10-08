@@ -49,10 +49,25 @@ export interface WorkspaceInput {
   autoMerge?: boolean;
 }
 
+export interface ProjectInput {
+  /** Only on create: projects stay in their workspace. */
+  workspaceId: ID;
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  instructions?: string;
+  /** A global profile or one of the workspace's; null = the workspace's default. */
+  browserProfileId?: ID | null;
+  sources?: WorkspaceSourceInput[];
+}
+
 export type WorkspaceSourceInput = { kind: "folder"; path: string } | { kind: "git"; url: string; branch?: string | null };
 
 export interface AgentInput {
   workspaceId?: ID | null;
+  /** One of its workspace's projects; null = none. */
+  projectId?: ID | null;
   name: string;
   avatar?: string;
   color?: string;
@@ -278,6 +293,8 @@ export interface StartChatInput {
   browserProfileId?: ID | null;
   /** Workspace selected in the sidebar: a global agent browses with its default profile. */
   workspaceId?: ID | null;
+  /** Project selected in the sidebar (one of the agent's workspace, any for a global agent); omitted = the agent's. */
+  projectId?: ID | null;
   /** SSH servers the chat may use, in addition to the agent's. */
   sshServerIds?: ID[];
   instructions?: string;
@@ -310,6 +327,8 @@ export interface ConversationPatch {
   sshServerIds?: ID[];
   /** "" = none. */
   instructions?: string;
+  /** Project the chat works on; null = the agent's. */
+  projectId?: ID | null;
 }
 
 export interface StartChatResult extends SendMessageResult {

@@ -64,6 +64,7 @@ interface ConversationRow extends PauseQuestionCols {
   vm_id: string | null;
   browser_profile_id: string | null;
   workspace_id: string | null;
+  project_id: string | null;
   ssh_server_ids: string | null;
   instructions: string;
   runner_id: string | null;
@@ -152,6 +153,7 @@ function toConversation(r: ConversationRow): Conversation {
     vmId: r.vm_id ?? null,
     browserProfileId: r.browser_profile_id ?? null,
     workspaceId: r.workspace_id ?? null,
+    projectId: r.project_id ?? null,
     sshServerIds: parseServerIds(r.ssh_server_ids),
     instructions: r.instructions,
     runnerId: r.runner_id ?? null,
@@ -273,6 +275,20 @@ function normalizeWorkspaceId(agent: Agent, value: string | null | undefined): s
   return get<{ id: string }>("SELECT id FROM workspaces WHERE id = ?", id)?.id ?? null;
 }
 
+/**
+ * Normalize a chat's project: undefined = unchanged, null/"" = the agent's, else one of the agent's workspace (any for
+ * a global agent, whose chat then counts to the project's workspace).
+ */
+function normalizeProject(agent: Agent, value: string | null | undefined): { id: string; workspaceId: string } | null | undefined {
+  if (value === undefined) return undefined;
+  const id = value?.trim();
+  if (!id) return null;
+  const row = get<{ workspace_id: string }>("SELECT workspace_id FROM projects WHERE id = ?", id);
+  if (!row) throw badRequest("That project doesn't exist anymore");
+  if (agent.workspaceId && row.workspace_id !== agent.workspaceId) throw badRequest(`${agent.name} works in another workspace than this project`);
+  return { id, workspaceId: row.workspace_id };
+}
+
 export interface ModelChoice {
   /** `claude --model` value; null/empty = the agent's model. */
   model?: string | null;
@@ -290,6 +306,7 @@ export function createConversation(
     vmId?: string | null;
     browserProfileId?: string | null;
     workspaceId?: string | null;
+    projectId?: string | null;
     sshServerIds?: string[];
     instructions?: string;
     /** No raw secrets in this chat, whatever its agent may read (see `chatFillOnly`). */
@@ -301,6 +318,7 @@ export function createConversation(
   const vmId = normalizeVmId(input.vmId) ?? null;
   const browserProfileId = normalizeBrowserProfileId(input.browserProfileId) ?? null;
   const sshServerIds = normalizeSshServerIds(input.sshServerIds) ?? [];
+  const project = normalizeProject(agent, input.projectId) ?? null;
   const ts = now();
   const id = newId("cnv");
   const title = input.title?.trim() ? input.title.trim().slice(0, 200) : DEFAULT_CONVERSATION_TITLE;
@@ -316,7 +334,8 @@ export function createConversation(
     working_directory: workingDirectory,
     vm_id: vmId,
     browser_profile_id: browserProfileId,
-    workspace_id: normalizeWorkspaceId(agent, input.workspaceId),
+    workspace_id: agent.workspaceId ? null : (project?.workspaceId ?? normalizeWorkspaceId(agent, input.workspaceId)),
+    project_id: project?.id ?? null,
     ssh_server_ids: JSON.stringify(sshServerIds),
     secret_access: input.fillOnly ? "fill" : null,
     instructions: input.instructions?.trim() ?? "",
@@ -353,7 +372,7 @@ export function getConversation(id: string): ConversationWithMessages {
  * a workspace id = chats of the workspace's agents, and global agents' chats started in it.
  */
 export function listConversations(
-  opts: { agentId?: string; workspaceId?: string; search?: string; limit?: number; archived?: boolean } = {},
+  opts: { agentId?: string; workspaceId?: string; projectId?: string; search?: string; limit?: number; archived?: boolean } = {},
 ): Conversation[] {
   const where: string[] = ["c.archived = ?"];
   const params: (string | number)[] = [opts.archived ? 1 : 0];
@@ -366,6 +385,11 @@ export function listConversations(
   } else if (opts.workspaceId && opts.workspaceId !== "all") {
     where.push("(c.workspace_id = ? OR c.agent_id IN (SELECT id FROM agents WHERE workspace_id = ?))");
     params.push(opts.workspaceId, opts.workspaceId);
+  }
+  // A project's chats: the ones started in it, and those of its agents that didn't pick another.
+  if (opts.projectId) {
+    where.push("(c.project_id = ? OR (c.project_id IS NULL AND c.agent_id IN (SELECT id FROM agents WHERE project_id = ?)))");
+    params.push(opts.projectId, opts.projectId);
   }
   // Every word, in the title or in a message ("invoice march" finds "March invoice review"); at most six words.
   for (const word of (opts.search ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 6)) {
@@ -386,7 +410,8 @@ export function listConversations(
 }
 
 export function updateConversation(id: string, patch: ConversationPatch): Conversation {
-  requireConversationRow(id);
+  const row = requireConversationRow(id);
+  const project = patch.projectId === undefined ? undefined : normalizeProject(getAgent(row.agent_id), patch.projectId);
   const title = patch.title === undefined ? undefined : patch.title.trim().slice(0, 200);
   if (title !== undefined && !title) throw badRequest("Title must not be empty");
   update("conversations", id, {
@@ -402,12 +427,15 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     browser_profile_id: normalizeBrowserProfileId(patch.browserProfileId),
     ssh_server_ids: patch.sshServerIds === undefined ? undefined : JSON.stringify(normalizeSshServerIds(patch.sshServerIds)),
     instructions: patch.instructions?.trim(),
+    project_id: project === undefined ? undefined : (project?.id ?? null),
+    // A global agent's chat moves along to the project's workspace.
+    workspace_id: project && !get("SELECT 1 FROM agents WHERE id = ? AND workspace_id IS NOT NULL", row.agent_id) ? project.workspaceId : undefined,
     updated_at: now(),
   });
   const conversation = getConversationSummary(id);
   bus.emit({ type: "conversation.updated", conversation });
   if (patch.vmId !== undefined) assignmentsChanged();
-  if (patch.browserProfileId !== undefined) retryQueued();
+  if (patch.browserProfileId !== undefined || project !== undefined) retryQueued();
   // Archived, or moved to another browser profile: its tabs aren't needed where they are.
   if (patch.archived || patch.browserProfileId !== undefined) void closeChatTabs(id);
   if (patch.sshServerIds !== undefined || (patch.archived !== undefined && conversation.sshServerIds.length)) bus.changed("ssh-servers");
@@ -733,6 +761,8 @@ export async function startChat(
     browserProfileId?: string | null;
     /** Workspace the chat is started in (the sidebar's); a global agent browses with its default profile. */
     workspaceId?: string | null;
+    /** Project the chat works on (the sidebar's); omitted = the agent's. */
+    projectId?: string | null;
     /** SSH servers for this chat, in addition to the agent's. */
     sshServerIds?: string[];
     instructions?: string;
@@ -754,6 +784,7 @@ export async function startChat(
     vmId: input.vmId,
     browserProfileId: input.browserProfileId,
     workspaceId: input.workspaceId,
+    projectId: input.projectId,
     sshServerIds: input.sshServerIds,
     instructions: input.instructions,
     model: input.model,

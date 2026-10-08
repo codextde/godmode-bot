@@ -111,7 +111,7 @@ describe("workspace folders", () => {
     rmSync(gone, { recursive: true });
     expect(getWorkspace(ws.id).sources[0]).toMatchObject({ status: "missing" });
     expect(updateWorkspace(ws.id, { name: "Missing 2", sources: [{ kind: "folder", path: gone }] }).sources).toHaveLength(1);
-    const prepared = await prepareSources(ws.id, { onActivity: () => {}, signal: new AbortController().signal });
+    const prepared = await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: () => {}, signal: new AbortController().signal });
     expect(prepared.sources).toEqual([]);
     expect(prepared.notices[0]).toContain('"gone" was skipped');
   });
@@ -188,7 +188,7 @@ describe("workspace repositories", () => {
     const failed = await settled(ws.id, ws.sources[0]!.id);
     expect(failed.status).toBe("error");
     expect(failed.error).toBeTruthy();
-    const prepared = await prepareSources(ws.id, { onActivity: () => {}, signal: new AbortController().signal });
+    const prepared = await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: () => {}, signal: new AbortController().signal });
     expect(prepared.sources).toEqual([]);
     expect(prepared.notices[0]).toContain("couldn't be cloned");
   });
@@ -200,7 +200,7 @@ describe("workspace repositories", () => {
     run("UPDATE workspace_sources SET synced_at = ? WHERE id = ?", "2020-01-01T00:00:00.000Z", source.id);
 
     const labels: string[] = [];
-    const first = await prepareSources(ws.id, { onActivity: (l) => labels.push(l), signal: new AbortController().signal });
+    const first = await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: (l) => labels.push(l), signal: new AbortController().signal });
     expect(labels).toEqual(["Updating app …"]);
     expect(first.sources.map((s) => s.path)).toEqual([source.path]);
     const failed = getWorkspace(ws.id).sources[0]!;
@@ -208,7 +208,7 @@ describe("workspace repositories", () => {
     expect(failed.error).toContain("127.0.0.1");
 
     const again: string[] = [];
-    await prepareSources(ws.id, { onActivity: (l) => again.push(l), signal: new AbortController().signal });
+    await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: (l) => again.push(l), signal: new AbortController().signal });
     expect(again).toEqual([]);
   });
 
@@ -221,7 +221,7 @@ describe("workspace repositories", () => {
     __setRunSyncWaitForTests(150);
     try {
       const started = Date.now();
-      const first = await prepareSources(ws.id, { onActivity: () => {}, signal: new AbortController().signal });
+      const first = await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: () => {}, signal: new AbortController().signal });
       expect(Date.now() - started).toBeLessThan(1500);
       expect(first.sources.map((s) => s.path)).toEqual([source.path]);
       // The run started with the files as they were: nothing changes under it.
@@ -234,7 +234,7 @@ describe("workspace repositories", () => {
       server.delayMs = 0;
       __setRunSyncWaitForTests(20_000);
       const labels: string[] = [];
-      await prepareSources(ws.id, { onActivity: (l) => labels.push(l), signal: new AbortController().signal });
+      await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: (l) => labels.push(l), signal: new AbortController().signal });
       expect(labels).toEqual([]);
       expect(existsSync(join(source.path, "SLOW.md"))).toBe(false);
       // An update by hand fast-forwards to what was fetched.
@@ -255,7 +255,7 @@ describe("workspace repositories", () => {
     server.delayMs = 400;
     __setRunSyncWaitForTests(100);
     try {
-      await prepareSources(ws.id, { onActivity: () => {}, signal: new AbortController().signal });
+      await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: () => {}, signal: new AbortController().signal });
       expect(getWorkspace(ws.id).sources[0]!.status).toBe("syncing");
       syncSource(ws.id, source.id);
       const done = await settled(ws.id, source.id);
@@ -289,7 +289,7 @@ describe("workspace repositories", () => {
     rmSync(source.path, { recursive: true });
     expect(getWorkspace(ws.id).sources[0]!.status).toBe("missing");
     const labels: string[] = [];
-    const prepared = await prepareSources(ws.id, { onActivity: (l) => labels.push(l), signal: new AbortController().signal });
+    const prepared = await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: (l) => labels.push(l), signal: new AbortController().signal });
     expect(labels).toEqual(["Cloning app …"]);
     expect(prepared.sources).toEqual([{ kind: "git", name: "app", path: source.path, url: server.url, branch: null }]);
     expect(existsSync(join(source.path, ".git"))).toBe(true);

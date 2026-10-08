@@ -111,8 +111,9 @@ export function repoLabel(url: string): string {
  * The workspace's git repositories: clones and folders that are repositories. Tasks work in their own worktree of the
  * first unless they name another.
  */
-export function workspaceRepos(workspace: Workspace | null | undefined): WorkspaceSource[] {
-  return (workspace?.sources ?? []).filter((s) => s.git && (s.kind === "folder" || !!s.url));
+export function workspaceRepos(workspace: Workspace | null | undefined, projectId: string | null = null): WorkspaceSource[] {
+  const project = projectId ? workspace?.projects.find((p) => p.id === projectId) : undefined;
+  return [...(project?.sources ?? []), ...(workspace?.sources ?? [])].filter((s) => s.git && (s.kind === "folder" || !!s.url));
 }
 
 /** How a repository reads: "owner/repo" of a clone, the name of a folder. */

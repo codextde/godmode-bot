@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, FolderGit2, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace, type WorkspaceSourceInput } from "@godmode/shared";
-import { colorSwatch, DraftStatus } from "@/components/common";
+import { DraftStatus } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,17 +17,9 @@ import { api } from "@/lib/api";
 import { clearDraft, useDraft } from "@/lib/drafts";
 import { useVmChoices } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
-import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
 import { WorkspaceSourcesField, toSourceInput } from "./workspace-sources";
-import { WorkspaceTile } from "./workspace-tile";
-
-const EMOJIS = [
-  "🚀", "💼", "🏢", "🏠", "🛒", "📈", "💰", "🏦", "💡", "🎯",
-  "🧠", "🎨", "✍️", "📣", "💬", "🤝", "🧑‍💻", "🛠️", "⚙️", "🧪",
-  "🔬", "📚", "🎓", "🏥", "✈️", "🌍", "🌱", "🍀", "🔥", "⭐",
-  "🎮", "🎬", "🎵", "📦", "🧾", "📊", "🗂️", "📝", "🔒", "🐙",
-];
+import { ColorRadios, ICONS, IconPicker } from "./icon-picker";
 
 const MAX_NAME = 60;
 const NEW_DRAFT = "workspace:new";
@@ -47,7 +37,7 @@ interface WorkspaceForm {
 }
 
 function randomLook() {
-  return { icon: EMOJIS[Math.floor(Math.random() * 10)], color: AGENT_COLORS[Math.floor(Math.random() * AGENT_COLORS.length)] };
+  return { icon: ICONS[Math.floor(Math.random() * 10)]!, color: AGENT_COLORS[Math.floor(Math.random() * AGENT_COLORS.length)]! };
 }
 
 function formFrom(workspace: Workspace | null | undefined, look: { icon: string; color: string }): WorkspaceForm {
@@ -100,12 +90,9 @@ export function WorkspaceDialog({
   const sourcesRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const vmChoices = useVmChoices();
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [customEmoji, setCustomEmoji] = useState("");
 
   useEffect(() => {
     if (!open) return;
-    setCustomEmoji("");
     // Only once the dialog is open again: while it closes, a new base would turn the saved form into a draft.
     if (newLook.current) setLook(randomLook());
     newLook.current = false;
@@ -181,67 +168,7 @@ export function WorkspaceDialog({
               </DialogDescription>
             </DialogHeader>
             <div className="relative mt-5 flex items-center gap-4">
-              <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-                <PopoverTrigger asChild>
-                  <button type="button" aria-label="Choose icon" className="group relative rounded-2xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-                    <WorkspaceTile icon={icon} color={color} size="xl" />
-                    <span className="absolute -right-1 -bottom-1 grid size-6 place-items-center rounded-md border bg-card text-muted-foreground shadow-card transition group-hover:text-foreground">
-                      <SmilePlus className="size-3.5" />
-                    </span>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-[20.5rem] rounded-xl p-3">
-                  <div className="grid grid-cols-8 gap-1" role="listbox" aria-label="Icons">
-                    {EMOJIS.map((e) => (
-                      <button
-                        key={e}
-                        type="button"
-                        role="option"
-                        aria-selected={icon === e}
-                        onClick={() => {
-                          setIcon(e);
-                          setPickerOpen(false);
-                        }}
-                        className={cn(
-                          "grid size-9 place-items-center rounded-lg text-xl transition hover:bg-accent",
-                          icon === e && "bg-accent ring-1 ring-foreground/20",
-                        )}
-                      >
-                        {e}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex gap-2 border-t pt-3">
-                    <Input
-                      aria-label="Custom emoji"
-                      placeholder="Or paste any emoji…"
-                      value={customEmoji}
-                      maxLength={16}
-                      onChange={(e) => setCustomEmoji(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && customEmoji.trim()) {
-                          e.preventDefault();
-                          setIcon(customEmoji.trim());
-                          setPickerOpen(false);
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="secondary"
-                      aria-label="Use emoji"
-                      disabled={!customEmoji.trim()}
-                      onClick={() => {
-                        setIcon(customEmoji.trim());
-                        setPickerOpen(false);
-                      }}
-                    >
-                      <Check />
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <IconPicker icon={icon} color={color} onChange={setIcon} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-lg font-medium tracking-[-0.02em]">{name.trim() || "Untitled workspace"}</p>
                 <p className="line-clamp-1 text-sm text-muted-foreground">{description.trim() || "Click the icon to change it"}</p>
@@ -264,25 +191,7 @@ export function WorkspaceDialog({
             </div>
             <div className="space-y-2">
               <Label id="ws-color-label">Color</Label>
-              <div role="radiogroup" aria-labelledby="ws-color-label" className="flex flex-wrap gap-2">
-                {AGENT_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    role="radio"
-                    aria-checked={color === c}
-                    aria-label={c}
-                    onClick={() => set("color")(c)}
-                    className={cn(
-                      "grid size-7 place-items-center rounded-md ring-offset-2 ring-offset-background transition hover:opacity-85 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                      colorSwatch(c),
-                      color === c && "ring-2 ring-foreground/70",
-                    )}
-                  >
-                    {color === c && <Check className="size-3.5 text-white" />}
-                  </button>
-                ))}
-              </div>
+              <ColorRadios value={color} onChange={set("color")} labelledBy="ws-color-label" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="ws-desc">

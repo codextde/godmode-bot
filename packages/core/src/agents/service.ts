@@ -65,12 +65,14 @@ import {
   renderMemoryMd,
 } from "./claudeMd";
 import * as repo from "./repo";
+import { checkProject } from "../services/projects";
 
 const log = logger("agents");
 
 interface AgentRow {
   id: string;
   workspace_id: string | null;
+  project_id: string | null;
   name: string;
   slug: string;
   avatar: string;
@@ -170,6 +172,7 @@ function toModel(r: AgentRow): Agent {
   return {
     id: r.id,
     workspaceId: r.workspace_id,
+    projectId: r.project_id ?? null,
     name: r.name,
     slug: r.slug,
     avatar: r.avatar,
@@ -212,6 +215,7 @@ function toRow(a: Agent): Record<string, string | number | null> {
   return {
     id: a.id,
     workspace_id: a.workspaceId,
+    project_id: a.projectId,
     name: a.name,
     slug: a.slug,
     avatar: a.avatar,
@@ -582,6 +586,7 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
   const agent: Agent = {
     id,
     workspaceId,
+    projectId: isDefault ? null : checkProject(input.projectId, workspaceId),
     name,
     slug,
     avatar: input.avatar?.trim() || "🤖",
@@ -657,6 +662,8 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
     if (ws) assertWorkspace(ws);
     next.workspaceId = ws;
   }
+  if (patch.projectId !== undefined) next.projectId = current.isDefault ? null : checkProject(patch.projectId, next.workspaceId);
+  else if (next.workspaceId !== current.workspaceId) next.projectId = null;
   if (patch.avatar !== undefined) next.avatar = patch.avatar.trim() || "🤖";
   if (patch.color !== undefined) next.color = patch.color.trim() || "violet";
   if (patch.character !== undefined) next.character = normalizeCharacter(patch.character, current.character);
@@ -979,6 +986,7 @@ export async function duplicateAgent(id: string, actor = "user"): Promise<Agent>
   const created = await createAgentRecord(
     {
       workspaceId: source.workspaceId,
+      projectId: source.projectId,
       name,
       avatar: source.avatar,
       color: source.color,

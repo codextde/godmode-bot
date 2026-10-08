@@ -25,6 +25,7 @@ const TS = "2026-01-01T00:00:00.000Z";
 const LATER = "2026-02-02T00:00:00.000Z";
 const MIRRORED = [
   "workspaces",
+  "projects",
   "agents",
   "credentials",
   "totp",

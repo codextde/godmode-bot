@@ -14,7 +14,7 @@ import { useBootstrap, useWorkspaces } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
 export interface InstructionLayer {
-  key: "global" | "workspace" | "agent";
+  key: "global" | "workspace" | "project" | "agent";
   label: string;
   text: string;
   icon: ReactNode;
@@ -31,11 +31,12 @@ export function firstLine(text: string): string {
 }
 
 /** Instructions an agent in this workspace receives besides a chat's own, most general first. Only layers with text. */
-export function useInheritedInstructions(workspaceId: string | null | undefined, agent?: Agent): InstructionLayer[] {
+export function useInheritedInstructions(workspaceId: string | null | undefined, agent?: Agent, projectId?: string | null): InstructionLayer[] {
   const { data: boot } = useBootstrap();
   const { data: workspaces } = useWorkspaces();
   const global = boot?.settings.runner.appendSystemPrompt?.trim() ?? "";
   const workspace = workspaceId ? workspaces?.find((w) => w.id === workspaceId) : undefined;
+  const project = projectId ? workspace?.projects.find((p) => p.id === projectId) : undefined;
   return useMemo(() => {
     const layers: InstructionLayer[] = [];
     if (global)
@@ -58,15 +59,24 @@ export function useInheritedInstructions(workspaceId: string | null | undefined,
         icon: <WorkspaceTile icon={workspace.icon} color={workspace.color} size="sm" />,
         href: `/workspaces?edit=${workspace.id}`,
       });
+    if (project?.instructions.trim())
+      layers.push({
+        key: "project",
+        label: project.name,
+        text: project.instructions,
+        icon: <WorkspaceTile icon={project.icon} color={project.color} size="sm" />,
+        href: "/workspaces",
+      });
     if (agent?.instructions.trim())
       layers.push({ key: "agent", label: agent.name, text: agent.instructions, icon: <AgentAvatar agent={agent} size="sm" />, href: `/agents/${agent.id}/settings#instructions` });
     return layers;
-  }, [global, workspace, agent]);
+  }, [global, workspace, project, agent]);
 }
 
 const LAYER_HINT: Record<InstructionLayer["key"], string> = {
   global: "Every agent",
   workspace: "Workspace",
+  project: "Project",
   agent: "Agent",
 };
 
@@ -114,7 +124,7 @@ export function InstructionsChip({
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
   const discard = useRef(false);
-  const inherited = useInheritedInstructions(agent?.workspaceId, agent);
+  const inherited = useInheritedInstructions(agent?.workspaceId, agent, agent?.projectId);
   const own = value.trim().length > 0;
   const dirty = draft.trim() !== value.trim();
 

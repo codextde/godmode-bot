@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -7,6 +7,8 @@ import {
   ArrowRight,
   Bot,
   EllipsisVertical,
+  FolderGit2,
+  FolderPlus,
   Globe2,
   KeyRound,
   Layers,
@@ -24,7 +26,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Workspace, WorkspaceSource } from "@godmode/shared";
+import type { Project, Workspace, WorkspaceSource } from "@godmode/shared";
 import { EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
 import {
   AlertDialog,
@@ -51,7 +53,8 @@ import { type WorkspacesSort, type WorkspacesView, useUi } from "@/stores/ui";
 import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
 import { SourcesSummary } from "@/components/workspaces/workspace-sources";
 import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
-import { type WorkspaceActivity, useWorkspaceActivity } from "@/components/workspaces/workspace-activity";
+import { type WorkspaceActivity, projectKey, useWorkspaceActivity } from "@/components/workspaces/workspace-activity";
+import { ProjectDialog } from "@/components/projects/project-dialog";
 
 const SORTS: { id: WorkspacesSort; label: string }[] = [
   { id: "name", label: "A–Z" },
@@ -107,6 +110,7 @@ export default function WorkspacesPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const scope = useUi((s) => s.workspace);
+  const scopedProject = useUi((s) => s.project);
   const setScope = useUi((s) => s.setWorkspace);
   const { data: workspaces, isLoading, isError, error, refetch } = useWorkspaces();
   const { data: boot } = useBootstrap();
@@ -172,6 +176,28 @@ export default function WorkspacesPage() {
     setScope(ws ? ws.id : "global");
     navigate(to);
   };
+  const openProject = (ws: Workspace, project: Project, to = "/") => {
+    setScope(ws.id, project.id);
+    navigate(to);
+  };
+
+  const [projectDialog, setProjectDialog] = useState<{ workspaceId: string; projectId: string | null } | null>(null);
+  const newProjectIn = params.get("newProject");
+  useEffect(() => {
+    if (!newProjectIn || !workspaces) return;
+    const next = new URLSearchParams(params);
+    next.delete("newProject");
+    setParams(next, { replace: true });
+    if (workspaces.some((w) => w.id === newProjectIn)) setProjectDialog({ workspaceId: newProjectIn, projectId: null });
+    else toast.error("That workspace doesn't exist anymore");
+  }, [newProjectIn, workspaces, params, setParams]);
+  // Kept while the dialog closes, so it can animate out.
+  const lastProjectWorkspace = useRef<Workspace | undefined>(undefined);
+  const projectWorkspace = (projectDialog ? workspaces?.find((w) => w.id === projectDialog.workspaceId) : undefined) ?? (projectDialog ? undefined : lastProjectWorkspace.current);
+  if (projectDialog && projectWorkspace) lastProjectWorkspace.current = projectWorkspace;
+  const projectTarget = projectDialog?.projectId ? projectWorkspace?.projects.find((p) => p.id === projectDialog.projectId) : undefined;
+  const addProject = (ws: Workspace) => setProjectDialog({ workspaceId: ws.id, projectId: null });
+  const editProject = (ws: Workspace, project: Project) => setProjectDialog({ workspaceId: ws.id, projectId: project.id });
 
   const remove = useMutation({
     mutationFn: ({ ws, force }: { ws: Workspace; force: boolean }) => api.workspaces.delete(ws.id, force),
@@ -196,7 +222,9 @@ export default function WorkspacesPage() {
   const all = workspaces ?? [];
   const query = search.trim().toLowerCase();
   const list = useMemo(() => {
-    const hits = query ? all.filter((w) => `${w.name} ${w.description}`.toLowerCase().includes(query)) : all;
+    const hits = query
+      ? all.filter((w) => [w.name, w.description, ...w.projects.map((p) => p.name)].join(" ").toLowerCase().includes(query))
+      : all;
     const byName = (x: Workspace, y: Workspace) => x.name.localeCompare(y.name, undefined, { sensitivity: "base" });
     return [...hits].sort((x, y) => {
       const ax = activity.of(x.id);
@@ -227,6 +255,9 @@ export default function WorkspacesPage() {
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => setEditing(ws)}>
           <Pencil /> Edit
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => addProject(ws)}>
+          <FolderPlus /> New project
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={() => setDeleting(ws)}>
@@ -356,18 +387,31 @@ export default function WorkspacesPage() {
               />
             )}
             {list.map((ws) => (
-              <ScopeListRow
-                key={ws.id}
-                current={scope === ws.id}
-                tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="sm" className="size-9 rounded-lg text-lg" />}
-                title={ws.name}
-                description={ws.description}
-                counts={counts.get(ws.id)}
-                activity={activity.of(ws.id)}
-                onOpen={() => open(ws)}
-                onBoard={() => open(ws, "/tasks")}
-                menu={menuFor(ws)}
-              />
+              <Fragment key={ws.id}>
+                <ScopeListRow
+                  current={scope === ws.id && !scopedProject}
+                  tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="sm" className="size-9 rounded-lg text-lg" />}
+                  title={ws.name}
+                  description={ws.description}
+                  counts={counts.get(ws.id)}
+                  activity={activity.of(ws.id)}
+                  onOpen={() => open(ws)}
+                  onBoard={() => open(ws, "/tasks")}
+                  menu={menuFor(ws)}
+                />
+                {ws.projects.map((p, i) => (
+                  <ProjectListRow
+                    key={p.id}
+                    project={p}
+                    last={i === ws.projects.length - 1}
+                    current={scope === ws.id && scopedProject === p.id}
+                    activity={activity.of(projectKey(p.id))}
+                    onOpen={() => openProject(ws, p)}
+                    onBoard={() => openProject(ws, p, "/tasks")}
+                    onEdit={() => editProject(ws, p)}
+                  />
+                ))}
+              </Fragment>
             ))}
             {!query && (
               <button
@@ -405,7 +449,7 @@ export default function WorkspacesPage() {
                 <ScopeCard
                   key={ws.id}
                   index={i + 1}
-                  current={scope === ws.id}
+                  current={scope === ws.id && !scopedProject}
                   tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="lg" />}
                   title={ws.name}
                   description={ws.description}
@@ -420,6 +464,13 @@ export default function WorkspacesPage() {
                     onClick: () => editFocused(ws, "instructions"),
                   }}
                   sources={{ list: ws.sources, onClick: () => editFocused(ws, "sources") }}
+                  projects={{
+                    list: ws.projects,
+                    current: scope === ws.id ? scopedProject : null,
+                    onOpen: (p) => openProject(ws, p),
+                    onEdit: (p) => editProject(ws, p),
+                    onAdd: () => addProject(ws),
+                  }}
                   menu={menuFor(ws)}
                 />
               ))}
@@ -455,6 +506,15 @@ export default function WorkspacesPage() {
           if (!o) closeDialog();
         }}
       />
+
+      {projectWorkspace && (
+        <ProjectDialog
+          open={!!projectDialog && (!projectDialog.projectId || !!projectTarget)}
+          workspace={projectWorkspace}
+          project={projectTarget}
+          onOpenChange={(o) => !o && setProjectDialog(null)}
+        />
+      )}
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent className="rounded-2xl">
@@ -556,6 +616,7 @@ function ScopeCard({
   menu,
   context,
   sources,
+  projects,
 }: {
   index: number;
   current: boolean;
@@ -571,6 +632,7 @@ function ScopeCard({
   menu?: ReactNode;
   context?: { label: string; set: boolean; onClick: () => void };
   sources?: { list: WorkspaceSource[]; onClick: () => void };
+  projects?: { list: Project[]; current: string | null; onOpen: (p: Project) => void; onEdit: (p: Project) => void; onAdd: () => void };
 }) {
   const stats: { key: keyof Counts; label: string; icon: ReactNode }[] = [
     { key: "agents", label: "Agents", icon: <Bot /> },
@@ -642,7 +704,18 @@ function ScopeCard({
             )}
           </button>
         )}
+        {projects && !projects.list.length && (
+          <button
+            type="button"
+            onClick={projects.onAdd}
+            className="mt-1.5 flex max-w-full items-center gap-1.5 rounded-md text-xs text-muted-foreground transition hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            <FolderPlus className="size-3.5 shrink-0" />
+            <span className="truncate">Add a project (optional)</span>
+          </button>
+        )}
       </div>
+      {projects && projects.list.length > 0 && <ProjectStrip {...projects} />}
       <div className="relative mt-4 grid grid-cols-4 gap-1.5">
         {stats.map((s) => {
           const n = counts[s.key];
@@ -767,6 +840,127 @@ function ScopeListRow({
           <SquareKanban /> <span className="hidden @2xl:inline">Tasks</span>
         </Button>
         {menu ?? <span className="w-8" />}
+      </div>
+    </div>
+  );
+}
+
+const STRIP_MAX = 4;
+
+/** A workspace card's projects: open one, edit it, or add another. */
+function ProjectStrip({
+  list,
+  current,
+  onOpen,
+  onEdit,
+  onAdd,
+}: {
+  list: Project[];
+  current: string | null;
+  onOpen: (p: Project) => void;
+  onEdit: (p: Project) => void;
+  onAdd: () => void;
+}) {
+  const [all, setAll] = useState(false);
+  const shown = all ? list : list.slice(0, STRIP_MAX);
+  const hidden = list.length - shown.length;
+  return (
+    <div className="relative mt-4 rounded-lg border bg-paper-2 p-2">
+      <div className="flex items-center justify-between px-1 pb-1.5">
+        <span className="eyebrow text-[10.5px] text-muted-foreground">
+          Projects{list.length > 0 && <span className="ml-1 font-mono tabular-nums">{list.length}</span>}
+        </span>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-card hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          <Plus className="size-3.5" /> New
+        </button>
+      </div>
+      <ul className="flex flex-col gap-0.5">
+        {shown.map((p) => (
+          <li key={p.id} className="group/project relative flex items-center rounded-md transition hover:bg-card">
+            <button
+              type="button"
+              onClick={() => onOpen(p)}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              aria-current={current === p.id || undefined}
+            >
+              <WorkspaceTile icon={p.icon} color={p.color} size="sm" className="size-5 rounded text-[11px]" />
+              <span className="truncate">{p.name}</span>
+              {current === p.id && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />}
+              {p.sources.length > 0 && (
+                <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10.5px] text-muted-foreground tabular-nums" title={p.sources.map((x) => x.name).join(", ")}>
+                  <FolderGit2 className="size-3" aria-hidden />
+                  {p.sources.length}
+                </span>
+              )}
+            </button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${p.name}`}
+              onClick={() => onEdit(p)}
+              className="mr-0.5 size-6 text-muted-foreground opacity-0 transition group-hover/project:opacity-100 focus-visible:opacity-100 [&_svg]:size-3.5"
+            >
+              <Pencil />
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {(hidden > 0 || all) && list.length > STRIP_MAX && (
+        <button type="button" onClick={() => setAll((v) => !v)} className="mt-0.5 px-1.5 text-xs text-muted-foreground transition hover:text-foreground">
+          {all ? "Show less" : `${hidden} more`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** A project under its workspace in the list view. */
+function ProjectListRow({
+  project,
+  last,
+  current,
+  activity,
+  onOpen,
+  onBoard,
+  onEdit,
+}: {
+  project: Project;
+  last: boolean;
+  current: boolean;
+  activity: WorkspaceActivity;
+  onOpen: () => void;
+  onBoard: () => void;
+  onEdit: () => void;
+}) {
+  return (
+    <div className={cn("group relative flex items-center gap-3 border-b py-2 pr-4 pl-8 transition last:border-b-0 hover:bg-accent/40", current && "bg-brand-soft/40")}>
+      {current && <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-brand" />}
+      <span aria-hidden className="absolute top-0 left-8 h-full w-3">
+        <span className={cn("absolute left-0 w-px bg-border", last ? "top-0 h-1/2" : "inset-y-0")} />
+        <span className="absolute top-1/2 left-0 h-px w-3 bg-border" />
+      </span>
+      <WorkspaceTile icon={project.icon} color={project.color} size="sm" className="ml-5 size-7 rounded-md text-sm" />
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring/50 focus-visible:after:ring-inset">
+        <span className="flex items-center gap-2">
+          <span className="truncate text-[13px] font-medium">{project.name}</span>
+          {current && <span className="shrink-0 text-[11px] font-medium text-brand-strong">Current</span>}
+        </span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {activity.lastActive ? `Active ${formatDistanceToNowStrict(new Date(activity.lastActive), { addSuffix: true })}` : project.description || "No activity yet"}
+        </span>
+      </button>
+      <ActivityChips activity={activity} compact className="pointer-events-none hidden shrink-0 flex-nowrap @3xl:flex" />
+      <div className="relative z-10 flex shrink-0 items-center gap-1">
+        <Button variant="ghost" size="sm" onClick={onBoard} aria-label={`Tasks of ${project.name}`} className="text-muted-foreground">
+          <SquareKanban /> <span className="hidden @2xl:inline">Tasks</span>
+        </Button>
+        <Button variant="ghost" size="icon-sm" onClick={onEdit} aria-label={`Edit ${project.name}`} className="text-muted-foreground">
+          <Pencil />
+        </Button>
       </div>
     </div>
   );

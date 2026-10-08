@@ -148,6 +148,7 @@ describe("triggering", () => {
         vmId: null,
         browserProfileId: null,
         workspaceId: null,
+        projectId: null,
         sshServerIds: [],
         instructions: "",
         runnerId: null,

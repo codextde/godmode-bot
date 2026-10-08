@@ -55,7 +55,9 @@ export interface PromptContext {
 }
 
 export interface PromptSources {
-  workspace: string;
+  workspace: string | null;
+  /** The chat's project, whose folders and repositories come along. */
+  project?: string | null;
   items: RunSource[];
 }
 
@@ -89,19 +91,25 @@ export interface PromptVm {
 /** Standing instructions from the human besides the global ones, most general first. The agent's own live in its CLAUDE.md. */
 export interface InstructionLayers {
   workspace: { name: string; text: string } | null;
+  /** The project the chat works on: what it is about (description) and its agent context. */
+  project?: { name: string; workspace: string; description: string; text: string } | null;
   chat: string;
 }
 
 /** The "Standing instructions" section, or "" when no layer has any. */
-export function instructionsSection(settings: Settings, { workspace, chat }: InstructionLayers): string {
+export function instructionsSection(settings: Settings, { workspace, project, chat }: InstructionLayers): string {
   const parts: string[] = [];
   const global = settings.runner.appendSystemPrompt?.trim();
   if (global) parts.push(`### For every agent\n${global}`);
   if (workspace?.text.trim()) parts.push(`### For the "${workspace.name}" workspace\n${workspace.text.trim()}`);
+  if (project) {
+    const about = [project.description.trim() && `What it is about: ${project.description.trim()}`, project.text.trim()].filter(Boolean).join("\n\n");
+    parts.push(`### For the "${project.name}" project (in "${project.workspace}")\nThis chat works on this project.${about ? `\n${about}` : ""}`);
+  }
   if (chat.trim()) parts.push(`### For this chat\n${chat.trim()}`);
   if (!parts.length) return "";
   return `## Standing instructions
-${settings.general.userName.trim() || "The user"} set these rules. Follow them in every task. When two conflict, the more specific one wins: this chat, then your own instructions in CLAUDE.md, then the workspace, then the ones for every agent.
+${settings.general.userName.trim() || "The user"} set these rules. Follow them in every task. When two conflict, the more specific one wins: this chat, then your own instructions in CLAUDE.md, then the project, then the workspace, then the ones for every agent.
 
 ${parts.join("\n\n")}`;
 }
@@ -390,10 +398,13 @@ function sourceLine(s: RunSource): string {
   return s.kind === "folder" ? `\`${s.path}\` (folder)` : `\`${s.path}\` (clone of ${s.url}${s.branch ? `, branch \`${s.branch}\`` : ""})`;
 }
 
-function sourcesSection({ workspace, items }: PromptSources, human: string, inVm: boolean): string {
+function sourcesSection({ workspace, project, items }: PromptSources, human: string, inVm: boolean): string {
   const git = items.some((s) => s.kind === "git");
+  const owner = project
+    ? `${[workspace && `the "${workspace}" workspace`, `the "${project}" project`].filter(Boolean).join(" and ")} for every agent working there`
+    : `the "${workspace}" workspace for every agent in it`;
   return `### Workspace folders and repositories
-Attached to the "${workspace}" workspace for every agent in it, and added to this session: read and edit them with your file tools (their CLAUDE.md files are loaded too) whenever a task is about their contents, and follow their conventions.
+Attached to ${owner}, and added to this session: read and edit them with your file tools (their CLAUDE.md files are loaded too) whenever a task is about their contents, and follow their conventions.
 ${items.map((s) => `- ${sourceLine(s)}`).join("\n")}${
     git
       ? `\nGodmode clones the repositories and fast-forwards them from their remote while they have no local changes. Other agents of the workspace share these clones: commit, push or switch branches only when ${human} asks.${inVm ? ` They are on ${human}'s computer — to build or run one in the VM, clone it there.` : ""}`

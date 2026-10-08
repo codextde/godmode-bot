@@ -174,11 +174,16 @@ interface Chat {
     browser_profile_id: string | null;
     ssh_server_ids: string;
     workspace_id: string | null;
+    project_id: string | null;
     ultracode: number | null;
     last_message_at: string | null;
     updated_at: string;
     runner_state: string;
   };
+}
+
+function knownProject(id: string | null): string | null {
+  return id && get("SELECT 1 FROM projects WHERE id = ?", id) ? id : null;
 }
 
 function readConversation(v: unknown): Chat | null {
@@ -208,6 +213,8 @@ function readConversation(v: unknown): Chat | null {
       browser_profile_id: safeId(c.browserProfileId),
       ssh_server_ids: JSON.stringify(list(c.sshServerIds).filter((s) => safeId(s) !== null)),
       workspace_id: safeId(c.workspaceId),
+      // Only a project this computer knows (one deleted here meanwhile would break the foreign key).
+      project_id: knownProject(safeId(c.projectId)),
       ultracode: typeof c.ultracode === "boolean" ? (c.ultracode ? 1 : 0) : null,
       last_message_at: isoDate(c.lastMessageAt),
       updated_at: updatedAt,

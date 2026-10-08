@@ -163,6 +163,8 @@ import type {
   WebhookRotateResult,
   Workspace,
   WorkspaceInput,
+  Project,
+  ProjectInput,
   WorkspaceSource,
 } from "@godmode/shared";
 import { CloudErrorCode, LICENSE_REQUIRED } from "@godmode/shared";
@@ -416,6 +418,13 @@ export const api = {
     syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/workspaces/${id}/sources/${sourceId}/sync`),
   },
 
+  projects: {
+    create: (input: ProjectInput) => post<Project>("/api/projects", input),
+    update: (id: string, input: Partial<Omit<ProjectInput, "workspaceId">>) => patch<Project>(`/api/projects/${id}`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/projects/${id}`),
+    syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/projects/${id}/sources/${sourceId}/sync`),
+  },
+
   tasks: {
     /** The board's tasks, or the archived ones (latest first). */
     list: (q: { workspaceId?: ScopeFilter; archived?: boolean } = {}) =>
@@ -536,10 +545,10 @@ export const api = {
   conversations: {
     /** The human has seen these chats ("all" = every chat). */
     read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),
-    list: (q: { agentId?: string; workspaceId?: ScopeFilter; search?: string; limit?: number; archived?: boolean } = {}) =>
+    list: (q: { agentId?: string; workspaceId?: ScopeFilter; projectId?: string; search?: string; limit?: number; archived?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
     get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`),
-    create: (input: { agentId: string; title?: string; workspaceId?: string | null }) => post<Conversation>("/api/conversations", input),
+    create: (input: { agentId: string; title?: string; workspaceId?: string | null; projectId?: string | null }) => post<Conversation>("/api/conversations", input),
     update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
