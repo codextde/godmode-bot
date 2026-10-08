@@ -121,6 +121,7 @@ describe("StreamAccumulator — workflow fixture (a workflow that outlives its t
         { label: "a.txt", phase: "Count", state: "done", lastTool: "StructuredOutput", tokens: 9278 },
         { label: "b.txt", phase: "Count", state: "done", lastTool: "StructuredOutput", tokens: 9278 },
       ],
+      startedAt: expect.any(Number),
     });
   });
 
@@ -346,6 +347,52 @@ describe("StreamAccumulator — synthetic cases", () => {
     const block = shell.blocks[0]!;
     expect(block.type === "tool_use" && block.task).toMatchObject({ kind: "local_bash", status: "running", description: "npm run dev", agents: [] });
     expect(shell.activityLabel()).toBe("Thinking…");
+  });
+
+  test("a subagent in the background: its card follows the task, the label says it works, its report is kept", () => {
+    const acc = new StreamAccumulator();
+    acc.push({ type: "assistant", message: { id: "m1", content: [{ type: "tool_use", id: "a1", name: "Agent", input: { description: "Build the module", run_in_background: true } }] } });
+    acc.push({ type: "system", subtype: "task_started", task_id: "ag", tool_use_id: "a1", description: "Build the module", task_type: "local_agent", is_backgrounded: true });
+    acc.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "a1", content: "Async agent launched successfully." }] } });
+    acc.push({ type: "assistant", message: { id: "m2", content: [{ type: "text", text: "I'll check back when it reports." }] } });
+    expect(acc.activityLabel()).toBe("Subagent working · Build the module");
+    acc.push({ type: "assistant", parent_tool_use_id: "a1", message: { id: "s1", content: [{ type: "tool_use", id: "b1", name: "Bash", input: { command: "ls" } }] } });
+    expect(
+      acc.push({ type: "system", subtype: "task_progress", task_id: "ag", tool_use_id: "a1", description: "Running List files", last_tool_name: "Bash", usage: { total_tokens: 100, tool_uses: 1, duration_ms: 2000 } }),
+    ).toBe(true);
+    const block = acc.blocks[0]!;
+    if (block.type !== "tool_use" || !block.task) throw new Error("expected a task");
+    expect(block.task).toMatchObject({ kind: "local_agent", status: "running", background: true, activity: "Running List files", lastTool: "Bash", toolUses: 1 });
+    expect(acc.activityLabel()).toBe("Subagent working · Build the module");
+
+    acc.push({ type: "assistant", message: { id: "m3", content: [{ type: "tool_use", id: "a2", name: "Agent", input: {} }] } });
+    acc.push({ type: "system", subtype: "task_started", task_id: "ag2", tool_use_id: "a2", description: "Review", task_type: "local_agent", is_backgrounded: true });
+    acc.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "a2", content: "Async agent launched successfully." }] } });
+    expect(acc.activityLabel()).toBe("2 subagents working");
+
+    acc.push({ type: "system", subtype: "task_notification", task_id: "ag", tool_use_id: "a1", status: "completed", summary: "Built all five files." });
+    expect(block.task).toMatchObject({ status: "completed", summary: "Built all five files." });
+    expect(acc.activityLabel()).toBe("Subagent working · Review");
+
+    // Resumed with SendMessage: the same task starts again, on its own card.
+    acc.push({ type: "assistant", message: { id: "m4", content: [{ type: "tool_use", id: "sm", name: "SendMessage", input: { to: "ag" } }] } });
+    acc.push({ type: "system", subtype: "task_started", task_id: "ag", tool_use_id: "sm", description: "Build the module", task_type: "local_agent", is_backgrounded: true });
+    acc.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "sm", content: "Message sent." }] } });
+    const resumed = acc.blocks[0]!;
+    expect(resumed.type === "tool_use" && resumed.task).toMatchObject({ status: "running", background: true });
+    expect(resumed.type === "tool_use" && resumed.task?.summary).toBeUndefined();
+    const send = acc.blocks.find((b) => b.type === "tool_use" && b.id === "sm");
+    expect(send?.type === "tool_use" && send.task).toBeUndefined();
+    expect(acc.activityLabel()).toBe("2 subagents working");
+
+    // A subagent the run waits for is a step of its own, not background work.
+    const fg = new StreamAccumulator();
+    fg.push({ type: "assistant", message: { id: "m1", content: [{ type: "tool_use", id: "a1", name: "Agent", input: {} }] } });
+    fg.push({ type: "system", subtype: "task_started", task_id: "ag", tool_use_id: "a1", description: "Map the code", task_type: "local_agent", is_backgrounded: false });
+    expect(fg.activityLabel()).not.toContain("subagent");
+    fg.push({ type: "system", subtype: "task_updated", task_id: "ag", patch: { is_backgrounded: true } });
+    fg.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "a1", content: "Async agent launched successfully." }] } });
+    expect(fg.activityLabel()).toBe("Subagent working · Map the code");
   });
 
   test("a pause cuts a running workflow off: its task is stopped, for the run that continues too", () => {

@@ -1,23 +1,21 @@
 import { useId, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
-import { KeyRound, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import type { Credential, TotpEntry } from "@godmode/shared";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { toast } from "sonner";
 import { Favicon } from "./favicon";
+import { LinkPicker, type LinkPickerItem } from "./link-picker";
 import { WorkspaceSelect } from "./workspace-select";
 import { issuerDomain } from "./use-totp-codes";
 import { domainFromUrl, rootDomain, toastApiError } from "./vault-utils";
-
-const NO_LOGIN = "__none__";
 
 export function TotpEditDialog({
   entry,
@@ -46,11 +44,13 @@ function EditForm({ entry, focusLink, onDone }: { entry: TotpEntry; focusLink: b
   const [credentialId, setCredentialId] = useState<string | null>(entry.credentialId);
 
   const creds = useQuery({ queryKey: qk.credentialList("all", ""), queryFn: () => api.credentials.list({ workspaceId: "all" }) });
-  const options = useMemo(() => {
+  const loginItems = useMemo((): LinkPickerItem[] => {
     const root = rootDomain(issuerDomain(issuer));
-    const score = (c: Credential) => (c.id === credentialId ? 0 : c.domains.some((d) => rootDomain(d) === root) || rootDomain(domainFromUrl(c.url)) === root ? 1 : 2);
-    return [...(creds.data ?? [])].sort((a, b) => score(a) - score(b) || a.name.localeCompare(b.name));
-  }, [creds.data, issuer, credentialId]);
+    const matches = (c: Credential) => !!root && (c.domains.some((d) => rootDomain(d) === root) || rootDomain(domainFromUrl(c.url)) === root);
+    return [...(creds.data ?? [])]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((c) => ({ id: c.id, title: c.name, subtitle: c.username, domain: c.domains[0] ?? domainFromUrl(c.url), suggested: matches(c) }));
+  }, [creds.data, issuer]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -102,26 +102,17 @@ function EditForm({ entry, focusLink, onDone }: { entry: TotpEntry; focusLink: b
         </div>
         <div className="space-y-2">
           <Label htmlFor={id("login")}>Linked login</Label>
-          <Select value={credentialId ?? NO_LOGIN} onValueChange={(v) => setCredentialId(v === NO_LOGIN ? null : v)}>
-            <SelectTrigger id={id("login")} className="w-full" autoFocus={focusLink}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NO_LOGIN}>
-                <span className="text-muted-foreground">Not linked</span>
-              </SelectItem>
-              {options.length > 0 && <SelectSeparator />}
-              {options.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  <KeyRound className="size-4" />
-                  <span className="truncate">
-                    {c.name}
-                    {c.username && <span className="text-muted-foreground"> · {c.username}</span>}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LinkPicker
+            id={id("login")}
+            value={credentialId}
+            onChange={setCredentialId}
+            items={loginItems}
+            loading={creds.isLoading}
+            noneLabel="Not linked"
+            searchPlaceholder="Search logins by name, username or domain…"
+            noun="login"
+            autoFocus={focusLink}
+          />
           <p className="text-xs text-muted-foreground">When an agent signs in with the linked login, Godmode types this code in right after the password.</p>
         </div>
         <div className="space-y-2">

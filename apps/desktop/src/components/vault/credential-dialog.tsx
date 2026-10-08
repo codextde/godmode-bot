@@ -1,15 +1,14 @@
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { Eye, Inbox, Lock, ShieldCheck } from "lucide-react";
-import type { Credential, CredentialInput, TotpEntry } from "@godmode/shared";
+import { Eye, Inbox, Lock } from "lucide-react";
+import type { Credential, CredentialInput } from "@godmode/shared";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AgentAvatar } from "@/components/common";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -17,6 +16,7 @@ import { useAllAgents, useMissingLogins } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Favicon } from "./favicon";
+import { LinkPicker, type LinkPickerItem } from "./link-picker";
 import { PasswordInput } from "./password-input";
 import { PasswordGeneratorButton } from "./password-generator";
 import { StrengthMeter } from "./strength-meter";
@@ -31,8 +31,6 @@ export interface CredentialPrefill {
   service?: string;
   missingLoginId?: string;
 }
-
-const NO_TOTP = "__none__";
 
 const PRETTY: Record<string, string> = {
   github: "GitHub",
@@ -147,12 +145,15 @@ function CredentialForm({
   const primaryDomain = domains[0] ?? domainFromUrl(url);
 
   const totpQuery = useQuery({ queryKey: qk.totpList("all"), queryFn: () => api.totp.list({ workspaceId: "all" }) });
-  const totpOptions = useMemo(() => {
-    const list = [...(totpQuery.data ?? [])];
+  const totpItems = useMemo((): LinkPickerItem[] => {
     const root = primaryDomain ? rootDomain(primaryDomain) : "";
-    const score = (t: TotpEntry) => (t.id === totpId ? 0 : root && rootDomain(issuerDomain(t.issuer)) === root ? 1 : 2);
-    return list.sort((a, b) => score(a) - score(b) || a.issuer.localeCompare(b.issuer));
-  }, [totpQuery.data, primaryDomain, totpId]);
+    return [...(totpQuery.data ?? [])]
+      .sort((a, b) => a.issuer.localeCompare(b.issuer))
+      .map((t) => {
+        const domain = issuerDomain(t.issuer);
+        return { id: t.id, title: t.issuer, subtitle: t.accountName, domain, suggested: !!root && rootDomain(domain) === root };
+      });
+  }, [totpQuery.data, primaryDomain]);
 
   const revealNotes = useMutation({
     mutationFn: () => withGrant((grant) => api.credentials.reveal(credential!.id, grant)),
@@ -319,26 +320,16 @@ function CredentialForm({
             />
           </FormField>
           <FormField label="Two-factor code" htmlFor={id("totp")} hint="Linked codes are typed in automatically after the password.">
-            <Select value={totpId ?? NO_TOTP} onValueChange={(v) => setTotpId(v === NO_TOTP ? null : v)}>
-              <SelectTrigger id={id("totp")} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_TOTP}>
-                  <span className="text-muted-foreground">No 2FA linked</span>
-                </SelectItem>
-                {totpOptions.length > 0 && <SelectSeparator />}
-                {totpOptions.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    <ShieldCheck className="size-4" />
-                    <span className="truncate">
-                      {t.issuer}
-                      {t.accountName && <span className="text-muted-foreground"> · {t.accountName}</span>}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <LinkPicker
+              id={id("totp")}
+              value={totpId}
+              onChange={setTotpId}
+              items={totpItems}
+              loading={totpQuery.isLoading}
+              noneLabel="No 2FA linked"
+              searchPlaceholder="Search 2FA codes…"
+              noun="2FA code"
+            />
           </FormField>
         </div>
 
