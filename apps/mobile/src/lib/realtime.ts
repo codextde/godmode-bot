@@ -23,7 +23,7 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
   notifications: [qk.notifications, qk.bootstrap],
   runs: [qk.runs],
   vms: [qk.vms],
-  settings: [qk.bootstrap],
+  settings: [qk.bootstrap, qk.settings],
   workspaces: [qk.workspaces, qk.agents],
   tasks: [qk.tasks],
   "human-tasks": [qk.humanTasks, qk.bootstrap],

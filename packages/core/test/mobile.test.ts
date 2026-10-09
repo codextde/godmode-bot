@@ -139,7 +139,8 @@ describe("device scope", () => {
     expect(deviceMayCall("GET", "/api/credentials")).toBe(false);
     expect(deviceMayCall("POST", "/api/credentials/c1/reveal")).toBe(false);
     expect(deviceMayCall("GET", "/api/totp/codes")).toBe(false);
-    expect(deviceMayCall("PUT", "/api/settings")).toBe(false);
+    expect(deviceMayCall("PUT", "/api/settings")).toBe(true);
+    expect(deviceMayCall("PUT", "/api/vault/settings")).toBe(false);
     expect(deviceMayCall("POST", "/api/backup/export")).toBe(false);
     expect(deviceMayCall("GET", "/api/mobile")).toBe(false);
     expect(deviceMayCall("POST", "/api/mobile/pairing")).toBe(false);
@@ -153,13 +154,16 @@ describe("device scope", () => {
     expect(deviceMayCall("POST", "/api/tasks/attachments")).toBe(true);
     expect(deviceMayCall("GET", "/api/tasks/attachments/tat_1/shot.png")).toBe(true);
     expect(deviceMayCall("GET", "/api/files/image")).toBe(false);
-    expect(deviceMayCall("POST", "/api/workspaces")).toBe(false);
+    expect(deviceMayCall("POST", "/api/workspaces")).toBe(true);
+    expect(deviceMayCall("PATCH", "/api/projects/prj_1")).toBe(true);
+    expect(deviceMayCall("DELETE", "/api/agents/a1")).toBe(false);
     expect(deviceMayCall("GET", "/api/agents/a1/commands")).toBe(true);
     expect(deviceMayCall("GET", "/api/models")).toBe(true);
     expect(deviceMayCall("PATCH", "/api/conversations/conv_1/queue/qmsg_1")).toBe(true);
     expect(deviceMayCall("DELETE", "/api/conversations/conv_1/queue/qmsg_1")).toBe(true);
     expect(deviceMayCall("POST", "/api/conversations/conv_1/queue/send")).toBe(true);
-    expect(deviceMayCall("PATCH", "/api/agents/a1")).toBe(false);
+    expect(deviceMayCall("PATCH", "/api/agents/a1")).toBe(true);
+    expect(deviceMayCall("PUT", "/api/agents/a1/file")).toBe(false);
   });
 });
 
@@ -257,6 +261,82 @@ describe("phone access", () => {
     expect(screen.status).toBe(403);
     expect(((await screen.json()) as { error: string }).error).toMatch(/shared in a chat/);
     expect((await phone("/api/vms/vm_missing/input", json("POST", { event: { type: "text", text: "hi" }, frame: { width: 1, height: 1 }, cwd: "/" }))).status).toBe(403);
+  });
+
+  test("phones set up instructions, defaults, workspaces, projects and agents", async () => {
+    const { token: device } = await pair("Setup");
+    const json = (method: string, body: unknown) => ({ bearer: device, method, body: JSON.stringify(body) });
+
+    const settings = await phone("/api/settings", { bearer: device });
+    expect(settings.status).toBe(200);
+    const saved = await phone("/api/settings", json("PUT", { runner: { appendSystemPrompt: "Commit as me only.", effort: "high", monthlyBudgetUsd: 50 }, memory: { dreaming: { enabled: true } } }));
+    expect(saved.status).toBe(200);
+    expect(((await saved.json()) as { runner: { appendSystemPrompt: string; monthlyBudgetUsd: number } }).runner).toMatchObject({ appendSystemPrompt: "Commit as me only.", monthlyBudgetUsd: 50 });
+    expect((await phone("/api/settings", json("PUT", { runner: { monthlyBudgetUsd: null } }))).status).toBe(200);
+    expect((await phone("/api/settings", json("PUT", { runner: { effort: "high&calc" } }))).status).toBe(400);
+    expect((await phone("/api/settings", json("PUT", { runner: { model: "x y" } }))).status).toBe(400);
+    for (const patch of [
+      { runner: { claudePath: "/tmp/evil" } },
+      { runner: { extraArgs: ["--dangerously-skip-permissions"] } },
+      { runner: { bypassPermissions: true } },
+      { browser: { chromePath: "/tmp/evil" } },
+      { security: { defaultSecretAccess: "reveal" } },
+      { mobile: { enabled: false } },
+      { cloud: { enabled: false } },
+      { vm: { vaultFill: true } },
+      { vm: { isolateHostShell: false } },
+      { runner: { maxConcurrentRuns: 100000 } },
+      { runner: { runTimeoutMinutes: -1 } },
+      { general: { userName: "x".repeat(81) } },
+      JSON.parse('{"memory":{"dreaming":{"__proto__":{}}}}') as object,
+      { runner: { effort: 5 } },
+      { memory: { dreaming: { cron: 1 } } },
+      { runner: "x" },
+    ]) {
+      expect((await phone("/api/settings", json("PUT", patch))).status).toBe(403);
+    }
+
+    const ws = await phone("/api/workspaces", json("POST", { name: "From the phone", icon: "🚀", instructions: "Be brief." }));
+    expect(ws.status).toBe(200);
+    const workspace = (await ws.json()) as { id: string; instructions: string };
+    expect(workspace.instructions).toBe("Be brief.");
+    expect((await phone("/api/workspaces", json("POST", { name: "Sneaky", sources: [{ kind: "folder", path: "/" }] }))).status).toBe(403);
+    expect((await phone("/api/workspaces", json("POST", { name: "Sneaky", vmId: "vm_1" }))).status).toBe(403);
+
+    const folder = mkdtempSync(join(tmpdir(), "godmode-phone-folder-"));
+    try {
+      const set = await desktop(`/api/workspaces/${workspace.id}`, { method: "PATCH", body: JSON.stringify({ sources: [{ kind: "folder", path: folder }] }) });
+      const sources = ((await set.json()) as { sources: { path: string }[] }).sources;
+      expect(sources.length).toBe(1);
+      const kept = await phone(`/api/workspaces/${workspace.id}`, json("PATCH", { instructions: "Be very brief.", sources: [{ kind: "folder", path: sources[0]!.path }] }));
+      expect(kept.status).toBe(200);
+      expect((await phone(`/api/workspaces/${workspace.id}`, json("PATCH", { sources: [{ kind: "folder", path: tmpdir() }] }))).status).toBe(403);
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+
+    const project = await phone("/api/projects", json("POST", { workspaceId: workspace.id, name: "Launch", instructions: "Ship it." }));
+    expect(project.status).toBe(201);
+    const created = (await project.json()) as { id: string; workspaceId: string };
+    expect(created.workspaceId).toBe(workspace.id);
+    expect((await phone(`/api/projects?workspaceId=${workspace.id}`, { bearer: device })).status).toBe(200);
+    expect((await phone(`/api/projects/${created.id}`, json("PATCH", { instructions: "Ship it today." }))).status).toBe(200);
+
+    const agent = await phone("/api/agents", json("POST", { name: "Phone helper", workspaceId: workspace.id, instructions: "Help." }));
+    expect(agent.status).toBe(200);
+    const helper = (await agent.json()) as { id: string; inheritMcp: boolean; permissions: { credentialIds: string[] | null; secretAccess: string } };
+    expect(helper.inheritMcp).toBe(false);
+    expect(helper.permissions).toMatchObject({ credentialIds: [], secretAccess: "fill" });
+    const renamed = await phone(`/api/agents/${helper.id}`, json("PATCH", { role: "Helper", instructions: "Help a lot.", projectId: created.id }));
+    expect(renamed.status).toBe(200);
+    expect(((await renamed.json()) as { instructions: string }).instructions).toBe("Help a lot.");
+    expect((await phone(`/api/agents/${helper.id}`, json("PATCH", { permissions: { secretAccess: "reveal" } }))).status).toBe(403);
+    expect((await phone(`/api/agents/${helper.id}`, json("PATCH", { workingDirectory: "/" }))).status).toBe(403);
+
+    expect((await phone(`/api/workspaces/${workspace.id}?force=1`, { bearer: device, method: "DELETE" })).status).toBe(403);
+    expect((await phone(`/api/workspaces/${workspace.id}`, { bearer: device, method: "DELETE" })).status).toBe(409);
+    expect((await phone("/api/workspaces", json("POST", { name: "Drive", sources: [{ kind: "git", url: "C:/Users/me/secret" }] }))).status).toBe(400);
+    expect((await phone(`/api/projects/${created.id}`, { bearer: device, method: "DELETE" })).status).toBe(200);
   });
 
   test("phones create and follow tasks in a workspace", async () => {
