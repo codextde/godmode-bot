@@ -67,6 +67,9 @@ const ICONS = {
   archive: ["archivebox", "archive"],
   unarchive: ["arrow.uturn.backward", "unarchive"],
   workflow: ["flowchart", "account_tree"],
+  folder: ["folder.fill", "folder"],
+  person: ["person.fill.checkmark", "assignment_ind"],
+  subagent: ["person.2.wave.2", "diversity_3"],
 } as const satisfies Record<string, readonly [SFSymbol, AndroidSymbol]>;
 
 export type IconName = keyof typeof ICONS;

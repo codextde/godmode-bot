@@ -6,7 +6,8 @@ import type { Routine } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { CharacterAvatar } from "@/components/character";
 import { ConversationRow, RunCard } from "@/components/rows";
-import { Badge, Button, Card, Hairline, Row, SectionTitle, T, tap } from "@/components/ui";
+import { Badge, Button, Card, ErrorState, Hairline, LoadingState, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
+import { useProjectIndex } from "@/lib/workspace";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
@@ -15,14 +16,31 @@ import { radius, space, useColors } from "@/lib/theme";
 
 export default function AgentScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { byId } = useAgents();
+  const agents = useAgents();
+  const { byId } = agents;
   const agent = byId.get(id);
+  const project = useProjectIndex().get(agent?.projectId ?? "")?.project;
   const runs = useLive((s) => s.runs);
   const working = Object.values(runs).filter((r) => r.run.agentId === id && r.run.status === "running");
   const routines = useQuery({ queryKey: qk.agentRoutines(id), queryFn: () => api.routines.list({ agentId: id }) });
   const chats = useQuery({ queryKey: [...qk.conversations, "agent", id], queryFn: () => api.conversations.list({ agentId: id, limit: 5 }) });
 
-  if (!agent) return <Stack.Title>Agent</Stack.Title>;
+  if (!agent) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center" }}>
+        <Stack.Title>Agent</Stack.Title>
+        {agents.isLoading ? (
+          <LoadingState label="Loading the agent…" />
+        ) : (
+          <ErrorState
+            title={agents.isError ? "Couldn't load the agent" : "This agent is gone"}
+            error={agents.isError ? errorText(agents.error) : "It was deleted on your computer."}
+            onRetry={agents.isError ? () => void agents.refetch() : undefined}
+          />
+        )}
+      </View>
+    );
+  }
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
@@ -32,6 +50,7 @@ export default function AgentScreen() {
         <T variant="title">{agent.name}</T>
         <Row style={{ gap: 6 }}>
           {agent.isDefault && <Badge label="Main assistant" />}
+          {project ? <Badge label={`${project.icon ? `${project.icon} ` : ""}${project.name}`} /> : null}
           {!agent.enabled ? (
             <Badge label="Off" />
           ) : working.length ? (
@@ -83,9 +102,13 @@ export default function AgentScreen() {
               </View>
             ))
           ) : (
-            <T variant="subhead" muted style={{ padding: space.lg }}>
-              {routines.isLoading ? "Loading…" : "No automations. Set them up on your computer."}
-            </T>
+            routines.isLoading ? (
+              <SkeletonRows count={2} avatar={0} />
+            ) : (
+              <T variant="subhead" muted style={{ padding: space.lg }}>
+                No automations. Set them up on your computer.
+              </T>
+            )
           )}
         </Card>
       </View>
@@ -96,9 +119,13 @@ export default function AgentScreen() {
           {chats.data?.length ? (
             chats.data.map((conv) => <ConversationRow key={conv.id} conversation={conv} agent={agent} running={working.some((w) => w.run.conversationId === conv.id)} />)
           ) : (
-            <T variant="subhead" muted style={{ padding: space.lg }}>
-              {chats.isLoading ? "Loading…" : "No chats yet."}
-            </T>
+            chats.isLoading ? (
+              <SkeletonRows count={3} />
+            ) : (
+              <T variant="subhead" muted style={{ padding: space.lg }}>
+                No chats yet.
+              </T>
+            )
           )}
         </Card>
       </View>

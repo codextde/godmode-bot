@@ -253,6 +253,59 @@ export function EmptyState({ icon, title, body, action }: { icon: IconName; titl
   );
 }
 
+/** A placeholder block that breathes while its content loads. */
+export function Skeleton({ width, height = 12, radius: r = 6, style }: { width?: ViewStyle["width"]; height?: number; radius?: number; style?: StyleProp<ViewStyle> }) {
+  const c = useColors();
+  const v = useSharedValue(0.55);
+  useEffect(() => {
+    v.value = withRepeat(withTiming(1, { duration: 850, easing: Easing.inOut(Easing.quad) }), -1, true);
+  }, [v]);
+  const pulse = useAnimatedStyle(() => ({ opacity: v.value }));
+  return <Animated.View style={[{ width, height, borderRadius: r, borderCurve: "continuous", backgroundColor: c.sunken }, pulse, style]} />;
+}
+
+/** List rows while a list loads: the shape of what comes, so the screen is never blank. */
+export function SkeletonRows({ count = 6, avatar = 44, inset = space.lg }: { count?: number; avatar?: number; inset?: number }) {
+  return (
+    <View accessibilityLabel="Loading" accessibilityRole="progressbar">
+      {Array.from({ length: count }, (_, i) => (
+        <View key={i} style={[styles.skeletonRow, { paddingHorizontal: inset }]}>
+          {avatar > 0 && <Skeleton width={avatar} height={avatar} radius={avatar * 0.32} />}
+          <View style={{ flex: 1, gap: 8 }}>
+            <Skeleton width={`${62 - ((i * 17) % 26)}%`} height={14} />
+            <Skeleton width={`${88 - ((i * 23) % 30)}%`} height={11} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** A whole screen waiting for its data. */
+export function LoadingState({ label = "Loading…", style }: { label?: string; style?: StyleProp<ViewStyle> }) {
+  const c = useColors();
+  return (
+    <View style={[styles.loading, style]} accessibilityRole="progressbar" accessibilityLabel={label}>
+      <ActivityIndicator color={c.textMuted} />
+      <T variant="footnote" muted>
+        {label}
+      </T>
+    </View>
+  );
+}
+
+/** Loading failed: say why and offer to try again instead of an empty screen. */
+export function ErrorState({ title, error, onRetry }: { title: string; error: string; onRetry?: () => void }) {
+  return (
+    <EmptyState
+      icon="wifi"
+      title={title}
+      body={error}
+      action={onRetry ? <Button title="Try again" icon="refresh" variant="secondary" onPress={onRetry} /> : undefined}
+    />
+  );
+}
+
 export function Row({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   return <View style={[{ flexDirection: "row", alignItems: "center" }, style]}>{children}</View>;
 }
@@ -296,6 +349,18 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingVertical: 36,
     paddingHorizontal: space.xl,
+  },
+  skeletonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    paddingVertical: space.md,
+  },
+  loading: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.sm,
+    paddingVertical: 48,
   },
   emptyIcon: {
     width: 52,
