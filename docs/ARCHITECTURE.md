@@ -344,6 +344,27 @@ queued, budgeted and reported like a message from the human:
   live in `@godmode/shared` (`runEndOf`); for a sign-in, CLI, VM, folder or model error the desktop links to the fix
   and offers *Try again* next to it.
 
+### Continuing after a restart
+
+Work a quit, update or crash of Godmode cut off goes on by itself once it is back (`services/resume.ts`, setting
+`runner.resumeAfterRestart`, default on). Right after `recoverInterruptedRuns`, before the scheduler, follow-ups or
+automations start anything, `interruptedWork` collects the runs that ended with `RUN_SHUT_DOWN` or `RUN_INTERRUPTED`
+since the last start looked (meta `runs.resumeCheckedAt`; at most a day back, 15 minutes on the first start with it):
+the chat's latest run, a `chat`, `manual`, `api`, `followup`, `delegation` or `routine` run, not a ticket's (the board
+retries those itself) and not on a runner. Once the API listens, `resumeInterruptedWork` gives each a new turn of the
+same trigger in the same chat: `continue` with a `<godmode-continue>` note (`restartContext`) when Claude had the prompt
+and the session is there, else its prompt again; the `retry` marker has `auto: true` ("Continued after Godmode
+restarted").
+
+* Who handed work over goes first. Its cut-off handoffs get their new run ids up front, so its note names where to wait
+  (`delegation_status`, which also follows a run id to its latest continuation); the handoff's turn hangs off the
+  turn that continues its parent.
+* An automation's turn keeps its routine (busy check, status) and gets an event "Continued after Godmode restarted";
+  in a Slack, Telegram or Teams chat the answer goes back there (`deliverFollowup`).
+* Something new in the chat since, a run already working there or a pause leave it alone; a turn continued three times
+  in a row by itself (one that restarts Godmode) is left for the human.
+* Managers continue what is left (older work, setting off) with the `run_continue` tool.
+
 ### Questions and approvals
 
 An agent that needs the human asks and waits, instead of ending its turn with a question in prose
@@ -512,7 +533,7 @@ the core, the desktop and the phone alike.
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |
 | `agents_list()`, `agent_get({id})` | Discover peer agents: role, who they report to (`relation` marks the caller's lead and reports), and for `agent_get` who reports to it (only agents the caller could reach) |
 | `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result). The chat stores the bare task (`source: "delegation"`); the run's prompt starts with `[Delegated by <name> (<role>), your lead. Your final answer goes back to <name>.]` |
-| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list`, `workspace_create`, `workspace_update`, `project_create`, `project_update`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo`. `workspace_update` / `project_update` only add sources (`addSources`); removing sources, deleting, VM, browser profile and auto-merge stay human-only. A run kept in a VM sets up no workspaces or projects (their instructions reach agents on the computer), and changing a workspace's or project's context follows the `agent_update` rules for every agent in it (reveal mode, computer use) |
+| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `run_continue`, `workspaces_list`, `workspace_create`, `workspace_update`, `project_create`, `project_update`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo`. `workspace_update` / `project_update` only add sources (`addSources`); removing sources, deleting, VM, browser profile and auto-merge stay human-only. A run kept in a VM sets up no workspaces or projects (their instructions reach agents on the computer), and changing a workspace's or project's context follows the `agent_update` rules for every agent in it (reveal mode, computer use) |
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
 | `task_note({ text, taskId? })` | A progress note on the ticket the run works on (managers: any ticket); on its timeline, nobody is notified |
 | `ask_human({ question, context?, options? })`, `request_approval({ action, reason, affects })` | Ask the human a question or for an OK and stand still until the answer; the run continues with it (see Questions and approvals). Not in condition checks, dreams or delegated runs |

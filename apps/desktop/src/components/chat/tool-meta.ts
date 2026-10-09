@@ -39,6 +39,7 @@ import {
   NotebookPen,
   OctagonAlert,
   PanelsTopLeft,
+  Play,
   Plug,
   ScanText,
   ScrollText,
@@ -319,6 +320,7 @@ const GODMODE_TOOLS = new Set([
   "automation_events_list",
   "automation_check_result",
   "runs_list",
+  "run_continue",
   "workspaces_list",
   "workspace_create",
   "workspace_update",
@@ -448,6 +450,8 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       };
     case "runs_list":
       return { kind: "agents", icon: History, title: "Checked recent runs" };
+    case "run_continue":
+      return { kind: "agents", icon: Play, title: "Continued work a restart cut off" };
     case "workspaces_list":
       return { kind: "agents", icon: Layers, title: "Listed workspaces" };
     case "workspace_create":

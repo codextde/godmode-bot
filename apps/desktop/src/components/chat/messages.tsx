@@ -167,15 +167,22 @@ export function SystemMessage({ message }: { message: Message }) {
   );
 }
 
-/** Where the human picked up a turn that ended early. */
+/** Where a turn that ended early was picked up: by the human, or by Godmode after it restarted. */
 function RetryMarker({ block, at }: { block: Extract<MessageBlock, { type: "retry" }>; at: string }) {
   const Icon = block.mode === "continue" ? Play : RotateCcw;
+  const label = block.auto
+    ? block.mode === "continue"
+      ? "Continued after Godmode restarted"
+      : "Sent again after Godmode restarted"
+    : block.mode === "continue"
+      ? "Continued where it stopped"
+      : "Tried again";
   return (
     <div role="note" className="flex w-full items-center gap-3 text-[11px] text-muted-foreground">
       <span className="h-px flex-1 bg-border" />
       <span className="inline-flex items-center gap-1.5">
         <Icon className={cn("size-3", block.mode === "continue" && "fill-current")} aria-hidden />
-        <span className="font-medium text-foreground">{block.mode === "continue" ? "Continued where it stopped" : "Tried again"}</span>
+        <span className="font-medium text-foreground">{label}</span>
         <time dateTime={at} className="tabular-nums">
           · {timeOf(at)}
         </time>

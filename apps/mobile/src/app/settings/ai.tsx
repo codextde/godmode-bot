@@ -109,6 +109,13 @@ export default function ModelAndLimits() {
           value={r.autoContinueOnLimit}
           onChange={(autoContinueOnLimit) => void patchSettings({ runner: { autoContinueOnLimit } })}
         />
+        <SwitchRow
+          icon="refresh"
+          title="Continue after a restart"
+          detail="Work Godmode was doing when it quit or restarted picks up by itself once it is back."
+          value={r.resumeAfterRestart ?? true}
+          onChange={(resumeAfterRestart) => void patchSettings({ runner: { resumeAfterRestart } })}
+        />
       </Group>
 
       <Group title="Budgets" footer="Used up, unattended work waits until next month. Leave empty for no limit.">

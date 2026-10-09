@@ -259,6 +259,13 @@ export function AiSection({ settings }: { settings: Settings }) {
           <Switch id="auto-continue" checked={r.autoContinueOnLimit ?? true} onCheckedChange={(autoContinueOnLimit) => patch({ runner: { autoContinueOnLimit } })} />
         </SettingRow>
         <SettingRow
+          label="Continue after a restart"
+          htmlFor="resume-after-restart"
+          description="Chats, automations and handed-over tasks that were working when Godmode quit, updated or crashed pick up where they stopped once it is back (work of the last day). Board tickets always do."
+        >
+          <Switch id="resume-after-restart" checked={r.resumeAfterRestart ?? true} onCheckedChange={(resumeAfterRestart) => patch({ runner: { resumeAfterRestart } })} />
+        </SettingRow>
+        <SettingRow
           label="Watchdog"
           htmlFor="watchdog"
           description="Stops runs that stall or go in circles, with a report of where they stood. Board tickets try again once on their own."
