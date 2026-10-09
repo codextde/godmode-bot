@@ -19,6 +19,8 @@ export interface PromptContext {
   peers: Agent[];
   /** Browser MCP tools are attached to this run. */
   browserAvailable: boolean;
+  /** Environment variable holding the run's own DevTools URL (browser on this computer only). */
+  browserCdpEnv?: string | null;
   /** Screen, window or browser tab this run may see and control (computer MCP tools). */
   computer?: ComputerTarget | null;
   /** macOS VM this run works in (vm MCP tools). */
@@ -241,7 +243,11 @@ Godmode tools come from the \`godmode\` MCP server (vault logins and 2FA, missin
     const where = ctx.vm ? ` It is Google Chrome inside the VM "${ctx.vm.name}", not a browser on ${human}'s computer.` : "";
     const takeover = ctx.vm ? "on the VM's screen" : "in Godmode's live browser view";
     out.push(`### Browser
-Use the \`browser\` MCP tools for anything on the web (navigate, click, type, read pages, take screenshots).${where} The browser keeps its cookies between runs, so you are often already logged in — check before logging in again. If a CAPTCHA or an unexpected human check blocks you, tell ${human} in your final summary (they can take over ${takeover}).`);
+Use the \`browser\` MCP tools for anything on the web (navigate, click, type, read pages, take screenshots).${where} The browser keeps its cookies between runs, so you are often already logged in — check before logging in again. If a CAPTCHA or an unexpected human check blocks you, tell ${human} in your final summary (they can take over ${takeover}).${
+      ctx.browserCdpEnv
+        ? ` The browser runs in the browser profile set for this chat, agent or workspace — only there do the logins work. A script that needs the browser itself (Playwright, puppeteer) connects to \`$${ctx.browserCdpEnv}\` (e.g. \`chromium.connectOverCDP(process.env.${ctx.browserCdpEnv})\`), the same profile and tabs as your browser tools. Never look for or connect to any other Chrome DevTools port: those are other profiles with other logins.`
+        : ""
+    }`);
   } else if (ctx.vm && settings.browser.enabled && agent.browser.enabled) {
     out.push(`### Browser
 No browser could be set up in the VM for this run. If a task needs a website, say so in your final summary — never open a browser on ${human}'s computer instead.`);

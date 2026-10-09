@@ -97,16 +97,10 @@ export default function ChatHome() {
   const [instructions, setInstructions, instructionsDraft] = useDraft(`${SETUP_DRAFT}instructions`, "");
   /** macOS VM for the new chat; null = the agent's (or its workspace's). */
   const [vmId, setVmId, vmDraft] = useDraft<string | null>(`${SETUP_DRAFT}vm`, null);
-  /** Browser profile for the new chat; null = the agent's. */
-  const [browserProfileId, setBrowserProfileId, browserDraft] = useDraft<string | null>(`${SETUP_DRAFT}browser`, null);
   /** SSH servers for the new chat, on top of the agent's. */
   const [sshServerIds, setSshServerIds, sshDraft] = useDraft<string[]>(`${SETUP_DRAFT}ssh`, NO_SSH_SERVERS);
   /** The runner the new chat works on; null = this computer. */
   const [runnerId, setRunnerId, runnerDraft] = useDraft<string | null>(`${SETUP_DRAFT}runner`, null);
-  const resetSetup = () => {
-    [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft, runnerDraft].forEach((d) => d.discard());
-    setProjectPick(undefined);
-  };
   const { data: workspaces = [] } = useWorkspaces();
   const scopeWorkspaceId = useScopeWorkspace()?.id ?? null;
   const scopeProject = useScopeProject();
@@ -121,6 +115,15 @@ export default function ChatHome() {
     available.find((a) => a.isDefault) ??
     available[0];
   const selectedWorkspace = selected?.workspaceId ? workspaces.find((w) => w.id === selected.workspaceId) : undefined;
+  /** Browser profile for the new chat; null = the agent's. A pick stays with its workspace and agent: logins live in profiles. */
+  const [browserProfileId, setBrowserProfileId, browserDraft] = useDraft<string | null>(
+    `${SETUP_DRAFT}browser:${scopeWorkspaceId ?? "all"}:${selected?.id ?? "none"}`,
+    null,
+  );
+  const resetSetup = () => {
+    [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft, runnerDraft].forEach((d) => d.discard());
+    setProjectPick(undefined);
+  };
   const sidebarProject = scopeProject && selected && (!selected.workspaceId || selected.workspaceId === scopeProject.workspaceId) ? scopeProject.id : null;
   // A pick made for another agent doesn't carry over.
   useEffect(() => setProjectPick(undefined), [selected?.id]);
