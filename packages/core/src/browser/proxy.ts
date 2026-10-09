@@ -430,6 +430,12 @@ export function openChatLease(input: { runId: string; profileId: string; convers
   return `http://127.0.0.1:${ensureServer().port}/${lease.token}`;
 }
 
+/** The DevTools URL a run was given (null when it has none). */
+export function chatLeaseUrl(runId: string): string | null {
+  const lease = byRun.get(runId);
+  return lease && server ? `http://127.0.0.1:${server.port}/${lease.token}` : null;
+}
+
 /** End a run's access: its URL stops working and open connections close. Returns what was leased. */
 export function releaseChatLease(runId: string): { profileId: string; conversationId: string } | null {
   const lease = byRun.get(runId);
