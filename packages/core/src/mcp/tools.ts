@@ -6,7 +6,24 @@
  */
 import { join } from "node:path";
 import { z } from "zod";
-import type { Agent, ApiTool, ConnectorAccess, ConnectorTool, Credential, MissingLoginKind, Mod, Routine, RoutineTrigger, Run, Task, Vm } from "@godmode/shared";
+import type {
+  Agent,
+  ApiTool,
+  ConnectorAccess,
+  ConnectorTool,
+  Credential,
+  MissingLoginKind,
+  Mod,
+  Project,
+  Routine,
+  RoutineTrigger,
+  Run,
+  Task,
+  Vm,
+  Workspace,
+  WorkspaceSource,
+  WorkspaceSourceInput,
+} from "@godmode/shared";
 import {
   AGENT_COLORS,
   CHARACTER_BODIES,
@@ -60,7 +77,7 @@ import { reportCheckResult } from "../automations/conditions";
 import { reportDream } from "../memory/dreaming";
 import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/composio";
 import { listTriggerTypes } from "../integrations/composioTriggers";
-import { listWorkspaces } from "../services/workspaces";
+import { createWorkspace, listWorkspaces, updateWorkspace } from "../services/workspaces";
 import { createAgent, deleteAgent, getAgent, listAgents, peersFor, teamOf, updateAgent } from "../agents/service";
 import {
   addCredentialDomain,
@@ -81,7 +98,7 @@ import { currentVmPage, fillIntoVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
 import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
-import { chatSources, projectOfChat } from "../services/projects";
+import { chatSources, createProject, getProject, projectOfChat, updateProject } from "../services/projects";
 import { get } from "../db";
 import { config } from "../config";
 import { fixRunner, runnerExec, runnerHealth } from "../remote/runners";
@@ -209,6 +226,62 @@ function agentSummary(a: Agent, names: Map<string, string>, team: Agent[] = list
     ...(a.workingDirectory ? { workingDirectory: a.workingDirectory } : {}),
     ...(a.isDefault ? { isDefault: true } : {}),
   };
+}
+
+const sourceSummary = (s: WorkspaceSource) => ({ kind: s.kind, name: s.name, path: s.path, url: s.url, branch: s.branch, status: s.status });
+
+const projectSummary = (p: Project) => ({ id: p.id, name: p.name, description: p.description, sources: p.sources.map(sourceSummary) });
+
+const workspaceSummary = (w: Workspace) => ({
+  id: w.id,
+  name: w.name,
+  description: w.description,
+  sources: w.sources.map(sourceSummary),
+  projects: w.projects.map(projectSummary),
+});
+
+const sourceInput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("folder"), path: z.string().min(1).describe("Absolute path of a folder on this computer") }),
+  z.object({
+    kind: z.literal("git"),
+    url: z.string().min(1).describe("Git repository URL (https or ssh); Godmode clones it for the workspace"),
+    branch: z.string().nullable().optional(),
+  }),
+]);
+
+const scopeFields = {
+  description: z.string().max(2000).optional().describe("What it is for, one or two sentences"),
+  icon: z.string().max(16).optional().describe("One emoji"),
+  color: z.string().max(32).optional().describe("violet, blue, green, amber, rose, …"),
+  instructions: z.string().max(20_000).optional().describe("Context every run in it gets: goals, conventions, people, links"),
+};
+
+const asInput = (s: WorkspaceSource): WorkspaceSourceInput => (s.kind === "git" ? { kind: "git", url: s.url ?? "", branch: s.branch } : { kind: "folder", path: s.path });
+
+/** A workspace by id or (case-insensitive) name. */
+function findWorkspace(ref: string): Workspace | null {
+  const key = ref.trim().toLowerCase();
+  const all = listWorkspaces();
+  return all.find((w) => w.id === ref.trim()) ?? all.find((w) => w.name.toLowerCase() === key || w.slug === key) ?? null;
+}
+
+/**
+ * Workspace and project instructions reach every agent working there, global ones included, so a run kept in a VM sets
+ * none up. Returns the refusal, or null.
+ */
+function setupOffHostRefusal(ctx: RunContext): string | null {
+  if (!lockedVm(ctx)) return null;
+  return "This task runs in a virtual machine and is kept off the human's computer, and workspaces and projects reach agents that work on the computer — only the human can set them up.";
+}
+
+/** Changing a workspace's (or one of its projects') context is changing what its agents follow: the agent_update rules hold for each. */
+function memberRefusal(caller: Agent, ctx: RunContext, workspaceId: string, projectId: string | null, what: string): string | null {
+  const members = listAgents({ workspaceId: "all" }).filter((a) => a.id !== caller.id && (a.workspaceId === workspaceId || (projectId && a.projectId === projectId)));
+  for (const m of members) {
+    const refusal = revealTargetRefusal(caller, ctx, m, what) ?? computerTargetRefusal(caller, m, what);
+    if (refusal) return refusal;
+  }
+  return null;
 }
 
 /** "[Delegated by Lena (Head of finance), your lead. Your final answer goes back to Lena.]" — what the delegate is told about who asked. */
@@ -653,6 +726,10 @@ const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
   ["runs_list", "read"],
   ["spend_overview", "read"],
   ["workspaces_list", "read"],
+  ["workspace_create", "manage"],
+  ["workspace_update", "manage"],
+  ["project_create", "manage"],
+  ["project_update", "manage"],
   ["logins_overview", "read"],
   ["missing_logins_list", "read"],
   ["vms_list", "read"],
@@ -2049,21 +2126,109 @@ const TOOLS: ToolDef[] = [
       "List workspaces (groups of agents, logins and integrations) with the folders and git repositories their agents work with, and their optional projects (each with its own context, folders and repositories; tasks, chats and agents can belong to one).",
     schema: z.object({}),
     when: isManager,
-    run: () =>
-      json(
-        listWorkspaces().map((w) => ({
-          id: w.id,
-          name: w.name,
-          description: w.description,
-          sources: w.sources.map((s) => ({ kind: s.kind, name: s.name, path: s.path, url: s.url, branch: s.branch, status: s.status })),
-          projects: w.projects.map((p) => ({
-            id: p.id,
-            name: p.name,
-            description: p.description,
-            sources: p.sources.map((s) => ({ kind: s.kind, name: s.name, path: s.path, url: s.url, branch: s.branch, status: s.status })),
-          })),
-        })),
-      ),
+    run: () => json(listWorkspaces().map(workspaceSummary)),
+  }),
+
+  defineTool({
+    name: "workspace_create",
+    description:
+      "Create a workspace: a group of agents, logins and integrations around one business, client or product, with the folders and git repositories its agents work with (repositories are cloned for it). " +
+      "Give it a clear name, a one-line description, a fitting emoji and instructions with the context every run in it needs. Then add agents to it with agent_create({ workspaceId }) and file its tasks with task_create. " +
+      "VM, browser profile and auto-merge stay the human's, in Settings.",
+    schema: z.object({
+      name: z.string().min(1).max(100),
+      ...scopeFields,
+      sources: z.array(sourceInput).max(20).optional().describe("Folders and git repositories its agents work with"),
+    }),
+    when: managesSetup,
+    run: ({ sources, ...input }, { agent, ctx }) => {
+      const taken = findWorkspace(input.name);
+      if (taken) return fail(`There is already a workspace "${taken.name}" (${taken.id}). Use it, or pick another name.`);
+      const refusal = setupOffHostRefusal(ctx);
+      if (refusal) return fail(refusal);
+      const created = createWorkspace({ ...input, sources });
+      audit(`agent:${agent.id}`, "workspace.create", created.id, { name: created.name });
+      return json({ created: workspaceSummary(created) });
+    },
+  }),
+
+  defineTool({
+    name: "workspace_update",
+    description:
+      "Change a workspace's name, description, emoji, colour or instructions, and attach more folders or git repositories (addSources). Removing sources and deleting a workspace is the human's.",
+    schema: z.object({
+      workspaceId: z.string().describe("Workspace id or name"),
+      name: z.string().min(1).max(100).optional(),
+      ...scopeFields,
+      addSources: z.array(sourceInput).max(20).optional().describe("Folders and git repositories to attach"),
+    }),
+    when: managesSetup,
+    run: ({ workspaceId, addSources, ...patch }, { agent, ctx }) => {
+      const workspace = findWorkspace(workspaceId);
+      if (!workspace) return fail(`There is no workspace "${workspaceId}". workspaces_list shows them.`);
+      const refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, workspace.id, null, "change its workspace");
+      if (refusal) return fail(refusal);
+      if (patch.name) {
+        const taken = findWorkspace(patch.name);
+        if (taken && taken.id !== workspace.id) return fail(`There is already a workspace "${taken.name}".`);
+      }
+      const sources = addSources?.length ? [...workspace.sources.map(asInput), ...addSources] : undefined;
+      const updated = updateWorkspace(workspace.id, { ...patch, sources });
+      audit(`agent:${agent.id}`, "workspace.update", workspace.id, { fields: Object.keys({ ...patch, ...(sources ? { sources } : {}) }) });
+      return json(workspaceSummary(updated));
+    },
+  }),
+
+  defineTool({
+    name: "project_create",
+    description:
+      "Create a project inside a workspace: one product, client or initiative with its own context, folders and git repositories. Chats, tasks (task_create({ projectId })) and agents (agent_create({ projectId })) can belong to it; their runs get the workspace's setup plus the project's.",
+    schema: z.object({
+      workspaceId: z.string().describe("Workspace id or name"),
+      name: z.string().min(1).max(100),
+      ...scopeFields,
+      sources: z.array(sourceInput).max(20).optional().describe("Folders and git repositories of the project"),
+    }),
+    when: managesSetup,
+    run: ({ workspaceId, sources, ...input }, { agent, ctx }) => {
+      const workspace = findWorkspace(workspaceId);
+      if (!workspace) return fail(`There is no workspace "${workspaceId}". workspaces_list shows them, workspace_create adds one.`);
+      const refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, workspace.id, null, "add a project to its workspace");
+      if (refusal) return fail(refusal);
+      const name = input.name.trim().toLowerCase();
+      const taken = workspace.projects.find((p) => p.name.toLowerCase() === name);
+      if (taken) return fail(`${workspace.name} already has a project "${taken.name}" (${taken.id}).`);
+      const created = createProject({ ...input, workspaceId: workspace.id, sources });
+      audit(`agent:${agent.id}`, "project.create", created.id, { name: created.name, workspaceId: workspace.id });
+      return json({ created: { ...projectSummary(created), workspace: { id: workspace.id, name: workspace.name } } });
+    },
+  }),
+
+  defineTool({
+    name: "project_update",
+    description:
+      "Change a project's name, description, emoji, colour or instructions, and attach more folders or git repositories (addSources). Projects stay in their workspace; removing sources and deleting a project is the human's.",
+    schema: z.object({
+      projectId: z.string(),
+      name: z.string().min(1).max(100).optional(),
+      ...scopeFields,
+      addSources: z.array(sourceInput).max(20).optional().describe("Folders and git repositories to attach"),
+    }),
+    when: managesSetup,
+    run: ({ projectId, addSources, ...patch }, { agent, ctx }) => {
+      let project: Project;
+      try {
+        project = getProject(projectId);
+      } catch {
+        return fail(`There is no project "${projectId}". workspaces_list shows them.`);
+      }
+      const refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, project.workspaceId, project.id, "change its project");
+      if (refusal) return fail(refusal);
+      const sources = addSources?.length ? [...project.sources.map(asInput), ...addSources] : undefined;
+      const updated = updateProject(project.id, { ...patch, sources });
+      audit(`agent:${agent.id}`, "project.update", project.id, { fields: Object.keys({ ...patch, ...(sources ? { sources } : {}) }) });
+      return json(projectSummary(updated));
+    },
   }),
 
   defineTool({
