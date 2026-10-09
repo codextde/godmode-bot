@@ -6,6 +6,7 @@
  * A credential and a TOTP entry can be linked 1:1; the link is stored on both sides
  * (`credentials.totp_id` and `totp.credential_id`) and kept consistent by the helpers below.
  */
+import { randomInt } from "node:crypto";
 import type { Agent, Credential, CredentialInput } from "@godmode/shared";
 import { all, get, insert, run, tx, update } from "../db";
 import { bus } from "../events/bus";
@@ -414,4 +415,18 @@ export function revealForAgent(agent: Agent, credentialId: string): { username: 
 
 export function markCredentialUsed(id: string): void {
   if (run("UPDATE credentials SET last_used_at = ? WHERE id = ?", now(), id).changes > 0) bus.changed("credentials");
+}
+
+const PASSWORD_SETS = ["abcdefghijkmnpqrstuvwxyz", "ABCDEFGHJKLMNPQRSTUVWXYZ", "23456789", "!@#$%^&*()-_=+[]{};:,.?/~"];
+
+/** A strong random password with every character kind (no look-alikes), for an account an agent signs up for. */
+export function generatePassword(length = 24): string {
+  const pool = PASSWORD_SETS.join("");
+  const chars = PASSWORD_SETS.map((set) => set[randomInt(set.length)]!);
+  while (chars.length < length) chars.push(pool[randomInt(pool.length)]!);
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j]!, chars[i]!];
+  }
+  return chars.join("");
 }
