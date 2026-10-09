@@ -8,6 +8,7 @@ import { getSettings } from "../services/settings";
 import { logger, setSecretMasker } from "../log";
 import { badRequest, locked, now } from "../util";
 import { decrypt, deriveKey, encrypt, newKdfParams, randomKey, sha256, type KdfParams } from "./crypto";
+import { addCardMask, clearCardMasks } from "./cardMask";
 
 const log = logger("vault");
 
@@ -30,7 +31,7 @@ const pushSecrets = new Set<string>();
 /** What a secret taken out of a file is replaced with: plain letters, so it fits wherever the secret stood. */
 export const SECRET_PLACEHOLDER = "GODMODE_REMOVED_SECRET";
 /** Sealed values that aren't one secret: free-text notes, and the JSON of a map whose values are remembered one by one. */
-const SEALED_NOT_SECRET = /^(credentials\.notes|mcp_servers\.(env|headers)|messaging_connections\.secrets|mods\.secrets):/;
+const SEALED_NOT_SECRET = /^(credentials\.notes|mcp_servers\.(env|headers)|messaging_connections\.secrets|mods\.secrets|payment_cards\.billing):/;
 /** Names of env variables and headers that hold a secret (API_KEY, botToken, Authorization, SENTRY_DSN) — the rest is settings. */
 const SECRET_NAME = /(pass(word|wd|phrase)|secret|token|(api|private|access)key|authorization|credentials?|cookie|signature|dsn|webhook([_-]?url)?|connection[_-]?string|(^|[_-])(pass|pwd|key|auth|pat))$/i;
 /** …except keys meant to be public (STRIPE_PUBLISHABLE_KEY, NEXT_PUBLIC_…, an anon key). */
@@ -135,6 +136,7 @@ export function lock() {
   dek = null;
   knownSecrets.clear();
   pushSecrets.clear();
+  clearCardMasks();
   secretsForgotten++;
   emitStatus();
 }
@@ -361,6 +363,14 @@ export function rememberSecret(value: string | null | undefined, secret = true) 
   if (secret && value.length >= 8 && !PLAIN.test(value)) pushSecrets.add(value);
 }
 
+/** A card number in every way pages print it: masked in transcripts, logs and what agents read from the browser, never pushed. */
+export function rememberCardNumber(number: string) {
+  for (const variant of addCardMask(number)) {
+    knownSecrets.add(variant);
+    pushSecrets.add(variant);
+  }
+}
+
 /**
  * Remember every value of an env/header map, plus the token of "Bearer <token>"-style auth values and the password
  * inside a URL. Only values under a name that says secret count as one: NODE_ENV=production is a setting.
@@ -390,6 +400,13 @@ function loadKnownSecrets() {
     for (const row of all<{ id: string; secret_enc: string }>("SELECT id, secret_enc FROM totp")) {
       try {
         rememberSecret(decrypt(dek, row.secret_enc, `totp.secret:${row.id}`));
+      } catch {
+        /* ignore */
+      }
+    }
+    for (const row of all<{ id: string; number_enc: string }>("SELECT id, number_enc FROM payment_cards")) {
+      try {
+        rememberCardNumber(decrypt(dek, row.number_enc, `payment_cards.number:${row.id}`));
       } catch {
         /* ignore */
       }

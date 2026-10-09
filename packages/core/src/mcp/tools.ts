@@ -26,6 +26,9 @@ import type {
 } from "@godmode/shared";
 import {
   AGENT_COLORS,
+  cardExpired,
+  cardLabel,
+  formatMoney,
   CHARACTER_BODIES,
   CHARACTER_EYES,
   CHARACTER_FACES,
@@ -57,6 +60,7 @@ import {
   waitsForSubtasks,
 } from "@godmode/shared";
 import type { RunContext } from "../types";
+import type { CardFillKind } from "../browser/fill";
 import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
 import { logger } from "../log";
 import { hasAppSecret, isUnlocked, redact } from "../vault/vault";
@@ -92,6 +96,22 @@ import {
   updateCredential,
 } from "../vault/credentials";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
+import {
+  CARD_FIELDS,
+  attachQuestion,
+  cardFieldValue,
+  cardFillHosts,
+  cardsForAgent,
+  dropPurchase,
+  getCard,
+  getPurchase,
+  hasCardsForAgent,
+  markFilled,
+  purchaseForFill,
+  requestPurchase,
+  settlePurchase,
+  type CardField,
+} from "../vault/cards";
 import { nameGuessMatchesHost } from "../vault/match";
 import { chatWorkspaceId, currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
 import { currentVmPage, fillIntoVm } from "../vm/guest";
@@ -469,6 +489,31 @@ async function fillScopeFor(target: FillTarget, login: Credential): Promise<{ sc
     return { scope, guessHost: null };
   }
   return { scope: { allowedHosts: [...scope.allowedHosts, host], httpHosts: scope.httpHosts }, guessHost: host };
+}
+
+/** The checkout field each card value goes into, and how the agent calls it. */
+const CARD_FILL: Record<CardField, { kind: CardFillKind; label: string }> = {
+  number: { kind: "cc-number", label: "card number" },
+  expiry: { kind: "cc-exp", label: "expiry date" },
+  exp_month: { kind: "cc-exp-month", label: "expiry month" },
+  exp_year: { kind: "cc-exp-year", label: "expiry year" },
+  cvc: { kind: "cc-csc", label: "security code" },
+  name: { kind: "cc-name", label: "name on the card" },
+  address_line1: { kind: "address-line1", label: "billing street" },
+  address_line2: { kind: "address-line2", label: "second address line" },
+  postal_code: { kind: "postal-code", label: "billing postal code" },
+  city: { kind: "address-level2", label: "billing city" },
+  state: { kind: "address-level1", label: "billing state" },
+};
+
+/** Paying with a card: the agent has one, and the run is real work (not a condition check or a dream). */
+const mayPay = (agent: Agent, ctx: RunContext) => !isCheckRun(ctx) && hasCardsForAgent(agent);
+
+/** Cards are typed only into Godmode's own browser on this computer, never into a VM (its shell could read the page). */
+function cardBrowser(agent: Agent, ctx: RunContext): { profileId: string; conversationId: string } {
+  const target = requireBrowser(agent, ctx);
+  if ("vmId" in target) throw new HttpError(403, "Saved cards are only typed into Godmode's browser on this computer, not into a VM. Ask the human to pay this one.");
+  return target;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1078,6 +1123,172 @@ const TOOLS: ToolDef[] = [
       const code = codeForAgent(agent, id);
       audit(`agent:${agent.id}`, "totp.reveal", id, { field: "totp", runId: ctx.runId });
       return json({ code: code.code, secondsRemaining: code.remaining });
+    },
+  }),
+
+  defineTool({
+    name: "vault_list_cards",
+    description:
+      "List the payment cards in the Godmode vault you may pay with: brand, last 4 digits, currency, limits and what this month already committed. Never includes the number, security code or address — you never see those. To pay: open the checkout page, call vault_card_purchase, then vault_fill_card.",
+    schema: z.object({}),
+    when: mayPay,
+    run: (_args, { agent }) => {
+      const cards = cardsForAgent(agent);
+      if (!cards.length) return "No payment cards are available to you.";
+      const money = (minor: number | null, currency: string) => (minor === null ? null : formatMoney(minor, currency));
+      return json(
+        cards.map((c) => ({
+          id: c.id,
+          name: c.name,
+          card: cardLabel(c),
+          status: c.frozen ? "frozen" : cardExpired(c) ? "expired" : "active",
+          currency: c.currency,
+          limitPerPurchase: money(c.limitPerPurchase, c.currency),
+          monthlyLimit: money(c.limitMonthly, c.currency),
+          committedThisMonth: formatMoney(c.spentThisMonth, c.currency),
+          ...(c.limitMonthly !== null ? { leftThisMonth: formatMoney(Math.max(0, c.limitMonthly - c.spentThisMonth), c.currency) } : {}),
+          approval:
+            c.askAbove === null ? "not needed within the limits" : c.askAbove === 0 ? "the human approves every purchase" : `the human approves purchases above ${formatMoney(c.askAbove, c.currency)}`,
+          ...(c.allowedSites.length ? { onlyOn: c.allowedSites } : {}),
+          savedFields: ["number", "expiry", ...(c.hasCvc ? ["cvc"] : []), ...(c.holderName ? ["name"] : []), ...(c.hasBilling ? ["billing address"] : [])],
+          ...(c.billingCountry ? { billingCountry: c.billingCountry } : {}),
+        })),
+      );
+    },
+  }),
+
+  defineTool({
+    name: "vault_card_purchase",
+    description:
+      "Ask to pay with a saved card, on the checkout page that is open in your browser now. Godmode checks the amount against the card's limits; above the card's approval threshold the human is asked first and this turn waits for the decision. The purchase is bound to the site of the open page (plus the payment providers it embeds). `amount` is the total you will be charged now, taxes and fees included, in the card's currency. Only buy what the task really needs, and prefer monthly plans and the smallest plan that works. Then call vault_fill_card for each card field, check the total on the page, click the pay button yourself and report the outcome with vault_card_purchase_result.",
+    schema: z.object({
+      cardId: z.string().describe("Card id from vault_list_cards"),
+      amount: z.number().positive().max(1_000_000).describe("Total charged now, in the card's currency, e.g. 24.99"),
+      currency: z.string().length(3).describe("The card's currency, e.g. EUR"),
+      merchant: z.string().min(1).max(200).describe('Who you pay and for what, e.g. "OpenAI · ChatGPT Plus"'),
+      description: z.string().min(1).max(1000).describe("Why the task needs it, in one or two sentences (the human reads it)"),
+      recurrence: z.enum(["once", "monthly", "yearly"]).optional().describe("A subscription that renews monthly or yearly; default once"),
+    }),
+    when: mayPay,
+    run: async ({ cardId, amount, currency, merchant, description, recurrence }, { agent, ctx }) => {
+      const browser = cardBrowser(agent, ctx);
+      const page = await pageOf(browser);
+      const site = hostnameOf(page?.url ?? "");
+      if (!page || !site || !/^https:\/\//i.test(page.url)) {
+        return fail("Open the checkout page (https) in the browser first: the card is bound to the site where you pay.");
+      }
+      const every = recurrence === "monthly" ? "month" : recurrence === "yearly" ? "year" : null;
+      const { purchase, card, needsApproval } = requestPurchase(agent, {
+        cardId,
+        amount: Math.round(amount * 100),
+        currency,
+        merchant: redact(merchant),
+        description: redact(description),
+        recurrence: recurrence ?? "once",
+        site,
+        runId: ctx.runId,
+        conversationId: ctx.conversationId,
+      });
+      const price = formatMoney(purchase.amount, purchase.currency);
+      audit(`agent:${agent.id}`, "card.purchase_request", purchase.id, {
+        cardId: card.id,
+        amount: purchase.amount,
+        currency: purchase.currency,
+        merchant: purchase.merchant,
+        site,
+        recurrence: purchase.recurrence,
+        needsApproval,
+        runId: ctx.runId,
+      });
+      const renews = every ? `, then ${price} every ${every} until cancelled` : "";
+      const next = `Type the card in with vault_fill_card({ purchaseId: "${purchase.id}", field }) — "number", "expiry" (or "exp_month" + "exp_year"), "cvc", and "name" or the billing address fields when the form asks. Before you click the pay button, check that the total on the page is ${price}; if it is higher, don't pay — ask again with the right amount. If the bank asks for a confirmation (3-D Secure, a code, an app), give the human a task for it. After paying, call vault_card_purchase_result.`;
+      if (!needsApproval) return `Purchase ${purchase.id}: ${price} to ${purchase.merchant} on ${site}${renews} — approved within the limits of ${cardLabel(card)}. ${next}`;
+      if (!canAsk(agent, ctx)) {
+        dropPurchase(purchase.id);
+        return fail(
+          `${price} needs the human's OK on this card, and this run can't ask (another agent handed you the task). Report back what you want to buy, for how much and why, so it can be approved.`,
+        );
+      }
+      const committed =
+        card.limitMonthly !== null
+          ? `${formatMoney(card.spentThisMonth, card.currency)} of the ${formatMoney(card.limitMonthly, card.currency)} monthly limit committed, this one included`
+          : `${formatMoney(card.spentThisMonth, card.currency)} committed this month, this one included`;
+      const asked = askQuestion(ctx, {
+        kind: "approval",
+        action: `Pay ${price} to ${purchase.merchant} with ${cardLabel(card)}`,
+        reason: purchase.description,
+        affects: `Charges "${card.name}" (${cardLabel(card)}) ${price} on ${site}${renews}. ${committed}. Godmode types the card only on ${site} and its payment provider; the agent never sees the card details.`,
+      });
+      if (!asked.ok || !asked.id) {
+        dropPurchase(purchase.id);
+        return fail(asked.text);
+      }
+      attachQuestion(purchase.id, asked.id);
+      return `${asked.text} If it is approved: ${next}`;
+    },
+  }),
+
+  defineTool({
+    name: "vault_fill_card",
+    description:
+      'Type one field of an approved purchase\'s card into the checkout page — Godmode fills it, you never see the value, and the number and security code show as dots afterwards. Works only for your own approved purchase (vault_card_purchase), in this chat, on the purchase\'s site or the payment provider it embeds (Stripe, Adyen, PayPal/Braintree, Shopify, Paddle and others), incl. their iframes. The field is found automatically (autocomplete attributes, labels, also <select> dropdowns for expiry month/year); pass a CSS selector only if that picks the wrong field. It never submits: click the pay button yourself after checking the total.',
+    schema: z.object({
+      purchaseId: z.string().describe("Purchase id from vault_card_purchase"),
+      field: z.enum(CARD_FIELDS),
+      selector: z.string().optional().describe("CSS selector of the input; default: the best match on the page"),
+    }),
+    when: mayPay,
+    run: async ({ purchaseId, field, selector }, { agent, ctx }) => {
+      const browser = cardBrowser(agent, ctx);
+      const { purchase, row } = purchaseForFill(agent, purchaseId, ctx.conversationId);
+      const { kind, label } = CARD_FILL[field];
+      const value = cardFieldValue(row, field);
+      if (!value) return fail(`This card has no ${label} saved. If the form requires it, ask the human to add it to the card in the vault, and say so in your summary.`);
+      const result = await fillInto(browser, { text: value, kind, selector, allowedHosts: cardFillHosts(purchase) });
+      audit(`agent:${agent.id}`, "card.fill", purchase.cardId, { purchaseId, field, runId: ctx.runId, ok: result.ok });
+      if (!result.ok) return fail(`Could not fill the ${label}: ${scrub(result.detail, value)}`);
+      const first = field === "number" && !purchase.filledAt;
+      markFilled(purchase.id, purchase.cardId);
+      if (first) {
+        const card = getCard(purchase.cardId);
+        notify(
+          "info",
+          `${agent.name} is paying ${formatMoney(purchase.amount, purchase.currency)} · ${purchase.merchant}`,
+          `${cardLabel(card)} on ${purchase.site}${purchase.recurrence === "once" ? "" : ` · renews ${purchase.recurrence}`}`,
+          `/chat/${ctx.conversationId}`,
+        );
+      }
+      return `Filled the ${label} into ${result.url}.${result.detail.includes("Warning") ? ` ${result.detail}` : ""}`;
+    },
+  }),
+
+  defineTool({
+    name: "vault_card_purchase_result",
+    description:
+      "Report how a card payment went, right after the page confirms it (or fails): paid, or failed (declined, cancelled, never submitted). Pass the amount actually charged if it differs, and the order or invoice number in the note. A failure after the card was typed in keeps counting toward the card's limits until the human confirms nothing was charged.",
+    schema: z.object({
+      purchaseId: z.string(),
+      outcome: z.enum(["paid", "failed"]),
+      amount: z.number().positive().max(1_000_000).optional().describe("What was actually charged, if it differs from the approved amount"),
+      note: z.string().max(500).optional().describe("Order or invoice number, or why it failed"),
+    }),
+    when: mayPay,
+    run: ({ purchaseId, outcome, amount, note }, { agent, ctx }) => {
+      const before = getPurchase(purchaseId);
+      const p = settlePurchase(agent, purchaseId, outcome, { amount: amount === undefined ? undefined : Math.round(amount * 100), note: note ? redact(note) : "" });
+      audit(`agent:${agent.id}`, "card.purchase_result", p.id, { outcome, amount: p.amount, approved: before.amount, runId: ctx.runId });
+      const price = formatMoney(p.amount, p.currency);
+      if (outcome === "paid" && p.amount > before.amount) {
+        notify(
+          "warning",
+          `${agent.name} paid more than approved: ${price} · ${p.merchant}`,
+          `${formatMoney(before.amount, before.currency)} was approved.${p.note ? ` ${p.note}` : ""}`,
+          `/chat/${ctx.conversationId}`,
+        );
+      }
+      return outcome === "paid"
+        ? `Recorded: ${price} paid to ${p.merchant}${p.recurrence === "once" ? "" : ` (renews ${p.recurrence})`}. Mention it in your final summary.`
+        : `Recorded as failed.${before.filledAt ? " The card was typed in, so the amount keeps counting toward the card's limits until the human confirms nothing was charged." : ""} Mention it in your final summary.`;
     },
   }),
 

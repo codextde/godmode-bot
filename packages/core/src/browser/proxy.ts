@@ -8,6 +8,7 @@
 import { randomBytes } from "node:crypto";
 import type { Server, ServerWebSocket } from "bun";
 import { logger } from "../log";
+import { maskCardNumbers } from "../vault/cardMask";
 import { probeCdp } from "./cdp";
 import type { RunningBrowser } from "./state";
 import type { TabRegistry, TargetInfo } from "./tabs";
@@ -312,8 +313,9 @@ class ChatConnection {
     return !!this.tabs && this.tabs.visibleTo(info, this.chat);
   }
 
+  /** Saved card numbers never reach the agent: a number Godmode typed into a checkout field reads as "•••• 4242". */
   private send(raw: string) {
-    if (!this.closed) this.ws.send(raw);
+    if (!this.closed) this.ws.send(maskCardNumbers(raw));
   }
 
   end(code: number, reason: string) {

@@ -1,4 +1,9 @@
 import type {
+  CardPurchase,
+  CardPurchasePatch,
+  PaymentCard,
+  PaymentCardInput,
+  PaymentCardSecrets,
   AttentionItem,
   AwaySummary,
   BudgetOverview,
@@ -404,6 +409,19 @@ export const api = {
       form.set("ids", JSON.stringify(ids));
       return request<PasswordImportResult>("POST", "/api/credentials/import", form, withGrant(grant));
     },
+  },
+
+  cards: {
+    list: (q: { workspaceId?: ScopeFilter; search?: string } = {}) => get<PaymentCard[]>("/api/cards", q),
+    get: (id: string) => get<PaymentCard>(`/api/cards/${id}`),
+    reveal: (id: string, grant?: string) => request<PaymentCardSecrets>("POST", `/api/cards/${id}/reveal`, {}, withGrant(grant)),
+    create: (input: PaymentCardInput) => post<PaymentCard>("/api/cards", input),
+    /** Loosening a card (higher limits, fewer approvals, more agents or sites, unfreezing) needs a grant. */
+    update: (id: string, input: Partial<PaymentCardInput>, grant?: string) => request<PaymentCard>("PATCH", `/api/cards/${id}`, input, withGrant(grant)),
+    delete: (id: string) => del<{ ok: true }>(`/api/cards/${id}`),
+    purchases: (q: { cardId?: string; limit?: number } = {}) => get<CardPurchase[]>("/api/card-purchases", q),
+    /** Marking a purchase failed or a subscription ended frees room under the limits: needs a grant. */
+    updatePurchase: (id: string, input: CardPurchasePatch, grant?: string) => request<CardPurchase>("PATCH", `/api/card-purchases/${id}`, input, withGrant(grant)),
   },
 
   totp: {

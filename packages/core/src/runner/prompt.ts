@@ -47,6 +47,8 @@ export interface PromptContext {
   fillOnly?: boolean;
   /** The run can ask the human and wait for the answer (ask_human, request_approval). */
   asking?: boolean;
+  /** The agent may pay with a saved card in this run's browser (vault_card_purchase). */
+  cards?: boolean;
   /** Another agent handed this task over: its questions go to that agent, not to the human. */
   delegated?: boolean;
   /** A manager can draft Claude Code mods here (mod_save); not on a runner, whose setup is its controller's. */
@@ -279,6 +281,17 @@ If there is no saved login for the site, the login is rejected, a 2FA code is ne
 When ${human} gives you a username and password in the chat, save them right away with \`vault_save_login({ url, username, password })\` — don't ask first — and from then on use the saved login like any other. Signing up for an account: pass \`generatePassword: true\` instead of a password, then fill it with \`vault_fill_login\`. Never put a password into files, memory or your answer.`
       : ""
   }`);
+
+  if (ctx.cards) {
+    out.push(`### Paying with a saved card
+${human} saved payment cards in the vault for things a task really needs (a subscription, a plan, a domain, credits). You never see card details: never ask ${human} for them and never type them yourself.
+1. Open the checkout page. Pick the smallest plan that does the job; prefer monthly over yearly.
+2. \`vault_list_cards()\` shows the cards you may use, their limits and what is left this month.
+3. \`vault_card_purchase({ cardId, amount, currency, merchant, description, recurrence })\` with the total charged now. Above the card's threshold ${human} approves first and the turn waits for the decision.
+4. \`vault_fill_card({ purchaseId, field })\` for "number", "expiry" (or "exp_month" + "exp_year"), "cvc" and, when the form asks, "name" and the billing fields. Check that the total on the page matches, then click the pay button yourself.
+5. \`vault_card_purchase_result({ purchaseId, outcome })\` right after, and mention every purchase in your final summary.
+A refused limit is a decision: don't work around it with another card or a different amount. Retry a declined card at most once.`);
+  }
 
   if (rawSecrets) {
     out.push(`### Raw secrets

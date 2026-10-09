@@ -16,6 +16,7 @@ import { findChrome } from "../src/browser/chrome";
 import { getRunning } from "../src/browser/state";
 import { TabRegistry, type TargetInfo } from "../src/browser/tabs";
 import { openChatLease, releaseChatLease } from "../src/browser/proxy";
+import { addCardMask, clearCardMasks } from "../src/vault/cardMask";
 import { startLiveView, stopLiveView } from "../src/browser/screencast";
 import * as manager from "../src/browser/manager";
 
@@ -164,7 +165,9 @@ suite("parallel chats in one browser", () => {
         const body =
           path === "/login"
             ? `<!doctype html><title>Login</title><input id="pass" type="password">`
-            : `<!doctype html><title>${path.slice(1)}</title><p>${path}</p>`;
+            : path === "/checkout"
+              ? `<!doctype html><title>Checkout</title><input id="num" autocomplete="cc-number">`
+              : `<!doctype html><title>${path.slice(1)}</title><p>${path}</p>`;
         return new Response(body, { headers: { "content-type": "text/html; charset=utf-8" } });
       },
     });
@@ -269,6 +272,36 @@ suite("parallel chats in one browser", () => {
     expect((await manager.currentPage(profileId, "cnv_b"))?.url).toBe(`${origin}/login`);
     const none = await manager.fillIntoPage(profileId, { text: "x", kind: "password", conversationId: "cnv_none", allowedHosts: ["127.0.0.1"] });
     expect(none.detail).toContain("no open tab");
+  });
+
+  test("a card number Godmode typed reads back masked through the chat's endpoint", async () => {
+    const sessionId = await openIn(chats.a!, "/checkout");
+    addCardMask("4242424242424242");
+    try {
+      const res = await manager.fillIntoPage(profileId, {
+        text: "4242424242424242",
+        kind: "cc-number",
+        conversationId: "cnv_a",
+        allowedHosts: ["127.0.0.1"],
+        httpHosts: ["127.0.0.1"],
+      });
+      expect(res.ok).toBe(true);
+      const read = await chats.a!.client.send<{ result: { value: string } }>(
+        "Runtime.evaluate",
+        { expression: "document.getElementById('num').value + ' ' + document.documentElement.outerHTML", returnByValue: true },
+        sessionId,
+      );
+      expect(read.result.value).toStartWith("•••• 4242 ");
+      expect(read.result.value).not.toContain("4242424242424242");
+      const s = await attachToPage(rb().client, rb().tabs.currentPage("cnv_a")!.targetId);
+      try {
+        expect(await s.evaluate<string>("document.getElementById('num').value")).toBe("4242424242424242");
+      } finally {
+        await s.detach();
+      }
+    } finally {
+      clearCardMasks();
+    }
   });
 
   test("a chat's live view shows its own tab", async () => {

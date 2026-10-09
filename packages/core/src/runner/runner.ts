@@ -63,6 +63,7 @@ import { setRunSnapshots, setWelcomeEvents } from "../server/ws";
 import { excerpt, logger } from "../log";
 import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson } from "../util";
 import { isUnlocked, redact, redactionEpoch } from "../vault/vault";
+import { hasCardsForAgent } from "../vault/cards";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentFailedRun, setAgentStatus, teamOf, touchAgentRun } from "../agents/service";
 import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
@@ -1969,6 +1970,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         fillOnly: conv.secret_access === "fill",
         // Delegated work reports to the run that handed it over; checks only observe.
         asking: job.trigger !== "check" && !job.parentRunId,
+        cards: !vm && job.trigger !== "check" && "browser" in mcp.mcpServers && hasCardsForAgent(agent),
         delegated: !!job.parentRunId,
         mods: config().role !== "runner",
         savesLogins: config().role !== "runner" && job.trigger !== "check",

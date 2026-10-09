@@ -8,6 +8,7 @@ import {
   Bot,
   Box,
   ChevronRight,
+  CreditCard,
   Globe,
   MonitorUp,
   Inbox,
@@ -180,6 +181,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const accessNav: NavItem[] = [
     { to: "/vault/logins", label: "Logins", icon: <KeyRound /> },
     { to: "/vault/2fa", label: "2FA Codes", icon: <ShieldCheck /> },
+    { to: "/vault/cards", label: "Cards", icon: <CreditCard /> },
     { to: "/integrations", label: "Integrations", icon: <Plug /> },
     { to: "/messaging", label: "Messaging", icon: <MessageCircle />, badge: boot?.counts.messagingRequests || undefined },
   ];

@@ -16,7 +16,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { SettingsGroup } from "./settings-kit";
 
-const COMMON_ACTIONS = ["credential.fill", "credential.reveal", "totp.fill", "totp.reveal", "vault.unlock", "vault.lock", "vault.passphrase", "backup.export", "backup.import"];
+const COMMON_ACTIONS = ["credential.fill", "credential.reveal", "totp.fill", "totp.reveal", "card.fill", "card.purchase_request", "card.reveal", "vault.unlock", "vault.lock", "vault.passphrase", "backup.export", "backup.import"];
 
 function actionTone(action: string): string {
   if (action.includes("reveal")) return "border-warning/30 bg-warning/[0.08] text-warning";

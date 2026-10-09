@@ -1,6 +1,7 @@
 import { GATEWAY_DONE } from "@godmode/shared";
 import type { LucideIcon } from "lucide-react";
 import {
+  CreditCard,
   AlarmClock,
   AlarmClockOff,
   AppWindow,
@@ -300,6 +301,10 @@ const GODMODE_TOOLS = new Set([
   "vault_save_login",
   "vault_get_login",
   "vault_get_totp",
+  "vault_list_cards",
+  "vault_card_purchase",
+  "vault_fill_card",
+  "vault_card_purchase_result",
   "report_missing_login",
   "agents_list",
   "agent_get",
@@ -392,6 +397,17 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       return { kind: "vault", icon: Eye, title: credLabel ? `Revealed login for ${credLabel}` : "Revealed a login", detail: "audited" };
     case "vault_get_totp":
       return { kind: "vault", icon: Eye, title: "Read a 2FA code", detail: "audited" };
+    case "vault_list_cards":
+      return { kind: "vault", icon: CreditCard, title: "Looked up saved cards" };
+    case "vault_card_purchase": {
+      const amount = typeof input.amount === "number" ? `${str(input.currency).toUpperCase()} ${input.amount.toFixed(2)}`.trim() : "";
+      const merchant = str(input.merchant);
+      return { kind: "vault", icon: CreditCard, title: `Asked to pay${amount ? ` ${amount}` : ""}${merchant ? ` · ${truncate(merchant, 60)}` : ""}`, detail: str(input.description) || undefined };
+    }
+    case "vault_fill_card":
+      return { kind: "vault", icon: CreditCard, title: `Entered card ${str(input.field).replace(/_/g, " ") || "details"}`, detail: "from vault · never shown to the AI" };
+    case "vault_card_purchase_result":
+      return { kind: "vault", icon: CreditCard, title: str(input.outcome) === "failed" ? "Payment failed" : "Payment done", detail: str(input.note) || undefined };
     case "report_missing_login": {
       const service = str(input.service) || hostOf(input.url) || "a service";
       return { kind: "missing-login", icon: ShieldAlert, title: `Needs a login for ${service}`, detail: str(input.reason) || undefined };

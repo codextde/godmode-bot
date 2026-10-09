@@ -223,7 +223,7 @@ export type AskInput =
  * The gateway's `ask_human` / `request_approval`: put the question on the run, which stands still for it at its next
  * step. Nothing is stored or announced until then. Returns what the tool answers the model.
  */
-export function askQuestion(ctx: { runId: string; conversationId: string; workspaceId: string | null }, input: AskInput): { ok: boolean; text: string } {
+export function askQuestion(ctx: { runId: string; conversationId: string; workspaceId: string | null }, input: AskInput): { ok: boolean; text: string; id?: string } {
   const human = humanName();
   const refused = questionRefusal(ctx.runId, human);
   if (refused) return { ok: false, text: refused };
@@ -278,6 +278,7 @@ export function askQuestion(ctx: { runId: string; conversationId: string; worksp
   if (late) return { ok: false, text: late };
   return {
     ok: true,
+    id,
     text:
       block.kind === "approval"
         ? `Asked ${human} to approve: “${block.title}”. This turn stops here and continues with the decision — don't call any more tools and don't write an answer now.`
