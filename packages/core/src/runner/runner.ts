@@ -70,6 +70,8 @@ import { projectOfChat } from "../services/projects";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
 import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, onLaunchProblem, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
+import { chatLeaseUrl } from "../browser/proxy";
+import { RUN_CDP_ENV } from "../browser/cdpGuard";
 import {
   addMessage,
   appendTranscript,
@@ -1862,8 +1864,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const ultracode = !dreaming && job.trigger !== "check" && ultracodeFor(model, wantsUltracode === true);
   // The human's mods (Mods page). Dreams and condition checks are small jobs with a fixed shape: they load none.
   const mods = dreaming || job.trigger === "check" ? null : await modsForRun(agent, job.runId, (text) => job.acc.addNotice("warning", text));
-  // Between two steps Claude Code asks for the messages waiting in the chat's queue. Dreams and condition checks run in
-  // chats nobody writes to.
+  // Between two steps Claude Code asks for the messages waiting in the chat's queue, and before shell commands and file
+  // writes whether they reach for another browser profile. Dreams and condition checks run in chats nobody writes to.
+  const hook = (path: string) => ({ type: "http", url: `${gatewayUrl()}/hooks/${path}`, timeout: 10, headers: { Authorization: `Bearer ${res.token}` } });
   const hooksPath =
     dreaming || job.trigger === "check"
       ? null
@@ -1872,9 +1875,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
           `godmode-settings-${job.runId}.json`,
           JSON.stringify({
             hooks: {
-              PostToolBatch: [
-                { hooks: [{ type: "http", url: `${gatewayUrl()}/hooks/post-tool-batch`, timeout: 10, headers: { Authorization: `Bearer ${res.token}` } }] },
-              ],
+              PreToolUse: [{ matcher: "Bash|Write|Edit|MultiEdit", hooks: [hook("pre-tool-use")] }],
+              PostToolBatch: [{ hooks: [hook("post-tool-batch")] }],
             },
             // Claude Code honours one --settings value: the session's Ultracode and the mods' options go with the hooks.
             ...(ultracode ? { ultracode: true } : {}),
@@ -1921,6 +1923,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         settings,
         peers,
         browserAvailable: "browser" in mcp.mcpServers,
+        browserCdpEnv: !vm && "browser" in mcp.mcpServers ? RUN_CDP_ENV : null,
         computer,
         vm: promptVm,
         ssh,
@@ -2030,6 +2033,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
   // doesn't load. With it they reach the chat as notes from the mod. It also watches the folders — the run's own copies.
   if (mods?.dirs.length) env.CLAUDE_CODE_PLUGIN_DIR_WATCH = "1";
+  // Scripts that drive the browser themselves (Playwright, puppeteer) get the run's own endpoint: its profile, its chat's tabs.
+  const cdpUrl = !vm && mcp.mcpServers[BROWSER_MCP_NAME] ? chatLeaseUrl(job.runId) : null;
+  if (cdpUrl) env[RUN_CDP_ENV] = cdpUrl;
   const logPath = runLogPath(agent, getRun(job.runId));
   mkdirSync(join(logPath, ".."), { recursive: true });
   const logSink: RunLog = job.resumed ? createWriteStream(logPath, { flags: "a" }) : Bun.file(logPath).writer();
