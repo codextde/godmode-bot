@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { mkdirSync, chmodSync } from "node:fs";
 import { DEFAULT_PORT } from "@godmode/shared";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 /** The commit a compiled core was built from (scripts/build.ts); "dev" when it runs from source. */
 export const BUILD = process.env.GODMODE_BUILD || "dev";
 /** A `bun build --compile` binary (release app sidecar, server binary, Docker image), not the sources. */

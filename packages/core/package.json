@@ -1,6 +1,6 @@
 {
   "name": "@godmode/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Godmode Bot core daemon: agents, runner (Claude Code CLI), vault, browser, scheduler, MCP gateway and HTTP/WebSocket API.",

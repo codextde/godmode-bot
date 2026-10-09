@@ -1,6 +1,6 @@
 {
   "name": "@godmode/cloud",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Godmode Cloud — accounts, billing, admin dashboard and the relay gateway that lets you reach your Godmode from any browser.",

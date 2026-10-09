@@ -1,6 +1,6 @@
 [package]
 name = "godmode-bot"
-version = "0.1.0"
+version = "0.2.0"
 description = "Godmode Bot — an AI coworker that works in your browser with your logins, 2FA and tools."
 authors = ["Codext GmbH"]
 license = "MIT"
