@@ -10,23 +10,47 @@ import { Icon } from "./icon";
 import { Markdown } from "./markdown";
 import { Row, T, tap } from "./ui";
 import { toolLabel } from "@/lib/format";
+import { useNow } from "@/lib/hooks";
 import { radius, space, useColors } from "@/lib/theme";
 
 type Step = Extract<MessageBlock, { type: "tool_use" | "thinking" }>;
-type Part = { kind: "block"; block: MessageBlock } | { kind: "steps"; steps: Step[] };
+type ToolUse = Extract<MessageBlock, { type: "tool_use" }>;
+type Part = { kind: "block"; block: MessageBlock } | { kind: "steps"; steps: Step[] } | { kind: "subagent"; block: ToolUse; children: MessageBlock[] };
 
-/** Consecutive tool calls and thinking collapse into one "steps" row; subagent output stays inside its tool. */
+const isSubagent = (block: MessageBlock) => block.type === "tool_use" && (block.name === "Task" || block.name === "Agent");
+
+/** Consecutive tool calls and thinking collapse into one "steps" row; a subagent gets its own card with its work inside. */
 function group(blocks: MessageBlock[]): Part[] {
   const parts: Part[] = [];
+  const children = new Map<string, MessageBlock[]>();
+  for (const block of blocks) {
+    const parent = "parentToolUseId" in block ? block.parentToolUseId : null;
+    if (parent) children.set(parent, [...(children.get(parent) ?? []), block]);
+  }
   for (const block of blocks) {
     if ("parentToolUseId" in block && block.parentToolUseId) continue;
-    if (block.type === "tool_use" || block.type === "thinking") {
+    if (block.type === "tool_use" && isSubagent(block)) parts.push({ kind: "subagent", block, children: children.get(block.id) ?? [] });
+    else if (block.type === "tool_use" || block.type === "thinking") {
       const last = parts[parts.length - 1];
       if (last?.kind === "steps") last.steps.push(block);
       else parts.push({ kind: "steps", steps: [block] });
     } else parts.push({ kind: "block", block });
   }
   return parts;
+}
+
+/**
+ * Where a subagent stands. One in the background returns its tool call at once: its task says when it works and when it
+ * is done, and its report comes with the task's end. Still running on a turn that ended means it was cut off.
+ */
+function subagentState(block: ToolUse, streaming: boolean) {
+  const task = block.task;
+  const background = task?.background ?? block.result?.startsWith("Async agent launched") ?? false;
+  const status = task ? (task.status === "running" && !streaming ? "stopped" : task.status) : null;
+  const running = status ? status === "running" : !background && streaming && block.result === undefined;
+  const failed = status === "failed" || !!block.isError;
+  const result = background ? task?.summary : block.result;
+  return { task, background, status, running, failed, result };
 }
 
 const SOURCE_CAPTION = { automation: "Automation", delegation: "From another agent", task: "Board ticket" } as const;
@@ -61,7 +85,16 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
   return (
     <Pressable onLongPress={content ? () => copy(content) : undefined} style={styles.assistant}>
       {parts.length === 0 && streaming ? <Thinking /> : null}
-      {parts.map((p, i) => (p.kind === "steps" ? <Steps key={i} steps={p.steps} live={streaming && p === last} /> : <Block key={i} block={p.block} />))}
+      {parts.map((p, i) =>
+        p.kind === "steps" ? (
+          <Steps key={i} steps={p.steps} live={streaming && p === last} />
+        ) : p.kind === "subagent" ? (
+          <SubagentCard key={p.block.id} block={p.block} childBlocks={p.children} streaming={!!streaming} />
+        ) : (
+          <Block key={i} block={p.block} />
+        ),
+      )}
+      {streaming ? <BackgroundAgents parts={parts} /> : null}
       {streaming && last?.kind === "block" && last.block.type === "text" ? <Caret /> : null}
     </Pressable>
   );
@@ -182,6 +215,24 @@ function Block({ block }: { block: MessageBlock }) {
         </View>
       );
     }
+    case "human_task": {
+      const done = block.outcome === "done";
+      return (
+        <View style={[styles.callout, { backgroundColor: c.sunken, alignItems: "flex-start" }]}>
+          <Icon name={done ? "check" : "close"} size={14} color={c.textMuted} style={{ marginTop: 2 }} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <T variant="footnote" style={{ fontWeight: "600" }}>
+              {done ? "You did" : "You couldn't do"} H-{block.number}: {block.title}
+            </T>
+            {block.note ? (
+              <T variant="footnote" muted selectable>
+                {block.note}
+              </T>
+            ) : null}
+          </View>
+        </View>
+      );
+    }
     case "pause": {
       // The question card says why a run stands still for an answer.
       if (block.reason === "question") return null;
@@ -200,6 +251,103 @@ function Block({ block }: { block: MessageBlock }) {
     default:
       return null;
   }
+}
+
+function SubagentCard({ block, childBlocks, streaming }: { block: ToolUse; childBlocks: MessageBlock[]; streaming: boolean }) {
+  const c = useColors();
+  const { task, background, status, running, failed, result } = subagentState(block, streaming);
+  const [open, setOpen] = useState<boolean | null>(null);
+  const expanded = open ?? false;
+  const input = (block.input && typeof block.input === "object" ? block.input : {}) as { description?: unknown; subagent_type?: unknown };
+  const title = (typeof input.description === "string" && input.description) || task?.description || "Helper";
+  const tools = childBlocks.filter((b): b is ToolUse => b.type === "tool_use");
+  const steps = Math.max(tools.length, task?.toolUses ?? 0);
+  const state = running ? task?.activity || "Working…" : failed ? "Failed" : status === "stopped" ? "Stopped" : "Done";
+  const meta = [background ? "Background helper" : "Helper", state, steps > 0 ? `${steps} steps` : null, !running && task?.durationMs ? duration(task.durationMs) : null]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <View style={[styles.steps, { borderColor: failed ? c.danger : running ? c.brand : c.border }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={() => {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setOpen(!expanded);
+        }}
+        style={styles.stepsHeader}
+      >
+        <View style={[styles.stepIcon, { backgroundColor: failed ? c.dangerSoft : running ? c.brandSoft : c.sunken }]}>
+          <Icon name="subagent" size={13} color={failed ? c.danger : running ? c.brandStrong : c.textMuted} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T variant="subhead" numberOfLines={1} style={{ fontWeight: "500" }}>
+            {title}
+          </T>
+          <T variant="caption" muted numberOfLines={1} color={failed ? c.danger : undefined}>
+            {meta}
+          </T>
+        </View>
+        {running && task?.startedAt ? <Elapsed since={task.startedAt} /> : null}
+        {running ? <Spinner /> : <Icon name="down" size={11} color={c.textFaint} style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }} />}
+      </Pressable>
+      {expanded && (
+        <Animated.View entering={FadeIn.duration(160)} style={{ gap: 10, paddingTop: 4, paddingBottom: 12, paddingHorizontal: space.md }}>
+          {tools.slice(-12).map((t, i) => (
+            <ToolStep key={t.id ?? i} step={t} />
+          ))}
+          {tools.length > 12 ? (
+            <T variant="caption" muted>
+              and {tools.length - 12} earlier steps
+            </T>
+          ) : null}
+          {result ? (
+            <View style={[styles.report, { backgroundColor: c.sunken }]}>
+              <T variant="eyebrow" muted>
+                {background ? "Report" : "Result"}
+              </T>
+              <Markdown text={result.length > 6000 ? `${result.slice(0, 6000)}…` : result} />
+            </View>
+          ) : running && !tools.length ? (
+            <Thinking />
+          ) : null}
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
+/** Helpers still at work in the background, at the foot of the turn: without this the chat would look idle. */
+function BackgroundAgents({ parts }: { parts: Part[] }) {
+  const c = useColors();
+  const working = parts.flatMap((p) => (p.kind === "subagent" && subagentState(p.block, true).background && subagentState(p.block, true).running ? [p.block] : []));
+  const last = parts[parts.length - 1];
+  if (!working.length || (working.length === 1 && last?.kind === "subagent" && last.block === working[0])) return null;
+  return (
+    <Animated.View entering={FadeIn.duration(200)} style={[styles.background, { borderColor: c.border }]}>
+      <Spinner />
+      <T variant="footnote" muted style={{ flex: 1 }}>
+        {working.length === 1 ? "1 helper is working in the background" : `${working.length} helpers are working in the background`}
+      </T>
+    </Animated.View>
+  );
+}
+
+function Elapsed({ since }: { since: number }) {
+  const now = useNow(1000);
+  return (
+    <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
+      {duration(now - since)}
+    </T>
+  );
+}
+
+function duration(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
 function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
@@ -244,7 +392,7 @@ function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
   );
 }
 
-function ToolStep({ step }: { step: Extract<Step, { type: "tool_use" }> }) {
+function ToolStep({ step }: { step: ToolUse }) {
   const c = useColors();
   const label = toolLabel(step);
   const [more, setMore] = useState(false);
@@ -383,6 +531,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
+  },
+  report: {
+    gap: 6,
+    padding: space.md,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+  },
+  background: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: space.md,
+    paddingVertical: 10,
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderStyle: "dashed",
   },
   shot: {
     width: "100%",

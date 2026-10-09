@@ -1,5 +1,6 @@
 import { isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets, type TaskBlockedKind } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { Task, TaskStatus } from "@godmode/shared";
@@ -8,8 +9,9 @@ import { Composer } from "@/components/composer";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
 import { openChat } from "@/components/rows";
+import { ProjectPicker } from "@/components/project-picker";
 import { STATUS_META, TaskStatusBadge, TYPE_META } from "@/components/task-row";
-import { Avatar, Badge, Button, Card, Row, SectionTitle, T, tap } from "@/components/ui";
+import { Avatar, Badge, Button, Card, ErrorState, LoadingState, Row, SectionTitle, T, tap } from "@/components/ui";
 import { ApiError, api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { activityText } from "@/lib/format";
@@ -25,15 +27,22 @@ export default function TaskScreen() {
   const task = useQuery({ queryKey: qk.task(id), queryFn: () => api.tasks.get(id) });
   const { data: agents, byId } = useAgents();
   const { workspaces } = useWorkspace();
+  const [picking, setPicking] = useState(false);
 
   const onDone = (next: Task) => {
     queryClient.setQueryData(qk.task(id), next);
     void queryClient.invalidateQueries({ queryKey: [...qk.tasks, "list"] });
   };
   const update = useMutation({
-    mutationFn: (patch: { status?: TaskStatus; agentId?: string | null; archived?: boolean }) => api.tasks.update(id, patch),
+    mutationFn: (patch: { status?: TaskStatus; agentId?: string | null; archived?: boolean; projectId?: string | null }) => api.tasks.update(id, patch),
     onSuccess: onDone,
-    onError: (err) => Alert.alert("Couldn't change the task", errorText(err)),
+    onError: (err, patch) =>
+      Alert.alert(
+        "Couldn't change the task",
+        err instanceof ApiError && err.code === "device_forbidden" && patch.projectId !== undefined
+          ? "Update Godmode on your computer to change a ticket's project from the phone."
+          : errorText(err),
+      ),
   });
   const approve = useMutation({
     mutationFn: () => api.tasks.approve(id),
@@ -53,11 +62,27 @@ export default function TaskScreen() {
   });
 
   const t = task.data;
-  if (!t) return <Stack.Title>{task.isError ? "Task not found" : "Task"}</Stack.Title>;
+  if (!t) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center" }}>
+        <Stack.Title>{task.isError ? "Task not found" : "Task"}</Stack.Title>
+        {task.isError ? (
+          <ErrorState title="Couldn't open this task" error={errorText(task.error)} onRetry={() => void task.refetch()} />
+        ) : (
+          <LoadingState label="Loading the task…" />
+        )}
+      </View>
+    );
+  }
 
   const agent = t.agentId ? byId.get(t.agentId) : undefined;
   const workspace = workspaces.find((w) => w.id === t.workspaceId);
-  // In progress isn't working: the ticket may wait for its follow-up, for an answer, or stand still.
+  const projects = workspace?.projects ?? [];
+  const project = projects.find((p) => p.id === t.projectId);
+  const pickProject = () => {
+    tap();
+    setPicking((v) => !v);
+  };  // In progress isn't working: the ticket may wait for its follow-up, for an answer, or stand still.
   const working = t.status === "in_progress" && (t.runStatus === "running" || t.runStatus === "queued" || !!t.activity);
   const waiting = t.status === "in_progress" && (isWaiting(t) || waitsForAnswer(t) || !!t.pause);
   const canFollowUp =
@@ -109,7 +134,26 @@ export default function TaskScreen() {
           {t.archivedAt ? <Badge label="Archived" /> : null}
           <Badge label={TYPE_META[t.type].label} />
           <Badge label={workspace ? `${workspace.icon || "🗂️"} ${workspace.name}` : "Global"} />
+          {projects.length > 0 && !t.archivedAt ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={project ? `Project ${project.name}. Change` : "Add to a project"} hitSlop={6} onPress={pickProject}>
+              <Badge label={project ? `${project.icon ? `${project.icon} ` : ""}${project.name}` : "+ Project"} tone={project ? "brand" : "neutral"} />
+            </Pressable>
+          ) : project ? (
+            <Badge label={`${project.icon ? `${project.icon} ` : ""}${project.name}`} tone="brand" />
+          ) : null}
         </Row>
+        {picking && (
+          <ProjectPicker
+            bleed={space.lg}
+            projects={projects}
+            value={t.projectId}
+            onChange={(projectId) => {
+              setPicking(false);
+              if (projectId !== t.projectId) update.mutate({ projectId });
+            }}
+            hint="Its agent works with the project's context, folders and repositories."
+          />
+        )}
       </View>
 
       <Card style={styles.agent} onPress={agent ? () => router.push({ pathname: "/agent/[id]", params: { id: agent.id } }) : undefined}>

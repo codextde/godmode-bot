@@ -18,3 +18,12 @@ export function useAgents() {
   const byId = useMemo(() => new Map<string, Agent>((query.data ?? []).map((a) => [a.id, a])), [query.data]);
   return { ...query, byId };
 }
+
+/** Tasks agents handed to the human that still wait (open or doing), most urgent first. */
+export function useOpenHumanTasks() {
+  return useQuery({
+    queryKey: qk.humanTaskList("active"),
+    queryFn: () => api.humanTasks.list({ status: "active" }),
+    select: (list) => [...list].sort((a, b) => Number(b.priority === "high") - Number(a.priority === "high") || (a.createdAt < b.createdAt ? 1 : -1)),
+  });
+}

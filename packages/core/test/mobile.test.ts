@@ -272,6 +272,14 @@ describe("phone access", () => {
     const moved = await phone(`/api/tasks/${task.id}`, json("PATCH", { status: "cancelled" }));
     expect(((await moved.json()) as { status: string }).status).toBe("cancelled");
     expect((await phone(`/api/conversations?workspaceId=${ws.id}`, { bearer: device })).status).toBe(200);
+
+    const project = (await (await desktop("/api/projects", { method: "POST", body: JSON.stringify({ workspaceId: ws.id, name: "Docs" }) })).json()) as { id: string };
+    const listedWs = (await (await phone("/api/workspaces", { bearer: device })).json()) as { id: string; projects: { id: string }[] }[];
+    expect(listedWs.find((w) => w.id === ws.id)?.projects.map((p) => p.id)).toEqual([project.id]);
+    const inProject = await phone("/api/tasks", json("POST", { workspaceId: ws.id, projectId: project.id, title: "Write the docs" }));
+    expect(((await inProject.json()) as { projectId: string }).projectId).toBe(project.id);
+    const out = await phone(`/api/tasks/${task.id}`, json("PATCH", { projectId: project.id }));
+    expect(((await out.json()) as { projectId: string }).projectId).toBe(project.id);
   });
 
   test("phones send files with messages and attach them to tasks", async () => {

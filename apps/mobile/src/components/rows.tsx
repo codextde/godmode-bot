@@ -1,8 +1,9 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
-import type { Agent, Conversation } from "@godmode/shared";
+import type { Agent, Conversation, Project } from "@godmode/shared";
 import { agentPresence, presenceLabel } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
+import { ProjectTag } from "./project-picker";
 import { Icon } from "./icon";
 import { Badge, Card, LiveDot, Row, T, tap } from "./ui";
 import { api } from "@/lib/api";
@@ -25,7 +26,18 @@ export function openChat(id: string) {
   router.push({ pathname: "/chat/[id]", params: { id } });
 }
 
-export function ConversationRow({ conversation, agent, running }: { conversation: Conversation; agent?: Agent; running?: boolean }) {
+export function ConversationRow({
+  conversation,
+  agent,
+  running,
+  project,
+}: {
+  conversation: Conversation;
+  agent?: Agent;
+  running?: boolean;
+  /** The project it works on, when the list isn't scoped to it already. */
+  project?: Pick<Project, "name" | "icon">;
+}) {
   const c = useColors();
   const origin = ORIGIN_LABEL[conversation.origin];
   return (
@@ -34,9 +46,11 @@ export function ConversationRow({ conversation, agent, running }: { conversation
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Row style={{ gap: space.sm }}>
           {conversation.pinned && <Icon name="pin" size={11} color={c.textMuted} />}
-          <T variant="headline" numberOfLines={1} style={{ flex: 1, fontSize: 16 }}>
+          <T variant="headline" numberOfLines={1} style={{ flexShrink: 1, fontSize: 16 }}>
             {conversation.title || "New chat"}
           </T>
+          {project ? <ProjectTag project={project} /> : null}
+          <View style={{ flex: 1 }} />
           <T variant="footnote" color={running ? c.brandStrong : c.textMuted} style={running ? { fontWeight: "600" } : undefined}>
             {running ? "Working" : shortTime(conversation.lastMessageAt ?? conversation.createdAt)}
           </T>
