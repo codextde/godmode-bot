@@ -1,8 +1,11 @@
 /** Friendly cron helpers: presets ⇄ cron expressions, validation and human-readable descriptions. */
 import { Cron } from "croner";
-import { formatMinutes, MAX_START_WINDOW_MINUTES, startWindowLimit, startWindowTooLong } from "@godmode/shared";
+import { formatMinutes, MAX_START_WINDOW_MINUTES, MIN_MINUTES_PER_RUN, startWindowLimit, startWindowTooLong } from "@godmode/shared";
 
-export type CronKind = "hourly" | "daily" | "weekdays" | "weekly" | "monthly" | "custom";
+export type CronKind = "hourly" | "several" | "daily" | "weekdays" | "weekly" | "monthly" | "custom";
+
+/** "Several times a day": N runs at random times between two times, or a run every N hours. */
+export type SeveralMode = "random" | "interval";
 
 export interface CronDraft {
   kind: CronKind;
@@ -14,10 +17,21 @@ export interface CronDraft {
   monthDay: number;
   /** Raw expression for kind = "custom" */
   custom: string;
+  /** kind = "several": runs start at `hour:minute` and end by `untilHour:untilMinute` */
+  mode: SeveralMode;
+  /** Random runs per day */
+  times: number;
+  /** Hours between interval runs */
+  every: number;
+  untilHour: number;
+  untilMinute: number;
+  /** Days of week the runs happen on, 0 = Sunday */
+  days: number[];
 }
 
 export const CRON_KIND_LABELS: Record<CronKind, string> = {
   hourly: "Every hour",
+  several: "Several times a day",
   daily: "Every day",
   weekdays: "Every weekday",
   weekly: "Every week",
@@ -37,12 +51,53 @@ export const DEFAULT_CRON = "0 9 * * *";
 
 const isInt = (s: string) => /^\d+$/.test(s);
 
+export const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+export const SEVERAL_TIMES = [2, 3, 4, 5, 6, 8, 10, 12];
+export const SEVERAL_EVERY = [1, 2, 3, 4, 6, 8, 12];
+
 export function defaultDraft(): CronDraft {
-  return { kind: "daily", minute: 0, hour: 9, weekday: 1, monthDay: 1, custom: DEFAULT_CRON };
+  return {
+    kind: "daily",
+    minute: 0,
+    hour: 9,
+    weekday: 1,
+    monthDay: 1,
+    custom: DEFAULT_CRON,
+    mode: "random",
+    times: 5,
+    every: 2,
+    untilHour: 21,
+    untilMinute: 0,
+    days: ALL_DAYS,
+  };
 }
 
-/** Parse a cron expression into the friendliest matching preset (falls back to "custom"). */
-export function parseCron(cron: string): CronDraft {
+/** "*", "1-5", "MON,WED", "0,6" → sorted days (0 = Sunday); null when not a plain day list. */
+export function parseDays(dow: string): number[] | null {
+  if (dow === "*" || dow === "?") return ALL_DAYS;
+  const days = new Set<number>();
+  for (const item of dow.split(",")) {
+    const [a, b, extra] = item.split("-");
+    if (extra !== undefined) return null;
+    const from = dowValue(a);
+    const to = b === undefined ? from : dowValue(b);
+    if (from === null || to === null) return null;
+    const end = b !== undefined && Number(b) === 7 ? 7 : to;
+    if (end < from) return null;
+    for (let d = from; d <= end; d++) days.add(d % 7);
+  }
+  return [...days].sort((x, y) => x - y);
+}
+
+export function buildDays(days: number[]): string {
+  const set = [...new Set(days)].sort((a, b) => a - b);
+  if (!set.length || set.length === 7) return "*";
+  if (set.join(",") === "1,2,3,4,5") return "1-5";
+  return set.join(",");
+}
+
+/** Parse a cron expression into the friendliest matching preset (falls back to "custom"). Runs per window > 1 = random "several". */
+export function parseCron(cron: string, startWindowMinutes = 0, runsPerWindow = 1): CronDraft {
   const base = defaultDraft();
   const expr = cron.trim().replace(/\s+/g, " ");
   const parts = expr.split(" ");
@@ -51,6 +106,31 @@ export function parseCron(cron: string): CronDraft {
   const [m, h, dom, mon, dow] = parts;
   if (!isInt(m) || Number(m) > 59 || mon !== "*") return custom;
   const minute = Number(m);
+  const days = dom === "*" ? parseDays(dow) : null;
+  if (days && runsPerWindow > 1 && startWindowMinutes > 0 && isInt(h) && Number(h) <= 23) {
+    const end = Math.min(Number(h) * 60 + minute + startWindowMinutes, 23 * 60 + 59);
+    return {
+      ...base,
+      kind: "several",
+      mode: "random",
+      minute,
+      hour: Number(h),
+      times: runsPerWindow,
+      untilHour: Math.floor(end / 60),
+      untilMinute: end % 60,
+      days,
+      custom: expr,
+    };
+  }
+  const step = days ? /^(?:\*|(\d+)-(\d+))\/(\d+)$/.exec(h) : null;
+  if (step && days) {
+    const from = step[1] === undefined ? 0 : Number(step[1]);
+    const to = step[2] === undefined ? 23 : Number(step[2]);
+    const every = Number(step[3]);
+    if (from <= to && to <= 23 && every >= 1) {
+      return { ...base, kind: "several", mode: "interval", minute, hour: from, every, untilHour: to, untilMinute: minute, days, custom: expr };
+    }
+  }
   if (h === "*" && dom === "*" && dow === "*") return { ...base, kind: "hourly", minute, custom: expr };
   if (!isInt(h) || Number(h) > 23) return custom;
   const hour = Number(h);
@@ -82,6 +162,13 @@ export function buildCron(d: CronDraft): string {
   switch (d.kind) {
     case "hourly":
       return `${m} * * * *`;
+    case "several": {
+      const dow = buildDays(d.days);
+      if (d.mode === "random") return `${m} ${h} * * ${dow}`;
+      const last = lastIntervalHour(d);
+      if (h === 0 && last >= 23 - (23 % d.every) && 24 % d.every === 0) return `${m} */${d.every} * * ${dow}`;
+      return `${m} ${h}-${Math.max(h, last)}/${d.every} * * ${dow}`;
+    }
     case "daily":
       return `${m} ${h} * * *`;
     case "weekdays":
@@ -93,6 +180,47 @@ export function buildCron(d: CronDraft): string {
     case "custom":
       return d.custom.trim().replace(/\s+/g, " ");
   }
+}
+
+/** Latest hour an interval run can start at without passing the end time. */
+function lastIntervalHour(d: CronDraft): number {
+  const end = d.untilHour * 60 + d.untilMinute;
+  return Math.floor((end - d.minute) / 60);
+}
+
+/** Minutes between the first and the last moment of a "several" draft. */
+export function severalSpan(d: CronDraft): number {
+  return d.untilHour * 60 + d.untilMinute - (d.hour * 60 + d.minute);
+}
+
+/** Random start window + runs a "several · random" draft needs; null for every other draft. */
+export function severalWindow(d: CronDraft): { startWindowMinutes: number; runsPerWindow: number } | null {
+  if (d.kind !== "several" || d.mode !== "random") return null;
+  return { startWindowMinutes: Math.max(0, severalSpan(d)), runsPerWindow: d.times };
+}
+
+/** Start times (minutes after midnight) of a "several" draft: the start of each random part, or each interval run. */
+export function severalStarts(d: CronDraft): number[] {
+  const start = d.hour * 60 + d.minute;
+  const span = severalSpan(d);
+  if (span <= 0) return [];
+  if (d.mode === "random") return Array.from({ length: d.times }, (_, i) => start + (span * i) / d.times);
+  const out: number[] = [];
+  for (let t = start; t <= start + span; t += d.every * 60) out.push(t);
+  return out;
+}
+
+/** What is wrong with a "several" draft, or null. */
+export function severalProblem(d: CronDraft): string | null {
+  if (d.kind !== "several") return null;
+  if (!d.days.length) return "Pick at least one day";
+  const span = severalSpan(d);
+  if (span <= 0) return "The end time must be after the start time";
+  if (d.mode === "random" && span / d.times < MIN_MINUTES_PER_RUN) {
+    return `${d.times} runs need at least ${formatMinutes(d.times * MIN_MINUTES_PER_RUN)} between start and end`;
+  }
+  if (d.mode === "interval" && severalStarts(d).length < 2) return `Only one run fits — make the range longer than ${d.every} h`;
+  return null;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -244,7 +372,14 @@ export function cronToHuman(cron: string): string {
   if (m === "*" && h === "*") time = "Every minute";
   else if (/^\*\/\d+$/.test(m) && h === "*") time = `Every ${m.slice(2)} minutes`;
   else if (isInt(m) && h === "*") time = `Every hour at :${m.padStart(2, "0")}`;
-  else if (isInt(m) && /^\*\/\d+$/.test(h)) time = `Every ${h.slice(2)} hours${m === "0" ? "" : ` at :${m.padStart(2, "0")}`}`;
+  else if (isInt(m) && /^\*\/\d+$/.test(h)) time = h === "*/1" ? "Every hour" : `Every ${h.slice(2)} hours${m === "0" ? "" : ` at :${m.padStart(2, "0")}`}`;
+  else if (isInt(m) && /^\d+-\d+\/\d+$/.test(h)) {
+    const [range, step] = h.split("/");
+    const [a, b] = range.split("-").map(Number);
+    const n = Number(step);
+    const last = a + Math.floor((b - a) / n) * n;
+    time = `${n === 1 ? "Every hour" : `Every ${n} hours`} from ${formatTime(a, Number(m))} to ${formatTime(last, Number(m))}`;
+  }
   else if (isInt(m) && isInt(h)) time = `At ${formatTime(Number(h), Number(m))}`;
   else if (isInt(m) && h.split(",").every(isInt)) time = `At ${h.split(",").map((x) => formatTime(Number(x), Number(m))).join(" and ")}`;
   else if (isInt(m) && /^\d+-\d+$/.test(h)) {
@@ -279,14 +414,24 @@ export function startWindowProblem(cron: string, timezone: string, minutes: numb
   return minutes > limit ? startWindowTooLong(limit) : null;
 }
 
-/** Like cronToHuman, with the random start window: "Weekdays between 8:00 AM and 9:30 AM". */
-export function scheduleToHuman(cron: string, startWindowMinutes = 0): string {
+/** Like cronToHuman, with the random start window: "Weekdays between 8:00 AM and 9:30 AM", "5 times a day at random times between …". */
+export function scheduleToHuman(cron: string, startWindowMinutes = 0, runsPerWindow = 1): string {
   const base = cronToHuman(cron);
   if (!startWindowMinutes || validateCron(cron)) return base;
   const expr = cron.trim().replace(/\s+/g, " ");
+  if (runsPerWindow > 1) {
+    const d = parseCron(expr, startWindowMinutes, runsPerWindow);
+    if (d.kind === "several") {
+      const days = describeDow(buildDays(d.days));
+      const end = d.hour * 60 + d.minute + startWindowMinutes;
+      const range = `between ${formatTime(d.hour, d.minute)} and ${formatTime(Math.floor(end / 60) % 24, end % 60)}`;
+      return `${runsPerWindow} times a day at random times ${range}${days ? ` ${days}` : ""}`;
+    }
+    return `${base} · ${runsPerWindow} runs at random times within ${formatMinutes(startWindowMinutes)}`;
+  }
   const d = parseCron(expr);
   if (d.kind === "hourly" && startWindowMinutes === 60) return "Every hour at a random minute";
-  if (d.kind !== "custom" && d.kind !== "hourly") {
+  if (d.kind !== "custom" && d.kind !== "hourly" && d.kind !== "several") {
     const end = d.hour * 60 + d.minute + startWindowMinutes;
     const range = `between ${formatTime(d.hour, d.minute)} and ${formatTime(Math.floor(end / 60) % 24, end % 60)}`;
     switch (d.kind) {

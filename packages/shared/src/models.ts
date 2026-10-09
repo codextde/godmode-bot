@@ -229,6 +229,12 @@ export type RoutineTrigger =
        * ("0 8 * * 1-5" + 90 = weekdays somewhere between 08:00 and 09:30). Absent = on time.
        */
       startWindowMinutes?: number;
+      /**
+       * Run this many times per scheduled time instead of once: the start window is split into equal parts and each
+       * run starts at a random moment in its part ("0 8 * * *" + 840 + 5 = five runs a day between 08:00 and 22:00).
+       * Needs `startWindowMinutes`. Absent = once.
+       */
+      runsPerWindow?: number;
     }
   | {
       type: "app";

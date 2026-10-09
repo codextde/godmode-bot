@@ -60,6 +60,8 @@ export interface RoutineDraft {
   cron: string;
   /** Schedule triggers: random start window in minutes, 0 = on time. */
   startWindow: number;
+  /** Schedule triggers: runs spread over the start window, 1 = once. */
+  runs: number;
   /** Condition triggers: how often to check. */
   checkCron: string;
   timezone: string;
@@ -89,6 +91,7 @@ function initialDraft(routine: Routine | null | undefined, agentId: string | und
     triggerType,
     cron: t?.type === "schedule" ? routine!.cron : (initial?.cron ?? DEFAULT_CRON),
     startWindow: t?.type === "schedule" ? (t.startWindowMinutes ?? 0) : (initial?.startWindow ?? 0),
+    runs: t?.type === "schedule" ? (t.runsPerWindow ?? 1) : (initial?.runs ?? 1),
     checkCron: t?.type === "condition" ? routine!.cron : (initial?.checkCron ?? DEFAULT_CHECK_CRON),
     timezone: routine?.timezone || initial?.timezone || localTimezone(),
     condition: t?.type === "condition" ? t.condition : (initial?.condition ?? ""),
@@ -160,7 +163,14 @@ export function RoutineDialog({
     () => (type === "schedule" ? startWindowProblem(draft.cron, draft.timezone, draft.startWindow) : null),
     [type, draft.cron, draft.timezone, draft.startWindow],
   );
-  const cronError = type === "schedule" ? (validateCron(draft.cron) ?? windowProblem) : type === "condition" ? validateCron(draft.checkCron) : null;
+  const [scheduleProblem, setScheduleProblem] = useState<string | null>(null);
+  const [checkProblem, setCheckProblem] = useState<string | null>(null);
+  const cronError =
+    type === "schedule"
+      ? (validateCron(draft.cron) ?? scheduleProblem ?? windowProblem)
+      : type === "condition"
+        ? (validateCron(draft.checkCron) ?? checkProblem)
+        : null;
   const appProblems = type === "app" ? appTriggerProblems(draft.app, appSchema) : null;
   /** The event's settings can't be checked until its schema is known: no saving meanwhile (the fields say why). */
   const schemaBlocked = !!appProblems?.schema;
@@ -177,7 +187,10 @@ export function RoutineDialog({
   const buildTrigger = (): RoutineTrigger => {
     switch (type) {
       case "schedule":
-        return draft.startWindow > 0 ? { type: "schedule", startWindowMinutes: draft.startWindow } : { type: "schedule" };
+        if (!draft.startWindow) return { type: "schedule" };
+        return draft.runs > 1
+          ? { type: "schedule", startWindowMinutes: draft.startWindow, runsPerWindow: draft.runs }
+          : { type: "schedule", startWindowMinutes: draft.startWindow };
       case "app": {
         const { connectionId, toolkit, triggerSlug, triggerName, config } = draft.app;
         return {
@@ -347,9 +360,12 @@ export function RoutineDialog({
                       onChange={(c) => set("cron", c)}
                       idPrefix="routine-cron"
                       startWindowMinutes={draft.startWindow}
+                      runsPerWindow={draft.runs}
+                      onWindowChange={(w) => setDraft((d) => ({ ...d, startWindow: w.startWindowMinutes, runs: w.runsPerWindow }))}
+                      onProblemChange={setScheduleProblem}
                       problem={windowProblem}
                     >
-                      <StartWindowField cron={draft.cron} timezone={draft.timezone} value={draft.startWindow} onChange={(m) => set("startWindow", m)} />
+                      <StartWindowField cron={draft.cron} timezone={draft.timezone} value={draft.startWindow} onChange={(m) => setDraft((d) => ({ ...d, startWindow: m, runs: 1 }))} />
                     </CronBuilder>
                     <TimezoneField value={draft.timezone} onChange={(tz) => set("timezone", tz)} />
                   </>
@@ -390,7 +406,7 @@ export function RoutineDialog({
                     </div>
                     <div className="space-y-2">
                       <div className="text-xs font-medium">How often to check</div>
-                      <CronBuilder value={draft.checkCron} onChange={(c) => set("checkCron", c)} idPrefix="routine-check" />
+                      <CronBuilder value={draft.checkCron} onChange={(c) => set("checkCron", c)} idPrefix="routine-check" onProblemChange={setCheckProblem} />
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <TimezoneField value={draft.timezone} onChange={(tz) => set("timezone", tz)} />

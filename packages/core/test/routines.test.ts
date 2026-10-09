@@ -272,7 +272,7 @@ describe("random start window", () => {
   });
 
   test("rejects windows that are invalid or longer than the gap between runs", () => {
-    for (const startWindowMinutes of [-5, 1.5, 721]) {
+    for (const startWindowMinutes of [-5, 1.5, 1441]) {
       const err = catchHttp(() =>
         createRoutine({ agentId: agent.id, name: "Bad", trigger: { type: "schedule", startWindowMinutes }, cron: "0 8 * * *", prompt: "x" }),
       );
@@ -294,6 +294,62 @@ describe("random start window", () => {
     expect(limit("0 8,20 * * *", "2027-03-26T12:00:00Z")).toBe(720);
     expect(limit("0 * * * *", "2027-03-27T20:00:00Z")).toBe(60);
     expect(limit("*/15 * * * *", "2027-03-27T20:00:00Z")).toBe(15);
+  });
+
+  test("several runs per window: one random start in each equal part", () => {
+    const window = 14 * 60;
+    const part = (window / 5) * 60_000;
+    let after = new Date("2026-10-01T00:00:00Z");
+    const starts: Date[] = [];
+    for (let i = 0; i < 10; i++) {
+      const { slot, at } = nextRandomStart("rtn_beat", "0 8 * * *", "UTC", window, after, 0, 5);
+      expect(nextRandomStart("rtn_beat", "0 8 * * *", "UTC", window, after, 0, 5)).toEqual({ slot, at });
+      expect(at.getTime() - slot.getTime()).toBeLessThan(part);
+      starts.push(at);
+      after = at;
+    }
+    const day = (d: Date) => d.toISOString().slice(0, 10);
+    expect(starts.filter((d) => day(d) === "2026-10-01")).toHaveLength(5);
+    expect(starts.filter((d) => day(d) === "2026-10-02")).toHaveLength(5);
+    starts.forEach((d, i) => {
+      const minutes = d.getUTCHours() * 60 + d.getUTCMinutes();
+      expect(minutes).toBeGreaterThanOrEqual(8 * 60 + (i % 5) * (window / 5));
+      expect(minutes).toBeLessThan(8 * 60 + ((i % 5) + 1) * (window / 5));
+    });
+  });
+
+  test("several runs per window skip parts that already ran", () => {
+    const first = nextRandomStart("rtn_parts", "0 8 * * *", "UTC", 600, new Date("2026-10-01T00:00:00Z"), 0, 5);
+    const handled = nextRandomStart("rtn_parts", "0 8 * * *", "UTC", 600, new Date(first.slot.getTime() + 1), first.slot.getTime(), 5);
+    expect(handled.slot.getTime() - first.slot.getTime()).toBe(120 * 60_000);
+    const lastPart = new Date(first.slot.getTime() + 4 * 120 * 60_000);
+    const nextDay = nextRandomStart("rtn_parts", "0 8 * * *", "UTC", 600, new Date(lastPart.getTime() + 1), lastPart.getTime(), 5);
+    expect(nextDay.slot.getTime() - first.slot.getTime()).toBe(86_400_000);
+  });
+
+  test("validates runs per window", () => {
+    const routine = createRoutine({
+      agentId: agent.id,
+      name: "Heartbeat",
+      trigger: { type: "schedule", startWindowMinutes: 840, runsPerWindow: 5 },
+      cron: "0 8 * * *",
+      timezone: "UTC",
+      prompt: "x",
+    });
+    expect(routine.trigger).toEqual({ type: "schedule", startWindowMinutes: 840, runsPerWindow: 5 });
+    const next = new Date(routine.nextRunAt!);
+    expect(next.getUTCHours()).toBeGreaterThanOrEqual(8);
+    expect(next.getUTCHours()).toBeLessThan(22);
+    expect(updateRoutine(routine.id, { trigger: { type: "schedule", startWindowMinutes: 840, runsPerWindow: 1 } }).trigger).toEqual({
+      type: "schedule",
+      startWindowMinutes: 840,
+    });
+    const bad = (trigger: { type: "schedule"; startWindowMinutes?: number; runsPerWindow?: number }) =>
+      catchHttp(() => createRoutine({ agentId: agent.id, name: "Bad runs", trigger, cron: "0 8 * * *", prompt: "x" }));
+    expect(bad({ type: "schedule", runsPerWindow: 3 }).message).toContain("random start window");
+    expect(bad({ type: "schedule", startWindowMinutes: 60, runsPerWindow: 0 }).message).toContain("between 1 and 24");
+    expect(bad({ type: "schedule", startWindowMinutes: 60, runsPerWindow: 2.5 }).status).toBe(400);
+    expect(bad({ type: "schedule", startWindowMinutes: 60, runsPerWindow: 10 }).message).toContain("at least 100 minutes");
   });
 
   test("changes that leave the schedule alone don't check the window again", () => {

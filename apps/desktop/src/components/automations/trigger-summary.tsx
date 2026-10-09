@@ -20,7 +20,7 @@ export function TriggerSummary({ routine, icon = true, className }: { routine: R
         ))}
       {t.type === "schedule" && (
         <span className="min-w-0 truncate">
-          {scheduleToHuman(routine.cron, t.startWindowMinutes)}
+          {scheduleToHuman(routine.cron, t.startWindowMinutes, t.runsPerWindow)}
           {tz && <span className="ml-1.5 text-xs text-muted-foreground">({tz})</span>}
         </span>
       )}

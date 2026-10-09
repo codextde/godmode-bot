@@ -70,7 +70,7 @@ export function triggerText(routine: Routine): string {
   const t = routine.trigger;
   switch (t.type) {
     case "schedule":
-      return scheduleToHuman(routine.cron, t.startWindowMinutes);
+      return scheduleToHuman(routine.cron, t.startWindowMinutes, t.runsPerWindow);
     case "app":
       return `${t.triggerName} · ${prettySlug(t.toolkit)}`;
     case "condition":

@@ -335,7 +335,7 @@ describe("triggering", () => {
       expect(sent.find((m) => m.routineId === routine.id)).toMatchObject({ content: "Good morning", trigger: "routine" });
 
       const next = scheduledRoutines().find((s) => s.routineId === routine.id)!.nextRunAt!;
-      expect(draw).toHaveBeenLastCalledWith(routine.id, "0 8 * * *", "UTC", 60, expect.any(Date), soon.slot.getTime());
+      expect(draw).toHaveBeenLastCalledWith(routine.id, "0 8 * * *", "UTC", 60, expect.any(Date), soon.slot.getTime(), 1);
       expect(Date.parse(next)).toBeGreaterThan(Date.now());
       expect(new Date(next).getUTCHours()).toBe(8);
       expect(getRoutine(routine.id).nextRunAt).toBe(next);

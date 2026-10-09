@@ -2,15 +2,16 @@
  * Cron scheduler for automations: one croner job per enabled schedule or condition automation of an enabled agent
  * (timezone aware). A schedule tick sends the automation's prompt into its conversation, exactly like a user message;
  * a condition tick starts a condition check (automations/conditions.ts). Schedules with a random start window get a
- * one-off job at the start drawn for their next time slot, replaced by the next one when it fires.
+ * one-off job at the start drawn for their next time slot, replaced by the next one when it fires; with several runs per
+ * window every part of the window is such a slot.
  */
 import { Cron } from "croner";
 import type { Routine, Run } from "@godmode/shared";
-import { MAX_START_WINDOW_MINUTES } from "@godmode/shared";
+import { MAX_RUNS_PER_WINDOW, MAX_START_WINDOW_MINUTES } from "@godmode/shared";
 import { all, get, run as exec } from "../db";
 import { logger } from "../log";
 import { getAgent } from "../agents/service";
-import { computeNextRunAt, emitRoutine, getRoutine, lastScheduledStart, nextRandomStart, startWindowOf } from "../services/routines";
+import { computeNextRunAt, emitRoutine, getRoutine, lastScheduledStart, nextRandomStart, runsOf, startWindowOf } from "../services/routines";
 import { sendMessage } from "../services/conversations";
 import { notify } from "../services/notifications";
 import { automationConversation } from "../automations/conversation";
@@ -42,10 +43,11 @@ interface WantedRoutine {
   timezone: string;
   type: string;
   start_window: number | null;
+  runs: number | null;
 }
 
 function signature(r: WantedRoutine): string {
-  return `${r.type}\u0000${r.cron}\u0000${r.timezone}\u0000${r.start_window ?? 0}`;
+  return `${r.type}\u0000${r.cron}\u0000${r.timezone}\u0000${r.start_window ?? 0}\u0000${r.runs ?? 1}`;
 }
 
 function cronJob(r: WantedRoutine): Cron {
@@ -61,15 +63,15 @@ function cronJob(r: WantedRoutine): Cron {
   );
 }
 
-function randomStartJob(r: WantedRoutine, windowMinutes: number, handledUntil: number): Cron {
-  const { slot, at } = nextRandomStart(r.id, r.cron, r.timezone, windowMinutes, new Date(), handledUntil);
+function randomStartJob(r: WantedRoutine, windowMinutes: number, runs: number, handledUntil: number): Cron {
+  const { slot, at } = nextRandomStart(r.id, r.cron, r.timezone, windowMinutes, new Date(), handledUntil, runs);
   const job: Cron = new Cron(at, { catch: (err) => log.error(`routine ${r.id} tick crashed`, err) }, () => {
     const current = jobs.get(r.id);
     if (current?.job !== job) return;
     firedSlots.set(r.id, slot.getTime());
     // Plan the next slot first: the run's next_run_at is read from the job.
     try {
-      jobs.set(r.id, { job: randomStartJob(r, windowMinutes, slot.getTime()), signature: current.signature });
+      jobs.set(r.id, { job: randomStartJob(r, windowMinutes, runs, slot.getTime()), signature: current.signature });
     } catch (err) {
       jobs.delete(r.id);
       log.warn(`routine ${r.id} has no next start`, err);
@@ -90,7 +92,7 @@ function nextRunAt(routine: Routine): string | null {
   const minutes = startWindowOf(routine.trigger);
   if (!minutes) return computeNextRunAt(routine.cron, routine.timezone);
   try {
-    return nextRandomStart(routine.id, routine.cron, routine.timezone, minutes, new Date(), handledUntil(routine.id)).at.toISOString();
+    return nextRandomStart(routine.id, routine.cron, routine.timezone, minutes, new Date(), handledUntil(routine.id), runsOf(routine.trigger)).at.toISOString();
   } catch {
     return null;
   }
@@ -201,12 +203,13 @@ async function onTick(routineId: string) {
 export function reloadSchedules(): void {
   if (!started) return;
   const wanted = all<WantedRoutine>(
-    `SELECT id, cron, timezone, type, start_window FROM (
+    `SELECT id, cron, timezone, type, start_window, runs FROM (
        SELECT r.id, r.cron, r.timezone,
          CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END AS type,
-         CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.startWindowMinutes') END AS start_window
+         CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.startWindowMinutes') END AS start_window,
+         CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.runsPerWindow') END AS runs
        FROM routines r JOIN agents a ON a.id = r.agent_id WHERE r.enabled = 1 AND a.enabled = 1)
-     WHERE type IN ('schedule', 'condition')`,
+      WHERE type IN ('schedule', 'condition')`,
   );
   const byId = new Map(wanted.map((r) => [r.id, r]));
 
@@ -222,7 +225,8 @@ export function reloadSchedules(): void {
     try {
       const w = r.type === "schedule" ? r.start_window : null;
       const windowMinutes = typeof w === "number" && Number.isInteger(w) && w > 0 && w <= MAX_START_WINDOW_MINUTES ? w : 0;
-      const job = windowMinutes > 0 ? randomStartJob(r, windowMinutes, handledUntil(r.id)) : cronJob(r);
+      const runs = typeof r.runs === "number" && Number.isInteger(r.runs) && r.runs > 1 && r.runs <= MAX_RUNS_PER_WINDOW ? r.runs : 1;
+      const job = windowMinutes > 0 ? randomStartJob(r, windowMinutes, runs, handledUntil(r.id)) : cronJob(r);
       jobs.set(r.id, { job, signature: signature(r) });
     } catch (err) {
       log.warn(`routine ${r.id} has an invalid schedule (${r.cron} ${r.timezone})`, err);
