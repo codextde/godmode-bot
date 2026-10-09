@@ -703,13 +703,19 @@ function redactDeep(value: unknown, redact: (s: string) => string, depth = 0): u
   return out;
 }
 
+/** The password an agent hands to `vault_save_login` is never kept with the call, whatever masking is set to. */
+function withoutSavedPassword(name: string, input: unknown): unknown {
+  if (displayToolName(name) !== "vault_save_login" || typeof input !== "object" || input === null || !("password" in input)) return input;
+  return { ...input, password: "••••••••" };
+}
+
 /** Copy of `block` with every string (text, tool input, results) passed through `redact`. */
 export function redactBlock(b: MessageBlock, redact: (s: string) => string): MessageBlock {
   switch (b.type) {
     case "tool_use":
       return {
         ...b,
-        input: redactDeep(b.input, redact),
+        input: redactDeep(withoutSavedPassword(b.name, b.input), redact),
         ...(b.result !== undefined ? { result: redact(b.result) } : {}),
         ...(b.task
           ? {

@@ -79,7 +79,18 @@ import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/compos
 import { listTriggerTypes } from "../integrations/composioTriggers";
 import { createWorkspace, listWorkspaces, updateWorkspace } from "../services/workspaces";
 import { createAgent, deleteAgent, getAgent, listAgents, peersFor, teamOf, updateAgent } from "../agents/service";
-import { addCredentialDomain, credentialsForAgent, findCredentialsForAgent, getCredential, listCredentials, markCredentialUsed, revealForAgent } from "../vault/credentials";
+import {
+  addCredentialDomain,
+  createCredential,
+  credentialsForAgent,
+  findCredentialsForAgent,
+  generatePassword,
+  getCredential,
+  listCredentials,
+  markCredentialUsed,
+  revealForAgent,
+  updateCredential,
+} from "../vault/credentials";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
 import { nameGuessMatchesHost } from "../vault/match";
 import { chatWorkspaceId, currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
@@ -92,7 +103,7 @@ import { get } from "../db";
 import { config } from "../config";
 import { fixRunner, runnerExec, runnerHealth } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
-import { chatFillOnly, createConversation, sendMessage } from "../services/conversations";
+import { chatFillOnly, createConversation, maskSecretInChat, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
@@ -960,6 +971,81 @@ const TOOLS: ToolDef[] = [
       const remembered = guessHost && addCredentialDomain(site.id, guessHost);
       if (remembered) audit(`agent:${agent.id}`, "credential.autofix_domain", site.id, { domain: guessHost, runId: ctx.runId });
       return `Filled the current 2FA code into ${result.url}${submit ? " and submitted" : ""}.${remembered ? ` Added ${guessHost} to "${site.name}" (its name matched the site).` : ""}`;
+    },
+  }),
+
+  defineTool({
+    name: "vault_save_login",
+    description:
+      "Save a website login to the Godmode vault: when the human gives you a username and password in the chat, or you signed up for an account. Do it right away, without asking. Godmode masks the password in this chat from then on — never repeat it in your answer, files or memory. A saved login for the same site and username (or the one you pass as credentialId, for its own site) gets the new username/password instead of being added twice; its old password stays in the login's notes, its name and site never change. To sign up somewhere, pass generatePassword: true instead of a password: Godmode makes a strong one you never see, and you fill it into the form with vault_fill_login.",
+    schema: z.object({
+      url: z.string().min(1).describe('Login page or site, e.g. "https://github.com/login" or "github.com"'),
+      username: z.string().max(500).optional().describe("Username or email"),
+      password: z.string().max(1000).optional(),
+      generatePassword: z.boolean().optional().describe("Let Godmode make a strong password you never see"),
+      name: z.string().max(200).optional().describe('Name in the vault, e.g. "GitHub". Default: the site'),
+      notes: z.string().max(2000).optional().describe("Anything else worth keeping with the login (no secrets other than this one)"),
+      credentialId: z.string().optional().describe("Update this saved login (id from vault_list_logins) instead of finding it by site and username"),
+    }),
+    when: (_agent, ctx) => config().role !== "runner" && !isCheckRun(ctx),
+    run: async ({ url, username, password, generatePassword: generate, name, notes, credentialId }, { agent, ctx }) => {
+      if (!isUnlocked()) return fail("The vault is locked, so nothing can be saved. Ask the human to unlock Godmode's vault, then try again.");
+      if (password && generate) return fail("Pass a password or generatePassword, not both.");
+      const host = hostnameOf(url);
+      if (!host) return fail(`"${url}" is not a website address.`);
+      const user = username?.trim() ?? "";
+      const secret = password || (generate ? generatePassword() : undefined);
+      if (!user && !secret && !credentialId) return fail("Nothing to save: pass the username and the password.");
+      const by = `${agent.name}, ${new Date().toISOString().slice(0, 10)}`;
+
+      const onSite = (c: Credential) => [...c.domains, ...(c.url ? [hostnameOf(c.url)] : [])].some((d) => d && domainMatches(host, d));
+      const existing = credentialId
+        ? credentialsForAgent(agent).find((c) => c.id === credentialId)
+        : user
+          ? findCredentialsForAgent(agent, host).find((c) => onSite(c) && c.username.toLowerCase() === user.toLowerCase())
+          : undefined;
+      if (credentialId && !existing) return fail(`Login ${credentialId} is not available to you.`);
+      // Widening where a saved password may be typed (another site, a name that matches one) would let it leak there.
+      if (existing && !onSite(existing)) {
+        return fail(`"${existing.name}" is a login for ${existing.domains.join(", ") || existing.url}, not ${host}. Pass the URL of its own site, or leave out credentialId to save a new login for ${host}.`);
+      }
+
+      let login: Credential;
+      if (existing) {
+        const current = getCredential(existing.id, { reveal: true });
+        const replaced = secret !== undefined && current.password && current.password !== secret ? current.password : null;
+        const extra = [notes?.trim(), replaced ? `Previous password (replaced by ${by}): ${replaced}` : ""].filter(Boolean);
+        login = updateCredential(existing.id, {
+          ...(user && user.toLowerCase() !== current.username.toLowerCase() ? { username: user } : {}),
+          ...(secret !== undefined ? { password: secret } : {}),
+          ...(extra.length ? { notes: [current.notes?.trim(), ...extra].filter(Boolean).join("\n\n") } : {}),
+        });
+        audit(`agent:${agent.id}`, "credential.update", login.id, { name: login.name, runId: ctx.runId, passwordChanged: secret !== undefined && secret !== current.password });
+      } else {
+        login = createCredential({
+          workspaceId: agent.workspaceId,
+          name: name?.trim() || host.replace(/^www\./, ""),
+          url: url.trim(),
+          username: user,
+          password: secret,
+          notes: [notes?.trim(), `Saved by ${by}.`].filter(Boolean).join("\n\n"),
+        });
+        audit(`agent:${agent.id}`, "credential.create", login.id, { name: login.name, runId: ctx.runId, generated: !!generate });
+        // An agent limited to some logins may use the one it just saved.
+        const allowed = agent.permissions.credentialIds;
+        if (allowed) await updateAgent(agent.id, { permissions: { credentialIds: [...allowed, login.id] } }, "vault");
+      }
+      const masked = password ? maskSecretInChat(ctx.conversationId, password, ctx.runId) : 0;
+      const what = existing ? "Updated" : "Saved";
+      const who = login.username ? `, ${login.username}` : "";
+      return [
+        `${what} "${login.name}" (${host}${who}) in the vault as ${login.id}.`,
+        generate ? "It has a new strong password you can't see: fill it into the form with vault_fill_login (field password), also into a \"repeat password\" field." : "",
+        masked ? "The password is masked in this chat now." : "",
+        password ? "Don't repeat the password anywhere." : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
     },
   }),
 

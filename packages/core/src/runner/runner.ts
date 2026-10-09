@@ -15,7 +15,7 @@
  * limit is reached. It keeps its row, its assistant message and its Claude session; `resumeRun` queues it again and the
  * next `claude -p` process resumes the session with a note to pick the work up where it stopped.
  */
-import { createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, chmodSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -129,7 +129,7 @@ import { runSshServerIds } from "../ssh/assignments";
 import { attachSsh, detachSsh, promptServers } from "../ssh/service";
 import { parseComputerTarget } from "../computer/targets";
 import { timedSync } from "../diagnostics/slow";
-import { StreamAccumulator, addUsage, detectLoginFailure, redactBlock } from "./stream";
+import { StreamAccumulator, addUsage, detectLoginFailure, displayToolName, redactBlock } from "./stream";
 import { requireLicense } from "../license/license";
 
 const log = logger("runner");
@@ -1564,6 +1564,34 @@ interface RunLog {
   end(): unknown;
 }
 
+/**
+ * What a stream event leaves in the run log. Not partial deltas: the complete message follows, and a fragment could
+ * hold part of a secret that no masking recognizes. The password handed to `vault_save_login` is never logged.
+ */
+function logLineOf(event: unknown, line: string): string | null {
+  if (typeof event !== "object" || event === null) return line;
+  const e = event as { type?: unknown; event?: { type?: unknown }; message?: { content?: unknown } };
+  if (e.type === "stream_event" && e.event?.type === "content_block_delta") return null;
+  if (e.type !== "assistant" || !line.includes("vault_save_login") || !Array.isArray(e.message?.content)) return line;
+  for (const c of e.message.content as { type?: unknown; name?: unknown; input?: Record<string, unknown> }[]) {
+    if (c?.type === "tool_use" && typeof c.name === "string" && displayToolName(c.name) === "vault_save_login" && c.input && "password" in c.input) {
+      c.input = { ...c.input, password: "••••••••" };
+    }
+  }
+  return JSON.stringify(event);
+}
+
+/** A secret was saved while the run wrote its log (an agent stored a login the human pasted): mask it there too. */
+function maskLog(path: string) {
+  try {
+    const text = readFileSync(path, "utf8");
+    const masked = redact(text);
+    if (masked !== text) writeFileSync(path, masked);
+  } catch (err) {
+    log.warn(`could not mask secrets in run log ${path}`, err);
+  }
+}
+
 interface Attempt {
   exitCode: number | null;
   stderr: string;
@@ -1606,15 +1634,17 @@ async function spawnClaude(
     const line = raw.trim();
     job.lastOutputAt = Date.now();
     if (!line) return;
-    logSink.write(`${redact(line)}\n`);
     let event: unknown;
     try {
       event = JSON.parse(line);
     } catch {
+      logSink.write(`${redact(line)}\n`);
       noise.push(line.slice(0, 500));
       if (noise.length > 20) noise.shift();
       return;
     }
+    const logged = logLineOf(event, line);
+    if (logged !== null) logSink.write(`${redact(logged)}\n`);
     if (job.acc.push(event)) scheduleDelta(job);
     // Claude has read the human's answer the moment it starts replying: settle it now, so a crash later in the run
     // can't hand the same answer (an approval: "Do it now") to the next turn again.
@@ -1941,6 +1971,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         asking: job.trigger !== "check" && !job.parentRunId,
         delegated: !!job.parentRunId,
         mods: config().role !== "runner",
+        savesLogins: config().role !== "runner" && job.trigger !== "check",
         team: teamFor(agent),
       });
   const memoryNow = memoryDigest(agent.repoPath);
@@ -2039,6 +2070,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const logPath = runLogPath(agent, getRun(job.runId));
   mkdirSync(join(logPath, ".."), { recursive: true });
   const logSink: RunLog = job.resumed ? createWriteStream(logPath, { flags: "a" }) : Bun.file(logPath).writer();
+  const logEpoch = redactionEpoch();
 
   const timeoutMinutes = dreaming
     ? Math.min(settings.runner.runTimeoutMinutes || DREAM_TIMEOUT_MINUTES, DREAM_TIMEOUT_MINUTES)
@@ -2157,6 +2189,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   } finally {
     try {
       await logSink.end();
+      if (redactionEpoch() !== logEpoch) maskLog(logPath);
     } catch (err) {
       log.warn(`could not close run log ${logPath}`, err);
     }

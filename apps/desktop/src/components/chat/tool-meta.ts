@@ -297,6 +297,7 @@ const GODMODE_TOOLS = new Set([
   "vault_list_logins",
   "vault_fill_login",
   "vault_fill_totp",
+  "vault_save_login",
   "vault_get_login",
   "vault_get_totp",
   "report_missing_login",
@@ -377,6 +378,16 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
     }
     case "vault_fill_totp":
       return { kind: "vault", icon: ShieldCheck, title: credLabel ? `Entered 2FA code for ${credLabel}` : "Entered 2FA code", detail: "from vault" };
+    case "vault_save_login": {
+      const site = hostOf(input.url);
+      const user = str(input.username);
+      return {
+        kind: "vault",
+        icon: KeyRound,
+        title: site ? `Saved login for ${site}` : "Saved a login",
+        detail: [user, input.generatePassword ? "new password, never shown to the AI" : "password stored encrypted"].filter(Boolean).join(" · "),
+      };
+    }
     case "vault_get_login":
       return { kind: "vault", icon: Eye, title: credLabel ? `Revealed login for ${credLabel}` : "Revealed a login", detail: "audited" };
     case "vault_get_totp":

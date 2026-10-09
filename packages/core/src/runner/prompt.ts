@@ -51,6 +51,8 @@ export interface PromptContext {
   delegated?: boolean;
   /** A manager can draft Claude Code mods here (mod_save); not on a runner, whose setup is its controller's. */
   mods?: boolean;
+  /** The run can save logins to the vault (vault_save_login); not on a runner, whose vault is its controller's. */
+  savesLogins?: boolean;
   /** Who leads the agent, the line up to the built-in agent, and who reports to it ("Your team"). */
   team?: { lead: Agent | null; chain: Agent[]; reports: Agent[] };
   now?: Date;
@@ -271,7 +273,12 @@ Never ask ${human} for a password and never type a password or 2FA code yourself
 4. Focus/click the password field (some sites show it on a second step), then call \`vault_fill_login({ credentialId, field: "password", submit: true })\`.
 5. If the site asks for a 2FA / verification / authenticator code, focus that field and call \`vault_fill_totp({ credentialId })\` (add \`submit: true\` when there is no separate confirm step).
 6. Take a snapshot/screenshot to confirm you are logged in.
-If there is no saved login for the site, the login is rejected, a 2FA code is needed but none is linked, or the account does not exist, call \`report_missing_login({ service, url, kind, reason })\` (kind: "missing_credential" | "invalid_credential" | "missing_totp" | "missing_account" | "other"). Then continue with any other part of the task you can still do, and mention the missing login in your final summary. Do not retry a rejected password more than once (accounts get locked).`);
+If there is no saved login for the site, the login is rejected, a 2FA code is needed but none is linked, or the account does not exist, call \`report_missing_login({ service, url, kind, reason })\` (kind: "missing_credential" | "invalid_credential" | "missing_totp" | "missing_account" | "other"). Then continue with any other part of the task you can still do, and mention the missing login in your final summary. Do not retry a rejected password more than once (accounts get locked).${
+    ctx.savesLogins
+      ? `
+When ${human} gives you a username and password in the chat, save them right away with \`vault_save_login({ url, username, password })\` — don't ask first — and from then on use the saved login like any other. Signing up for an account: pass \`generatePassword: true\` instead of a password, then fill it with \`vault_fill_login\`. Never put a password into files, memory or your answer.`
+      : ""
+  }`);
 
   if (rawSecrets) {
     out.push(`### Raw secrets

@@ -171,6 +171,12 @@ ask within the same moment share a request.
   controls the VM, so this is best effort against a determined agent — closer to "reveal" than to fill-only.
 * **Grants**: revealing secrets and enabling reveal/remember-device require `X-Godmode-Grant`, obtained from
   `POST /api/vault/grant {passphrase}` (10 min, in memory).
+* **Saving logins** (`vault_save_login`): any agent may add a login the human gave it in the chat, or one it signed up
+  for (`generatePassword` makes a password the model never sees). New logins land in the agent's scope (its workspace,
+  or global), and an agent with a login allow-list gets the new one added. Updating a login keeps the old password in
+  its notes. The password argument is never stored or logged with the call, and once saved the password is masked in
+  the chat's messages, title, transcript and run logs (partial stream deltas are not logged at all, so no fragment of
+  a secret ends up in a log).
 * **Redaction**: every known secret is masked in transcripts, run logs and the UI stream.
 * **Audit log**: every secret access (`credential.fill`, `credential.reveal`, `totp.fill`, …) is recorded.
 * **API auth**: bearer token (desktop shell / `godmode token`) or HttpOnly SameSite=Strict session cookie
@@ -500,6 +506,7 @@ the core, the desktop and the phone alike.
 | `vault_list_logins({ domain? })` | Logins available to this agent (no secrets) |
 | `vault_fill_login({ credentialId, field: "username"\|"password", selector? })` | Type a secret into the browser page |
 | `vault_fill_totp({ credentialId? , totpId?, selector? })` | Type the current 2FA code into the page |
+| `vault_save_login({ url, username?, password?, generatePassword?, name?, notes?, credentialId? })` | Save a login the human gave in the chat (or a new account) to the vault; updates the same site + username instead of duplicating, keeps the old password in its notes, masks the password in the chat, run logs and transcript. Not on runners or condition checks |
 | `vault_get_login({ credentialId })` | Reveal username/password — only when `secretAccess = "reveal"` |
 | `vault_get_totp({ totpId })` | Reveal current code — only in reveal mode |
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |

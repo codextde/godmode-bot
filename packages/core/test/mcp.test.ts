@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -5,14 +6,15 @@ import { join } from "node:path";
 import type { Agent, Credential, TotpEntry } from "@godmode/shared";
 import { argValue, fillFailure, fills, invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import * as vault from "../src/vault/vault";
-import { createCredential, deleteCredential, getCredential } from "../src/vault/credentials";
+import { createCredential, deleteCredential, getCredential, listCredentials } from "../src/vault/credentials";
 import { createTotp } from "../src/vault/totp";
 import { listAudit } from "../src/services/audit";
 import { listMissingLogins } from "../src/services/missingLogins";
 import { listNotifications } from "../src/services/notifications";
-import { chatFillOnly, createConversation, getConversation, sendMessage, startChat } from "../src/services/conversations";
+import { addMessage, chatFillOnly, createConversation, getConversation, sendMessage, startChat, transcriptPath } from "../src/services/conversations";
 import { issueRunToken, resolveRunToken, revokeRunToken } from "../src/mcp/tokens";
-import { cancelRun, getRun, listRuns, waitForRun } from "../src/runner/runner";
+import { cancelRun, findRunLog, getRun, listRuns, waitForRun } from "../src/runner/runner";
+import { redactBlock } from "../src/runner/stream";
 import { createProfile } from "../src/browser/manager";
 import { getAgent, listAgents, updateAgent } from "../src/agents/service";
 import { createRoutine, listRoutines } from "../src/services/routines";
@@ -169,7 +171,7 @@ describe("tools/list permissions", () => {
   test("regular agents get vault + reporting tools only", async () => {
     const tools = await names(worker);
     const list = tools.map((t) => t.name);
-    for (const n of ["vault_list_logins", "vault_fill_login", "vault_fill_totp", "report_missing_login", "notify_user"]) expect(list).toContain(n);
+    for (const n of ["vault_list_logins", "vault_fill_login", "vault_fill_totp", "vault_save_login", "report_missing_login", "notify_user"]) expect(list).toContain(n);
     for (const n of ["vault_get_login", "vault_get_totp", "agents_list", "agent_delegate", "agent_create", "runs_list"]) expect(list).not.toContain(n);
     for (const t of tools) expect(t.inputSchema.type).toBe("object");
   });
@@ -346,6 +348,161 @@ describe("vault tools", () => {
     } finally {
       await vault.unlock(PASSPHRASE);
     }
+  });
+});
+
+describe("vault_save_login", () => {
+  const saved = new Set<string>();
+  const byUser = (username: string) => listCredentials().filter((c) => c.username === username);
+  const track = (username: string) => {
+    for (const c of byUser(username)) saved.add(c.id);
+    return byUser(username);
+  };
+
+  afterAll(() => {
+    for (const id of saved) deleteCredential(id);
+  });
+
+  test("saves a login the human pasted and masks the password in the chat", async () => {
+    const pasted = "Pasted-Secret-4711!";
+    const chat = createConversation({ agentId: worker.id, title: `GitHub octo ${pasted}` });
+    addMessage({ conversationId: chat.id, role: "user", content: `My GitHub login: octo / ${pasted}` });
+    addMessage({ conversationId: chat.id, role: "assistant", runId: "run_earlier", content: "", blocks: [{ type: "text", text: `Got "${pasted}"` }] });
+    const token = issueRunToken({ runId: "run_save_paste", agentId: worker.id, conversationId: chat.id, workspaceId: null, depth: 0 });
+    try {
+      const r = await call(token, "vault_save_login", { url: "https://github.com/login", username: "octo", password: pasted });
+      expect(r.isError).toBeUndefined();
+      expect(r.content[0]!.text).toMatch(/^Saved "github.com" \(github.com, octo\) in the vault as cred_/);
+      expect(r.content[0]!.text).toContain("masked in this chat");
+      expect(r.content[0]!.text).not.toContain(pasted);
+
+      const [login] = track("octo");
+      const full = getCredential(login!.id, { reveal: true });
+      expect([full.password, full.domains, full.workspaceId]).toEqual([pasted, ["github.com"], null]);
+      expect(full.notes).toMatch(/^Saved by Worker, \d{4}-\d{2}-\d{2}\.$/);
+      expect(listAudit(50, "credential.create").find((a) => a.target === login!.id)?.actor).toBe(`agent:${worker.id}`);
+
+      const after = getConversation(chat.id);
+      expect(JSON.stringify(after.messages)).not.toContain(pasted);
+      expect(after.messages[0]!.content).toBe("My GitHub login: octo / ••••••••");
+      expect(after.title).toBe("GitHub octo ••••••••");
+
+      const found = await call(tokens[worker.id]!, "vault_list_logins", { domain: "github.com" });
+      expect(found.content[0]!.text).toContain(login!.id);
+    } finally {
+      revokeRunToken(token);
+    }
+  });
+
+  test("the same site and username is updated, and the old password kept in the notes", async () => {
+    const r = await call(tokens[worker.id]!, "vault_save_login", { url: "www.github.com", username: "OCTO", password: "Newer-Secret-0815" });
+    expect(r.content[0]!.text).toMatch(/^Updated "github.com"/);
+    const logins = track("octo");
+    expect(logins).toHaveLength(1);
+    const full = getCredential(logins[0]!.id, { reveal: true });
+    expect(full.password).toBe("Newer-Secret-0815");
+    expect(full.notes).toMatch(/Previous password \(replaced by Worker, [\d-]+\): Pasted-Secret-4711!$/);
+    expect(full.username).toBe("octo");
+  });
+
+  test("an update never moves a saved login to another site or name", async () => {
+    const [login] = track("octo");
+    const before = getCredential(login!.id, { reveal: true });
+    const moved = await call(tokens[worker.id]!, "vault_save_login", { url: "https://evil.test", credentialId: login!.id, username: "octo", password: "Evil-Known-Pass-1" });
+    expect(moved.isError).toBe(true);
+    expect(moved.content[0]!.text).toContain("not evil.test");
+    const renamed = await call(tokens[worker.id]!, "vault_save_login", { url: "github.com", credentialId: login!.id, name: "evil.test", password: before.password });
+    expect(renamed.isError).toBeUndefined();
+    const after = getCredential(login!.id, { reveal: true });
+    expect([after.name, after.domains, after.url, after.password]).toEqual([before.name, before.domains, before.url, before.password]);
+  });
+
+  test("another username on the same site is a login of its own", async () => {
+    await call(tokens[worker.id]!, "vault_save_login", { url: "github.com", username: "hubot", password: "Hubot-Secret-123" });
+    expect(track("hubot")).toHaveLength(1);
+    expect(track("octo")).toHaveLength(1);
+  });
+
+  test("generatePassword makes a strong password the agent never sees", async () => {
+    const r = await call(tokens[worker.id]!, "vault_save_login", { url: "https://signup.example.org/register", username: "bot@codext.de", generatePassword: true, name: "Example Org" });
+    const [login] = track("bot@codext.de");
+    const password = getCredential(login!.id, { reveal: true }).password!;
+    expect(password).toHaveLength(24);
+    expect(password).toMatch(/[a-z]/);
+    expect(password).toMatch(/[A-Z]/);
+    expect(password).toMatch(/\d/);
+    expect(password).toMatch(/[^a-zA-Z\d]/);
+    expect(r.content[0]!.text).not.toContain(password);
+    expect(r.content[0]!.text).toContain("vault_fill_login");
+    expect(login!.name).toBe("Example Org");
+    expect(listAudit(50, "credential.create").find((a) => a.target === login!.id)?.details).toMatchObject({ generated: true });
+  });
+
+  test("an agent limited to some logins may use the one it saved", async () => {
+    const limited = await makeAgent({ name: "Limited saver", permissions: { credentialIds: [cred.id], allowDelegation: false } });
+    const token = tokenFor(limited, 5);
+    try {
+      await call(token, "vault_save_login", { url: "limited.example.net", username: "limited-user", password: "Limited-Secret-1" });
+      const [login] = track("limited-user");
+      expect(getAgent(limited.id).permissions.credentialIds).toEqual([cred.id, login!.id]);
+      const list = await call(token, "vault_list_logins", { domain: "limited.example.net" });
+      expect(list.content[0]!.text).toContain(login!.id);
+      // Updating needs a login it may use already.
+      const foreign = await call(token, "vault_save_login", { url: "127.0.0.1", credentialId: other.id, password: "nope-nope-nope" });
+      expect(foreign.isError).toBe(true);
+      expect(getCredential(other.id, { reveal: true }).password).toBe("local-dev-pass-1");
+    } finally {
+      revokeRunToken(token);
+    }
+  });
+
+  test("refuses what it can't save", async () => {
+    const both = await call(tokens[worker.id]!, "vault_save_login", { url: "a.example", username: "x", password: "abcdefgh1", generatePassword: true });
+    expect(both.isError).toBe(true);
+    const nothing = await call(tokens[worker.id]!, "vault_save_login", { url: "a.example" });
+    expect(nothing.content[0]!.text).toContain("Nothing to save");
+    const notASite = await call(tokens[worker.id]!, "vault_save_login", { url: "   ", username: "x", password: "abcdefgh1" });
+    expect(notASite.isError).toBe(true);
+    vault.lock();
+    try {
+      const locked = await call(tokens[worker.id]!, "vault_save_login", { url: "a.example", username: "x", password: "abcdefgh1" });
+      expect(locked.isError).toBe(true);
+      expect(locked.content[0]!.text).toContain("vault is locked");
+    } finally {
+      await vault.unlock(PASSPHRASE);
+    }
+    expect(byUser("x")).toHaveLength(0);
+  });
+
+  test("the password handed to the tool is never kept with the call", () => {
+    const block = redactBlock({ type: "tool_use", id: "t", name: "mcp__godmode__vault_save_login", input: { url: "x.test", username: "u", password: "short" } }, (s) => s);
+    expect(block.type === "tool_use" && block.input).toEqual({ url: "x.test", username: "u", password: "••••••••" });
+    const other = redactBlock({ type: "tool_use", id: "t", name: "Bash", input: { password: "short" } }, (s) => s);
+    expect(other.type === "tool_use" && other.input).toEqual({ password: "short" });
+  });
+
+  test("in a real run the pasted password leaves no trace in the chat, its log or the transcript", async () => {
+    const pasted = "Run-Pasted-Secret-9!";
+    const { conversation, run } = await startChat({ agentId: worker.id, content: `SAVE_LOGIN https://gitlab.com/users/sign_in run-user ${pasted}` });
+    const finished = await waitForRun(run.id, 20_000);
+    expect(finished.status).toBe("succeeded");
+    const [login] = track("run-user");
+    expect(getCredential(login!.id, { reveal: true }).password).toBe(pasted);
+
+    const chat = getConversation(conversation.id);
+    const stored = JSON.stringify(chat.messages);
+    expect(stored).not.toContain(pasted);
+    expect(stored).toContain("The password is ••••••••");
+    const tool = chat.messages.at(-1)!.blocks.find((b) => b.type === "tool_use");
+    expect(tool?.type === "tool_use" && tool.input).toEqual({ url: "https://gitlab.com/users/sign_in", username: "run-user", password: "••••••••" });
+    expect(chat.title).not.toContain(pasted);
+
+    const log = readFileSync(findRunLog(finished)!, "utf8");
+    expect(log).not.toContain(pasted);
+    expect(log).not.toContain(pasted.slice(3));
+    expect(log).not.toContain("content_block_delta");
+    expect(log).toContain("vault_save_login");
+    expect(readFileSync(transcriptPath(worker, conversation.id), "utf8")).not.toContain(pasted);
   });
 });
 
