@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [plain, fixed]
+        variant: [fixed]
     steps:
       - uses: actions/checkout@v7
       - run: |
@@ -18,9 +18,7 @@ jobs:
           ls /dev/fuse || true
       - if: matrix.variant == 'fixed'
         run: |
-          sudo apt-get install -y libfuse2 xdg-utils file
-          echo "APPIMAGE_EXTRACT_AND_RUN=1" >> "$GITHUB_ENV"
-          echo "NO_STRIP=true" >> "$GITHUB_ENV"
+          echo "PATCHELF=$GITHUB_WORKSPACE/.github/scripts/patchelf-skip-sidecar.sh" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -32,4 +30,10 @@ jobs:
       - working-directory: packages/core
         run: bun run scripts/build.ts --sidecar --target=bun-linux-arm64 --smoke
       - working-directory: apps/desktop
-        run: pnpm tauri build --verbose --bundles appimage
+        run: pnpm tauri build --bundles appimage
+      - run: |
+          f=$(ls apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage)
+          "$f" --appimage-extract >/dev/null
+          ldd squashfs-root/usr/bin/godmode-core
+          squashfs-root/usr/bin/godmode-core --help > /dev/null && echo sidecar-runs
+          readelf -d squashfs-root/usr/bin/godmode-bot | grep -i path

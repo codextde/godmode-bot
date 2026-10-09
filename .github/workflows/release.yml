@@ -121,6 +121,7 @@ jobs:
             rust_target: aarch64-unknown-linux-gnu
             bun_target: bun-linux-arm64
             args: ""
+            patchelf: .github/scripts/patchelf-skip-sidecar.sh
     steps:
       - uses: actions/checkout@v7
         with:
@@ -164,6 +165,10 @@ jobs:
               { echo "$name<<__GODMODE_EOF__"; echo "$value"; echo "__GODMODE_EOF__"; } >> "$GITHUB_ENV"
             fi
           done
+
+      - name: Keep linuxdeploy away from the sidecar
+        if: matrix.patchelf
+        run: echo "PATCHELF=$GITHUB_WORKSPACE/${{ matrix.patchelf }}" >> "$GITHUB_ENV"
 
       - uses: tauri-apps/tauri-action@v1
         env:
