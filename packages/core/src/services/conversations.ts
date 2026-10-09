@@ -3,7 +3,7 @@
  * A conversation belongs to one agent; every user turn starts a run (runner/runner.ts) that streams
  * into one assistant message. A human-readable transcript is kept in the agent repo.
  */
-import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import type {
   Agent,
@@ -29,9 +29,9 @@ import { logger } from "../log";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
-import { redact } from "../vault/vault";
+import { redact, SECRET_MASK } from "../vault/vault";
 import { getAgent, getDefaultAgentId, setAgentFailedRun } from "../agents/service";
-import { activeRunForConversation, cancelRun, listActiveRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
+import { activeRunForConversation, cancelRun, findRunLog, listActiveRuns, listRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
 import { remoteRunForConversation } from "../remote/activeRuns";
 import { closeChatTabs } from "../browser/manager";
 import { displayToolName } from "../runner/stream";
@@ -885,4 +885,47 @@ export function appendTranscript(conversationId: string, finishedRun: Run, userM
   if (tools) parts.push(`Tools used: ${tools}`);
   if (finishedRun.error && assistant?.content?.trim()) parts.push(`_Error: ${finishedRun.error}_`);
   appendFileSync(path, `${parts.join("\n\n")}\n\n---\n\n`);
+}
+
+/**
+ * A secret the human typed into this chat was just saved to the vault: mask it wherever the chat kept it in clear —
+ * messages, title, transcript and the logs of its finished runs. The run that is still writing (`liveRunId`) masks its
+ * own message and log itself. Off when the human turned masking off.
+ */
+export function maskSecretInChat(conversationId: string, secret: string, liveRunId: string | null = null): number {
+  if (!secret || !getSettings().security.redactSecrets) return 0;
+  const row = conversationRow(conversationId);
+  if (!row) return 0;
+  const escaped = JSON.stringify(secret).slice(1, -1);
+  const mask = (text: string) => text.split(secret).join(SECRET_MASK).split(escaped).join(SECRET_MASK);
+  const rows = all<MessageRow>(
+    "SELECT * FROM messages WHERE conversation_id = ? AND (instr(content, ?) > 0 OR instr(blocks, ?) > 0) AND NOT (role = 'assistant' AND run_id IS ?) ORDER BY created_at",
+    conversationId,
+    secret,
+    escaped,
+    liveRunId,
+  );
+  for (const m of rows) {
+    sql("UPDATE messages SET content = ?, blocks = ? WHERE id = ?", mask(m.content), mask(m.blocks), m.id);
+    bus.emit({ type: "message.updated", message: getMessage(m.id) });
+  }
+  const titled = row.title.includes(secret);
+  if (titled) {
+    sql("UPDATE conversations SET title = ? WHERE id = ?", mask(row.title), conversationId);
+    bus.emit({ type: "conversation.updated", conversation: getConversationSummary(conversationId) });
+  }
+  // Only runs since the secret first showed up can have it in their log (a long chat has hundreds).
+  const since = titled ? row.created_at : rows[0]?.created_at;
+  const files = [transcriptPath(getAgent(row.agent_id), conversationId)];
+  if (since) for (const r of listRuns({ conversationId, limit: 500 })) if (r.id !== liveRunId && r.createdAt >= since) files.push(findRunLog(r) ?? "");
+  for (const file of files) {
+    if (!file || !existsSync(file)) continue;
+    try {
+      const text = readFileSync(file, "utf8");
+      if (text.includes(secret) || text.includes(escaped)) writeFileSync(file, mask(text));
+    } catch (err) {
+      log.warn(`could not mask a saved secret in ${file}`, err);
+    }
+  }
+  return rows.length;
 }

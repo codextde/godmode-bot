@@ -18,6 +18,8 @@ export default defineConfig({
   prefetch: { prefetchAll: false, defaultStrategy: 'hover' },
   build: { inlineStylesheets: 'always', format: 'file' },
   compressHTML: true,
+  // Off: in-app webviews and privacy browsers send `Origin: null` or none, which blocked checkout. /admin checks the origin itself.
+  security: { checkOrigin: false },
   vite: {
     plugins: [tailwindcss()],
   },

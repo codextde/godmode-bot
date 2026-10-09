@@ -40,7 +40,7 @@ export function TaskStatusBadge({ task }: { task: Task }) {
   return <Badge label={meta.label} tone={meta.tone} live={live} />;
 }
 
-export function TaskRow({ task, agent, workspaceName }: { task: Task; agent?: Agent; workspaceName?: string }) {
+export function TaskRow({ task, agent, workspaceName, projectName }: { task: Task; agent?: Agent; workspaceName?: string; projectName?: string }) {
   const c = useColors();
   const detail =
     task.status === "blocked"
@@ -79,7 +79,7 @@ export function TaskRow({ task, agent, workspaceName }: { task: Task; agent?: Ag
         <Row style={{ gap: space.sm }}>
           <TaskStatusBadge task={task} />
           <T variant="footnote" muted numberOfLines={1} style={{ flex: 1 }}>
-            {[`#${task.number}`, agent?.name ?? "No agent", workspaceName, ...extra].filter(Boolean).join(" · ")}
+            {[`#${task.number}`, agent?.name ?? "No agent", workspaceName, projectName, ...extra].filter(Boolean).join(" · ")}
           </T>
         </Row>
         {detail ? (

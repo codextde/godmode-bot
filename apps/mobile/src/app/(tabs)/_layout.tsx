@@ -3,6 +3,7 @@ import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { DynamicColorIOS, Platform } from "react-native";
 import { LiveAccessory } from "@/components/live-accessory";
 import { api } from "@/lib/api";
+import { useOpenHumanTasks } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { qk } from "@/lib/query";
 import { useColors } from "@/lib/theme";
@@ -14,7 +15,8 @@ export default function TabsLayout() {
   const working = useLive((s) => Object.keys(s.runs).length > 0);
   const offline = useLive((s) => s.status === "offline");
   const { data: boot } = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
-  const needsYou = (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.openQuestions ?? 0);
+  const forYou = useOpenHumanTasks().data?.length ?? 0;
+  const needsYou = (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.openQuestions ?? 0) + forYou;
 
   return (
     <NativeTabs
@@ -41,6 +43,7 @@ export default function TabsLayout() {
       <NativeTabs.Trigger name="tasks">
         <NativeTabs.Trigger.Label>Tasks</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="checklist" md="checklist" />
+        {forYou > 0 && <NativeTabs.Trigger.Badge>{String(forYou)}</NativeTabs.Trigger.Badge>}
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="screens">
         <NativeTabs.Trigger.Label>Screens</NativeTabs.Trigger.Label>

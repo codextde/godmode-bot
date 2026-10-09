@@ -1,31 +1,39 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, router, Stack } from "expo-router";
 import { useDeferredValue, useMemo, useState } from "react";
-import { Alert, FlatList, View } from "react-native";
-import type { Agent, Conversation } from "@godmode/shared";
+import { Alert, FlatList, RefreshControl, View } from "react-native";
+import type { Agent, Conversation, Project } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
 import { ConversationRow } from "@/components/rows";
-import { EmptyState, Hairline } from "@/components/ui";
+import { EmptyState, ErrorState, Hairline, SkeletonRows } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
-import { useWorkspace } from "@/lib/workspace";
+import { usePullRefresh } from "@/lib/use-pull-refresh";
+import { inProject, useProjectIndex, useWorkspace, chatProject } from "@/lib/workspace";
 import { space } from "@/lib/theme";
 
 export default function Chats() {
   const [search, setSearch] = useState("");
   const q = useDeferredValue(search.trim());
-  const { id: workspaceId, workspace } = useWorkspace();
+  const { id: workspaceId, workspace, projectId, project } = useWorkspace();
+  const projects = useProjectIndex();
   const list = useQuery({
     queryKey: qk.conversationList(q, workspaceId),
     queryFn: () => api.conversations.list({ search: q || undefined, limit: 200, workspaceId }),
   });
   const { byId } = useAgents();
+  const pull = usePullRefresh(list.refetch);
   const runs = useLive((s) => s.runs);
   const running = useMemo(() => new Set(Object.values(runs).map((r) => r.run.conversationId)), [runs]);
-  const data = (list.data ?? []).filter((conv) => conv.origin !== "dream");
+  const data = inProject(list.data ?? [], projectId, byId).filter((conv) => conv.origin !== "dream");
+  const projectOf = (conv: Conversation) => {
+    if (projectId) return undefined;
+    const id = chatProject(conv, byId);
+    return id ? projects.get(id)?.project : undefined;
+  };
 
   return (
     <>
@@ -37,22 +45,29 @@ export default function Chats() {
         keyExtractor={(conv) => conv.id}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: 140 }}
+        refreshControl={<RefreshControl {...pull} />}
         ListHeaderComponent={
           <View style={{ paddingHorizontal: space.sm, paddingVertical: space.sm }}>
             <WorkspaceChip />
           </View>
         }
         ItemSeparatorComponent={() => <Hairline inset={76} />}
-        renderItem={({ item }) => <ChatItem conversation={item} agent={byId.get(item.agentId)} running={running.has(item.id)} />}
+        renderItem={({ item }) => <ChatItem conversation={item} agent={byId.get(item.agentId)} running={running.has(item.id)} project={projectOf(item)} />}
         ListEmptyComponent={
-          list.isLoading ? null : q ? (
+          list.isLoading ? (
+            <SkeletonRows count={8} />
+          ) : list.isError ? (
+            <ErrorState title="Couldn't load your chats" error={errorText(list.error)} onRetry={() => void list.refetch()} />
+          ) : q ? (
             <EmptyState icon="search" title="Nothing found" body={`No chat mentions “${q}”.`} />
           ) : (
             <EmptyState
               icon="chats"
               title="No chats yet"
               body={
-                workspace
+                project
+                  ? `Chats in ${project.name} show up here. Start one and it works with the project's context.`
+                  : workspace
                   ? `Chats in ${workspace.name} show up here. Start one and it runs with this workspace's context.`
                   : "Ask Godmode something and the conversation shows up here, on your computer too."
               }
@@ -64,7 +79,7 @@ export default function Chats() {
   );
 }
 
-function ChatItem({ conversation, agent, running }: { conversation: Conversation; agent?: Agent; running: boolean }) {
+function ChatItem({ conversation, agent, running, project }: { conversation: Conversation; agent?: Agent; running: boolean; project?: Project }) {
   const update = useMutation({
     mutationFn: (patch: { pinned?: boolean; archived?: boolean }) => api.conversations.update(conversation.id, patch),
     onSettled: () => queryClient.invalidateQueries({ queryKey: qk.conversations }),
@@ -84,7 +99,7 @@ function ChatItem({ conversation, agent, running }: { conversation: Conversation
       },
     ]);
 
-  const row = <ConversationRow conversation={conversation} agent={agent} running={running} />;
+  const row = <ConversationRow conversation={conversation} agent={agent} running={running} project={project} />;
   if (process.env.EXPO_OS !== "ios") return row;
   return (
     <Link href={{ pathname: "/chat/[id]", params: { id: conversation.id } }} asChild>

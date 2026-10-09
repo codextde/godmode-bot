@@ -28,7 +28,6 @@ const asked = Astro.url.searchParams.get('platform') ?? '';
 const selected = PLATFORMS[asked] ? asked : guess;
 const invalid = Astro.url.searchParams.has('invalid');
 Astro.response.headers.set('cache-control', 'no-store');
-// same-origin, not no-referrer: no-referrer makes browsers send `Origin: null` on the form POST and Astro's origin check rejects it.
 Astro.response.headers.set('referrer-policy', 'same-origin');
 ---
 

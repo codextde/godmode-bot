@@ -501,12 +501,15 @@ export function redactionEpoch(): string {
   return `${secretsForgotten}:${knownSecrets.size}:${getSettings().security.redactSecrets ? 1 : 0}`;
 }
 
+/** What a masked secret reads as in transcripts and logs. */
+export const SECRET_MASK = "••••••••";
+
 /** `redact` regardless of the setting: the diagnostic log is meant to be shared. */
 function maskKnownSecrets(text: string): string {
   if (!text || knownSecrets.size === 0) return text;
   let out = text;
   for (const secret of knownSecrets) {
-    if (out.includes(secret)) out = out.split(secret).join("••••••••");
+    if (out.includes(secret)) out = out.split(secret).join(SECRET_MASK);
   }
   return out;
 }

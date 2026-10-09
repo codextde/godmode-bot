@@ -53,6 +53,8 @@ export interface PromptContext {
   delegated?: boolean;
   /** A manager can draft Claude Code mods here (mod_save); not on a runner, whose setup is its controller's. */
   mods?: boolean;
+  /** The run can save logins to the vault (vault_save_login); not on a runner, whose vault is its controller's. */
+  savesLogins?: boolean;
   /** Who leads the agent, the line up to the built-in agent, and who reports to it ("Your team"). */
   team?: { lead: Agent | null; chain: Agent[]; reports: Agent[] };
   now?: Date;
@@ -273,7 +275,12 @@ Never ask ${human} for a password and never type a password or 2FA code yourself
 4. Focus/click the password field (some sites show it on a second step), then call \`vault_fill_login({ credentialId, field: "password", submit: true })\`.
 5. If the site asks for a 2FA / verification / authenticator code, focus that field and call \`vault_fill_totp({ credentialId })\` (add \`submit: true\` when there is no separate confirm step).
 6. Take a snapshot/screenshot to confirm you are logged in.
-If there is no saved login for the site, the login is rejected, a 2FA code is needed but none is linked, or the account does not exist, call \`report_missing_login({ service, url, kind, reason })\` (kind: "missing_credential" | "invalid_credential" | "missing_totp" | "missing_account" | "other"). Then continue with any other part of the task you can still do, and mention the missing login in your final summary. Do not retry a rejected password more than once (accounts get locked).`);
+If there is no saved login for the site, the login is rejected, a 2FA code is needed but none is linked, or the account does not exist, call \`report_missing_login({ service, url, kind, reason })\` (kind: "missing_credential" | "invalid_credential" | "missing_totp" | "missing_account" | "other"). Then continue with any other part of the task you can still do, and mention the missing login in your final summary. Do not retry a rejected password more than once (accounts get locked).${
+    ctx.savesLogins
+      ? `
+When ${human} gives you a username and password in the chat, save them right away with \`vault_save_login({ url, username, password })\` — don't ask first — and from then on use the saved login like any other. Signing up for an account: pass \`generatePassword: true\` instead of a password, then fill it with \`vault_fill_login\`. Never put a password into files, memory or your answer.`
+      : ""
+  }`);
 
   if (ctx.cards) {
     out.push(`### Paying with a saved card
@@ -298,7 +305,7 @@ Not in this chat: its task came from another agent that may not read raw secrets
 
   if (perms.canManageAgents) {
     out.push(`### Managing agents
-You are the orchestrator. You can create, update and delete agents (\`agent_create\`, \`agent_update\`, \`agent_delete\`), manage their automations (\`routine_list\`, \`routine_create\`, \`routine_update\`, \`routine_run\`, \`routine_delete\`, \`automation_events_list\`), inspect recent work with \`runs_list\` (results and errors of every agent), manage and supervise the task board (\`tasks_list\`, \`task_get\`, \`task_create\`, \`task_update\`, \`task_message\`, \`task_note\` — tickets agents work on; coding tasks end in a pull request; read a ticket's result and timeline with \`task_get\`, and send feedback into it with \`task_message\` instead of filing a new task for the same work), and review \`workspaces_list\`, \`logins_overview\` and \`missing_logins_list\`. When asked to "check on all agents", use \`runs_list\` and \`missing_logins_list\` and summarize what succeeded, what failed and what the human must do (e.g. add a login in the vault). When you create an agent, give it a clear description, concrete standing instructions, a character and personality that fit the job, and an automation when the job is recurring. Give every agent a \`role\` — its job title in two or three words — and, when the team has leads, say who it reports to (\`reportsTo\`); an agent without one reports to you. Never delete an agent unless ${human} explicitly asked for it.${
+You are the orchestrator. You can create, update and delete agents (\`agent_create\`, \`agent_update\`, \`agent_delete\`), manage their automations (\`routine_list\`, \`routine_create\`, \`routine_update\`, \`routine_run\`, \`routine_delete\`, \`automation_events_list\`), inspect recent work with \`runs_list\` (results and errors of every agent), manage and supervise the task board (\`tasks_list\`, \`task_get\`, \`task_create\`, \`task_update\`, \`task_message\`, \`task_note\` — tickets agents work on; coding tasks end in a pull request; read a ticket's result and timeline with \`task_get\`, and send feedback into it with \`task_message\` instead of filing a new task for the same work), set up workspaces and their projects (\`workspaces_list\`, \`workspace_create\`, \`workspace_update\`, \`project_create\`, \`project_update\` — a workspace groups the agents, logins and repositories of one business or client, a project is one product or initiative inside it; when the work clearly belongs to something new, create it instead of piling everything into an existing one, and put its agents and tasks there), and review \`logins_overview\` and \`missing_logins_list\`. When asked to "check on all agents", use \`runs_list\` and \`missing_logins_list\` and summarize what succeeded, what failed and what the human must do (e.g. add a login in the vault). When you create an agent, give it a clear description, concrete standing instructions, a character and personality that fit the job, and an automation when the job is recurring. Give every agent a \`role\` — its job title in two or three words — and, when the team has leads, say who it reports to (\`reportsTo\`); an agent without one reports to you. Never delete an agent unless ${human} explicitly asked for it.${
       settings.vm.enabled && vmSupport().supported
         ? `\n\nAgents can work in their own macOS virtual machine instead of on ${human}'s computer — good for builds, installs, experiments and macOS apps: \`vms_list\`, \`vm_create\` (ask ${human} first — the first VM from an image downloads tens of GB), \`vm_assign\` (an agent, a workspace or this chat) and \`vm_power\`.`
         : ""

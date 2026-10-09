@@ -2,13 +2,14 @@ import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   characterGreeting,
   type Agent,
   type ConversationWithMessages,
+  type HumanTask,
   type Message,
   type MessageBlock,
   type QueuedMessage,
@@ -26,7 +27,8 @@ import { AssistantMessage, UserMessage } from "@/components/message";
 import { Icon } from "@/components/icon";
 import { ModelButton } from "@/components/model-button";
 import { QueueTray } from "@/components/queue-tray";
-import { EmptyState, T, tap } from "@/components/ui";
+import { ErrorState, Skeleton, T, tap } from "@/components/ui";
+import { openHumanTask } from "@/components/human-task-row";
 import { ApiError, api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { setQueue } from "@/lib/composer";
@@ -49,6 +51,7 @@ export default function Chat() {
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
   const list = useRef<FlashListRef<Item>>(null);
   const conversation = useQuery({ queryKey: qk.conversation(id), queryFn: () => api.conversations.get(id) });
+  const forYou = useQuery({ queryKey: qk.chatHumanTasks(id), queryFn: () => api.humanTasks.list({ status: "active", conversationId: id }) });
   const { byId } = useAgents();
   const agent = conversation.data ? byId.get(conversation.data.agentId) : undefined;
   const run = useConversationRun(id);
@@ -73,6 +76,11 @@ export default function Chat() {
       if (m.role === "user") out.push({ key: m.id, role: "user", message: m });
       else if (m.role === "assistant" && m.id !== live?.messageId) {
         out.push({ key: m.id, role: "assistant", blocks: m.blocks, content: m.content, streaming: !!run && m.runId === run.run.id });
+      }
+      else if (m.role === "system") {
+        // Where the human closed a task the agent gave them; the chat continued from there.
+        const marker = m.blocks.filter((b) => b.type === "human_task");
+        if (marker.length) out.push({ key: m.id, role: "assistant", blocks: marker, content: "", streaming: false });
       }
     }
     if (live) {
@@ -200,6 +208,15 @@ export default function Chat() {
       <Stack.Title>{title}</Stack.Title>
       {primary && <HeaderActions actions={[{ icon: "eye", label: "Watch the agent's screen", onPress: () => router.push(screenHref(primary)) }]} />}
       <KeyboardAvoidingView behavior="translate-with-padding" style={{ flex: 1 }}>
+        {!conversation.data ? (
+          <View style={{ flex: 1 }}>
+            {conversation.isError ? (
+              <ErrorState title="Couldn't open this chat" error={errorText(conversation.error)} onRetry={() => void conversation.refetch()} />
+            ) : (
+              <ChatSkeleton />
+            )}
+          </View>
+        ) : (
         <FlashList
           ref={list}
           data={items}
@@ -209,7 +226,6 @@ export default function Chat() {
           maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.25 }}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={{ height: 22 }} />}
-          ListEmptyComponent={conversation.isError ? <EmptyState icon="warning" title="Couldn't open this chat" body={errorText(conversation.error)} /> : null}
           renderItem={({ item }) =>
             item.role === "intro" ? (
               agent ? <Intro agent={agent} conversationId={id} running={!!run} /> : null
@@ -221,6 +237,8 @@ export default function Chat() {
           }
           getItemType={(item) => item.role}
         />
+        )}
+        {forYou.data?.length ? <ForYouStrip tasks={forYou.data} /> : null}
         {run && primary ? <LiveStrip screen={primary} activity={run.activity} /> : null}
         {paused?.reason === "question" ? (
           <AskingStrip agentName={agent?.name ?? "The agent"} approval={paused.question?.kind === "approval"} />
@@ -282,6 +300,60 @@ export default function Chat() {
         <View style={{ height: keyboardOpen ? space.sm : Math.max(insets.bottom, space.md) }} />
       </KeyboardAvoidingView>
     </>
+  );
+}
+
+/** Shaped like a chat while its messages load: a long chat takes a moment over the phone's connection. */
+function ChatSkeleton() {
+  const widths = [["62%", 0], ["84%", 1], ["48%", 0], ["90%", 1], ["70%", 1]] as const;
+  return (
+    <ScrollView
+      scrollEnabled={false}
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={styles.skeleton}
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading the chat"
+    >
+      <View style={{ alignItems: "center", gap: 10, paddingBottom: space.lg }}>
+        <Skeleton width={88} height={88} radius={30} />
+        <Skeleton width={110} height={14} />
+      </View>
+      {widths.map(([w, agent], i) =>
+        agent ? (
+          <View key={i} style={{ gap: 8 }}>
+            <Skeleton width={w} height={13} />
+            <Skeleton width={`${Math.max(30, parseInt(w, 10) - 22)}%`} height={13} />
+          </View>
+        ) : (
+          <Skeleton key={i} width={w} height={40} radius={20} style={{ alignSelf: "flex-end" }} />
+        ),
+      )}
+    </ScrollView>
+  );
+}
+
+/** Above the composer while the agent waits for something only the human can do. */
+function ForYouStrip({ tasks }: { tasks: HumanTask[] }) {
+  const c = useColors();
+  const first = tasks[0]!;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => openHumanTask(first.id, first.conversationId)}
+      style={({ pressed }) => [styles.paused, { backgroundColor: c.warningSoft, borderColor: c.warning, opacity: pressed ? 0.75 : 1 }]}
+    >
+      <Icon name="person" size={15} color={c.warning} />
+      <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
+        <T variant="footnote" style={{ fontWeight: "600" }}>
+          Waiting for you:{" "}
+        </T>
+        {first.title}
+        {tasks.length > 1 ? ` and ${tasks.length - 1} more` : ""}
+      </T>
+      <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
+        Open
+      </T>
+    </Pressable>
   );
 }
 
@@ -390,6 +462,11 @@ function Intro({ agent, conversationId, running }: { agent: Agent; conversationI
 }
 
 const styles = StyleSheet.create({
+  skeleton: {
+    gap: 22,
+    paddingHorizontal: space.lg,
+    paddingTop: space.xl,
+  },
   list: {
     paddingHorizontal: space.lg,
     paddingTop: space.md,

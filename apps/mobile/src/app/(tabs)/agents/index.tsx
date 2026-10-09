@@ -2,7 +2,8 @@ import { router, Stack } from "expo-router";
 import { useMemo } from "react";
 import { RefreshControl, ScrollView, View } from "react-native";
 import { AgentRow } from "@/components/rows";
-import { EmptyState, Hairline, tap } from "@/components/ui";
+import { EmptyState, ErrorState, Hairline, SkeletonRows, tap } from "@/components/ui";
+import { errorText } from "@/lib/api";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
@@ -12,7 +13,7 @@ import { space } from "@/lib/theme";
 
 export default function Agents() {
   const agents = useAgents();
-  const { id: workspaceId } = useWorkspace();
+  const { id: workspaceId, projectId } = useWorkspace();
   const runs = useLive((s) => s.runs);
   // Working means running; a run waiting for a free slot is only queued.
   const counts = useMemo(() => {
@@ -30,9 +31,11 @@ export default function Agents() {
   const data = useMemo(
     () =>
       [...agentsFor(agents.data ?? [], workspaceId)].sort(
-        (a, b) => Number(busy.has(b.id)) - Number(busy.has(a.id)) || Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name),
+        (a, b) =>
+          Number(!!projectId && b.projectId === projectId) - Number(!!projectId && a.projectId === projectId) ||
+          Number(busy.has(b.id)) - Number(busy.has(a.id)) || Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name),
       ),
-    [agents.data, busy, workspaceId],
+    [agents.data, busy, workspaceId, projectId],
   );
 
   return (
@@ -59,7 +62,13 @@ export default function Agents() {
           />
         </View>
       ))}
-      {!agents.isLoading && data.length === 0 && <EmptyState icon="agents" title="No agents yet" body="Create agents in Godmode on your computer." />}
+      {agents.isLoading ? (
+        <SkeletonRows count={7} avatar={46} />
+      ) : agents.isError && !data.length ? (
+        <ErrorState title="Couldn't load your agents" error={errorText(agents.error)} onRetry={() => void agents.refetch()} />
+      ) : data.length === 0 ? (
+        <EmptyState icon="agents" title="No agents yet" body="Create agents in Godmode on your computer." />
+      ) : null}
     </ScrollView>
   );
 }

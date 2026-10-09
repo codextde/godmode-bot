@@ -1,7 +1,7 @@
 import { Stack } from "expo-router";
 import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { ScreenTile } from "@/components/screen-tile";
-import { EmptyState, SectionTitle } from "@/components/ui";
+import { EmptyState, LoadingState, SectionTitle } from "@/components/ui";
 import { isLive, useLiveScreens, type LiveScreen } from "@/lib/screens";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { space } from "@/lib/theme";
@@ -37,13 +37,15 @@ export default function Screens() {
             ))}
           </View>
         </View>
-      ) : !loading ? (
+      ) : loading ? (
+        <LoadingState label="Looking for screens…" />
+      ) : (
         <EmptyState
           icon="screens"
           title="Nothing on screen right now"
           body="When an agent browses, works in a VM or on a screen you shared, you can watch it here live."
         />
-      ) : null}
+      )}
 
       {groups.map(([title, items]) =>
         items.length ? (

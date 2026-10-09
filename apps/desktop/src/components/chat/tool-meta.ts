@@ -19,6 +19,7 @@ import {
   FileSearch,
   FileText,
   FileUp,
+  FolderKanban,
   FolderSearch,
   Globe,
   History,
@@ -297,6 +298,7 @@ const GODMODE_TOOLS = new Set([
   "vault_list_logins",
   "vault_fill_login",
   "vault_fill_totp",
+  "vault_save_login",
   "vault_get_login",
   "vault_get_totp",
   "vault_list_cards",
@@ -318,6 +320,10 @@ const GODMODE_TOOLS = new Set([
   "automation_check_result",
   "runs_list",
   "workspaces_list",
+  "workspace_create",
+  "workspace_update",
+  "project_create",
+  "project_update",
   "notify_user",
   "followup_schedule",
   "followup_cancel",
@@ -377,6 +383,16 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
     }
     case "vault_fill_totp":
       return { kind: "vault", icon: ShieldCheck, title: credLabel ? `Entered 2FA code for ${credLabel}` : "Entered 2FA code", detail: "from vault" };
+    case "vault_save_login": {
+      const site = hostOf(input.url);
+      const user = str(input.username);
+      return {
+        kind: "vault",
+        icon: KeyRound,
+        title: site ? `Saved login for ${site}` : "Saved a login",
+        detail: [user, input.generatePassword ? "new password, never shown to the AI" : "password stored encrypted"].filter(Boolean).join(" · "),
+      };
+    }
     case "vault_get_login":
       return { kind: "vault", icon: Eye, title: credLabel ? `Revealed login for ${credLabel}` : "Revealed a login", detail: "audited" };
     case "vault_get_totp":
@@ -434,6 +450,14 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       return { kind: "agents", icon: History, title: "Checked recent runs" };
     case "workspaces_list":
       return { kind: "agents", icon: Layers, title: "Listed workspaces" };
+    case "workspace_create":
+      return { kind: "agents", icon: Layers, title: `Created workspace ${str(input.name)}`.trim(), detail: truncate(str(input.description), 120) || undefined };
+    case "workspace_update":
+      return { kind: "agents", icon: Layers, title: "Updated a workspace" };
+    case "project_create":
+      return { kind: "agents", icon: FolderKanban, title: `Created project ${str(input.name)}`.trim(), detail: truncate(str(input.description), 120) || undefined };
+    case "project_update":
+      return { kind: "agents", icon: FolderKanban, title: "Updated a project" };
     case "notify_user":
       return { kind: "notify", icon: Bell, title: "Sent you a notification", detail: str(input.title) || undefined };
     case "followup_schedule":

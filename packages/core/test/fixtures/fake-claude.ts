@@ -562,6 +562,45 @@ if (slash?.[1] === "clear") {
   ].join("\n");
   textTurn(text);
   result(text);
+} else if (/SAVE_LOGIN (\S+) (\S+) (\S+)/.test(prompt)) {
+  // An agent saving a login the human pasted: streamed like Claude does (the password split over deltas), thought about, then saved.
+  out(init);
+  const [, url, username, password] = /SAVE_LOGIN (\S+) (\S+) (\S+)/.exec(prompt)!;
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  const args = { url, username, password };
+  const id = `msg_${crypto.randomUUID()}`;
+  const event = (ev: unknown) => out({ type: "stream_event", event: ev, parent_tool_use_id: null, session_id: sessionId });
+  event({ type: "message_start", message: { id, role: "assistant", model: "fake-model", content: [] } });
+  event({ type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } });
+  event({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: `The password is ${password.slice(0, 4)}` } });
+  event({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: password.slice(4) } });
+  event({ type: "content_block_stop", index: 0 });
+  event({ type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "toolu_save", name: "mcp__godmode__vault_save_login", input: {} } });
+  const json = JSON.stringify(args);
+  const cut = json.indexOf(password) + 3;
+  event({ type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: json.slice(0, cut) } });
+  event({ type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: json.slice(cut) } });
+  event({ type: "content_block_stop", index: 1 });
+  out({
+    type: "assistant",
+    message: { id, role: "assistant", content: [{ type: "thinking", thinking: `The password is ${password}` }, { type: "tool_use", id: "toolu_save", name: "mcp__godmode__vault_save_login", input: args }] },
+    parent_tool_use_id: null,
+    session_id: sessionId,
+  });
+  const call = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "vault_save_login", arguments: args } });
+  const text = call.result.content[0].text as string;
+  out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_save", content: text, is_error: call.result.isError === true }] }, parent_tool_use_id: null, session_id: sessionId });
+  textTurn("Saved it to the vault.");
+  result("Saved it to the vault.");
 } else if (prompt.includes("TASK_FOLLOWUP") || prompt.includes("TASK_NOTE") || prompt.includes("HUMAN_TASK")) {
   out(init);
   const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
