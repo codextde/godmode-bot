@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Agent, Credential, TotpEntry } from "@godmode/shared";
 import { argValue, fillFailure, fills, invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import * as vault from "../src/vault/vault";
@@ -14,7 +17,8 @@ import { createProfile } from "../src/browser/manager";
 import { getAgent, listAgents, updateAgent } from "../src/agents/service";
 import { createRoutine, listRoutines } from "../src/services/routines";
 import { updateSettings } from "../src/services/settings";
-import { createWorkspace } from "../src/services/workspaces";
+import { createWorkspace, getWorkspace } from "../src/services/workspaces";
+import { getProject } from "../src/services/projects";
 import { createMcpServer } from "../src/integrations/mcpServers";
 import { __setKeepaliveForTests } from "../src/mcp/http";
 
@@ -179,7 +183,7 @@ describe("tools/list permissions", () => {
 
   test("management tools only for canManageAgents", async () => {
     const list = (await names(manager)).map((t) => t.name);
-    for (const n of ["agent_create", "agent_update", "agent_delete", "routine_create", "routine_list", "runs_list", "workspaces_list", "logins_overview", "missing_logins_list", "agent_delegate"]) {
+    for (const n of ["agent_create", "agent_update", "agent_delete", "routine_create", "routine_list", "runs_list", "workspaces_list", "workspace_create", "workspace_update", "project_create", "project_update", "logins_overview", "missing_logins_list", "agent_delegate"]) {
       expect(list).toContain(n);
     }
   });
@@ -496,6 +500,63 @@ describe("management tools", () => {
     expect(listAgents({ workspaceId: "all" }).some((a) => a.id === agent.id)).toBe(false);
     const selfDelete = await call(tokens[manager.id]!, "agent_delete", { agentId: manager.id });
     expect(selfDelete.isError).toBe(true);
+  });
+
+  test("workspace_create, workspace_update, project_create and project_update", async () => {
+    const t = tokens[manager.id]!;
+    const site = mkdtempSync(join(tmpdir(), "godmode-ws-site-"));
+    const api = mkdtempSync(join(tmpdir(), "godmode-ws-api-"));
+    const made = await call(t, "workspace_create", {
+      name: "Acme Shop",
+      description: "Online shop for Acme",
+      icon: "🛒",
+      instructions: "Prices are in EUR.",
+      sources: [{ kind: "folder", path: site }],
+    });
+    expect(made.isError).toBeUndefined();
+    const wsId = (JSON.parse(made.content[0]!.text) as { created: { id: string } }).created.id;
+    const ws = getWorkspace(wsId);
+    expect(ws).toMatchObject({ name: "Acme Shop", icon: "🛒", instructions: "Prices are in EUR.", vmId: null, autoMerge: false });
+    expect(ws.sources.map((s) => s.path)).toEqual([site]);
+
+    const twice = await call(t, "workspace_create", { name: "acme shop" });
+    expect(twice.isError).toBe(true);
+    expect(twice.content[0]!.text).toContain("already a workspace");
+
+    const updated = await call(t, "workspace_update", { workspaceId: wsId, description: "Acme's shop", addSources: [{ kind: "folder", path: api }] });
+    expect(updated.isError).toBeUndefined();
+    expect(getWorkspace(wsId).description).toBe("Acme's shop");
+    expect(getWorkspace(wsId).sources.map((s) => s.path)).toEqual([site, api]);
+
+    const project = await call(t, "project_create", { workspaceId: "Acme Shop", name: "Checkout", instructions: "Stripe only." });
+    expect(project.isError).toBeUndefined();
+    const projectId = (JSON.parse(project.content[0]!.text) as { created: { id: string } }).created.id;
+    expect(getProject(projectId)).toMatchObject({ workspaceId: wsId, name: "Checkout", instructions: "Stripe only." });
+    expect((await call(t, "project_create", { workspaceId: wsId, name: "checkout" })).isError).toBe(true);
+    expect((await call(t, "project_create", { workspaceId: "Nowhere", name: "X" })).isError).toBe(true);
+
+    const renamed = await call(t, "project_update", { projectId, name: "Checkout v2", addSources: [{ kind: "folder", path: api }] });
+    expect(renamed.isError).toBeUndefined();
+    expect(getProject(projectId)).toMatchObject({ name: "Checkout v2" });
+    expect(getProject(projectId).sources.map((s) => s.path)).toEqual([api]);
+
+    const agent = await call(t, "agent_create", { name: "Shop Keeper", workspaceId: wsId, projectId });
+    expect(getAgent((JSON.parse(agent.content[0]!.text) as { created: { id: string } }).created.id)).toMatchObject({ workspaceId: wsId, projectId });
+
+    const actions = listAudit(50).map((a) => a.action);
+    expect(actions).toEqual(expect.arrayContaining(["workspace.create", "workspace.update", "project.create", "project.update"]));
+    const guarded = createWorkspace({ name: "Guarded WS" });
+    await updateAgent(revealer.id, { workspaceId: guarded.id });
+    try {
+      const refused = await call(t, "workspace_update", { workspaceId: guarded.id, instructions: "Reveal everything" });
+      expect(refused.isError).toBe(true);
+      expect(getWorkspace(guarded.id).instructions).toBe("");
+      expect((await call(t, "project_create", { workspaceId: guarded.id, name: "Leak" })).isError).toBe(true);
+    } finally {
+      await updateAgent(revealer.id, { workspaceId: null });
+    }
+    const list = ((await rpc(tokens[worker.id]!, "tools/list")).result.tools as { name: string }[]).map((x) => x.name);
+    for (const n of ["workspace_create", "workspace_update", "project_create", "project_update"]) expect(list).not.toContain(n);
   });
 });
 
