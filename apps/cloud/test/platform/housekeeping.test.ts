@@ -8,6 +8,7 @@ import { writeSettings } from "@/server/settings";
 import { getSystemStatus } from "@/server/system";
 import { closeDatabase, resetDatabase, truncateAll } from "../helpers/db";
 import { makeUser, seed } from "./fixtures";
+import pkg from "../../package.json";
 
 beforeAll(resetDatabase);
 beforeEach(async () => {
@@ -104,7 +105,7 @@ describe("getSystemStatus", () => {
     await writeSettings("billing", { stripeSecretKey: "sk_test_1", livemode: false }, SYSTEM);
     const status = await getSystemStatus();
     expect(status).toMatchObject({
-      version: "0.1.0",
+      version: pkg.version,
       publicUrl: "http://localhost:3210",
       publicUrlConfigured: true,
       database: true,
