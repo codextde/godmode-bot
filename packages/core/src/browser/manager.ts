@@ -374,7 +374,10 @@ async function startBrowser(profileId: string, opts: { headless?: boolean; trans
     const chrome = requireChrome(settings.browser.chromePath);
     headless = opts.headless ?? settings.browser.headless;
     stealth = settings.browser.stealth;
-    const extraArgs = stealth ? stealthArgs({ headless, userAgent: headless ? await windowedUserAgent(chrome.path) : null }) : [];
+    const extraArgs = [
+      ...(stealth ? stealthArgs({ headless, userAgent: headless ? await windowedUserAgent(chrome.path) : null }) : []),
+      ...(settings.browser.muteAudio ? ["--mute-audio"] : []),
+    ];
     try {
       proc = await launchChrome({ executable: chrome.path, userDataDir: profile.user_data_dir, headless, extraArgs });
     } catch (err) {
