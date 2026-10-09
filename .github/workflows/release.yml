@@ -121,6 +121,7 @@ jobs:
             rust_target: aarch64-unknown-linux-gnu
             bun_target: bun-linux-arm64
             args: ""
+            skip_sidecar_rpath: true
     steps:
       - uses: actions/checkout@v7
         with:
@@ -164,6 +165,20 @@ jobs:
               { echo "$name<<__GODMODE_EOF__"; echo "$value"; echo "__GODMODE_EOF__"; } >> "$GITHUB_ENV"
             fi
           done
+
+      - name: Keep linuxdeploy from patching the sidecar
+        if: matrix.skip_sidecar_rpath
+        run: |
+          # linuxdeploy sets an rpath on every ELF file in the AppImage. On arm64 that rewrite makes the Bun-compiled
+          # sidecar segfault and ldd fail, which aborts the build. The sidecar only links libc, so it needs no rpath.
+          wrapper="$RUNNER_TEMP/patchelf"
+          cat > "$wrapper" <<'EOF'
+          #!/usr/bin/env bash
+          if [ "${1:-}" = "--set-rpath" ] && [[ "${!#}" == */godmode-core ]]; then exit 0; fi
+          exec /usr/bin/patchelf "$@"
+          EOF
+          chmod +x "$wrapper"
+          echo "PATCHELF=$wrapper" >> "$GITHUB_ENV"
 
       - uses: tauri-apps/tauri-action@v1
         env:
