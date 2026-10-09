@@ -13,7 +13,25 @@
 import { domainMatches, hostnameOf, randomToken } from "../util";
 import { PageSession, attachToPage, pickActivePage, type CdpClient, type PageTarget } from "./cdp";
 
-export type FillKind = "username" | "password" | "totp" | "text";
+/** Card and billing fields are named by their HTML autocomplete token. */
+export type CardFillKind =
+  | "cc-number"
+  | "cc-exp"
+  | "cc-exp-month"
+  | "cc-exp-year"
+  | "cc-csc"
+  | "cc-name"
+  | "address-line1"
+  | "address-line2"
+  | "postal-code"
+  | "address-level2"
+  | "address-level1";
+export type FillKind = "username" | "password" | "totp" | "text" | CardFillKind;
+
+const CARD_KINDS = new Set<string>(["cc-number", "cc-exp", "cc-exp-month", "cc-exp-year", "cc-csc", "cc-name", "address-line1", "address-line2", "postal-code", "address-level2", "address-level1"]);
+/** Typed digits are compared by count (the page may add spaces or a slash), and the field shows dots afterwards. */
+const DIGIT_KINDS = new Set<string>(["cc-number", "cc-exp", "cc-csc"]);
+const MASKED_KINDS = new Set<string>(["cc-number", "cc-csc"]);
 
 export interface FillOptions {
   text: string;
@@ -66,7 +84,10 @@ export interface FillResult {
 
 interface LocateResult {
   status: "ok" | "not_found" | "bad_selector" | "not_editable" | "incompatible" | "nothing_focused";
-  mode?: "single" | "split";
+  mode?: "single" | "split" | "select";
+  /** The field's maxlength (-1 = none) and whether it asks for a four-digit year: how an expiry is written. */
+  maxLength?: number;
+  fullYear?: boolean;
   count?: number;
   via?: "selector" | "focused" | "auto";
   desc?: string;
@@ -83,6 +104,20 @@ const LOCATE = String.raw`(args) => {
   const TEXT_TYPES = new Set(["", "text", "email", "password", "tel", "number", "search", "url"]);
   const USER_RE = /user|e-?mail|login|account|identifier|benutzer|nutzer|anmelde|usuario|utilisateur/;
   const OTP_RE = /one[-_ ]?time|otp|totp|2fa|mfa|two[-_ ]?factor|verification|verify|security[-_ ]?code|auth(entication)?[-_ ]?code|\bcode\b|token|\bpin\b/;
+  const CARD = {
+    "cc-number": [/card.?num|cardnumber|cc.?num|credit.?card|card.?no\b|kartennummer|encryptedcardnumber|\bpan\b/],
+    "cc-exp": [/exp(iry|iration)?.?date|exp-date|\bexpir|valid.?(thru|until)|ablauf|g(ue|\u00fc)ltig|mm\s*\/\s*(yy|jj)|encryptedexpirydate/, /month|year|monat|jahr/],
+    "cc-exp-month": [/exp.*(month|\bmm\b)|card.?month|\bmonth\b|\bmonat|expirymonth/, /\/\s*(yy|jj)|year|jahr/],
+    "cc-exp-year": [/exp.*(year|\byy)|card.?year|\byear\b|\bjahr|expiryyear/, /(mm|mo)\s*\/|month|monat/],
+    "cc-csc": [/cvc|cvv|\bcsc\b|cvn|\bcid\b|security.?code|sicherheitscode|pr(ue|\u00fc)f(nummer|ziffer)|card.?code|securitycode|verification.?(code|value)/],
+    "cc-name": [/cc.?name|card.?holder|cardholder|holder.?name|name.?on.?card|karteninhaber|name.?auf.?der.?karte/],
+    "address-line1": [/address.?(line)?.?1|street|stra(ss|\u00df)e|billing.?address|\baddress\b/, /e-?mail|line.?2|address.?2/],
+    "address-line2": [/address.?(line)?.?2|apartment|suite|\bapt\b|adresszusatz/, /e-?mail/],
+    "postal-code": [/postal|\bzip|\bplz\b|post.?code|postleitzahl/],
+    "address-level2": [/\bcity\b|\btown\b|\bort\b|\bstadt\b|locality/],
+    "address-level1": [/\bstate\b|province|region|bundesland|county/],
+  };
+  const SELECTABLE = new Set(["cc-exp-month", "cc-exp-year", "address-level1"]);
   const typeOf = (el) => (el.getAttribute("type") || "text").toLowerCase();
   const isEditable = (el) => {
     if (!el || el.nodeType !== 1 || el.disabled || el.readOnly) return false;
@@ -103,6 +138,13 @@ const LOCATE = String.raw`(args) => {
     try { for (const l of el.labels || []) parts.push((l.textContent || "").slice(0, 80)); } catch {}
     return parts.join(" ").toLowerCase();
   };
+  const tokens = (el) => (el.getAttribute("autocomplete") || "").toLowerCase().split(/\s+/);
+  const cardMatch = (el, k) => {
+    if (tokens(el).includes(k)) return 2;
+    const [hint, not] = CARD[k];
+    const text = attrText(el);
+    return hint.test(text) && !(not && not.test(text)) ? 1 : 0;
+  };
   const describe = (el) => {
     let d = el.tagName.toLowerCase();
     if (el.tagName === "INPUT") d += "[type=" + typeOf(el) + "]";
@@ -119,6 +161,10 @@ const LOCATE = String.raw`(args) => {
     if (k === "password") return el.tagName === "INPUT" && t === "password";
     if (k === "username") return el.tagName === "INPUT" && ["", "text", "email", "tel"].includes(t);
     if (k === "totp") return el.tagName === "INPUT" && (t !== "password" || OTP_RE.test(attrText(el)) || el.getAttribute("autocomplete") === "one-time-code");
+    if (CARD[k]) {
+      if (el.tagName === "SELECT") return SELECTABLE.has(k) && !el.disabled;
+      return el.tagName === "INPUT" && ["", "text", "tel", "number"].concat(k === "cc-csc" ? ["password"] : []).includes(t);
+    }
     return true;
   };
 
@@ -154,7 +200,16 @@ const LOCATE = String.raw`(args) => {
   };
   const found = (el, via) => {
     globalThis[stateKey] = { el, boxes: null };
-    return { status: "ok", mode: "single", via, desc: describe(el), origin: originOf(el) };
+    const placeholder = (el.getAttribute("placeholder") || "") + " " + attrText(el);
+    return {
+      status: "ok",
+      mode: el.tagName === "SELECT" ? "select" : "single",
+      via,
+      desc: describe(el),
+      origin: originOf(el),
+      maxLength: typeof el.maxLength === "number" ? el.maxLength : -1,
+      fullYear: /yyyy|jjjj|aaaa/i.test(placeholder),
+    };
   };
 
   if (selector) {
@@ -163,6 +218,11 @@ const LOCATE = String.raw`(args) => {
     matches = all(selector);
     let el = matches.find(isVisible) || matches[0];
     if (!el) return { status: "not_found" };
+    if (CARD[kind]) {
+      if (el.tagName === "LABEL" && el.control) el = el.control;
+      else if (el.tagName !== "INPUT" && el.tagName !== "SELECT") el = (el.querySelector && el.querySelector("input, select")) || el;
+      return kindOk(el, kind) ? found(el, "selector") : { status: "incompatible", desc: describe(el) };
+    }
     if (!isEditable(el)) {
       const inner = el.tagName === "LABEL" && el.control ? el.control : el.querySelector && el.querySelector("input, textarea, [contenteditable='true'], [contenteditable='']");
       if (inner && isEditable(inner)) el = inner;
@@ -192,6 +252,15 @@ const LOCATE = String.raw`(args) => {
       globalThis[stateKey] = { el: boxes[0], boxes };
       return { status: "ok", mode: "split", count: boxes.length, via: "auto", desc: describe(boxes[0]), origin: originOf(boxes[0]) };
     }
+  }
+
+  if (CARD[kind]) {
+    const active = allowFocused ? deepActive() : null;
+    if (active && kindOk(active, kind) && cardMatch(active, kind)) return found(active, "focused");
+    const selects = SELECTABLE.has(kind) ? all("select").filter((e) => !e.disabled && isVisible(e)) : [];
+    const candidates = selects.concat(inputs).filter((e) => kindOk(e, kind));
+    const el = candidates.find((e) => cardMatch(e, kind) === 2) || candidates.find((e) => cardMatch(e, kind) === 1) || null;
+    return el ? found(el, "auto") : { status: "not_found" };
   }
 
   if (allowFocused) {
@@ -286,7 +355,7 @@ const FOCUS_CLEAR = String.raw`(args) => {
   return { focused: a === el, origin };
 }`;
 
-/** Fire change events, compare lengths (never values) and forget the target. */
+/** Fire change events, compare lengths (never values) and forget the target. `mask` shows the field as dots, like a password. */
 const FINISH = String.raw`(args) => {
   const s = globalThis[args.stateKey];
   delete globalThis[args.stateKey];
@@ -294,12 +363,54 @@ const FINISH = String.raw`(args) => {
   const targets = s.boxes || [s.el];
   for (const el of targets) {
     try { el.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+    if (args.mask) try { el.style.setProperty("-webkit-text-security", "disc", "important"); } catch {}
   }
   let matches = null;
   if (s.boxes && args.split) matches = s.boxes.every((b) => String(b.value).length === 1);
-  else if (s.el.tagName === "INPUT" || s.el.tagName === "TEXTAREA") matches = String(s.el.value).length === args.length;
+  else if (s.el.tagName === "INPUT" || s.el.tagName === "TEXTAREA") {
+    matches = args.digits ? String(s.el.value).replace(/\D/g, "").length === args.length : String(s.el.value).length === args.length;
+  }
   return { matches, url: location.href };
 }`;
+
+/** Pick the option of a <select> for an expiry month or year, or a state: by value, number or name. */
+const SELECT_OPTION = String.raw`(args) => {
+  const s = globalThis[args.stateKey];
+  const el = s && s.el;
+  if (!el || !el.isConnected || el.tagName !== "SELECT") return { ok: false };
+  const norm = (t) => String(t || "").trim().toLowerCase();
+  const want = norm(args.text);
+  const n = parseInt(want, 10);
+  const MONTHS = [["jan"], ["feb"], ["mar", "m\u00e4r", "maer"], ["apr"], ["may", "mai"], ["jun"], ["jul"], ["aug"], ["sep"], ["oct", "okt"], ["nov"], ["dec", "dez"]];
+  const fits = (raw) => {
+    const t = norm(raw);
+    if (!t) return false;
+    if (t === want) return true;
+    const num = parseInt(t, 10);
+    if (args.kind === "cc-exp-month") return num === n || MONTHS[n - 1].some((m) => t.startsWith(m));
+    if (args.kind === "cc-exp-year") return num === n || num === n % 100;
+    return false;
+  };
+  const options = [...el.options].filter((o) => !o.disabled);
+  const pick = options.find((o) => fits(o.value)) || options.find((o) => fits(o.textContent));
+  if (!pick) return { ok: false };
+  el.focus({ preventScroll: true });
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, pick.value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  return { ok: el.value === pick.value };
+}`;
+
+/** How an expiry ("MM/YYYY") or a year is written into this field. */
+function cardText(kind: FillKind, text: string, loc: LocateResult): string {
+  if (kind === "cc-exp") {
+    const [mm = "", yyyy = ""] = text.split("/");
+    if (loc.fullYear) return `${mm}/${yyyy}`;
+    return loc.maxLength === 4 ? `${mm}${yyyy.slice(-2)}` : `${mm}/${yyyy.slice(-2)}`;
+  }
+  if (kind === "cc-exp-year" && loc.maxLength === 2) return text.slice(-2);
+  return text;
+}
 
 /* ------------------------------------------------------------------ */
 /* Driver                                                               */
@@ -369,19 +480,30 @@ export async function fillOnPage(page: PageSession, opts: FillOptions): Promise<
   let loc = await call<LocateResult>(main, LOCATE, { kind, selector: opts.selector ?? null, stateKey, allowFocused: true });
 
   if (loc.status === "not_found" || loc.status === "nothing_focused") {
-    // The field may live in a cross-origin iframe (separate renderer) — search those too.
+    // The field may live in a cross-origin iframe (separate renderer) — search those too. A card's fields can sit in
+    // several frames next to unrelated ones: skip a match on a site the secret may not go to and keep looking.
+    let refused: { ctx: FrameContext; loc: LocateResult } | null = null;
     for (const child of await childFrameSessions(page)) {
       const childCtx: FrameContext = { session: child, contextId: await child.isolatedWorld(), isChildFrame: true };
       try {
         const res = await call<LocateResult>(childCtx, LOCATE, { kind, selector: opts.selector ?? null, stateKey, allowFocused: false });
-        if (res.status === "ok") {
-          ctx = childCtx;
-          loc = res;
-          break;
+        if (res.status !== "ok") continue;
+        if (CARD_KINDS.has(kind) && originRefusal(res.origin ?? "", opts)) {
+          await call(childCtx, FINISH, { stateKey, length: 0, split: false }).catch(() => {});
+          refused ??= { ctx: childCtx, loc: res };
+          continue;
         }
+        ctx = childCtx;
+        loc = res;
+        refused = null;
+        break;
       } catch {
         /* frame navigated away */
       }
+    }
+    if (refused) {
+      ctx = refused.ctx;
+      loc = refused.loc;
     }
   }
 
@@ -417,19 +539,34 @@ export async function fillOnPage(page: PageSession, opts: FillOptions): Promise<
     await ctx.session.insertText(value);
   };
 
-  const split = loc.mode === "split" && loc.count === opts.text.length;
+  if (loc.mode === "select") {
+    const picked = await call<{ ok: boolean }>(ctx, SELECT_OPTION, { stateKey, kind, text: opts.text }).catch(() => ({ ok: false }));
+    await call(ctx, FINISH, { stateKey, length: 0, split: false }).catch(() => {});
+    if (!picked.ok) return { ok: false, url: await currentUrl(), detail: `No option of ${loc.desc ?? "the dropdown"} matches; pick it yourself.` };
+    return { ok: true, url: await currentUrl(), detail: `Picked the option in ${loc.desc ?? "the dropdown"}${ctx.isChildFrame ? " (inside an embedded frame)" : ""}.` };
+  }
+
+  const text = CARD_KINDS.has(kind) ? cardText(kind, opts.text, loc) : opts.text;
+  const split = loc.mode === "split" && loc.count === text.length;
   try {
     if (split) {
-      for (let i = 0; i < opts.text.length; i++) await fillOne(i, opts.text[i]!);
+      for (let i = 0; i < text.length; i++) await fillOne(i, text[i]!);
     } else {
-      await fillOne(null, opts.text);
+      await fillOne(null, text);
     }
   } catch (err) {
     await call(ctx, FINISH, { stateKey, length: 0, split }).catch(() => {});
     return { ok: false, url: await currentUrl(), detail: err instanceof Error ? err.message : "Typing failed." };
   }
 
-  const fin = await call<{ matches: boolean | null; url: string }>(ctx, FINISH, { stateKey, length: opts.text.length, split }).catch(() => ({
+  const digits = DIGIT_KINDS.has(kind);
+  const fin = await call<{ matches: boolean | null; url: string }>(ctx, FINISH, {
+    stateKey,
+    length: digits ? text.replace(/\D/g, "").length : text.length,
+    split,
+    digits,
+    mask: MASKED_KINDS.has(kind),
+  }).catch(() => ({
     matches: null,
     url: "",
   }));
@@ -437,7 +574,7 @@ export async function fillOnPage(page: PageSession, opts: FillOptions): Promise<
 
   const where = split ? `${loc.count} one-digit boxes` : (loc.desc ?? "the field");
   const how = loc.via === "selector" ? "matched by selector" : loc.via === "focused" ? "focused field" : "auto-detected";
-  let detail = `Filled ${kind === "text" ? "text" : kind} into ${where} (${how}${ctx.isChildFrame ? ", inside an embedded frame" : ""})${opts.submit ? " and pressed Enter" : ""}.`;
+  let detail = `Filled ${kind === "text" ? "text" : CARD_KINDS.has(kind) ? "the field" : kind} into ${where} (${how}${ctx.isChildFrame ? ", inside an embedded frame" : ""})${opts.submit ? " and pressed Enter" : ""}.`;
   if (fin.matches === false) detail += " Warning: the field's content length differs from what was typed — the page may have truncated or reformatted it.";
   return { ok: true, url: opts.submit ? await currentUrl() : fin.url || (await currentUrl()), detail };
 }

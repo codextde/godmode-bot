@@ -1263,4 +1263,63 @@ CREATE INDEX IF NOT EXISTS idx_human_tasks_status ON human_tasks(status, positio
 CREATE INDEX IF NOT EXISTS idx_human_tasks_conversation ON human_tasks(conversation_id, status);
 `,
   },
+  {
+    id: 79,
+    name: "payment_cards",
+    sql: /* sql */ `
+-- Payment cards in the vault (vault/cards.ts): number, security code and billing address sealed with the vault key;
+-- amounts in minor units of the card's currency. Agents never read them: Godmode types them into checkout fields.
+CREATE TABLE IF NOT EXISTS payment_cards (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  brand TEXT NOT NULL DEFAULT 'other',
+  last4 TEXT NOT NULL,
+  exp_month INTEGER NOT NULL,
+  exp_year INTEGER NOT NULL,
+  holder_name TEXT NOT NULL DEFAULT '',
+  number_enc TEXT NOT NULL,
+  cvc_enc TEXT,
+  billing_enc TEXT,
+  billing_country TEXT NOT NULL DEFAULT '',
+  currency TEXT NOT NULL DEFAULT 'EUR',
+  limit_per_purchase INTEGER,
+  limit_monthly INTEGER,
+  ask_above INTEGER DEFAULT 0,             -- NULL = never ask within the limits, 0 = ask every time
+  agent_ids TEXT,                          -- JSON array; NULL = every agent that sees the workspace
+  allowed_sites TEXT NOT NULL DEFAULT '[]',
+  frozen INTEGER NOT NULL DEFAULT 0,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_payment_cards_workspace ON payment_cards(workspace_id);
+-- What agents bought with a card: the ledger the limits are checked against.
+CREATE TABLE IF NOT EXISTS card_purchases (
+  id TEXT PRIMARY KEY,
+  card_id TEXT NOT NULL REFERENCES payment_cards(id) ON DELETE CASCADE,
+  agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  run_id TEXT,
+  conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+  question_id TEXT,
+  amount INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  merchant TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  site TEXT NOT NULL,
+  recurrence TEXT NOT NULL DEFAULT 'once', -- once | monthly | yearly
+  status TEXT NOT NULL,                    -- pending | approved | declined | paid | failed | expired | cancelled
+  approved_by TEXT,                        -- limit | human
+  filled_at TEXT,
+  settled_at TEXT,
+  settled_by TEXT,                         -- agent | human: a failure the agent reports after typing the card still counts
+  ended_at TEXT,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_card_purchases_card ON card_purchases(card_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_card_purchases_status ON card_purchases(status);
+`,
+  },
 ];

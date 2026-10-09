@@ -166,6 +166,7 @@ const DEPENDENTS = [
   { table: "agents", key: "agents" },
   { table: "credentials", key: "credentials" },
   { table: "totp", key: "totp" },
+  { table: "payment_cards", key: "cards" },
   { table: "mcp_servers", key: "mcpServers" },
   { table: "api_tools", key: "apiTools" },
   { table: "browser_profiles", key: "browserProfiles" },
@@ -189,6 +190,7 @@ function describeCounts(counts: DependentCounts): string {
     agents: ["agent", "agents"],
     credentials: ["login", "logins"],
     totp: ["2FA entry", "2FA entries"],
+    cards: ["card", "cards"],
     mcpServers: ["MCP server", "MCP servers"],
     apiTools: ["API tool", "API tools"],
     browserProfiles: ["browser profile", "browser profiles"],
@@ -271,6 +273,7 @@ export async function deleteWorkspace(id: string, force = false): Promise<void> 
   }
   if (counts.credentials) bus.changed("credentials");
   if (counts.totp) bus.changed("totp");
+  if (counts.cards) bus.changed("payment-cards");
   if (counts.mcpServers) bus.changed("mcp-servers");
   if (counts.apiTools) bus.changed("api-tools");
   if (counts.browserProfiles) bus.changed("browser-profiles");

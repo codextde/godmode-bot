@@ -7,6 +7,7 @@ import { hostGuard, isAllowedOrigin, requireAuth } from "./auth";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerSystemRoutes } from "./routes/system";
 import { registerVaultRoutes } from "./routes/vault";
+import { registerCardRoutes } from "./routes/cards";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
 import { registerAgentRoutes } from "./routes/agents";
 import { registerSpendRoutes } from "./routes/spend";
@@ -150,6 +151,7 @@ export function createApp() {
 
   registerSystemRoutes(app);
   registerVaultRoutes(app);
+  registerCardRoutes(app);
   registerWorkspaceRoutes(app);
   registerAgentRoutes(app);
   registerSpendRoutes(app);

@@ -47,6 +47,8 @@ export interface PromptContext {
   fillOnly?: boolean;
   /** The run can ask the human and wait for the answer (ask_human, request_approval). */
   asking?: boolean;
+  /** The agent may pay with a saved card in this run's browser (vault_card_purchase). */
+  cards?: boolean;
   /** Another agent handed this task over: its questions go to that agent, not to the human. */
   delegated?: boolean;
   /** A manager can draft Claude Code mods here (mod_save); not on a runner, whose setup is its controller's. */
@@ -272,6 +274,17 @@ Never ask ${human} for a password and never type a password or 2FA code yourself
 5. If the site asks for a 2FA / verification / authenticator code, focus that field and call \`vault_fill_totp({ credentialId })\` (add \`submit: true\` when there is no separate confirm step).
 6. Take a snapshot/screenshot to confirm you are logged in.
 If there is no saved login for the site, the login is rejected, a 2FA code is needed but none is linked, or the account does not exist, call \`report_missing_login({ service, url, kind, reason })\` (kind: "missing_credential" | "invalid_credential" | "missing_totp" | "missing_account" | "other"). Then continue with any other part of the task you can still do, and mention the missing login in your final summary. Do not retry a rejected password more than once (accounts get locked).`);
+
+  if (ctx.cards) {
+    out.push(`### Paying with a saved card
+${human} saved payment cards in the vault for things a task really needs (a subscription, a plan, a domain, credits). You never see card details: never ask ${human} for them and never type them yourself.
+1. Open the checkout page. Pick the smallest plan that does the job; prefer monthly over yearly.
+2. \`vault_list_cards()\` shows the cards you may use, their limits and what is left this month.
+3. \`vault_card_purchase({ cardId, amount, currency, merchant, description, recurrence })\` with the total charged now. Above the card's threshold ${human} approves first and the turn waits for the decision.
+4. \`vault_fill_card({ purchaseId, field })\` for "number", "expiry" (or "exp_month" + "exp_year"), "cvc" and, when the form asks, "name" and the billing fields. Check that the total on the page matches, then click the pay button yourself.
+5. \`vault_card_purchase_result({ purchaseId, outcome })\` right after, and mention every purchase in your final summary.
+A refused limit is a decision: don't work around it with another card or a different amount. Retry a declined card at most once.`);
+  }
 
   if (rawSecrets) {
     out.push(`### Raw secrets

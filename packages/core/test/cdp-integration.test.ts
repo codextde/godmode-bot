@@ -59,6 +59,30 @@ const FAKE_PASSWORD = `<!doctype html><title>Fake</title>
 <input id="fakepw" type="text" name="password" placeholder="Password">
 <textarea id="otpnote" name="otp"></textarea>`;
 
+const CHECKOUT = `<!doctype html><title>Checkout</title>
+<form>
+  <input id="email" type="email" name="email" autocomplete="email">
+  <input id="num" name="cardnumber" autocomplete="cc-number" inputmode="numeric">
+  <input id="exp" name="exp-date" autocomplete="cc-exp" placeholder="MM / YY">
+  <input id="cvc" name="cvc" autocomplete="cc-csc" maxlength="4">
+  <input id="holder" name="ccname" placeholder="Name on card">
+  <input id="zip" name="postal" placeholder="ZIP">
+</form>
+<script>document.getElementById("email").focus();</script>`;
+
+const CHECKOUT_SELECTS = `<!doctype html><title>Checkout selects</title>
+<label>Card number <input id="num2" name="card_number"></label>
+<select id="mm" name="exp_month"><option value="">Month</option>${Array.from({ length: 12 }, (_, i) => `<option value="${String(i + 1).padStart(2, "0")}">${String(i + 1).padStart(2, "0")}</option>`).join("")}</select>
+<select id="yy" name="exp_year"><option value="">Year</option>${Array.from({ length: 10 }, (_, i) => `<option value="${2026 + i}">${2026 + i}</option>`).join("")}</select>
+<input id="exp4" name="expiry" maxlength="4" placeholder="MMYY">
+<input id="exp7" name="expiration" placeholder="MM/YYYY">`;
+
+const PAY_FRAME = `<!doctype html><title>Pay frame</title>
+<input id="fnum" name="cardnumber" autocomplete="cc-number"><input id="fcvc" name="cvc" autocomplete="cc-csc">`;
+
+const PAY_OUTER = (frameOrigin: string) => `<!doctype html><title>Pay outer</title>
+<input id="coupon" name="coupon"><iframe id="pay" src="${frameOrigin}/pay-frame" width="400" height="120"></iframe>`;
+
 /** Fill binding for the local test server (http://127.0.0.1:<port>), as for a login saved with an http:// URL. */
 const LOCAL = { allowedHosts: ["127.0.0.1"], httpHosts: ["127.0.0.1"] };
 
@@ -167,6 +191,14 @@ suite("managed Chromium (CDP integration)", () => {
             return html(OUTER_SAME);
           case "/fake-password":
             return html(FAKE_PASSWORD);
+          case "/checkout":
+            return html(CHECKOUT);
+          case "/checkout-selects":
+            return html(CHECKOUT_SELECTS);
+          case "/pay-outer":
+            return html(PAY_OUTER(`http://localhost:${server.port}`));
+          case "/pay-frame":
+            return html(PAY_FRAME);
           default:
             return new Response("not found", { status: 404 });
         }
@@ -393,6 +425,67 @@ suite("managed Chromium (CDP integration)", () => {
       "({ pw: document.getElementById('fakepw').value, note: document.getElementById('otpnote').value })",
     );
     expect(values).toEqual({ pw: "", note: "" });
+  }, 30_000);
+
+  test("fills card fields by their autocomplete tokens, never into the focused email field, and masks number and code", async () => {
+    await openPage(profileId, "/checkout");
+    const fill = (text: string, kind: Parameters<typeof manager.fillIntoPage>[1]["kind"]) => manager.fillIntoPage(profileId, { text, kind, ...LOCAL });
+    for (const [text, kind] of [
+      ["4242424242424242", "cc-number"],
+      ["08/2028", "cc-exp"],
+      ["123", "cc-csc"],
+      ["Ada Lovelace", "cc-name"],
+      ["74547", "postal-code"],
+    ] as const) {
+      const res = await fill(text, kind);
+      expect(res.ok).toBe(true);
+      expect(res.detail).not.toContain(text);
+    }
+    const values = await evalOn<Record<string, string>>(
+      profileId,
+      "/checkout",
+      `({ email: email.value, num: num.value, exp: exp.value, cvc: cvc.value, holder: holder.value, zip: zip.value,
+          numMask: getComputedStyle(num).webkitTextSecurity, cvcMask: getComputedStyle(cvc).webkitTextSecurity, holderMask: getComputedStyle(holder).webkitTextSecurity })`,
+    );
+    expect(values).toMatchObject({ email: "", num: "4242424242424242", exp: "08/28", cvc: "123", holder: "Ada Lovelace", zip: "74547", numMask: "disc", cvcMask: "disc" });
+    expect(values.holderMask).not.toBe("disc");
+  }, 30_000);
+
+  test("picks expiry month and year in dropdowns and writes the expiry as the field asks", async () => {
+    await openPage(profileId, "/checkout-selects");
+    expect((await manager.fillIntoPage(profileId, { text: "08", kind: "cc-exp-month", ...LOCAL })).ok).toBe(true);
+    expect((await manager.fillIntoPage(profileId, { text: "2028", kind: "cc-exp-year", ...LOCAL })).ok).toBe(true);
+    expect((await manager.fillIntoPage(profileId, { text: "4242424242424242", kind: "cc-number", ...LOCAL })).ok).toBe(true);
+    expect((await manager.fillIntoPage(profileId, { text: "08/2028", kind: "cc-exp", selector: "#exp4", ...LOCAL })).ok).toBe(true);
+    expect((await manager.fillIntoPage(profileId, { text: "08/2028", kind: "cc-exp", selector: "#exp7", ...LOCAL })).ok).toBe(true);
+    const nope = await manager.fillIntoPage(profileId, { text: "2099", kind: "cc-exp-year", ...LOCAL });
+    expect(nope.ok).toBe(false);
+    const values = await evalOn<Record<string, string>>(profileId, "/checkout-selects", "({ mm: mm.value, yy: yy.value, num: num2.value, exp4: exp4.value, exp7: exp7.value })");
+    expect(values).toEqual({ mm: "08", yy: "2028", num: "4242424242424242", exp4: "0828", exp7: "08/2028" });
+  }, 30_000);
+
+  test("types a card into a payment provider's cross-origin iframe only when that provider is allowed", async () => {
+    await openPage(profileId, "/pay-outer");
+    const rb = getRunning(profileId)!;
+    await waitFor(async () => {
+      const { targetInfos } = await rb.client.send<{ targetInfos: { type: string; url: string }[] }>("Target.getTargets");
+      return targetInfos.some((t) => t.type === "iframe" && t.url.includes("/pay-frame"));
+    });
+    const refused = await manager.fillIntoPage(profileId, { text: "4000056655665556", kind: "cc-number", ...LOCAL });
+    expect(refused.ok).toBe(false);
+    expect(refused.detail).not.toContain("4000056655665556");
+    const ok = await manager.fillIntoPage(profileId, { text: "4000056655665556", kind: "cc-number", allowedHosts: ["127.0.0.1", "localhost"], httpHosts: ["127.0.0.1", "localhost"] });
+    expect(ok.ok).toBe(true);
+    expect(ok.detail).toContain("embedded frame");
+    expect(await evalOn<string>(profileId, "/pay-outer", "document.getElementById('coupon').value")).toBe("");
+    const { targetInfos } = await rb.client.send<{ targetInfos: { type: string; url: string; targetId: string }[] }>("Target.getTargets");
+    const frame = targetInfos.find((t) => t.type === "iframe" && t.url.includes("/pay-frame"))!;
+    const s = await attachToPage(rb.client, frame.targetId);
+    try {
+      expect(await s.evaluate<string>("document.getElementById('fnum').value")).toBe("4000056655665556");
+    } finally {
+      await s.detach();
+    }
   }, 30_000);
 
   test("live view emits frames and human takeover types into the page", async () => {

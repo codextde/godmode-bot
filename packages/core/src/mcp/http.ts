@@ -38,8 +38,10 @@ function toolResultText(result: Record<string, unknown>): string {
 
 const INSTRUCTIONS =
   "Godmode tools for this agent: log in to websites with vault_list_logins → vault_fill_login → vault_fill_totp " +
-  "(secrets are typed into the browser by Godmode; you never see them), report missing or broken logins with " +
-  "report_missing_login, notify the human with notify_user, and work with other agents when permitted.";
+  "(secrets are typed into the browser by Godmode; you never see them), pay with a saved card when you have one with " +
+  "vault_card_purchase → vault_fill_card → vault_card_purchase_result (within its limits; card details stay hidden too), " +
+  "report missing or broken logins with report_missing_login, notify the human with notify_user, and work with other " +
+  "agents when permitted.";
 
 type JsonRpcId = string | number | null;
 

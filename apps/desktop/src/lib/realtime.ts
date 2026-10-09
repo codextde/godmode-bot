@@ -50,6 +50,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   routines: [qk.routines, qk.bootstrap],
   credentials: [qk.credentials],
   totp: [qk.totp],
+  "payment-cards": [qk.cards],
   "mcp-servers": [qk.mcpServers],
   "api-tools": [qk.apiTools],
   composio: [qk.composio],

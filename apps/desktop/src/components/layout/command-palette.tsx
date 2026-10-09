@@ -248,6 +248,9 @@ export function CommandPalette() {
           <CommandItem onSelect={() => go("/vault/2fa?import=1")}>
             <ShieldCheck /> Import 2FA QR code
           </CommandItem>
+          <CommandItem value="add card payment credit card" onSelect={() => go("/vault/cards?new=1")}>
+            <CreditCard /> Add card
+          </CommandItem>
           <CommandItem
             onSelect={async () => {
               setOpen(false);
@@ -324,6 +327,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => go("/vault/2fa")}>
             <ShieldCheck /> 2FA codes
+          </CommandItem>
+          <CommandItem value="cards payment credit cards purchases subscriptions" onSelect={() => go("/vault/cards")}>
+            <CreditCard /> Cards
           </CommandItem>
           <CommandItem onSelect={() => go("/integrations")}>
             <Plug /> Integrations
