@@ -1,5 +1,5 @@
 import { AppState, type AppStateStatus } from "react-native";
-import { browserView, type ClientEvent, type EntityName, type ServerEvent, type Vm } from "@godmode/shared";
+import { browserView, type ClientEvent, type ConversationWithMessages, type EntityName, type Message, type ServerEvent, type Vm } from "@godmode/shared";
 import { api, forget, reachableBase } from "./api";
 import { setQueue } from "./composer";
 import { withPending } from "./pending-queue";
@@ -98,12 +98,36 @@ async function catchUp() {
   }
 }
 
+/**
+ * The chat lists, not the open chats: a long chat is megabytes, and refetching it on every run of every agent kept it
+ * from ever loading — messages that only arrive by refetch went missing meanwhile. Each chat refreshes on its own events.
+ */
+const conversationLists = { queryKey: qk.conversations, predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[1] !== "detail" };
+
+/** A stored message into the cached chat right away; the optimistic copy of a message the human just sent goes. */
+function upsertMessage(message: Message) {
+  queryClient.setQueryData<ConversationWithMessages>(qk.conversation(message.conversationId), (old) => {
+    if (!old) return old;
+    if (old.messages.some((m) => m.id === message.id)) return { ...old, messages: old.messages.map((m) => (m.id === message.id ? message : m)) };
+    let rest = old.messages;
+    if (message.role === "user") {
+      const optimistic = rest.findIndex((m) => m.id.startsWith("pending-") && m.content.trim() === message.content.trim());
+      if (optimistic >= 0) rest = rest.filter((_, i) => i !== optimistic);
+    }
+    const stored = rest.filter((m) => !m.id.startsWith("pending-"));
+    const at = stored.findIndex((m) => m.createdAt > message.createdAt);
+    const sorted = at < 0 ? [...stored, message] : [...stored.slice(0, at), message, ...stored.slice(at)];
+    return { ...old, messages: [...sorted, ...rest.filter((m) => m.id.startsWith("pending-"))] };
+  });
+}
+
 function handle(event: ServerEvent) {
   const live = useLive.getState();
   switch (event.type) {
     case "run.started":
       live.runStarted(event.run);
-      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
+      void queryClient.invalidateQueries(conversationLists);
       void queryClient.invalidateQueries({ queryKey: qk.runs });
       break;
     case "run.activity":
@@ -116,19 +140,21 @@ function handle(event: ServerEvent) {
     case "run.paused":
       // It stands still: nothing works in the chat until it continues.
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) }).then(() => live.runFinished(event.run));
-      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+      void queryClient.invalidateQueries(conversationLists);
       void queryClient.invalidateQueries({ queryKey: qk.runs });
       void queryClient.invalidateQueries({ queryKey: qk.agents });
       break;
     case "run.finished":
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) }).then(() => live.runFinished(event.run));
-      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+      void queryClient.invalidateQueries(conversationLists);
       void queryClient.invalidateQueries({ queryKey: qk.runs });
       void queryClient.invalidateQueries({ queryKey: qk.agents });
       void queryClient.invalidateQueries({ queryKey: qk.bootstrap });
       break;
     case "message.created":
     case "message.updated":
+      upsertMessage(event.message);
+      // A fetch that started before this message must not take it away again.
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.message.conversationId) });
       break;
     case "queue.updated":
@@ -137,10 +163,12 @@ function handle(event: ServerEvent) {
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.conversationId) });
       break;
     case "conversation.updated":
-      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
+      void queryClient.invalidateQueries(conversationLists);
       break;
     case "conversation.deleted":
-      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.id) });
+      void queryClient.invalidateQueries(conversationLists);
       break;
     case "agent.updated":
     case "agent.deleted":
@@ -198,7 +226,7 @@ function handle(event: ServerEvent) {
       void queryClient.invalidateQueries({ queryKey: qk.bootstrap });
       void queryClient.invalidateQueries({ queryKey: qk.agents });
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.question.conversationId) });
-      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+      void queryClient.invalidateQueries(conversationLists);
       break;
     case "missing-login.created":
     case "missing-login.updated":
