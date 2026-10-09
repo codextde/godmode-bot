@@ -1,5 +1,5 @@
-import type { QueryClient } from "@tanstack/react-query";
-import { browserView, type AgentQuestion, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type EntityName, type RemoteRunner, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
+import type { InvalidateQueryFilters, QueryClient } from "@tanstack/react-query";
+import { browserView, type AgentQuestion, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type EntityName, type Message, type RemoteRunner, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { withPending } from "./pending-queue";
@@ -162,16 +162,40 @@ function scheduleReconnect(queryClient: QueryClient) {
 const refreshing = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** Refetch once per burst of events: "Mark all read" sends one event per chat, and every window would refetch each time. */
-function refreshSoon(qc: QueryClient, queryKey: readonly unknown[]) {
+function refreshSoon(qc: QueryClient, queryKey: readonly unknown[], filters: Omit<InvalidateQueryFilters, "queryKey"> = {}) {
   const id = JSON.stringify(queryKey);
   if (refreshing.has(id)) return;
   refreshing.set(
     id,
     setTimeout(() => {
       refreshing.delete(id);
-      void qc.invalidateQueries({ queryKey });
+      void qc.invalidateQueries({ ...filters, queryKey });
     }, 250),
   );
+}
+
+/**
+ * The chat lists, not the open chats: a long chat is megabytes, and refetching it on every run of every agent kept it
+ * from ever loading — messages that only arrive by refetch went missing meanwhile. Each chat refreshes on its own events.
+ */
+const LISTS_ONLY = { predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[1] !== "detail" };
+const conversationLists = { queryKey: qk.conversationsAll, ...LISTS_ONLY };
+
+/** A stored message into the cached chat right away; the optimistic copy of a message the human just sent goes. */
+function upsertMessage(qc: QueryClient, message: Message) {
+  qc.setQueryData<ConversationWithMessages>(qk.conversation(message.conversationId), (old) => {
+    if (!old) return old;
+    if (old.messages.some((m) => m.id === message.id)) return { ...old, messages: old.messages.map((m) => (m.id === message.id ? message : m)) };
+    let rest = old.messages;
+    if (message.role === "user") {
+      const optimistic = rest.findIndex((m) => m.id.startsWith("pending-") && m.content.trim() === message.content.trim());
+      if (optimistic >= 0) rest = rest.filter((_, i) => i !== optimistic);
+    }
+    const stored = rest.filter((m) => !m.id.startsWith("pending-"));
+    const at = stored.findIndex((m) => m.createdAt > message.createdAt);
+    const sorted = at < 0 ? [...stored, message] : [...stored.slice(0, at), message, ...stored.slice(at)];
+    return { ...old, messages: [...sorted, ...rest.filter((m) => m.id.startsWith("pending-"))] };
+  });
 }
 
 function handle(qc: QueryClient, event: ServerEvent) {
@@ -184,7 +208,8 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "run.started":
       live.runStarted(event.run);
       qc.invalidateQueries({ queryKey: qk.runs });
-      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
+      qc.invalidateQueries(conversationLists);
       refreshSoon(qc, qk.bootstrap);
       break;
     case "run.delta":
@@ -196,7 +221,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "run.paused":
       live.runPaused(event.run);
       qc.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
-      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries(conversationLists);
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
       qc.invalidateQueries({ queryKey: qk.spend });
@@ -204,7 +229,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "run.finished":
       live.runFinished(event.run);
       qc.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
-      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries(conversationLists);
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
       qc.invalidateQueries({ queryKey: qk.spend });
@@ -212,6 +237,8 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "message.created":
     case "message.updated":
+      upsertMessage(qc, event.message);
+      // A fetch that started before this message must not take it away again.
       qc.invalidateQueries({ queryKey: qk.conversation(event.message.conversationId) });
       break;
     case "queue.updated": {
@@ -222,7 +249,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     }
     case "conversation.updated":
-      refreshSoon(qc, qk.conversationsAll);
+      refreshSoon(qc, qk.conversationsAll, LISTS_ONLY);
       // Unread and failed chats are on "Needs you".
       refreshSoon(qc, qk.bootstrap);
       qc.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
@@ -230,7 +257,8 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries({ queryKey: qk.followups });
       break;
     case "conversation.deleted":
-      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries(conversationLists);
+      qc.invalidateQueries({ queryKey: qk.conversation(event.id) });
       qc.invalidateQueries({ queryKey: qk.followups });
       // A deleted chat's failed or paused row leaves "Needs you".
       refreshSoon(qc, qk.bootstrap);
@@ -291,7 +319,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries({ queryKey: qk.questions });
       refreshSoon(qc, qk.bootstrap);
       qc.invalidateQueries({ queryKey: qk.conversation(q.conversationId) });
-      qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      qc.invalidateQueries(conversationLists);
       qc.invalidateQueries({ queryKey: qk.agents });
       qc.invalidateQueries({ queryKey: qk.tasks });
       break;
