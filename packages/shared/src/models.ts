@@ -1184,6 +1184,8 @@ export interface BrowserSettings {
   liveView: boolean;
   /** Hide automation signals so sites don't treat agents as bots (applies when a browser launches). */
   stealth: boolean;
+  /** Start browsers with audio muted so pages agents open stay silent (applies when a browser launches). */
+  muteAudio: boolean;
 }
 
 export interface ComputerSettings {

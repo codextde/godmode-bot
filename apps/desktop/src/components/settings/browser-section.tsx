@@ -40,6 +40,14 @@ export function BrowserSection({ settings }: { settings: Settings }) {
           <Switch id="headless" checked={b.headless} disabled={!b.enabled} onCheckedChange={(headless) => patch({ browser: { headless } })} />
         </SettingRow>
         <SettingRow
+          label="Mute audio"
+          htmlFor="mute-audio"
+          disabled={!b.enabled}
+          description="Videos and sounds on pages agents open stay silent. Applies the next time a browser starts."
+        >
+          <Switch id="mute-audio" checked={b.muteAudio} disabled={!b.enabled} onCheckedChange={(muteAudio) => patch({ browser: { muteAudio } })} />
+        </SettingRow>
+        <SettingRow
           label="Keep browser alive"
           htmlFor="keep-alive"
           disabled={!b.enabled}
