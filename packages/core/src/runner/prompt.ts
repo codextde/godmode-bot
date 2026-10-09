@@ -305,7 +305,7 @@ Not in this chat: its task came from another agent that may not read raw secrets
 
   if (perms.canManageAgents) {
     out.push(`### Managing agents
-You are the orchestrator. You can create, update and delete agents (\`agent_create\`, \`agent_update\`, \`agent_delete\`), manage their automations (\`routine_list\`, \`routine_create\`, \`routine_update\`, \`routine_run\`, \`routine_delete\`, \`automation_events_list\`), inspect recent work with \`runs_list\` (results and errors of every agent), manage and supervise the task board (\`tasks_list\`, \`task_get\`, \`task_create\`, \`task_update\`, \`task_message\`, \`task_note\` — tickets agents work on; coding tasks end in a pull request; read a ticket's result and timeline with \`task_get\`, and send feedback into it with \`task_message\` instead of filing a new task for the same work), set up workspaces and their projects (\`workspaces_list\`, \`workspace_create\`, \`workspace_update\`, \`project_create\`, \`project_update\` — a workspace groups the agents, logins and repositories of one business or client, a project is one product or initiative inside it; when the work clearly belongs to something new, create it instead of piling everything into an existing one, and put its agents and tasks there), and review \`logins_overview\` and \`missing_logins_list\`. When asked to "check on all agents", use \`runs_list\` and \`missing_logins_list\` and summarize what succeeded, what failed and what the human must do (e.g. add a login in the vault). When you create an agent, give it a clear description, concrete standing instructions, a character and personality that fit the job, and an automation when the job is recurring. Give every agent a \`role\` — its job title in two or three words — and, when the team has leads, say who it reports to (\`reportsTo\`); an agent without one reports to you. Never delete an agent unless ${human} explicitly asked for it.${
+You are the orchestrator. You can create, update and delete agents (\`agent_create\`, \`agent_update\`, \`agent_delete\`), manage their automations (\`routine_list\`, \`routine_create\`, \`routine_update\`, \`routine_run\`, \`routine_delete\`, \`automation_events_list\`), inspect recent work with \`runs_list\` (results and errors of every agent) and pick up a run a restart of Godmode cut off with \`run_continue\`, manage and supervise the task board (\`tasks_list\`, \`task_get\`, \`task_create\`, \`task_update\`, \`task_message\`, \`task_note\` — tickets agents work on; coding tasks end in a pull request; read a ticket's result and timeline with \`task_get\`, and send feedback into it with \`task_message\` instead of filing a new task for the same work), set up workspaces and their projects (\`workspaces_list\`, \`workspace_create\`, \`workspace_update\`, \`project_create\`, \`project_update\` — a workspace groups the agents, logins and repositories of one business or client, a project is one product or initiative inside it; when the work clearly belongs to something new, create it instead of piling everything into an existing one, and put its agents and tasks there), and review \`logins_overview\` and \`missing_logins_list\`. When asked to "check on all agents", use \`runs_list\` and \`missing_logins_list\` and summarize what succeeded, what failed and what the human must do (e.g. add a login in the vault). When you create an agent, give it a clear description, concrete standing instructions, a character and personality that fit the job, and an automation when the job is recurring. Give every agent a \`role\` — its job title in two or three words — and, when the team has leads, say who it reports to (\`reportsTo\`); an agent without one reports to you. Never delete an agent unless ${human} explicitly asked for it.${
       settings.vm.enabled && vmSupport().supported
         ? `\n\nAgents can work in their own macOS virtual machine instead of on ${human}'s computer — good for builds, installs, experiments and macOS apps: \`vms_list\`, \`vm_create\` (ask ${human} first — the first VM from an image downloads tens of GB), \`vm_assign\` (an agent, a workspace or this chat) and \`vm_power\`.`
         : ""
@@ -717,6 +717,43 @@ export function retryContext(opts: { userName: string; why: string; endedAt: str
 Your last turn in this chat ended before it was done, on ${describeNow(new Date(opts.endedAt))}: ${opts.why}. ${human} asks you to continue — this is not a new task.${startedBySentence(opts.startedBy, human)}
 Pick the work up exactly where you stopped: don't start over and don't repeat what is already done. A step that was running at that moment may have been cut off, so check what it left behind before you run it again. Then finish the task and end with your answer for ${human}.
 </godmode-continue>`;
+}
+
+/** A teammate's run that was cut off with the turn and continues by itself. */
+export interface CutOffHandoff {
+  agentName: string;
+  runId: string;
+}
+
+function answerGoesTo(startedBy: RunTrigger): string {
+  if (startedBy === "delegation") return "Your answer goes back to the agent that handed you the task, as before.";
+  const who = STARTED_BY[startedBy];
+  return who ? `That turn was started by ${who}; your answer goes where it would have gone.` : "";
+}
+
+/** The note a turn gets that Godmode continues by itself after a restart cut it off (`continue`). */
+export function restartContext(opts: { userName: string; endedAt: string; startedBy: RunTrigger; handoffs: CutOffHandoff[] }): string {
+  const human = opts.userName.trim() || "the user";
+  const goesTo = answerGoesTo(opts.startedBy);
+  const handoffs = opts.handoffs.length
+    ? `\nWhat you handed to ${opts.handoffs.map((h) => h.agentName).join(", ")} was cut off too and continues by itself: get the answer with ${opts.handoffs
+        .map((h) => `delegation_status({ runId: "${h.runId}", wait: true })`)
+        .join(", ")} — don't hand it over again.`
+    : "";
+  return `<godmode-continue>
+Godmode restarted on ${describeNow(new Date(opts.endedAt))} while you were working on your last turn in this chat, and now continues it by itself — this is not a new task.${goesTo ? ` ${goesTo}` : ""}
+Pick the work up exactly where you stopped: don't start over and don't repeat what is already done. A step that was running at that moment may have been cut off, so check what it left behind before you run it again — something that reaches other people or costs money (a message, a post, an order, a payment) must not happen twice.${handoffs}
+Then finish the task and end with your answer${opts.startedBy === "delegation" ? "" : ` for ${human}`}.
+</godmode-continue>`;
+}
+
+/** Put in front of a prompt that Godmode sends again by itself: a restart came before the turn got it (`again`). */
+export function restartAgainNote(opts: { endedAt: string }): string {
+  return `<godmode-context>
+Godmode restarted on ${describeNow(new Date(opts.endedAt))} before you got this turn, so it is sent again now.
+</godmode-context>
+
+`;
 }
 
 /** Put in front of the re-sent prompt of an `again` retry when the turn wasn't started by the human. */

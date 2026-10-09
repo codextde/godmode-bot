@@ -572,8 +572,11 @@ export type MessageBlock =
   | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason }
   /** Where the human closed a task the agent gave them (see HumanTask) and the chat continued with it. */
   | { type: "human_task"; id: ID; number: number; title: string; outcome: "done" | "declined"; note: string; at: ISODate }
-  /** The human picked up a turn that ended early: `continue` where it stopped, or `again` from its prompt. */
-  | { type: "retry"; mode: RetryMode; runId: ID; at: ISODate; masked?: boolean }
+  /**
+   * A turn that ended early was picked up: `continue` where it stopped, or `again` from its prompt. By the human, or
+   * (`auto`) by Godmode after it restarted in the middle of the turn.
+   */
+  | { type: "retry"; mode: RetryMode; runId: ID; at: ISODate; masked?: boolean; auto?: boolean }
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */
@@ -1159,6 +1162,8 @@ export interface RunnerSettings {
   runTimeoutMinutes: number;
   /** A run that hit Claude's usage limit continues by itself once the limit has reset. */
   autoContinueOnLimit: boolean;
+  /** Work that a quit, update or crash of Godmode cut off continues by itself after the next start. */
+  resumeAfterRestart: boolean;
   /** The watchdog stops runs that stall or go in circles (see heartbeat.ts). */
   watchdog: boolean;
   /** No sign of life for this long (a tool that runs: three times as long, at least 30 minutes) = stalled. */

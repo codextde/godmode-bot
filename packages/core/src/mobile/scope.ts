@@ -97,6 +97,7 @@ const SETTINGS: Record<string, string[]> = {
     "maxConcurrentRuns",
     "runTimeoutMinutes",
     "autoContinueOnLimit",
+    "resumeAfterRestart",
     "watchdog",
     "stallMinutes",
     "loopRepeats",

@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
     maxConcurrentRuns: 3,
     runTimeoutMinutes: 60,
     autoContinueOnLimit: true,
+    resumeAfterRestart: true,
     watchdog: true,
     stallMinutes: DEFAULT_STALL_MINUTES,
     loopRepeats: DEFAULT_LOOP_REPEATS,

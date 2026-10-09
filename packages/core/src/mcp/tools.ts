@@ -134,6 +134,7 @@ import { listGoals } from "../tasks/goals";
 import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow } from "../runner/prompt";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
+import { continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
 import { MAX_OPEN_PER_CHAT, createAgentHumanTask, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
 import { createMod, findMod, listMods, updateMod } from "../mods/service";
@@ -1705,9 +1706,12 @@ const TOOLS: ToolDef[] = [
     }),
     when: canDelegate,
     run: async ({ runId, wait, timeoutSeconds }, { agent, ctx }) => {
-      let r = getRun(runId);
-      if (!isManager(agent) && !delegatedBy(r, agent, ctx)) return fail("That run was not delegated by you.");
-      if (wait && !TERMINAL.has(r.status) && r.status !== "paused") r = await waitForRun(runId, (timeoutSeconds ?? 300) * 1000, { orPaused: true });
+      const asked = get<{ id: string }>("SELECT id FROM runs WHERE id = ?", runId);
+      if (!asked) return fail(`Run ${runId} doesn't exist — if Godmode restarted, that handoff didn't go on: hand it over again if it is still needed.`);
+      if (!isManager(agent) && !delegatedBy(getRun(runId), agent, ctx)) return fail("That run was not delegated by you.");
+      // Work a restart cut off goes on in a new turn of the same chat: that turn has the answer.
+      let r = getRun(latestContinuation(runId));
+      if (wait && !TERMINAL.has(r.status) && r.status !== "paused") r = await waitForRun(r.id, (timeoutSeconds ?? 300) * 1000, { orPaused: true });
       let name = r.agentId;
       try {
         name = getAgent(r.agentId).name;
@@ -2332,6 +2336,22 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
+    name: "run_continue",
+    description:
+      'Continue a run that a restart of Godmode cut off (its error in runs_list is "Cancelled (Godmode shut down)" or "Interrupted (Godmode restarted)"): a new turn in the same chat and Claude session picks the work up where it stopped, with the work it had handed to other agents. Only the last turn of its chat; board tickets continue from the board. Godmode does this by itself after a restart for work of the last day (unless that is turned off in Settings) — use it for what is left.',
+    schema: z.object({ runId: z.string() }),
+    when: managesSetup,
+    run: async ({ runId }, { agent, ctx }) => {
+      const cut = getRun(runId);
+      const target = cut.agentId === agent.id ? agent : requireReachable(agent, cut.agentId);
+      const refusal = offHostRefusal(ctx, target, "continue its work") ?? revealTargetRefusal(agent, ctx, target, "continue its work");
+      if (refusal) return fail(refusal);
+      const run = await continueCutOffRun(runId);
+      return `Continued: ${getAgent(run.agentId).name} picks the work up in run ${run.id} (conversation ${run.conversationId}).`;
+    },
+  }),
+
+  defineTool({
     name: "workspaces_list",
     description:
       "List workspaces (groups of agents, logins and integrations) with the folders and git repositories their agents work with, and their optional projects (each with its own context, folders and repositories; tasks, chats and agents can belong to one).",
@@ -2695,7 +2715,7 @@ function delegationReport(agentName: string, r: Run): ToolOutput {
   const ids = `(run ${r.id}, conversation ${r.conversationId})`;
   if (r.status === "succeeded") return `${agentName} finished the task ${ids}:\n\n${r.result ?? "(no answer)"}`;
   if (r.status === "failed") return fail(`${agentName} failed ${ids}: ${r.error ?? "unknown error"}${r.result ? `\n\n${r.result}` : ""}`);
-  if (r.status === "cancelled") return fail(`The task for ${agentName} was cancelled ${ids}.`);
+  if (r.status === "cancelled") return fail(`The task for ${agentName} was cancelled ${ids}${r.error ? `: ${r.error}` : ""}.`);
   if (r.status === "paused") return `${agentName}'s work on the task is paused ${ids} — by the human, or until Claude's usage limit resets. It continues where it stopped; don't hand the task over again. Check later with delegation_status({ runId: "${r.id}" }).`;
   return `${agentName} is still working (status: ${r.status}) ${ids}. Check again later with delegation_status({ runId: "${r.id}" }).`;
 }
