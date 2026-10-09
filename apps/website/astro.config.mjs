@@ -18,6 +18,8 @@ export default defineConfig({
   prefetch: { prefetchAll: false, defaultStrategy: 'hover' },
   build: { inlineStylesheets: 'always', format: 'file' },
   compressHTML: true,
+  // In-app browsers (X, Instagram) send `Origin: null` on form posts; routes that need CSRF protection check the origin themselves.
+  security: { checkOrigin: false },
   vite: {
     plugins: [tailwindcss()],
   },
