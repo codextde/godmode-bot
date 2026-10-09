@@ -46,9 +46,19 @@ export default function Workspaces() {
           </View>
         ))}
       </Card>
-      <T variant="caption" muted style={{ paddingHorizontal: 4 }}>
-        Create and set up workspaces in Godmode on your computer.
-      </T>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          tap();
+          router.replace("/settings/workspaces");
+        }}
+        style={({ pressed }) => [styles.manage, { backgroundColor: c.sunken, opacity: pressed ? 0.7 : 1 }]}
+      >
+        <Icon name="slider" size={15} color={c.text} />
+        <T variant="subhead" style={{ fontWeight: "600" }}>
+          Manage workspaces
+        </T>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -93,6 +103,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     borderRadius: radius.md,
     borderCurve: "continuous",
+  },
+  manage: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: space.sm,
+    height: 44,
+    borderRadius: radius.pill,
   },
   tile: {
     width: 36,

@@ -40,6 +40,7 @@ import { isMemoryPath } from "../../memory/files";
 import { resolveRepoPath } from "../../agents/repo";
 import { getSettings } from "../../services/settings";
 import { conflict } from "../../util";
+import { requestDevice } from "../auth";
 import { requireGrant } from "../grants";
 import { body, computerTargetSchema, z } from "../validate";
 
@@ -207,6 +208,8 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post("/api/agents", async (c) => {
     const input = await body(c, agentSchema);
+    // An agent set up from the phone starts with no logins, no inherited tools and fill-only secrets; it's widened on the computer.
+    if (requestDevice(c)) Object.assign(input, { permissions: { credentialIds: [], totpIds: [], secretAccess: "fill" }, inheritMcp: false });
     // Letting an agent read secrets in plain text needs a fresh passphrase confirmation (unless it's already the default).
     if (input.permissions?.secretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") requireGrant(c);
     return c.json(await createAgent(input));

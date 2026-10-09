@@ -19,7 +19,8 @@ declare const URL: new (input: string) => {
   toString(): string;
 };
 
-const SCP_LIKE =/^(?:[A-Za-z0-9._-]+@)?([A-Za-z0-9.-]+):(?!\/\/)([A-Za-z0-9._~/-]+)$/;
+// A one-letter "host" is a Windows drive (C:/repo), which git reads as a local folder.
+const SCP_LIKE =/^(?:[A-Za-z0-9._-]+@)?([A-Za-z0-9.-]{2,}):(?!\/\/)([A-Za-z0-9._~/-]+)$/;
 const PROTOCOLS = new Set(["https:", "http:", "ssh:", "git:"]);
 const FORGES = new Set(["github.com", "gitlab.com", "bitbucket.org", "codeberg.org"]);
 

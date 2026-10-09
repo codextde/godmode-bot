@@ -15,6 +15,7 @@ export const qk = {
   bootstrap: ["bootstrap"],
   me: ["me"],
   workspaces: ["workspaces"],
+  settings: ["settings"],
   agents: ["agents"],
   agent: (id: string) => ["agents", id],
   agentCommands: (id: string) => ["agent-commands", id],

@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import { homedir } from "node:os";
-import type { Bootstrap } from "@godmode/shared";
-import { MAX_INSTRUCTIONS_LENGTH, isModelId, countAttention } from "@godmode/shared";
+import type { Bootstrap, Effort } from "@godmode/shared";
+import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, isModelId, countAttention } from "@godmode/shared";
 import { config } from "../../config";
 import { get } from "../../db";
 import * as vault from "../../vault/vault";
@@ -82,6 +82,11 @@ export function registerSystemRoutes(app: Hono) {
       throw badRequest(`Instructions for every agent can be at most ${MAX_INSTRUCTIONS_LENGTH.toLocaleString("en-US")} characters`);
     }
     if (runner?.ultracode !== undefined && typeof runner.ultracode !== "boolean") throw badRequest("runner.ultracode must be true or false");
+    const { effort, model, fallbackModel } = (runner ?? {}) as { effort?: unknown; model?: unknown; fallbackModel?: unknown };
+    if (effort !== undefined && !EFFORT_OPTIONS.includes(effort as Effort)) throw badRequest(`runner.effort must be one of ${EFFORT_OPTIONS.join(", ")}`);
+    for (const [key, value] of [["model", model], ["fallbackModel", fallbackModel]] as const) {
+      if (value !== undefined && (typeof value !== "string" || (value.trim() !== "" && !isModelId(value.trim())))) throw badRequest(`Invalid model id for runner.${key}`);
+    }
     const budget = (runner as { monthlyBudgetUsd?: unknown } | undefined)?.monthlyBudgetUsd;
     if (budget !== undefined && budget !== null && !(typeof budget === "number" && Number.isFinite(budget) && budget > 0 && budget <= 1_000_000)) {
       throw badRequest("The monthly budget must be an amount above 0, or empty for no budget");

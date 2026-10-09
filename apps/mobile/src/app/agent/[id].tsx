@@ -5,6 +5,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-na
 import type { Routine } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { CharacterAvatar } from "@/components/character";
+import { HeaderActions } from "@/components/header-actions";
 import { ConversationRow, RunCard } from "@/components/rows";
 import { Badge, Button, Card, Hairline, Row, SectionTitle, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
@@ -27,6 +28,7 @@ export default function AgentScreen() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Title>{agent.name}</Stack.Title>
+      <HeaderActions actions={[{ icon: "slider", label: `Set up ${agent.name}`, onPress: () => router.push({ pathname: "/settings/agent/[id]", params: { id: agent.id } }) }]} />
       <View style={styles.hero}>
         <CharacterAvatar agent={agent} size={76} running={working.length > 0} style={{ marginTop: space.md }} />
         <T variant="title">{agent.name}</T>
@@ -84,7 +86,7 @@ export default function AgentScreen() {
             ))
           ) : (
             <T variant="subhead" muted style={{ padding: space.lg }}>
-              {routines.isLoading ? "Loading…" : "No automations. Set them up on your computer."}
+              {routines.isLoading ? "Loading…" : "No automations yet."}
             </T>
           )}
         </Card>

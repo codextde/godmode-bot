@@ -67,6 +67,19 @@ const ICONS = {
   archive: ["archivebox", "archive"],
   unarchive: ["arrow.uturn.backward", "unarchive"],
   workflow: ["flowchart", "account_tree"],
+  brain: ["brain.head.profile", "psychology"],
+  wrench: ["wrench.and.screwdriver", "build"],
+  folder: ["folder.fill", "folder"],
+  dollar: ["dollarsign.circle", "paid"],
+  gauge: ["gauge.with.dots.needle.67percent", "speed"],
+  pulse: ["waveform.path.ecg", "monitor_heart"],
+  person: ["person.crop.circle", "account_circle"],
+  text: ["text.alignleft", "notes"],
+  cpu: ["cpu", "memory"],
+  moon: ["moon.stars", "bedtime"],
+  shield: ["checkmark.shield", "verified_user"],
+  minus: ["minus", "remove"],
+  slider: ["slider.horizontal.3", "tune"],
 } as const satisfies Record<string, readonly [SFSymbol, AndroidSymbol]>;
 
 export type IconName = keyof typeof ICONS;

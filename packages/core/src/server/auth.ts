@@ -8,7 +8,7 @@ import { config, isLoopbackHost } from "../config";
 import { get, getMeta, insert, run, setMeta } from "../db";
 import { getSettings } from "../services/settings";
 import { authenticateDevice } from "../mobile/devices";
-import { deviceBodyKeys, deviceMayCall, deviceMayUseView } from "../mobile/scope";
+import { deviceBodyKeys, deviceBodyRefusal, deviceMayCall, deviceMayUseView, deviceQueryRefusal } from "../mobile/scope";
 import { cloudPathRefusal, cloudRefusal } from "../cloud/scope";
 import { hashPassword, safeEqual, sha256, verifyPassword } from "../vault/crypto";
 import { HttpError, newId, now, randomToken } from "../util";
@@ -282,6 +282,8 @@ export function requestCloudUser(c: Context): CloudRelayUser | null {
 async function deviceRefusal(c: Context): Promise<string | null> {
   const denied = "The phone app can't do this. Use Godmode on your computer.";
   if (!deviceMayCall(c.req.method, c.req.path)) return denied;
+  const query = deviceQueryRefusal(c.req.method, c.req.path, new URL(c.req.url).searchParams);
+  if (query) return query;
   const keys = deviceBodyKeys(c.req.method, c.req.path);
   if (!keys) return null;
   let payload: unknown;
@@ -292,6 +294,8 @@ async function deviceRefusal(c: Context): Promise<string | null> {
   }
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
   if (Object.keys(payload).some((k) => !keys.includes(k))) return denied;
+  const refusal = deviceBodyRefusal(c.req.method, c.req.path, payload as Record<string, unknown>);
+  if (refusal) return refusal;
   const view = (payload as { view?: unknown }).view;
   if (c.req.path === "/api/computer/input" && (typeof view !== "string" || !deviceMayUseView(view))) {
     return "Only screens shared in a chat can be controlled from the phone.";

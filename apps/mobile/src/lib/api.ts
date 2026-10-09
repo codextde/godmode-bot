@@ -10,6 +10,7 @@ import type {
   BrowserProfile,
   ComputerInputEvent,
   Effort,
+  AgentHeartbeatInput,
   Conversation,
   ConversationWithMessages,
   MissingLogin,
@@ -17,11 +18,13 @@ import type {
   MobilePairingPayload,
   MobileSession,
   ModelCatalog,
+  Project,
   QueuedMessage,
   RetryMode,
   Routine,
   Run,
   SendMessageResult,
+  Settings,
   SendMessageOutcome,
   SlashCommand,
   StartChatResult,
@@ -217,6 +220,7 @@ export async function request<T>(method: string, path: string, body?: unknown, m
 const get = <T>(path: string, query?: Query) => request<T>("GET", path + qs(query));
 const post = <T>(path: string, body: unknown = {}, minTimeoutMs = 0) => request<T>("POST", path, body, minTimeoutMs);
 const patch = <T>(path: string, body: unknown) => request<T>("PATCH", path, body);
+const put = <T>(path: string, body: unknown) => request<T>("PUT", path, body);
 const del = <T>(path: string) => request<T>("DELETE", path);
 
 export function deviceName(): string {
@@ -271,6 +275,46 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
   );
 }
 
+/** What the phone may change of the settings, by section (the computer refuses the rest). */
+export type SettingsPatch = {
+  general?: Partial<Pick<Settings["general"], "userName" | "desktopNotifications">>;
+  runner?: Partial<Omit<Settings["runner"], "claudePath" | "extraArgs" | "bypassPermissions">>;
+  browser?: Partial<Pick<Settings["browser"], "enabled" | "headless" | "keepAliveMinutes" | "liveView" | "stealth" | "muteAudio">>;
+  computer?: Partial<Pick<Settings["computer"], "enabled" | "allowForeground" | "agentCursor" | "liveView" | "liveViewFps">>;
+  vm?: Partial<Pick<Settings["vm"], "enabled" | "onQuit" | "idleStopMinutes">>;
+  memory?: Partial<Pick<Settings["memory"], "autoCommit" | "reflectAfterRun" | "injectMemory">> & { dreaming?: Partial<Settings["memory"]["dreaming"]> };
+  maintenance?: Partial<Settings["maintenance"]>;
+};
+
+/** Folders are kept as they are (`path`); repositories are added by their clone URL. */
+export type SourceInput = { kind: "folder"; path: string } | { kind: "git"; url: string; branch?: string | null };
+
+export type WorkspacePatch = {
+  name?: string;
+  description?: string;
+  icon?: string;
+  instructions?: string;
+  autoMerge?: boolean;
+  browserProfileId?: string | null;
+  sources?: SourceInput[];
+};
+
+export type ProjectPatch = Omit<WorkspacePatch, "autoMerge">;
+
+export type AgentPatch = {
+  name?: string;
+  role?: string;
+  description?: string;
+  instructions?: string;
+  personality?: string;
+  model?: string;
+  effort?: Effort | null;
+  ultracode?: boolean | null;
+  enabled?: boolean;
+  projectId?: string | null;
+  heartbeat?: AgentHeartbeatInput;
+};
+
 export type ModelChoicePatch = { model?: string | null; effort?: Effort | null; ultracode?: boolean | null };
 
 export type BrowserInput =
@@ -285,9 +329,31 @@ export const api = {
   bootstrap: () => get<Bootstrap>("/api/bootstrap"),
   workspaces: () => get<Workspace[]>("/api/workspaces"),
 
+  settings: {
+    get: () => get<Settings>("/api/settings"),
+    update: (patch: SettingsPatch) => put<Settings>("/api/settings", patch),
+  },
+
+  workspace: {
+    create: (input: WorkspacePatch & { name: string }) => post<Workspace>("/api/workspaces", input),
+    update: (id: string, input: WorkspacePatch) => patch<Workspace>(`/api/workspaces/${id}`, input),
+    /** Only an empty workspace; one with agents, chats or tasks is deleted on the computer. */
+    delete: (id: string) => del<{ ok: true }>(`/api/workspaces/${id}`),
+    sync: (id: string, sourceId: string) => post<unknown>(`/api/workspaces/${id}/sources/${sourceId}/sync`),
+  },
+
+  projects: {
+    create: (input: ProjectPatch & { workspaceId: string; name: string }) => post<Project>("/api/projects", input),
+    update: (id: string, input: ProjectPatch) => patch<Project>(`/api/projects/${id}`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/projects/${id}`),
+    sync: (id: string, sourceId: string) => post<unknown>(`/api/projects/${id}/sources/${sourceId}/sync`),
+  },
+
   agents: {
     list: () => get<Agent[]>("/api/agents"),
     get: (id: string) => get<Agent>(`/api/agents/${id}`),
+    create: (input: AgentPatch & { name: string; workspaceId: string | null }) => post<Agent>("/api/agents", input),
+    update: (id: string, input: AgentPatch) => patch<Agent>(`/api/agents/${id}`, input),
     /** Slash commands of the installed Claude Code CLI, as this agent's runs see them */
     commands: (id: string) => get<SlashCommand[]>(`/api/agents/${id}/commands`),
   },

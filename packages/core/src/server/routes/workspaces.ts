@@ -3,6 +3,9 @@ import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { createWorkspace, deleteWorkspace, listWorkspaces, updateWorkspace } from "../../services/workspaces";
 import { MAX_SOURCES, syncSource } from "../../services/workspaceSources";
 import { createProject, deleteProject, getProject, listProjects, updateProject } from "../../services/projects";
+import { get } from "../../db";
+import { conflict } from "../../util";
+import { requestDevice } from "../auth";
 import { body, z } from "../validate";
 
 const sourceSchema = z.discriminatedUnion("kind", [
@@ -61,6 +64,10 @@ export function registerWorkspaceRoutes(app: Hono): void {
 
   app.delete("/api/workspaces/:id", async (c) => {
     const force = ["1", "true"].includes(c.req.query("force") ?? "");
+    // Goals go with an otherwise empty workspace; from the phone that is only done on the computer.
+    if (requestDevice(c) && get<{ c: number }>("SELECT COUNT(*) AS c FROM goals WHERE workspace_id = ?", c.req.param("id"))?.c) {
+      throw conflict("This workspace has goals. Delete it on your computer.");
+    }
     await deleteWorkspace(c.req.param("id"), force);
     return c.json({ ok: true });
   });

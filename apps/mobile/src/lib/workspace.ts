@@ -49,7 +49,7 @@ export function useWorkspace() {
 
   // Until the list confirms it, keep scoping to the saved workspace so nothing flashes unscoped.
   const id = list.isSuccess ? (workspace?.id ?? null) : picked;
-  return { id, workspace, workspaces, select: useWorkspaceStore.getState().select };
+  return { id, workspace, workspaces, loading: list.isPending, select: useWorkspaceStore.getState().select };
 }
 
 /**
