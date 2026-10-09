@@ -146,7 +146,9 @@ export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => voi
                         ·{" "}
                         {r.trigger.type === "condition"
                           ? `checks ${lowerFirst(cronToHuman(r.cron))}`
-                          : lowerFirst(scheduleToHuman(r.cron, r.trigger.type === "schedule" ? r.trigger.startWindowMinutes : 0))}
+                          : lowerFirst(
+                              r.trigger.type === "schedule" ? scheduleToHuman(r.cron, r.trigger.startWindowMinutes, r.trigger.runsPerWindow) : scheduleToHuman(r.cron),
+                            )}
                       </span>
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground">{formatDistanceToNowStrict(new Date(r.nextRunAt!), { addSuffix: true })}</span>

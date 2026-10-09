@@ -23,6 +23,7 @@ import {
   modState,
   MAX_AGENT_ROLE_LENGTH,
   MAX_HEARTBEAT_CHECKLIST_LENGTH,
+  MAX_RUNS_PER_WINDOW,
   MAX_START_WINDOW_MINUTES,
   normalizeRole,
   reportsOf,
@@ -502,6 +503,15 @@ const triggerSchema = z
         .describe(
           'Start at a random moment up to this many minutes after each scheduled time, drawn anew every run — like a coworker who doesn\'t start at the same minute every day. cron "0 8 * * 1-5" + 90 = weekdays somewhere between 08:00 and 09:30. Must not exceed the gap between two runs. Default: on time.',
         ),
+      runsPerWindow: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_RUNS_PER_WINDOW)
+        .optional()
+        .describe(
+          'Run several times per scheduled time, like a heartbeat: the start window is split into equal parts and each run starts at a random moment in its part. cron "0 8 * * *" + startWindowMinutes 840 + runsPerWindow 5 = five times a day at random times between 08:00 and 22:00. Needs startWindowMinutes (at least 10 minutes per run). For fixed intervals use the cron instead ("0 8-20/2 * * *" = every 2 hours from 08:00 to 20:00). Default: once.',
+        ),
     }),
     z.object({
       type: z.literal("app"),
@@ -548,7 +558,12 @@ function triggerSummary(r: Routine) {
   if (t.type === "condition") return { type: t.type, condition: t.condition, checks: r.cron, checkModel: t.checkModel };
   // The URL is a secret (and masked in transcripts): the human copies it from the app.
   if (t.type === "webhook") return { type: t.type, url: "secret — copy it in the Godmode app: Automations → this automation → Copy webhook URL" };
-  return { type: t.type, cron: r.cron, ...(t.startWindowMinutes ? { startWindowMinutes: t.startWindowMinutes } : {}) };
+  return {
+    type: t.type,
+    cron: r.cron,
+    ...(t.startWindowMinutes ? { startWindowMinutes: t.startWindowMinutes } : {}),
+    ...(t.runsPerWindow ? { runsPerWindow: t.runsPerWindow } : {}),
+  };
 }
 
 /** Event titles, notes and observations quote outside content (emails, web pages, webhook callers). */

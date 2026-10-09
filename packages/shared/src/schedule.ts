@@ -1,5 +1,11 @@
 /** Longest random start window of a schedule automation (`startWindowMinutes`). */
-export const MAX_START_WINDOW_MINUTES = 12 * 60;
+export const MAX_START_WINDOW_MINUTES = 24 * 60;
+
+/** Most runs a schedule may spread over one start window (`runsPerWindow`). */
+export const MAX_RUNS_PER_WINDOW = 24;
+
+/** Shortest share of the window one of several runs gets. */
+export const MIN_MINUTES_PER_RUN = 10;
 
 /** "15 min", "1 h", "1 h 30 min" */
 export function formatMinutes(minutes: number): string {

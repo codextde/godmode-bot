@@ -8,7 +8,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Cron } from "croner";
 import type { Agent, Routine, RoutineInput, RoutineTrigger, RoutineTriggerStatus, RunStatus, Run } from "@godmode/shared";
-import { isModelId, MAX_START_WINDOW_MINUTES, startWindowLimit, startWindowTooLong } from "@godmode/shared";
+import { isModelId, MAX_RUNS_PER_WINDOW, MAX_START_WINDOW_MINUTES, MIN_MINUTES_PER_RUN, startWindowLimit, startWindowTooLong } from "@godmode/shared";
 import { all, bool, get, insert, int, run, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -245,20 +245,41 @@ export function startWindowOf(trigger: RoutineTrigger): number {
   return trigger.type === "schedule" ? (trigger.startWindowMinutes ?? 0) : 0;
 }
 
+/** Runs per start window of a schedule; 1 = once per scheduled time. */
+export function runsOf(trigger: RoutineTrigger): number {
+  return trigger.type === "schedule" && trigger.startWindowMinutes ? (trigger.runsPerWindow ?? 1) : 1;
+}
+
 function assertStartWindow(cron: string, timezone: string, minutes: number) {
   const limit = startWindowLimit((after) => nextRunFor(cron, timezone, after), timezone);
   if (minutes > limit) throw badRequest(startWindowTooLong(limit));
 }
 
 /** Offset into the window, fixed per routine and time slot so a restart or an unrelated edit keeps the drawn start. */
-function startOffsetMs(routineId: string, slot: Date, windowMinutes: number): number {
+function startOffsetMs(routineId: string, slot: Date, windowMs: number): number {
   const hash = createHash("sha256").update(`${routineId}:${slot.toISOString()}`).digest();
-  return Math.floor((hash.readUInt32BE(0) / 2 ** 32) * windowMinutes * 60) * 1000;
+  return Math.floor(((hash.readUInt32BE(0) / 2 ** 32) * windowMs) / 1000) * 1000;
+}
+
+/** First part of a window after `from`: with several runs per window each scheduled time splits into `runs` equal parts. */
+function nextPart(cron: string, timezone: string, from: number, windowMs: number, runs: number): Date {
+  if (runs <= 1) return nextRunFor(cron, timezone, new Date(from));
+  const part = Math.floor(windowMs / runs / 1000) * 1000;
+  let base = nextRunFor(cron, timezone, new Date(from - windowMs));
+  for (let i = 0; i < 100; i++) {
+    for (let k = 0; k < runs; k++) {
+      const at = base.getTime() + k * part;
+      if (at > from) return new Date(at);
+    }
+    base = nextRunFor(cron, timezone, base);
+  }
+  throw badRequest("Invalid cron expression: it never matches a future date");
 }
 
 /**
  * Next start of a schedule with a random start window: the first time slot after `handledUntil` (ms) whose drawn
  * start lies after `after`. Slots whose window is still open count, so a start drawn late in the window survives a restart.
+ * With `runs` > 1 every part of the window is a slot of its own.
  */
 export function nextRandomStart(
   routineId: string,
@@ -267,11 +288,14 @@ export function nextRandomStart(
   windowMinutes: number,
   after = new Date(),
   handledUntil = 0,
+  runs = 1,
 ): { slot: Date; at: Date } {
-  let from = Math.max(after.getTime() - windowMinutes * 60_000, handledUntil);
-  for (let i = 0; i < 100; i++) {
-    const slot = nextRunFor(cron, timezone, new Date(from));
-    const at = new Date(slot.getTime() + startOffsetMs(routineId, slot, windowMinutes));
+  const windowMs = windowMinutes * 60_000;
+  const partMs = runs > 1 ? Math.floor(windowMs / runs / 1000) * 1000 : windowMs;
+  let from = Math.max(after.getTime() - partMs, handledUntil);
+  for (let i = 0; i < 100 * runs; i++) {
+    const slot = nextPart(cron, timezone, from, windowMs, runs);
+    const at = new Date(slot.getTime() + startOffsetMs(routineId, slot, partMs));
     if (at > after) return { slot, at };
     from = slot.getTime();
   }
@@ -346,7 +370,16 @@ export function normalizeTrigger(input: RoutineTrigger | undefined, agent: Pick<
       if (!Number.isInteger(minutes) || minutes < 0 || minutes > MAX_START_WINDOW_MINUTES) {
         throw badRequest(`The random start window must be a whole number of minutes between 0 and ${MAX_START_WINDOW_MINUTES}`);
       }
-      return minutes ? { type: "schedule", startWindowMinutes: minutes } : { type: "schedule" };
+      const runs = t.runsPerWindow ?? 1;
+      if (!Number.isInteger(runs) || runs < 1 || runs > MAX_RUNS_PER_WINDOW) {
+        throw badRequest(`Runs per window must be a whole number between 1 and ${MAX_RUNS_PER_WINDOW}`);
+      }
+      if (runs > 1 && !minutes) throw badRequest("Several runs per scheduled time need a random start window to spread them over");
+      if (runs > 1 && minutes / runs < MIN_MINUTES_PER_RUN) {
+        throw badRequest(`${runs} runs need a start window of at least ${runs * MIN_MINUTES_PER_RUN} minutes (${MIN_MINUTES_PER_RUN} per run)`);
+      }
+      if (!minutes) return { type: "schedule" };
+      return runs > 1 ? { type: "schedule", startWindowMinutes: minutes, runsPerWindow: runs } : { type: "schedule", startWindowMinutes: minutes };
     }
     case "webhook":
       return { type: t.type };
@@ -491,7 +524,7 @@ function scheduleFor(
   const startWindow = startWindowOf(trigger);
   if (startWindow) {
     if (checkWindow) assertStartWindow(cron, timezone, startWindow);
-    next = nextRandomStart(id, cron, timezone, startWindow, new Date(), lastScheduledStart(id)).at;
+    next = nextRandomStart(id, cron, timezone, startWindow, new Date(), lastScheduledStart(id), runsOf(trigger)).at;
   }
   return { cron, next };
 }
@@ -552,7 +585,8 @@ export function updateRoutine(id: string, patch: Partial<RoutineInput>): Routine
   const timezone = patch.timezone !== undefined ? validateTimezone(patch.timezone || defaultTimezone()) : current.timezone;
   const cronInput = patch.cron !== undefined ? patch.cron : current.cron;
   const scheduleChanged =
-    normalizeCron(cronInput ?? "") !== current.cron || timezone !== current.timezone || startWindowOf(trigger) !== startWindowOf(current.trigger);
+    normalizeCron(cronInput ?? "") !== current.cron || timezone !== current.timezone || startWindowOf(trigger) !== startWindowOf(current.trigger) ||
+    runsOf(trigger) !== runsOf(current.trigger);
   const { cron, next } = scheduleFor(id, trigger, cronInput, timezone, scheduleChanged);
   const filter =
     trigger.type === "app" || trigger.type === "webhook" ? normalizeFilter(patch.filter !== undefined ? patch.filter : current.filter) : "";

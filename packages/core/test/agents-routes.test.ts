@@ -148,7 +148,7 @@ describe("agent routes", () => {
 
     const randomStart = await call<Routine>("PATCH", `/api/routines/${created.data.id}`, { trigger: { type: "schedule", startWindowMinutes: 90 } });
     expect(randomStart.data.trigger).toEqual({ type: "schedule", startWindowMinutes: 90 });
-    const tooLong = await call<{ error: string }>("PATCH", `/api/routines/${created.data.id}`, { trigger: { type: "schedule", startWindowMinutes: 900 } });
+    const tooLong = await call<{ error: string }>("PATCH", `/api/routines/${created.data.id}`, { trigger: { type: "schedule", startWindowMinutes: 1500 } });
     expect(tooLong.status).toBe(400);
     expect(tooLong.data.error).toContain("random start window");
 
