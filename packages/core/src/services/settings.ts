@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS: Settings = {
     keepAliveMinutes: 5,
     liveView: true,
     stealth: true,
+    muteAudio: true,
   },
   computer: {
     enabled: true,

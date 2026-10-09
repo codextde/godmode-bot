@@ -60,7 +60,7 @@ const BROWSER_STAMP = `"$HOME/.godmode/stamps/browser-use-${BROWSER_USE_VERSION}
 const CUA_STAMP = `"$HOME/.godmode/stamps/cua-driver-${CUA_DRIVER_VERSION}"`;
 const CDP_UP = `curl -fsS -m 2 http://127.0.0.1:${GUEST_CDP_PORT}/json/version >/dev/null 2>&1`;
 
-const chromeFlags = (stealth: boolean) => [
+const chromeFlags = (stealth: boolean, muteAudio: boolean) => [
   `--remote-debugging-port=${GUEST_CDP_PORT}`,
   "--remote-debugging-address=127.0.0.1",
   '"--user-data-dir=$HOME/.godmode/browser-profile"',
@@ -73,6 +73,7 @@ const chromeFlags = (stealth: boolean) => [
   "--disable-backgrounding-occluded-windows",
   "--disable-renderer-backgrounding",
   ...(stealth ? stealthArgs({ headless: false, userAgent: null }) : []),
+  ...(muteAudio ? ["--mute-audio"] : []),
 ].join(" ");
 
 /** Lines "uv", "chrome", "browser-use=<path>", "cua=<path>" for what is installed. */
@@ -87,7 +88,7 @@ const PROBE = [
 /** Start Chrome with DevTools unless it already answers. Output goes to stderr (the MCP wrapper's stdout is JSON-RPC). */
 const startChrome = () => `if ! ${CDP_UP}; then
   mkdir -p ${KIT}/browser-profile "$HOME/Downloads"
-  open -n -a ${CHROME_APP} --args ${chromeFlags(getSettings().browser.stealth)} >&2
+  open -n -a ${CHROME_APP} --args ${chromeFlags(getSettings().browser.stealth, getSettings().browser.muteAudio)} >&2
   i=0
   until ${CDP_UP}; do
     i=$((i + 1))
