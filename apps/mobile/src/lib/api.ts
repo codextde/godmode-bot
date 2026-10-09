@@ -221,6 +221,20 @@ const post = <T>(path: string, body: unknown = {}, minTimeoutMs = 0) => request<
 const patch = <T>(path: string, body: unknown) => request<T>("PATCH", path, body);
 const del = <T>(path: string) => request<T>("DELETE", path);
 
+/**
+ * A computer on an older Godmode refuses `projectId` from the phone (403, before anything runs): send it again without,
+ * so the chat or task still starts, in the workspace.
+ */
+async function withProject<I extends { projectId?: string | null }, T>(input: I, call: (input: I) => Promise<T>): Promise<T> {
+  try {
+    return await call(input);
+  } catch (err) {
+    if (!(err instanceof ApiError && err.code === "device_forbidden" && input.projectId !== undefined)) throw err;
+    const { projectId: _dropped, ...rest } = input;
+    return call(rest as I);
+  }
+}
+
 export function deviceName(): string {
   return Device.deviceName || Device.modelName || (process.env.EXPO_OS === "ios" ? "iPhone" : "Android phone");
 }
@@ -329,7 +343,7 @@ export const api = {
   chat: {
     /** With `workspaceId`: a global agent's chat belongs to that workspace. */
     start: (input: { agentId?: string; content: string; attachments?: UploadFile[]; workspaceId?: string | null; projectId?: string | null } & ModelChoicePatch) =>
-      post<StartChatResult>("/api/chat", input),
+      withProject(input, (body) => post<StartChatResult>("/api/chat", body)),
   },
 
   tasks: {
@@ -345,8 +359,7 @@ export const api = {
       type?: TaskType;
       status?: TaskStatus;
       agentId?: string | null;
-    }) =>
-      post<Task>("/api/tasks", input),
+    }) => withProject(input, (body) => post<Task>("/api/tasks", body)),
     /** Moving to To do starts the agent; moving away from In progress stops it. Archived tasks are off the board. */
     update: (id: string, input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null; archived?: boolean; projectId?: string | null }) =>
       patch<Task>(`/api/tasks/${id}`, input),

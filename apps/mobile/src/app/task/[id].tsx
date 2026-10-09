@@ -36,7 +36,13 @@ export default function TaskScreen() {
   const update = useMutation({
     mutationFn: (patch: { status?: TaskStatus; agentId?: string | null; archived?: boolean; projectId?: string | null }) => api.tasks.update(id, patch),
     onSuccess: onDone,
-    onError: (err) => Alert.alert("Couldn't change the task", errorText(err)),
+    onError: (err, patch) =>
+      Alert.alert(
+        "Couldn't change the task",
+        err instanceof ApiError && err.code === "device_forbidden" && patch.projectId !== undefined
+          ? "Update Godmode on your computer to change a ticket's project from the phone."
+          : errorText(err),
+      ),
   });
   const approve = useMutation({
     mutationFn: () => api.tasks.approve(id),
