@@ -24,6 +24,7 @@ import { isValidBranch, MOD_NAME_RE, parseGitUrl } from "@godmode/shared";
 import { config, VERSION } from "../config";
 import { all, get, getDb, run as exec } from "../db";
 import { recoverInterruptedRuns } from "../runner/runner";
+import { leaveInterruptedWork } from "../services/resume";
 import { SPEND_BACKFILL_SQL, TEAM_BACKFILL_SQL, TICKET_FACTS_SQL } from "../db/migrations";
 import { startBudgets, stopBudgets } from "../services/budgets";
 import { repairReportingLines } from "../agents/service";
@@ -755,6 +756,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       // Runs that were in progress when the backup was made will never finish, and events that were waiting then
       // are stale now: don't replay them.
       recoverInterruptedRuns();
+      leaveInterruptedWork();
       // A backup from before the team package: who wrote old prompts, the built-in agent's role. Then fix reporting
       // lines an edited or partial backup may have broken.
       getDb().run(TEAM_BACKFILL_SQL);

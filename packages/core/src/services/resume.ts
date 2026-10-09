@@ -9,7 +9,7 @@ import { RUN_INTERRUPTED, RUN_SHUT_DOWN, retryModeOf } from "@godmode/shared";
 import { all, get, getMeta, run as exec, setMeta } from "../db";
 import { logger } from "../log";
 import { HttpError, newId, now, parseJson } from "../util";
-import { recordEvent, settleIfFinished } from "../automations/events";
+import { activeMainRun, recordEvent, settleIfFinished } from "../automations/events";
 import { deliverFollowup } from "../messaging/bridge";
 import { restartAgainNote, restartContext, type CutOffHandoff } from "../runner/prompt";
 import { activeRunForConversation } from "../runner/runner";
@@ -94,6 +94,11 @@ export async function resumeInterruptedWork(work: InterruptedWork): Promise<void
   }
 }
 
+/** What is cut off now stays for the human (a restored backup's runs): later starts don't continue it by themselves. */
+export function leaveInterruptedWork(): void {
+  setMeta(CHECKED_KEY, now());
+}
+
 /**
  * Continue one run a restart cut off, with the work it had handed to other agents — for an agent looking after the
  * team (work older than a day, or with continuing after a restart turned off). Throws when it can't be continued.
@@ -138,15 +143,19 @@ export function latestContinuation(runId: string): string {
 
 async function continueAll(runs: RunRow[], strict = false): Promise<Run[]> {
   const ids = new Set(runs.map((r) => r.id));
+  const requested = strict ? runs[0] : null;
   const ordered = runs.map((r) => ({ r, depth: depthOf(r.parent_run_id) })).sort((a, b) => a.depth - b.depth);
   // Handed-over work gets its new run id up front, so the run that handed it over is told where to wait for it.
   const planned = new Map<string, string>();
-  for (const { r } of ordered) if (r.trigger === "delegation" && r.parent_run_id && ids.has(r.parent_run_id) && !blocked(r)) planned.set(r.id, newId("run"));
+  for (const { r } of ordered) {
+    if (r.trigger === "delegation" && r.parent_run_id && ids.has(r.parent_run_id) && !blocked(r) && agentEnabled(r.agent_id)) planned.set(r.id, newId("run"));
+  }
+  const continued = new Set<string>();
   const started: Run[] = [];
   for (const { r } of ordered) {
-    const refusal = blocked(r);
+    const refusal = blocked(r) ?? (r === requested ? null : orphaned(r, continued));
     if (refusal) {
-      if (strict && r === runs[0]) throw new HttpError(409, refusal, "busy");
+      if (r === requested) throw new HttpError(409, refusal, "busy");
       continue;
     }
     const handoffs = ordered
@@ -154,12 +163,24 @@ async function continueAll(runs: RunRow[], strict = false): Promise<Run[]> {
       .map(({ r: c }) => ({ agentName: agentName(c.agent_id), runId: planned.get(c.id)! }));
     try {
       started.push(await continueOne(r, handoffs, planned.get(r.id)));
+      continued.add(r.id);
     } catch (err) {
-      if (strict && r === runs[0]) throw err;
+      if (r === requested) throw err;
       log.warn(`could not continue run ${r.id} after the restart`, err);
     }
   }
   return started;
+}
+
+/**
+ * Handed-over work goes on only for a run that goes on too, or one that had already finished (it handed the work over
+ * without waiting): else whatever picks that run up again (the board, the human) would hand it over a second time.
+ */
+function orphaned(r: RunRow, continued: Set<string>): string | null {
+  if (r.trigger !== "delegation" || !r.parent_run_id || continued.has(r.parent_run_id)) return null;
+  const parent = get<Pick<RunRow, "status" | "error">>("SELECT status, error FROM runs WHERE id = ?", r.parent_run_id);
+  if (!parent || cutOffByRestart(parent) || !["succeeded", "failed", "cancelled"].includes(parent.status)) return "The run that handed this over doesn't go on.";
+  return null;
 }
 
 async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId?: string): Promise<Run> {
@@ -212,6 +233,8 @@ function blocked(r: RunRow): string | null {
   if (latest !== r.id) return "Something new happened in this chat since — the work already went on.";
   if (activeRunForConversation(r.conversation_id)) return "The agent is already working in this chat.";
   if (pauseOf(r.conversation_id)) return "This chat stands still — it continues from the bar above the message box.";
+  // An automation that runs each event in a chat of its own may have started again meanwhile.
+  if (r.trigger === "routine" && r.routine_id && activeMainRun(r.routine_id)) return "The automation is already running again.";
   return null;
 }
 
@@ -253,6 +276,10 @@ function depthOf(parentRunId: string | null): number {
     id = get<{ parent_run_id: string | null }>("SELECT parent_run_id FROM runs WHERE id = ?", id)?.parent_run_id ?? null;
   }
   return depth;
+}
+
+function agentEnabled(agentId: string): boolean {
+  return get<{ enabled: number }>("SELECT enabled FROM agents WHERE id = ?", agentId)?.enabled === 1;
 }
 
 function agentName(agentId: string): string {

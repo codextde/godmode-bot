@@ -358,11 +358,13 @@ restarted").
 
 * Who handed work over goes first. Its cut-off handoffs get their new run ids up front, so its note names where to wait
   (`delegation_status`, which also follows a run id to its latest continuation); the handoff's turn hangs off the
-  turn that continues its parent.
+  turn that continues its parent. A handoff goes on only when its parent goes on too or had already finished (handed
+  over without waiting): a ticket's run, picked up again by the board, would hand it over a second time.
 * An automation's turn keeps its routine (busy check, status) and gets an event "Continued after Godmode restarted";
   in a Slack, Telegram or Teams chat the answer goes back there (`deliverFollowup`).
-* Something new in the chat since, a run already working there or a pause leave it alone; a turn continued three times
-  in a row by itself (one that restarts Godmode) is left for the human.
+* Something new in the chat since, a run already working there, a pause or an automation that already runs again
+  (one chat per event) leave it alone; a turn continued three times in a row by itself (one that restarts Godmode) is
+  left for the human, and so is what a restored backup marked interrupted (`leaveInterruptedWork`).
 * Managers continue what is left (older work, setting off) with the `run_continue` tool.
 
 ### Questions and approvals

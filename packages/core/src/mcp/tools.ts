@@ -1706,6 +1706,8 @@ const TOOLS: ToolDef[] = [
     }),
     when: canDelegate,
     run: async ({ runId, wait, timeoutSeconds }, { agent, ctx }) => {
+      const asked = get<{ id: string }>("SELECT id FROM runs WHERE id = ?", runId);
+      if (!asked) return fail(`Run ${runId} doesn't exist — if Godmode restarted, that handoff didn't go on: hand it over again if it is still needed.`);
       if (!isManager(agent) && !delegatedBy(getRun(runId), agent, ctx)) return fail("That run was not delegated by you.");
       // Work a restart cut off goes on in a new turn of the same chat: that turn has the answer.
       let r = getRun(latestContinuation(runId));
@@ -2339,9 +2341,11 @@ const TOOLS: ToolDef[] = [
       'Continue a run that a restart of Godmode cut off (its error in runs_list is "Cancelled (Godmode shut down)" or "Interrupted (Godmode restarted)"): a new turn in the same chat and Claude session picks the work up where it stopped, with the work it had handed to other agents. Only the last turn of its chat; board tickets continue from the board. Godmode does this by itself after a restart for work of the last day (unless that is turned off in Settings) — use it for what is left.',
     schema: z.object({ runId: z.string() }),
     when: managesSetup,
-    run: async ({ runId }, { agent }) => {
+    run: async ({ runId }, { agent, ctx }) => {
       const cut = getRun(runId);
-      if (cut.agentId !== agent.id) requireReachable(agent, cut.agentId);
+      const target = cut.agentId === agent.id ? agent : requireReachable(agent, cut.agentId);
+      const refusal = offHostRefusal(ctx, target, "continue its work") ?? revealTargetRefusal(agent, ctx, target, "continue its work");
+      if (refusal) return fail(refusal);
       const run = await continueCutOffRun(runId);
       return `Continued: ${getAgent(run.agentId).name} picks the work up in run ${run.id} (conversation ${run.conversationId}).`;
     },

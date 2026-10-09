@@ -8,7 +8,7 @@ import { all, get, insert, run as sql, setMeta } from "../src/db";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { callTool } from "../src/mcp/tools";
 import { getRun, listRuns, waitForRun } from "../src/runner/runner";
-import { continueCutOffRun, interruptedWork, latestContinuation, resumeInterruptedWork } from "../src/services/resume";
+import { continueCutOffRun, interruptedWork, latestContinuation, leaveInterruptedWork, resumeInterruptedWork } from "../src/services/resume";
 import { createRoutine } from "../src/services/routines";
 import { updateSettings } from "../src/services/settings";
 import { createTask } from "../src/tasks/service";
@@ -199,6 +199,43 @@ describe("continuing after a restart", () => {
     expect(status.content[0]!.text).toContain("finished the task");
     await waitForRun(parentRun.id, 10_000);
   }, 30_000);
+
+  test("handed-over work goes on only when the run that handed it over does, or had already finished", async () => {
+    // The ticket's run is the board's to pick up again: what it handed over would be handed over twice.
+    const ticketConv = chat(agent, "task");
+    sql("UPDATE tasks SET conversation_id = ? WHERE id = ?", ticketConv, createTask({ title: "Find suppliers" }).id);
+    const ticketRun = cutOff(agent, ticketConv, { trigger: "task" });
+    const orphanConv = chat(helper, "delegation");
+    const orphan = cutOff(helper, orphanConv, { trigger: "delegation", parent: ticketRun });
+
+    // Handed over without waiting: the run that did it had finished long before.
+    const doneConv = chat(agent);
+    const done = cutOff(agent, doneConv, { status: "succeeded", error: "" });
+    const backgroundConv = chat(helper, "delegation");
+    const background = cutOff(helper, backgroundConv, { trigger: "delegation", parent: done });
+
+    await resumeNow();
+    expect(next(orphanConv, orphan)).toBeUndefined();
+    const run = next(backgroundConv, background)!;
+    expect(run).toMatchObject({ trigger: "delegation", parentRunId: done });
+    await waitForRun(run.id, 10_000);
+  }, 20_000);
+
+  test("an automation that already runs again isn't continued a second time", async () => {
+    const routine = createRoutine({ agentId: agent.id, name: "Inbox triage", cron: "0 * * * *", prompt: "Triage the inbox" });
+    const conv = chat(agent, "routine");
+    const cut = cutOff(agent, conv, { trigger: "routine", routineId: routine.id });
+    insert("runs", { id: newId("run"), agent_id: agent.id, conversation_id: chat(agent, "routine"), trigger: "routine", routine_id: routine.id, status: "queued", prompt: "x", created_at: now() });
+    await resumeNow();
+    expect(next(conv, cut)).toBeUndefined();
+    sql("UPDATE runs SET status = 'cancelled' WHERE routine_id = ? AND status = 'queued'", routine.id);
+  });
+
+  test("a restored backup's interrupted runs stay for the human", () => {
+    const cut = cutOff(agent, chat(agent), { status: "failed", error: RUN_INTERRUPTED });
+    leaveInterruptedWork();
+    expect(interruptedWork().runs.map((r) => r.id)).not.toContain(cut);
+  });
 
   test("an automation's turn keeps its automation", async () => {
     const routine = createRoutine({ agentId: agent.id, name: "Morning report", cron: "0 8 * * *", prompt: "Write the morning report" });
