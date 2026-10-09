@@ -69,17 +69,19 @@ const ICONS = {
   workflow: ["flowchart", "account_tree"],
   brain: ["brain.head.profile", "psychology"],
   wrench: ["wrench.and.screwdriver", "build"],
-  folder: ["folder.fill", "folder"],
   dollar: ["dollarsign.circle", "paid"],
   gauge: ["gauge.with.dots.needle.67percent", "speed"],
   pulse: ["waveform.path.ecg", "monitor_heart"],
-  person: ["person.crop.circle", "account_circle"],
+  personCircle: ["person.crop.circle", "account_circle"],
   text: ["text.alignleft", "notes"],
   cpu: ["cpu", "memory"],
   moon: ["moon.stars", "bedtime"],
   shield: ["checkmark.shield", "verified_user"],
   minus: ["minus", "remove"],
   slider: ["slider.horizontal.3", "tune"],
+  folder: ["folder.fill", "folder"],
+  person: ["person.fill.checkmark", "assignment_ind"],
+  subagent: ["person.2.wave.2", "diversity_3"],
 } as const satisfies Record<string, readonly [SFSymbol, AndroidSymbol]>;
 
 export type IconName = keyof typeof ICONS;

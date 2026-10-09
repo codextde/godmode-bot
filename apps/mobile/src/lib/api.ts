@@ -12,6 +12,8 @@ import type {
   Effort,
   AgentHeartbeatInput,
   Conversation,
+  HumanTask,
+  HumanTaskCloseResult,
   ConversationWithMessages,
   MissingLogin,
   MobilePairResult,
@@ -223,6 +225,20 @@ const patch = <T>(path: string, body: unknown) => request<T>("PATCH", path, body
 const put = <T>(path: string, body: unknown) => request<T>("PUT", path, body);
 const del = <T>(path: string) => request<T>("DELETE", path);
 
+/**
+ * A computer on an older Godmode refuses `projectId` from the phone (403, before anything runs): send it again without,
+ * so the chat or task still starts, in the workspace.
+ */
+async function withProject<I extends { projectId?: string | null }, T>(input: I, call: (input: I) => Promise<T>): Promise<T> {
+  try {
+    return await call(input);
+  } catch (err) {
+    if (!(err instanceof ApiError && err.code === "device_forbidden" && input.projectId !== undefined)) throw err;
+    const { projectId: _dropped, ...rest } = input;
+    return call(rest as I);
+  }
+}
+
 export function deviceName(): string {
   return Device.deviceName || Device.modelName || (process.env.EXPO_OS === "ios" ? "iPhone" : "Android phone");
 }
@@ -392,8 +408,8 @@ export const api = {
 
   chat: {
     /** With `workspaceId`: a global agent's chat belongs to that workspace. */
-    start: (input: { agentId?: string; content: string; attachments?: UploadFile[]; workspaceId?: string | null } & ModelChoicePatch) =>
-      post<StartChatResult>("/api/chat", input),
+    start: (input: { agentId?: string; content: string; attachments?: UploadFile[]; workspaceId?: string | null; projectId?: string | null } & ModelChoicePatch) =>
+      withProject(input, (body) => post<StartChatResult>("/api/chat", body)),
   },
 
   tasks: {
@@ -401,10 +417,17 @@ export const api = {
     list: (q: { workspaceId?: string | null } = {}) => get<Task[]>("/api/tasks", q),
     get: (id: string) => get<Task>(`/api/tasks/${id}`),
     /** With an agent (and no status) the task goes to To do and the agent starts right away. */
-    create: (input: { workspaceId: string | null; title: string; description?: string; type?: TaskType; status?: TaskStatus; agentId?: string | null }) =>
-      post<Task>("/api/tasks", input),
+    create: (input: {
+      workspaceId: string | null;
+      projectId?: string | null;
+      title: string;
+      description?: string;
+      type?: TaskType;
+      status?: TaskStatus;
+      agentId?: string | null;
+    }) => withProject(input, (body) => post<Task>("/api/tasks", body)),
     /** Moving to To do starts the agent; moving away from In progress stops it. Archived tasks are off the board. */
-    update: (id: string, input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null; archived?: boolean }) =>
+    update: (id: string, input: { title?: string; description?: string; status?: TaskStatus; agentId?: string | null; archived?: boolean; projectId?: string | null }) =>
       patch<Task>(`/api/tasks/${id}`, input),
     /** Approve a ticket in review: its open pull request is merged first, then it's done. */
     approve: (id: string) => post<Task>(`/api/tasks/${id}/approve`),
@@ -458,6 +481,15 @@ export const api = {
 
   missingLogins: {
     open: () => get<MissingLogin[]>("/api/missing-logins", { status: "open" }),
+  },
+
+  humanTasks: {
+    /** What agents handed over to the human: open and doing, or with `closed` the finished ones too. */
+    list: (q: { status?: "active" | "closed" | "all"; conversationId?: string } = {}) => get<HumanTask[]>("/api/human-tasks", q),
+    /** The human is on it (`doing`) or puts it back (`open`). */
+    move: (id: string, status: "open" | "doing") => patch<HumanTask>(`/api/human-tasks/${id}`, { status }),
+    /** Done or can't do it; the note goes to the agent and its chat continues. */
+    close: (id: string, outcome: "done" | "declined", note?: string) => post<HumanTaskCloseResult>(`/api/human-tasks/${id}/close`, note ? { outcome, note } : { outcome }),
   },
 
   questions: {

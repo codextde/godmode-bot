@@ -15,7 +15,7 @@ const LAYERS: { icon: IconName; label: string }[] = [
   { icon: "globe", label: "Everyone" },
   { icon: "layers", label: "Workspace" },
   { icon: "folder", label: "Project" },
-  { icon: "person", label: "Agent" },
+  { icon: "personCircle", label: "Agent" },
   { icon: "chats", label: "Chat" },
 ];
 

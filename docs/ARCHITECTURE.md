@@ -171,6 +171,12 @@ ask within the same moment share a request.
   controls the VM, so this is best effort against a determined agent — closer to "reveal" than to fill-only.
 * **Grants**: revealing secrets and enabling reveal/remember-device require `X-Godmode-Grant`, obtained from
   `POST /api/vault/grant {passphrase}` (10 min, in memory).
+* **Saving logins** (`vault_save_login`): any agent may add a login the human gave it in the chat, or one it signed up
+  for (`generatePassword` makes a password the model never sees). New logins land in the agent's scope (its workspace,
+  or global), and an agent with a login allow-list gets the new one added. Updating a login keeps the old password in
+  its notes. The password argument is never stored or logged with the call, and once saved the password is masked in
+  the chat's messages, title, transcript and run logs (partial stream deltas are not logged at all, so no fragment of
+  a secret ends up in a log).
 * **Redaction**: every known secret is masked in transcripts, run logs and the UI stream.
 * **Audit log**: every secret access (`credential.fill`, `credential.reveal`, `totp.fill`, …) is recorded.
 * **API auth**: bearer token (desktop shell / `godmode token`) or HttpOnly SameSite=Strict session cookie
@@ -500,12 +506,13 @@ the core, the desktop and the phone alike.
 | `vault_list_logins({ domain? })` | Logins available to this agent (no secrets) |
 | `vault_fill_login({ credentialId, field: "username"\|"password", selector? })` | Type a secret into the browser page |
 | `vault_fill_totp({ credentialId? , totpId?, selector? })` | Type the current 2FA code into the page |
+| `vault_save_login({ url, username?, password?, generatePassword?, name?, notes?, credentialId? })` | Save a login the human gave in the chat (or a new account) to the vault; updates the same site + username instead of duplicating, keeps the old password in its notes, masks the password in the chat, run logs and transcript. Not on runners or condition checks |
 | `vault_get_login({ credentialId })` | Reveal username/password — only when `secretAccess = "reveal"` |
 | `vault_get_totp({ totpId })` | Reveal current code — only in reveal mode |
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |
 | `agents_list()`, `agent_get({id})` | Discover peer agents: role, who they report to (`relation` marks the caller's lead and reports), and for `agent_get` who reports to it (only agents the caller could reach) |
 | `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result). The chat stores the bare task (`source: "delegation"`); the run's prompt starts with `[Delegated by <name> (<role>), your lead. Your final answer goes back to <name>.]` |
-| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo` |
+| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `workspaces_list`, `workspace_create`, `workspace_update`, `project_create`, `project_update`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo`. `workspace_update` / `project_update` only add sources (`addSources`); removing sources, deleting, VM, browser profile and auto-merge stay human-only. A run kept in a VM sets up no workspaces or projects (their instructions reach agents on the computer), and changing a workspace's or project's context follows the `agent_update` rules for every agent in it (reveal mode, computer use) |
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
 | `task_note({ text, taskId? })` | A progress note on the ticket the run works on (managers: any ticket); on its timeline, nobody is notified |
 | `ask_human({ question, context?, options? })`, `request_approval({ action, reason, affects })` | Ask the human a question or for an OK and stand still until the answer; the run continues with it (see Questions and approvals). Not in condition checks, dreams or delegated runs |
@@ -535,6 +542,7 @@ tasks, and read what was done. `packages/core/src/connect/`.
 * **Tools.** `CONNECTOR_TOOLS` in `mcp/tools.ts` is the allowlist, each tool marked `read` or `manage`: `agents_list`,
   `agent_get`, `agent_create`, `agent_update`, `agent_delete`, the `routine_*` and `automation_*` tools, `tasks_list`,
   `task_get`, `task_create`, `task_update`, `task_message`, `task_note`, `runs_list`, `spend_overview`, `workspaces_list`,
+  `workspace_create`, `workspace_update`, `project_create`, `project_update`,
   `logins_overview` (names, never secrets), `missing_logins_list`, `vms_list`, `vm_create`, `vm_assign`, `vm_power`.
   Nothing that needs a run, a chat or a browser (vault fills, questions, follow-ups, delegation, API tools). `tools/list`
   and `tools/call` both check it; a `read` key is refused on `manage` tools. A read key still sees login names and

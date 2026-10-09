@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import {
   MAX_TASK_DESCRIPTION_LENGTH,
@@ -13,8 +13,9 @@ import {
 import { AttachmentTray } from "@/components/attachments";
 import { CharacterAvatar } from "@/components/character";
 import { Icon } from "@/components/icon";
+import { ProjectPicker } from "@/components/project-picker";
 import { TYPE_META } from "@/components/task-row";
-import { Button, T, tap } from "@/components/ui";
+import { Button, Skeleton, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { usePendingFiles } from "@/lib/attachments";
@@ -29,8 +30,13 @@ const NONE = "none";
 export default function NewTask() {
   const c = useColors();
   const { agentId } = useLocalSearchParams<{ agentId?: string }>();
-  const { id: workspaceId, workspace } = useWorkspace();
-  const { data: allAgents } = useAgents();
+  const { id: workspaceId, workspace, projectId: scopeProject } = useWorkspace();
+  const [projectPick, setProjectPick] = useState<string | null | undefined>(undefined);
+  // A workspace switched in the sheet takes its own projects: a pick from the old one doesn't carry over.
+  useEffect(() => setProjectPick(undefined), [workspaceId]);
+  const chosen = projectPick !== undefined ? projectPick : scopeProject;
+  const projectId = chosen && workspace?.projects?.some((p) => p.id === chosen) ? chosen : null;
+  const { data: allAgents, isLoading: agentsLoading } = useAgents();
   const agents = agentsFor(allAgents ?? [], workspaceId).filter((a) => a.enabled);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -39,7 +45,8 @@ export default function NewTask() {
   const { files, attach, remove } = usePendingFiles();
   const [saving, setSaving] = useState(false);
   const uploads = useRef(new Map<string, TaskAttachment>());
-  const agent = picked === NONE ? undefined : (agents.find((a) => a.id === picked) ?? agents[0]);
+  const agent =
+    picked === NONE ? undefined : (agents.find((a) => a.id === picked) ?? (projectId ? agents.find((a) => a.projectId === projectId) : undefined) ?? agents[0]);
 
   const create = async () => {
     const name = title.trim();
@@ -60,7 +67,7 @@ export default function NewTask() {
         attachments.push(done);
       }
       const details = [description.trim(), ...attachments.map(taskAttachmentMarkdown)].filter(Boolean).join("\n\n");
-      const task = await api.tasks.create({ workspaceId, title: name, description: details || undefined, type, agentId: agent?.id ?? null });
+      const task = await api.tasks.create({ workspaceId, ...(projectId ? { projectId } : {}), title: name, description: details || undefined, type, agentId: agent?.id ?? null });
       void queryClient.invalidateQueries({ queryKey: qk.tasks });
       router.dismiss();
       router.push({ pathname: "/task/[id]", params: { id: task.id } });
@@ -144,14 +151,22 @@ export default function NewTask() {
         </T>
       </View>
 
+      <ProjectPicker
+        bleed={space.xl}
+        projects={workspace?.projects ?? []}
+        value={projectId}
+        onChange={setProjectPick}
+        hint={projectId ? "The agent works with the project's context, folders and repositories." : "It uses the workspace's setup."}
+      />
+
       <View style={{ gap: space.sm }}>
         <T variant="eyebrow" muted>
           Agent
         </T>
         <View style={styles.chips}>
-          {agents.map((a) => (
-            <Chip key={a.id} active={a.id === agent?.id} onPress={() => setPicked(a.id)} label={a.name} agent={a} />
-          ))}
+          {agentsLoading
+            ? [104, 128, 92].map((w) => <Skeleton key={w} width={w} height={36} radius={18} />)
+            : agents.map((a) => <Chip key={a.id} active={a.id === agent?.id} onPress={() => setPicked(a.id)} label={a.name} agent={a} />)}
           <Chip active={!agent} onPress={() => setPicked(NONE)} label="Nobody yet" />
         </View>
         <T variant="footnote" muted>

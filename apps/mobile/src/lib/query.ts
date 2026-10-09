@@ -36,4 +36,7 @@ export const qk = {
   notifications: ["notifications"],
   missingLogins: ["missing-logins"],
   questions: ["questions"],
+  humanTasks: ["human-tasks"],
+  humanTaskList: (status: "active" | "all") => ["human-tasks", "list", status],
+  chatHumanTasks: (conversationId: string) => ["human-tasks", "chat", conversationId],
 } as const;
