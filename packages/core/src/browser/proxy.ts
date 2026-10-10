@@ -9,7 +9,7 @@ import { randomBytes } from "node:crypto";
 import type { Server, ServerWebSocket } from "bun";
 import { logger } from "../log";
 import { maskCardNumbers } from "../vault/cardMask";
-import { probeCdp } from "./cdp";
+import { probeCdp, type CdpClient } from "./cdp";
 import type { RunningBrowser } from "./state";
 import type { TabRegistry, TargetInfo } from "./tabs";
 
@@ -70,6 +70,7 @@ interface CdpMessage {
 
 class ChatConnection {
   private upstream: WebSocket | null = null;
+  private browser: CdpClient | null = null;
   private tabs: TabRegistry | null = null;
   private outbox: string[] = [];
   private sessions = new Map<string, string>();
@@ -103,6 +104,7 @@ class ChatConnection {
       return;
     }
     if (this.closed) return;
+    this.browser = rb.client;
     this.tabs = rb.tabs;
     const up = new WebSocket(rb.wsUrl);
     this.upstream = up;
@@ -195,6 +197,8 @@ class ChatConnection {
       const targetId = parse(raw)?.result?.targetId;
       if (typeof targetId === "string") {
         this.tabs?.claim(targetId, this.chat);
+        const placeholder = this.tabs?.replacedPlaceholder(this.chat, targetId);
+        if (placeholder) this.closeTab(placeholder);
         // Answered after the hold gave up: its tab's events were dropped as nobody's.
         if (!wasHolding) late = this.unclaimed.get(targetId) ?? [];
         this.unclaimed.delete(targetId);
@@ -299,6 +303,14 @@ class ChatConnection {
         return this.send(raw);
     }
     this.send(raw);
+  }
+
+  /** Closed over Godmode's own connection: the chat's client only hears that the tab is gone. */
+  private closeTab(targetId: string) {
+    void this.browser?.send("Target.closeTarget", { targetId }, undefined, 5000).then(
+      () => this.tabs?.forget(targetId),
+      () => {},
+    );
   }
 
   private keepUnclaimed(info: TargetInfo, raw: string) {

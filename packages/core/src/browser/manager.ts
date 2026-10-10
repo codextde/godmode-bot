@@ -394,7 +394,7 @@ async function startBrowser(profileId: string, opts: { headless?: boolean; trans
   let tabs: TabRegistry;
   try {
     client = await CdpClient.connect(wsUrl);
-    tabs = new TabRegistry(client);
+    tabs = new TabRegistry(client, !headless && process.platform !== "darwin");
     await client.send("Target.setDiscoverTargets", { discover: true });
     tabs.addSpares(tabs.userPages().filter((p) => tabs.isBlank(p.targetId)).map((p) => p.targetId));
   } catch (err) {
@@ -680,11 +680,11 @@ export async function ensureChatTab(rb: RunningBrowser, conversationId: string):
   const p = (async () => {
     const spare = rb.tabs.spareBlankPage();
     if (spare) {
-      rb.tabs.claim(spare.targetId, conversationId);
+      rb.tabs.claimPlaceholder(spare.targetId, conversationId);
       return spare.targetId;
     }
     const { targetId } = await rb.client.send<{ targetId: string }>("Target.createTarget", { url: "about:blank", newWindow: true, background: true });
-    rb.tabs.claim(targetId, conversationId);
+    rb.tabs.claimPlaceholder(targetId, conversationId);
     return targetId;
   })().finally(() => opening.delete(key));
   opening.set(key, p);
@@ -701,10 +701,14 @@ function chatPage(rb: RunningBrowser, conversationId: string, urlContains?: stri
   return page ? { targetId: page.targetId, url: page.url, title: page.title, attached: true } : null;
 }
 
-/** Close a chat's tabs (deleted, archived or idle chats). The browser's last page stays open, blank, for the next chat. */
-async function closeTabsOf(rb: RunningBrowser, conversationId: string) {
+/**
+ * Close a chat's tabs (deleted, archived or idle chats), or with `blank` the ones it left blank when its run ended. The
+ * browser's last page stays open, blank, for the next chat.
+ */
+async function closeTabsOf(rb: RunningBrowser, conversationId: string, which: "all" | "blank" = "all") {
   if (leasedChats(rb.profileId).has(conversationId)) return;
-  const pages = rb.tabs.pagesOf(conversationId);
+  const owned = rb.tabs.pagesOf(conversationId);
+  const pages = which === "all" ? owned : owned.filter((p) => rb.tabs.isBlank(p.targetId));
   // Closing its last window quits Chromium on Windows and Linux.
   const keep = rb.tabs.userPages().length > pages.length ? null : pages[0];
   for (const page of pages) {
@@ -719,7 +723,7 @@ async function closeTabsOf(rb: RunningBrowser, conversationId: string) {
     await session?.navigate("about:blank").catch(() => {});
     await session?.detach();
   }
-  rb.tabs.dropChat(conversationId, keep?.targetId);
+  if (pages.length === owned.length && !leasedChats(rb.profileId).has(conversationId)) rb.tabs.dropChat(conversationId, keep?.targetId);
 }
 
 export async function closeChatTabs(conversationId: string): Promise<void> {
@@ -978,11 +982,18 @@ export async function browserMcpServer(
   return { command: command.command, args: command.args, env };
 }
 
-/** The run ended: its browser endpoint stops working; the chat keeps its tabs for its next message. */
+/**
+ * The run ended: its browser endpoint stops working; the chat keeps its tabs for its next message, except blank ones
+ * (where the last window doesn't quit the browser, so two runs ending at once can't close it).
+ */
 export function releaseChatBrowser(runId: string) {
   const lease = releaseChatLease(runId);
   if (lease) {
-    getRunning(lease.profileId)?.tabs.touch(lease.conversationId);
+    const rb = getRunning(lease.profileId);
+    rb?.tabs.touch(lease.conversationId);
+    if (rb && !rb.tabs.lastWindowQuits) {
+      void closeTabsOf(rb, lease.conversationId, "blank").catch((err) => log.warn(`could not close the blank tabs of chat ${lease.conversationId}`, err));
+    }
     emitProfileSoon(lease.profileId);
   }
   const runDir = runDirs.get(runId);
