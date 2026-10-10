@@ -19,6 +19,8 @@ export interface TargetInfo {
 interface Chat {
   /** The tab the chat's agent worked in last. */
   current: string | null;
+  /** The blank tab Godmode opened for the chat before it asked for one, until the chat uses it. */
+  placeholder: string | null;
   usedAt: number;
 }
 
@@ -34,7 +36,11 @@ export class TabRegistry {
   private chats = new Map<string, Chat>();
   private listeners = new Set<(conversationId: string | null) => void>();
 
-  constructor(client: CdpClient) {
+  /** `lastWindowQuits`: a visible browser on Windows and Linux, which quits with its last window. */
+  constructor(
+    client: CdpClient,
+    readonly lastWindowQuits = false,
+  ) {
     client.on("Target.targetCreated", (p) => this.learn(p.targetInfo as TargetInfo));
     client.on("Target.targetInfoChanged", (p) => this.learn(p.targetInfo as TargetInfo));
     client.on("Target.targetDestroyed", (p) => this.forget(p.targetId as string));
@@ -55,6 +61,8 @@ export class TabRegistry {
     // Popups stay with the chat that opened them, even after the opener closes.
     if (info.type === "page" && !this.owners.has(info.targetId)) this.ownerOf(info.targetId);
     const owner = this.owners.get(info.targetId);
+    const chat = owner ? this.chats.get(owner) : undefined;
+    if (chat?.placeholder === info.targetId && !BLANK.test(info.url)) chat.placeholder = null;
     if (owner && (!known || known.url !== info.url || known.title !== info.title)) this.changed(owner);
   }
 
@@ -72,6 +80,7 @@ export class TabRegistry {
     this.owners.delete(targetId);
     const chat = this.chats.get(owner);
     if (chat?.current === targetId) chat.current = null;
+    if (chat?.placeholder === targetId) chat.placeholder = null;
     this.changed(owner);
   }
 
@@ -103,6 +112,24 @@ export class TabRegistry {
     this.changed(conversationId);
   }
 
+  /** Give the chat a blank tab before it asked for one; it makes way once the chat opens its own (`replacedPlaceholder`). */
+  claimPlaceholder(targetId: string, conversationId: string) {
+    this.claim(targetId, conversationId);
+    this.chat(conversationId).placeholder = targetId;
+  }
+
+  /**
+   * The chat's unused placeholder, to close now that the chat opened `opened` itself (scripts open their own tab and
+   * would leave a blank window behind). Kept where the last window quits the browser: the chat may close its own tab.
+   */
+  replacedPlaceholder(conversationId: string, opened: string): string | null {
+    const chat = this.chats.get(conversationId);
+    const id = chat?.placeholder;
+    if (this.lastWindowQuits || !chat || !id || id === opened || this.owners.get(id) !== conversationId || !this.isBlank(id)) return null;
+    chat.placeholder = null;
+    return id;
+  }
+
   /** Offer blank, unclaimed pages to the next chats (the browser just started, or a chat gave its last tab back). */
   addSpares(targetIds: string[]) {
     for (const id of targetIds) if (this.targets.has(id) && !this.owners.has(id)) this.spares.add(id);
@@ -113,7 +140,9 @@ export class TabRegistry {
     const page = this.pageOf(targetId);
     const chat = this.chat(conversationId);
     chat.usedAt = Date.now();
-    if (!page || this.owners.get(page) !== conversationId || chat.current === page) return;
+    if (!page || this.owners.get(page) !== conversationId) return;
+    if (chat.placeholder === page) chat.placeholder = null;
+    if (chat.current === page) return;
     chat.current = page;
     this.changed(conversationId);
   }
@@ -210,7 +239,7 @@ export class TabRegistry {
   private chat(conversationId: string): Chat {
     let chat = this.chats.get(conversationId);
     if (!chat) {
-      chat = { current: null, usedAt: Date.now() };
+      chat = { current: null, placeholder: null, usedAt: Date.now() };
       this.chats.set(conversationId, chat);
     }
     return chat;

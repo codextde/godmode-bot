@@ -21,10 +21,10 @@ import { startLiveView, stopLiveView } from "../src/browser/screencast";
 import * as manager from "../src/browser/manager";
 
 describe("tab registry", () => {
-  const registry = () => {
+  const registry = (lastWindowQuits = false) => {
     const handlers = new Map<string, (p: CdpParams) => void>();
     const client = { on: (method: string, fn: (p: CdpParams) => void) => handlers.set(method, fn) };
-    const tabs = new TabRegistry(client as unknown as CdpClient);
+    const tabs = new TabRegistry(client as unknown as CdpClient, lastWindowQuits);
     const created = (info: TargetInfo) => handlers.get("Target.targetCreated")!({ targetInfo: info });
     const destroyed = (targetId: string) => handlers.get("Target.targetDestroyed")!({ targetId });
     return { tabs, created, destroyed };
@@ -84,6 +84,34 @@ describe("tab registry", () => {
     expect(tabs.openChats().map((c) => [c.conversationId, c.tabs])).toEqual([["chat_a", 1]]);
     tabs.dropChat("chat_a");
     expect(tabs.openChats()).toEqual([]);
+  });
+
+  test("a placeholder makes way once its chat opens a tab itself, unless the last window quits the browser", () => {
+    for (const lastWindowQuits of [false, true]) {
+      const { tabs, created } = registry(lastWindowQuits);
+      created(page("P1", { url: "about:blank" }));
+      tabs.claimPlaceholder("P1", "chat_a");
+      created(page("N1"));
+      tabs.claim("N1", "chat_a");
+      expect(tabs.replacedPlaceholder("chat_a", "N1")).toBe(lastWindowQuits ? null : "P1");
+      expect(tabs.replacedPlaceholder("chat_a", "N1")).toBeNull();
+    }
+  });
+
+  test("a placeholder the chat used stays", () => {
+    const { tabs, created } = registry();
+    for (const [id, chat] of [["P1", "chat_a"], ["P2", "chat_b"]] as const) {
+      created(page(id, { url: "about:blank" }));
+      tabs.claimPlaceholder(id, chat);
+    }
+    tabs.focus("chat_a", "P1");
+    created(page("P2", { url: "https://b.test/" }));
+    created(page("P2", { url: "about:blank" }));
+    for (const [chat, opened] of [["chat_a", "N1"], ["chat_b", "N2"]] as const) {
+      created(page(opened));
+      tabs.claim(opened, chat);
+      expect(tabs.replacedPlaceholder(chat, opened)).toBeNull();
+    }
   });
 });
 
@@ -352,5 +380,19 @@ suite("parallel chats in one browser", () => {
     expect(rb().tabs.userPages().map((p) => p.targetId)).toEqual([last.targetId]);
     expect(await manager.ensureChatTab(rb(), "cnv_c")).toBe(last.targetId);
     expect(manager.getProfile(profileId).running).toBe(true);
+  });
+
+  test("a script's own tab replaces its chat's blank one, and tabs left blank close when the run ends", async () => {
+    chats.d = await connect("cnv_d", "run_d");
+    const [placeholder] = await targetsOf(chats.d);
+    expect(placeholder!.url).toBe("about:blank");
+    const { targetId: own } = await chats.d.client.send<{ targetId: string }>("Target.createTarget", { url: `${origin}/d` });
+    await waitFor(() => !rb().tabs.info(placeholder!.targetId));
+    expect(rb().tabs.pagesOf("cnv_d").map((p) => p.targetId)).toEqual([own]);
+    const { targetId: blank } = await chats.d.client.send<{ targetId: string }>("Target.createTarget", { url: "about:blank" });
+    expect(rb().tabs.ownerOf(blank)).toBe("cnv_d");
+    manager.releaseChatBrowser("run_d");
+    await waitFor(() => !rb().tabs.info(blank));
+    expect(rb().tabs.pagesOf("cnv_d").map((p) => p.targetId)).toEqual([own]);
   });
 });
