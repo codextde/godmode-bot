@@ -174,8 +174,13 @@ export function RunnerNote({ runner }: { runner: RemoteRunner | null }) {
   );
 }
 
-/** In the tray of a chat that lives on a runner: where it works, and whether that computer is there. A chat can't move. */
-export function RunnerPill({ runner }: { runner: RemoteRunner | null }) {
+/**
+ * In the tray of a chat that lives on a runner: where it works and whether that computer is there. Its menu moves the
+ * chat to this computer (`onMove`), unless `blocked` says why not now.
+ */
+export function RunnerPill({ runner, onMove, blocked }: { runner: RemoteRunner | null; onMove: () => void; blocked: string | null }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
   const tooltip = !runner
     ? "This chat works on a runner"
     : runner.state === "online"
@@ -185,28 +190,78 @@ export function RunnerPill({ runner }: { runner: RemoteRunner | null }) {
         : runner.state === "offline"
           ? `This chat works on ${runner.name}, which is offline`
           : `This chat works on ${runner.name}, which needs an update`;
+  const act = (fn: () => void) => {
+    setOpen(false);
+    fn();
+  };
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Link
-          to="/runners"
-          aria-label={runner ? `On ${runner.name} (${RUNNER_STATE_LABEL[runner.state].toLowerCase()}) — open runners` : "On a runner — open runners"}
-          className="flex h-8 max-w-[12rem] min-w-0 shrink items-center gap-1.5 rounded-lg border bg-card px-2 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-        >
-          <MonitorSmartphone className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="truncate">
-            On <span className="font-medium">{runner?.name ?? "a runner"}</span>
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={runner ? `On ${runner.name} (${RUNNER_STATE_LABEL[runner.state].toLowerCase()})` : "On a runner"}
+              className={cn(
+                "flex h-8 max-w-[15rem] min-w-0 shrink items-center gap-1.5 rounded-lg border bg-card pr-1.5 pl-2 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+                open && "bg-accent",
+              )}
+            >
+              <MonitorSmartphone className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="truncate">
+                On <span className="font-medium">{runner?.name ?? "a runner"}</span>
+              </span>
+              {runner && <RunnerStateDot state={runner.state} />}
+              <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+            </button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+      <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
+        <div className="flex items-start gap-2.5 border-b px-3 pt-2.5 pb-2">
+          <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-md border bg-card text-muted-foreground [&_svg]:size-3.5">
+            <MonitorSmartphone />
           </span>
-          {runner && <RunnerStateDot state={runner.state} />}
-        </Link>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-medium">{runner?.name ?? "A runner"}</span>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {runner && <RunnerStateDot state={runner.state} />}
+              <span className="truncate">{runner ? runnerLine(runner) : "Removed"}</span>
+            </span>
+          </span>
+        </div>
+        <Command>
+          <CommandList>
+            <CommandGroup>
+              <CommandItem value="__move" disabled={!!blocked} onSelect={() => act(onMove)} className="gap-2.5 py-2">
+                <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-paper-2 text-muted-foreground [&_svg]:size-3.5">
+                  <Laptop />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">Move to {THIS_COMPUTER_INLINE}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{blocked ?? "Continue here with the whole conversation"}</span>
+                </span>
+              </CommandItem>
+            </CommandGroup>
+            <CommandSeparator />
+            <CommandGroup>
+              <CommandItem value="__manage" onSelect={() => act(() => navigate("/runners"))} className="text-muted-foreground">
+                <Settings2 /> Manage runners
+              </CommandItem>
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
-/** Above the composer of a runner's chat while that runner can't be reached: why nothing can be sent, and a way to try now. */
-export function RunnerOfflineBar({ runner }: { runner: RemoteRunner }) {
+/**
+ * Above the composer of a runner's chat while that runner can't be reached: why nothing can be sent, a way to try now,
+ * and a way to continue on this computer instead.
+ */
+export function RunnerOfflineBar({ runner, onMove }: { runner: RemoteRunner; onMove: () => void }) {
   const qc = useQueryClient();
   const connect = useMutation({
     mutationFn: () => api.runners.connect(runner.id),
@@ -243,6 +298,11 @@ export function RunnerOfflineBar({ runner }: { runner: RemoteRunner }) {
           <RefreshCw /> Try again
         </Button>
       )}
+      <Button size="xs" variant="outline" onClick={onMove}>
+        <Laptop />
+        <span className="@lg:hidden">Move here</span>
+        <span className="hidden @lg:inline">Continue on {THIS_COMPUTER_INLINE}</span>
+      </Button>
     </div>
   );
 }

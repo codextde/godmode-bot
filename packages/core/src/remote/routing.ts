@@ -14,7 +14,7 @@ import { conversationExists, deleteConversation, emitConversationUpdated, getCon
 import { HttpError, badRequest } from "../util";
 import { requireLicense } from "../license/license";
 import { reconcileConversation } from "./mirror";
-import { getRunner, link, prepareRemoteMessage, runnerOfConversation } from "./runners";
+import { chatIsMoving, getRunner, link, prepareRemoteMessage, runnerOfConversation } from "./runners";
 
 const log = logger("routing");
 
@@ -186,6 +186,9 @@ async function conversationRequest(c: Context, runnerId: string, id: string, res
     return null;
   }
   if (!FORWARDED.test(rest)) return null;
+  if (method === "POST" && (STARTS_RUN.test(rest) || rest === "/continue") && chatIsMoving(id)) {
+    throw new HttpError(409, "This chat is moving to this computer — send it again in a moment.", "runner_chat_moving");
+  }
   if (method === "POST" && STARTS_RUN.test(rest)) requireLicense();
   // Both start a run there: the runner gets what it needs for it first.
   if ((rest === "/messages" || rest === "/retry") && method === "POST") await prepareRemoteMessage(id);

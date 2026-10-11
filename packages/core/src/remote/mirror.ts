@@ -64,6 +64,8 @@ export interface MirrorHooks {
   runFinished?(runnerId: string, run: Run): void;
   /** The copy of a run's in-flight message missed a delta: ask the runner for its whole block list (`run.resync`). */
   resync?(runnerId: string, runId: string): void;
+  /** The chat moved to this computer and the runner hasn't dropped its copy yet: it is never adopted again. */
+  released?(runnerId: string, conversationId: string): boolean;
 }
 
 let hooks: MirrorHooks = {};
@@ -390,7 +392,7 @@ function writeConversation(runnerId: string, chat: Chat): boolean {
     update("conversations", chat.id, chat.columns);
     return true;
   }
-  if (!get<{ id: string }>("SELECT id FROM agents WHERE id = ?", chat.agentId)) return false;
+  if (!get<{ id: string }>("SELECT id FROM agents WHERE id = ?", chat.agentId) || hooks.released?.(runnerId, chat.id)) return false;
   insert("conversations", {
     id: chat.id,
     agent_id: chat.agentId,
@@ -1009,6 +1011,12 @@ export async function catchUp(runnerId: string, api: RunnerApi): Promise<{ conve
   }
   log.info("caught up with a runner", { runnerId, conversations, refreshed, working: remoteRuns(runnerId).length });
   return { conversations, refreshed };
+}
+
+/** A chat of this runner moved to this computer: nothing of it works there for this computer anymore. */
+export function chatMovedHere(runnerId: string, conversationId: string): void {
+  for (const [runId, r] of live) if (r.conversationId === conversationId) forgetLive(runId);
+  for (const r of remoteRuns(runnerId)) if (r.conversationId === conversationId) clearRemoteRun(r.runId);
 }
 
 /** The link to a runner dropped: nothing is known to work there anymore. The copies keep what the runner said last. */

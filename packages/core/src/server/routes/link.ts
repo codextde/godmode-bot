@@ -3,6 +3,7 @@ import type { RunnerFixResult } from "@godmode/shared";
 import { importChromeSession } from "../../browser/manager";
 import { config } from "../../config";
 import { logger } from "../../log";
+import { readHandover } from "../../remote/handover";
 import { fixCheck, runnerHealth } from "../../remote/health";
 import { forgetController, runnerInfo } from "../../remote/linkServer";
 import { readMemoryState, writeMemoryState } from "../../remote/memorySync";
@@ -61,6 +62,9 @@ export function registerLinkRoutes(app: Hono): void {
     const input = await body(c, z.object({ snapshot: z.object({ files: z.record(z.string(), z.unknown()) }).passthrough() }));
     return c.json(await writeMemoryState(c.req.param("id"), input.snapshot as never, "Memory from Godmode"));
   });
+
+  // A chat of this runner moves to the controller: its Claude session and transcript go along.
+  app.get("/api/link/conversations/:id/handover", (c) => c.json(readHandover(c.req.param("id"))));
 
   app.post("/api/link/browser/:profileId/cookies", async (c) => {
     const { cookies } = await body(c, z.object({ cookies: z.array(z.unknown()).max(20_000) }));

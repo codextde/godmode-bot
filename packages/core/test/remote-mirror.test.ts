@@ -187,6 +187,18 @@ describe("a chat the runner reports", () => {
     expect(getConversationSummary(conversation.id).archived).toBe(true);
   });
 
+  test("is never adopted again once it moved here and the runner hasn't dropped it yet", () => {
+    const conversation = chat();
+    setMirrorHooks({ released: (runnerId, id) => runnerId === RUNNER && id === conversation.id });
+    try {
+      const events = during(() => applyRunnerEvent(RUNNER, { type: "conversation.updated", conversation }));
+      expect(events).toEqual([]);
+      expect(get("SELECT id FROM conversations WHERE id = ?", conversation.id)).toBeNull();
+    } finally {
+      setMirrorHooks({});
+    }
+  });
+
   test("is ignored when its agent doesn't exist here", () => {
     const conversation = chat({ agentId: "agt_nobodyhere000000" });
     const before = database();

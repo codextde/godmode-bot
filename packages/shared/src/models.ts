@@ -385,7 +385,7 @@ export interface Conversation {
   sshServerIds: ID[];
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
   instructions: string;
-  /** The runner (another computer) this chat works on; fixed when the chat is created. null = this computer. */
+  /** The runner (another computer) this chat works on; set when the chat is created, cleared when it moves here. null = this computer. */
   runnerId: ID | null;
   /** A local chat whose agent may run commands on that runner (the "fix with Claude" chat of a runner). */
   runnerToolsId: ID | null;

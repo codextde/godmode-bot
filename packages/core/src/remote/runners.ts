@@ -13,6 +13,9 @@
 import { createHash } from "node:crypto";
 import {
   type ClientEvent,
+  type Conversation,
+  type ConversationFollowup,
+  type ConversationWithMessages,
   type RemoteRunner,
   type RunnerAutofixInput,
   type RunnerFixResult,
@@ -21,6 +24,7 @@ import {
   type RunnerInfo,
   type RunnerPairingOffer,
   type RunnerPatch,
+  type Run,
   type StartChatInput,
   type StartChatResult,
   parseRunnerCode,
@@ -28,13 +32,22 @@ import {
 } from "@godmode/shared";
 import { getAgent, getDefaultAgentId } from "../agents/service";
 import { exportProfileCookies, resolveProfileForAgent } from "../browser/manager";
-import { all, get, getMeta, insert, run as sql, setMeta, update } from "../db";
+import { all, deleteMeta, get, getMeta, insert, run as sql, setMeta, tx, update } from "../db";
 import { projectOfChat } from "../services/projects";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { computerName } from "../mobile/devices";
 import { audit } from "../services/audit";
-import { createConversation, emitConversationUpdated, getConversationSummary, sendMessage } from "../services/conversations";
+import {
+  type RunnerChatState,
+  conversationExists,
+  createConversation,
+  emitConversationUpdated,
+  getConversationSummary,
+  sendMessage,
+  transcriptPath,
+} from "../services/conversations";
+import { MIN_DELAY_MS as MIN_FOLLOWUP_DELAY_MS, scheduleFollowup } from "../services/followups";
 import { notify } from "../services/notifications";
 import { addWelcomeEvents, setRemoteViewHandlers } from "../server/ws";
 import { HttpError, badRequest, newId, notFound, now, parseJson } from "../util";
@@ -44,7 +57,8 @@ import { canonicalKey, fingerprint } from "./crypto";
 import { loadIdentity } from "./identity";
 import { RemoteLink, type LinkState } from "./linkClient";
 import { mergeMemory, readMemoryState, writeMemoryState } from "./memorySync";
-import { adoptChat, applyRunnerEvent, catchUp, forgetHeavyChats, runnerDisconnected, setMirrorHooks } from "./mirror";
+import { parseHandover, writeSession, writeTranscript, type ChatHandover } from "./handover";
+import { adoptChat, applyRunnerEvent, catchUp, chatMovedHere, forgetHeavyChats, reconcileConversation, runnerDisconnected, setMirrorHooks } from "./mirror";
 import { cancelOffer, createOffer } from "./pairing";
 import { forgetRunnerUpdates, maybeAutoUpdate, prepareRunnerUpdates, resetRunnerUpdates, runnerConnected, runnerUpdate, setUpdateHost, updateRunnerSoftware } from "./runnerUpdates";
 import { buildSnapshot, snapshotDigest } from "./snapshot";
@@ -256,6 +270,7 @@ export async function removeRunner(id: string): Promise<void> {
   sql("UPDATE conversations SET runner_tools_id = NULL WHERE runner_tools_id = ?", id);
   sql("DELETE FROM runners WHERE id = ?", id);
   for (const key of all<{ key: string }>("SELECT key FROM meta WHERE key LIKE ?", `link.cookies.${id}.%`)) sql("DELETE FROM meta WHERE key = ?", key.key);
+  deleteMeta(releaseKey(id));
   audit("user", "runner.remove", id, { name: r.name });
   for (const chat of chats) emitConversationUpdated(chat);
   bus.emit({ type: "runner.deleted", id });
@@ -387,6 +402,7 @@ async function connected(id: string, state: LinkState) {
   // What changed in a run, not its whole block list each time: a long run's list is tens of megabytes.
   l.sendClientEvent({ type: "deltas.patch" });
   for (const event of subscriptions.get(id)?.values() ?? []) l.sendClientEvent(event);
+  await releaseChats(id);
   try {
     await catchUp(id, l);
   } catch (err) {
@@ -471,6 +487,8 @@ export function startRunners(): void {
   });
   autoUpdateTimer = setInterval(() => {
     for (const id of links.keys()) void maybeAutoUpdate(id);
+    // Chats that moved here and that a runner couldn't drop yet.
+    for (const id of links.keys()) void releaseChats(id);
   }, AUTO_UPDATE_EVERY_MS);
   autoUpdateTimer.unref?.();
   for (const r of all<RunnerRow>("SELECT * FROM runners")) startLink(r);
@@ -479,6 +497,7 @@ export function startRunners(): void {
       void syncRunner(runnerId, { agentId: run.agentId }).catch((err) => log.warn(`could not merge memory after run ${run.id}`, err instanceof Error ? err.message : err));
     },
     resync: (runnerId, runId) => links.get(runnerId)?.sendClientEvent({ type: "run.resync", runId }),
+    released: (runnerId, conversationId) => pendingReleases(runnerId).includes(conversationId),
   });
   offBus = bus.on((event) => {
     if (event.type === "entity.changed" && SETUP_ENTITIES.has(event.entity)) scheduleSync(false);
@@ -746,6 +765,164 @@ export async function prepareRemoteMessage(conversationId: string): Promise<void
     }
   }
   await syncRunner(runnerId, { agentId: conv.agentId, profileId });
+}
+
+/* ------------------------------------------------------------------ */
+/* Moving a chat here                                                   */
+/* ------------------------------------------------------------------ */
+
+function releaseKey(runnerId: string): string {
+  return `link.release.${runnerId}`;
+}
+
+function pendingReleases(runnerId: string): string[] {
+  const ids = parseJson<unknown>(getMeta(releaseKey(runnerId)), []);
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+}
+
+/**
+ * The runner drops its copy of the chats that moved to this computer. What it can't drop now is tried again after its
+ * next connect and every 15 minutes. Never throws.
+ */
+async function releaseChats(runnerId: string): Promise<void> {
+  const wanted = pendingReleases(runnerId);
+  if (!wanted.length) return;
+  const l = links.get(runnerId);
+  const done = new Set<string>();
+  if (l?.state.state === "online") {
+    for (const id of wanted) {
+      try {
+        await l.json("DELETE", `/api/conversations/${encodeURIComponent(id)}`, undefined, { timeoutMs: 30_000 });
+        done.add(id);
+      } catch (err) {
+        if (err instanceof HttpError && err.status === 404) done.add(id);
+        else log.info(`runner ${runnerId} didn't drop moved chat ${id} yet`, { error: message(err) });
+      }
+    }
+  }
+  const left = pendingReleases(runnerId).filter((id) => !done.has(id));
+  if (left.length) setMeta(releaseKey(runnerId), JSON.stringify(left));
+  else deleteMeta(releaseKey(runnerId));
+}
+
+function offline(err: unknown): boolean {
+  return err instanceof HttpError && err.code === "runner_offline";
+}
+
+/** Chats on their way here: nothing new starts in them on the runner meanwhile (routing.ts). */
+const moving = new Set<string>();
+
+export function chatIsMoving(conversationId: string): boolean {
+  return moving.has(conversationId);
+}
+
+function busyOnRunner(r: RunnerRow): HttpError {
+  return new HttpError(409, `${r.name} is still working on this chat. Stop the run or let it finish, then move it.`, "runner_chat_busy");
+}
+
+/**
+ * While the runner is there: bring the copy up to date, refuse while a run works or stands still there, and get what
+ * the chat takes along. Null when the runner is away, or no longer has the chat. Nothing is changed when it fails.
+ */
+async function handoverFrom(r: RunnerRow, conversationId: string): Promise<ChatHandover | null> {
+  const l = links.get(r.id);
+  if (l?.state.state !== "online") return null;
+  const path = encodeURIComponent(conversationId);
+  const gone = (err: unknown) => err instanceof HttpError && err.status === 404;
+  try {
+    let remote: ConversationWithMessages;
+    try {
+      remote = await l.json<ConversationWithMessages>("GET", `/api/conversations/${path}`);
+    } catch (err) {
+      if (gone(err)) return null;
+      throw err;
+    }
+    const runs = await l.json<Run[]>("GET", `/api/runs?conversationId=${path}&limit=500`).catch(() => undefined);
+    const chat = reconcileConversation(r.id, remote, runs);
+    if (chat.activeRunId || chat.running || chat.paused) throw busyOnRunner(r);
+    // A runner from before moving chats has no handover: the next turn here starts a new session with a recap.
+    return await l.json<unknown>("GET", `/api/link/conversations/${path}/handover`, undefined, { timeoutMs: 120_000 }).then(parseHandover, (err) => {
+      if (gone(err)) return null;
+      throw err;
+    });
+  } catch (err) {
+    if (offline(err)) throw new HttpError(409, `${r.name} went away while the chat was moving. Nothing changed — try again.`, "runner_offline");
+    if (err instanceof HttpError && err.code === "runner_chat_busy") throw err;
+    throw new HttpError(502, `Couldn't copy the chat from ${r.name}: ${message(err)}. Nothing changed — try again.`, "runner_handover_failed");
+  }
+}
+
+/** A follow-up the runner had for the chat continues here; one that came due meanwhile runs a minute later. */
+function keepFollowup(conversationId: string, agentId: string, followup: ConversationFollowup): void {
+  try {
+    const due = Math.max(Date.parse(followup.dueAt), Date.now() + MIN_FOLLOWUP_DELAY_MS + 5_000);
+    const note = followup.note.trim() || "Continue where you left off.";
+    scheduleFollowup({ conversationId, agentId, dueAt: new Date(due), note });
+  } catch (err) {
+    log.info(`the follow-up of chat ${conversationId} didn't move along`, { error: message(err) });
+  }
+}
+
+/**
+ * Move a chat from its runner to this computer. It keeps its messages, runs and settings; its Claude session and
+ * transcript come along, so the agent resumes with the whole conversation. The runner drops its copy — now, or after
+ * its next connect when it is away. While a run works or stands still there, the chat stays.
+ */
+export async function moveChatHere(conversationId: string): Promise<Conversation> {
+  const runnerId = runnerOfConversation(conversationId);
+  if (!runnerId) {
+    if (!conversationExists(conversationId)) throw notFound("Conversation");
+    throw new HttpError(409, "This chat already works on this computer.", "not_on_runner");
+  }
+  if (moving.has(conversationId)) throw new HttpError(409, "This chat is already moving to this computer.", "runner_chat_moving");
+  const r = requireRow(runnerId);
+  moving.add(conversationId);
+  try {
+    const handover = await handoverFrom(r, conversationId);
+    const conv = get<{ agent_id: string; runner_id: string | null; runner_state: string | null }>(
+      "SELECT agent_id, runner_id, runner_state FROM conversations WHERE id = ?",
+      conversationId,
+    );
+    if (!conv || conv.runner_id !== runnerId) throw notFound("Conversation");
+    // Something started there while the chat was being copied (a follow-up on the runner).
+    if (links.get(runnerId)?.state.state === "online" && remoteRuns(runnerId).some((x) => x.conversationId === conversationId)) throw busyOnRunner(r);
+    const agent = getAgent(conv.agent_id);
+    const session = !!handover?.sessionId && !!handover.session && writeSession(agent.workingDirectory ?? agent.repoPath, handover.sessionId, handover.session);
+    if (handover?.transcript) writeTranscript(transcriptPath(agent, conversationId), handover.transcript);
+
+    const followup = parseJson<Partial<RunnerChatState> | null>(conv.runner_state, null)?.followup ?? null;
+    const ts = now();
+    const ended = tx(() => {
+      const changes = sql(
+        "UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE conversation_id = ? AND status IN ('queued', 'running', 'paused')",
+        `Ended: the chat moved from ${r.name} to this computer`,
+        ts,
+        conversationId,
+      ).changes;
+      // What servers and VMs a chat may use was the runner's word: here it starts without any, as after removing a runner.
+      sql(
+        `UPDATE conversations SET runner_id = NULL, runner_state = NULL, ssh_server_ids = '[]', vm_id = NULL,
+           claude_session_id = COALESCE(?, claude_session_id), updated_at = ? WHERE id = ?`,
+        session ? handover!.sessionId : null,
+        ts,
+        conversationId,
+      );
+      const pending = new Set([...pendingReleases(runnerId), conversationId]);
+      setMeta(releaseKey(runnerId), JSON.stringify([...pending]));
+      return changes;
+    });
+    chatMovedHere(runnerId, conversationId);
+    if (followup) keepFollowup(conversationId, conv.agent_id, followup);
+    audit("user", "runner.chat.move", conversationId, { runner: r.name, session, transcript: !!handover?.transcript });
+    log.info("moved a chat from a runner to this computer", { conversationId, runnerId, session });
+    emitConversationUpdated(conversationId);
+    emit(runnerId);
+    if (ended) bus.changed("runs");
+    void releaseChats(runnerId);
+    return getConversationSummary(conversationId);
+  } finally {
+    moving.delete(conversationId);
+  }
 }
 
 function describeHealth(health: RunnerHealth): string {
