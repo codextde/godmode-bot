@@ -65,7 +65,7 @@ import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
 import { logger } from "../log";
 import { hasAppSecret, isUnlocked, redact } from "../vault/vault";
 import { audit } from "../services/audit";
-import { notify } from "../services/notifications";
+import { markRunNotifiedUser, notify } from "../services/notifications";
 import { listMissingLogins, reportMissingLogin } from "../services/missingLogins";
 import {
   createRoutine,
@@ -1329,6 +1329,7 @@ const TOOLS: ToolDef[] = [
     run: ({ title, body, level }, { agent, ctx }) => {
       const task = taskForConversation(ctx.conversationId);
       notify(level ?? "info", `${agent.name}: ${redact(title)}`, redact(body ?? ""), task ? `/tasks?task=${task.id}` : `/chat/${ctx.conversationId}`);
+      if (ctx.runId) markRunNotifiedUser(ctx.runId);
       return "Notification sent.";
     },
   }),

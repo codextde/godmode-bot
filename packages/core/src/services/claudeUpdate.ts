@@ -4,7 +4,7 @@
  * The latest version comes from the same release feed the official installer uses, on the channel Claude Code itself
  * follows (`autoUpdatesChannel`), so we never offer a version `claude update` would refuse to install.
  */
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ClaudeReleaseChannel, ClaudeUpdateResult, ClaudeUpdateStatus } from "@godmode/shared";
@@ -94,14 +94,34 @@ export function isPackageManaged(path: string): boolean {
   return /[\\/](Caskroom|Cellar|WinGet)[\\/]|^\/nix\/store\//i.test(real);
 }
 
-async function installedVersion(path: string): Promise<string | null> {
+/**
+ * The version of the binary as it was when last asked: starting it takes seconds, and it changes with the file. A check
+ * the human asks for and an update ask the binary itself.
+ */
+let installed: { file: string; version: string } | null = null;
+
+function fileKey(path: string): string {
+  try {
+    const real = realpathSync(path);
+    const st = statSync(real);
+    return `${real}:${st.size}:${st.mtimeMs}`;
+  } catch {
+    return path;
+  }
+}
+
+async function installedVersion(path: string, fresh = false): Promise<string | null> {
+  const file = fileKey(path);
+  if (!fresh && installed?.file === file) return installed.version;
   const res = await runCommand([path, "--version"], { timeoutMs: 20_000, env: childEnv({ PATH: toolPath() }) });
-  return res.code === 0 ? versionFrom(res.stdout) : null;
+  const version = res.code === 0 ? versionFrom(res.stdout) : null;
+  installed = version && file !== path ? { file, version } : null;
+  return version;
 }
 
 export async function claudeUpdateStatus(refresh = false): Promise<ClaudeUpdateStatus> {
   const path = resolveClaudeBinary();
-  const current = path ? await installedVersion(path) : null;
+  const current = path ? await installedVersion(path, refresh) : null;
   const channel = claudeChannel();
   const latest = current ? await latestVersion(channel, refresh) : null;
   const updateAvailable = !!path && !!current && !!latest && compareVersions(latest, current) > 0 && !isPackageManaged(path);
@@ -120,11 +140,11 @@ export function updateClaude(): Promise<ClaudeUpdateResult> {
 async function runUpdate(): Promise<ClaudeUpdateResult> {
   const path = resolveClaudeBinary();
   if (!path) return { ok: false, previous: null, version: null, output: "Claude Code CLI not found" };
-  const previous = await installedVersion(path);
+  const previous = await installedVersion(path, true);
   log.info(`updating claude (currently ${previous ?? "unknown"})`);
   const res = await runCommand([path, "update"], { timeoutMs: UPDATE_TIMEOUT_MS, env: childEnv({ PATH: toolPath() }), maxOutput: 20_000 });
   resetDoctorCache();
-  const version = await installedVersion(resolveClaudeBinary() ?? path);
+  const version = await installedVersion(resolveClaudeBinary() ?? path, true);
   const latest = await latestVersion(claudeChannel(), true);
   const upgraded = !!version && !!previous && compareVersions(version, previous) > 0;
   const current = !!version && !!latest && compareVersions(version, latest) >= 0;
