@@ -2813,22 +2813,18 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "android_assign",
     description:
-      "Let an agent (every run) or this chat see and control an Android phone with the android tools, from its next run. The phone is real: give it only to agents whose job needs it. Only the human can take it away again.",
+      "Let another agent see and control an Android phone with the android tools in every run, from its next run. The phone is real: give it only to agents whose job needs it. You can't give a phone to yourself or your own chat (the human picks phones for a chat in its message box), and only the human can take one away again.",
     schema: z.object({
       deviceId: z.string(),
-      target: z.enum(["agent", "this_chat"]),
-      id: z.string().optional().describe("Agent id (not needed for this_chat)"),
+      agentId: z.string().describe("The agent that gets the phone"),
     }),
     when: managesSetup,
-    run: async ({ deviceId, target, id }, { agent, ctx }) => {
+    run: async ({ deviceId, agentId }, { agent, ctx }) => {
       if (lockedVm(ctx)) return fail("This task runs in a virtual machine and is kept off the human's computer, where the phones are plugged in.");
-      if (target === "agent" && !id) return fail("Pass the agent's id.");
-      if (target === "this_chat" && !ctx.conversationId) return fail("There is no chat here: assign the phone to an agent.");
-      if (target === "agent") {
-        const refusal = revealTargetRefusal(agent, ctx, getAgent(id!), "give it a phone");
-        if (refusal) return fail(refusal);
-      }
-      const device = await assignDevice(deviceId, { kind: target === "agent" ? "agent" : "conversation", id: target === "agent" ? id! : ctx.conversationId, assigned: true }, `agent:${agent.id}`);
+      if (agentId === agent.id) return fail("You can't give yourself a phone. Ask the human: they pick phones for a chat in its message box, or for an agent in its settings.");
+      const refusal = revealTargetRefusal(agent, ctx, getAgent(agentId), "give it a phone");
+      if (refusal) return fail(refusal);
+      const device = await assignDevice(deviceId, { kind: "agent", id: agentId, assigned: true }, `agent:${agent.id}`);
       return json({ id: device.id, name: device.name, state: device.state, usedBy: device.assignments.map((a) => `${a.kind} ${a.name}`), note: "Applies from the next run." });
     },
   }),

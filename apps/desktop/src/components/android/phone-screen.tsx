@@ -63,6 +63,7 @@ export function PhoneScreen({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<HTMLDivElement>(null);
   const size = useRef({ width: 0, height: 0 });
+  const screenSize = useRef({ width: 0, height: 0 });
   const [frameSize, setFrameSize] = useState<{ width: number; height: number } | null>(null);
   const [hasPicture, setHasPicture] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,9 +82,15 @@ export function PhoneScreen({
     const canvas = canvasRef.current;
     const { width, height } = size.current;
     if (!canvas || !width || !height) return null;
+    // The screen sits letterboxed inside the video (its edges are rounded to multiples of 16), the video inside the view.
+    const sw = screenSize.current.width || width;
+    const sh = screenSize.current.height || height;
+    const inVideo = Math.min(width / sw, height / sh);
+    const vx = (width - sw * inVideo) / 2 + rx * sw * inVideo;
+    const vy = (height - sh * inVideo) / 2 + ry * sh * inVideo;
     const rect = canvas.getBoundingClientRect();
     const scale = Math.min(rect.width / width, rect.height / height);
-    return { x: (rect.width - width * scale) / 2 + rx * width * scale, y: (rect.height - height * scale) / 2 + ry * height * scale };
+    return { x: (rect.width - width * scale) / 2 + vx * scale, y: (rect.height - height * scale) / 2 + vy * scale };
   }, []);
 
   /* ------------------------------ the stream ------------------------------ */
@@ -141,6 +148,7 @@ export function PhoneScreen({
       }
       if (e.kind === "frame") {
         size.current = { width: e.width, height: e.height };
+        screenSize.current = e.screen;
         setFrameSize({ width: e.width, height: e.height });
         const img = new Image();
         img.onload = () => draw(img, e.width, e.height);
@@ -151,6 +159,7 @@ export function PhoneScreen({
       if (e.kind === "config") {
         decoder?.close();
         size.current = { width: e.width, height: e.height };
+        screenSize.current = e.screen;
         setFrameSize({ width: e.width, height: e.height });
         waitingKey = true;
         try {

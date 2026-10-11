@@ -55,6 +55,7 @@ export function DeviceCard({ device, onEdit, onForget }: { device: AndroidDevice
 
   return (
     <article aria-label={device.name} className={cn("flex min-w-0 flex-col rounded-xl border bg-card shadow-card transition hover:border-foreground/15", device.busy && "glow-border")}>
+      {connected && (
       <Link
         to={`/android/${device.id}`}
         aria-label={`Open ${device.name}`}
@@ -69,8 +70,18 @@ export function DeviceCard({ device, onEdit, onForget }: { device: AndroidDevice
           </span>
         )}
       </Link>
+      )}
 
       <div className="flex items-start gap-3 p-4">
+        {!connected && (
+          <Link
+            to={`/android/${device.id}`}
+            aria-label={`Open ${device.name}`}
+            className="grid size-10 shrink-0 place-items-center rounded-lg border bg-paper-2 text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            <Smartphone className="size-5" />
+          </Link>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 className="min-w-0 truncate text-[15px] leading-snug font-medium tracking-[-0.01em]">{device.name}</h3>

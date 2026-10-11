@@ -2010,7 +2010,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         vm: promptVm,
         ssh,
         android: phones,
-        androidVaultFill: settings.android.vaultFill,
+        androidVaultFill: settings.android.vaultFill && agent.permissions.secretAccess === "reveal" && conv.secret_access !== "fill",
         voice: job.voice,
         workingDirectory: folder,
         taskWorktree: task ? { repo: task.repo_path || task.repo_url, branch: task.branch } : null,

@@ -10,6 +10,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { ANDROID_KEYS } from "@godmode/shared";
 import { getAgent } from "../agents/service";
+import { chatFillOnly } from "../services/conversations";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
@@ -23,7 +24,7 @@ import { localPath } from "../ssh/tools";
 import { AdbError, adb, adbErrorText, shq } from "./adb";
 import { runAndroidDeviceIds } from "./assignments";
 import { androidRun, ensureConnected, noticeFailure, promptDevices, type PromptAndroidDevice } from "./service";
-import { focusedField, longPress, modelSize, pressKey, screenSize, screenshot, swipe, tap, typeText, uiNodes, untypable, type Size, type UiNode } from "./screen";
+import { focusedField, longPress, modelSize, pressKey, screenSize, screenshot, swipe, tap, typeSecretText, typeText, uiNodes, untypable, type Size, type UiNode } from "./screen";
 
 const log = logger("android");
 
@@ -41,6 +42,18 @@ export const ANDROID_INSTRUCTIONS =
 
 const VAULT_FILL_OFF =
   'Typing saved logins and 2FA codes into phones is turned off. Ask the human to turn on "Logins and 2FA codes" in Settings → Android phones, then try again.';
+const FILL_NEEDS_REVEAL =
+  "Godmode only types saved logins into a phone for agents that may see passwords: the phone's shell can read what is typed. Ask the human to sign in on the phone (they can do it in the live view).";
+
+/**
+ * Typing a secret on a phone is as good as showing it: `input` gets it as an argument, which the phone's shell user —
+ * the one the `shell` tool runs as — can read. So only runs that may reveal secrets get the fills.
+ */
+function mayFill(ctx: { agentId: string; conversationId: string | null }): boolean {
+  if (!getSettings().android.vaultFill) return false;
+  const agent = getAgent(ctx.agentId);
+  return agent.permissions.secretAccess === "reveal" && !(ctx.conversationId && chatFillOnly(ctx.conversationId));
+}
 
 function text(t: string, isError = false): AndroidToolResult {
   return { content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) };
@@ -75,6 +88,12 @@ function mask(runId: string, s: string): string {
   return out;
 }
 
+function remember(runId: string, secret: string) {
+  const set = typedSecrets.get(runId) ?? new Set<string>();
+  set.add(secret);
+  typedSecrets.set(runId, set);
+}
+
 export function forgetAndroidRun(runId: string): void {
   typedSecrets.delete(runId);
   for (const key of [...shots.keys()]) if (key.startsWith(`${runId}:`)) shots.delete(key);
@@ -89,6 +108,7 @@ interface ToolEnv {
   serial: string;
   runId: string;
   agentId: string;
+  conversationId: string | null;
   folders: string[];
   signal?: AbortSignal;
 }
@@ -129,12 +149,13 @@ async function after(env: ToolEnv, note: string, want: boolean | undefined): Pro
 async function toScreen(env: ToolEnv, c: [number, number], what: string): Promise<{ x: number; y: number; screen: Size }> {
   const screen = await screenSize(env.serial);
   let shot = shots.get(shotKey(env.runId, env.device.id));
-  if (shot && (shot.screen.width !== screen.width || shot.screen.height !== screen.height)) {
+  const portrait = (s: Size) => s.height >= s.width;
+  if (shot && portrait(shot.screen) !== portrait(screen)) {
     throw new AdbError(`The phone turned since your last screenshot (now ${screen.width}×${screen.height}). Take a new screenshot and use its coordinates.`);
   }
   shot ??= { ...modelSize(screen, maxEdge()), screen };
   const [x, y] = c;
-  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x > shot.width || y > shot.height) {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || y < 0 || x >= shot.width || y >= shot.height) {
     throw new AdbError(`${what} [${x}, ${y}] is outside the screenshot (${shot.width}×${shot.height}).`);
   }
   return { x: (x * screen.width) / shot.width, y: (y * screen.height) / shot.height, screen };
@@ -447,6 +468,14 @@ const TOOLS: AndroidTool[] = [
       local_path: z.string().max(4096).optional(),
     }),
     run: async (args, env) => {
+      const kind = await adb(["shell", `if [ -d ${shq(args.remote_path)} ]; then echo dir; elif [ -e ${shq(args.remote_path)} ]; then echo file; else echo none; fi`], {
+        serial: env.serial,
+        timeoutMs: 15_000,
+        signal: env.signal,
+      });
+      const what = kind.stdout.toString("utf8").trim();
+      if (what === "dir") return text(`${args.remote_path} is a folder. Copy files one at a time (pack a folder with tar on the phone first).`, true);
+      if (what === "none") return text(`No such file on ${env.device.name}: ${args.remote_path}`, true);
       const name = posix.basename(args.remote_path.replace(/\/+$/, "")) || "download";
       const target = args.local_path?.trim() || join(getAgent(env.agentId).repoPath, "workspace", "downloads", name);
       let local = localPath(target, env.folders, "write");
@@ -458,7 +487,7 @@ const TOOLS: AndroidTool[] = [
         if (res.code !== 0) return text(`Copying failed: ${adbErrorText(res)}`, true);
         renameSync(partial, local);
       } finally {
-        rmSync(partial, { force: true });
+        rmSync(partial, { force: true, recursive: true });
       }
       return text(`Copied ${args.remote_path} from ${env.device.name} to ${local}.`);
     },
@@ -477,6 +506,7 @@ const TOOLS: AndroidTool[] = [
     }),
     run: async (args, env) => {
       if (!getSettings().android.vaultFill) return text(VAULT_FILL_OFF, true);
+      if (!mayFill(env)) return text(FILL_NEEDS_REVEAL, true);
       const agent = getAgent(env.agentId);
       const secret = revealForAgent(agent, args.credentialId);
       const value = args.field === "username" ? secret.username : secret.password;
@@ -499,10 +529,10 @@ const TOOLS: AndroidTool[] = [
         record(false, { error: "not_password", pkg: field.pkg });
         return text("The focused field isn't a password field, so Godmode didn't type the password there. Tap the password field and try again.", true);
       }
-      (typedSecrets.get(env.runId) ?? typedSecrets.set(env.runId, new Set()).get(env.runId)!).add(value);
+      remember(env.runId, value);
       ripple(env, "type");
       try {
-        await typeText(env.serial, value, env.signal);
+        await typeSecretText(env.serial, value, env.signal);
         if (args.field === "password") {
           // Focus may have moved while typing: take the password back out of whatever field got it.
           const now = focusedField(await uiNodes(env.serial, env.signal).catch(() => []));
@@ -535,6 +565,7 @@ const TOOLS: AndroidTool[] = [
     }),
     run: async (args, env) => {
       if (!getSettings().android.vaultFill) return text(VAULT_FILL_OFF, true);
+      if (!mayFill(env)) return text(FILL_NEEDS_REVEAL, true);
       const agent = getAgent(env.agentId);
       let id = args.totpId ?? null;
       if (args.credentialId) {
@@ -557,8 +588,9 @@ const TOOLS: AndroidTool[] = [
         code = codeForAgent(agent, id);
       }
       const meta = { field: "totp", runId: env.runId, deviceId: env.device.id, credentialId: args.credentialId ?? null };
+      remember(env.runId, code.code);
       try {
-        await typeText(env.serial, code.code, env.signal);
+        await typeSecretText(env.serial, code.code, env.signal);
         if (args.submit) await pressKey(env.serial, "enter", { signal: env.signal });
       } catch (err) {
         audit(`agent:${agent.id}`, "totp.fill", id, { ...meta, ok: false, error: err instanceof Error ? err.message : String(err) });
@@ -592,7 +624,7 @@ function devicesOf(ctx: RunContext): PromptAndroidDevice[] {
 
 export function listAndroidTools(ctx: RunContext): { name: string; description: string; inputSchema: Record<string, unknown> }[] {
   if (!androidRun(ctx.runId)) return [];
-  const fill = getSettings().android.vaultFill;
+  const fill = mayFill(ctx);
   return [LIST_TOOL, ...TOOLS.filter((t) => fill || !t.name.startsWith("fill_"))].map((t) => ({ name: t.name, description: t.description, inputSchema: jsonSchema(t.name, t.schema) }));
 }
 
@@ -649,7 +681,7 @@ export async function callAndroidTool(ctx: RunContext, name: string, args: unkno
       setTimeout(() => audited.delete(key), 6 * 3600_000).unref?.();
       audit(`agent:${ctx.agentId}`, "android.use", device.id, { runId: ctx.runId });
     }
-    const result = await tool.run(parsed as never, { device, serial, runId: ctx.runId, agentId: ctx.agentId, folders: run.folders, signal: run.signal });
+    const result = await tool.run(parsed as never, { device, serial, runId: ctx.runId, agentId: ctx.agentId, conversationId: ctx.conversationId, folders: run.folders, signal: run.signal });
     return { ...result, content: result.content.map((c) => (c.type === "text" ? { ...c, text: mask(ctx.runId, c.text) } : c)) };
   } catch (err) {
     if (err instanceof z.ZodError) return text(`Invalid arguments: ${err.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("; ")}`, true);
