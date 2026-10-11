@@ -375,9 +375,10 @@ function agentInput(t: AgentTemplate, name: string, workspaceId: string | null, 
 /**
  * Create the structure top-down: the top seat (reporting to the built-in agent), then every seat under its lead — or,
  * when its lead was left out, under the nearest one kept — and, when asked, the automations from their templates.
- * All or nothing: a failure removes what was made, so the next try doesn't duplicate half a company.
+ * All or nothing: a failure removes what was made, so the next try doesn't duplicate half a company. An agent installing
+ * one (`actor` "agent:<id>") gets what agent_create gives it: no secret access or management rights for the new agents.
  */
-export async function installTeam(id: string, opts: TeamInstallInput = {}): Promise<TeamInstallResult> {
+export async function installTeam(id: string, opts: TeamInstallInput = {}, actor = "user"): Promise<TeamInstallResult> {
   const team = TEAM_TEMPLATES.find((t) => t.id === id);
   if (!team) throw notFound("Team");
   const seats = seatsOf(team.root);
@@ -414,6 +415,7 @@ export async function installTeam(id: string, opts: TeamInstallInput = {}): Prom
       const lead = s.parent ? created.get(leadOf(s.parent)!)! : null;
       const agent = await createAgent(
         agentInput(t, freeName(t.name, team.name, taken), workspaceId, lead?.id ?? null, leads.has(s.path)) as Parameters<typeof createAgent>[0],
+        actor,
       );
       created.set(s.path, agent);
       agents.push(agent);
@@ -423,7 +425,7 @@ export async function installTeam(id: string, opts: TeamInstallInput = {}): Prom
         );
       }
     }
-    audit("user", "team.install", agents[0]!.id, {
+    audit(actor, "team.install", agents[0]!.id, {
       team: id,
       members: agents.slice(1).map((a) => a.id),
       automations: routineIds.length,
