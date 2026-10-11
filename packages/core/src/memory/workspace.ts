@@ -25,6 +25,11 @@ const RESERVED = ["tmp", "uploads"];
 export const RECENT_DAYS = 3;
 /** Moves one dream may make. */
 export const MAX_TIDY_CHANGES = 300;
+/** What may come out of tmp/ into the versioned workspace: a script or a file, not a whole build. */
+export const RESCUE_MAX = 25_000_000;
+const SCRATCH_LIMIT = 60;
+/** Names of secrets and keys: tmp/ isn't versioned, the rest of the workspace is — they never come out of it. */
+const SECRET = /(^|\/)(\.?env(\.[^/]*)?|[^/]*\.(env|pem|key|p8|p12|pfx|jks|keystore|kdbx)|[^/]*(secret|credential|passw|token|apikey|api-key|private)[^/]*)$/i;
 const INVENTORY_LIMIT = 400;
 const PEEK = 5;
 const DAY = 86_400_000;
@@ -52,6 +57,17 @@ export async function measure(path: string): Promise<EntryStats> {
     modified: 0,
   });
   return total.files ? total : { ...total, modified: st.mtimeMs };
+}
+
+/** The entry is, or holds, something named like a secret (hidden files included). */
+async function holdsSecret(path: string, rel: string): Promise<boolean> {
+  if (SECRET.test(rel)) return true;
+  const st = await lstat(path).catch(() => null);
+  if (!st?.isDirectory()) return false;
+  for (const name of await readdir(path).catch(() => [] as string[])) {
+    if (await holdsSecret(join(path, name), name)) return true;
+  }
+  return false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -114,11 +130,22 @@ function noSymlink(root: string, rel: string): boolean {
 /* ------------------------------------------------------------------ */
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const NOT_BEFORE = "(?<![A-Za-z0-9._-])";
+/** `workspace/` as a path segment (also the end of an absolute path). */
+const RELATIVE = `${NOT_BEFORE}${escape(WORKSPACE_DIR)}/`;
 
-/** `workspace/<rel>` as a path of its own (also inside an absolute path), or a path below it. */
-function mentionPattern(rel: string, flags = ""): RegExp {
-  return new RegExp(`(?<![A-Za-z0-9._-])${escape(WORKSPACE_DIR)}/${escape(rel)}(?![A-Za-z0-9._-])`, flags);
+/** `workspace/<rel>` as a path of its own, or a path below it. */
+function mentionPattern(rel: string, flags = "", prefix = RELATIVE): RegExp {
+  return new RegExp(`${prefix}${escape(rel)}(?![A-Za-z0-9._-])`, flags);
 }
+
+/** `workspace/<rel>` itself (a folder named as a place), not a path below it. */
+function folderPattern(rel: string, prefix = RELATIVE): RegExp {
+  return new RegExp(`${prefix}${escape(rel)}/?(?![A-Za-z0-9._/-])`);
+}
+
+/** The agent as far as references go. */
+export type Owner = Pick<Agent, "id" | "repoPath" | "instructions">;
 
 interface References {
   /** Where an entry must stay: the agent's instructions, automations and follow-ups (label → text). */
@@ -127,30 +154,35 @@ interface References {
   memory: Record<string, string>;
 }
 
-function references(agent: Agent): References {
-  const pinned: [string, string][] = [["your instructions", agent.instructions]];
+function references(agent: Owner): References {
+  const pinned: [string, string][] = [["the instructions", agent.instructions]];
   for (const r of all<{ name: string; prompt: string }>("SELECT name, prompt FROM routines WHERE agent_id = ?", agent.id)) pinned.push([`the automation "${r.name}"`, r.prompt]);
   for (const f of all<{ note: string }>("SELECT note FROM followups WHERE agent_id = ?", agent.id)) pinned.push(["a follow-up", f.note]);
   return { pinned, memory: snapshotMemory(agent.repoPath).files };
 }
 
-/** Other agents name this agent's files by their absolute path only. */
-function pinnedElsewhere(agent: Agent, rel: string): string | null {
-  const abs = join(agent.repoPath, WORKSPACE_DIR, rel);
-  const pattern = new RegExp(`${escape(abs)}(?![A-Za-z0-9._-])`);
+function pinnedElsewhere(agent: Owner, pattern: RegExp): string | null {
   const routine = all<{ name: string; prompt: string }>("SELECT name, prompt FROM routines WHERE agent_id != ?", agent.id).find((r) => pattern.test(r.prompt));
   if (routine) return `the automation "${routine.name}" of another agent`;
   const other = all<{ name: string; instructions: string }>("SELECT name, instructions FROM agents WHERE id != ?", agent.id).find((a) => pattern.test(a.instructions));
   return other ? `the instructions of ${other.name}` : null;
 }
 
-/** What keeps the entry where it is: a mention of it, of something in it, or of a folder it lies in. */
-function pinnedBy(agent: Agent, refs: References, rel: string): string | null {
+/**
+ * What keeps the entry where it is: a mention of it or of something in it, or of a folder it lies in (named as a
+ * place; tmp/ and uploads/ are places for everything and don't count).
+ */
+function pinnedBy(agent: Owner, refs: References, rel: string): string | null {
+  // Other agents name this agent's files by their absolute path only.
+  const abs = `${escape(join(agent.repoPath, WORKSPACE_DIR))}/`;
   const parts = rel.split("/");
-  for (let i = parts.length; i > 0; i--) {
-    const path = parts.slice(0, i).join("/");
-    const pattern = mentionPattern(path);
-    const pin = refs.pinned.find(([, text]) => pattern.test(text))?.[0] ?? pinnedElsewhere(agent, path);
+  const patterns: [RegExp, RegExp][] = [[mentionPattern(rel), mentionPattern(rel, "", abs)]];
+  for (let i = parts.length - 1; i > 0; i--) {
+    const folder = parts.slice(0, i).join("/");
+    if (!RESERVED.includes(folder)) patterns.push([folderPattern(folder), folderPattern(folder, abs)]);
+  }
+  for (const [own, elsewhere] of patterns) {
+    const pin = refs.pinned.find(([, text]) => own.test(text))?.[0] ?? pinnedElsewhere(agent, elsewhere);
     if (pin) return pin;
   }
   return null;
@@ -161,6 +193,32 @@ function memoryMentions(refs: References, rel: string): string[] {
   return Object.entries(refs.memory)
     .filter(([, text]) => pattern.test(text))
     .map(([path]) => path);
+}
+
+/**
+ * A lookup of where the agent's memory, instructions, automations or follow-ups name `workspace/<rel>` or something in
+ * it (null = nowhere), read once for many entries.
+ */
+export function namedBy(agent: Owner): (rel: string) => string | null {
+  const refs = references(agent);
+  return (rel) => pinnedBy(agent, refs, rel) ?? memoryMentions(refs, rel)[0] ?? null;
+}
+
+/** Paths in tmp/ the agent's notes name (`tmp/...`, existing ones only) → where they are named. */
+function namedScratch(root: string, refs: References): Map<string, string[]> {
+  const found = new Map<string, string[]>();
+  const pattern = new RegExp(`${NOT_BEFORE}${escape(WORKSPACE_DIR)}/(tmp/[A-Za-z0-9._/-]+)`, "g");
+  const texts: [string, string][] = [...Object.entries(refs.memory), ...refs.pinned.map(([label, text]) => [label, text] as [string, string])];
+  for (const [where, text] of texts) {
+    for (const m of text.matchAll(pattern)) {
+      const rel = m[1]!.replace(/[./]+$/, "");
+      if (rel.split("/").some((p) => p === ".." || p.startsWith(".")) || !exists(join(root, rel))) continue;
+      const list = found.get(rel) ?? [];
+      if (!list.includes(where)) list.push(where);
+      found.set(rel, list);
+    }
+  }
+  return found;
 }
 
 /* ------------------------------------------------------------------ */
@@ -180,14 +238,15 @@ export interface Inventory {
 }
 
 /** What lies at the top of the workspace, for the dream to sort: size, age, a peek inside, and what must stay. */
-export async function workspaceInventory(agent: Agent, at = new Date()): Promise<Inventory> {
+export async function workspaceInventory(agent: Owner & Pick<Agent, "name">, at = new Date()): Promise<Inventory> {
   const root = workspaceRoot(agent.repoPath);
   if (!root) return { text: "", entries: 0 };
   const names = readdirSync(root)
     .filter((n) => !n.startsWith(".") && !RESERVED.includes(n))
     .sort((a, b) => a.localeCompare(b));
-  if (!names.length) return { text: "", entries: 0 };
   const refs = references(agent);
+  const scratch = [...namedScratch(root, refs)].sort(([a], [b]) => a.localeCompare(b));
+  if (!names.length && !scratch.length) return { text: "", entries: 0 };
   const recent = at.getTime() - RECENT_DAYS * DAY;
   const lines: string[] = [];
   let total = 0;
@@ -214,6 +273,16 @@ export async function workspaceInventory(agent: Agent, at = new Date()): Promise
     const kind = folder ? `folder, ${stats.files} file${stats.files === 1 ? "" : "s"}` : "file";
     lines.push(`- \`${name}${folder ? "/" : ""}\` — ${kind}, ${formatBytes(stats.bytes)}, last changed ${day(stats.modified)}${notes.length ? ` · ${notes.join(" · ")}` : ""}`);
   }
+  const kept: string[] = [];
+  for (const [rel, where] of scratch.slice(0, SCRATCH_LIMIT)) {
+    const stats = await measure(join(root, rel));
+    const notes = [`named in ${where.join(", ")}`];
+    if (pinnedBy(agent, refs, rel)) notes.push("stays");
+    else if (stats.bytes > RESCUE_MAX) notes.push(`too large to move out (over ${formatBytes(RESCUE_MAX)})`);
+    else if (await holdsSecret(join(root, rel), rel)) notes.push("looks like a secret: stays out of git, in tmp/");
+    const kind = stats.files > 1 ? `folder, ${stats.files} files` : "file";
+    kept.push(`- \`${rel}\` — ${kind}, ${formatBytes(stats.bytes)}, last changed ${day(stats.modified)} · ${notes.join(" · ")}`);
+  }
   const more = names.length - INVENTORY_LIMIT;
   const text = [
     `# Workspace of ${agent.name} — ${day(at.getTime())}`,
@@ -223,9 +292,20 @@ export async function workspaceInventory(agent: Agent, at = new Date()): Promise
     "",
     ...lines,
     more > 0 ? `\n(${more} more entries are not listed — sort the listed ones first.)` : "",
+    ...(kept.length
+      ? [
+          "",
+          "## Named in your notes, but lying in tmp/",
+          "",
+          `Godmode clears what lies in tmp/ untouched for a week, but keeps these because your notes name them. Move what you still use (scripts, helpers, data) into a proper folder such as \`scripts/\` with workspace_tidy (up to ${formatBytes(RESCUE_MAX)} each); for what you no longer need, drop the mention from your memory so it can go.`,
+          "",
+          ...kept,
+          scratch.length > SCRATCH_LIMIT ? `\n(${scratch.length - SCRATCH_LIMIT} more are not listed.)` : "",
+        ]
+      : []),
     "",
   ].join("\n");
-  return { text, entries: names.length };
+  return { text, entries: names.length + scratch.length };
 }
 
 /* ------------------------------------------------------------------ */
@@ -282,7 +362,7 @@ function discardTarget(root: string, rel: string, at: Date): string {
 }
 
 /** Carry out a dream's tidy operations, in order. Each one is checked on its own; refusals don't stop the rest. */
-export async function applyTidy(agent: Agent, operations: TidyOperation[], at = new Date()): Promise<TidyOutcome[]> {
+export async function applyTidy(agent: Owner, operations: TidyOperation[], at = new Date()): Promise<TidyOutcome[]> {
   const root = workspaceRoot(agent.repoPath);
   if (!root) return operations.map((op) => ({ change: null, line: `${op.path}: there is no workspace folder.` }));
   const refs = references(agent);
@@ -294,8 +374,13 @@ export async function applyTidy(agent: Agent, operations: TidyOperation[], at = 
       skip("not a path inside workspace/.");
       continue;
     }
-    if (reserved(from)) {
+    const fromScratch = from.startsWith("tmp/");
+    if (reserved(from) && !fromScratch) {
       skip("tmp/ and uploads/ are not sorted (Godmode clears tmp/, uploads/ are the human's files).");
+      continue;
+    }
+    if (fromScratch && op.action === "discard") {
+      skip("what lies in tmp/ goes by itself once nothing names it — drop the mention from your memory instead.");
       continue;
     }
     const fromAbs = join(root, from);
@@ -312,9 +397,17 @@ export async function applyTidy(agent: Agent, operations: TidyOperation[], at = 
       skip(`it changed in the last ${RECENT_DAYS} days and may belong to work in progress.`);
       continue;
     }
+    if (fromScratch && stats.bytes > RESCUE_MAX) {
+      skip(`it is ${formatBytes(stats.bytes)}: only what you need (a script, a file) comes out of tmp/, up to ${formatBytes(RESCUE_MAX)}.`);
+      continue;
+    }
+    if (fromScratch && (await holdsSecret(fromAbs, from))) {
+      skip("it looks like a secret: tmp/ isn't versioned, the rest of the workspace is, so it stays in tmp/.");
+      continue;
+    }
     const pin = pinnedBy(agent, refs, from);
     if (pin) {
-      skip(`${pin} names it, so it stays where it is.`);
+      skip(`it is named in ${pin}, so it stays where it is.`);
       continue;
     }
 

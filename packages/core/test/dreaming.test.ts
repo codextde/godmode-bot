@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, truncateSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, Dream, DreamDetail, DreamOverview, Settings } from "@godmode/shared";
@@ -32,7 +32,7 @@ import {
   startDream,
 } from "../src/memory/dreaming";
 import { diffSnapshots, isMemoryPath, memoryForPrompt, snapshotMemory } from "../src/memory/files";
-import { workspacePath } from "../src/memory/workspace";
+import { applyTidy, workspaceInventory, workspacePath } from "../src/memory/workspace";
 
 let env: TestEnv;
 const DAY = 86_400_000;
@@ -542,7 +542,7 @@ describe("tidying the workspace", () => {
     expect(lines).toHaveLength(9);
     expect(lines[2]).toContain("updated the path in memory/places.md");
     expect(lines[3]).toMatch(/keep\.txt: skipped — memory\/places\.md still names it/);
-    expect(lines[4]).toMatch(/the automation "Install" names it/);
+    expect(lines[4]).toMatch(/named in the automation "Install"/);
     expect(lines[5]).toMatch(/changed in the last 3 days/);
     expect(lines[6]).toMatch(/tmp\/ and uploads\/ are not sorted/);
     expect(lines[7]).toMatch(/not a path inside workspace/);
@@ -566,6 +566,49 @@ describe("tidying the workspace", () => {
     expect([ws(agent, "brand"), ws(agent, "codext"), ws(agent, dream.workspace[1]!.to.split("/").slice(0, 2).join("/"))]).toEqual([false, false, false]);
     expect(ws(agent, "tmp")).toBe(true);
     expect(readRepo(agent, "memory/places.md")).toContain("`workspace/offer.pdf`");
+  });
+
+  test("what the notes name in tmp/ can come out of it; a folder an automation names keeps what lies in it", async () => {
+    const agent = await makeAgent({ name: "Rescuer" });
+    entry(agent, "tmp/tools", ["asc.mjs", "old.log"]);
+    const build = entry(agent, "tmp/build", ["app.apk"]);
+    truncateSync(join(build, "app.apk"), 30 * 1024 * 1024);
+    utimesSync(join(build, "app.apk"), new Date(Date.now() - OLD), new Date(Date.now() - OLD));
+    entry(agent, "tmp/unnamed.txt");
+    entry(agent, "tmp/review/secrets.env");
+    entry(agent, "reports", ["q3.pdf"]);
+    entry(agent, "scripts", ["run.sh", "other.sh"]);
+    writeFileSync(join(agent.repoPath, "memory", "tools.md"), "- App Store helper: workspace/tmp/tools/asc.mjs\n- Build: workspace/tmp/build/app.apk\n- Scratch lives in workspace/tmp/\n- Review env: workspace/tmp/review/secrets.env\n");
+    const ts = new Date().toISOString();
+    insert("routines", { id: newId("rtn"), agent_id: agent.id, name: "Weekly", cron: "0 9 * * 1", prompt: "Put the report in workspace/reports/ and run workspace/scripts/run.sh", created_at: ts, updated_at: ts });
+
+    const inventory = (await workspaceInventory(agent)).text;
+    expect(inventory).toContain("## Named in your notes, but lying in tmp/");
+    expect(inventory).toContain("- `tmp/tools/asc.mjs` — file");
+    expect(inventory).toMatch(/`tmp\/build\/app\.apk` — file, 31.5 MB.*too large to move out \(over 25 MB\)/);
+    expect(inventory).not.toContain("unnamed.txt");
+    expect(inventory).toMatch(/`tmp\/review\/secrets\.env` .*looks like a secret/);
+
+    const outcomes = await applyTidy(agent, [
+      { action: "move", path: "tmp/tools/asc.mjs", to: "scripts/asc.mjs" },
+      { action: "discard", path: "tmp/tools" },
+      { action: "move", path: "tmp/build", to: "builds/app" },
+      { action: "move", path: "reports/q3.pdf", to: "archive/q3.pdf" },
+      { action: "move", path: "scripts/other.sh", to: "tools/other.sh" },
+      { action: "move", path: "scripts/run.sh", to: "tools/run.sh" },
+      { action: "move", path: "tmp/review/secrets.env", to: "review/secrets.env" },
+      { action: "move", path: "tmp/review", to: "review" },
+    ]);
+    expect(outcomes.map((o) => !!o.change)).toEqual([true, false, false, false, true, false, false, false]);
+    expect(outcomes[6]!.line).toMatch(/looks like a secret/);
+    expect(outcomes[7]!.line).toMatch(/looks like a secret/);
+    expect(outcomes[0]!.line).toContain("updated the path in memory/tools.md");
+    expect(outcomes[1]!.line).toMatch(/goes by itself/);
+    expect(outcomes[2]!.line).toMatch(/only what you need/);
+    expect(outcomes[3]!.line).toMatch(/named in the automation "Weekly"/);
+    expect(outcomes[5]!.line).toMatch(/named in the automation "Weekly"/);
+    expect(readRepo(agent, "memory/tools.md")).toContain("workspace/scripts/asc.mjs");
+    expect([ws(agent, "scripts/asc.mjs"), ws(agent, "tmp/tools/old.log"), ws(agent, "tools/other.sh")]).toEqual([true, true, true]);
   });
 
   test("a dream that ends early puts back what it moved", async () => {

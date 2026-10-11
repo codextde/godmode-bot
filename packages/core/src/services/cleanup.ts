@@ -15,6 +15,7 @@ import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { CleanupEntry, CleanupId, CleanupItem, CleanupReport, CleanupResult, CleanupRun, HealthCheck, StorageArea, StorageUsage } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { withRepoLock } from "../agents/repo";
+import { namedBy } from "../memory/workspace";
 import { backupInProgress } from "../backup/backup";
 import { getRegistered } from "../browser/state";
 import { config } from "../config";
@@ -467,14 +468,15 @@ interface AgentRepo {
   id: string;
   name: string;
   dir: string;
+  instructions: string;
 }
 
 /** Agent repositories in Godmode's agents folder (a repository anywhere else is never touched). */
 function agentRepos(): AgentRepo[] {
   const root = config().agentsDir;
-  return all<{ id: string; name: string; repo_path: string }>("SELECT id, name, repo_path FROM agents ORDER BY name")
+  return all<{ id: string; name: string; repo_path: string; instructions: string }>("SELECT id, name, repo_path, instructions FROM agents ORDER BY name")
     .filter((a) => inside(root, a.repo_path))
-    .map((a) => ({ id: a.id, name: a.name, dir: a.repo_path }));
+    .map((a) => ({ id: a.id, name: a.name, dir: a.repo_path, instructions: a.instructions }));
 }
 
 const working = (agent: AgentRepo) => `${agent.name} is working — this is cleaned once it is done.`;
@@ -494,19 +496,28 @@ async function agentScratch(scan: Scan): Promise<Category> {
   for (const agent of agentRepos()) {
     const tmp = await repoDir(agent, "workspace", "tmp");
     if (!tmp) continue;
+    const owner = { id: agent.id, repoPath: agent.dir, instructions: agent.instructions };
+    const named = namedBy(owner);
+    // Agents keep helpers they reuse in tmp/ too: what their notes name stays until a dream moves it out or it is forgotten.
+    const why = (name: string) => {
+      const where = named(`tmp/${name}`);
+      return where ? `Named in ${where} — it stays until ${agent.name} moves it out of tmp/ or no longer needs it.` : null;
+    };
     for (const name of await names(tmp)) {
       const path = join(tmp, name);
       if (scan.at - (await scan.sizes.of(path)).modified < SCRATCH_DAYS * DAY) continue;
       const clean = async () => {
         if (newScan().busyAgents.has(agent.id)) throw new Kept(working(agent));
+        const still = namedBy(owner)(`tmp/${name}`);
+        if (still) throw new Kept(`Named in ${still}.`);
         await remove(path);
       };
-      targets.push(await target(scan, path, `${agent.name} · ${name}`, { kept: scan.busyAgents.has(agent.id) ? working(agent) : null, clean }));
+      targets.push(await target(scan, path, `${agent.name} · ${name}`, { kept: scan.busyAgents.has(agent.id) ? working(agent) : why(name), clean }));
     }
   }
   return {
     id: "agent-scratch",
-    detail: `What agents left in workspace/tmp and nobody touched for ${SCRATCH_DAYS} days: test builds, downloads, screenshots and what their dreams sorted out.`,
+    detail: `What agents left in workspace/tmp and nobody touched for ${SCRATCH_DAYS} days: test builds, downloads, screenshots and what their dreams sorted out. What their notes still name stays.`,
     targets,
   };
 }

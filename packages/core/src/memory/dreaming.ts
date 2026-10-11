@@ -372,6 +372,7 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
         "   - Move finished work that is worth keeping (sent offers, invoices, reports, final assets, scripts you may run again) into its topic folder, or into `archive/<topic>/` when it is done for good.",
         "   - Discard what is clearly disposable: test screenshots, intermediate renders and exports, downloads you can fetch again, duplicates, leftovers of finished tasks. When unsure, keep it.",
         "   - Never discard deliverables, contracts, invoices, anything the human sent or will need again, or what your memory still relies on.",
+        "   - tmp/ is for throwaway files and Godmode clears it by itself. What your notes name there is listed at the end of the inventory: move what you still use (scripts, helpers) into a proper folder like `scripts/`, and drop the mention of what you don't, so it can go.",
         `   - Do every move and discard with \`workspace_tidy\` (in batches). It updates the paths in your memory files for you; mention a move elsewhere in your notes only when the path appears without \`workspace/\`. It refuses what is in use: entries changed in the last ${RECENT_DAYS} days, or named by your instructions, automations or follow-ups.`,
         "   - If the workspace is already tidy, leave it. Don't rename things for the sake of it.",
       ].join("\n")

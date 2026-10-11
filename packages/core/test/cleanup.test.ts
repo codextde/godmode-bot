@@ -336,16 +336,22 @@ suite("agent repositories", () => {
     age(render, 8 * DAY);
     file(join(render, "b.png"), 1024);
     const kept = file(join(agent.repoPath, "workspace", "report.pdf"), 1024, 30 * DAY);
+    // A helper the agent's notes point to stays.
+    const helper = join(tmp, "helpers");
+    file(join(helper, "upload.mjs"), 1024, 8 * DAY);
+    age(helper, 8 * DAY);
+    writeFileSync(join(agent.repoPath, "memory", "playbook.md"), "- Upload with workspace/tmp/helpers/upload.mjs\n");
 
     const scratch = item(await scanCleanup(), "agent-scratch");
     expect(scratch.recommended).toBe(true);
     expect(paths(scratch).sort()).toEqual([build, shot].sort());
     expect(scratch.entries.find((e) => e.path === build)?.name).toBe("Cleaner · whizzper");
+    expect(scratch.entries.find((e) => e.path === helper)?.kept).toBe("Named in memory/playbook.md — it stays until Cleaner moves it out of tmp/ or no longer needs it.");
 
     working("run_agentwork001");
     try {
       expect(item(await scanCleanup(), "agent-scratch").entries.every((e) => /Cleaner is working/.test(e.kept ?? ""))).toBe(true);
-      expect((await runCleanup(["agent-scratch"])).results[0]).toMatchObject({ removed: 0, kept: 2 });
+      expect((await runCleanup(["agent-scratch"])).results[0]).toMatchObject({ removed: 0, kept: 3 });
       expect(existsSync(build)).toBe(true);
     } finally {
       sql("DELETE FROM runs WHERE id = 'run_agentwork001'");
@@ -353,7 +359,9 @@ suite("agent repositories", () => {
 
     expect((await runCleanup(["agent-scratch"])).results[0]).toMatchObject({ ok: true, removed: 2 });
     expect([build, shot].map(existsSync)).toEqual([false, false]);
-    expect([render, kept].map(existsSync)).toEqual([true, true]);
+    expect([render, kept, helper].map(existsSync)).toEqual([true, true, true]);
+    rmSync(join(agent.repoPath, "memory", "playbook.md"));
+    expect(paths(item(await scanCleanup(), "agent-scratch"))).toEqual([helper]);
   });
 
   test("run logs older than two weeks go, unless a run may still write to them", async () => {
