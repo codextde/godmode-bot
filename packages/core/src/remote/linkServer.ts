@@ -37,6 +37,13 @@ const PORT_TRIES = 20;
 const HANDSHAKES_PER_MINUTE = 30;
 /** Above this much unsent data, events that the next one replaces anyway (frames, streaming text) are dropped. */
 const BACKPRESSURE_BYTES = 16 * 1024 * 1024;
+/**
+ * The socket gets more only while it holds less than this; the rest waits in order for `drain`. Bun drops a message
+ * sent past its backpressure limit, and one lost frame breaks the counters: the controller then ends the link.
+ */
+const SEND_HIGH_WATER = 4 * 1024 * 1024;
+/** Frames held back for a controller that takes them too slowly; past this the link closes instead of growing. */
+const MAX_QUEUED_BYTES = 512 * 1024 * 1024;
 /** Events larger than this go as a binary stream (a JSON frame holds at most 1 MiB). */
 const STREAM_EVENT_BYTES = 256 * 1024;
 /** Request bodies that arrived and wait for the request that names them. */
@@ -56,6 +63,9 @@ interface LinkSocketData {
   ip: string;
   channel: SecureChannel<LinkPeer> | null;
   link: Link | null;
+  /** Frames waiting for the socket to drain, oldest first, and their bytes. */
+  queue: (string | Uint8Array)[];
+  queued: number;
 }
 
 /** One controller connected through a finished handshake. */
@@ -202,7 +212,7 @@ export function startLinkServer(h: Handler): number | null {
           if (path === "/link") {
             const ip = srv.requestIP(req)?.address ?? "unknown";
             if (!allowHandshake(ip)) return new Response("Too many attempts", { status: 429 });
-            const ok = srv.upgrade(req, { data: { ip, channel: null, link: null } });
+            const ok = srv.upgrade(req, { data: { ip, channel: null, link: null, queue: [], queued: 0 } });
             return ok ? undefined : new Response("Upgrade failed", { status: 400 });
           }
           if (path === "/" && req.method === "GET") return new Response("godmode-runner\n", { headers: { "content-type": "text/plain" } });
@@ -213,7 +223,12 @@ export function startLinkServer(h: Handler): number | null {
           backpressureLimit: 64 * 1024 * 1024,
           open: onOpen,
           message: (ws, data) => ws.data.channel?.receive(typeof data === "string" ? data : new Uint8Array(data)),
-          close: (ws) => ws.data.channel?.close(),
+          drain: flush,
+          close: (ws) => {
+            ws.data.queue = [];
+            ws.data.queued = 0;
+            ws.data.channel?.close();
+          },
         },
       });
       boundPort = server.port ?? port;
@@ -240,11 +255,45 @@ export function linkServerPort(): number | null {
   return boundPort;
 }
 
+function byteSize(data: string | Uint8Array): number {
+  return typeof data === "string" ? Buffer.byteLength(data, "utf8") : data.byteLength;
+}
+
+/** Bytes on their way to the controller: in the socket and still queued here. */
+function unsent(ws: ServerWebSocket<LinkSocketData>): number {
+  return ws.getBufferedAmount() + ws.data.queued;
+}
+
+/** Sends in order, never more than the socket takes. Throwing ends the channel cleanly instead of leaving a hole. */
+function enqueue(ws: ServerWebSocket<LinkSocketData>, data: string | Uint8Array): void {
+  const d = ws.data;
+  if (d.queue.length === 0 && ws.getBufferedAmount() < SEND_HIGH_WATER) {
+    if (ws.send(data) === 0) throw new Error("The socket dropped a frame");
+    return;
+  }
+  const size = byteSize(data);
+  if (d.queued + size > MAX_QUEUED_BYTES) throw new Error("The controller doesn't take what the runner sends");
+  d.queue.push(data);
+  d.queued += size;
+}
+
+function flush(ws: ServerWebSocket<LinkSocketData>): void {
+  const d = ws.data;
+  while (d.queue.length > 0 && ws.getBufferedAmount() < SEND_HIGH_WATER) {
+    const data = d.queue.shift()!;
+    d.queued -= byteSize(data);
+    if (ws.send(data) === 0) {
+      d.queue = [];
+      d.queued = 0;
+      d.channel?.close();
+      return;
+    }
+  }
+}
+
 function onOpen(ws: ServerWebSocket<LinkSocketData>) {
   const transport: Transport = {
-    send: (data) => {
-      ws.send(data);
-    },
+    send: (data) => enqueue(ws, data),
     close: (code, reason) => {
       try {
         ws.close(code, reason);
@@ -321,7 +370,7 @@ function onReady(ws: ServerWebSocket<LinkSocketData>, channel: SecureChannel<Lin
 /** An event of the hub, to the controller. Frames and streaming text are dropped while the link is backed up. */
 function sendEvent(link: Link, payload: string) {
   try {
-    if (link.socket.getBufferedAmount() > BACKPRESSURE_BYTES && SUPERSEDED.some((p) => payload.startsWith(p))) return;
+    if (unsent(link.socket) > BACKPRESSURE_BYTES && SUPERSEDED.some((p) => payload.startsWith(p))) return;
     if (payload.length > STREAM_EVENT_BYTES) {
       const streamId = link.nextStream++;
       link.channel.sendBinary(streamId, Buffer.from(payload, "utf8"));
