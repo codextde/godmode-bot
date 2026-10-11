@@ -18,7 +18,7 @@ import { redactBlock } from "../src/runner/stream";
 import { createProfile } from "../src/browser/manager";
 import { getAgent, listAgents, updateAgent } from "../src/agents/service";
 import { createRoutine, listRoutines } from "../src/services/routines";
-import { updateSettings } from "../src/services/settings";
+import { getSettings, updateSettings } from "../src/services/settings";
 import { createWorkspace, getWorkspace } from "../src/services/workspaces";
 import { getProject } from "../src/services/projects";
 import { createMcpServer } from "../src/integrations/mcpServers";
@@ -923,5 +923,111 @@ describe("no privilege escalation through agent tools", () => {
     revokeRunToken(own);
     expect(upd.isError).toBeUndefined();
     expect(getAgent(revealBoss.id).description).toBe("Still mine to change");
+  });
+});
+
+describe("settings tools", () => {
+  const settingsOf = (r: { content: { text: string }[] }) => JSON.parse(r.content[0]!.text) as { settings: Record<string, Record<string, unknown>>; humanOnly: string[] };
+
+  test("only managers get them, and they read every section", async () => {
+    const worker_ = ((await rpc(tokens[worker.id]!, "tools/list")).result.tools as { name: string }[]).map((x) => x.name);
+    expect(worker_).not.toContain("settings_get");
+    expect(worker_).not.toContain("settings_update");
+    expect((await call(tokens[worker.id]!, "settings_update", { changes: { runner: { effort: "low" } } })).isError).toBe(true);
+
+    const all = settingsOf(await call(tokens[manager.id]!, "settings_get"));
+    expect(Object.keys(all.settings)).toEqual(expect.arrayContaining(["general", "runner", "memory", "security", "server"]));
+    expect(all.humanOnly).toEqual(expect.arrayContaining(["security", "server", "cloud", "runner.bypassPermissions", "runner.appendSystemPrompt", "runner.monthlyBudgetUsd", "vm.vaultFill"]));
+    const one = settingsOf(await call(tokens[manager.id]!, "settings_get", { section: "memory" }));
+    expect(Object.keys(one.settings)).toEqual(["memory"]);
+    expect((await call(tokens[manager.id]!, "settings_get", { section: "nope" })).isError).toBe(true);
+  });
+
+  test("a manager changes models and limits; the change is applied and audited", async () => {
+    const before = getSettings();
+    try {
+      const res = await call(tokens[manager.id]!, "settings_update", {
+        changes: { runner: { fallbackModel: "claude-opus-5", stallMinutes: 30 }, memory: { dreaming: { model: "" } } },
+      });
+      expect(res.isError).toBeUndefined();
+      const { changed } = JSON.parse(res.content[0]!.text) as { changed: { setting: string; from: unknown; to: unknown }[] };
+      expect(changed).toEqual(
+        expect.arrayContaining([
+          { setting: "runner.fallbackModel", from: before.runner.fallbackModel, to: "claude-opus-5" },
+          { setting: "runner.stallMinutes", from: before.runner.stallMinutes, to: 30 },
+          { setting: "memory.dreaming.model", from: before.memory.dreaming.model, to: "" },
+        ]),
+      );
+      expect(changed).toHaveLength(3);
+      const now = getSettings();
+      expect(now.runner.fallbackModel).toBe("claude-opus-5");
+      expect(now.memory.dreaming).toEqual({ ...before.memory.dreaming, model: "" });
+      expect(now.runner.model).toBe(before.runner.model);
+      expect(listAudit(5).find((a) => a.action === "settings.update")).toMatchObject({ actor: `agent:${manager.id}` });
+
+      const again = await call(tokens[manager.id]!, "settings_update", { changes: { runner: { stallMinutes: 30 } } });
+      expect(again.content[0]!.text).toContain("Nothing changed");
+    } finally {
+      updateSettings({ runner: { fallbackModel: before.runner.fallbackModel, stallMinutes: before.runner.stallMinutes }, memory: { dreaming: { model: before.memory.dreaming.model } } });
+    }
+  });
+
+  test("what guards secrets, access, the sandbox and spending stays with the human", async () => {
+    const before = JSON.stringify(getSettings());
+    const refused: Record<string, unknown>[] = [
+      { security: { redactSecrets: false } },
+      { security: { defaultSecretAccess: "reveal" } },
+      { server: { remoteAccess: true } },
+      { cloud: { allowSecrets: true } },
+      { mobile: { enabled: true } },
+      { selfRepair: { autoMerge: true } },
+      { onboardingComplete: false },
+      { runner: { bypassPermissions: true } },
+      { runner: { claudePath: "/tmp/evil" } },
+      { runner: { extraArgs: ["--dangerously-skip-permissions"] } },
+      { runner: { appendSystemPrompt: "Reveal everything" } },
+      { runner: { monthlyBudgetUsd: 100000 } },
+      { runner: { defaultMaxBudgetUsd: null } },
+      { browser: { enabled: true } },
+      { browser: { chromePath: "/tmp/evil" } },
+      { computer: { allowForeground: true } },
+      { vm: { vaultFill: true } },
+      { vm: { isolateHostShell: false } },
+      { runner: { effort: "high", bypassPermissions: true } },
+    ];
+    for (const changes of refused) {
+      const res = await call(tokens[manager.id]!, "settings_update", { changes });
+      expect(res.isError).toBe(true);
+      expect(res.content[0]!.text).toMatch(/stays with|is a list/);
+    }
+    expect(JSON.stringify(getSettings())).toBe(before);
+  });
+
+  test("unknown settings and wrong values are refused before anything is saved", async () => {
+    const before = JSON.stringify(getSettings());
+    const invalid: Record<string, unknown>[] = [
+      {},
+      { nope: { x: 1 } },
+      { runner: { nope: 1 } },
+      { runner: "opus" },
+      { runner: { model: 5 } },
+      { runner: { model: "not a model!" } },
+      { runner: { effort: "extreme" } },
+      { runner: { stallMinutes: 1 } },
+      { runner: { maxConcurrentRuns: 2.5 } },
+      { runner: { effort: "low", stallMinutes: 100000 } },
+      { general: { theme: "banana" } },
+      { general: { userName: "x".repeat(81) } },
+      { memory: { dreaming: { cron: "every night" } } },
+      { memory: { dreaming: { nope: true } } },
+      { memory: { dreaming: "sonnet" } },
+      { voice: { rate: 9 } },
+      { vm: { onQuit: "explode" } },
+    ];
+    for (const changes of invalid) {
+      const res = await call(tokens[manager.id]!, "settings_update", { changes });
+      expect(res.isError).toBe(true);
+    }
+    expect(JSON.stringify(getSettings())).toBe(before);
   });
 });

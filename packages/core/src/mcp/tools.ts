@@ -127,6 +127,7 @@ import { chatFillOnly, createConversation, maskSecretInChat, sendMessage } from 
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { getSettings } from "../services/settings";
+import { agentSettingsRefusal, applyAgentSettings, humanOnlySettings, settingsSections } from "../services/agentSettings";
 import { spendReport } from "../services/spend";
 import { budgetOverview, budgetSentence, exhaustedBudget } from "../services/budgets";
 import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun, runExempt } from "../runner/runner";
@@ -780,6 +781,7 @@ const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
   ["logins_overview", "read"],
   ["missing_logins_list", "read"],
   ["vms_list", "read"],
+  ["settings_get", "read"],
   ["agent_create", "manage"],
   ["agent_update", "manage"],
   ["agent_delete", "manage"],
@@ -794,6 +796,7 @@ const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
   ["vm_create", "manage"],
   ["vm_assign", "manage"],
   ["vm_power", "manage"],
+  ["settings_update", "manage"],
 ]);
 
 /** The tool is closed to the caller because it is a connected app: not on the list, or its key only reads. */
@@ -2516,6 +2519,33 @@ const TOOLS: ToolDef[] = [
         ...modSummary(saved),
         next: saved.check && !saved.check.ok ? "Fix the errors and save again with this mod's id." : "Saved as a draft. Tell the human to review it under Mods and switch it on.",
       });
+    },
+  }),
+
+  defineTool({
+    name: "settings_get",
+    description:
+      "Godmode's own settings, as the human sees them under Settings: default and fallback model, reasoning effort, limits and watchdog, the instructions for every agent, browser, computer control, virtual machines, memory and dreaming, voice, upkeep, self-repair, security. `section` returns one of them. `humanOnly` names what only the human changes; everything else is yours to change with settings_update.",
+    schema: z.object({ section: z.string().max(50).optional().describe("One section, e.g. \"runner\" or \"memory\"; default: all") }),
+    when: managesSetup,
+    run: ({ section }) => {
+      const settings = getSettings() as unknown as Record<string, unknown>;
+      if (section !== undefined && !Object.hasOwn(settings, section)) return fail(`There is no settings section "${section}". Sections: ${settingsSections().join(", ")}.`);
+      return json({ settings: section === undefined ? settings : { [section]: settings[section] }, humanOnly: humanOnlySettings() });
+    },
+  }),
+
+  defineTool({
+    name: "settings_update",
+    description:
+      'Change Godmode\'s own settings. `changes` is a partial object by section with only what should differ, e.g. { "runner": { "fallbackModel": "claude-opus-5" }, "memory": { "dreaming": { "model": "" } } }. It applies at once and to every agent, so change what the human asked for and name it in your answer. A model takes an id or alias; "" means none (fallback) or the agent\'s own (dreaming). What guards secrets, access from outside, what agents may do on this computer, the instructions for every agent and spending limits stays with the human (`humanOnly` in settings_get).',
+    schema: z.object({ changes: z.record(z.string(), z.unknown()).describe("Partial settings by section") }),
+    when: managesSetup,
+    run: ({ changes }, { agent, ctx }) => {
+      const refusal = agentSettingsRefusal(changes, getSettings().general.userName.trim() || "The human");
+      if (refusal) return fail(refusal);
+      const changed = applyAgentSettings(ctx.connector ? `connector:${ctx.connector.id}` : `agent:${agent.id}`, ctx.runId, changes);
+      return changed.length ? json({ changed }) : "Nothing changed: the settings already have these values.";
     },
   }),
 

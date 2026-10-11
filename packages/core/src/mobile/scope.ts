@@ -8,6 +8,7 @@
 import { computerView, type ComputerTarget } from "@godmode/shared";
 import { all, get } from "../db";
 import { getSettings } from "../services/settings";
+import { sameSettingShape, settingInRange } from "../services/settingShape";
 import { parseJson } from "../util";
 
 const ID = "[^/]+";
@@ -112,19 +113,6 @@ const SETTINGS: Record<string, string[]> = {
   maintenance: ["autoFix", "autoUpdate", "autoCleanup"],
 };
 const NULLABLE_SETTINGS = new Set(["defaultMaxBudgetUsd", "monthlyBudgetUsd"]);
-/** Ranges for the numbers a phone may set (as on the computer); text length limits. */
-const LIMITS: Record<string, [min: number, max: number]> = {
-  "runner.maxConcurrentRuns": [1, 32],
-  "runner.runTimeoutMinutes": [0, 1440],
-  "runner.stallMinutes": [3, 240],
-  "runner.loopRepeats": [3, 50],
-  "runner.defaultMaxBudgetUsd": [0.01, 10_000],
-  "runner.monthlyBudgetUsd": [0.01, 1_000_000],
-  "browser.keepAliveMinutes": [0, 1440],
-  "computer.liveViewFps": [1, 10],
-  "vm.idleStopMinutes": [0, 1440],
-  "general.userName": [0, 80],
-};
 
 const WORKSPACE_KEYS = ["name", "description", "color", "icon", "instructions", "autoMerge", "browserProfileId", "sources"];
 const PROJECT_KEYS = ["name", "description", "color", "icon", "instructions", "browserProfileId", "sources"];
@@ -212,27 +200,10 @@ function settingsRefusal(body: Record<string, unknown>): string | null {
     if (typeof patch !== "object" || patch === null || Array.isArray(patch)) return `Invalid ${section} settings.`;
     for (const [key, value] of Object.entries(patch)) {
       if (!SETTINGS[section]?.includes(key)) return "Change this setting in Godmode on your computer.";
-      if (!sameShape(value, current[section]?.[key], NULLABLE_SETTINGS.has(key)) || !inRange(`${section}.${key}`, value)) return `Invalid value for ${section}.${key}.`;
+      if (!sameSettingShape(value, current[section]?.[key], NULLABLE_SETTINGS.has(key)) || !settingInRange(`${section}.${key}`, value)) return `Invalid value for ${section}.${key}.`;
     }
   }
   return null;
-}
-
-function inRange(key: string, value: unknown): boolean {
-  const limit = LIMITS[key];
-  if (!limit || value === null) return true;
-  const [min, max] = limit;
-  if (typeof value === "string") return value.length <= max;
-  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
-}
-
-function sameShape(value: unknown, current: unknown, nullable: boolean): boolean {
-  if (value === null) return nullable || current === null;
-  if (current === null || current === undefined) return nullable && typeof value === "number";
-  if (typeof current !== "object" || Array.isArray(current)) return typeof value === typeof current;
-  if (typeof value !== "object" || Array.isArray(value)) return false;
-  const shape = current as Record<string, unknown>;
-  return Object.entries(value as Record<string, unknown>).every(([k, v]) => Object.hasOwn(shape, k) && sameShape(v, shape[k], false));
 }
 
 /** A phone may watch and control a screen only while it is shared in a chat. */
