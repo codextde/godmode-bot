@@ -91,6 +91,7 @@ export function registerChatRoutes(app: Hono): void {
         search: c.req.query("search") || undefined,
         limit: num(c.req.query("limit")),
         archived: flag(c.req.query("archived")),
+        ongoing: flag(c.req.query("ongoing")),
       }),
     ),
   );

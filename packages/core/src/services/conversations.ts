@@ -221,6 +221,14 @@ const DELEGATED_JOIN =
   "LEFT JOIN runs pr ON c.origin = 'delegation' AND pr.id = (SELECT r.parent_run_id FROM runs r WHERE r.conversation_id = c.id AND r.parent_run_id IS NOT NULL ORDER BY r.created_at, r.rowid LIMIT 1) " +
   "LEFT JOIN conversations pc ON pc.id = pr.conversation_id";
 const FROM_SQL = `conversations c LEFT JOIN followups f ON f.conversation_id = c.id LEFT JOIN paused_runs p ON p.conversation_id = c.id ${PAUSE_QUESTION_JOIN} ${DELEGATED_JOIN}`;
+/**
+ * The chat has work ahead: an agent works in it, a run stands still, or it continues by itself later. Not a ticket's
+ * chat (the board shows it) and not dreams or condition checks, which Godmode files in the archive itself.
+ */
+const ONGOING_SQL = `c.origin NOT IN ('task', 'dream') AND CASE WHEN c.runner_id IS NULL
+  THEN f.conversation_id IS NOT NULL OR p.run_id IS NOT NULL
+    OR EXISTS (SELECT 1 FROM runs ar WHERE ar.conversation_id = c.id AND ar.status IN ('queued', 'running') AND ar.trigger NOT IN ('dream', 'check'))
+  ELSE json_extract(c.runner_state, '$.running') = 1 OR json_extract(c.runner_state, '$.paused') IS NOT NULL OR json_extract(c.runner_state, '$.followup') IS NOT NULL END`;
 
 function conversationRow(id: string): ConversationRow | null {
   return get<ConversationRow>(`SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL}, ${PAUSE_SQL}, ${DELEGATED_SQL} FROM ${FROM_SQL} WHERE c.id = ?`, id);
@@ -370,12 +378,14 @@ export function getConversation(id: string): ConversationWithMessages {
 /**
  * `workspaceId`: "all"/undefined = every chat; "global" = global agents' chats started outside any workspace;
  * a workspace id = chats of the workspace's agents, and global agents' chats started in it.
+ * `ongoing`: only chats with work ahead (working, standing still, or continuing by themselves later).
  */
 export function listConversations(
-  opts: { agentId?: string; workspaceId?: string; projectId?: string; search?: string; limit?: number; archived?: boolean } = {},
+  opts: { agentId?: string; workspaceId?: string; projectId?: string; search?: string; limit?: number; archived?: boolean; ongoing?: boolean } = {},
 ): Conversation[] {
   const where: string[] = ["c.archived = ?"];
   const params: (string | number)[] = [opts.archived ? 1 : 0];
+  if (opts.ongoing) where.push(`(${ONGOING_SQL})`);
   if (opts.agentId) {
     where.push("c.agent_id = ?");
     params.push(opts.agentId);
@@ -436,10 +446,16 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
   bus.emit({ type: "conversation.updated", conversation });
   if (patch.vmId !== undefined) assignmentsChanged();
   if (patch.browserProfileId !== undefined || project !== undefined) retryQueued();
-  // Archived, or moved to another browser profile: its tabs aren't needed where they are.
-  if (patch.archived || patch.browserProfileId !== undefined) void closeChatTabs(id);
+  // Moved to another browser profile, or archived with nothing ahead: its tabs aren't needed where they are. An
+  // archived chat that goes on later (a paused run, a follow-up, held messages) finds its pages as it left them.
+  if (patch.browserProfileId !== undefined || (patch.archived && !continuesLater(id))) void closeChatTabs(id);
   if (patch.sshServerIds !== undefined || (patch.archived !== undefined && conversation.sshServerIds.length)) bus.changed("ssh-servers");
   return conversation;
+}
+
+/** The chat stands still or comes back on its own: a paused run, a follow-up, or messages held for its next turn. */
+function continuesLater(id: string): boolean {
+  return ["paused_runs", "followups", "queued_messages"].some((table) => !!get(`SELECT 1 FROM ${table} WHERE conversation_id = ? LIMIT 1`, id));
 }
 
 /** Internal fields maintained by the runner. Does not emit. */

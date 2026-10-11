@@ -132,6 +132,16 @@ describe("continuing after a restart", () => {
     await waitForRun(run.id, 10_000);
   }, 20_000);
 
+  test("a chat the human archived continues like any other", async () => {
+    const conv = chat(agent);
+    sql("UPDATE conversations SET archived = 1 WHERE id = ?", conv);
+    const cut = cutOff(agent, conv);
+    expect(await resumeNow()).toContain(cut);
+    const run = next(conv, cut)!;
+    expect(marker(run.id)).toMatchObject({ mode: "continue", runId: cut, auto: true });
+    expect((await waitForRun(run.id, 10_000)).status).toBe("succeeded");
+  }, 20_000);
+
   test("leaves alone what the human stopped, what is older than the last look, what moved on and tickets", async () => {
     const stopped = cutOff(agent, chat(agent), { error: RUN_STOPPED_BY_USER });
     const old = cutOff(agent, chat(agent), { finishedAt: ago(HOUR) });
@@ -310,6 +320,14 @@ describe("continuing once Claude can be reached again", () => {
     expect(get<{ content: string }>("SELECT content FROM messages WHERE run_id = ? AND role = 'system'", run.id)?.content).toBe("Continued once Claude could be reached again");
     await waitForRun(run.id, 10_000);
     expect(await continueAfterOutage(online)).toBe(0);
+  }, 20_000);
+
+  test("an archived chat's turn continues too", async () => {
+    const conv = chat(agent);
+    sql("UPDATE conversations SET archived = 1 WHERE id = ?", conv);
+    const cut = cutOff(agent, conv, { status: "failed", error: OFFLINE });
+    expect(await continueAfterOutage(online)).toBe(1);
+    expect((await waitForRun(next(conv, cut)!.id, 10_000)).status).toBe("succeeded");
   }, 20_000);
 
   test("leaves other failures, handed-over work, tickets, old turns and automations that came round again", async () => {
