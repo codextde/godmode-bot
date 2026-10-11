@@ -588,7 +588,7 @@ async function agentRunLogs(scan: Scan): Promise<Category> {
  * reads a whole pack into memory to get one object out of it, so only what its commits, status and log never read may
  * be packed: older versions of files and files that were deleted or stopped being versioned (run logs).
  */
-async function historyOnly(dir: string): Promise<{ oids: string[]; bytes: number } | null> {
+async function historyOnly(dir: string): Promise<{ oids: string[]; bytes: number; named: string[] } | null> {
   const [current, reachable, objects] = await Promise.all([
     gitLines(["ls-tree", "-r", "--object-only", "HEAD"], dir),
     gitLines(["rev-list", "--objects", "--all"], dir),
@@ -596,8 +596,10 @@ async function historyOnly(dir: string): Promise<{ oids: string[]; bytes: number
   ]);
   if (!current || !reachable || !objects) return null;
   const now = new Set(current);
-  const kept = new Set(reachable.map((l) => l.slice(0, 40)));
+  // "<oid> <path>": the path tells pack-objects which blobs are versions of one file, to store them against each other.
+  const kept = new Map(reachable.map((l) => [l.slice(0, 40), l]));
   const oids: string[] = [];
+  const named: string[] = [];
   let bytes = 0;
   for (const line of objects) {
     const [oid, type, size] = line.split(" ");
@@ -605,9 +607,10 @@ async function historyOnly(dir: string): Promise<{ oids: string[]; bytes: number
     // Loose only: what an earlier pass packed is done.
     if (!existsSync(join(dir, ".git", "objects", oid.slice(0, 2), oid.slice(2)))) continue;
     oids.push(oid);
+    named.push(kept.get(oid)!);
     bytes += Number(size) || 0;
   }
-  return { oids, bytes };
+  return { oids, bytes, named };
 }
 
 async function agentHistory(scan: Scan): Promise<Category | null> {
@@ -630,7 +633,7 @@ async function agentHistory(scan: Scan): Promise<Category | null> {
         // work, so packing a large history doesn't take the whole computer.
         const pack = await runGit(
           ["pack-objects", "-q", "--max-pack-size=512m", "--window-memory=256m", "--threads=2", join(gitDir, "objects", "pack", "pack")],
-          { cwd: agent.dir, timeoutMs: 30 * 60_000, input: `${fresh.oids.join("\n")}\n` },
+          { cwd: agent.dir, timeoutMs: 30 * 60_000, input: `${fresh.named.join("\n")}\n` },
         );
         if (!pack.ok) throw new Error(pack.timedOut ? "Packing took too long." : pack.stderr.trim().split("\n").at(-1) || "git pack-objects failed");
         const prune = await runGit(["prune-packed", "-q"], { cwd: agent.dir, timeoutMs: 10 * 60_000 });

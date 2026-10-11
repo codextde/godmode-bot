@@ -412,6 +412,8 @@ describe("gitignore", () => {
   test("new repositories keep user uploads out of git", async () => {
     const agent = await createAgent({ name: "Uploads" });
     expect(readFileSync(join(agent.repoPath, ".gitignore"), "utf8")).toContain("workspace/uploads/");
+    // System git never packs the repository on its own: isomorphic-git would have to load the whole pack.
+    expect(readFileSync(join(agent.repoPath, ".git", "config"), "utf8")).toMatch(/\[gc\]\s+auto = 0/);
     mkdirSync(join(agent.repoPath, "workspace", "uploads"), { recursive: true });
     writeFileSync(join(agent.repoPath, "workspace", "uploads", "contract.pdf"), "private");
     writeFileSync(join(agent.repoPath, "workspace", "report.md"), "# Report");

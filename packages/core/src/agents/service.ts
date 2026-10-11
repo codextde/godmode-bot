@@ -433,6 +433,7 @@ async function syncRepoFiles(agent: Agent, regenerate: boolean): Promise<void> {
       if (!existsSync(join(dir, file))) await writeFile(join(dir, file), content, "utf8");
     };
     await syncGitignore(dir);
+    await repo.keepLooseInLock(dir);
     await writeIfMissing("MEMORY.md", renderMemoryMd(agent));
     if (regenerate) await writeFile(join(dir, "CLAUDE.md"), claudeMd, "utf8");
     else await writeIfMissing("CLAUDE.md", claudeMd);
