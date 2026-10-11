@@ -20,6 +20,11 @@ import type { MessageBlock, QueuedMessage, RunUsage, ToolTask, ToolTaskAgent } f
 export const MAX_TOOL_RESULT_CHARS = 20_000;
 /** Largest base64 image kept on a tool_use block (~1.5 MB decoded). */
 export const MAX_TOOL_IMAGE_BASE64 = 2_000_000;
+/**
+ * Screenshots one message keeps, in base64 characters (~24 browser screenshots): the newest stay. Without a cap a long
+ * run grows its message by megabytes a minute, and every save, delta and continue of it rewrites all of them.
+ */
+export const MAX_MESSAGE_IMAGE_BASE64 = 8_000_000;
 /** Notes one stretch of a run keeps from its mods, and how long one may be: a mod can log in a loop. */
 export const MAX_MOD_NOTES = 200;
 const MAX_MOD_NOTE_CHARS = 2000;
@@ -208,6 +213,7 @@ export class StreamAccumulator {
   constructor(blocks: MessageBlock[] = []) {
     this.blocks = blocks;
     for (const b of blocks) if (b.type === "tool_use") this.toolsCalled.add(b.name);
+    this.dropOldImages();
   }
 
   /** Consume one parsed stream-json event. Returns true when the visible blocks changed. */
@@ -640,10 +646,25 @@ export class StreamAccumulator {
       const { text, image } = toolResultContent(c.content);
       block.result = truncateResult(text);
       block.isError = c.is_error === true;
-      if (image) block.image = image;
+      if (image) {
+        block.image = image;
+        this.dropOldImages(block);
+      }
       changed = true;
     }
     return changed;
+  }
+
+  /** Over MAX_MESSAGE_IMAGE_BASE64 the oldest screenshots go (their steps stay), never the one just added. */
+  private dropOldImages(keep?: ToolUseBlock): void {
+    let chars = 0;
+    for (const b of this.blocks) if (b.type === "tool_use" && b.image) chars += b.image.length;
+    for (const b of this.blocks) {
+      if (chars <= MAX_MESSAGE_IMAGE_BASE64) return;
+      if (b.type !== "tool_use" || !b.image || b === keep) continue;
+      chars -= b.image.length;
+      delete b.image;
+    }
   }
 
   private onResult(e: Json): void {

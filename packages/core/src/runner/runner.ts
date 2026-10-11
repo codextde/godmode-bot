@@ -15,7 +15,7 @@
  * limit is reached. It keeps its row, its assistant message and its Claude session; `resumeRun` queues it again and the
  * next `claude -p` process resumes the session with a note to pick the work up where it stopped.
  */
-import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -767,9 +767,11 @@ export function resumeRun(
   if (answer && settled) {
     const { status, ...given } = settled;
     blocks = settleBlock(blocks, answer.questionId, { status, answer: given });
-    // The card shows the answer at once, also where nobody follows the run's stream.
-    updateMessage(p.message_id, { blocks });
   }
+  // Drops the oldest screenshots of a message that has more than it keeps (saved before they were capped).
+  const acc = new StreamAccumulator(blocks);
+  // The card shows the answer at once, also where nobody follows the run's stream.
+  if (answer && settled) updateMessage(p.message_id, { blocks });
   const kept = unanswered.get(row.id);
   unanswered.delete(row.id);
   const job: Job = {
@@ -785,7 +787,7 @@ export function resumeRun(
     depth: p.depth,
     voice: p.voice === 1,
     status: "queued",
-    acc: new StreamAccumulator(blocks),
+    acc,
     proc: null,
     cancelReason: null,
     // What the human typed is gone after a restart: the stored text has saved secrets masked.
@@ -1565,6 +1567,20 @@ interface RunLog {
   end(): unknown;
 }
 
+/** The log of a run that continues: written on at its end, and only done once all of it is on disk. */
+function appendedLog(path: string): RunLog {
+  const stream = createWriteStream(path, { flags: "a" });
+  return {
+    write: (line) => stream.write(line),
+    end: () =>
+      new Promise<void>((resolve) => {
+        if (stream.closed || stream.destroyed) return resolve();
+        stream.once("close", () => resolve());
+        stream.end();
+      }),
+  };
+}
+
 /**
  * What a stream event leaves in the run log. Not partial deltas: the complete message follows, and a fragment could
  * hold part of a secret that no masking recognizes. The password handed to `vault_save_login` is never logged.
@@ -1573,6 +1589,8 @@ function logLineOf(event: unknown, line: string): string | null {
   if (typeof event !== "object" || event === null) return line;
   const e = event as { type?: unknown; event?: { type?: unknown }; message?: { content?: unknown } };
   if (e.type === "stream_event" && e.event?.type === "content_block_delta") return null;
+  // A screenshot is hundreds of kilobytes: the log says that there was one (the message keeps the newest).
+  if (e.type === "user" && line.includes('"base64"')) return JSON.stringify(withoutImageData(event));
   if (e.type !== "assistant" || !line.includes("vault_save_login") || !Array.isArray(e.message?.content)) return line;
   for (const c of e.message.content as { type?: unknown; name?: unknown; input?: Record<string, unknown> }[]) {
     if (c?.type === "tool_use" && typeof c.name === "string" && displayToolName(c.name) === "vault_save_login" && c.input && "password" in c.input) {
@@ -1582,13 +1600,35 @@ function logLineOf(event: unknown, line: string): string | null {
   return JSON.stringify(event);
 }
 
-/** A secret was saved while the run wrote its log (an agent stored a login the human pasted): mask it there too. */
-function maskLog(path: string) {
+/** `v` without the data of base64 images: tool results with a screenshot, an image file Claude read. */
+function withoutImageData(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(withoutImageData);
+  if (typeof v !== "object" || v === null) return v;
+  const leftOut = (data: string) => `(${data.length} characters left out)`;
+  const o = v as Record<string, unknown>;
+  if (o.type === "base64" && typeof o.data === "string") return { ...o, data: leftOut(o.data) };
+  return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, k === "base64" && typeof x === "string" ? leftOut(x) : withoutImageData(x)]));
+}
+
+/**
+ * A secret was saved while the run wrote its log (an agent stored a login the human pasted): mask it there too. Line by
+ * line: the log of a long run is far too big to hold and mask in one piece without stalling the core.
+ */
+async function maskLog(path: string) {
+  const masking = `${path}.masking`;
   try {
-    const text = readFileSync(path, "utf8");
-    const masked = redact(text);
-    if (masked !== text) writeFileSync(path, masked);
+    const out = Bun.file(masking).writer({ highWaterMark: 1024 * 1024 });
+    let changed = false;
+    await readLines(Bun.file(path).stream(), (line) => {
+      const masked = redact(line);
+      if (masked !== line) changed = true;
+      out.write(`${masked}\n`);
+    });
+    await out.end();
+    if (changed) renameSync(masking, path);
+    else rmSync(masking, { force: true });
   } catch (err) {
+    rmSync(masking, { force: true });
     log.warn(`could not mask secrets in run log ${path}`, err);
   }
 }
@@ -2071,7 +2111,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   if (cdpUrl) env[RUN_CDP_ENV] = cdpUrl;
   const logPath = runLogPath(agent, getRun(job.runId));
   mkdirSync(join(logPath, ".."), { recursive: true });
-  const logSink: RunLog = job.resumed ? createWriteStream(logPath, { flags: "a" }) : Bun.file(logPath).writer();
+  const logSink: RunLog = job.resumed ? appendedLog(logPath) : Bun.file(logPath).writer();
   const logEpoch = redactionEpoch();
 
   const timeoutMinutes = dreaming
@@ -2191,7 +2231,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   } finally {
     try {
       await logSink.end();
-      if (redactionEpoch() !== logEpoch) maskLog(logPath);
+      if (redactionEpoch() !== logEpoch) await maskLog(logPath);
     } catch (err) {
       log.warn(`could not close run log ${logPath}`, err);
     }
