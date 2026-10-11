@@ -1,15 +1,15 @@
 /**
  * A real runner (a child process: `godmode runner serve`) and a controller (this process) end to end: pairing with
  * the code `godmode runner pair` prints, the setup copy, a chat that works on the runner and shows up here live, the
- * runner going away and coming back, and catching up on what finished while nobody listened.
+ * runner going away and coming back, catching up on what finished while nobody listened, and moving a chat back here.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync, chmodSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Message, ServerEvent, StartChatResult } from "@godmode/shared";
+import type { Conversation, Message, ServerEvent, StartChatResult } from "@godmode/shared";
 import { loadConfig, config } from "../src/config";
-import { all, closeDb, get, openDb, setMeta } from "../src/db";
+import { all, closeDb, get, getMeta, openDb, setMeta } from "../src/db";
 import { bus } from "../src/events/bus";
 import { setLogLevel } from "../src/log";
 import { ensureDefaultAgent } from "../src/agents/service";
@@ -22,6 +22,7 @@ import { connectRunner, getRunner, link, listRunners, pairWithCode, removeRunner
 import { Database } from "bun:sqlite";
 import { callTool, listToolsFor } from "../src/mcp/tools";
 import { getAgent } from "../src/agents/service";
+import { transcriptPath } from "../src/services/conversations";
 import { childEnv, sleep } from "../src/util";
 import { __setClaudeBinaryForTests, cancelRun, listActiveRuns, waitForRun } from "../src/runner/runner";
 
@@ -36,6 +37,7 @@ let app: ReturnType<typeof createApp>;
 let runnerId: string;
 let agentId: string;
 const events: ServerEvent[] = [];
+const savedClaudeConfig = process.env.CLAUDE_CONFIG_DIR;
 
 async function until(cond: () => boolean | Promise<boolean>, timeoutMs = 20_000, what = "condition") {
   const end = Date.now() + timeoutMs;
@@ -47,7 +49,13 @@ async function until(cond: () => boolean | Promise<boolean>, timeoutMs = 20_000,
 
 function env() {
   // No installs and no keychain items on the machine that runs the tests.
-  return childEnv({ GODMODE_RUNNER_BOOTSTRAP: "0", GODMODE_KEYCHAIN: "0", GODMODE_LOG_LEVEL: "error", FAKE_CLAUDE_STATE: join(runnerDir, "fake-claude") }) as Record<string, string>;
+  return childEnv({
+    GODMODE_RUNNER_BOOTSTRAP: "0",
+    GODMODE_KEYCHAIN: "0",
+    GODMODE_LOG_LEVEL: "error",
+    FAKE_CLAUDE_STATE: join(runnerDir, "fake-claude"),
+    CLAUDE_CONFIG_DIR: join(runnerDir, "claude-config"),
+  }) as Record<string, string>;
 }
 
 /** Start the runner and wait until it says it is ready. */
@@ -109,6 +117,7 @@ beforeAll(async () => {
   // This process is the controller. Its own runs (the fix-with-Claude chat) use the fake Claude Code too: never the
   // real one, which would work with bypassed permissions on this machine.
   process.env.FAKE_CLAUDE_STATE = join(controllerDir, "fake-claude");
+  process.env.CLAUDE_CONFIG_DIR = join(controllerDir, "claude-config");
   __setClaudeBinaryForTests([process.execPath, FAKE_CLAUDE]);
   loadConfig({ dataDir: controllerDir });
   openDb(join(controllerDir, "godmode.db"));
@@ -135,6 +144,8 @@ afterAll(async () => {
     await waitForRun(r.runId, 10_000);
   }
   __setClaudeBinaryForTests(null);
+  if (savedClaudeConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = savedClaudeConfig;
   stopRunners();
   await stopChild();
   server?.stop(true);
@@ -283,6 +294,78 @@ describe("a runner, end to end", () => {
     const answer = get<{ content: string }>("SELECT content FROM messages WHERE run_id = ? AND role = 'assistant'", run.id);
     expect(answer?.content).toContain("finished");
     expect(existsSync(join(runnerDir, "fake-claude", "finish"))).toBe(true);
+  }, 90_000);
+
+  test("a chat moves back here with its Claude session and transcript; the runner drops it, and a busy one stays", async () => {
+    const res = await api("/api/chat", { method: "POST", body: JSON.stringify({ content: "A chat to move", agentId, runnerId }) });
+    const { conversation, run } = (await res.json()) as StartChatResult;
+    const id = conversation.id;
+    await until(() => get<{ status: string }>("SELECT status FROM runs WHERE id = ?", run.id)?.status === "succeeded", 30_000, "run done");
+
+    const busy = (await (await api(`/api/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ content: "SLEEP for a while" }) })).json()) as { run: { id: string } };
+    await until(() => get<{ status: string }>("SELECT status FROM runs WHERE id = ?", busy.run.id)?.status === "running", 20_000, "second run working");
+    const refused = await api(`/api/conversations/${id}/move-here`, { method: "POST" });
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { code: string }).code).toBe("runner_chat_busy");
+    expect((await api(`/api/runs/${busy.run.id}/cancel`, { method: "POST" })).status).toBe(200);
+    await until(() => get<{ status: string }>("SELECT status FROM runs WHERE id = ?", busy.run.id)?.status === "cancelled", 20_000, "run stopped");
+
+    const sessionId = get<{ claude_session_id: string }>("SELECT claude_session_id FROM conversations WHERE id = ?", id)!.claude_session_id;
+    expect(sessionId).toBeTruthy();
+    const session = `{"type":"user","sessionId":"${sessionId}","message":{"role":"user","content":"A chat to move"}}\n`;
+    mkdirSync(join(runnerDir, "claude-config", "projects", "-runner-agent-repo"), { recursive: true });
+    writeFileSync(join(runnerDir, "claude-config", "projects", "-runner-agent-repo", `${sessionId}.jsonl`), session);
+
+    const moved = await api(`/api/conversations/${id}/move-here`, { method: "POST" });
+    expect(moved.status).toBe(200);
+    expect(((await moved.json()) as Conversation).runnerId).toBeNull();
+    expect(get<{ runner_id: string | null; claude_session_id: string }>("SELECT runner_id, claude_session_id FROM conversations WHERE id = ?", id)).toEqual({
+      runner_id: null,
+      claude_session_id: sessionId,
+    });
+    const agent = getAgent(agentId);
+    const project = realpathSync(agent.workingDirectory ?? agent.repoPath).replace(/[^A-Za-z0-9]/g, "-");
+    expect(readFileSync(join(controllerDir, "claude-config", "projects", project, `${sessionId}.jsonl`), "utf8")).toBe(session);
+    expect(readFileSync(transcriptPath(agent, id), "utf8")).toContain("A chat to move");
+    expect((await link(runnerId).request("GET", `/api/conversations/${id}`)).status).toBe(404);
+    expect(getMeta(`link.release.${runnerId}`)).toBeNull();
+    expect((await api(`/api/conversations/${id}/move-here`, { method: "POST" })).status).toBe(409);
+
+    // Claude Code finds the copied session here: the next turn resumes it on this computer.
+    mkdirSync(join(controllerDir, "fake-claude", "sessions"), { recursive: true });
+    writeFileSync(join(controllerDir, "fake-claude", "sessions", sessionId), "");
+    const next = await api(`/api/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ content: "Continue here" }) });
+    expect(next.status).toBe(201);
+    const local = ((await next.json()) as { run: { id: string } }).run.id;
+    expect((await waitForRun(local, 20_000)).status).toBe("succeeded");
+    const invocations = readFileSync(join(controllerDir, "fake-claude", "invocations.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { args: string[]; prompt: string });
+    const last = invocations.at(-1)!;
+    expect(last.args).toEqual(expect.arrayContaining(["--resume", sessionId]));
+    expect(last.prompt).toContain("Continue here");
+  }, 90_000);
+
+  test("a chat moved here while its runner is away is dropped there once it is back", async () => {
+    const res = await api("/api/chat", { method: "POST", body: JSON.stringify({ content: "Moved while away", agentId, runnerId }) });
+    const { conversation, run } = (await res.json()) as StartChatResult;
+    await until(() => get<{ status: string }>("SELECT status FROM runs WHERE id = ?", run.id)?.status === "succeeded", 30_000, "run done");
+    await stopChild();
+    await until(() => getRunner(runnerId).state !== "online", 10_000, "offline");
+
+    const moved = await api(`/api/conversations/${conversation.id}/move-here`, { method: "POST" });
+    expect(moved.status).toBe(200);
+    expect(((await moved.json()) as Conversation).runnerId).toBeNull();
+    expect(JSON.parse(getMeta(`link.release.${runnerId}`) ?? "[]")).toEqual([conversation.id]);
+
+    await startChild();
+    connectRunner(runnerId);
+    await until(() => getRunner(runnerId).state === "online", 20_000, "back online");
+    await until(() => getMeta(`link.release.${runnerId}`) === null, 20_000, "released on the runner");
+    expect((await link(runnerId).request("GET", `/api/conversations/${conversation.id}`)).status).toBe(404);
+    expect(get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", conversation.id)?.runner_id).toBeNull();
+    expect(((await (await api(`/api/conversations/${conversation.id}`)).json()) as { messages: Message[] }).messages.length).toBeGreaterThanOrEqual(2);
   }, 90_000);
 
   test("the runner tells its build and tools; one running from source refuses a new program with a clear answer", async () => {

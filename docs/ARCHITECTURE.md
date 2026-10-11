@@ -1519,6 +1519,15 @@ A **runner** is a headless Godmode core on another computer (macOS for now) that
   `archived` stay local, and reading works from the copy while the runner is offline (`409 runner_offline` for
   everything else). Live views: the hub hands subscriptions to a runner's chat tab and to `runner:` views to the link
   (`setRemoteViewHandlers`) and re-sends them after a reconnect; the frames come back through the mirror.
+* **Moving a chat here** (`moveChatHere`, `POST /api/conversations/:id/move-here`). The chat becomes this computer's:
+  it keeps its messages, runs and settings (servers and VMs reset, as when a runner is removed), and its Claude session
+  and transcript come along (`handover.ts`, `GET /api/link/conversations/:id/handover`): the session file is written to
+  `<Claude config>/projects/<the chat's working directory here>/`, so the next turn resumes it — without it (an older
+  runner, a session over 64 MiB, the runner away) the lost-session recap takes over. A follow-up moves along. While the
+  runner is online the copy is reconciled first and a chat whose run works or stands still there is refused
+  (`409 runner_chat_busy`); while it is away the chat moves anyway and its open runs end here. The runner drops its copy
+  (`DELETE /api/conversations/:id`; its `conversation.deleted` no longer matches the chat's `runner_id`) — or, when it
+  can't now, after its next connect (meta `link.release.<runner id>`).
 * **Health** (`health.ts`): software (doctor), macOS permissions (Accessibility, Screen Recording, Full Disk Access),
   access (vault, setup copied), system (service, keep-awake, desktop session, disk, firewall), each with a fix kind
   (`install`, `request`, `open-settings`, `sync`, `restart`, `manual` + hint) and `installing` for what is on its way.

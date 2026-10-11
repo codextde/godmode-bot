@@ -574,6 +574,8 @@ export const api = {
     create: (input: { agentId: string; title?: string; workspaceId?: string | null; projectId?: string | null }) => post<Conversation>("/api/conversations", input),
     update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
+    /** A chat on a runner moves to this computer, with its Claude session; the runner drops its copy. */
+    moveHere: (id: string) => post<Conversation>(`/api/conversations/${id}/move-here`),
     /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
     send: (id: string, input: SendMessageInput) => post<SendMessageOutcome>(`/api/conversations/${id}/messages`, { ...input, queue: true }),
     queue: {

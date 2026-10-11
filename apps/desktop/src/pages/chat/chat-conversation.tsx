@@ -29,6 +29,7 @@ import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { InstructionsChip } from "@/components/instructions/instructions";
 import { SshChip } from "@/components/ssh/ssh-chip";
 import { RunnerOfflineBar, RunnerPill } from "@/components/runners/runner-chip";
+import { MoveChatDialog, moveBlocker } from "@/components/runners/move-chat";
 import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { ChatDropZone } from "@/components/chat/drop-zone";
@@ -103,6 +104,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const { data: runners } = useRunners();
   const runner = conv?.runnerId ? (runners?.find((r) => r.id === conv.runnerId) ?? null) : null;
   const runnerAway = !!runner && runner.state !== "online";
+  const [moving, setMoving] = useState(false);
   const computerTarget = onRunner ? null : (conv?.computerTarget ?? null);
   const computerPanel = useUi((s) => s.computerPanel);
   const setComputerPanel = useUi((s) => s.setComputerPanel);
@@ -132,6 +134,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const activeRunId = live?.runId ?? conv?.activeRunId ?? null;
   // The chat's run stands still (one that continues is live again before the chat says so). Runs that came after it wait.
   const paused = (conv?.paused && conv.paused.runId !== activeRunId && conv.paused) || null;
+  // While the runner is away nothing is known to work there: the chat can always move then.
+  const moveBlocked = onRunner && !runnerAway && runner ? moveBlocker({ running: !!activeRunId || !!conv?.running, paused: !!paused }) : null;
   const liveMood = useConversationMood(conversationId, messages, live);
   // The run waits for the human's answer to a question or an approval (the card in the thread asks it).
   const waiting = paused?.reason === "question" ? paused : null;
@@ -432,6 +436,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           agent={agent}
           mood={mood}
           onVoiceMode={dreamLog ? undefined : onVoiceMode}
+          move={onRunner ? { onSelect: () => setMoving(true), blocked: moveBlocked } : undefined}
           browserToggle={
             chatVm ? (
               !showVmPanel && <VmToggle working={!!activeRunId} onClick={() => (wide ? setVmPanel(true) : setVmFocus(true))} />
@@ -454,6 +459,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             )
           }
         />
+
+        <MoveChatDialog conversation={conv} runner={runner} agentName={agent?.name ?? "The agent"} open={moving} onOpenChange={setMoving} />
 
         <ChatFilesScope conversationId={conversationId} runnerId={conv.runnerId}>
           <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? "The agent", openId: waiting?.question?.id ?? null }}>
@@ -535,7 +542,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                     className="overflow-hidden"
                   >
-                    <RunnerOfflineBar runner={runner} />
+                    <RunnerOfflineBar runner={runner} onMove={() => setMoving(true)} />
                   </motion.div>
                 )}
                 {conv.followup && (
@@ -574,7 +581,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 leading={
                   <>
                     {onRunner ? (
-                      <RunnerPill runner={runner} />
+                      <RunnerPill runner={runner} onMove={() => setMoving(true)} blocked={moveBlocked} />
                     ) : (
                       <FolderChip
                         chatFolder={conv.workingDirectory}
