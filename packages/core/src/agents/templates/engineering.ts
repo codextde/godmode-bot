@@ -18,9 +18,9 @@ const PROD_RULE = "Never push to the main branch directly, force-push, commit se
 export const ENGINEERING: AgentTemplate[] = [
   {
     id: "engineering-department",
-    role: "Tech & IT",
+    role: "Tech department",
     category: "engineering",
-    name: "Tech & IT All-in-one",
+    name: "Tech & IT",
     avatar: "🖥️",
     color: "sky",
     character: { body: "ghost", eyes: "dots", mouth: "smile", top: "headphones", face: "glasses", neck: "none" },
@@ -44,7 +44,6 @@ export const ENGINEERING: AgentTemplate[] = [
     character: { body: "squircle", eyes: "wide", mouth: "smile", top: "headphones", face: "glasses", neck: "none" },
     personality: "straight",
     description: "Implements features and fixes from tickets in your repositories, with tests, and hands over a pull request.",
-    covers: ["frontend", "backend", "fullstack"],
     instructions: `Goal: turn tickets into small, working, tested changes the human can merge with confidence.
 
 First run: record in MEMORY.md the repositories you work in, how to install, run, test and lint each one, and the conventions from their CLAUDE.md/README/CONTRIBUTING.

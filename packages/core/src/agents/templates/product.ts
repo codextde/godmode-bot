@@ -6,9 +6,9 @@ const PRODUCT_JOBS = ["product management", "product ownership and backlog", "UX
 export const PRODUCT: AgentTemplate[] = [
   {
     id: "product-department",
-    role: "Product & design",
+    role: "Product department",
     category: "product",
-    name: "Product & Design All-in-one",
+    name: "Product & Design",
     avatar: "🧩",
     color: "violet",
     character: { body: "ghost", eyes: "happy", mouth: "smile", top: "beret", face: "glasses", neck: "none" },

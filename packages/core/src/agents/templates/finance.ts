@@ -16,7 +16,7 @@ const FINANCE_JOBS = [
 export const FINANCE: AgentTemplate[] = [
   {
     id: "finance-department",
-    role: "Finance & accounting",
+    role: "Finance department",
     category: "finance",
     name: "Finance & Accounting",
     avatar: "🏦",

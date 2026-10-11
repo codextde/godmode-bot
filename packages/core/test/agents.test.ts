@@ -547,10 +547,13 @@ describe("templates", () => {
   });
 
   test("every department has an all-in-one agent that names the jobs it covers", () => {
-    for (const c of AGENT_TEMPLATE_CATEGORIES.filter((c) => c !== "leadership")) {
-      const allInOne = AGENT_TEMPLATES.filter((t) => t.category === c && (t.covers?.length ?? 0) >= 4);
-      expect(allInOne).toHaveLength(1);
-      for (const job of allInOne[0]!.covers!) expect(allInOne[0]!.instructions).toContain(job);
+    for (const c of AGENT_TEMPLATE_CATEGORIES) {
+      const allInOne = AGENT_TEMPLATES.filter((t) => t.category === c && t.covers);
+      expect(allInOne).toHaveLength(c === "leadership" ? 0 : 1);
+      for (const t of allInOne) {
+        expect(t.covers!.length).toBeGreaterThanOrEqual(4);
+        for (const job of t.covers!) expect(t.instructions).toContain(job);
+      }
     }
     // Shown grouped by department, in the departments' order.
     const order = AGENT_TEMPLATES.map((t) => AGENT_TEMPLATE_CATEGORIES.indexOf(t.category));

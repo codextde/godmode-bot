@@ -8,7 +8,7 @@ const CONFIDENTIAL = "Personal and salary data is confidential: keep it out of s
 export const PEOPLE: AgentTemplate[] = [
   {
     id: "people-department",
-    role: "People & HR",
+    role: "HR department",
     category: "people",
     name: "People & HR",
     avatar: "🫶",

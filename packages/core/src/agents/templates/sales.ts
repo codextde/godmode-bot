@@ -18,9 +18,9 @@ const SEND_RULE = "Send only what the human allowed in MEMORY.md (which kinds of
 export const SALES: AgentTemplate[] = [
   {
     id: "sales-department",
-    role: "Sales",
+    role: "Sales department",
     category: "sales",
-    name: "Sales All-in-one",
+    name: "Sales",
     avatar: "💼",
     color: "orange",
     character: { body: "drop", eyes: "happy", mouth: "grin", top: "headphones", face: "shades", neck: "bowtie" },

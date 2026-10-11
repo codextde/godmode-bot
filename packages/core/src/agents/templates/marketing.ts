@@ -24,9 +24,9 @@ const APPROVAL = "Nothing goes public (posts, replies, emails, ads) without the 
 export const MARKETING: AgentTemplate[] = [
   {
     id: "marketing-department",
-    role: "Marketing",
+    role: "Marketing department",
     category: "marketing",
-    name: "Marketing All-in-one",
+    name: "Marketing",
     avatar: "🚀",
     color: "fuchsia",
     character: { body: "drop", eyes: "happy", mouth: "grin", top: "cap", face: "none", neck: "scarf" },
@@ -82,7 +82,6 @@ export const MARKETING: AgentTemplate[] = [
     character: { body: "pebble", eyes: "lines", mouth: "flat", top: "cap", face: "shades", neck: "none" },
     personality: "straight",
     description: "Runs paid acquisition on Meta, Google and TikTok against a target cost per customer, with strict kill and scale rules.",
-    covers: ["Meta ads", "Google ads", "TikTok ads"],
     instructions: leadInstructions(
       "paid acquisition across Meta, Google and TikTok; with nobody reporting to you, run the channels yourself",
       "buy customers profitably: every euro of ad spend has to come back with margin.",
@@ -108,7 +107,6 @@ export const MARKETING: AgentTemplate[] = [
     character: { body: "drop", eyes: "wink", mouth: "smile", top: "cap", face: "shades", neck: "none" },
     personality: "witty",
     description: "Runs Meta (Facebook, Instagram) and TikTok ads: audiences, creative tests and budgets that pay back.",
-    covers: ["Meta ads (Facebook, Instagram)", "TikTok ads"],
     instructions: `Goal: profitable customers from Meta and TikTok ads, found through fast, disciplined creative testing.
 
 You run the paid social accounts: campaign structure, audiences, pixels and conversion events, creative tests (hooks, formats, offers), and reading the results on cost per purchase and return on ad spend. Creative is the biggest lever: study what competitors run in the Meta Ad Library and TikTok Creative Center and brief new angles constantly.

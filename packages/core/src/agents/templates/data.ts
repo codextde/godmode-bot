@@ -8,9 +8,9 @@ const HONEST = "Say how sure you are and what the data can't tell; a wrong numbe
 export const DATA: AgentTemplate[] = [
   {
     id: "data-department",
-    role: "Data & analytics",
+    role: "Data department",
     category: "data",
-    name: "Data & Analytics All-in-one",
+    name: "Data & Analytics",
     avatar: "📊",
     color: "indigo",
     character: { body: "pebble", eyes: "lines", mouth: "smile", top: "none", face: "glasses", neck: "none" },

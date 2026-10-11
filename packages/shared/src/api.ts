@@ -148,7 +148,7 @@ export interface AgentTemplate {
   category: AgentTemplateCategory;
   /** Made to lead others: hands out work and reviews it. */
   leads?: boolean;
-  /** One agent doing several jobs (a whole department): the jobs it covers. */
+  /** An all-in-one agent doing every job of its department: the jobs it covers. */
   covers?: string[];
   routine?: { name: string; cron: string; prompt: string };
 }

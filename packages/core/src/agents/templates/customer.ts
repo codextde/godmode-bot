@@ -8,9 +8,9 @@ const MONEY_RULE = "Refunds, discounts, credits and promised dates are the human
 export const CUSTOMER: AgentTemplate[] = [
   {
     id: "customer-department",
-    role: "Customer service",
+    role: "Customer service department",
     category: "customer",
-    name: "Customer Service All-in-one",
+    name: "Customer Service",
     avatar: "🛟",
     color: "sky",
     character: { body: "blob", eyes: "happy", mouth: "smile", top: "headphones", face: "blush", neck: "scarf" },

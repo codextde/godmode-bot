@@ -9,7 +9,7 @@ const NOT_A_LAWYER =
 export const LEGAL: AgentTemplate[] = [
   {
     id: "legal-department",
-    role: "Legal & compliance",
+    role: "Legal department",
     category: "legal",
     name: "Legal & Compliance",
     avatar: "⚖️",

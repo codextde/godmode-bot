@@ -16,9 +16,9 @@ const LIVE_RULE = "Changes customers see (prices, live listings, theme, checkout
 export const ECOMMERCE: AgentTemplate[] = [
   {
     id: "ecommerce-department",
-    role: "E-commerce",
+    role: "E-commerce department",
     category: "ecommerce",
-    name: "E-Commerce All-in-one",
+    name: "E-Commerce",
     avatar: "🛒",
     color: "amber",
     character: { body: "gumdrop", eyes: "happy", mouth: "grin", top: "cap", face: "none", neck: "scarf" },

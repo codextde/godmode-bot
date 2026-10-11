@@ -17,7 +17,7 @@ const SPEND_RULE = "Placing orders, signing with suppliers, paying and committin
 export const OPERATIONS: AgentTemplate[] = [
   {
     id: "operations-department",
-    role: "Operations & procurement",
+    role: "Operations department",
     category: "operations",
     name: "Operations & Procurement",
     avatar: "🏭",
