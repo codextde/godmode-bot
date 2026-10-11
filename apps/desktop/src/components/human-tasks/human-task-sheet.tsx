@@ -38,7 +38,9 @@ export function useHumanTaskActions() {
   };
   const update = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: HumanTaskPatch }) => api.humanTasks.update(id, patch),
-    onMutate: ({ id, patch }) => {
+    onMutate: async ({ id, patch }) => {
+      // A list answer already on its way would put the old column back.
+      await qc.cancelQueries({ queryKey: qk.humanTasks, exact: true });
       qc.setQueryData<HumanTask[]>(qk.humanTasks, (list) => list?.map((t) => (t.id === id ? { ...t, ...(patch.status ? { status: patch.status } : {}), ...(patch.priority ? { priority: patch.priority } : {}) } : t)));
     },
     onSettled: refresh,

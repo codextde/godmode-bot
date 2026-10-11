@@ -23,13 +23,14 @@ import { EmptyState, PageHeader } from "@/components/common";
 import { Character } from "@/components/character";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HumanTaskCard } from "@/components/human-tasks/human-task-card";
 import { HumanTaskSheet, useHumanTaskActions } from "@/components/human-tasks/human-task-sheet";
 import { toastApiError } from "@/components/vault/vault-utils";
-import { api } from "@/lib/api";
-import { useAllAgents, useHumanTasks } from "@/lib/hooks";
+import { api, errorMessage } from "@/lib/api";
+import { useAllAgents, useBootstrap, useHumanTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
@@ -66,7 +67,9 @@ function columnOf(id: string, cols: Columns): ColumnId | null {
 export default function HumanTasksPage() {
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const { data = [], isLoading } = useHumanTasks();
+  const tasksQ = useHumanTasks();
+  const { data = [] } = tasksQ;
+  const { data: boot } = useBootstrap();
   const { data: agents = [] } = useAllAgents();
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const [search, setSearch] = useState("");
@@ -114,7 +117,7 @@ export default function HumanTasksPage() {
             : "What your agents can't do without you — a passkey, a CAPTCHA, a signature. Mark it done and the agent picks up where it left off."
         }
         actions={
-          <Button onClick={() => setAdding(true)}>
+          <Button onClick={() => setAdding(true)} disabled={tasksQ.isError && !tasksQ.data}>
             <Plus /> New task
           </Button>
         }
@@ -125,9 +128,30 @@ export default function HumanTasksPage() {
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks" className="h-8 pl-8 text-[13px]" aria-label="Search tasks" />
         </div>
+        {tasksQ.isError && tasksQ.data && (
+          <p className="text-xs text-muted-foreground" role="status">
+            Couldn't refresh the list ·{" "}
+            <button type="button" className="text-foreground underline-offset-2 hover:underline" onClick={() => tasksQ.refetch()}>
+              Try again
+            </button>
+          </p>
+        )}
       </div>
 
-      {!isLoading && data.length === 0 && !adding ? (
+      {tasksQ.isError && !tasksQ.data ? (
+        <div className="px-5 @2xl:px-8">
+          <EmptyState
+            icon={<ListTodo />}
+            title="Couldn't load your tasks"
+            description={errorMessage(tasksQ.error)}
+            action={
+              <Button variant="outline" onClick={() => tasksQ.refetch()}>
+                Try again
+              </Button>
+            }
+          />
+        </div>
+      ) : tasksQ.data && data.length === 0 && !adding ? (
         <div className="px-5 @2xl:px-8">
           <EmptyState
             art={<Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={72} follow />}
@@ -144,6 +168,7 @@ export default function HumanTasksPage() {
         <Board
           tasks={tasks}
           agents={agentById}
+          loading={tasksQ.isPending ? { open: Math.min(boot?.counts.attention?.todo ?? 2, 4), doing: 0, closed: 2 } : undefined}
           adding={adding}
           onAdding={setAdding}
           onAdd={(title) => create.mutateAsync(title)}
@@ -161,6 +186,7 @@ export default function HumanTasksPage() {
 function Board({
   tasks,
   agents,
+  loading,
   adding,
   onAdding,
   onAdd,
@@ -170,6 +196,8 @@ function Board({
 }: {
   tasks: HumanTask[];
   agents: Map<string, Agent>;
+  /** The list isn't here yet: placeholder cards per column (as many to do as the sidebar counts). */
+  loading?: Record<ColumnId, number>;
   adding: boolean;
   onAdding: (on: boolean) => void;
   onAdd: (title: string) => Promise<unknown>;
@@ -232,7 +260,7 @@ function Board({
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => setDrag(null)}>
-      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-5 pb-5 @2xl:px-8">
+      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-5 pb-5 @2xl:px-8" aria-busy={!!loading}>
         {COLUMNS.map((col) => (
           <Column
             key={col.id}
@@ -240,6 +268,7 @@ function Board({
             ids={columns[col.id]}
             byId={byId}
             agents={agents}
+            placeholders={loading?.[col.id]}
             dragging={!!drag}
             activeId={drag?.id ?? null}
             onOpen={onOpen}
@@ -261,6 +290,7 @@ function Column({
   ids,
   byId,
   agents,
+  placeholders,
   dragging,
   activeId,
   onOpen,
@@ -272,6 +302,7 @@ function Column({
   ids: string[];
   byId: Map<string, HumanTask>;
   agents: Map<string, Agent>;
+  placeholders?: number;
   dragging: boolean;
   activeId: string | null;
   onOpen: (t: HumanTask) => void;
@@ -282,6 +313,7 @@ function Column({
   const { setNodeRef, isOver } = useDroppable({ id: `${COLUMN_ID}${column.id}` });
   const tasks = ids.map((id) => byId.get(id)).filter((t): t is HumanTask => !!t);
   const closed = column.id === "closed";
+  const loading = placeholders !== undefined;
   return (
     <section
       aria-label={column.label}
@@ -297,7 +329,7 @@ function Column({
             <h2 className="flex min-w-0 cursor-default items-center gap-2 text-[13px] font-medium">
               {column.icon}
               <span className="truncate">{column.label}</span>
-              <span className="font-mono text-[11.5px] font-normal text-muted-foreground tabular-nums">{tasks.length}</span>
+              {!loading && <span className="font-mono text-[11.5px] font-normal text-muted-foreground tabular-nums">{tasks.length}</span>}
             </h2>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-60">
@@ -322,13 +354,28 @@ function Column({
             ))}
           </SortableContext>
         )}
-        {!tasks.length && !adding && (
+        {loading && Array.from({ length: placeholders }, (_, i) => <CardSkeleton key={i} />)}
+        {!loading && !tasks.length && !adding && (
           <p className={cn("m-1 rounded-lg border border-dashed px-3 py-5 text-center text-xs text-muted-foreground/80", dragging && "border-foreground/20")}>
             {dragging ? (closed ? "Drop to mark it done" : "Drop here") : column.hint}
           </p>
         )}
       </div>
     </section>
+  );
+}
+
+function CardSkeleton() {
+  return (
+    <div className="rounded-lg border bg-card p-3 shadow-card" aria-hidden>
+      <Skeleton className="h-3 w-10" />
+      <Skeleton className="mt-2.5 h-3.5 w-4/5" />
+      <Skeleton className="mt-1.5 h-3 w-3/5" />
+      <div className="mt-3.5 flex items-center gap-1.5">
+        <Skeleton className="size-5 rounded-[5px]" />
+        <Skeleton className="h-3 w-20" />
+      </div>
+    </div>
   );
 }
 
