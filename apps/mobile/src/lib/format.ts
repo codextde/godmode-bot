@@ -1,5 +1,5 @@
 import { gatewayDone } from "@godmode/shared";
-import { format, isThisYear, isToday, isYesterday } from "date-fns";
+import { format, isThisYear, isToday, isTomorrow, isYesterday } from "date-fns";
 import type { MessageBlock } from "@godmode/shared";
 import type { IconName } from "@/components/icon";
 
@@ -12,6 +12,16 @@ export function shortTime(iso: string | null | undefined): string {
   if (isToday(date)) return format(date, "HH:mm");
   if (isYesterday(date)) return "Yesterday";
   return format(date, isThisYear(date) ? "MMM d" : "MMM d, yyyy");
+}
+
+/** "today at 16:00", "tomorrow at 09:00", "Thu, Oct 1 at 09:00" */
+export function whenText(iso: string): string {
+  const date = new Date(iso);
+  const time = format(date, "HH:mm");
+  if (isToday(date)) return `today at ${time}`;
+  if (isTomorrow(date)) return `tomorrow at ${time}`;
+  if (isYesterday(date)) return `yesterday at ${time}`;
+  return `${format(date, isThisYear(date) ? "EEE, MMM d" : "EEE, MMM d yyyy")} at ${time}`;
 }
 
 export function elapsed(fromIso: string | null | undefined, now = Date.now()): string {

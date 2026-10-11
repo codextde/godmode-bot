@@ -141,3 +141,24 @@ export function useRunningChats(): Set<string> {
   const key = useLive((s) => [...new Set(Object.values(s.runs).map(({ run }) => run.conversationId))].sort().join("\n"));
   return useMemo(() => new Set(key ? key.split("\n") : []), [key]);
 }
+
+/**
+ * The run working on a chat, as its id and status only: a chat screen re-renders when the run starts, pauses or ends,
+ * not with every activity label.
+ */
+export function useChatRun(conversationId: string): { id: string; status: Run["status"] } | null {
+  const key = useLive((s) => {
+    const runs = Object.values(s.runs).filter((r) => r.run.conversationId === conversationId);
+    const run = (runs.find((r) => r.run.status === "running") ?? runs[0])?.run;
+    return run ? `${run.id} ${run.status}` : "";
+  });
+  return useMemo(() => {
+    if (!key) return null;
+    const [id, status] = key.split(" ");
+    return { id: id!, status: status as Run["status"] };
+  }, [key]);
+}
+
+export function useRunActivity(runId: string | undefined): string | null {
+  return useLive((s) => (runId ? (s.runs[runId]?.activity ?? null) : null));
+}

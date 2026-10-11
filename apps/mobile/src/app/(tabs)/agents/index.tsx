@@ -3,6 +3,7 @@ import { router, Stack } from "expo-router";
 import { memo, useCallback, useMemo } from "react";
 import { RefreshControl, View } from "react-native";
 import type { Agent } from "@godmode/shared";
+import { HeaderActions } from "@/components/header-actions";
 import { AgentRow } from "@/components/rows";
 import { EmptyState, ErrorState, Hairline, SkeletonRows, tap } from "@/components/ui";
 import { errorText } from "@/lib/api";
@@ -60,6 +61,12 @@ export default function Agents() {
   return (
     <>
       <Stack.Title large>Agents</Stack.Title>
+      <HeaderActions
+        actions={[
+          { icon: "clock", label: "Automations", onPress: () => router.push("/automations") },
+          { icon: "pulse", label: "Activity", onPress: () => router.push("/activity") },
+        ]}
+      />
       <FlashList
         data={data}
         keyExtractor={(agent) => agent.id}

@@ -2,10 +2,11 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { AppLock } from "@/components/app-lock";
+import { forgetQueries, persistQueries, restoreQueries } from "@/lib/persist";
 import { queryClient } from "@/lib/query";
 import { startRealtime } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
@@ -24,19 +25,35 @@ export default function RootLayout() {
     void useSession.getState().load();
   }, []);
 
+  // What the last session saw is on screen before the computer answers.
+  const [restored, setRestored] = useState(false);
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync();
-  }, [ready]);
+    if (!ready || restored) return;
+    const connection = useSession.getState().connection;
+    if (!connection) return setRestored(true);
+    void restoreQueries(connection.deviceId).finally(() => setRestored(true));
+  }, [ready, restored]);
 
   useEffect(() => {
+    if (restored) void SplashScreen.hideAsync();
+  }, [restored]);
+
+  useEffect(() => {
+    if (!restored) return;
     if (!deviceId) {
       queryClient.clear();
+      forgetQueries();
       return;
     }
-    return startRealtime();
-  }, [deviceId]);
+    const stopRealtime = startRealtime();
+    const stopSaving = persistQueries(deviceId);
+    return () => {
+      stopRealtime();
+      stopSaving();
+    };
+  }, [deviceId, restored]);
 
-  if (!ready) return null;
+  if (!ready || !restored) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.background }}>

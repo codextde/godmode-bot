@@ -74,6 +74,7 @@ export default function Tasks() {
           { icon: "person", label: "My tasks", onPress: () => router.push("/my-tasks") },
           { icon: "plus", label: "New task", onPress: newTask },
         ]}
+        menu={[{ icon: "archive", title: "Archived tasks", onPress: () => router.push("/archived-tasks") }]}
       />
       <FlashList
         data={items}

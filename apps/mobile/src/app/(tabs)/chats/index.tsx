@@ -1,7 +1,7 @@
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router, Stack } from "expo-router";
-import { memo, useCallback, useDeferredValue, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, RefreshControl, View } from "react-native";
 import type { Agent, Conversation, Project } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
@@ -18,7 +18,14 @@ import { space } from "@/lib/theme";
 
 export default function Chats() {
   const [search, setSearch] = useState("");
-  const q = useDeferredValue(search.trim());
+  // The search reads every message on the computer: ask once the typing pauses.
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const next = search.trim();
+    if (!next) return setQ("");
+    const timer = setTimeout(() => setQ(next), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
   const { id: workspaceId, workspace, projectId, project } = useWorkspace();
   const projects = useProjectIndex();
   const list = useQuery({
@@ -42,7 +49,12 @@ export default function Chats() {
     <>
       <Stack.Title large>Chats</Stack.Title>
       <Stack.SearchBar placeholder="Search chats" hideWhenScrolling={false} onChangeText={(e) => setSearch(e.nativeEvent.text)} onCancelButtonPress={() => setSearch("")} />
-      <HeaderActions actions={[{ icon: "compose", label: "New chat", onPress: () => router.push("/compose") }]} />
+      <HeaderActions
+        actions={[
+          { icon: "archive", label: "Archived chats", onPress: () => router.push("/archived") },
+          { icon: "compose", label: "New chat", onPress: () => router.push("/compose") },
+        ]}
+      />
       <FlashList
         data={data}
         keyExtractor={(conv) => conv.id}
