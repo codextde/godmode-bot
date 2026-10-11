@@ -1306,8 +1306,9 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
 * **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
   allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents and their slash commands, the model catalog,
-  conversations, messages (with files) and the message queue (edit, remove, send now), questions (list, answer without
-  files), tasks and their attachments (upload and read), runs (cancel), routines (run, enable), browser profiles (launch,
+  conversations (pause, continue, their follow-up), messages (with files) and the message queue (edit, remove, send
+  now), questions (list, answer without files), tasks (approve, their timeline) and their attachments (upload and read),
+  runs (list, cancel), routines (run, enable), browser profiles (launch,
   input), computer input, VMs (list, screenshot, start/stop, input), notifications, missing logins and
   `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are restricted too: a phone may
   pick a chat's model, effort and Ultracode but can't set its folder, VM, browser, shared screen or instructions, or
@@ -1320,9 +1321,23 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   https anywhere, which is how the Godmode Cloud gateway is reached — `isPhoneUrlAllowed`), and first asks the address's `/api/health`, which on
   the phones' listener returns the instance id; an address that answers as another instance never gets the key.
   Writes are sent once (no retry on another address), so a slow network never duplicates a message or a run.
-* **Realtime.** Phone sockets get every event except `run.delta`, which only goes to conversations they subscribed to
-  (`conversation.subscribe`) — streaming replies are large. New sockets are sent the current `run.activity` of every
-  run. Browser and computer frames are opt-in as for the desktop; VM screens are polled (`/api/vms/:id/screenshot`).
+* **Realtime.** Phone sockets get every event except `run.delta` and `message.created` / `message.updated`, which
+  only go to conversations they subscribed to (`conversation.subscribe`) — streaming replies and stored turns are
+  large. The app asks for deltas as patches (`deltas.patch`) like the desktop. New sockets are sent the current
+  `run.activity` of every run. Browser and computer frames are opt-in as for the desktop; VM screens are polled
+  (`/api/vms/:id/screenshot`).
+* **Light answers.** Most of a long chat's bytes are screenshots tools returned, inline as base64. A client on a slow
+  link asks for less: `GET /api/conversations/:id?limit=40&lite=1` answers with the latest messages only (`hasMore`;
+  older pages from `GET /api/conversations/:id/messages?before=<message id>&limit=`), and `lite` replaces every
+  `tool_use.image` with an `imageUrl` (`GET /api/conversations/:id/messages/:messageId/images/:toolUseId`, cached
+  for good) and cuts tool output to its first 6,000 characters (`resultTruncated`). Message events to phones are light
+  too. `GET /api/tasks?fields=summary` leaves the descriptions out of a board. Without these parameters every route
+  answers as before. Answers on the phones' listener and through the cloud relay are gzipped (`hono/compress`); the
+  desktop on this computer gets them as they are.
+* **What the app keeps.** The lists it opens with (chats, tasks, agents, what needs you) are saved in the app's cache
+  folder between launches (`lib/persist.ts`) and shown at once on the next start; chats themselves and settings are
+  not. Events patch the cached lists instead of fetching them again, and coming back to the app only refetches what
+  predates the dropped socket.
 * **Removing a phone** (`DELETE /api/mobile/devices/:id`, or the phone itself via `DELETE /api/mobile/me`) deletes the
   row and closes its sockets with code 4003; the app then forgets its token. Backups carry neither the devices nor the
   `mobile` settings.
