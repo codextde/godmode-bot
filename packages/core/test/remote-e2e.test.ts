@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Conversation, Message, ServerEvent, StartChatResult } from "@godmode/shared";
+import { applyRunDelta, type Conversation, type Message, type RunDelta, type RunDeltaState, type ServerEvent, type StartChatResult } from "@godmode/shared";
 import { loadConfig, config } from "../src/config";
 import { all, closeDb, get, getMeta, openDb, setMeta } from "../src/db";
 import { bus } from "../src/events/bus";
@@ -178,7 +178,16 @@ describe("a runner, end to end", () => {
     const id = started.conversation.id;
 
     await until(() => events.some((e) => e.type === "run.finished" && e.run.conversationId === id), 30_000, "run.finished");
-    expect(events.some((e) => e.type === "run.delta" && e.conversationId === id)).toBe(true);
+    // The link carries what changed, not the whole list each time, and every patch fits onto the one before.
+    const deltas = events.filter((e): e is RunDelta => e.type === "run.delta" && e.conversationId === id);
+    expect(deltas.length).toBeGreaterThan(0);
+    expect(deltas.every((d) => d.patch && !d.blocks)).toBe(true);
+    let copy: RunDeltaState | null = null;
+    for (const d of deltas) {
+      copy = applyRunDelta(copy, d);
+      expect(copy).not.toBeNull();
+    }
+    expect(JSON.stringify(copy!.blocks)).toContain("Hello");
 
     const local = get<{ runner_id: string }>("SELECT runner_id FROM conversations WHERE id = ?", id);
     expect(local?.runner_id).toBe(runnerId);

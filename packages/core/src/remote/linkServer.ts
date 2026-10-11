@@ -35,13 +35,17 @@ const log = logger("link");
 /** Ports tried after the configured one when it is taken. */
 const PORT_TRIES = 20;
 const HANDSHAKES_PER_MINUTE = 30;
-/** Above this much unsent data, events that the next one replaces anyway (frames, streaming text) are dropped. */
+/** Above this much unsent data, events that the next one replaces anyway (frames, whole block lists) are dropped. */
 const BACKPRESSURE_BYTES = 16 * 1024 * 1024;
+/** Unsent data Bun keeps per link; past it a send is dropped, and the link ends (see onOpen). Fits a long run's whole list. */
+const SOCKET_BACKLOG_BYTES = 256 * 1024 * 1024;
 /** Events larger than this go as a binary stream (a JSON frame holds at most 1 MiB). */
 const STREAM_EVENT_BYTES = 256 * 1024;
 /** Request bodies that arrived and wait for the request that names them. */
 const MAX_PENDING_BODIES = 32;
 const SUPERSEDED = ['{"type":"browser.frame"', '{"type":"computer.frame"', '{"type":"run.delta"'];
+/** A `run.delta` patch names `"patch"` within its ids: it is never superseded, a missing one costs a resync. */
+const PATCH_KEY_WITHIN = 512;
 const ALLOWED_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);
 /** Headers a controller may set on a forwarded request; the rest (auth, cookies, host, origin, forwarding) are ours. */
 const FORWARD_HEADERS = new Set(["content-type", "accept", "x-godmode-grant"]);
@@ -210,7 +214,7 @@ export function startLinkServer(h: Handler): number | null {
         },
         websocket: {
           maxPayloadLength: 2 * 1024 * 1024,
-          backpressureLimit: 64 * 1024 * 1024,
+          backpressureLimit: SOCKET_BACKLOG_BYTES,
           open: onOpen,
           message: (ws, data) => ws.data.channel?.receive(typeof data === "string" ? data : new Uint8Array(data)),
           close: (ws) => ws.data.channel?.close(),
@@ -243,7 +247,11 @@ export function linkServerPort(): number | null {
 function onOpen(ws: ServerWebSocket<LinkSocketData>) {
   const transport: Transport = {
     send: (data) => {
-      ws.send(data);
+      // Bun drops what doesn't fit the backlog (0). A frame that never left breaks the frame counters: end the link.
+      if (ws.send(data) === 0) {
+        log.warn("the link fell behind and is closed", { ip: ws.data.ip, bufferedMb: Math.round(ws.getBufferedAmount() / 1048576) });
+        throw new Error("The link fell behind");
+      }
     },
     close: (code, reason) => {
       try {
@@ -318,10 +326,15 @@ function onReady(ws: ServerWebSocket<LinkSocketData>, channel: SecureChannel<Lin
   h.websocket.open?.(link.client as never);
 }
 
-/** An event of the hub, to the controller. Frames and streaming text are dropped while the link is backed up. */
+function superseded(payload: string): boolean {
+  if (!SUPERSEDED.some((p) => payload.startsWith(p))) return false;
+  return !payload.startsWith('{"type":"run.delta"') || !payload.slice(0, PATCH_KEY_WITHIN).includes('"patch":');
+}
+
+/** An event of the hub, to the controller. Frames and whole block lists are dropped while the link is backed up. */
 function sendEvent(link: Link, payload: string) {
   try {
-    if (link.socket.getBufferedAmount() > BACKPRESSURE_BYTES && SUPERSEDED.some((p) => payload.startsWith(p))) return;
+    if (link.socket.getBufferedAmount() > BACKPRESSURE_BYTES && superseded(payload)) return;
     if (payload.length > STREAM_EVENT_BYTES) {
       const streamId = link.nextStream++;
       link.channel.sendBinary(streamId, Buffer.from(payload, "utf8"));

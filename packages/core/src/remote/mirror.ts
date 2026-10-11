@@ -19,6 +19,7 @@ import type {
   ConversationOrigin,
   ConversationWithMessages,
   Message,
+  MessageBlock,
   MessageRole,
   MissingLogin,
   MissingLoginKind,
@@ -26,16 +27,19 @@ import type {
   NotificationKind,
   QueuedMessage,
   Run,
+  RunDelta,
+  RunDeltaState,
   RunPause,
   RunStatus,
   RunTrigger,
   ServerEvent,
 } from "@godmode/shared";
-import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, isModelId, runnerView } from "@godmode/shared";
+import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, applyRunDelta, isModelId, runnerView } from "@godmode/shared";
 import { all, get, insert, run as sql, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { getRun } from "../runner/runner";
+import { addRunSnapshots } from "../server/ws";
 import {
   DEFAULT_CONVERSATION_TITLE,
   conversationExists,
@@ -58,6 +62,8 @@ export interface RunnerApi {
 export interface MirrorHooks {
   /** A run on a runner ended (remote/runners.ts exchanges the agent's memory then). */
   runFinished?(runnerId: string, run: Run): void;
+  /** The copy of a run's in-flight message missed a delta: ask the runner for its whole block list (`run.resync`). */
+  resync?(runnerId: string, runId: string): void;
 }
 
 let hooks: MirrorHooks = {};
@@ -86,6 +92,10 @@ const NOTIFICATION_TITLE_MAX = 200;
 const NOTIFICATION_BODY_MAX = 4000;
 const LABEL_MAX = 300;
 const QUEUE_MAX = 200;
+/** Blocks of an in-flight message; a patch can't make this computer build a longer list. */
+const LIVE_BLOCKS_MAX = 100_000;
+/** A copy that fell behind asks the runner again after this long when the whole list didn't come. */
+const RESYNC_EVERY_MS = 5_000;
 
 const TERMINAL: ReadonlySet<RunStatus> = new Set(["succeeded", "failed", "cancelled"]);
 const RUN_STATUSES: readonly RunStatus[] = ["queued", "running", "paused", "succeeded", "failed", "cancelled"];
@@ -486,6 +496,7 @@ function runFinished(runnerId: string, run: Run): void {
 }
 
 function emitRun(runnerId: string, type: RunEvent, runId: string): void {
+  if (type !== "run.started") forgetLive(runId);
   const run = getRun(runId);
   bus.emit({ type, run });
   if (type === "run.finished") runFinished(runnerId, run);
@@ -504,27 +515,93 @@ function onRun(runnerId: string, type: RunEvent, raw: unknown): boolean {
   return true;
 }
 
+interface LiveRun extends RunDeltaState {
+  runnerId: string;
+  conversationId: string;
+  messageId: string;
+}
+
+/**
+ * The in-flight message of the runs on runners, as their deltas built it: what the runner's patches apply to, and what
+ * a UI here gets when it joins, missed a delta or doesn't apply patches.
+ */
+const live = new Map<string, LiveRun>();
+/** When the whole list of a run was last asked for. */
+const resyncs = new Map<string, number>();
+
+function forgetLive(runId: string): void {
+  live.delete(runId);
+  resyncs.delete(runId);
+}
+
+addRunSnapshots((want) => {
+  const out: RunDelta[] = [];
+  for (const [runId, r] of live) {
+    if ((want.runId && want.runId !== runId) || (want.conversationId && want.conversationId !== r.conversationId)) continue;
+    out.push({ type: "run.delta", runId, conversationId: r.conversationId, messageId: r.messageId, ...(r.stream !== undefined ? { stream: r.stream } : {}), seq: r.seq, blocks: r.blocks });
+  }
+  return out;
+});
+
+function isBlock(v: unknown): v is MessageBlock {
+  return typeof record(v)?.type === "string";
+}
+
+function readPatch(patch: unknown, length: unknown): { patch: [number, MessageBlock][]; length: number } | null {
+  if (!Array.isArray(patch) || typeof length !== "number" || !Number.isSafeInteger(length) || length < 0 || length > LIVE_BLOCKS_MAX) return null;
+  const out: [number, MessageBlock][] = [];
+  for (const entry of patch) {
+    if (!Array.isArray(entry) || entry.length !== 2) return null;
+    const [index, block] = entry as [unknown, unknown];
+    if (typeof index !== "number" || !Number.isSafeInteger(index) || index < 0 || index >= length || !isBlock(block)) return null;
+    out.push([index, block]);
+  }
+  return { patch: out, length };
+}
+
+function askForWhole(runnerId: string, runId: string): void {
+  const at = Date.now();
+  if (at - (resyncs.get(runId) ?? 0) < RESYNC_EVERY_MS) return;
+  resyncs.set(runId, at);
+  try {
+    hooks.resync?.(runnerId, runId);
+  } catch (err) {
+    log.warn(`could not ask runner ${runnerId} for the whole run ${runId}`, err);
+  }
+}
+
 function onDelta(runnerId: string, e: Raw): boolean {
   const runId = safeId(e.runId);
   const conversationId = safeId(e.conversationId);
   const messageId = safeId(e.messageId);
-  if (!runId || !conversationId || !messageId || !Array.isArray(e.blocks) || !ownChat(runnerId, conversationId)) return false;
+  if (!runId || !conversationId || !messageId || !ownChat(runnerId, conversationId)) return false;
   // The UI puts the blocks into that message of that run: neither may be something of another chat.
   const message = get<{ conversation_id: string }>("SELECT conversation_id FROM messages WHERE id = ?", messageId);
   const run = get<{ conversation_id: string }>("SELECT conversation_id FROM runs WHERE id = ?", runId);
   if ((message && message.conversation_id !== conversationId) || (run && run.conversation_id !== conversationId)) return false;
-  const blocks = e.blocks.filter((b) => typeof record(b)?.type === "string");
-  // The runner sends its link the whole list every time (it never asks for patches), so every client here can take it.
-  bus.emit({
+  const patch = Array.isArray(e.blocks) ? null : readPatch(e.patch, e.length);
+  if (!Array.isArray(e.blocks) && !patch) return false;
+  const delta: RunDelta = {
     type: "run.delta",
     runId,
     conversationId,
     messageId,
-    blocks,
+    ...(Array.isArray(e.blocks) ? { blocks: e.blocks.filter(isBlock) } : patch!),
     ...(typeof e.stream === "string" && e.stream.length <= 100 ? { stream: e.stream } : {}),
     ...(typeof e.seq === "number" && Number.isSafeInteger(e.seq) && e.seq >= 0 ? { seq: e.seq } : {}),
     ...(typeof e.textDelta === "string" ? { textDelta: e.textDelta } : {}),
-  });
+  };
+  const have = live.get(runId);
+  const next = applyRunDelta(have && have.runnerId === runnerId && have.messageId === messageId ? have : null, delta);
+  if (!next) {
+    // Missed one: the UIs keep what they show until the whole list comes.
+    askForWhole(runnerId, runId);
+    return true;
+  }
+  live.set(runId, { ...next, runnerId, conversationId, messageId });
+  resyncs.delete(runId);
+  // Passed on as it came: patches to the UIs that apply them, the whole list (ws.ts, from `live`) to the others.
+  bus.emit(delta);
   return true;
 }
 
@@ -906,5 +983,6 @@ export async function catchUp(runnerId: string, api: RunnerApi): Promise<{ conve
 
 /** The link to a runner dropped: nothing is known to work there anymore. The copies keep what the runner said last. */
 export function runnerDisconnected(runnerId: string): void {
+  for (const [runId, r] of live) if (r.runnerId === runnerId) forgetLive(runId);
   clearRunner(runnerId);
 }

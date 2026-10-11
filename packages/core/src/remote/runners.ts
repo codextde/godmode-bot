@@ -394,6 +394,8 @@ async function connected(id: string, state: LinkState) {
   }
   const l = links.get(id);
   if (!l) return;
+  // What changed in a run, not its whole block list each time: a long run's list is tens of megabytes.
+  l.sendClientEvent({ type: "deltas.patch" });
   for (const event of subscriptions.get(id)?.values() ?? []) l.sendClientEvent(event);
   await releaseChats(id);
   try {
@@ -483,6 +485,7 @@ export function startRunners(): void {
     runFinished: (runnerId, run) => {
       void syncRunner(runnerId, { agentId: run.agentId }).catch((err) => log.warn(`could not merge memory after run ${run.id}`, err instanceof Error ? err.message : err));
     },
+    resync: (runnerId, runId) => links.get(runnerId)?.sendClientEvent({ type: "run.resync", runId }),
   });
   offBus = bus.on((event) => {
     if (event.type === "entity.changed" && SETUP_ENTITIES.has(event.entity)) scheduleSync(false);
