@@ -98,6 +98,15 @@ export function parseRawScreencap(buf: Buffer): Raster {
   return { width, height, data };
 }
 
+/** What `screencap | gzip` sent: cut short when the phone or its cable went away meanwhile. */
+export function unpackScreencap(buf: Buffer): Buffer {
+  try {
+    return gunzipSync(buf);
+  } catch {
+    throw new AdbError(`The phone sent an incomplete picture (${buf.length} bytes)`);
+  }
+}
+
 export async function captureRaw(serial: string, signal?: AbortSignal): Promise<Raster> {
   const gzip = gzipWorks.get(serial) !== false;
   const res = await adb(["exec-out", gzip ? "screencap | gzip -1" : "screencap"], { serial, timeoutMs: 20_000, signal });
@@ -112,7 +121,7 @@ export async function captureRaw(serial: string, signal?: AbortSignal): Promise<
   if (gzip) {
     if (buf[0] === 0x1f && buf[1] === 0x8b) {
       gzipWorks.set(serial, true);
-      buf = gunzipSync(buf);
+      buf = unpackScreencap(buf);
     } else {
       gzipWorks.set(serial, false);
     }

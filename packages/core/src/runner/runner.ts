@@ -1772,16 +1772,37 @@ function bodyOf(job: Job, agent: Agent): string {
   return continueContext({ reason: resumed.reason, userName: getSettings().general.userName, pausedAt: resumed.pausedAt, messages, answer: resumed.answer });
 }
 
-/** The usage limit that ended the run, when that is why it failed and the run can wait for the reset. */
-function limitOf(job: Job, attempt: Attempt): LimitPause | null {
-  // Checks and dreams come round again by themselves; delegated work reports its failure to the run that waits for it.
-  if (job.trigger === "check" || job.trigger === "dream" || job.parentRunId) return null;
+/** The usage limit Claude last refused a run with on this computer, and when: every run works on the same account. */
+let lastLimit: { pause: LimitPause; at: number } | null = null;
+const LIMIT_ECHO_MS = 5 * 60_000;
+
+/** The usage limit Claude Code named when the run ended. */
+function limitSaid(job: Job, attempt: Attempt): LimitPause | null {
   const { final, limit, limitLine } = job.acc;
   if (final?.subtype === "error_max_turns" || final?.subtype === "error_max_budget_usd") return null;
   // The answer itself only counts while Claude reports a limit as reached: the model may write about limits too.
   const said = [limitLine ?? "", limit ? (final?.text ?? "") : "", final?.errors.join("\n") ?? "", attempt.stderr, attempt.noise.join("\n")].join("\n");
   // Refused requests (429) while Claude reports a limit as reached are that limit, whatever the wording.
-  return limitReached(limit, final?.apiErrorStatus === 429 && limit ? `${said}\nusage limit reached` : said);
+  const reached = limitReached(limit, final?.apiErrorStatus === 429 && limit ? `${said}\nusage limit reached` : said);
+  if (reached) lastLimit = { pause: reached, at: Date.now() };
+  return reached;
+}
+
+/**
+ * Claude Code ended without a word right after the usage limit ended another run: at the limit it can exit before its
+ * own line about it is out. That limit is this run's too.
+ */
+function limitUnsaid(job: Job, attempt: Attempt): LimitPause | null {
+  if (!lastLimit || job.acc.final || !attempt.exitCode || attempt.stderr.trim() || attempt.noise.length) return null;
+  const until = lastLimit.pause.resumeAt ? Date.parse(lastLimit.pause.resumeAt) : 0;
+  return Date.now() - lastLimit.at < LIMIT_ECHO_MS && until > Date.now() ? lastLimit.pause : null;
+}
+
+/** The usage limit that ended the run, when that is why it failed and the run can wait for the reset. */
+function limitOf(job: Job, attempt: Attempt): LimitPause | null {
+  const limit = limitSaid(job, attempt) ?? limitUnsaid(job, attempt);
+  // Checks and dreams come round again by themselves; delegated work reports its failure to the run that waits for it.
+  return job.trigger === "check" || job.trigger === "dream" || job.parentRunId ? null : limit;
 }
 
 async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcome> {
@@ -2243,7 +2264,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       for (const child of delegatedBy(job.runId)) await cancelRun(child, "Stopped (the run that delegated this waits for Claude's usage limit)").catch(() => {});
       return { status: "paused", error: null };
     }
-    return { status: "failed", error: describeFailure(job, attempt) };
+    const unsaid = limitUnsaid(job, attempt);
+    return { status: "failed", error: unsaid ? `Claude's ${unsaid.limit} is reached` : describeFailure(job, attempt) };
   } finally {
     try {
       await logSink.end();

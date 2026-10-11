@@ -46,6 +46,8 @@
  *              answer, else answer "step finished"
  *   LIMIT_HIT   while the state dir has a `limit` file (its content: the reset time in unix seconds, may be empty) end
  *              like Claude Code does when a usage limit is reached; afterwards answer "back after the limit"
+ *   LIMIT_SILENT  while the state dir has a `limit` file exit with code 1 and without a word, like Claude Code
+ *              sometimes does at a usage limit; afterwards whatever the rest of the prompt asks for
  *   OVERAGE_CRASH  report a reached limit like Claude Code does while requests still go through, then crash like CRASH
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
@@ -782,6 +784,9 @@ if (slash?.[1] === "clear") {
     textTurn("step finished");
     result("step finished");
   }
+} else if (prompt.includes("LIMIT_SILENT") && existsSync(join(stateDir, "limit"))) {
+  out(init);
+  process.exit(1);
 } else if (prompt.includes("LIMIT_HIT")) {
   out(init);
   const limitFile = join(stateDir, "limit");
