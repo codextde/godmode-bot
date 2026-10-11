@@ -117,10 +117,12 @@ export async function runConditionCheck(routineId: string, opts: { scheduled?: b
 
 /** `automation_check_result` from a check run. Returns the tool's answer for the agent. */
 export function reportCheckResult(runId: string, result: { met: boolean; observation: string; summary: string }): string {
-  const row = get<{ routine_id: string | null; trigger: string }>("SELECT routine_id, trigger FROM runs WHERE id = ?", runId);
+  const row = get<{ routine_id: string | null; trigger: string; conversation_id: string }>("SELECT routine_id, trigger, conversation_id FROM runs WHERE id = ?", runId);
   if (!row || row.trigger !== "check" || !row.routine_id) throw badRequest("Only an automation's condition check can report a result");
   if (reported.has(runId)) return "The result of this check was already recorded. End the check now.";
   const routine = getRoutine(row.routine_id);
+  // Its secret access changed while this check ran: what it saw stays out of the checks and tasks that follow.
+  if (!chatFitsAutomation(routine, row.conversation_id)) return "The automation was changed while this check ran, so its result is not recorded. End the check now.";
   const { condition } = conditionOf(routine);
   const previous = readTriggerState(routine.id).observation ?? null;
   const observation = truncate(result.observation.trim(), MAX_OBSERVATION);

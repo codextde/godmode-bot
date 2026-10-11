@@ -2,6 +2,7 @@
 import type { Routine } from "@godmode/shared";
 import { get, run as exec } from "../db";
 import { createConversation } from "../services/conversations";
+import { getAgent } from "../agents/service";
 import { getSettings } from "../services/settings";
 
 function formatDate(date: Date, timezone: string): string {
@@ -17,13 +18,24 @@ function formatDate(date: Date, timezone: string): string {
   }
 }
 
+/** The automation's agent reads raw secrets, so it matters which of its chats and notes had them. */
+export function automationAgentReveals(routine: Pick<Routine, "agentId">): boolean {
+  try {
+    return getAgent(routine.agentId).permissions.secretAccess === "reveal";
+  } catch {
+    return true;
+  }
+}
+
 /**
  * A chat keeps its secret access for good, so an automation only goes on in a chat that has its own: one that
- * became fill-only (or stopped being it) starts a new chat, and nothing read in the old one comes along.
+ * became fill-only (or stopped being it) starts a new chat, and nothing read in the old one comes along. For an
+ * agent that reads no raw secrets anyway, every chat of its own fits.
  */
 export function chatFitsAutomation(routine: Pick<Routine, "agentId" | "fillOnly">, conversationId: string): boolean {
   const existing = get<{ secret_access: string | null }>("SELECT secret_access FROM conversations WHERE id = ? AND agent_id = ?", conversationId, routine.agentId);
-  return !!existing && (existing.secret_access === "fill") === routine.fillOnly;
+  if (!existing) return false;
+  return (existing.secret_access === "fill") === routine.fillOnly || !automationAgentReveals(routine);
 }
 
 /**

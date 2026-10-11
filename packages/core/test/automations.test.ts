@@ -605,8 +605,15 @@ describe("condition checks", () => {
   });
 
   test("a fill-only automation checks and works in fill-only chats, and forgets what it noted when that changes", async () => {
-    const r = conditionRoutine();
-    updateRoutine(r.id, { fillOnly: true });
+    const reader = await createAgent({ name: `Reader ${newId("t", 4)}`, permissions: { secretAccess: "reveal" } });
+    const r = createRoutine({
+      agentId: reader.id,
+      name: "Pricing with secrets",
+      trigger: { type: "condition", condition: "competitor pricing changes", checkModel: "haiku" },
+      cron: "0 * * * *",
+      prompt: "Compare it with ours and update the battlecard",
+      fillOnly: true,
+    });
     const check = await runConditionCheck(r.id);
     expect(conversations.chatFillOnly(check.conversationId)).toBe(true);
     await callTool(checkCtx(check), "automation_check_result", { met: true, observation: "Pro: $59/mo", summary: "Up to $59." });
@@ -622,6 +629,24 @@ describe("condition checks", () => {
     const again = await runConditionCheck(r.id);
     expect(again.conversationId).not.toBe(check.conversationId);
     expect(conversations.chatFillOnly(again.conversationId)).toBe(false);
+    // Changed while the check runs: what it saw is not kept.
+    updateRoutine(r.id, { fillOnly: true });
+    const late = await callTool(checkCtx(again), "automation_check_result", { met: false, observation: "Pro: $79/mo", summary: "" });
+    expect(late.content[0]!.text).toContain("not recorded");
+    expect(readTriggerState(r.id).observation).toBeUndefined();
+    finish(again);
+    await repo.repoIdle(reader.repoPath);
+  });
+
+  test("an agent without raw secrets keeps its chat and baseline when its automation becomes fill-only", async () => {
+    const r = conditionRoutine();
+    const check = await runConditionCheck(r.id);
+    await callTool(checkCtx(check), "automation_check_result", { met: false, observation: "Pro: $49/mo", summary: "" });
+    finish(check);
+    updateRoutine(r.id, { fillOnly: true });
+    expect(readTriggerState(r.id).observation).toBe("Pro: $49/mo");
+    const again = await runConditionCheck(r.id);
+    expect(again.conversationId).toBe(check.conversationId);
     finish(again);
   });
 
