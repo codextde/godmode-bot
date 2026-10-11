@@ -251,6 +251,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/runners/:id/sync", refused(COMPUTER_ONLY)],
   ["POST", "/api/runners/:id/health/fix", refused(COMPUTER_ONLY)],
   ["POST", "/api/runners/:id/autofix", refused(COMPUTER_ONLY)],
+  ["POST", "/api/runners/:id/fix-in-code", refused(COMPUTER_ONLY)],
   ["POST", "/api/runners/:id/update", refused(COMPUTER_ONLY)],
   ["GET", "/api/link/info", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/sync", refused(COMPUTER_ONLY)],
@@ -312,6 +313,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/logs/entries", A],
   ["GET", "/api/logs/report", A],
   ["POST", "/api/logs/client", A],
+  ["POST", "/api/logs/fix", refused(COMPUTER_ONLY)],
 
   ["POST", "/api/mobile/pair", refused(PHONES_ONLY)],
   ["GET|PUT", "/api/mobile", refused(PHONES_ONLY)],

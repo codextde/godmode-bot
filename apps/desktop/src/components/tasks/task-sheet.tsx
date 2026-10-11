@@ -53,6 +53,7 @@ import { clearDraft, draftKeys, saveDraft, useDraft } from "@/lib/drafts";
 import { useGoals, useQuestions, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { QuestionCard, viewOfQuestion } from "@/components/chat/question-card";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { DescriptionEditor, withoutPlaceholders, type DescriptionEditorHandle, type TextUpdate } from "./description-editor";
 import { AgentSelect, DueDateField, LabelsInput, PrioritySelect, StatusSelect, agentsInReach } from "./task-fields";
@@ -404,6 +405,28 @@ function TaskDetail({
                     />
                   )}
                 </Prop>
+                {task.type === "coding" && (
+                  <Prop label="Merge">
+                    <label className="flex h-8 min-w-0 cursor-pointer items-center gap-2 text-[13px]">
+                      <Switch
+                        size="sm"
+                        checked={task.autoMerge}
+                        disabled={task.pullRequest?.state === "merged"}
+                        onCheckedChange={(autoMerge) => save.mutate({ autoMerge })}
+                        aria-label="Merge the pull request by itself once delivered"
+                      />
+                      <span className={cn("truncate", !task.autoMerge && "text-muted-foreground")}>
+                        {task.autoMerge ? (
+                          <>
+                            Into <span className="font-mono">{task.baseBranch || "the default branch"}</span> by itself once delivered
+                          </>
+                        ) : (
+                          "After your review"
+                        )}
+                      </span>
+                    </label>
+                  </Prop>
+                )}
                 {task.worktree && (
                   <Prop label="Worktree">
                     <span className="flex h-8 min-w-0 items-center gap-1.5 font-mono text-[13px]" title={task.worktree}>

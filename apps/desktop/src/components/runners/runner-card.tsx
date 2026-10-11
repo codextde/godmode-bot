@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { CircleArrowUp, CircleCheck, Cookie, Ellipsis, HeartPulse, KeyRound, Monitor, MonitorSmartphone, Network, Pencil, RefreshCw, Sparkles, Trash2, TriangleAlert } from "lucide-react";
+import { CircleArrowUp, CircleCheck, Cookie, Ellipsis, HeartPulse, KeyRound, Monitor, MonitorSmartphone, Network, Pencil, RefreshCw, Sparkles, Trash2, TriangleAlert, Wrench } from "lucide-react";
 import type { RemoteRunner } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +43,7 @@ export function RunnerCard({
   onAddresses,
   onRemove,
   onScreen,
+  onFixInCode,
 }: {
   runner: RemoteRunner;
   actions: RunnerActions;
@@ -50,6 +51,7 @@ export function RunnerCard({
   onAddresses: () => void;
   onRemove: () => void;
   onScreen: () => void;
+  onFixInCode: () => void;
 }) {
   const online = runner.state === "online";
   const [healthOpen, setHealthOpen] = useState((runner.health?.failing ?? 0) > 0);
@@ -120,6 +122,20 @@ export function RunnerCard({
                 {online && runner.update.state === "current" && !runner.update.tools.length && (
                   <span className="inline-flex items-center gap-1 text-success">
                     <CircleCheck className="size-3" aria-hidden /> Up to date
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`Check ${runner.name} for updates`}
+                          disabled={actions.isBusy("upgrade", runner.id)}
+                          onClick={() => actions.upgrade.mutate(runner)}
+                          className="grid size-4 place-items-center rounded-[4px] text-muted-foreground transition hover:bg-foreground/5 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50"
+                        >
+                          {actions.isBusy("upgrade", runner.id) ? <Spinner className="size-3" /> : <RefreshCw className="size-3" />}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Check for updates of Godmode and its tools, and install them</TooltipContent>
+                    </Tooltip>
                   </span>
                 )}
               </>
@@ -267,6 +283,14 @@ export function RunnerCard({
             </Button>
           </TooltipTrigger>
           <TooltipContent>Start a chat that looks at this runner and repairs it</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" disabled={!online} className={FOOTER_BUTTON} onClick={onFixInCode}>
+              <Wrench /> Fix in code
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-72">Send its log to a ticket: an agent fixes the causes in Godmode's code and merges the fix</TooltipContent>
         </Tooltip>
       </div>
 

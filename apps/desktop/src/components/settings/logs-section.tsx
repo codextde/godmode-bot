@@ -2,7 +2,7 @@ import { useDeferredValue, useMemo, useRef, useState, type ReactNode } from "rea
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow, isToday } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
-import { Activity, Check, ChevronRight, CircleCheck, ClipboardCopy, Download, RefreshCw, ScanSearch, Search, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { Activity, Check, ChevronRight, CircleCheck, ClipboardCopy, Download, RefreshCw, ScanSearch, Search, ShieldCheck, Trash2, TriangleAlert, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import type { LogEntry, LogIssue, LogLevel, LogOverview, Settings } from "@godmode/shared";
 import { EmptyState } from "@/components/common";
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
@@ -27,9 +28,12 @@ import { writeClipboard } from "@/components/vault/clipboard";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { saveBlob } from "@/lib/desktop";
+import { useAllAgents } from "@/lib/hooks";
+import { AgentAvatar } from "@/components/common";
+import { FixInCodeDialog } from "@/components/tasks/fix-in-code-dialog";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import { SectionHeading, Segmented, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
+import { CommitInput, SectionHeading, Segmented, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 const REFRESH_MS = 10_000;
 const ENTRY_LIMIT = 300;
@@ -105,6 +109,7 @@ export function LogsSection({ settings }: { settings: Settings }) {
   const [search, setSearch] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const entriesRef = useRef<HTMLDivElement>(null);
 
   const overview = useQuery({ queryKey: qk.logOverview, queryFn: api.logs.overview, refetchInterval: REFRESH_MS, refetchOnWindowFocus: true });
@@ -194,6 +199,14 @@ export function LogsSection({ settings }: { settings: Settings }) {
             {copy.isPending ? <Spinner /> : copied ? <Check /> : <ClipboardCopy />}
             {copied ? "Copied" : "Copy for Claude"}
           </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" onClick={() => setFixing(true)} disabled={empty}>
+                <Wrench /> Fix in code
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-72">An agent gets this log as a ticket, fixes the causes in Godmode's code and merges the fix</TooltipContent>
+          </Tooltip>
           <Button variant="outline" onClick={() => download.mutate()} disabled={download.isPending || empty}>
             {download.isPending ? <Spinner /> : <Download />} Download
           </Button>
@@ -218,6 +231,8 @@ export function LogsSection({ settings }: { settings: Settings }) {
         <EntriesCard filter={filter} setFilter={setFilter} search={search} setSearch={setSearch} />
       </div>
 
+      <SelfRepairGroup settings={settings} />
+
       <SettingsGroup title="Detailed logging" icon={<ScanSearch />} description="For chasing a specific problem. Turn it off again afterwards — the log fills much faster.">
         <SettingRow
           label="Record every request and tool call"
@@ -227,6 +242,8 @@ export function LogsSection({ settings }: { settings: Settings }) {
           <Switch id="verbose-logging" checked={settings.diagnostics.verbose} onCheckedChange={(verbose) => patch({ diagnostics: { verbose } })} />
         </SettingRow>
       </SettingsGroup>
+
+      <FixInCodeDialog source={fixing ? { kind: "local", issues: o?.issues } : null} onClose={() => setFixing(false)} />
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
@@ -246,6 +263,70 @@ export function LogsSection({ settings }: { settings: Settings }) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+const DEFAULT_AGENT = "__default";
+
+/** Where fixes from the logs go, who makes them and whether they are merged without a review. */
+function SelfRepairGroup({ settings }: { settings: Settings }) {
+  const { patch } = useSettingsPatch();
+  const agents = (useAllAgents().data ?? []).filter((a) => a.enabled || a.id === settings.selfRepair.agentId);
+  const fallback = agents.find((a) => a.isDefault);
+  const s = settings.selfRepair;
+  return (
+    <SettingsGroup
+      title="Self-repair"
+      icon={<Wrench />}
+      description="“Fix in code” here and on runners files a ticket on Godmode's source repository. Agents with the self_repair tool check the logs by themselves, too."
+    >
+      <SettingRow stacked label="Repository" htmlFor="repair-repo" description="Godmode's source code, or your fork of it. Godmode pushes and merges with this computer's git and GitHub sign-in.">
+        <CommitInput
+          id="repair-repo"
+          value={s.repoUrl}
+          delay={null}
+          placeholder="https://github.com/codextde/godmode-bot"
+          onCommit={(repoUrl) => repoUrl.trim() !== s.repoUrl && patch({ selfRepair: { repoUrl: repoUrl.trim() } })}
+          spellCheck={false}
+          className="font-mono text-[13px]"
+        />
+      </SettingRow>
+      <SettingRow label="Branch" htmlFor="repair-branch" description="Fixes start from it and are merged into it.">
+        <CommitInput
+          id="repair-branch"
+          value={s.baseBranch}
+          delay={null}
+          onCommit={(baseBranch) => baseBranch.trim() && baseBranch.trim() !== s.baseBranch && patch({ selfRepair: { baseBranch: baseBranch.trim() } })}
+          spellCheck={false}
+          className="w-40 font-mono text-[13px]"
+        />
+      </SettingRow>
+      <SettingRow label="Agent" htmlFor="repair-agent" description="Works on the fixes. They go on its workspace's board.">
+        <Select value={s.agentId ?? DEFAULT_AGENT} onValueChange={(v) => patch({ selfRepair: { agentId: v === DEFAULT_AGENT ? null : v } })}>
+          <SelectTrigger id="repair-agent" className="w-56">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper" align="end">
+            <SelectItem value={DEFAULT_AGENT}>
+              {fallback ? <AgentAvatar agent={fallback} size="sm" still className="size-4" /> : null}
+              {fallback?.name ?? "Default agent"}
+              {fallback && <span className="text-xs text-muted-foreground">· default</span>}
+            </SelectItem>
+            {agents.some((a) => !a.isDefault) && <SelectSeparator />}
+            {agents
+              .filter((a) => !a.isDefault)
+              .map((a) => (
+                <SelectItem key={a.id} value={a.id}>
+                  <AgentAvatar agent={a} size="sm" still className="size-4" /> {a.name}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+      </SettingRow>
+      <SettingRow label="Merge fixes automatically" htmlFor="repair-merge" description={`A delivered fix is merged into ${s.baseBranch} right away, without a review.`}>
+        <Switch id="repair-merge" checked={s.autoMerge} onCheckedChange={(autoMerge) => patch({ selfRepair: { autoMerge } })} />
+      </SettingRow>
+    </SettingsGroup>
   );
 }
 

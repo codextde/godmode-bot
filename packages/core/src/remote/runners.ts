@@ -13,6 +13,7 @@
 import { createHash } from "node:crypto";
 import {
   type ClientEvent,
+  type LogEntry,
   type RemoteRunner,
   type RunnerAutofixInput,
   type RunnerFixResult,
@@ -793,6 +794,22 @@ export async function startAutofix(runnerId: string, input: RunnerAutofixInput):
     bus.emit({ type: "conversation.deleted", id: conversation.id });
     throw err;
   }
+}
+
+/**
+ * What a fix in Godmode's code needs from a runner: its diagnostic log (the overview and the report for an AI) and its
+ * health checks. Asks the runner's own API over the link, so it works with every runner that has Settings → Logs.
+ */
+export async function runnerDiagnostics(runnerId: string): Promise<{ runner: RemoteRunner; entries: LogEntry[]; report: string; health: string | null }> {
+  const l = link(runnerId);
+  l.assertOnline();
+  const [entries, res, health] = await Promise.all([
+    l.json<LogEntry[]>("GET", "/api/logs/entries?level=warn&limit=2000", undefined, { timeoutMs: 60_000 }),
+    l.request("GET", "/api/logs/report", { timeoutMs: 120_000 }),
+    runnerHealth(runnerId, false).catch(() => null),
+  ]);
+  if (res.status < 200 || res.status >= 300) throw new HttpError(502, `${requireRow(runnerId).name} couldn't put its log together (${res.status}).`, "runner_log");
+  return { runner: getRunner(runnerId), entries, report: Buffer.from(res.body).toString("utf8"), health: health ? describeHealth(health) : null };
 }
 
 /** For the autofix chat's tools: a command on the runner. */

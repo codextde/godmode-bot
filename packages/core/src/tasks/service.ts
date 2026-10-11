@@ -84,6 +84,7 @@ import { workingDirectoryProblem } from "../services/folders";
 import { isRepoFolder, listSources, reposDir } from "../services/workspaceSources";
 import { chatSourcePaths, checkProject } from "../services/projects";
 import {
+  addsLineWith,
   commitWork,
   commitsAhead,
   mergePullRequest,
@@ -123,6 +124,7 @@ interface TaskRow extends PauseQuestionCols {
   repo_url: string;
   repo_path: string;
   base_branch: string;
+  auto_merge: number;
   branch: string | null;
   pr_url: string | null;
   pr_number: number | null;
@@ -240,6 +242,7 @@ function toModel(r: TaskRow): Task {
     branchPushed: !!r.pushed_sha,
     worktree: r.branch ? checkoutDir(r.id) : null,
     pullRequest: r.pr_url ? { url: r.pr_url, number: r.pr_number, state: r.pr_state } : null,
+    autoMerge: r.auto_merge === 1,
     summary: r.summary,
     blockedReason: r.blocked_reason,
     activity: activity.get(r.id) ?? null,
@@ -713,6 +716,7 @@ export function createTask(input: TaskInput, actor: TaskActor = "user"): Task {
     repo_url: cleanRepoUrl(input.repoUrl),
     repo_path: cleanRepoPath(input.repoPath, workspaceId),
     base_branch: cleanBranch(input.baseBranch),
+    auto_merge: input.autoMerge ? 1 : 0,
     priority: cleanPriority(input.priority),
     due_date: cleanDueDate(input.dueDate),
     labels: JSON.stringify(cleanLabels(input.labels)),
@@ -791,6 +795,7 @@ export function updateTask(id: string, patch: TaskPatch, actor: TaskActor = "use
     repo_url: patch.repoUrl !== undefined ? cleanRepoUrl(patch.repoUrl) : undefined,
     repo_path: patch.repoPath !== undefined ? cleanRepoPath(patch.repoPath, current.workspace_id) : undefined,
     base_branch: patch.baseBranch !== undefined ? cleanBranch(patch.baseBranch) : undefined,
+    auto_merge: typeof patch.autoMerge === "boolean" ? Number(patch.autoMerge) : undefined,
     priority: patch.priority !== undefined ? cleanPriority(patch.priority) : undefined,
     due_date: patch.dueDate !== undefined ? cleanDueDate(patch.dueDate) : undefined,
     labels: patch.labels !== undefined ? JSON.stringify(cleanLabels(patch.labels)) : undefined,
@@ -1984,8 +1989,9 @@ function deliver(id: string, runId: string): boolean {
 
 function prBody(task: TaskRow, summary: string | null): string {
   const agent = task.agent_id ? get<{ name: string }>("SELECT name FROM agents WHERE id = ?", task.agent_id)?.name : null;
+  // A ticket merged without a review never publishes its brief (fixes from the logs quote them).
   return [
-    summary?.trim() || task.description.trim() || task.title,
+    summary?.trim() || (task.auto_merge ? "" : task.description.trim()) || task.title,
     "",
     "---",
     `Task #${task.number}${agent ? ` · done by ${agent}` : ""} with [Godmode Bot](https://github.com/codextde/godmode-bot)`,
@@ -2093,14 +2099,23 @@ async function mergeTaskPullRequest(task: TaskRow, actor: TaskActor): Promise<{ 
 }
 
 /**
- * The workspace merges its tickets' work without a review: the delivered pull request is merged and the ticket is
- * done. `true` when the human was told what happened (merged, or why it wasn't).
+ * The ticket (or its workspace) merges its work without a review: the delivered pull request is merged and the ticket
+ * is done. `true` when the human was told what happened (merged, or why it wasn't).
  */
 async function autoMerge(id: string): Promise<boolean> {
   const task = requireRow(id);
-  if (task.status !== "in_review" || !mergeable(task) || !task.workspace_id) return false;
-  if (!get<{ auto_merge: number }>("SELECT auto_merge FROM workspaces WHERE id = ?", task.workspace_id)?.auto_merge) return false;
+  if (task.status !== "in_review" || !mergeable(task)) return false;
+  const workspace = task.workspace_id ? get<{ auto_merge: number }>("SELECT auto_merge FROM workspaces WHERE id = ?", task.workspace_id) : null;
+  if (!task.auto_merge && !workspace?.auto_merge) return false;
   const link = `/tasks?task=${id}`;
+  // Godmode replaced a saved secret in the pushed code (pushWork): someone looks at that before it reaches the base branch.
+  if (await addsLineWith(checkoutDir(id), task.base_branch, SECRET_PLACEHOLDER)) {
+    const why = `Not merged automatically: Godmode replaced a saved secret with ${SECRET_PLACEHOLDER} in the pushed code. Check the pull request, then approve it.`;
+    record(id, "note", "system", { body: why });
+    emit(id);
+    notify("warning", `Task #${task.number}: pull request #${task.pr_number} waits for you`, why, link);
+    return true;
+  }
   const { queued, problem } = await mergeTaskPullRequest(task, "system");
   if (queued) {
     notify("success", `Task #${task.number}: pull request #${task.pr_number} is queued to merge`, "It moves to Done once GitHub merges it.", link);

@@ -173,6 +173,11 @@ function groupIssues(lists: LogEntry[][], limit: number): (LogIssue & { sample: 
     .slice(0, limit);
 }
 
+/** Warnings and errors (oldest first) grouped by what they say, worst first. */
+export function issuesOf(entries: LogEntry[], limit = 10): LogIssue[] {
+  return groupIssues([entries], limit).map(({ sample: _sample, ...issue }) => issue);
+}
+
 export function logOverview(): LogOverview {
   const lists = sources();
   const counts: Record<LogLevel, number> = { debug: 0, info: 0, warn: 0, error: 0 };
