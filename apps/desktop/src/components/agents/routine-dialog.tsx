@@ -11,6 +11,7 @@ import { useAllAgents, useModelCatalog } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { clearDraft, useDraft } from "@/lib/drafts";
 import { AgentAvatar, DraftStatus, Kbd } from "@/components/common";
+import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,6 +76,8 @@ export interface RoutineDraft {
   enabled: boolean;
   reuseConversation: boolean;
   notify: RoutineNotify;
+  /** Runs without raw secrets; only offered for an automation an agent set up that way. */
+  fillOnly: boolean;
 }
 
 /** Like the core: events get a conversation each (named after the event); schedules and conditions keep one. */
@@ -105,6 +108,7 @@ function initialDraft(routine: Routine | null | undefined, agentId: string | und
     enabled: routine?.enabled ?? initial?.enabled ?? true,
     reuseConversation: routine?.reuseConversation ?? initial?.reuseConversation ?? defaultReuse(triggerType),
     notify: routine?.notify ?? "failures",
+    fillOnly: routine?.fillOnly ?? false,
   };
 }
 
@@ -223,7 +227,9 @@ export function RoutineDialog({
         reuseConversation: draft.reuseConversation,
         notify: draft.notify,
       };
-      return routine ? api.routines.update(routine.id, input) : api.routines.create(input);
+      if (!routine) return api.routines.create(input);
+      if (!routine.fillOnly || draft.fillOnly !== false) return api.routines.update(routine.id, input);
+      return withGrant((grant) => api.routines.update(routine.id, { ...input, fillOnly: false }, grant), "Confirm to let this automation read secrets");
     },
     onSuccess: (r) => {
       clearDraft(draftKey);
@@ -235,7 +241,9 @@ export function RoutineDialog({
       if (r.trigger.type === "webhook" && routine?.trigger.type !== "webhook") setCreated(r);
       else onOpenChange(false);
     },
-    onError: (err) => toast.error(editing ? "Couldn't update automation" : "Couldn't create automation", { description: errorMessage(err) }),
+    onError: (err) => {
+      if (!isGrantCancelled(err)) toast.error(editing ? "Couldn't update automation" : "Couldn't create automation", { description: errorMessage(err) });
+    },
   });
 
   const submit = () => {
@@ -506,6 +514,17 @@ export function RoutineDialog({
                 checked={draft.enabled}
                 onChange={(v) => set("enabled", v)}
               />
+              {routine?.fillOnly && (
+                <div className="sm:col-span-2">
+                  <SwitchCard
+                    id="routine-reveal"
+                    title="Reveal secrets to AI"
+                    description="An agent set this automation up, so its runs fill logins into pages but can't read passwords or 2FA codes. Switch on only if you trust the prompt above: its runs then read them like the agent's own."
+                    checked={!draft.fillOnly}
+                    onChange={(v) => set("fillOnly", !v)}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">

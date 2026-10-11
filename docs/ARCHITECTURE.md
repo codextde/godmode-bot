@@ -192,8 +192,12 @@ ask within the same moment share a request.
   servers. `agent_delegate` to a reveal-mode agent works for every caller, but unless the caller's run reads raw
   secrets itself (reveal mode, its own chat not fill-only) and the target is global or in its workspace, the task's
   chat is marked fill-only (`conversations.secret_access = 'fill'`): `vault_get_login` / `vault_get_totp` are off in it
-  for good, and the agent counts as fill-only there for what it hands on or sets up — for itself too. What outlives
-  the task (automations, assigning board tasks, settings of a reveal-mode agent, giving that agent a VM) is still
+  for good, and the agent counts as fill-only there for what it hands on or sets up — for itself too. An automation
+  follows the same rule: such a caller may create or change one for a reveal-mode agent, and it is then fill-only
+  (`routines.secret_access = 'fill'`) — its runs and condition checks get fill-only chats, and a chat that had raw
+  secrets is not continued. Pausing changes nothing; starting an automation that still runs with raw secrets is
+  refused. Only the human lifts it (the automation's "Reveal secrets to AI" switch, with the vault passphrase). What
+  else outlives the task (assigning board tasks, settings of a reveal-mode agent, giving that agent a VM) is still
   refused for such callers. Login allow-lists are not compared, and the task can still write to the agent's memory and
   files.
 * **Token hand-off**: the desktop shell starts the core with `--token-stdin` and writes the token as the first stdin

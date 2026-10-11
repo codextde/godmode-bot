@@ -402,6 +402,15 @@ function revealTargetRefusal(caller: Agent, ctx: RunContext, target: Agent, what
 }
 
 /**
+ * An automation is the one thing a caller without raw secrets may set up for a reveal-mode agent: it then runs
+ * without them, like a task it delegates. True when `caller`'s automation for `target` has to be fill-only.
+ */
+const schedulesFillOnly = (caller: Agent, ctx: RunContext, target: Agent) => canReveal(target) && !revealsFor(caller, ctx, target);
+
+const fillOnlyNote = (target: Agent) =>
+  `${target.name} may read secrets in plain text and you can't from here, so this automation runs without them: logins and 2FA codes are still filled into pages, vault_get_login / vault_get_totp are off in its runs. Only the human can lift that (Automations → this automation).`;
+
+/**
  * Settings of agents that only the human may change through the UI: workspace, browser profile, and MCP servers
  * outside the agent's scope (global / its workspace / pinned to it). `target` is null for a new agent.
  */
@@ -734,6 +743,7 @@ function routineSummary(r: Routine, promptMax = 500) {
     lastStatus: r.lastStatus,
     lastEventAt: r.triggerStatus.lastEventAt,
     pendingEvents: r.pendingEvents,
+    ...(r.fillOnly ? { fillOnly: true } : {}),
     prompt: snippet(r.prompt, promptMax),
   };
 }
@@ -1995,23 +2005,25 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "routine_create",
     description:
-      "Create an automation for an agent: when the trigger fires, the agent runs the prompt. Triggers: schedule (cron), app (an event in a connected app — see automation_triggers_list), condition (checked on a cron schedule) or webhook (a secret URL the human copies from the app).",
+      "Create an automation for an agent: when the trigger fires, the agent runs the prompt. Triggers: schedule (cron), app (an event in a connected app — see automation_triggers_list), condition (checked on a cron schedule) or webhook (a secret URL the human copies from the app). For an agent that may read secrets in plain text while you can't, it is created fill-only: its runs fill logins into pages but read no raw secrets.",
     schema: z.object({ agentId: z.string(), ...routineFields }),
     when: managesSetup,
     run: async ({ timezone, trigger, ...input }, { agent, ctx }) => {
       const target = getAgent(input.agentId);
-      const refusal = offHostRefusal(ctx, target, "schedule its tasks") ?? revealTargetRefusal(agent, ctx, target, "schedule its tasks");
+      const refusal = offHostRefusal(ctx, target, "schedule its tasks") ?? computerTargetRefusal(agent, target, "schedule its tasks");
       if (refusal) return fail(refusal);
+      const fillOnly = schedulesFillOnly(agent, ctx, target);
       const resolved = await resolveAppTrigger(trigger as RoutineTrigger | undefined, input.agentId);
-      const r = createRoutine({ ...input, trigger: resolved, timezone: timezone ?? localTimezone() });
-      audit(`agent:${agent.id}`, "routine.create", r.id, { agentId: r.agentId, trigger: r.trigger.type });
-      return json(routineSummary(r));
+      const r = createRoutine({ ...input, trigger: resolved, timezone: timezone ?? localTimezone(), fillOnly });
+      audit(`agent:${agent.id}`, "routine.create", r.id, { agentId: r.agentId, trigger: r.trigger.type, ...(fillOnly ? { fillOnly } : {}) });
+      return json({ ...routineSummary(r), ...(fillOnly ? { note: fillOnlyNote(target) } : {}) });
     },
   }),
 
   defineTool({
     name: "routine_update",
-    description: "Change an automation's trigger, schedule, prompt, filter, name or enabled state.",
+    description:
+      "Change an automation's trigger, schedule, prompt, filter, name or enabled state. Changing one of an agent that may read secrets in plain text while you can't makes it fill-only (pausing it doesn't).",
     schema: z.object({
       routineId: z.string(),
       name: routineFields.name.optional(),
@@ -2027,12 +2039,16 @@ const TOOLS: ToolDef[] = [
     run: async ({ routineId, trigger, ...patch }, { agent, ctx }) => {
       const current = getRoutine(routineId);
       const target = getAgent(current.agentId);
-      const refusal = offHostRefusal(ctx, target, "change its automations") ?? revealTargetRefusal(agent, ctx, target, "schedule its tasks");
+      const refusal = offHostRefusal(ctx, target, "change its automations") ?? computerTargetRefusal(agent, target, "change its automations");
       if (refusal) return fail(refusal);
+      // What this caller writes or starts runs without raw secrets from now on. Pausing does neither.
+      const fields = [...Object.entries(patch).filter(([, v]) => v !== undefined).map(([k]) => k), ...(trigger ? ["trigger"] : [])];
+      const pauseOnly = fields.length === 1 && patch.enabled === false;
+      const fillOnly = !current.fillOnly && !pauseOnly && schedulesFillOnly(agent, ctx, target);
       const resolved = trigger ? await resolveAppTrigger(trigger as RoutineTrigger, current.agentId) : undefined;
-      const r = updateRoutine(routineId, { ...patch, ...(resolved ? { trigger: resolved } : {}) });
-      audit(`agent:${agent.id}`, "routine.update", routineId, { fields: [...Object.keys(patch), ...(trigger ? ["trigger"] : [])] });
-      return json(routineSummary(r));
+      const r = updateRoutine(routineId, { ...patch, ...(resolved ? { trigger: resolved } : {}), ...(fillOnly ? { fillOnly } : {}) });
+      audit(`agent:${agent.id}`, "routine.update", routineId, { fields, ...(fillOnly ? { fillOnly } : {}) });
+      return json({ ...routineSummary(r), ...(fillOnly ? { note: fillOnlyNote(target) } : {}) });
     },
   }),
 
@@ -2043,8 +2059,12 @@ const TOOLS: ToolDef[] = [
     schema: z.object({ routineId: z.string() }),
     when: managesSetup,
     run: async ({ routineId }, { agent, ctx }) => {
-      const target = getAgent(getRoutine(routineId).agentId);
-      const refusal = offHostRefusal(ctx, target, "run its tasks") ?? revealTargetRefusal(agent, ctx, target, "run its tasks");
+      const routine = getRoutine(routineId);
+      const target = getAgent(routine.agentId);
+      // A fill-only automation hands out no raw secrets, whoever starts it.
+      const refusal =
+        offHostRefusal(ctx, target, "run its tasks") ??
+        (routine.fillOnly ? computerTargetRefusal(agent, target, "run its tasks") : revealTargetRefusal(agent, ctx, target, "run its tasks"));
       if (refusal) return fail(refusal);
       const started = await runRoutineNow(routineId);
       audit(`agent:${agent.id}`, "routine.run", routineId, { runId: started.id });

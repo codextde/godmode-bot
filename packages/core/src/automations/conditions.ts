@@ -10,6 +10,7 @@ import { get, run as exec } from "../db";
 import { getAgent } from "../agents/service";
 import { emitRoutine, getRoutine, patchTriggerState, readTriggerState, type TriggerState } from "../services/routines";
 import { createConversation, sendMessage, setConversationState } from "../services/conversations";
+import { chatFitsAutomation } from "./conversation";
 import { ensureRunListener, isAutomationBusy, receiveEvent } from "./events";
 import { badRequest, conflict, now, truncate } from "../util";
 
@@ -33,11 +34,8 @@ function runActive(runId: string): boolean {
 
 /** The automation's archived check conversation (created on first use, per agent). */
 function checkConversation(routine: Routine, state: TriggerState): string {
-  if (state.checkConversationId) {
-    const existing = get<{ id: string }>("SELECT id FROM conversations WHERE id = ? AND agent_id = ?", state.checkConversationId, routine.agentId);
-    if (existing) return existing.id;
-  }
-  const conversation = createConversation({ agentId: routine.agentId, title: `${routine.name} · checks`, origin: "routine" });
+  if (state.checkConversationId && chatFitsAutomation(routine, state.checkConversationId)) return state.checkConversationId;
+  const conversation = createConversation({ agentId: routine.agentId, title: `${routine.name} · checks`, origin: "routine", fillOnly: routine.fillOnly });
   setConversationState(conversation.id, { archived: true });
   patchTriggerState(routine.id, { checkConversationId: conversation.id });
   return conversation.id;

@@ -18,21 +18,23 @@ function formatDate(date: Date, timezone: string): string {
 }
 
 /**
+ * A chat keeps its secret access for good, so an automation only goes on in a chat that has its own: one that
+ * became fill-only (or stopped being it) starts a new chat, and nothing read in the old one comes along.
+ */
+export function chatFitsAutomation(routine: Pick<Routine, "agentId" | "fillOnly">, conversationId: string): boolean {
+  const existing = get<{ secret_access: string | null }>("SELECT secret_access FROM conversations WHERE id = ? AND agent_id = ?", conversationId, routine.agentId);
+  return !!existing && (existing.secret_access === "fill") === routine.fillOnly;
+}
+
+/**
  * Reuse the routine's conversation when configured (and still present), otherwise start a new one — titled after
  * `occasion` (what started it, e.g. the event) when given, else dated.
  */
 export function automationConversation(routine: Routine, occasion?: string): string {
-  if (routine.reuseConversation && routine.conversationId) {
-    const existing = get<{ id: string }>(
-      "SELECT id FROM conversations WHERE id = ? AND agent_id = ?",
-      routine.conversationId,
-      routine.agentId,
-    );
-    if (existing) return existing.id;
-  }
+  if (routine.reuseConversation && routine.conversationId && chatFitsAutomation(routine, routine.conversationId)) return routine.conversationId;
   // A reused conversation spans many runs, so only per-run conversations carry the occasion or date.
   const title = routine.reuseConversation ? routine.name : `${routine.name} · ${occasion || formatDate(new Date(), routine.timezone)}`;
-  const conversation = createConversation({ agentId: routine.agentId, title, origin: "routine" });
+  const conversation = createConversation({ agentId: routine.agentId, title, origin: "routine", fillOnly: routine.fillOnly });
   if (routine.reuseConversation) exec("UPDATE routines SET conversation_id = ? WHERE id = ?", conversation.id, routine.id);
   return conversation.id;
 }

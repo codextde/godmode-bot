@@ -157,6 +157,18 @@ describe("agent routes", () => {
     expect(patched.data.nextRunAt).toBeNull();
     expect(patched.data.trigger).toEqual({ type: "schedule", startWindowMinutes: 90 });
 
+    // Giving a fill-only automation raw secrets needs the vault passphrase; everything else about it doesn't.
+    const fillOnly = await call<Routine>("PATCH", `/api/routines/${created.data.id}`, { fillOnly: true });
+    expect(fillOnly.data.fillOnly).toBe(true);
+    expect((await call<Routine>("PATCH", `/api/routines/${created.data.id}`, { prompt: "Still the daily thing", fillOnly: true })).data.fillOnly).toBe(true);
+    const denied = await call<{ code: string }>("PATCH", `/api/routines/${created.data.id}`, { fillOnly: false });
+    expect(denied.status).toBe(403);
+    expect(denied.data.code).toBe("grant_required");
+    expect((await call<Routine[]>("GET", `/api/routines?agentId=${agent.id}`)).data[0]!.fillOnly).toBe(true);
+    const lifted = await call<Routine>("PATCH", `/api/routines/${created.data.id}`, { fillOnly: false }, issueGrant().grant);
+    expect(lifted.data.fillOnly).toBe(false);
+    expect((await call<Routine>("PATCH", `/api/routines/${created.data.id}`, { fillOnly: false })).status).toBe(200);
+
     expect((await call("DELETE", `/api/routines/${created.data.id}`)).data).toEqual({ ok: true });
     expect((await call("POST", `/api/routines/${created.data.id}/run`)).status).toBe(404);
     await repo.repoIdle(agent.repoPath);

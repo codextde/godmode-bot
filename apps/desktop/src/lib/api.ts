@@ -557,7 +557,8 @@ export const api = {
   routines: {
     list: (q: { agentId?: string } = {}) => get<Routine[]>("/api/routines", q),
     create: (input: RoutineInput) => post<Routine>("/api/routines", input),
-    update: (id: string, input: Partial<RoutineInput>) => patch<Routine>(`/api/routines/${id}`, input),
+    /** `grant`: lifting `fillOnly` needs the vault passphrase. */
+    update: (id: string, input: Partial<RoutineInput>, grant?: string) => request<Routine>("PATCH", `/api/routines/${id}`, input, withGrant(grant)),
     delete: (id: string) => del<{ ok: true }>(`/api/routines/${id}`),
     /** Schedule: run now · condition: check now (trigger "check") · app/webhook: run with a test event. */
     run: (id: string) => post<Run>(`/api/routines/${id}/run`),
