@@ -20,7 +20,8 @@ import { frameToScreen, longPress, pressKey, screenSize, screenshot, swipe, tap,
 import { requestKeyframe, setViewers } from "../../android/stream";
 import { disableIdleTimeout } from "../../mcp/http";
 import { setAndroidViewHandlers } from "../ws";
-import { badRequest, conflict } from "../../util";
+import { HttpError, badRequest, conflict } from "../../util";
+import { requestDevice } from "../auth";
 import { body, z } from "../validate";
 
 const point = { x: z.number(), y: z.number() };
@@ -122,6 +123,13 @@ export function registerAndroidRoutes(app: Hono): void {
   app.get("/api/android/devices/:id/screenshot", async (c) => {
     const size = Number(c.req.query("size") ?? 480);
     if (!Number.isFinite(size) || size < 64 || size > 1568) throw badRequest("size must be between 64 and 1568");
+    // A paired phone only sees the phones agents work with, not any phone that happens to be plugged in.
+    if (requestDevice(c)) {
+      const device = getDevice(c.req.param("id"));
+      if (!device.busy && !device.assignments.length) {
+        throw new HttpError(403, "The phone app shows an Android phone once an agent or a chat uses it.", "device_forbidden");
+      }
+    }
     const serial = serialOf(c.req.param("id"));
     try {
       const shot = await screenshot(serial, size, { level: 1 });

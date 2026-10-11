@@ -119,7 +119,8 @@ export function createApp() {
   // Phones and the cloud relay get their JSON gzipped (chats and boards are megabytes over Tailscale or the relay); the
   // desktop on this computer doesn't spend the CPU on it.
   const gzip = compress({ encoding: "gzip", threshold: 2048 });
-  app.use("/api/*", (c, next) => (isMobileChannel(c) || isRelayed(c) ? gzip(c, next) : next()));
+  // Not the screenshots polled every second or two: pictures as base64 don't get smaller.
+  app.use("/api/*", (c, next) => ((isMobileChannel(c) || isRelayed(c)) && !c.req.path.endsWith("/screenshot") ? gzip(c, next) : next()));
 
   app.onError((err, c) => {
     const route = c.req.routePath;

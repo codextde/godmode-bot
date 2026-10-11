@@ -133,9 +133,17 @@ function timeoutFor(bytes: number): number {
 const verified = new Set<string>();
 /** Probes on their way, shared by the requests that wait for the same address. */
 const probing = new Map<string, Promise<true | ApiError | null>>();
-/** Addresses that didn't answer lately: skipped for a while instead of waiting out the probe's timeout on every request. */
+/**
+ * Addresses whose probe didn't answer lately. They are skipped for a while — but only while another address is known to
+ * answer, so a hiccup never makes the phone give up on the only way to the computer.
+ */
 const unreachable = new Map<string, number>();
 const UNREACHABLE_FOR_MS = 20_000;
+
+/** One of the addresses after `index` answered as the computer and still counts as reachable. */
+function laterAnswers(bases: string[], index: number, instanceId: string): boolean {
+  return bases.slice(index + 1).some((base) => verified.has(`${instanceId} ${base}`));
+}
 
 /**
  * Does this address answer as the paired computer? Asked (without the key) before the key goes to an address, so an
@@ -181,20 +189,16 @@ export async function reachableBase(connection: Connection): Promise<string | Ap
   let refused: ApiError | null = null;
   const bases = addressOrder(connection);
   for (const [i, base] of bases.entries()) {
-    const found = await isInstance(base, connection.instance.id, i < bases.length - 1);
+    const found = await isInstance(base, connection.instance.id, laterAnswers(bases, i, connection.instance.id));
     if (found === true) return base;
     refused ??= found;
   }
   return refused;
 }
 
-/** Asks this address for the computer again before its next use; `down`: it just didn't answer, so try the others first. */
-export function forget(base: string, down = false) {
-  for (const key of verified) {
-    if (!key.endsWith(` ${base}`)) continue;
-    verified.delete(key);
-    if (down) unreachable.set(key, Date.now() + UNREACHABLE_FOR_MS);
-  }
+/** Asks this address for the computer again before its next use. */
+export function forget(base: string) {
+  for (const key of verified) if (key.endsWith(` ${base}`)) verified.delete(key);
 }
 
 /** Every address gets a fresh chance (the app came back, the network changed, the human pulled to refresh). */
@@ -217,7 +221,7 @@ export async function request<T>(method: string, path: string, body?: unknown, m
   let refused: ApiError | null = null;
   const bases = addressOrder(connection);
   for (const [i, base] of bases.entries()) {
-    const found = await isInstance(base, connection.instance.id, i < bases.length - 1);
+    const found = await isInstance(base, connection.instance.id, laterAnswers(bases, i, connection.instance.id));
     if (found !== true) {
       refused ??= found;
       continue;
@@ -226,7 +230,7 @@ export async function request<T>(method: string, path: string, body?: unknown, m
     try {
       res = await send(base + path, { method, headers, body: payload }, timeout);
     } catch {
-      forget(base, true);
+      forget(base);
       if (method === "GET") continue;
       throw new ApiError(0, NO_ANSWER_MESSAGE, "timeout");
     }

@@ -8,7 +8,7 @@ import { queryClient } from "./query";
  * start shows them at once and refreshes them behind. Chats themselves, settings and live pictures are not kept. The
  * file is in the app's cache folder: not backed up, and gone with the pairing.
  */
-const KEPT = new Set(["bootstrap", "workspaces", "agents", "conversations", "tasks", "routines", "human-tasks", "questions", "missing-logins", "browser-profiles", "vms", "models"]);
+const KEPT = new Set(["workspaces", "agents", "conversations", "tasks", "routines", "human-tasks", "questions", "missing-logins", "browser-profiles", "vms", "models"]);
 const VERSION = 1;
 const MAX_AGE_MS = 7 * 24 * 3600_000;
 const SAVE_AFTER_MS = 3000;

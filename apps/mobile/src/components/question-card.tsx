@@ -1,5 +1,6 @@
 import { format } from "date-fns";
-import { createContext, useContext, useState } from "react";
+import { useRecyclingState } from "@shopify/flash-list";
+import { createContext, useContext } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from "react-native";
 import type { AnswerQuestionInput, MessageBlock } from "@godmode/shared";
 import { Icon } from "./icon";
@@ -46,9 +47,10 @@ export async function answerQuestion(id: string, input: AnswerQuestionInput, con
 export function QuestionCard({ question: q, streaming }: { question: QuestionBlock; streaming?: boolean }) {
   const c = useColors();
   const scope = useContext(ChatScope);
-  const [pressed, setPressed] = useState<string | null>(null);
-  const [noting, setNoting] = useState(false);
-  const [note, setNote] = useState("");
+  // Rows are reused for other messages while scrolling: a note typed for one approval must not show up in the next.
+  const [pressed, setPressed] = useRecyclingState<string | null>(null, [q.id]);
+  const [noting, setNoting] = useRecyclingState(false, [q.id]);
+  const [note, setNote] = useRecyclingState("", [q.id]);
 
   const approval = q.kind === "approval";
   const open = q.status === "open";

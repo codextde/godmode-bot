@@ -1,4 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
+import { Image } from "expo-image";
 import { Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -43,6 +44,7 @@ export default function RootLayout() {
     if (!deviceId) {
       queryClient.clear();
       forgetQueries();
+      void Image.clearDiskCache().catch(() => undefined);
       return;
     }
     const stopRealtime = startRealtime();

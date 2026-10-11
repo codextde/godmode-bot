@@ -355,8 +355,7 @@ function duration(ms: number): string {
 
 const Steps = memo(function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
   const c = useColors();
-  const first = steps[0];
-  const [open, setOpen] = useRecyclingState(false, [first?.type === "tool_use" ? first.id : first?.text.slice(0, 24)]);
+  const [open, setOpen] = useRecyclingState(false, [steps.find((s) => s.type === "tool_use")?.id ?? (steps[0]?.type === "thinking" ? steps[0].text.slice(0, 40) : "")]);
   const tools = steps.filter((s): s is Extract<Step, { type: "tool_use" }> => s.type === "tool_use");
   const latest = tools[tools.length - 1];
   const label = latest ? toolLabel(latest) : null;

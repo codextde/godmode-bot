@@ -16,9 +16,15 @@ const fetching = new Map<string, Set<Arrived>>();
 
 export const isPending = (m: Message) => m.id.startsWith("pending-");
 
-/** A stored message into a chat's list; the optimistic copy of a message the human just sent goes. */
-export function mergeMessage(messages: Message[], message: Message): Message[] {
+/**
+ * A stored message into a chat's list; the optimistic copy of a message the human just sent goes. `windowed`: older
+ * messages exist that aren't loaded, so one from before the loaded ones stays out (its page brings it) instead of
+ * landing on top with a hole behind it.
+ */
+export function mergeMessage(messages: Message[], message: Message, windowed = false): Message[] {
   if (messages.some((m) => m.id === message.id)) return messages.map((m) => (m.id === message.id ? message : m));
+  const oldest = messages.find((m) => !isPending(m));
+  if (windowed && oldest && message.createdAt < oldest.createdAt) return messages;
   let rest = messages;
   if (message.role === "user") {
     const optimistic = rest.findIndex((m) => isPending(m) && m.content.trim() === message.content.trim());
@@ -34,7 +40,7 @@ export function mergeMessage(messages: Message[], message: Message): Message[] {
 export function upsertMessage(message: Message) {
   for (const arrived of fetching.get(message.conversationId) ?? []) arrived.messages.set(message.id, message);
   queryClient.setQueryData<ConversationWithMessages>(qk.conversation(message.conversationId), (old) =>
-    old ? { ...old, messages: mergeMessage(old.messages, message) } : old,
+    old ? { ...old, messages: mergeMessage(old.messages, message, !!old.hasMore) } : old,
   );
 }
 
@@ -67,10 +73,12 @@ export async function fetchConversation(id: string): Promise<ConversationWithMes
           hasMore = old.hasMore ?? false;
         }
       }
-      const sent = new Set(messages.filter((m) => m.role === "user").slice(-5).map((m) => m.content.trim()));
-      messages = [...messages, ...old.messages.filter((m) => isPending(m) && !sent.has(m.content.trim()))];
+      // A message still on its way out stays until the computer's copy of it is in the answer.
+      const had = new Set(old.messages.map((m) => m.id));
+      const landed = new Set(messages.filter((m) => m.role === "user" && !had.has(m.id)).map((m) => m.content.trim()));
+      messages = [...messages, ...old.messages.filter((m) => isPending(m) && !landed.has(m.content.trim()))];
     }
-    for (const message of arrived.messages.values()) messages = mergeMessage(messages, message);
+    for (const message of arrived.messages.values()) messages = mergeMessage(messages, message, hasMore);
     return { ...fresh, messages, hasMore, queue: arrived.queue ? withPending(id, arrived.queue) : fresh.queue };
   } finally {
     waiting.delete(arrived);

@@ -24,8 +24,9 @@ export function ScreenTile({ screen, style, compact }: { screen: LiveScreen; sty
   const live = isLive(screen);
   const stream = useStreamFrame(screen, focused && live);
   const vmShot = useVmFrame(screen.kind === "vm" ? screen.vm : null, focused && live, compact ? 5000 : 3000);
-  // A connected phone shows its screen even while no agent is on it, at a slower pace.
-  const phoneShot = useAndroidFrame(screen.kind === "android" ? screen.device : null, focused, live ? 3000 : 8000);
+  // A phone agents use shows its screen: live while one is on it, else one picture when the tab opens.
+  const phone = screen.kind === "android" && (screen.device.busy || screen.device.assignments.length > 0) ? screen.device : null;
+  const phoneShot = useAndroidFrame(phone, focused, live ? 3000 : false);
   const frame = screen.kind === "vm" ? vmShot.data : screen.kind === "android" ? phoneShot.data : stream;
   const uri = frameUri(frame);
   const subtitle =

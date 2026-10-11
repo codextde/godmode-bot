@@ -121,10 +121,7 @@ const conversationLists = { queryKey: qk.conversations, predicate: (q: { queryKe
 
 const soon = new Map<string, ReturnType<typeof setTimeout>>();
 
-/**
- * Refetch once a burst of events is over: a run's start, its messages and its end each touch the same lists. A fetch on
- * its way keeps going instead of starting over with every event.
- */
+/** Refetch once a burst of events is over: a run's start, its messages and its end each touch the same lists. */
 function refreshSoon(filters: InvalidateQueryFilters & { queryKey: readonly unknown[] }) {
   const id = JSON.stringify(filters.queryKey) + (filters.predicate ? ":lists" : "");
   if (soon.has(id)) return;
@@ -132,9 +129,23 @@ function refreshSoon(filters: InvalidateQueryFilters & { queryKey: readonly unkn
     id,
     setTimeout(() => {
       soon.delete(id);
-      void queryClient.invalidateQueries(filters, { cancelRefetch: false });
+      // A fetch on its way started before the event: let it land (restarting it with every event could keep a slow
+      // one from ever finishing), then ask again.
+      if (queryClient.isFetching(filters) > 0) return refreshSoon(filters);
+      void queryClient.invalidateQueries(filters);
     }, 350),
   );
+}
+
+/**
+ * Patch cached lists from an event. A fetch of one that is on its way started before the event and would land without
+ * it: that one is cancelled and fetched again afterwards.
+ */
+async function patchLists(filters: { queryKey: readonly unknown[] }, patch: () => void) {
+  const fetching = queryClient.isFetching(filters) > 0;
+  if (fetching) await queryClient.cancelQueries(filters);
+  patch();
+  if (fetching) void queryClient.invalidateQueries(filters);
 }
 
 /** A ticket from its event into every cached board it belongs on, without fetching the boards again. */
@@ -156,7 +167,7 @@ function handle(event: ServerEvent) {
   switch (event.type) {
     case "run.started":
       live.runStarted(event.run);
-      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) }, { cancelRefetch: false });
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
       refreshSoon(conversationLists);
       refreshSoon({ queryKey: qk.runs });
       break;
@@ -185,7 +196,7 @@ function handle(event: ServerEvent) {
       noteQueue(event.conversationId, event.queue);
       break;
     case "conversation.updated":
-      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) }, { cancelRefetch: false });
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
       refreshSoon(conversationLists);
       break;
     case "conversation.deleted":
@@ -200,7 +211,7 @@ function handle(event: ServerEvent) {
       queryClient.setQueryData<Agent[]>(qk.agents, (old) => old?.filter((a) => a.id !== event.id));
       break;
     case "task.updated":
-      upsertTask(event.task);
+      void patchLists({ queryKey: [...qk.tasks, "list"] }, () => upsertTask(event.task));
       refreshSoon({ queryKey: qk.bootstrap });
       break;
     case "task.event": {
@@ -255,13 +266,15 @@ function handle(event: ServerEvent) {
     case "question.created":
     case "question.updated": {
       const q = event.question;
-      queryClient.setQueriesData<AgentQuestion[]>({ queryKey: qk.questions }, (list) =>
-        Array.isArray(list) && list.some((x) => x.id === q.id) ? list.map((x) => (x.id === q.id ? q : x)) : list,
-      );
+      // The lists are of open questions: a settled one leaves at once.
+      queryClient.setQueriesData<AgentQuestion[]>({ queryKey: qk.questions }, (list) => {
+        if (!Array.isArray(list) || !list.some((x) => x.id === q.id)) return list;
+        return q.status === "open" ? list.map((x) => (x.id === q.id ? q : x)) : list.filter((x) => x.id !== q.id);
+      });
       refreshSoon({ queryKey: qk.questions });
       refreshSoon({ queryKey: qk.bootstrap });
       refreshSoon({ queryKey: qk.agents });
-      void queryClient.invalidateQueries({ queryKey: qk.conversation(q.conversationId) }, { cancelRefetch: false });
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(q.conversationId) });
       refreshSoon(conversationLists);
       break;
     }
@@ -287,8 +300,8 @@ function clearTimers() {
 }
 
 let connecting = false;
-/** When the open socket last went away (0 = it never was open). */
-let closedAt = 0;
+/** The socket was open before in this pairing: the next open is a reconnect. */
+let wasOpen = false;
 
 function scheduleReconnect() {
   if (!running) return;
@@ -326,10 +339,10 @@ async function connect() {
     replaySubscriptions();
     if (viewing) sendView();
     void catchUp();
-    // What was fetched before the link dropped may have missed events; what came after is current. Nothing on the first
-    // connect: every screen has just fetched its own.
-    const since = closedAt;
-    if (since) void queryClient.invalidateQueries({ predicate: (q) => q.state.dataUpdatedAt < since }, { cancelRefetch: false });
+    // Events were missed while the link was down, so everything is asked again (lists are small and chats come as a
+    // window). Not on the first connect: every screen has just fetched its own.
+    if (wasOpen) void queryClient.invalidateQueries();
+    wasOpen = true;
     pingTimer = setInterval(() => sendEvent({ type: "ping" }), 25_000);
   };
   ws.onmessage = (msg) => {
@@ -342,7 +355,6 @@ async function connect() {
   ws.onclose = (e) => {
     if (socket !== ws) return;
     socket = null;
-    closedAt = Date.now();
     clearTimers();
     // Ask again before reconnecting: the gateway may have lost the computer while Tailscale still reaches it.
     forget(base);
@@ -369,7 +381,6 @@ function onAppState(state: AppStateStatus) {
   } else if (state === "background" && socket) {
     const ws = socket;
     socket = null;
-    closedAt = Date.now();
     clearTimers();
     ws.close();
     useLive.getState().setStatus("offline");
@@ -380,7 +391,7 @@ function onAppState(state: AppStateStatus) {
 export function startRealtime(): () => void {
   running = true;
   attempt = 0;
-  closedAt = 0;
+  wasOpen = false;
   void connect();
   const sub = AppState.addEventListener("change", onAppState);
   return () => {

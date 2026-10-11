@@ -46,7 +46,7 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
   const events = useQuery({ queryKey: qk.taskEvents(task.id), queryFn: () => api.tasks.events(task.id) });
   const [all, setAll] = useState(false);
   // A computer on an older Godmode keeps no timeline: who filed it is all there is to show.
-  const none = events.error instanceof ApiError && events.error.status === 404;
+  const none = events.error instanceof ApiError && (events.error.status === 404 || events.error.code === "device_forbidden");
   const list = events.data;
   const hidden = all || !list ? 0 : Math.max(0, list.length - SHOWN);
   const shown = useMemo(() => (list && hidden ? list.slice(hidden) : (list ?? [])), [list, hidden]);

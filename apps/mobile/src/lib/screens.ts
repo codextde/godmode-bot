@@ -108,7 +108,7 @@ export function useVmFrame(vm: Vm | null, active = true, intervalMs = 2500) {
 }
 
 /** A connected Android phone's screen, polled while visible. */
-export function useAndroidFrame(device: AndroidDevice | null, active = true, intervalMs = 2500) {
+export function useAndroidFrame(device: AndroidDevice | null, active = true, intervalMs: number | false = 2500) {
   return useQuery({
     queryKey: qk.androidScreen(device?.id ?? "none"),
     queryFn: async (): Promise<Frame> => {

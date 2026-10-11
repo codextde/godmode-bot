@@ -1309,7 +1309,7 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   conversations (pause, continue, their follow-up), messages (with files) and the message queue (edit, remove, send
   now), questions (list, answer without files), tasks (approve, their timeline) and their attachments (upload and read),
   runs (list, cancel), routines (run, enable), browser profiles (launch,
-  input), computer input, VMs (list, screenshot, start/stop, input), Android phones (list and screenshot only),
+  input), computer input, VMs (list, screenshot, start/stop, input), Android phones (the list, and a screenshot of the ones an agent or a chat uses),
   notifications, missing logins and
   `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are restricted too: a phone may
   pick a chat's model, effort and Ultracode but can't set its folder, VM, browser, shared screen or instructions, or

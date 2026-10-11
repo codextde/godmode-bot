@@ -235,7 +235,8 @@ export default function Chat() {
     api.conversations
       .update(id, patch)
       .then((next) => {
-        queryClient.setQueryData<ConversationWithMessages>(qk.conversation(id), (old) => (old ? { ...old, ...next } : old));
+        // Only what changed: a runner's chat answers with every message.
+        queryClient.setQueryData<ConversationWithMessages>(qk.conversation(id), (old) => (old ? { ...old, title: next.title, pinned: next.pinned, archived: next.archived } : old));
         void queryClient.invalidateQueries({ queryKey: qk.conversations, predicate: (q) => q.queryKey[1] !== "detail" });
         return true;
       })
@@ -289,11 +290,11 @@ export default function Chat() {
         case "intro":
           return agent ? <Intro agent={agent} conversationId={id} running={!!runId} /> : null;
         case "earlier":
-          return <Earlier />;
+          return <Earlier conversationId={id} />;
         case "user":
           return <UserMessage message={item.message} />;
         case "live":
-          return <LiveMessage conversationId={id} />;
+          return <LiveMessage conversationId={id} runId={runId} />;
         default:
           return <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} />;
       }
@@ -404,8 +405,11 @@ export default function Chat() {
 }
 
 /** The answer being written: it alone renders with every word that arrives. */
-const LiveMessage = memo(function LiveMessage({ conversationId }: { conversationId: string }) {
-  const blocks = useLive((s) => s.drafts[conversationId]?.blocks ?? NO_BLOCKS);
+const LiveMessage = memo(function LiveMessage({ conversationId, runId }: { conversationId: string; runId?: string }) {
+  const blocks = useLive((s) => {
+    const draft = s.drafts[conversationId];
+    return draft && draft.runId === runId ? draft.blocks : NO_BLOCKS;
+  });
   return <AssistantMessage blocks={blocks} streaming />;
 });
 
@@ -413,16 +417,25 @@ function ChatLiveStrip({ screen, runId }: { screen: LiveScreen; runId: string })
   return <LiveStrip screen={screen} activity={useRunActivity(runId)} />;
 }
 
-/** At the top while older messages exist: they load when the list gets there. */
-function Earlier() {
+/** At the top while older messages exist: they load when the list gets there, or with a tap when that failed. */
+function Earlier({ conversationId }: { conversationId: string }) {
   const c = useColors();
+  const [failed, setFailed] = useState(false);
+  const load = () => {
+    setFailed(false);
+    loadEarlier(conversationId).catch(() => setFailed(true));
+  };
+  // The list only says once that its start was reached: this row asks for the page itself when it appears.
+  useEffect(() => {
+    loadEarlier(conversationId).catch(() => setFailed(true));
+  }, [conversationId]);
   return (
-    <View style={styles.earlier} accessibilityRole="progressbar" accessibilityLabel="Loading earlier messages">
-      <ActivityIndicator size="small" color={c.textFaint} />
+    <Pressable onPress={load} disabled={!failed} accessibilityRole="button" accessibilityLabel={failed ? "Load earlier messages" : "Loading earlier messages"} style={styles.earlier}>
+      {failed ? <Icon name="refresh" size={12} color={c.textMuted} /> : <ActivityIndicator size="small" color={c.textFaint} />}
       <T variant="caption" muted>
-        Earlier messages
+        {failed ? "Couldn't load earlier messages. Tap to try again" : "Earlier messages"}
       </T>
-    </View>
+    </Pressable>
   );
 }
 
