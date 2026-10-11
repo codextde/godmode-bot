@@ -1665,20 +1665,22 @@ have passed ("is going to Singapore in July" → "went to Singapore in July 2026
   caught up on the next tick. An agent is due with at least `minNewExchanges` (default 3) new exchanges — finished
   chat, automation, delegated and API runs; checks and dreams don't count — or, without them, when its last dream is
   `refreshDays` (default 7) old and `MEMORY.md` mentions dates. An agent is also due when `MEMORY.md` is over
-  `maxMemoryChars` and was written since its last dream (a dream that couldn't shorten it isn't repeated over the same
-  text). Scheduled dreams only start on idle agents (no run in the last 10 minutes; retried on later ticks). "Dream
+  `maxMemoryChars` and isn't what its last dream left under that limit (`dreams.memory_digest`, `memory_target`: a
+  dream that couldn't shorten it isn't repeated over the same text, an undo isn't redone, and a lowered limit counts as
+  news). Scheduled dreams only start on idle agents (no run in the last 10 minutes; retried on later ticks). "Dream
   now" (`POST /api/agents/:id/dreams`) starts one right away.
 * **Early** (reason `size`): on the ticks between two scheduled times, an idle agent whose `MEMORY.md` outgrew what a
-  chat loads (its tasks start with the end of it missing) dreams at once, at most every 6 hours and not after the human
-  undid its last dream. A run someone waits for pauses it like a scheduled dream, but it isn't retried right away: the
-  next early try is hours later, or the scheduled dream.
+  chat loads (its tasks start with the end of it missing) dreams at once. Only when its latest dream succeeded, is at
+  least 6 hours old and got the memory under what a chat loads: after a dream that failed, was paused, cancelled or
+  undone, or couldn't shorten it, the scheduled dream takes over. A run someone waits for pauses an early dream like a
+  scheduled one, but it isn't retried when the agent is idle. Not when chats don't load the memory (`injectMemory`).
 * **How**: a dream is a run with trigger `dream` in the agent's archived `origin = 'dream'` conversation (nobody else
   can post there), with a fresh session, cwd = the agent repo, the dreaming model (`dreaming.model`, default
   Opus 5.5; empty = the agent's own), `--tools Read,Write,Edit,Glob,Grep`, and an MCP config with only the Godmode gateway, which lists just
   `memory_dream_report` and, when it tidies, `workspace_tidy` (other tools are refused). The exchanges since the cursor (`MAX(dreams.source_to)` of
   successful or undone dreams) are handed over as a digest of the already redacted run prompts and answers, grouped by
-  conversation, in `workspace/tmp/dreams/<id>.md` (git-ignored, removed afterwards; 120k characters per dream — older
-  activity first, the rest waits for the next dream). No transcript, no missing-login detection, no "last active".
+  conversation, in `workspace/tmp/dreams/<id>.md` (git-ignored, removed afterwards; 60k characters per dream — messages
+  are shortened first, then the newest exchanges win). No transcript, no missing-login detection, no "last active".
 * **Exclusive**: a dream owns the agent's memory — the runner starts no other run of the agent while it runs, and it
   waits for the agent's running runs (capped at 30 minutes). A run someone waits for (chat, delegation, API) pauses a
   dream the agent started by itself (scheduled or early): it is cancelled and rolled back, and a scheduled one is

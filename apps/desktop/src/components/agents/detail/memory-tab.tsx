@@ -327,6 +327,7 @@ function FileEditor({
       qc.setQueryData(qk.agentFile(agentId, path), { path, content });
       qc.invalidateQueries({ queryKey: qk.agentCommits(agentId) });
       qc.invalidateQueries({ queryKey: qk.agentFiles(agentId, parentOf(path)) });
+      if (path === "MEMORY.md") qc.invalidateQueries({ queryKey: qk.agentDreams(agentId) });
       setDraft(null);
       toast.success(`Saved ${nameOf(path)}`);
     },

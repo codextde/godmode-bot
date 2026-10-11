@@ -56,16 +56,19 @@ export default function Memory() {
               onChange={(tidyWorkspace) => void patchSettings({ memory: { dreaming: { tidyWorkspace } } })}
             />
             <PickerRow icon="sparkles" title="Model" value={dreamModel || "agent"} options={modelOptions} onChange={(v) => void patchSettings({ memory: { dreaming: { model: v === "agent" ? "" : v } } })} />
-            <StepperRow
-              icon="brain"
-              title="Memory size"
-              value={d.maxMemoryChars ?? 8000}
-              min={2000}
-              max={40000}
-              steps={[2000, 4000, 6000, 8000, 10000, 12000, 16000, 24000, 40000]}
-              format={(n) => `${n.toLocaleString()} chars`}
-              onChange={(maxMemoryChars) => void patchSettings({ memory: { dreaming: { maxMemoryChars } } })}
-            />
+            {/* An older Godmode on the computer has no size limit to set. */}
+            {d.maxMemoryChars === undefined ? null : (
+              <StepperRow
+                icon="brain"
+                title="Memory size"
+                value={d.maxMemoryChars}
+                min={2000}
+                max={40000}
+                steps={[2000, 4000, 6000, 8000, 10000, 12000, 16000, 24000, 40000]}
+                format={(n) => `${n.toLocaleString()} chars`}
+                onChange={(maxMemoryChars) => void patchSettings({ memory: { dreaming: { maxMemoryChars } } })}
+              />
+            )}
             <StepperRow
               icon="chats"
               title="New exchanges needed"

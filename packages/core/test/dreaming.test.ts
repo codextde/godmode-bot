@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, truncateSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, Dream, DreamDetail, DreamOverview, Settings } from "@godmode/shared";
 import { argValue, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { getMeta, get, insert, setMeta } from "../src/db";
+import { MIGRATIONS } from "../src/db/migrations";
 import { getSettings, updateSettings } from "../src/services/settings";
 import { createConversation, getConversation, sendMessage, transcriptPath } from "../src/services/conversations";
 import { writeAgentFile } from "../src/agents/service";
@@ -32,7 +34,7 @@ import {
   revertDream,
   startDream,
 } from "../src/memory/dreaming";
-import { diffSnapshots, isMemoryPath, memoryForPrompt, memoryOutgrew, snapshotMemory } from "../src/memory/files";
+import { diffSnapshots, isMemoryPath, memoryChars, memoryForPrompt, memoryOutgrew, snapshotMemory } from "../src/memory/files";
 import { applyTidy, canUndoWorkspace, undoWorkspace, workspaceInventory, workspacePath } from "../src/memory/workspace";
 
 let env: TestEnv;
@@ -139,11 +141,17 @@ describe("memory files", () => {
     expect(cut.text.endsWith("keeping")).toBe(true);
     expect(cut.chars).toBe(9 + 50 * 23 - 1);
     expect(memoryForPrompt(agent.repoPath)!.truncated).toBe(false);
-    // Longer than a size, and written since a moment: what makes a dream due.
-    expect(memoryOutgrew(agent.repoPath, 500, null)).toBe(true);
-    expect(memoryOutgrew(agent.repoPath, 5_000, null)).toBe(false);
-    expect(memoryOutgrew(agent.repoPath, 500, new Date(Date.now() - 60_000).toISOString())).toBe(true);
-    expect(memoryOutgrew(agent.repoPath, 500, new Date(Date.now() + 60_000).toISOString())).toBe(false);
+    expect(memoryOutgrew(agent.repoPath, 500)).toBe(true);
+    expect(memoryOutgrew(agent.repoPath, 5_000)).toBe(false);
+    // Too large to read whole: still counted and loaded from its start, never taken for empty.
+    writeFileSync(join(agent.repoPath, "MEMORY.md"), `# Memory\n${"- a fact worth keeping\n".repeat(13_000)}`);
+    expect(memoryChars(agent.repoPath)).toBe(9 + 13_000 * 23);
+    expect(memoryOutgrew(agent.repoPath, 12_000)).toBe(true);
+    const head = memoryForPrompt(agent.repoPath)!;
+    expect(head).toMatchObject({ truncated: true, chars: 9 + 13_000 * 23 });
+    expect(head.text.startsWith("# Memory\n- a fact")).toBe(true);
+    expect(head.text.length).toBeLessThanOrEqual(12_000);
+    expect(head.text.endsWith("keeping")).toBe(true);
     writeFileSync(join(agent.repoPath, "MEMORY.md"), "  \n");
     expect(memoryForPrompt(agent.repoPath)).toBeNull();
   });
@@ -320,6 +328,15 @@ describe("dreams end to end (fake claude)", () => {
     expect(readRepo(agent, "MEMORY.md")!.length).toBeLessThan(200);
     expect(dream.memoryChars!.after).toBe(readRepo(agent, "MEMORY.md")!.length);
     expect(dreamOverview(agent.id).memory).toEqual({ chars: dream.memoryChars!.after, target: 8_000, limit: 12_000 });
+
+    // It grows past what a chat loads again: an early dream, but only hours after one that went well.
+    const settings = getSettings();
+    writeFileSync(join(agent.repoPath, "MEMORY.md"), `# Memory\n${"- a line of memory\n".repeat(700)}`);
+    expect(memoryOverflowing(agent, settings, new Date(Date.now() + 3_600_000))).toBe(false);
+    expect(memoryOverflowing(agent, settings, new Date(Date.now() + 7 * 3_600_000))).toBe(true);
+    // Nothing is cut off when chats don't load the memory.
+    expect(memoryOverflowing(agent, { ...settings, memory: { ...settings.memory, injectMemory: false } }, new Date(Date.now() + 7 * 3_600_000))).toBe(false);
+    writeFileSync(join(agent.repoPath, "MEMORY.md"), "# Memory\n- short again\n");
   });
 
   test("a dream that can't shorten MEMORY.md is let go, and isn't repeated over the same text", async () => {
@@ -343,11 +360,14 @@ describe("dreams end to end (fake claude)", () => {
     const later = new Date(Date.now() + DAY);
     expect(dreamDue(agent, settings, later)).toBe(false);
     expect(memoryOverflowing(agent, settings, later)).toBe(false);
-    // Written again: early only after a pause of some hours, at night in any case.
-    await new Promise((r) => setTimeout(r, 20));
+    // The same text written again changes nothing; a lower limit is news.
+    writeFileSync(join(agent.repoPath, "MEMORY.md"), dream.fileChanges[0]!.after!);
+    expect(dreamDue(agent, settings, later)).toBe(false);
+    const tight = { ...settings, memory: { ...settings.memory, dreaming: { ...settings.memory.dreaming, maxMemoryChars: 6_000 } } };
+    expect(dreamDue(agent, tight, later)).toBe(true);
+    // New text: due at the scheduled time. Not early — the last dream couldn't get it under what a chat loads.
     writeFileSync(join(agent.repoPath, "MEMORY.md"), `# Memory\n${"- another line of memory\n".repeat(700)}`);
-    expect(memoryOverflowing(agent, settings, new Date(Date.now() + 3_600_000))).toBe(false);
-    expect(memoryOverflowing(agent, settings, later)).toBe(true);
+    expect(memoryOverflowing(agent, settings, later)).toBe(false);
     expect(dreamDue(agent, settings)).toBe(true);
     // Over what dreams keep it under, but all of it still loads: that waits for the scheduled dream.
     writeFileSync(join(agent.repoPath, "MEMORY.md"), `# Memory\n${"- a line of memory\n".repeat(500)}`);
@@ -355,11 +375,12 @@ describe("dreams end to end (fake claude)", () => {
     expect(dreamDue(agent, settings)).toBe(true);
     const roomy = { ...settings, memory: { ...settings.memory, dreaming: { ...settings.memory.dreaming, maxMemoryChars: 12_000 } } };
     expect(dreamDue(agent, roomy)).toBe(false);
-    // The human undid the last dream: nothing early.
+    // The human undid the last dream: what the undo put back isn't shortened again until it changes.
     writeFileSync(join(agent.repoPath, "MEMORY.md"), dream.fileChanges[0]!.after!);
     await revertDream(dream.id);
     expect(readRepo(agent, "MEMORY.md")!.length).toBeGreaterThan(12_000);
     expect(memoryOverflowing(agent, settings, later)).toBe(false);
+    expect(dreamDue(agent, settings, later)).toBe(false);
     writeFileSync(join(agent.repoPath, "MEMORY.md"), "# Memory\n- short again\n");
   });
 
@@ -917,16 +938,16 @@ describe("schedule", () => {
     const { run } = await sendMessage(conversationFor(agent, "Urgent"), { content: "quick question" });
     const paused = await dreamToEnd(early);
     expect(paused.status).toBe("paused");
-    expect(paused.error).toContain("it dreams again later");
+    expect(paused.error).toContain("its next scheduled dream takes over");
     expect(readRepo(agent, "MEMORY.md")).toBe(long);
     expect((await waitForRun(run.id, 20_000)).status).toBe("succeeded");
     expect(deferredDreams()).not.toContain(agent.id);
     setMeta("dreaming.lastSweepAt", new Date().toISOString());
     expect(await dreamTick(new Date(Date.now() + 15 * 60_000))).toEqual([]);
-    expect(memoryOverflowing(agent, getSettings(), new Date(Date.now() + 5 * 3_600_000))).toBe(false);
-    expect(memoryOverflowing(agent, getSettings(), new Date(Date.now() + 7 * 3_600_000))).toBe(true);
-    writeFileSync(join(agent.repoPath, "MEMORY.md"), "# Memory\n- short again\n");
     expect(memoryOverflowing(agent, getSettings(), new Date(Date.now() + 7 * 3_600_000))).toBe(false);
+    expect(dreamDue(agent)).toBe(true);
+    writeFileSync(join(agent.repoPath, "MEMORY.md"), "# Memory\n- short again\n");
+    expect(dreamDue(agent)).toBe(false);
   }, 30_000);
 
   test("the seed memory is not time-bound", async () => {
@@ -1013,6 +1034,25 @@ describe("routes", () => {
     expect(ok.status).toBe(200);
     expect(ok.data.memory.dreaming).toMatchObject({ cron: "30 2 * * *", model: "", enabled: true, minNewExchanges: 3 });
     updateSettings({ memory: { dreaming: { cron: "0 3 * * *", model: "claude-opus-5-5", maxMemoryChars: 8_000 } } });
+  });
+
+  test("saved settings with the old default dream on Opus; a model someone picked stays", () => {
+    const migration = MIGRATIONS.find((m) => m.name === "dream_memory_size")!;
+    const modelAfter = (saved: string) => {
+      const db = new Database(":memory:");
+      db.run("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL); CREATE TABLE dreams (id TEXT PRIMARY KEY)");
+      db.query("INSERT INTO settings (key, value) VALUES ('memory', ?), ('runner', ?)").run(saved, JSON.stringify({ model: "sonnet" }));
+      db.run(migration.sql);
+      const rows = db.query<{ key: string; value: string }, []>("SELECT key, value FROM settings").all();
+      db.close();
+      const value = (key: string) => JSON.parse(rows.find((r) => r.key === key)!.value) as { model?: string; dreaming?: { model: string; cron?: string } };
+      expect(value("runner").model).toBe("sonnet");
+      return value("memory").dreaming;
+    };
+    expect(modelAfter(JSON.stringify({ autoCommit: false, dreaming: { model: "sonnet", cron: "0 1 * * *" } }))).toEqual({ model: "claude-opus-5-5", cron: "0 1 * * *" });
+    expect(modelAfter(JSON.stringify({ dreaming: { model: "haiku" } }))!.model).toBe("haiku");
+    expect(modelAfter(JSON.stringify({ dreaming: { model: "" } }))!.model).toBe("");
+    expect(modelAfter(JSON.stringify({ autoCommit: false }))).toBeUndefined();
   });
 
   test("memory files can't be edited while the agent dreams", async () => {

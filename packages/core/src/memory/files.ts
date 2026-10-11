@@ -6,7 +6,7 @@
  * through the confined repository helpers.
  */
 import { createHash } from "node:crypto";
-import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, constants, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import type { DreamFileChange } from "@godmode/shared";
 import { memoryBudget } from "@godmode/shared";
@@ -61,26 +61,40 @@ export function memoryDigest(repoPath: string): string {
   return text === null ? "" : createHash("sha256").update(text).digest("hex").slice(0, 16);
 }
 
-/** Characters of MEMORY.md (0 when the agent has none). */
-export function memoryChars(repoPath: string): number {
-  return readMemory(repoPath)?.length ?? 0;
+/** Bytes of MEMORY.md (0 when the agent has none, or it isn't a plain file). */
+function memoryBytes(repoPath: string): number {
+  try {
+    const info = lstatSync(join(repoPath, MEMORY_FILE));
+    return info.isFile() ? info.size : 0;
+  } catch {
+    return 0;
+  }
 }
 
-/**
- * MEMORY.md is longer than `chars` and was written after `since` (null = ever). Looks at the file's size first, so
- * asking often costs next to nothing.
- */
-export function memoryOutgrew(repoPath: string, chars: number, since: string | null): boolean {
-  let info;
-  try {
-    info = lstatSync(join(repoPath, MEMORY_FILE));
-  } catch {
-    return false;
-  }
+/** Characters of MEMORY.md (0 when the agent has none). A file too large to read counts by its bytes. */
+export function memoryChars(repoPath: string): number {
+  return readMemory(repoPath)?.length ?? memoryBytes(repoPath);
+}
+
+/** MEMORY.md is longer than `chars`. Looks at the file's size first, so asking often costs next to nothing. */
+export function memoryOutgrew(repoPath: string, chars: number): boolean {
   // A character takes at least a byte.
-  if (!info.isFile() || info.size <= chars) return false;
-  if (since && info.mtimeMs <= new Date(since).getTime()) return false;
-  return memoryChars(repoPath) > chars;
+  return memoryBytes(repoPath) > chars && memoryChars(repoPath) > chars;
+}
+
+/** The start of a MEMORY.md that is too large to read whole. */
+function readMemoryHead(repoPath: string, chars: number): string | null {
+  let fd: number | null = null;
+  try {
+    fd = openSync(join(repoPath, MEMORY_FILE), constants.O_RDONLY | constants.O_NOFOLLOW);
+    const buf = Buffer.alloc(chars * 4);
+    const head = buf.subarray(0, readSync(fd, buf, 0, buf.length, 0));
+    return head.includes(0) ? null : head.toString("utf8");
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) closeSync(fd);
+  }
 }
 
 /** MEMORY.md as a run's system prompt gets it. `chars`: the length of the whole file. */
@@ -92,11 +106,14 @@ export interface PromptMemory {
 
 /** MEMORY.md for the system prompt: trimmed, and cut at a line break when it is longer than `limit`. */
 export function memoryForPrompt(repoPath: string, limit = memoryBudget(undefined).limit): PromptMemory | null {
-  const text = readMemory(repoPath)?.trim();
+  const whole = readMemory(repoPath);
+  const huge = whole === null && memoryBytes(repoPath) > MAX_SNAPSHOT_FILE;
+  const text = (huge ? readMemoryHead(repoPath, limit) : whole)?.trim();
   if (!text) return null;
-  if (text.length <= limit) return { text, truncated: false, chars: text.length };
+  const chars = huge ? memoryBytes(repoPath) : text.length;
+  if (!huge && text.length <= limit) return { text, truncated: false, chars };
   const cut = text.lastIndexOf("\n", limit);
-  return { text: text.slice(0, cut > limit / 2 ? cut : limit).trimEnd(), truncated: true, chars: text.length };
+  return { text: text.slice(0, cut > limit / 2 ? cut : limit).trimEnd(), truncated: true, chars };
 }
 
 /** MEMORY.md and the files under memory/ (recursively; hidden entries are ignored, symlinks never followed). */

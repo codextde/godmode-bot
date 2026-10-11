@@ -11,7 +11,9 @@
  * MEMORY.md is loaded into every run (runner/prompt.ts), so a dream also has to keep it small: under settings.memory.
  * dreaming.maxMemoryChars, with the details moved into memory/. The dream is told the measured size, and its report is
  * answered with what is still too much until it fits. A memory over that size is reason enough for the nightly dream,
- * and one that outgrew what a chat loads (one and a half times as much) dreams as soon as the agent is idle.
+ * and one that outgrew what a chat loads (one and a half times as much) dreams as soon as the agent is idle. Each
+ * finished dream notes the memory it left (dreams.memory_digest, memory_chars, memory_target): the same text under
+ * the same limit is not dreamt about twice for its size.
  *
  * A dream is a short run of its own (trigger "dream") in the agent's archived "Dreams" conversation: a fresh Claude
  * session with file tools only — no browser, computer or integrations — that owns the agent's memory while it runs
@@ -55,7 +57,19 @@ import { getSettings } from "../services/settings";
 import { onSettingsApplied } from "../services/runtime";
 import { audit } from "../services/audit";
 import { describeNow } from "../runner/prompt";
-import { MEMORY_FILE, canRestore, currentMemoryFile, diffSnapshots, memoryChars, memoryOutgrew, parseSnapshot, readMemory, restoreFiles, snapshotMemory } from "./files";
+import {
+  MEMORY_FILE,
+  canRestore,
+  currentMemoryFile,
+  diffSnapshots,
+  memoryChars,
+  memoryDigest,
+  memoryOutgrew,
+  parseSnapshot,
+  readMemory,
+  restoreFiles,
+  snapshotMemory,
+} from "./files";
 import { exhaustedBudget } from "../services/budgets";
 import { licenseBlocks } from "../license/license";
 import { MAX_TIDY_CHANGES, RECENT_DAYS, applyTidy, canUndoWorkspace, undoWorkspace, workspaceInventory, type TidyOperation } from "./workspace";
@@ -216,6 +230,31 @@ function lastDreamAt(agentId: string): string | null {
   return (
     get<{ t: string | null }>("SELECT MAX(COALESCE(finished_at, created_at)) AS t FROM dreams WHERE agent_id = ? AND status IN ('succeeded', 'reverted')", agentId)
       ?.t ?? null
+  );
+}
+
+/**
+ * MEMORY.md is longer than `chars` and not what the agent's last dream left under this size limit: a dream that
+ * couldn't shorten it isn't repeated over the same text, and a lowered limit counts as news.
+ */
+function memoryToShorten(agent: Agent, chars: number, target: number): boolean {
+  if (!memoryOutgrew(agent.repoPath, chars)) return false;
+  const left = get<{ memory_digest: string | null; memory_target: number | null }>(
+    `SELECT memory_digest, memory_target FROM dreams WHERE agent_id = ? AND status IN ('succeeded', 'reverted')
+     ORDER BY COALESCE(finished_at, created_at) DESC, rowid DESC LIMIT 1`,
+    agent.id,
+  );
+  return !left || left.memory_target !== target || left.memory_digest !== memoryDigest(agent.repoPath);
+}
+
+/** Note the memory a finished (or undone) dream left. */
+function noteMemoryLeft(dreamId: string, repoPath: string) {
+  exec(
+    "UPDATE dreams SET memory_digest = ?, memory_chars = ?, memory_target = ? WHERE id = ?",
+    memoryDigest(repoPath),
+    memoryChars(repoPath),
+    memoryBudget(getSettings().memory.dreaming.maxMemoryChars).target,
+    dreamId,
   );
 }
 
@@ -697,13 +736,13 @@ export function onDreamRunFinished(run: Run): void {
       const movedBack = moves.length - stuck.length;
       moves = moves.filter((m) => stuck.includes(m.from));
       const why = paused
-        ? `Paused because the agent was needed — it dreams again ${row.reason === "size" ? "later" : "once it is idle"}`
+        ? `Paused because the agent was needed — ${row.reason === "size" ? "its next scheduled dream takes over" : "it dreams again once it is idle"}`
         : truncate(run.error ?? (status === "cancelled" ? "Cancelled" : "The dream failed"), 400);
       const undone = [restored.length && "memory", movedBack && "workspace"].filter(Boolean).join(" and ");
       error = undone ? `${why}. Its ${undone} changes were rolled back.` : why;
       if (kept.length) error += ` ${kept.map((c) => c.path).join(", ")} could not be restored — see the dream's changes.`;
       if (moves.length) error += ` ${moves.map((m) => `workspace/${m.to}`).join(", ")} could not be moved back.`;
-      // An early dream isn't chased through a busy day: its next try is hours away, or the scheduled dream.
+      // An early dream isn't chased through a busy day: the scheduled dream takes over.
       if (paused && row.reason !== "size") deferred.set(row.agent_id, Date.now());
     }
   } catch (err) {
@@ -721,6 +760,7 @@ export function onDreamRunFinished(run: Run): void {
     run.finishedAt ?? now(),
     row.id,
   );
+  if (status === "succeeded" && repoPath) noteMemoryLeft(row.id, repoPath);
   pruneDreams(row.agent_id);
   removeDigest(repoPath, row.id);
   if (status === "succeeded" && (kept.length || moves.length)) {
@@ -777,6 +817,8 @@ export async function revertDream(id: string, actor = "user"): Promise<Dream> {
   restoreFiles(agent.repoPath, changes);
   const stuck = undoWorkspace(agent.repoPath, moves);
   exec("UPDATE dreams SET status = 'reverted' WHERE id = ?", id);
+  // What the undo put back is the human's choice: it isn't dreamt about again for its size until it changes.
+  noteMemoryLeft(id, agent.repoPath);
   audit(actor, "dream.revert", id, { agentId: agent.id, files: changes.map((c) => c.path), moved: moves.length - stuck.length });
   if (stuck.length) log.warn(`undoing dream ${id}: ${stuck.length} workspace entries could not be moved back`);
   await commitAgentRepo(agent.id, `Undo dream of ${fmtTime(row.created_at)}`);
@@ -834,8 +876,8 @@ export function dreamDue(agent: Agent, settings: Settings = getSettings(), at = 
   if (!agent.enabled || activeDreamRow(agent.id) || starting.has(agent.id)) return false;
   const pending = pendingActivity(agent.id);
   if (pending.exchanges >= Math.max(1, Math.floor(s.minNewExchanges))) return true;
-  // Too long, and written since the last dream: a dream that couldn't shorten it isn't repeated over the same text.
-  if (memoryOutgrew(agent.repoPath, memoryBudget(s.maxMemoryChars).target, lastDreamAt(agent.id))) return true;
+  const { target } = memoryBudget(s.maxMemoryChars);
+  if (memoryToShorten(agent, target, target)) return true;
   if (s.refreshDays <= 0) return false;
   const last = lastDreamAt(agent.id) ?? agent.createdAt;
   if (at.getTime() - new Date(last).getTime() < s.refreshDays * 86_400_000) return false;
@@ -844,19 +886,26 @@ export function dreamDue(agent: Agent, settings: Settings = getSettings(), at = 
 }
 
 /**
- * MEMORY.md outgrew what a chat loads (tasks start with part of it missing), so the agent should dream before its
- * schedule — unless it dreamt in the last hours, or the human undid its last dream.
+ * MEMORY.md outgrew what a chat loads (tasks start with the end of it missing), so the agent should dream before its
+ * schedule. Only after a dream that went well, and hours after it: when the last one failed, was paused, cancelled or
+ * undone, or couldn't get the memory under what a chat loads, the scheduled dream takes over.
  */
 export function memoryOverflowing(agent: Agent, settings: Settings = getSettings(), at = new Date()): boolean {
-  if (!agent.enabled || activeDreamRow(agent.id) || starting.has(agent.id)) return false;
-  const latest = get<{ status: DreamStatus; created_at: string }>(
-    "SELECT status, created_at FROM dreams WHERE agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
+  if (!settings.memory.injectMemory || !agent.enabled || activeDreamRow(agent.id) || starting.has(agent.id)) return false;
+  const { target, limit } = memoryBudget(settings.memory.dreaming.maxMemoryChars);
+  const latest = get<{ status: DreamStatus; created_at: string; memory_chars: number | null }>(
+    "SELECT status, created_at, memory_chars FROM dreams WHERE agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
     agent.id,
   );
-  if (latest?.status === "reverted") return false;
-  if (latest && at.getTime() - new Date(latest.created_at).getTime() < EARLY_DREAM_EVERY_MS) return false;
-  return memoryOutgrew(agent.repoPath, memoryBudget(settings.memory.dreaming.maxMemoryChars).limit, lastDreamAt(agent.id));
+  if (latest) {
+    if (latest.status !== "succeeded" || (latest.memory_chars ?? 0) > limit) return false;
+    if (at.getTime() - new Date(latest.created_at).getTime() < EARLY_DREAM_EVERY_MS) return false;
+  }
+  return memoryToShorten(agent, limit, target);
 }
+
+/** Early dreams that couldn't be started (agent id → when, ms): not tried again on every tick. */
+const earlyFailed = new Map<string, number>();
 
 /** The agent runs nothing and its last run ended at least IDLE_MS ago. */
 export function agentIdle(agentId: string, at = new Date()): boolean {
@@ -925,11 +974,13 @@ async function sweepOverflowing(at: Date): Promise<string[]> {
   const started: string[] = [];
   for (const agent of listAgents({ workspaceId: "all" })) {
     try {
-      if (deferred.has(agent.id) || !memoryOverflowing(agent, settings, at) || !agentIdle(agent.id, at)) continue;
+      if (deferred.has(agent.id) || at.getTime() - (earlyFailed.get(agent.id) ?? -Infinity) < EARLY_DREAM_EVERY_MS) continue;
+      if (!memoryOverflowing(agent, settings, at) || !agentIdle(agent.id, at)) continue;
       if (exhaustedBudget(agent) || licenseBlocks()) continue;
       await startDream(agent.id, "size");
       started.push(agent.id);
     } catch (err) {
+      earlyFailed.set(agent.id, at.getTime());
       log.warn(`could not start an early dream for ${agent.slug}`, err);
     }
   }
@@ -1084,5 +1135,6 @@ export function __resetDreamingForTests() {
   deferred.clear();
   preempted.clear();
   sizeReminders.clear();
+  earlyFailed.clear();
 }
 

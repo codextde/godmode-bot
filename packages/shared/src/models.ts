@@ -740,7 +740,8 @@ export interface Run {
 /** `size`: MEMORY.md outgrew what a chat loads, so the agent dreamt before its schedule. */
 export type DreamReason = "schedule" | "manual" | "size";
 /**
- * `paused`: a scheduled dream gave way to a run someone waits for (rolled back, retried when the agent is idle) ·
+ * `paused`: a dream the agent started by itself gave way to a run someone waits for (rolled back; a scheduled one is
+ * retried when the agent is idle, after an early one the next scheduled dream takes over) ·
  * `reverted`: the human undid the dream's changes. Failed, cancelled and paused dreams changed nothing (rolled back).
  */
 export type DreamStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "paused" | "reverted";

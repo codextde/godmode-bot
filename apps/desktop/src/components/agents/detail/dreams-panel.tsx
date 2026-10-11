@@ -93,7 +93,8 @@ export function useDreamingNow(agentId: string): boolean {
 export function DreamsPanel({ agent }: { agent: Agent }) {
   const qc = useQueryClient();
   const q = useDreamOverview(agent.id);
-  const dreaming = useSettings().data?.memory.dreaming;
+  const memorySettings = useSettings().data?.memory;
+  const dreaming = memorySettings?.dreaming;
   const [reviewing, setReviewing] = useState<Dream | null>(null);
   const [undoing, setUndoing] = useState<Dream | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -188,7 +189,9 @@ export function DreamsPanel({ agent }: { agent: Agent }) {
         {active && <DreamScan />}
       </div>
 
-      {o && o.memory.chars > 0 && <MemoryMeter memory={o.memory} agentName={agent.name} dreamsByItself={o.enabled && agent.enabled} dreaming={!!active} />}
+      {o && o.memory.chars > 0 && (
+        <MemoryMeter memory={o.memory} loaded={memorySettings?.injectMemory !== false} dreamsByItself={o.enabled && agent.enabled} dreaming={!!active} />
+      )}
 
       {o && (
         <Journal
@@ -269,7 +272,7 @@ function StatusLines({
             <time dateTime={lastAt.toISOString()} title={format(lastAt, "PPpp")}>
               {formatDistanceToNowStrict(lastAt, { addSuffix: true })}
             </time>
-            {last.status === "paused" && ` — it continues when ${agent.name} is idle`}
+            {last.status === "paused" && (last.reason === "size" ? " — the next scheduled dream takes over" : ` — it continues when ${agent.name} is idle`)}
             {last.status === "reverted" && " (undone)"}
           </span>
         ) : (
@@ -335,18 +338,19 @@ function StatusLines({
  */
 function MemoryMeter({
   memory: { chars, target, limit },
-  agentName,
+  loaded,
   dreamsByItself,
   dreaming,
 }: {
   memory: MemorySize;
-  agentName: string;
+  /** Chats load MEMORY.md (Settings → Memory). */
+  loaded: boolean;
   dreamsByItself: boolean;
   dreaming: boolean;
 }) {
-  const cut = chars > limit;
+  const cut = loaded && chars > limit;
   const over = chars > target;
-  const next = dreaming ? "This dream is shortening it." : dreamsByItself ? null : "Dream now to shorten it.";
+  const next = dreaming ? "This dream is shortening it." : dreamsByItself ? "Its next dream shortens it — or dream now." : "Dream now to shorten it.";
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t px-4 py-3 @xl:px-5">
       <div className="flex items-baseline gap-2">
@@ -374,14 +378,16 @@ function MemoryMeter({
       <p className="basis-full text-xs text-muted-foreground @3xl:basis-auto @3xl:max-w-[26rem] @3xl:text-right">
         {cut ? (
           <>
-            Chats load only the first {limit.toLocaleString()} — the end is missing. {next ?? `${agentName} dreams as soon as it is idle.`}
+            Chats load only the first {limit.toLocaleString()} — the end is missing. {next}
           </>
         ) : over ? (
           <>
-            {(chars - target).toLocaleString()} over its limit. {next ?? "The next dream shortens it."}
+            {(chars - target).toLocaleString()} over its limit. {next}
           </>
-        ) : (
+        ) : loaded ? (
           "Loaded in full into every chat."
+        ) : (
+          "Within its size limit."
         )}
       </p>
     </div>
