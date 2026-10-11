@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import type { Agent, Conversation, ConversationWithMessages, Run, StartChatResult } from "@godmode/shared";
+import type { Agent, Conversation, ConversationWithMessages, MessageBlock, MessagePage, Run, StartChatResult } from "@godmode/shared";
 import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { run as sql } from "../src/db";
 import {
@@ -9,6 +9,7 @@ import {
   createConversation,
   getConversation,
   listConversations,
+  listMessagePage,
   safeFileName,
   sendMessage,
   setConversationState,
@@ -178,6 +179,35 @@ describe("HTTP routes", () => {
     expect((await fetch(`${env.baseUrl}/api/conversations`)).status).toBe(401);
   });
 
+  test("a window of the latest messages, older pages and the pictures they left out", async () => {
+    const conv = createConversation({ agentId: agent.id });
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 9]);
+    const first = addMessage({ conversationId: conv.id, role: "user", content: "look" });
+    const shot = addMessage({
+      conversationId: conv.id,
+      role: "assistant",
+      content: "",
+      blocks: [{ type: "tool_use", id: "toolu_1", name: "screenshot", input: {}, result: "ok", image: png.toString("base64") }],
+    });
+    addMessage({ conversationId: conv.id, role: "user", content: "thanks" });
+
+    const latest = (await (await api("GET", `/api/conversations/${conv.id}?limit=2&lite=1`)).json()) as ConversationWithMessages;
+    expect(latest.messages.map((m) => m.id)).toEqual([shot.id, latest.messages[1]!.id]);
+    expect(latest.hasMore).toBe(true);
+    const block = latest.messages[0]!.blocks[0] as Extract<MessageBlock, { type: "tool_use" }>;
+    expect(block.image).toBeUndefined();
+
+    const picture = await api("GET", block.imageUrl!);
+    expect(picture.status).toBe(200);
+    expect(picture.headers.get("content-type")).toBe("image/png");
+    expect(new Uint8Array(await picture.arrayBuffer())).toEqual(new Uint8Array(png));
+    expect((await api("GET", `/api/conversations/${conv.id}/messages/${shot.id}/images/toolu_missing`)).status).toBe(404);
+
+    const page = (await (await api("GET", `/api/conversations/${conv.id}/messages?before=${shot.id}&limit=5`)).json()) as MessagePage;
+    expect(page).toEqual({ messages: [expect.objectContaining({ id: first.id })], hasMore: false });
+    expect((await api("GET", `/api/conversations/${conv.id}/messages?before=msg_missing`)).status).toBe(404);
+  });
+
   test("chat lifecycle over HTTP", async () => {
     const defaultAgent = await ensureDefaultAgent();
     const started = await api("POST", "/api/chat", { content: "Plan my week" });
@@ -267,6 +297,57 @@ describe("HTTP routes", () => {
     expect((await api("POST", "/api/conversations", { title: "no agent" })).status).toBe(400);
     expect((await api("GET", "/api/runs/run_nope")).status).toBe(404);
     expect((await api("GET", "/api/runs/run_nope/log")).status).toBe(404);
+  });
+});
+
+describe("message windows", () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]).toString("base64");
+
+  function chatWith(count: number) {
+    const conv = createConversation({ agentId: agent.id, title: "Long chat" });
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) ids.push(addMessage({ conversationId: conv.id, role: i % 2 ? "assistant" : "user", content: `m${i}` }).id);
+    return { conv, ids };
+  }
+
+  test("the latest messages, then older pages until the first", () => {
+    const { conv, ids } = chatWith(7);
+    const latest = getConversation(conv.id, { limit: 3 });
+    expect(latest.messages.map((m) => m.content)).toEqual(["m4", "m5", "m6"]);
+    expect(latest.hasMore).toBe(true);
+    const older = listMessagePage(conv.id, { limit: 3, before: ids[4] });
+    expect(older.messages.map((m) => m.content)).toEqual(["m1", "m2", "m3"]);
+    expect(older.hasMore).toBe(true);
+    const first = listMessagePage(conv.id, { limit: 3, before: ids[1] });
+    expect(first).toEqual({ messages: [expect.objectContaining({ content: "m0" })], hasMore: false });
+    expect(getConversation(conv.id).hasMore).toBeUndefined();
+    expect(getConversation(conv.id).messages).toHaveLength(7);
+  });
+
+  test("messages written in the same millisecond keep their order across pages", () => {
+    const conv = createConversation({ agentId: agent.id });
+    const ids = [1, 2, 3, 4].map((n) => addMessage({ conversationId: conv.id, role: "user", content: `same${n}` }).id);
+    sql("UPDATE messages SET created_at = '2026-01-01T00:00:00.000Z' WHERE conversation_id = ?", conv.id);
+    expect(getConversation(conv.id, { limit: 2 }).messages.map((m) => m.content)).toEqual(["same3", "same4"]);
+    expect(listMessagePage(conv.id, { limit: 2, before: ids[2] }).messages.map((m) => m.content)).toEqual(["same1", "same2"]);
+  });
+
+  test("light messages leave pictures out and cut long tool output", () => {
+    const conv = createConversation({ agentId: agent.id });
+    const blocks: MessageBlock[] = [
+      { type: "tool_use", id: "toolu_shot", name: "mcp__browser__browser_screenshot", input: {}, result: "ok", image: PNG },
+      { type: "tool_use", id: "toolu_long", name: "Bash", input: {}, result: "x".repeat(10_000) },
+      { type: "text", text: "Done" },
+    ];
+    const msg = addMessage({ conversationId: conv.id, role: "assistant", content: "Done", blocks });
+    const [lite] = getConversation(conv.id, { lite: true }).messages;
+    const [shot, long, text] = lite!.blocks as Extract<MessageBlock, { type: "tool_use" }>[];
+    expect(shot!.image).toBeUndefined();
+    expect(shot!.imageUrl).toBe(`/api/conversations/${conv.id}/messages/${msg.id}/images/toolu_shot`);
+    expect(long!.result).toHaveLength(6000);
+    expect(long!.resultTruncated).toBe(true);
+    expect(text).toEqual({ type: "text", text: "Done" } as never);
+    expect(getConversation(conv.id).messages[0]!.blocks[0]).toMatchObject({ image: PNG });
   });
 });
 

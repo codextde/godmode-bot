@@ -1385,4 +1385,12 @@ ALTER TABLE agents ADD COLUMN android_device_ids TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE conversations ADD COLUMN android_device_ids TEXT NOT NULL DEFAULT '[]';
 `,
   },
+  {
+    id: 84,
+    // The latest runs of all agents (the phone's Activity) without reading and sorting the whole table.
+    name: "runs_created_index",
+    sql: /* sql */ `
+CREATE INDEX IF NOT EXISTS idx_runs_created ON runs(created_at);
+`,
+  },
 ];

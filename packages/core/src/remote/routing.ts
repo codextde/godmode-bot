@@ -10,7 +10,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { parseRunnerView, type ConversationWithMessages, type Run } from "@godmode/shared";
 import { get, run as sql } from "../db";
 import { logger } from "../log";
-import { conversationExists, deleteConversation, emitConversationUpdated, getConversation } from "../services/conversations";
+import { conversationExists, deleteConversation, emitConversationUpdated, getConversation, messageWindow, windowConversation } from "../services/conversations";
 import { HttpError, badRequest } from "../util";
 import { requireLicense } from "../license/license";
 import { reconcileConversation } from "./mirror";
@@ -141,11 +141,11 @@ async function conversationRequest(c: Context, runnerId: string, id: string, res
     if (method === "GET") {
       label(c, "GET /api/conversations/:id");
       try {
-        return c.json(await freshConversation(runnerId, id));
+        return c.json(windowConversation(await freshConversation(runnerId, id), messageWindow((name) => c.req.query(name))));
       } catch (err) {
         // Offline, too slow, or the runner no longer has it (deleted there, or set up again): the copy here is what there is.
         if (!isUnanswered(err) && !(err instanceof HttpError && err.status === 404)) throw err;
-        return c.json(getConversation(id));
+        return c.json(getConversation(id, messageWindow((name) => c.req.query(name))));
       }
     }
     if (method === "PATCH") {
@@ -185,6 +185,8 @@ async function conversationRequest(c: Context, runnerId: string, id: string, res
     }
     return null;
   }
+  // Pages of older messages and pictures come from the copy here: the runner's chat was just mirrored for its window.
+  if (method === "GET" && rest.startsWith("/messages")) return null;
   if (!FORWARDED.test(rest)) return null;
   if (method === "POST" && (STARTS_RUN.test(rest) || rest === "/continue") && chatIsMoving(id)) {
     throw new HttpError(409, "This chat is moving to this computer — send it again in a moment.", "runner_chat_moving");

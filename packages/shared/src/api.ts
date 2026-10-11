@@ -229,6 +229,14 @@ export interface ConversationWithMessages extends Conversation {
   activeRunId: ID | null;
   /** Messages waiting for the agent, oldest first. */
   queue: QueuedMessage[];
+  /** Asked for the latest messages only (`limit`): older ones exist (GET /api/conversations/:id/messages?before=). */
+  hasMore?: boolean;
+}
+
+/** A page of a chat's messages, oldest first, and whether there are older ones still. */
+export interface MessagePage {
+  messages: Message[];
+  hasMore: boolean;
 }
 
 export interface SendMessageInput {

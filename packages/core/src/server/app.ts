@@ -1,9 +1,10 @@
 import { Hono } from "hono";
+import { compress } from "hono/compress";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { HttpError } from "../util";
 import { logger } from "../log";
-import { hostGuard, isAllowedOrigin, requireAuth } from "./auth";
+import { hostGuard, isAllowedOrigin, isMobileChannel, isRelayed, requireAuth } from "./auth";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerSystemRoutes } from "./routes/system";
 import { registerVaultRoutes } from "./routes/vault";
@@ -115,6 +116,10 @@ export function createApp() {
       maxAge: 600,
     }),
   );
+  // Phones and the cloud relay get their JSON gzipped (chats and boards are megabytes over Tailscale or the relay); the
+  // desktop on this computer doesn't spend the CPU on it.
+  const gzip = compress({ encoding: "gzip", threshold: 2048 });
+  app.use("/api/*", (c, next) => (isMobileChannel(c) || isRelayed(c) ? gzip(c, next) : next()));
 
   app.onError((err, c) => {
     const route = c.req.routePath;

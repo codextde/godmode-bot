@@ -151,6 +151,14 @@ describe("device scope", () => {
     expect(deviceMayCall("PATCH", "/api/tasks/tsk_1")).toBe(true);
     expect(deviceMayCall("POST", "/api/tasks/tsk_1/messages")).toBe(true);
     expect(deviceMayCall("DELETE", "/api/tasks/tsk_1")).toBe(false);
+    expect(deviceMayCall("POST", "/api/tasks/tsk_1/approve")).toBe(true);
+    expect(deviceMayCall("PATCH", "/api/conversations/conv_1/followup")).toBe(true);
+    expect(deviceMayCall("DELETE", "/api/conversations/conv_1/followup")).toBe(true);
+    expect(deviceMayCall("POST", "/api/conversations/conv_1/followup/run")).toBe(true);
+    expect(deviceMayCall("GET", "/api/followups")).toBe(false);
+    expect(deviceMayCall("GET", "/api/conversations/conv_1/messages")).toBe(true);
+    expect(deviceMayCall("GET", "/api/conversations/conv_1/messages/msg_1/images/toolu_1")).toBe(true);
+    expect(deviceMayCall("DELETE", "/api/conversations/conv_1/messages/msg_1")).toBe(false);
     expect(deviceMayCall("POST", "/api/tasks/attachments")).toBe(true);
     expect(deviceMayCall("GET", "/api/tasks/attachments/tat_1/shot.png")).toBe(true);
     expect(deviceMayCall("GET", "/api/files/image")).toBe(false);
@@ -236,6 +244,16 @@ describe("phone access", () => {
     expect((await phone("/api/mobile/pairing", { bearer: device, method: "POST" })).status).toBe(403);
     // Device tokens only work on the phones' listener.
     expect((await app.request("http://127.0.0.1/api/conversations", { headers: { authorization: `Bearer ${device}` } })).status).toBe(401);
+  });
+
+  test("answers to phones are gzipped, the desktop's are not", async () => {
+    const { token: device } = await pair("Zipped");
+    const gz = await phone("/api/settings", { bearer: device, headers: { "accept-encoding": "gzip" }, decompress: false } as never);
+    expect(gz.status).toBe(200);
+    expect(gz.headers.get("content-encoding")).toBe("gzip");
+    expect(JSON.parse(new TextDecoder().decode(Bun.gunzipSync(new Uint8Array(await gz.arrayBuffer()))))).toHaveProperty("runner");
+    const plain = await desktop("/api/settings", { headers: { "accept-encoding": "gzip" } });
+    expect(plain.headers.get("content-encoding")).toBeNull();
   });
 
   test("phones can't widen what a chat or an automation may do", async () => {
@@ -348,6 +366,8 @@ describe("phone access", () => {
     const task = (await created.json()) as { id: string; workspaceId: string; status: string };
     expect(task).toMatchObject({ workspaceId: ws.id, status: "backlog" });
     const listed = (await (await phone(`/api/tasks?workspaceId=${ws.id}`, { bearer: device })).json()) as { id: string }[];
+    const board = (await (await phone(`/api/tasks?workspaceId=${ws.id}&fields=summary`, { bearer: device })).json()) as { id: string; title: string; description: string }[];
+    expect(board.find((t) => t.id === task.id)).toMatchObject({ title: "Write the release notes", description: "" });
     expect(listed.map((t) => t.id)).toEqual([task.id]);
     const moved = await phone(`/api/tasks/${task.id}`, json("PATCH", { status: "cancelled" }));
     expect(((await moved.json()) as { status: string }).status).toBe("cancelled");
