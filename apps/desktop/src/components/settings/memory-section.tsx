@@ -125,7 +125,7 @@ function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; 
     <SettingsGroup
       title="Dreaming"
       icon={<MoonStar />}
-      description="While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned, merge duplicates, fix contradictions and update dates — like sleeping on it. Every dream can be reviewed and undone in the agent's Memory tab."
+      description="While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned, merge duplicates, fix contradictions and update dates — like sleeping on it — and sort their workspace. Every dream can be reviewed and undone in the agent's Memory tab."
     >
       <SettingRow
         label="Dream while idle"
