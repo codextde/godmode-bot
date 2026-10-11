@@ -227,7 +227,7 @@ const FROM_SQL = `conversations c LEFT JOIN followups f ON f.conversation_id = c
  */
 const ONGOING_SQL = `c.origin NOT IN ('task', 'dream') AND CASE WHEN c.runner_id IS NULL
   THEN f.conversation_id IS NOT NULL OR p.run_id IS NOT NULL
-    OR EXISTS (SELECT 1 FROM runs ar WHERE ar.conversation_id = c.id AND ar.status IN ('queued', 'running') AND ar.trigger NOT IN ('dream', 'check'))
+    OR c.id IN (SELECT ar.conversation_id FROM runs ar WHERE ar.status IN ('queued', 'running') AND ar.trigger NOT IN ('dream', 'check'))
   ELSE json_extract(c.runner_state, '$.running') = 1 OR json_extract(c.runner_state, '$.paused') IS NOT NULL OR json_extract(c.runner_state, '$.followup') IS NOT NULL END`;
 
 function conversationRow(id: string): ConversationRow | null {
@@ -447,15 +447,21 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
   if (patch.vmId !== undefined) assignmentsChanged();
   if (patch.browserProfileId !== undefined || project !== undefined) retryQueued();
   // Moved to another browser profile, or archived with nothing ahead: its tabs aren't needed where they are. An
-  // archived chat that goes on later (a paused run, a follow-up, held messages) finds its pages as it left them.
+  // archived chat that goes on later finds its pages as it left them.
   if (patch.browserProfileId !== undefined || (patch.archived && !continuesLater(id))) void closeChatTabs(id);
   if (patch.sshServerIds !== undefined || (patch.archived !== undefined && conversation.sshServerIds.length)) bus.changed("ssh-servers");
   return conversation;
 }
 
-/** The chat stands still or comes back on its own: a paused run, a follow-up, or messages held for its next turn. */
+/**
+ * The chat stands still or comes back on its own: a paused run, a follow-up, messages held for its next turn, or a run
+ * that waits for a free slot (a run that works holds its tabs itself).
+ */
 function continuesLater(id: string): boolean {
-  return ["paused_runs", "followups", "queued_messages"].some((table) => !!get(`SELECT 1 FROM ${table} WHERE conversation_id = ? LIMIT 1`, id));
+  return (
+    ["paused_runs", "followups", "queued_messages"].some((table) => !!get(`SELECT 1 FROM ${table} WHERE conversation_id = ? LIMIT 1`, id)) ||
+    !!get("SELECT 1 FROM runs WHERE conversation_id = ? AND status = 'queued' LIMIT 1", id)
+  );
 }
 
 /** Internal fields maintained by the runner. Does not emit. */

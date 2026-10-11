@@ -400,17 +400,20 @@ suite("parallel chats in one browser", () => {
   test("archiving a chat closes its tabs, unless the chat goes on by itself later", async () => {
     const at = new Date().toISOString();
     insert("agents", { id: "agt_tabs", name: "Tabs", slug: "tabs", repo_path: dataDir, created_at: at, updated_at: at });
-    for (const id of ["cnv_idle", "cnv_wait"]) {
+    const going = ["cnv_wait", "cnv_held", "cnv_queued"];
+    for (const id of ["cnv_idle", ...going]) {
       insert("conversations", { id, agent_id: "agt_tabs", created_at: at, updated_at: at });
       chats[id] = await connect(id, `run_${id}`);
       await openIn(chats[id], `/${id}`);
       releaseChatLease(`run_${id}`);
     }
     insert("followups", { conversation_id: "cnv_wait", agent_id: "agt_tabs", note: "Check the order", due_at: new Date(Date.now() + 3_600_000).toISOString(), created_at: at, updated_at: at });
+    insert("queued_messages", { id: "qmsg_held", conversation_id: "cnv_held", content: "And the invoice", created_at: at });
+    insert("runs", { id: "run_waits_for_a_slot", agent_id: "agt_tabs", conversation_id: "cnv_queued", trigger: "chat", status: "queued", prompt: "Go on", created_at: at });
 
-    updateConversation("cnv_wait", { archived: true });
+    for (const id of going) updateConversation(id, { archived: true });
     updateConversation("cnv_idle", { archived: true });
     await waitFor(() => rb().tabs.pagesOf("cnv_idle").length === 0);
-    expect(rb().tabs.pagesOf("cnv_wait").map((p) => p.url)).toEqual([`${origin}/cnv_wait`]);
-  });
+    for (const id of going) expect(rb().tabs.pagesOf(id).map((p) => p.url)).toEqual([`${origin}/${id}`]);
+  }, 30_000);
 });

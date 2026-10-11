@@ -208,7 +208,8 @@ export default function ArchivedPage() {
 
 /** When an archived chat goes on by itself; "" for one that works or waits for the human right now. */
 function continuesAt(c: Conversation): string {
-  return c.followup?.dueAt ?? (c.paused?.auto ? c.paused.resumeAt : null) ?? "";
+  if (c.paused) return (c.paused.auto && c.paused.resumeAt) || "";
+  return c.running ? "" : (c.followup?.dueAt ?? "");
 }
 
 function ArchivedRow({
