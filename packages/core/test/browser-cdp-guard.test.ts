@@ -47,6 +47,29 @@ describe("foreign browser use", () => {
     expect(foreignBrowserUse(`ls ${config().browserDir}-use/x/files/downloads`)).toBeNull();
   });
 
+  test("a later command that greps a log for the port file passes, reading the file stays refused", () => {
+    const grepLog = [
+      "f=$(ls runs/*.jsonl | head -1)",
+      'grep -c DevToolsActivePort "$f"',
+    ].join("; ");
+    expect(foreignBrowserUse(grepLog)).toBeNull();
+    const redirected = [
+      "cat 2>&1",
+      "~/Library/Chrome/DevToolsActivePort",
+    ].join(" ");
+    expect(foreignBrowserUse(redirected)).toContain("DevTools ports");
+    const lookup = [
+      "ps aux 2>&1",
+      "grep -o 'remote-debugging-port=[0-9]*'",
+    ].join(" | ");
+    expect(foreignBrowserUse(lookup)).toContain("DevTools ports");
+    const oneLineScript = [
+      `node -e "const o = execSync('ps aux').toString()`,
+      `console.log(o.match(/remote-debugging-port=(\\d+)/))"`,
+    ].join("; ");
+    expect(foreignBrowserUse(oneLineScript)).toContain("DevTools ports");
+  });
+
   test("ordinary work passes", () => {
     expect(foreignBrowserUse("curl -s http://127.0.0.1:3000/healthz && pnpm test")).toBeNull();
     expect(foreignBrowserUse(`node shot.mjs # connects to process.env.${RUN_CDP_ENV}`)).toBeNull();

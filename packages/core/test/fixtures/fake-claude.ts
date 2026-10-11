@@ -1038,7 +1038,7 @@ if (slash?.[1] === "clear") {
   out(init);
   const count = Number(/SHOTS:(\d+)/.exec(prompt)![1]);
   // A PNG header and filler: what matters is its size.
-  const image = `iVBORw0KGgo${"A".repeat(4000)}`;
+  const image = `iVBORw0KGgo${"A".repeat(Number(/SHOT_SIZE:(\d+)/.exec(prompt)?.[1] ?? 4000))}`;
   for (let i = 0; i < count; i++) {
     const id = `toolu_shot_${i}`;
     out({ type: "assistant", message: { id: `msg_${crypto.randomUUID()}`, role: "assistant", content: [{ type: "tool_use", id, name: "mcp__browser__browser_screenshot", input: { n: i } }] }, parent_tool_use_id: null, session_id: sessionId });

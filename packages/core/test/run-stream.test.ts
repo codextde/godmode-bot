@@ -3,12 +3,13 @@
  * session, a process that ends more than once, deltas that carry only what changed, and the row saved while it works.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
 import type { ServerWebSocket } from "bun";
 import { applyRunDelta, type Agent, type ClientEvent, type MessageBlock, type RunDelta, type RunDeltaState, type ServerEvent } from "@godmode/shared";
 import { captureEvents, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { get } from "../src/db";
 import { getConversation, getMessage, sendMessage, startChat } from "../src/services/conversations";
-import { __setPersistForTests, waitForRun } from "../src/runner/runner";
+import { __setPersistForTests, findRunLog, waitForRun } from "../src/runner/runner";
 import { rememberSecret } from "../src/vault/vault";
 import { websocketHandler, type WsData } from "../src/server/ws";
 
@@ -111,6 +112,29 @@ describe("the in-flight message", () => {
     // A screenshot travels once: with the delta in which its step got its result.
     const sent = deltas.flatMap((d) => d.patch!.map(([, b]) => b)).filter((b) => b.type === "tool_use" && b.image);
     expect(sent.length).toBe(6);
+
+    // The run log says there were screenshots; the pictures are in the message only.
+    const logged = readFileSync(findRunLog(run)!, "utf8");
+    expect(logged).toContain('"text":"shot 5"');
+    expect(logged).not.toContain("A".repeat(100));
+    expect(logged.match(/characters left out/g)).toHaveLength(6);
+  });
+
+  test("a long run keeps its newest screenshots: the clients and the saved message lose the oldest together", async () => {
+    const { events, stop } = captureEvents();
+    // Five of almost the largest size kept: one more than a message holds.
+    const started = await startChat({ agentId: agent.id, content: "SHOTS:5 SHOT_SIZE:1999000" });
+    const run = await waitForRun(started.run.id, 30_000);
+    stop();
+    expect(run.status).toBe("succeeded");
+
+    let have: RunDeltaState | null = null;
+    for (const d of deltasOf(events, run.id)) have = applyRunDelta(have, d);
+    const stored = getMessage(deltasOf(events, run.id)[0]!.messageId);
+    expect(have!.blocks).toEqual(stored.blocks);
+    const tools = stored.blocks.filter((b) => b.type === "tool_use");
+    expect(tools.map((b) => b.type === "tool_use" && b.result)).toEqual(["shot 0", "shot 1", "shot 2", "shot 3", "shot 4"]);
+    expect(tools.map((b) => b.type === "tool_use" && !!b.image)).toEqual([false, true, true, true, true]);
   });
 
   test("a delta that was missed can't be applied: the client asks for the whole list", () => {
@@ -182,6 +206,15 @@ describe("the in-flight message", () => {
       expect(shots(message.blocks)).toBe(3);
       expect(JSON.stringify(message.blocks)).not.toContain("shot 1");
       expect(state()).toEqual(message.blocks);
+
+      // What the log got before the secret was saved is masked once the run ended.
+      const logPath = findRunLog(run)!;
+      const logged = readFileSync(logPath, "utf8");
+      expect(logged).toContain('"text":"shot 0"');
+      expect(logged).not.toContain("shot 1");
+      expect(logged.endsWith("\n")).toBe(true);
+      expect(logged.split("\n").every((line) => !line || JSON.parse(line))).toBe(true);
+      expect(existsSync(`${logPath}.tmp`)).toBe(false);
     } finally {
       __setPersistForTests(2000, 50);
     }
