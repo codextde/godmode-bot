@@ -3,9 +3,11 @@ import { Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { differenceInCalendarDays, format, formatDistanceToNowStrict, isToday, isYesterday } from "date-fns";
 import { Archive, ArchiveRestore, RefreshCw, Search, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import type { Agent, Conversation } from "@godmode/shared";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
+import { chatStatus } from "@/components/chat/chat-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useDebouncedValue } from "@/components/vault/use-debounced-value";
 import { errorMessage } from "@/lib/api";
 import { useAllAgents, useArchivedConversations } from "@/lib/hooks";
+import { useLive } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 
 const LIMIT = 200;
@@ -32,24 +35,37 @@ export default function ArchivedPage() {
   const [agentFilter, setAgentFilter] = useState("all");
   const q = useDebouncedValue(search.trim());
   const scope = useUi((s) => s.workspace);
-  const archived = useArchivedConversations(agentFilter === "all" ? undefined : agentFilter, q, { limit: LIMIT, workspaceId: scope });
+  const agentId = agentFilter === "all" ? undefined : agentFilter;
+  const archived = useArchivedConversations(agentId, q, { limit: LIMIT, workspaceId: scope });
+  // Archiving only files a chat: these still work, wait or come back on their own.
+  const { data: ongoing = [] } = useArchivedConversations(agentId, q, { limit: LIMIT, workspaceId: scope, ongoing: true });
+  const liveRuns = useLive((s) => s.runs);
+  const live = (c: Conversation) => {
+    const statuses = Object.values(liveRuns).flatMap((r) => (r.conversationId === c.id ? [r.status] : []));
+    const queued = !statuses.includes("running") && statuses.includes("queued");
+    return { running: statuses.includes("running") || (c.running && !queued), queued };
+  };
   const { data: agents = [] } = useAllAgents();
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const { setArchived } = useArchiveChat();
   const { askDelete, deleteDialog } = useDeleteChat();
 
   const list = useMemo(() => archived.data ?? [], [archived.data]);
+  // What comes next first: working or waiting for you, then by the time they continue.
+  const going = useMemo(() => [...ongoing].sort((a, b) => continuesAt(a).localeCompare(continuesAt(b))), [ongoing]);
   const groups = useMemo(() => {
     const now = new Date();
+    const shown = new Set(going.map((c) => c.id));
     const out: { label: string; items: Conversation[] }[] = [];
     for (const c of list) {
+      if (shown.has(c.id)) continue;
       const label = bucket(new Date(c.lastMessageAt ?? c.createdAt), now);
       const last = out[out.length - 1];
       if (last?.label === label) last.items.push(c);
       else out.push({ label, items: [c] });
     }
     return out;
-  }, [list]);
+  }, [list, going]);
 
   const filtered = !!q || agentFilter !== "all";
 
@@ -58,7 +74,7 @@ export default function ArchivedPage() {
       <PageHeader
         icon={<Archive />}
         title="Archived chats"
-        description="Out of your sidebar, never deleted. Open one to read it — sending a message moves it back to Recent."
+        description="Out of your sidebar, never deleted, and never stopped: what a chat still has ahead goes on here. Sending a message moves it back to Recent."
       />
       <PageBody className="space-y-6">
         <div className="flex flex-wrap items-center gap-3">
@@ -139,6 +155,30 @@ export default function ArchivedPage() {
           />
         ) : (
           <div className="space-y-6">
+            {going.length > 0 && (
+              <section aria-labelledby="archived-going">
+                <div className="mb-2 flex items-baseline gap-2 px-1">
+                  <h2 id="archived-going" className="eyebrow">
+                    Still going
+                  </h2>
+                  <span className="text-xs text-muted-foreground">Archiving doesn't stop them — they work, wait or come back on their own.</span>
+                </div>
+                <div className="space-y-0.5 rounded-xl border bg-card p-1.5 shadow-card">
+                  <AnimatePresence initial={false}>
+                    {going.map((c) => (
+                      <ArchivedRow
+                        key={c.id}
+                        conversation={c}
+                        agent={agentById.get(c.agentId)}
+                        status={chatStatus(c, live(c))}
+                        onRestore={() => setArchived(c, false)}
+                        onDelete={() => askDelete(c)}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </section>
+            )}
             {groups.map((g) => (
               <section key={g.label}>
                 <h2 className="eyebrow mb-2 px-1">{g.label}</h2>
@@ -166,14 +206,23 @@ export default function ArchivedPage() {
   );
 }
 
+/** When an archived chat goes on by itself; "" for one that works or waits for the human right now. */
+function continuesAt(c: Conversation): string {
+  if (c.paused) return (c.paused.auto && c.paused.resumeAt) || "";
+  return c.running ? "" : (c.followup?.dueAt ?? "");
+}
+
 function ArchivedRow({
   conversation: c,
   agent,
+  status,
   onRestore,
   onDelete,
 }: {
   conversation: Conversation;
   agent?: Agent;
+  /** What the chat still has ahead, instead of its last message. */
+  status?: ReactNode;
   onRestore: () => void;
   onDelete: () => void;
 }) {
@@ -193,10 +242,17 @@ function ArchivedRow({
         <AgentAvatar agent={agent ?? { avatar: "💬", color: "violet" }} size="sm" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium tracking-[-0.01em]">{c.title || "New chat"}</span>
-          <span className="block truncate text-[13px] text-muted-foreground">
-            {agent?.name ?? "Agent"}
-            {c.preview && <span className="opacity-70"> · {c.preview}</span>}
-          </span>
+          {status ? (
+            <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
+              <span className="shrink-0">{agent?.name ?? "Agent"} ·</span>
+              <span className="min-w-0 truncate">{status}</span>
+            </span>
+          ) : (
+            <span className="block truncate text-[13px] text-muted-foreground">
+              {agent?.name ?? "Agent"}
+              {c.preview && <span className="opacity-70"> · {c.preview}</span>}
+            </span>
+          )}
         </span>
         <span
           className="shrink-0 text-xs text-muted-foreground tabular-nums transition-opacity group-focus-within:opacity-0 group-hover:opacity-0"

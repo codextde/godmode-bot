@@ -89,10 +89,11 @@ export function useInScope() {
   };
 }
 
-export function useArchivedConversations(agentId?: string, search = "", { enabled = true, limit = 200, workspaceId = "all" } = {}) {
+/** `ongoing`: only the archived chats that still have work ahead. */
+export function useArchivedConversations(agentId?: string, search = "", { enabled = true, limit = 200, workspaceId = "all", ongoing = false } = {}) {
   return useQuery({
-    queryKey: [...qk.archivedConversations(agentId ?? "all", search, workspaceId), limit],
-    queryFn: () => api.conversations.list({ agentId, search, limit, archived: true, workspaceId }),
+    queryKey: [...qk.archivedConversations(agentId ?? "all", search, workspaceId), limit, ongoing],
+    queryFn: () => api.conversations.list({ agentId, search, limit, archived: true, workspaceId, ...(ongoing ? { ongoing } : {}) }),
     enabled,
   });
 }

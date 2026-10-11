@@ -14,8 +14,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { useLive } from "@/stores/live";
+import { stillAhead } from "./chat-status";
 
-type ChatRef = Pick<Conversation, "id" | "title">;
+type ChatRef = Pick<Conversation, "id" | "title"> & Partial<Pick<Conversation, "running" | "paused" | "followup">>;
 
 interface ArchiveVars {
   chat: ChatRef;
@@ -23,7 +25,10 @@ interface ArchiveVars {
   undo?: boolean;
 }
 
-/** Archive or restore a chat. It leaves its list right away; the toast offers undo. */
+/**
+ * Archive or restore a chat. It leaves its list right away; the toast offers undo. Archiving only files the chat: what
+ * it still has ahead goes on, and the toast says so.
+ */
 export function useArchiveChat() {
   const qc = useQueryClient();
   const mutation = useMutation({
@@ -43,7 +48,9 @@ export function useArchiveChat() {
     },
     onSuccess: (_res, { chat, archived, undo }) => {
       if (undo) return;
-      toast.success(archived ? "Chat archived" : "Chat restored", {
+      const working = !!chat.running || Object.values(useLive.getState().runs).some((r) => r.conversationId === chat.id && (r.status === "running" || r.status === "queued"));
+      const ahead = archived ? stillAhead({ paused: chat.paused ?? null, followup: chat.followup ?? null }, working) : null;
+      toast.success(archived ? (ahead ? `Archived · ${ahead}` : "Chat archived") : "Chat restored", {
         description: chat.title || "New chat",
         action: { label: "Undo", onClick: () => mutation.mutate({ chat, archived: !archived, undo: true }) },
       });
