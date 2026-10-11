@@ -44,7 +44,7 @@ import { canonicalKey, fingerprint } from "./crypto";
 import { loadIdentity } from "./identity";
 import { RemoteLink, type LinkState } from "./linkClient";
 import { mergeMemory, readMemoryState, writeMemoryState } from "./memorySync";
-import { adoptChat, applyRunnerEvent, catchUp, runnerDisconnected, setMirrorHooks } from "./mirror";
+import { adoptChat, applyRunnerEvent, catchUp, forgetHeavyChats, runnerDisconnected, setMirrorHooks } from "./mirror";
 import { cancelOffer, createOffer } from "./pairing";
 import { forgetRunnerUpdates, maybeAutoUpdate, prepareRunnerUpdates, resetRunnerUpdates, runnerConnected, runnerUpdate, setUpdateHost, updateRunnerSoftware } from "./runnerUpdates";
 import { buildSnapshot, snapshotDigest } from "./snapshot";
@@ -367,6 +367,8 @@ function startLink(r: RunnerRow) {
 async function connected(id: string, state: LinkState) {
   const info = state.info;
   if (info) {
+    const before = infos.get(id);
+    if (!before || before.build !== info.build || before.digest !== info.digest) forgetHeavyChats(id);
     infos.set(id, info);
     update("runners", id, {
       last_seen_at: now(),
@@ -380,24 +382,30 @@ async function connected(id: string, state: LinkState) {
   }
   const l = links.get(id);
   if (!l) return;
+  // The link dropped on the way: the next connect starts over, the steps left would only fail as offline.
+  const dropped = () => links.get(id) !== l || l.state.state !== "online";
   // What changed in a run, not its whole block list each time: a long run's list is tens of megabytes.
   l.sendClientEvent({ type: "deltas.patch" });
   for (const event of subscriptions.get(id)?.values() ?? []) l.sendClientEvent(event);
   try {
     await catchUp(id, l);
   } catch (err) {
+    if (dropped()) return;
     log.warn(`could not catch up with runner ${id}`, err);
   }
   try {
     await syncRunner(id);
   } catch (err) {
+    if (dropped()) return;
     log.warn(`could not copy the setup to runner ${id}`, err instanceof Error ? err.message : err);
   }
   try {
     await runnerHealth(id, false);
   } catch (err) {
+    if (dropped()) return;
     log.warn(`could not check runner ${id}`, err instanceof Error ? err.message : err);
   }
+  if (dropped()) return;
   await runnerConnected(id).catch((err) => log.warn(`could not look at the updates of runner ${id}`, err instanceof Error ? err.message : err));
 }
 

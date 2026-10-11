@@ -28,7 +28,7 @@ import { applyRuntimeSettings, onSettingsApplied } from "./services/runtime";
 import * as vault from "./vault/vault";
 import { ensureDefaultAgent } from "./agents/service";
 import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
-import { interruptedWork, resumeInterruptedWork } from "./services/resume";
+import { interruptedWork, resumeInterruptedWork, startOutageRecovery, stopOutageRecovery } from "./services/resume";
 import { clearRunMods } from "./mods/service";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
@@ -294,6 +294,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
 
   // Once the API (the runs' tool gateway) listens, that work goes on where it stopped.
   if (interrupted) void resumeInterruptedWork(interrupted).catch((err) => log.warn("could not continue the work the restart cut off", err));
+  if (!runner) startOutageRecovery();
 
   // Background doctor check so the UI has fresh dependency info.
   runDoctor(true).catch((err) => log.warn("doctor failed", err));
@@ -322,6 +323,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       // Only its own: a runner.json that names another process is that runner's way of saying it serves.
       if (runningRunner(cfg.dataDir)?.pid === process.pid) rmSync(runnerFile(cfg.dataDir), { force: true });
     } else {
+      stopOutageRecovery();
       stopRunNotices();
       stopDreaming();
       stopAppTriggers();

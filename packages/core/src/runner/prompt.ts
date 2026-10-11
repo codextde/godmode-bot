@@ -351,7 +351,7 @@ When you can't go on because ${human} has to do something themselves — create 
 
   if (ctx.followups) {
     out.push(`### Following up later
-When a task can't be finished now because you have to wait — for a reply to an email or message, a delivery, a build or deployment, a status or price change, office hours, another person — don't leave it to ${human} to remind you. Schedule a follow-up with \`followup_schedule({ at | inMinutes, note })\`, like a coworker who says "I'll check back tomorrow at 10": at that time Godmode continues this chat on its own and you pick up where you left off, with the whole conversation. Pick a realistic time (when the answer is likely there; business hours when people are involved) and write the note so you know exactly what to check and do. Then end your turn with a short summary of what you're waiting for and when you'll continue. A chat has one follow-up: scheduling again moves it, \`followup_cancel\` removes it. Don't schedule follow-ups for work you can do now or for things that repeat on a schedule${perms.canManageAgents ? " (those are automations)" : ""}.`);
+When a task can't be finished now because you have to wait — for a reply to an email or message, a delivery, a build or deployment, a status or price change, office hours, another person — don't leave it to ${human} to remind you. Schedule a follow-up with \`followup_schedule({ at | inMinutes, note })\`, like a coworker who says "I'll check back tomorrow at 10": at that time Godmode continues this chat on its own and you pick up where you left off, with the whole conversation. Pick a realistic time (when the answer is likely there; business hours when people are involved) and write the note so you know exactly what to check and do. Then end your turn with a short summary of what you're waiting for and when you'll continue. Don't wait inside the turn instead: no \`sleep\`, \`until\` or polling loop that runs longer than about ten minutes, in the foreground or as a background task — a run that shows no sign of life that long is stopped. A chat has one follow-up: scheduling again moves it, \`followup_cancel\` removes it. Don't schedule follow-ups for work you can do now or for things that repeat on a schedule${perms.canManageAgents ? " (those are automations)" : ""}.`);
   }
 
   out.push(`### Messages while you work
@@ -731,8 +731,11 @@ function answerGoesTo(startedBy: RunTrigger): string {
   return who ? `That turn was started by ${who}; your answer goes where it would have gone.` : "";
 }
 
-/** The note a turn gets that Godmode continues by itself after a restart cut it off (`continue`). */
-export function restartContext(opts: { userName: string; endedAt: string; startedBy: RunTrigger; handoffs: CutOffHandoff[] }): string {
+/** What cut a turn off: Godmode stopping, or Claude's API out of reach (no internet, DNS down). */
+export type CutOffCause = "restart" | "offline";
+
+/** The note a turn gets that Godmode continues by itself after a restart or a lost connection cut it off (`continue`). */
+export function restartContext(opts: { userName: string; endedAt: string; startedBy: RunTrigger; handoffs: CutOffHandoff[]; cause?: CutOffCause }): string {
   const human = opts.userName.trim() || "the user";
   const goesTo = answerGoesTo(opts.startedBy);
   const handoffs = opts.handoffs.length
@@ -740,17 +743,23 @@ export function restartContext(opts: { userName: string; endedAt: string; starte
         .map((h) => `delegation_status({ runId: "${h.runId}", wait: true })`)
         .join(", ")} — don't hand it over again.`
     : "";
+  const when = describeNow(new Date(opts.endedAt));
+  const what =
+    opts.cause === "offline"
+      ? `Your last turn in this chat broke off on ${when} because Claude's API couldn't be reached (no internet connection). The connection is back and Godmode continues the turn by itself — this is not a new task.`
+      : `Godmode restarted on ${when} while you were working on your last turn in this chat, and now continues it by itself — this is not a new task.`;
   return `<godmode-continue>
-Godmode restarted on ${describeNow(new Date(opts.endedAt))} while you were working on your last turn in this chat, and now continues it by itself — this is not a new task.${goesTo ? ` ${goesTo}` : ""}
+${what}${goesTo ? ` ${goesTo}` : ""}
 Pick the work up exactly where you stopped: don't start over and don't repeat what is already done. A step that was running at that moment may have been cut off, so check what it left behind before you run it again — something that reaches other people or costs money (a message, a post, an order, a payment) must not happen twice.${handoffs}
 Then finish the task and end with your answer${opts.startedBy === "delegation" ? "" : ` for ${human}`}.
 </godmode-continue>`;
 }
 
-/** Put in front of a prompt that Godmode sends again by itself: a restart came before the turn got it (`again`). */
-export function restartAgainNote(opts: { endedAt: string }): string {
+/** Put in front of a prompt that Godmode sends again by itself: a restart or a lost connection came before the turn got it (`again`). */
+export function restartAgainNote(opts: { endedAt: string; cause?: CutOffCause }): string {
+  const when = describeNow(new Date(opts.endedAt));
   return `<godmode-context>
-Godmode restarted on ${describeNow(new Date(opts.endedAt))} before you got this turn, so it is sent again now.
+${opts.cause === "offline" ? `Claude's API couldn't be reached on ${when} (no internet connection) before you got this turn, so it is sent again now.` : `Godmode restarted on ${when} before you got this turn, so it is sent again now.`}
 </godmode-context>
 
 `;

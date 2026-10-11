@@ -3,15 +3,19 @@
  * an automation, a follow-up or a task handed to another agent gets a new turn in the same chat and Claude session that
  * picks the work up where it stopped, or gets its prompt again when the turn never got going. Board tickets do that on
  * their own (tasks/service.ts); dreams, condition checks and heartbeats simply come again.
+ *
+ * A turn that broke off because Claude's API couldn't be reached (no internet, DNS down) continues the same way once
+ * the API answers again.
  */
 import type { AutomationEventSource, MessageBlock, RetryMode, Run, RunTrigger } from "@godmode/shared";
 import { RUN_INTERRUPTED, RUN_SHUT_DOWN, retryModeOf } from "@godmode/shared";
 import { all, get, getMeta, run as exec, setMeta } from "../db";
+import { bus } from "../events/bus";
 import { logger } from "../log";
 import { HttpError, newId, now, parseJson } from "../util";
 import { activeMainRun, recordEvent, settleIfFinished } from "../automations/events";
 import { deliverFollowup } from "../messaging/bridge";
-import { restartAgainNote, restartContext, type CutOffHandoff } from "../runner/prompt";
+import { restartAgainNote, restartContext, type CutOffCause, type CutOffHandoff } from "../runner/prompt";
 import { activeRunForConversation } from "../runner/runner";
 import { taskForConversation } from "../tasks/service";
 import { audit } from "./audit";
@@ -31,6 +35,17 @@ const FIRST_LOOK_BACK_MS = 15 * 60_000;
 const MAX_IN_A_ROW = 3;
 const RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "delegation", "routine"]);
 const PLATFORMS = new Set(["slack", "telegram", "teams"]);
+/**
+ * Claude Code's answer when Claude's API couldn't be reached at all, after its own retries. Handed-over work isn't in
+ * the list: the run that handed it over got the failure and decides.
+ */
+const NO_CONNECTION = /^API Error: [^\n]*(Can't reach the API server|Unable to connect|Connection error|Request timed out|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ECONNREFUSED|ECONNRESET|ETIMEDOUT)/i;
+const OFFLINE_RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "routine"]);
+/** Broke off longer ago than this, the turn waits for someone to continue it. */
+const OFFLINE_MAX_AGE_MS = 12 * 3_600_000;
+const OFFLINE_CHECK_MS = 60_000;
+const PROBE_TIMEOUT_MS = 5_000;
+const LABELS: Record<CutOffCause, string> = { restart: "Continued after Godmode restarted", offline: "Continued once Claude could be reached again" };
 
 interface RunRow {
   id: string;
@@ -141,7 +156,7 @@ export function latestContinuation(runId: string): string {
   return id;
 }
 
-async function continueAll(runs: RunRow[], strict = false): Promise<Run[]> {
+async function continueAll(runs: RunRow[], strict = false, cause: CutOffCause = "restart"): Promise<Run[]> {
   const ids = new Set(runs.map((r) => r.id));
   const requested = strict ? runs[0] : null;
   const ordered = runs.map((r) => ({ r, depth: depthOf(r.parent_run_id) })).sort((a, b) => a.depth - b.depth);
@@ -162,11 +177,11 @@ async function continueAll(runs: RunRow[], strict = false): Promise<Run[]> {
       .filter(({ r: c }) => c.parent_run_id === r.id && planned.has(c.id))
       .map(({ r: c }) => ({ agentName: agentName(c.agent_id), runId: planned.get(c.id)! }));
     try {
-      started.push(await continueOne(r, handoffs, planned.get(r.id)));
+      started.push(await continueOne(r, handoffs, planned.get(r.id), cause));
       continued.add(r.id);
     } catch (err) {
       if (r === requested) throw err;
-      log.warn(`could not continue run ${r.id} after the restart`, err);
+      log.warn(`could not continue run ${r.id} (${cause})`, err);
     }
   }
   return started;
@@ -183,7 +198,7 @@ function orphaned(r: RunRow, continued: Set<string>): string | null {
   return null;
 }
 
-async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId?: string): Promise<Run> {
+async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId: string | undefined, cause: CutOffCause): Promise<Run> {
   const conv = getConversationSummary(r.conversation_id);
   const blocks = parseJson<MessageBlock[]>(get<{ blocks: string }>("SELECT blocks FROM messages WHERE run_id = ? AND role = 'assistant'", r.id)?.blocks, []);
   let mode: RetryMode = retryModeOf(blocks);
@@ -191,13 +206,13 @@ async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId?: string)
   const endedAt = r.finished_at ?? r.created_at;
   const prompt =
     mode === "continue"
-      ? restartContext({ userName: getSettings().general.userName, endedAt, startedBy: r.trigger, handoffs })
-      : restartAgainNote({ endedAt }) + r.prompt;
+      ? restartContext({ userName: getSettings().general.userName, endedAt, startedBy: r.trigger, handoffs, cause })
+      : restartAgainNote({ endedAt, cause }) + r.prompt;
   const masked = mode === "again" && /•{4,}/.test(r.prompt);
   // The work it hands on waits for the turn that continues the one that handed it over.
   const parentRunId = r.parent_run_id ? latestContinuation(r.parent_run_id) : null;
   const { run } = await sendMessage(r.conversation_id, {
-    content: "Continued after Godmode restarted",
+    content: LABELS[cause],
     prompt,
     marker: [{ type: "retry", mode, runId: r.id, at: now(), auto: true, ...(masked ? { masked: true } : {}) }],
     trigger: r.trigger,
@@ -206,19 +221,19 @@ async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId?: string)
     depth: depthOf(parentRunId),
     runId,
   });
-  if (r.trigger === "routine" && r.routine_id) followAutomation(r, run);
+  if (r.trigger === "routine" && r.routine_id) followAutomation(r, run, LABELS[cause]);
   // In a Slack, Telegram or Teams chat the answer goes back there.
   if (PLATFORMS.has(conv.origin)) void deliverFollowup(r.conversation_id, run.id).catch((err) => log.warn(`could not deliver run ${run.id}`, err));
-  audit("godmode", "run.resume", r.conversation_id, { runId: r.id, newRunId: run.id, mode });
+  audit("godmode", "run.resume", r.conversation_id, { runId: r.id, newRunId: run.id, mode, cause });
   return run;
 }
 
 /** The automation's activity shows the turn that goes on, and its status follows it. */
-function followAutomation(r: RunRow, run: Run) {
+function followAutomation(r: RunRow, run: Run, title: string) {
   const routineId = r.routine_id!;
   try {
     const source = get<{ source: AutomationEventSource }>("SELECT source FROM automation_events WHERE run_id = ? ORDER BY created_at DESC LIMIT 1", r.id)?.source;
-    recordEvent(routineId, { source: source ?? "schedule", title: "Continued after Godmode restarted", status: "running", runId: run.id });
+    recordEvent(routineId, { source: source ?? "schedule", title, status: "running", runId: run.id });
     settleIfFinished(run.id);
     exec("UPDATE routines SET last_status = ? WHERE id = ?", run.status, routineId);
     emitRoutine(routineId);
@@ -284,4 +299,87 @@ function agentEnabled(agentId: string): boolean {
 
 function agentName(agentId: string): string {
   return get<{ name: string }>("SELECT name FROM agents WHERE id = ?", agentId)?.name ?? "another agent";
+}
+
+/* ------------------------------------------------------------------ */
+/* Turns that broke off without a connection to Claude                  */
+/* ------------------------------------------------------------------ */
+
+export function brokeOffOffline(error: string | null | undefined): boolean {
+  return !!error && NO_CONNECTION.test(error);
+}
+
+/** Turns that failed because Claude's API couldn't be reached and nothing went on in their chat since. */
+function offlineFailures(): RunRow[] {
+  const since = new Date(Date.now() - OFFLINE_MAX_AGE_MS).toISOString();
+  return all<RunRow>(
+    `SELECT r.* FROM runs r JOIN conversations c ON c.id = r.conversation_id
+     WHERE r.status = 'failed' AND r.error LIKE 'API Error:%' AND r.finished_at > ? AND c.runner_id IS NULL AND ${LATEST}
+     ORDER BY r.created_at, r.rowid`,
+    since,
+  ).filter(
+    (r) =>
+      OFFLINE_RESUMABLE.has(r.trigger) &&
+      brokeOffOffline(r.error) &&
+      !taskForConversation(r.conversation_id) &&
+      // An automation that came round again meanwhile did the work already.
+      !(r.trigger === "routine" && r.routine_id && get("SELECT 1 FROM runs WHERE routine_id = ? AND created_at > ? LIMIT 1", r.routine_id, r.created_at)) &&
+      continuedInARow(r) < MAX_IN_A_ROW &&
+      !blocked(r),
+  );
+}
+
+/** Any answer from the API's host counts: only a connection that can't be made means it is still out of reach. */
+async function apiReachable(): Promise<boolean> {
+  try {
+    await fetch(process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com", { method: "HEAD", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let offlineTimer: ReturnType<typeof setInterval> | null = null;
+let stopListening: (() => void) | null = null;
+/** A turn may be waiting for the connection: set at the start and by every turn that broke off offline. */
+let watching = false;
+let checking = false;
+
+/** Continue what broke off offline, once Claude's API answers again. Returns how many turns went on. */
+export async function continueAfterOutage(probe: () => Promise<boolean> = apiReachable): Promise<number> {
+  if (checking || !getSettings().runner.resumeAfterRestart) return 0;
+  checking = true;
+  try {
+    const runs = offlineFailures();
+    if (!runs.length) {
+      watching = false;
+      return 0;
+    }
+    if (!(await probe())) return 0;
+    const started = await continueAll(runs, false, "offline");
+    if (started.length) log.info(`continued ${started.length} run(s) that broke off without a connection to Claude`);
+    return started.length;
+  } finally {
+    checking = false;
+  }
+}
+
+export function startOutageRecovery(): void {
+  if (offlineTimer) return;
+  watching = true;
+  stopListening = bus.on((e) => {
+    if (e.type === "run.finished" && e.run.status === "failed" && brokeOffOffline(e.run.error)) watching = true;
+  });
+  offlineTimer = setInterval(() => {
+    if (watching) void continueAfterOutage().catch((err) => log.warn("could not continue the work a lost connection cut off", err));
+  }, OFFLINE_CHECK_MS);
+  offlineTimer.unref?.();
+}
+
+export function stopOutageRecovery(): void {
+  if (offlineTimer) clearInterval(offlineTimer);
+  offlineTimer = null;
+  stopListening?.();
+  stopListening = null;
+  watching = false;
 }

@@ -7,7 +7,7 @@ import { HttpError, now } from "../src/util";
 import { INTERRUPTED, cancelRun, getRun, recoverInterruptedRuns, startRun } from "../src/runner/runner";
 import { addMessage, createConversation, getConversation, getConversationSummary, listConversations, updateConversation } from "../src/services/conversations";
 import { clearRunner, remoteRunForConversation, remoteRuns } from "../src/remote/activeRuns";
-import { adoptChat, applyRunnerEvent, catchUp, reconcileConversation, runnerDisconnected, setMirrorHooks, type RunnerApi } from "../src/remote/mirror";
+import { adoptChat, applyRunnerEvent, catchUp, forgetHeavyChats, reconcileConversation, runnerDisconnected, setMirrorHooks, type RunnerApi } from "../src/remote/mirror";
 import { websocketHandler, type HubSocket } from "../src/server/ws";
 
 const RUNNER = "rnr_mirrortest00000a";
@@ -832,6 +832,35 @@ describe("catching up after a connect", () => {
       },
     };
     expect((await failure(catchUp(RUNNER, api))).code).toBe("runner_offline");
+  });
+
+  test("a chat whose messages keep breaking the link is left out for a while, until the runner runs another Godmode", async () => {
+    const huge = chat({ title: "Long goal", running: true });
+    let breaks = true;
+    const calls: string[] = [];
+    const api: RunnerApi = {
+      async json<T>(_method: string, path: string): Promise<T> {
+        calls.push(path);
+        if (path.startsWith("/api/conversations?")) return (path.includes("archived") ? [] : [huge]) as T;
+        if (path === `/api/conversations/${huge.id}`) {
+          if (breaks) throw new HttpError(409, "Mac mini is offline", "runner_offline");
+          return { ...huge, messages: [], activeRunId: null, queue: [] } as T;
+        }
+        return [] as T;
+      },
+    };
+    expect((await failure(catchUp(RUNNER, api))).code).toBe("runner_offline");
+    expect((await failure(catchUp(RUNNER, api))).code).toBe("runner_offline");
+
+    calls.length = 0;
+    expect(await catchUp(RUNNER, api)).toEqual({ conversations: 1, refreshed: 0 });
+    expect(calls).not.toContain(`/api/conversations/${huge.id}`);
+    expect(getConversation(huge.id).title).toBe("Long goal");
+
+    forgetHeavyChats(RUNNER);
+    breaks = false;
+    expect(await catchUp(RUNNER, api)).toEqual({ conversations: 1, refreshed: 1 });
+    runnerDisconnected(RUNNER);
   });
 });
 
