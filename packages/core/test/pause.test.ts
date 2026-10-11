@@ -562,6 +562,37 @@ describe("Claude's usage limit", () => {
     await cancelRun(started.run.id);
   });
 
+  test("a sweep leaves no earlier wake-up behind, and stopping leaves none at all", async () => {
+    const waking = new Set<unknown>();
+    const { setTimeout: set, clearTimeout: clear } = globalThis;
+    globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+      const handle = set(fn, ms);
+      if (fn === sweep) waking.add(handle);
+      return handle;
+    }) as typeof setTimeout;
+    globalThis.clearTimeout = ((handle?: Parameters<typeof clear>[0]) => {
+      waking.delete(handle);
+      clear(handle);
+    }) as typeof clearTimeout;
+    try {
+      stopPauses();
+      startPauses();
+      signal("limit", String(inAnHour()));
+      const started = await startChat({ agentId: agent.id, content: "LIMIT_HIT and wait" });
+      await paused(started.run.id);
+      expect(waking.size).toBe(1);
+      sweep();
+      expect(waking.size).toBe(1);
+      stopPauses();
+      expect(waking.size).toBe(0);
+      startPauses();
+      await cancelRun(started.run.id);
+    } finally {
+      globalThis.setTimeout = set;
+      globalThis.clearTimeout = clear;
+    }
+  });
+
   test("names the limit and the reset from what Claude reports", () => {
     const at = Math.floor(Date.now() / 1000) + 600;
     const line = "You've hit your weekly limit · resets Oct 9, 9am";

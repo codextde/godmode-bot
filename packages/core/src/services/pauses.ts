@@ -278,6 +278,7 @@ function arm() {
 
 /** Continue every run whose limit has reset. */
 export function sweep(): void {
+  if (timer) clearTimeout(timer);
   timer = null;
   for (const row of all<PausedRow>("SELECT * FROM paused_runs WHERE auto = 1 AND resume_at IS NOT NULL AND resume_at <= ? ORDER BY created_at", now())) {
     try {
