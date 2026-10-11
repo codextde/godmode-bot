@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { StreamAccumulator, detectLoginFailure, displayToolName, redactBlocks, toolResultContent } from "../src/runner/stream";
+import type { MessageBlock } from "@godmode/shared";
+import { MAX_MESSAGE_IMAGE_BASE64, MAX_TOOL_IMAGE_BASE64, StreamAccumulator, detectLoginFailure, displayToolName, redactBlocks, toolResultContent } from "../src/runner/stream";
 
 function events(name: string): unknown[] {
   return readFileSync(join(import.meta.dir, "fixtures", name), "utf8")
@@ -467,6 +468,51 @@ describe("StreamAccumulator — a process that ends more than once", () => {
     acc.push(result({ result: "answer", total_cost_usd: 0.4, duration_ms: 1000, num_turns: 2, usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 1, cache_creation_input_tokens: 1 } }));
     acc.push(result({ result: "again" }));
     expect(acc.final).toMatchObject({ costUsd: 0.4, durationMs: 1000, numTurns: 2, usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 1, cacheWriteTokens: 1 } });
+  });
+});
+
+describe("StreamAccumulator — screenshots of a long run", () => {
+  // One screenshot of the largest size more than a message keeps.
+  const count = Math.floor(MAX_MESSAGE_IMAGE_BASE64 / MAX_TOOL_IMAGE_BASE64) + 1;
+  const shot = (i: number) => `${i}`.padEnd(MAX_TOOL_IMAGE_BASE64, "A");
+  const images = (blocks: MessageBlock[]) => blocks.flatMap((b) => (b.type === "tool_use" ? [b.image ?? null] : []));
+  const imageChars = (blocks: MessageBlock[]) => images(blocks).reduce((n, img) => n + (img?.length ?? 0), 0);
+
+  function screenshot(acc: StreamAccumulator, i: number) {
+    const id = `t${i}`;
+    acc.push({ type: "assistant", message: { id: `m${i}`, content: [{ type: "tool_use", id, name: "mcp__browser__browser_screenshot", input: {} }] } });
+    acc.push({
+      type: "user",
+      message: { content: [{ type: "tool_result", tool_use_id: id, content: [{ type: "text", text: `shot ${i}` }, { type: "image", source: { type: "base64", media_type: "image/png", data: shot(i) } }] }] },
+    });
+  }
+
+  test("the oldest screenshots go once the message holds more than it keeps; their steps stay", () => {
+    const acc = new StreamAccumulator();
+    for (let i = 0; i < count; i++) screenshot(acc, i);
+    const kept = images(acc.blocks);
+    expect(kept).toHaveLength(count);
+    expect(kept[0]).toBeNull();
+    expect(kept.slice(1)).toEqual(Array.from({ length: count - 1 }, (_, i) => shot(i + 1)));
+    expect(imageChars(acc.blocks)).toBeLessThanOrEqual(MAX_MESSAGE_IMAGE_BASE64);
+    const first = acc.blocks[0]!;
+    expect(first.type === "tool_use" && first.result).toBe("shot 0");
+    expect(first).not.toHaveProperty("image");
+  });
+
+  test("a paused run that continues with more than that keeps the newest", () => {
+    const blocks: MessageBlock[] = Array.from({ length: count + 2 }, (_, i) => ({ type: "tool_use", id: `t${i}`, name: "mcp__browser__browser_screenshot", input: {}, result: `shot ${i}`, image: shot(i) }));
+    const acc = new StreamAccumulator(blocks);
+    expect(acc.blocks).toBe(blocks);
+    expect(imageChars(blocks)).toBeLessThanOrEqual(MAX_MESSAGE_IMAGE_BASE64);
+    expect(images(blocks).at(-1)).toBe(shot(count + 1));
+    expect(images(blocks).filter(Boolean)).toHaveLength(count - 1);
+  });
+
+  test("below the cap every screenshot stays", () => {
+    const acc = new StreamAccumulator();
+    for (let i = 0; i < count - 1; i++) screenshot(acc, i);
+    expect(images(acc.blocks).every(Boolean)).toBe(true);
   });
 });
 
