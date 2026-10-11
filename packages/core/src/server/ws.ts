@@ -130,7 +130,7 @@ let onComputerSubscribe: ((view: string, subscribed: boolean) => void) | null = 
 
 /** Hook invoked when the viewers of an Android phone change (see android/stream.ts). */
 let onAndroidViewers: ((deviceId: string, video: number, frames: number, joined: boolean) => void) | null = null;
-let onAndroidKeyframe: ((deviceId: string) => void) | null = null;
+let onAndroidKeyframe: ((deviceId: string, reason: "join" | "congested") => void) | null = null;
 
 export function setAndroidViewHandlers(handlers: { viewers: typeof onAndroidViewers; keyframe: typeof onAndroidKeyframe }) {
   onAndroidViewers = handlers.viewers;
@@ -154,7 +154,7 @@ function changeAndroidSubscription(ws: HubSocket, deviceId: string, mode: "video
   if (current === mode) {
     if (mode === "video") {
       (ws.data.androidNeedsKey ??= new Set()).add(deviceId);
-      onAndroidKeyframe?.(deviceId);
+      onAndroidKeyframe?.(deviceId, "join");
     }
     return;
   }
@@ -182,10 +182,10 @@ function sendAndroid(event: Extract<ServerEvent, { type: "android.video" | "andr
         }
         if (event.kind === "chunk" && congested(ws)) {
           (ws.data.androidNeedsKey ??= new Set()).add(event.deviceId);
-          onAndroidKeyframe?.(event.deviceId);
+          onAndroidKeyframe?.(event.deviceId, "congested");
           continue;
         }
-      } else if (event.kind === "frame" && congested(ws)) continue;
+      } else if (event.kind === "frame" && ((mode === "video" && !event.all) || congested(ws))) continue;
     }
     try {
       ws.send(payload);

@@ -3,6 +3,7 @@
  * here), touches and swipes (`input`), keys, typed text and the tree of what is on screen (`uiautomator dump`).
  * Coordinates are always the phone's own pixels in its current orientation; tools and the live view scale them.
  */
+import { randomBytes } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import type { AndroidKey } from "@godmode/shared";
 import { fitSize, MAX_MODEL_PIXELS } from "../computer/geometry";
@@ -38,6 +39,18 @@ export function parseScreenSize(out: string): Size | null {
   const physical = out.match(/Physical size:\s*(\d+)x(\d+)/);
   const m = override ?? physical;
   return m ? { width: Number(m[1]), height: Number(m[2]) } : null;
+}
+
+/**
+ * A point on a picture of the screen → the phone's pixel. The picture may be letterboxed (screenrecord keeps the
+ * screen's proportions inside a video rounded to multiples of 16); points on the bars land on the nearest edge.
+ */
+export function frameToScreen(screen: Size, frame: Size, x: number, y: number): { x: number; y: number } {
+  const scale = Math.min(frame.width / screen.width, frame.height / screen.height);
+  const offX = (frame.width - screen.width * scale) / 2;
+  const offY = (frame.height - screen.height * scale) / 2;
+  const clamp = (v: number, max: number) => Math.min(max - 1, Math.max(0, v));
+  return { x: clamp((x - offX) / scale, screen.width), y: clamp((y - offY) / scale, screen.height) };
 }
 
 export function rememberSize(serial: string, size: Size): void {
@@ -181,8 +194,7 @@ export function keyCommand(key: AndroidKey | string): string | null {
   if (key === "notifications") return "cmd statusbar expand-notifications";
   if (key === "quick_settings") return "cmd statusbar expand-settings";
   if (key === "select_all") return "input keycombination 113 29";
-  const code = KEYCODES[key as keyof typeof KEYCODES];
-  if (code !== undefined) return `input keyevent ${code}`;
+  if (Object.hasOwn(KEYCODES, key)) return `input keyevent ${KEYCODES[key as keyof typeof KEYCODES]}`;
   if (/^KEYCODE_[A-Z0-9_]{1,40}$/.test(key)) return `input keyevent ${key}`;
   if (/^\d{1,3}$/.test(key)) return `input keyevent ${key}`;
   return null;
@@ -225,6 +237,16 @@ export function typeCommands(text: string, chunk = 400): string[] {
   }
   if (buf) pushText(buf);
   return out;
+}
+
+/**
+ * Type a saved secret: the commands go to the phone's shell on stdin, so the value isn't in any process's arguments on
+ * this computer (on the phone, `input` still gets it as an argument — the shell user can see that, see tools.ts).
+ */
+export async function typeSecretText(serial: string, text: string, signal?: AbortSignal): Promise<void> {
+  if (untypable(text).length || /[\n\t]/.test(text)) throw new AdbError("The value has characters adb can't type");
+  const res = await adb(["shell"], { serial, stdin: `${typeCommands(text).join(" && ")} && exit 0 || exit 1\n`, timeoutMs: 30_000, signal });
+  if (res.code !== 0) throw deviceError(res, "Typing");
 }
 
 export async function typeText(serial: string, text: string, signal?: AbortSignal): Promise<void> {
@@ -306,10 +328,10 @@ export function parseUiXml(xml: string): UiNode[] {
   return nodes;
 }
 
-const DUMP = "/data/local/tmp/godmode-ui.xml";
-
 export async function uiNodes(serial: string, signal?: AbortSignal): Promise<UiNode[]> {
-  const res = await adb(["shell", `uiautomator dump ${DUMP} >/dev/null 2>&1; cat ${DUMP} 2>/dev/null; rm -f ${DUMP}`], { serial, timeoutMs: 30_000, signal });
+  // A fresh name each time: nothing else on the phone can prepare the file that is read back.
+  const dump = `/data/local/tmp/godmode-ui-${randomBytes(6).toString("hex")}.xml`;
+  const res = await adb(["shell", `uiautomator dump ${dump} >/dev/null 2>&1; cat ${dump} 2>/dev/null; rm -f ${dump}`], { serial, timeoutMs: 30_000, signal });
   const xml = res.stdout.toString("utf8");
   if (!xml.includes("<hierarchy")) {
     if (res.code !== 0 && !xml) throw deviceError(res, "Reading the screen");

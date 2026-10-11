@@ -1363,9 +1363,9 @@ export interface AndroidSettings {
   /** Godmode looks for Android phones connected over adb, and agents may control the phones assigned to them. */
   enabled: boolean;
   /**
-   * Agents may type saved logins and 2FA codes into a phone (android tools `fill_login` / `fill_totp`). Godmode types
-   * the values, so the model never sees them, and passwords only go into password fields — but the fill can't be bound
-   * to the login's app or website. Turning it on needs a vault grant.
+   * Godmode may type saved logins and 2FA codes into a phone (android tools `fill_login` / `fill_totp`), passwords only
+   * into password fields. What is typed on a phone can be read through its shell, so only runs that may reveal secrets
+   * get the tools. Turning it on needs a vault grant.
    */
   vaultFill: boolean;
   /** Custom adb binary; empty = one from the Android SDK, PATH or Homebrew, else Godmode's own copy (installed on demand). */

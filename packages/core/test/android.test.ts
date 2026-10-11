@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import type { Agent } from "@godmode/shared";
@@ -25,7 +25,7 @@ import {
   serialOf,
   updateDevice,
 } from "../src/android/service";
-import { parseRawScreencap, parseScreenSize, parseState, parseUiXml, typeCommands, untypable } from "../src/android/screen";
+import { frameToScreen, parseRawScreencap, parseScreenSize, parseState, parseUiXml, typeCommands, untypable } from "../src/android/screen";
 import { FrameAssembler, avcC, codecString, splitNals, videoSize } from "../src/android/stream";
 import { forgetAndroidRun } from "../src/android/tools";
 import { buildSystemPrompt } from "../src/runner/prompt";
@@ -47,7 +47,7 @@ function writeState(devices: string, phones: Record<string, unknown>) {
   writeFileSync(join(dir, "state.json"), JSON.stringify({ devices, phones }));
 }
 
-function calls(): { serial: string | null; args: string[] }[] {
+function calls(): { serial: string | null; args: string[]; stdin?: string }[] {
   try {
     return readFileSync(join(dir, "calls.jsonl"), "utf8")
       .split("\n")
@@ -62,7 +62,7 @@ function clearCalls() {
   writeFileSync(join(dir, "calls.jsonl"), "");
 }
 
-const shellCalls = () => calls().filter((c) => c.args[0] === "shell").map((c) => c.args.slice(1).join(" "));
+const shellCalls = () => calls().filter((c) => c.args[0] === "shell").map((c) => c.stdin ?? c.args.slice(1).join(" "));
 
 const PIXEL = { serialno: "R58M12ABCDE", manufacturer: "Google", model: "Pixel 8", release: "15", sdk: 35, width: 1080, height: 2400, ui: UI.replace('focused="FOCUSED"', 'focused="true"').replace('password="PASSWORD"', 'password="true"') };
 
@@ -162,6 +162,17 @@ describe("parsing", () => {
     ]);
     expect(videoSize({ width: 1080, height: 2400 })).toEqual({ width: 576, height: 1280 });
   });
+
+  test("points on a letterboxed video map to the phone's pixels", () => {
+    // 1080×2340 in a 576×1280 video: 576/1080 scales the height to 1248, so 16 px bars top and bottom.
+    const screen = { width: 1080, height: 2340 };
+    expect(videoSize(screen)).toEqual({ width: 576, height: 1280 });
+    const video = { width: 576, height: 1280 };
+    expect(frameToScreen(screen, video, 288, 16)).toEqual({ x: 540, y: 0 });
+    expect(frameToScreen(screen, video, 288, 640)).toEqual({ x: 540, y: 1170 });
+    expect(frameToScreen(screen, video, 576, 1280)).toEqual({ x: 1079, y: 2339 });
+    expect(frameToScreen(screen, screen, 10, 20)).toEqual({ x: 10, y: 20 });
+  });
 });
 
 describe("phones", () => {
@@ -242,11 +253,11 @@ describe("android MCP tools", () => {
     return { text: r.result.content.find((c) => c.type === "text")?.text ?? "", images: r.result.content.filter((c) => c.type === "image").length, isError: !!r.result.isError };
   }
 
-  function runWith(ids: string[]) {
-    const conv = createConversation({ agentId: agent.id, androidDeviceIds: ids });
+  function runWith(ids: string[], who: Agent = agent) {
+    const conv = createConversation({ agentId: who.id, androidDeviceIds: ids });
     const runId = `run_and_${Math.random().toString(36).slice(2)}`;
     attachAndroid(runId, ids, [dir]);
-    const token = issueRunToken({ runId, agentId: agent.id, conversationId: conv.id, workspaceId: null, depth: 0 });
+    const token = issueRunToken({ runId, agentId: who.id, conversationId: conv.id, workspaceId: null, depth: 0 });
     return { token, runId, done: () => (revokeRunToken(token), detachAndroid(runId), forgetAndroidRun(runId)) };
   }
 
@@ -332,17 +343,25 @@ describe("android MCP tools", () => {
     }
   });
 
-  test("saved logins go into password fields only, and never come back", async () => {
+  test("saved logins: only for agents that may see them, into password fields only, never in the output", async () => {
     const login = createCredential({ name: "Shop", url: "https://shop.example.com", username: "owner@example.com", password: "s3cret-Pass!" });
-    const run = runWith([pixelId]);
+    const revealer = await makeAgent({ name: "Revealer", permissions: { secretAccess: "reveal" } });
+    const run = runWith([pixelId], revealer);
+    const fillOnly = runWith([pixelId]);
     expect((await call(run.token, "fill_login", { credentialId: login.id, field: "password" })).text).toContain("turned off");
     updateSettings({ android: { vaultFill: true } });
     try {
+      // The phone's shell can read what is typed: an agent that may only fill doesn't get the tools.
+      expect((await rpc(fillOnly.token, "tools/list")).result.tools!.map((t) => t.name)).not.toContain("fill_login");
+      expect((await call(fillOnly.token, "fill_login", { credentialId: login.id, field: "password" })).text).toContain("only types saved logins into a phone for agents that may see passwords");
+      expect((await rpc(run.token, "tools/list")).result.tools!.map((t) => t.name)).toContain("fill_login");
       clearCalls();
       const filled = await call(run.token, "fill_login", { credentialId: login.id, field: "password" });
       expect(filled.isError).toBe(false);
       expect(filled.text).toContain('Typed the password of "Shop" into the password field of com.example.shop');
-      expect(shellCalls().some((c) => c.includes("input text 's3cret-Pass!'"))).toBe(true);
+      // Typed through stdin: the password isn't in adb's arguments on this computer.
+      expect(calls().some((c) => c.stdin?.startsWith("input text 's3cret-Pass!'"))).toBe(true);
+      expect(calls().some((c) => c.args.join(" ").includes("s3cret"))).toBe(false);
       // Whatever a command prints afterwards, the password is masked.
       expect((await call(run.token, "shell", { command: "echo s3cret-Pass!" })).text).toBe("Exit code: 0\n••••••••");
       // Not a password field: refused.
@@ -354,6 +373,48 @@ describe("android MCP tools", () => {
       updateSettings({ android: { vaultFill: false } });
       writeState("R58M12ABCDE device\n", { R58M12ABCDE: PIXEL });
       run.done();
+      fillOnly.done();
+    }
+  });
+
+  test("files from the phone: one at a time, into the run's folders", async () => {
+    const run = runWith([pixelId]);
+    try {
+      expect((await call(run.token, "pull_file", { remote_path: "/sdcard/DCIM" })).text).toContain("is a folder");
+      expect((await call(run.token, "pull_file", { remote_path: "/sdcard/missing.jpg" })).text).toContain("No such file");
+      const pulled = await call(run.token, "pull_file", { remote_path: "/sdcard/Download/a.txt", local_path: join(dir, "a.txt") });
+      expect(pulled.text).toBe(`Copied /sdcard/Download/a.txt from Shop phone to ${realpathSync(dir)}/a.txt.`);
+      expect(readFileSync(join(dir, "a.txt"), "utf8")).toStartWith("pulled /sdcard/Download/a.txt");
+      expect((await call(run.token, "pull_file", { remote_path: "/sdcard/Download/a.txt", local_path: "/etc/a.txt" })).text).toContain("outside the folders");
+    } finally {
+      run.done();
+    }
+  });
+
+  test("a manager gives phones to other agents, never to itself", async () => {
+    const boss = await makeAgent({ name: "Boss", permissions: { canManageAgents: true } });
+    const conv = createConversation({ agentId: boss.id });
+    const token = issueRunToken({ runId: "run_and_boss", agentId: boss.id, conversationId: conv.id, workspaceId: null, depth: 0 });
+    const gateway = async (name: string, args: Record<string, unknown>) => {
+      const res = await fetch(`${env.baseUrl}/mcp`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+      });
+      const r = (await res.json()) as { result: { content: { text: string }[]; isError?: boolean } };
+      return { text: r.result.content[0]!.text, isError: !!r.result.isError };
+    };
+    try {
+      const self = await gateway("android_assign", { deviceId: pixelId, agentId: boss.id });
+      expect(self.isError).toBe(true);
+      expect(self.text).toContain("can't give yourself a phone");
+      expect(getAgent(boss.id).androidDeviceIds).toEqual([]);
+      const worker = await makeAgent({ name: "Phone Worker" });
+      expect((await gateway("android_assign", { deviceId: pixelId, agentId: worker.id })).isError).toBe(false);
+      expect(getAgent(worker.id).androidDeviceIds).toEqual([pixelId]);
+      expect((await gateway("android_devices_list", {})).text).toContain('"name": "Shop phone"');
+    } finally {
+      revokeRunToken(token);
     }
   });
 

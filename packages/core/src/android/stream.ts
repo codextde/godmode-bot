@@ -172,7 +172,10 @@ class PhoneStream {
   constructor(readonly deviceId: string) {}
 
   start() {
-    this.loop ??= this.run().catch((err) => log.warn(`live view of ${this.deviceId} stopped`, err));
+    // Video and pictures side by side: a viewer that can't decode H.264 watches along with one that can.
+    this.loop ??= Promise.all([this.videoLoop(), this.frameLoop()])
+      .then(() => undefined)
+      .catch((err) => log.warn(`live view of ${this.deviceId} stopped`, err));
   }
 
   restart() {
@@ -180,7 +183,12 @@ class PhoneStream {
     this.kill();
   }
 
-  private kill() {
+  /** Nobody watches the video anymore: don't keep screenrecord waiting for the next change on screen. */
+  videoGone() {
+    if (!this.wantsVideo()) this.kill();
+  }
+
+  kill() {
     try {
       this.proc?.kill("SIGKILL");
     } catch {
@@ -200,17 +208,27 @@ class PhoneStream {
     emit({ type: "android.video", deviceId: this.deviceId, kind: "error", message });
   }
 
-  private async run() {
+  private async videoLoop() {
+    await this.loopWhile(() => this.wantsVideo(), () => this.streamVideo());
+  }
+
+  private async frameLoop() {
+    await this.loopWhile(() => this.wantsFrames(), () => this.sendFrame());
+  }
+
+  private async loopWhile(wanted: () => boolean, step: () => Promise<void>) {
     while (!this.stopped) {
+      if (!wanted()) {
+        await sleep(300);
+        continue;
+      }
       if (!isConnected(this.deviceId)) {
         this.error(`${safeName(this.deviceId)} isn't connected.`);
         await sleep(2000);
         continue;
       }
       try {
-        if (this.wantsVideo()) await this.streamVideo();
-        else if (this.wantsFrames()) await this.sendFrame();
-        else await sleep(500);
+        await step();
       } catch (err) {
         if (this.stopped) break;
         this.error(err instanceof Error ? err.message : String(err));
@@ -235,6 +253,7 @@ class PhoneStream {
       width: size.width,
       height: size.height,
       screen: { width: raw.width, height: raw.height },
+      ...(this.noVideo ? { all: true } : {}),
     });
     await sleep(Math.max(100, 400 - (Date.now() - started)));
   }
@@ -244,12 +263,15 @@ class PhoneStream {
     const bin = resolveAdb();
     if (!bin) throw new AdbError("adb is not installed", "not_installed");
     const screen = await screenSize(serial, 0);
+    if (this.stopped || !this.wantsVideo()) return;
     const size = videoSize(screen);
     const proc = Bun.spawn(
       [bin.path, "-s", serial, "exec-out", `screenrecord --output-format=h264 --size ${size.width}x${size.height} --bit-rate ${BIT_RATE} -`],
       { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: childEnv() as Record<string, string> },
     );
     this.proc = proc;
+    // Stopped while it was starting: stop() found no process to kill.
+    if (this.stopped || !this.wantsVideo()) this.kill();
     this.restartWanted = false;
     let frames = 0;
     const startedAt = Date.now();
@@ -354,6 +376,9 @@ function safeName(id: string): string {
 
 const streams = new Map<string, PhoneStream>();
 const restartTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const lastRestart = new Map<string, number>();
+/** A new viewer gets its keyframe soon; a congested one waits longer, so one slow viewer can't keep restarting everyone's. */
+const RESTART_GAP_MS = { join: 1500, congested: 6000 };
 
 /** Viewers of a phone changed (from the WebSocket hub): start, restart for a keyframe, or stop its stream. */
 export function setViewers(deviceId: string, video: number, frames: number, joined: boolean): void {
@@ -375,18 +400,21 @@ export function setViewers(deviceId: string, video: number, frames: number, join
   }
   stream.videoViewers = video;
   stream.frameViewers = frames;
-  if (joined && video > 0) requestKeyframe(deviceId);
+  if (video === 0) stream.videoGone();
+  if (joined && video > 0) requestKeyframe(deviceId, "join");
 }
 
-/** A viewer needs a keyframe (joined, or dropped frames): restart the stream, at most every 1.5 s. */
-export function requestKeyframe(deviceId: string): void {
+/** A viewer needs a keyframe (it joined, or dropped frames): restart the stream, spaced out per device. */
+export function requestKeyframe(deviceId: string, reason: keyof typeof RESTART_GAP_MS = "congested"): void {
   if (restartTimers.has(deviceId)) return;
+  const wait = Math.max(300, (lastRestart.get(deviceId) ?? 0) + RESTART_GAP_MS[reason] - Date.now());
   restartTimers.set(
     deviceId,
     setTimeout(() => {
       restartTimers.delete(deviceId);
+      lastRestart.set(deviceId, Date.now());
       streams.get(deviceId)?.restart();
-    }, 300),
+    }, wait),
   );
 }
 

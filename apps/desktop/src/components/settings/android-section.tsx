@@ -109,12 +109,12 @@ export function AndroidSection({ settings }: { settings: Settings }) {
           label="Type logins and 2FA codes into phones"
           htmlFor="android-vault-fill"
           disabled={!a.enabled}
-          description="Godmode types saved logins into password fields on the phone without the AI seeing them, but it can't tell which app a field belongs to. An agent that can use the phone's shell could read what is typed. Turning this on asks for your vault passphrase."
+          description="Godmode types saved logins into password fields on the phone. Whatever is typed on a phone can be read through its shell, so only agents you allow to see passwords get this; the others ask you to sign in on the phone. Turning this on asks for your vault passphrase."
         >
           <Switch id="android-vault-fill" checked={a.vaultFill} disabled={!a.enabled} onCheckedChange={(on) => void setVaultFill(on)} />
         </SettingRow>
         <ul aria-label="How it works" className="flex flex-wrap gap-2 py-3.5">
-          <Fact icon={<EyeOff />}>Typed by Godmode, not the AI</Fact>
+          <Fact icon={<EyeOff />}>Only agents that may see passwords</Fact>
           <Fact icon={<RectangleEllipsis />}>Passwords only into password fields</Fact>
           <Fact icon={<ScrollText />}>Every fill audited</Fact>
           <Fact icon={<AppWindow />} caution>
