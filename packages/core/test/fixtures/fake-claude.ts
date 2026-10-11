@@ -50,7 +50,8 @@
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
  *               and answers "DREAM {json}". Digest keywords: DREAM_SLEEP hangs and DREAM_CRASH exits 3 (both after
- *               writing the memory), DREAM_NO_REPORT skips the report.
+ *               writing the memory), DREAM_NO_REPORT skips the report. With a workspace inventory in the prompt and a
+ *               `tidy-ops.json` in the state dir, it first calls workspace_tidy with those operations.
  *   ASK_HUMAN   call the gateway's ask_human (arguments from the state dir's `ask-args.json` when it exists) as a step,
  *              then call the PostToolBatch hook like Claude Code does: told to stop, write `stopped-by-hook` and end the
  *              turn without an answer, else answer "no stop". The tool's result goes to `ask-result.json`.
@@ -436,7 +437,10 @@ if (slash?.[1] === "clear") {
 } else if (prompt.startsWith("Dream: consolidate")) {
   out(init);
   const cwd = process.cwd();
-  const digestRel = /`(workspace\/tmp\/dreams\/[^`]+\.md)`/.exec(prompt)?.[1] ?? null;
+  const digestRel = /`(workspace\/tmp\/dreams\/[^`]+?(?<!-workspace)\.md)`/.exec(prompt)?.[1] ?? null;
+  const inventoryRel = /`(workspace\/tmp\/dreams\/[^`]+-workspace\.md)`/.exec(prompt)?.[1] ?? null;
+  const inventory = inventoryRel && existsSync(join(cwd, inventoryRel)) ? readFileSync(join(cwd, inventoryRel), "utf8") : null;
+  const tidyOps = join(stateDir, "tidy-ops.json");
   const digest = digestRel && existsSync(join(cwd, digestRel)) ? readFileSync(join(cwd, digestRel), "utf8") : "";
   const memoryPath = join(cwd, "MEMORY.md");
   const hadMemory = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8").length : 0;
@@ -446,7 +450,7 @@ if (slash?.[1] === "clear") {
     mkdirSync(join(cwd, "memory"), { recursive: true });
     writeFileSync(join(cwd, "memory", "dream-notes.md"), `# Notes\n\n${facts.length} fact(s)\n`);
   }
-  if (digest.includes("DREAM_SLEEP")) {
+  if (/DREAM_SLEEP(?!_)/.test(digest)) {
     textTurn("Dreaming");
     await pause(60_000);
   }
@@ -466,6 +470,14 @@ if (slash?.[1] === "clear") {
   await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
   const list = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" });
   const forbidden = await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "notify_user", arguments: { title: "hi", body: "x" } } });
+  const tidy =
+    inventory !== null && existsSync(tidyOps)
+      ? await rpc({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "workspace_tidy", arguments: { operations: JSON.parse(readFileSync(tidyOps, "utf8")) } } })
+      : null;
+  if (digest.includes("DREAM_SLEEP_AFTER_TIDY")) {
+    textTurn("Dreaming");
+    await pause(60_000);
+  }
   const report = digest.includes("DREAM_NO_REPORT")
     ? null
     : await rpc({
@@ -481,6 +493,8 @@ if (slash?.[1] === "clear") {
     report: report ? (report.result.content[0].text as string) : null,
     digest: digest.length > 0,
     hadMemory,
+    inventory,
+    tidy: tidy ? { text: tidy.result.content[0].text as string, isError: tidy.result.isError === true } : null,
   };
   const text = `DREAM ${JSON.stringify(summary)}`;
   textTurn(text);

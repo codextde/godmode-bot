@@ -16,9 +16,11 @@ export interface ClaudeMdContext {
 
 /**
  * Rules every agent repository's .gitignore must contain (re-added to existing repos when missing).
- * `workspace/uploads/` holds files the human attaches — possibly large or sensitive, so they stay out of git.
+ * `workspace/uploads/` holds files the human attaches — possibly large or sensitive, so they stay out of git. `runs/`
+ * holds raw run logs (screenshots and all): versioned they would fill the history for good, so they only live on disk
+ * until the cleanup removes old ones.
  */
-export const AGENT_GITIGNORE_RULES = ["workspace/tmp/", "workspace/uploads/", "*.tmp", ".claude-mem/", ".DS_Store"] as const;
+export const AGENT_GITIGNORE_RULES = ["workspace/tmp/", "workspace/uploads/", "/runs/", "*.tmp", ".claude-mem/", ".DS_Store"] as const;
 
 export const AGENT_GITIGNORE = `# Managed by Godmode Bot\n${AGENT_GITIGNORE_RULES.join("\n")}\n`;
 
@@ -120,9 +122,10 @@ export function renderClaudeMd(agent: Agent, ctx: ClaudeMdContext): string {
       "| `CLAUDE.md` | This file (generated — edits are overwritten when your settings change) |",
       "| `MEMORY.md` | Your long-term memory — keep it current |",
       "| `memory/` | Longer notes, playbooks and reference material |",
-      "| `workspace/` | Files you produce or download (`workspace/tmp/` and `workspace/uploads/` are not versioned) |",
+      "| `workspace/` | Files you produce or download, sorted into topic folders (`workspace/tmp/` and `workspace/uploads/` are not versioned) |",
+      "| `workspace/tmp/` | Throwaway files: what nobody touched for a week is removed |",
       "| `conversations/` | Conversation transcripts (written by Godmode) |",
-      "| `runs/` | Raw run logs (written by Godmode) |",
+      "| `runs/` | Raw run logs (written by Godmode, not versioned, removed after two weeks) |",
       "| `state/` | Snapshot of your settings and routines (written by Godmode, read-only for you) |",
       "",
       "Never rewrite git history (no reset, rebase or force operations).",

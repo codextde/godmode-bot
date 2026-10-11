@@ -36,9 +36,16 @@ export default function Memory() {
             <SwitchRow icon="branch" title="Save changes with git" value={m.autoCommit} onChange={(autoCommit) => void patchSettings({ memory: { autoCommit } })} />
           </Group>
 
-          <Group title="Dreaming" footer="While idle, agents review recent chats and tidy up their memory: merge duplicates, fix contradictions, date what has passed.">
+          <Group title="Dreaming" footer="While idle, agents review recent chats and tidy up their memory and workspace: merge duplicates, fix contradictions, date what has passed, sort files.">
             <SwitchRow icon="moon" title="Dreaming" value={d.enabled} onChange={(enabled) => void patchSettings({ memory: { dreaming: { enabled } } })} />
             <PickerRow icon="clock" title="When" value={cron} options={schedules} onChange={(next) => void patchSettings({ memory: { dreaming: { cron: next } } })} />
+            <SwitchRow
+              icon="folder"
+              title="Tidy the workspace"
+              detail="Sorts files into folders and clears out leftovers."
+              value={d.tidyWorkspace}
+              onChange={(tidyWorkspace) => void patchSettings({ memory: { dreaming: { tidyWorkspace } } })}
+            />
             <StepperRow
               icon="chats"
               title="New exchanges needed"
