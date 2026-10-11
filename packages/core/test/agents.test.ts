@@ -434,7 +434,7 @@ describe("gitignore", () => {
 
     await ensureAgentRepo(agent);
     const gitignore = readFileSync(join(agent.repoPath, ".gitignore"), "utf8");
-    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\nruns/\n.DS_Store\n");
+    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.DS_Store\n");
     const files = await headFiles(agent.repoPath);
     expect(files).not.toContain("workspace/uploads/old.pdf");
     expect(files.filter((f) => f.startsWith("runs/"))).toEqual([]);
@@ -446,6 +446,11 @@ describe("gitignore", () => {
     // Complete now: the fast path does nothing and later commits stay clean.
     await ensureAgentRepo(agent);
     expect(await repo.commitAll(agent.repoPath, "noop")).toBeNull();
+    // Only the run logs at the top: a folder of the same name in the workspace stays versioned.
+    mkdirSync(join(agent.repoPath, "workspace", "study", "runs"), { recursive: true });
+    writeFileSync(join(agent.repoPath, "workspace", "study", "runs", "a.csv"), "1,2\n");
+    await repo.commitAll(agent.repoPath, "Study");
+    expect(await headFiles(agent.repoPath)).toContain("workspace/study/runs/a.csv");
   });
 });
 

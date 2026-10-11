@@ -32,7 +32,7 @@ import {
   startDream,
 } from "../src/memory/dreaming";
 import { diffSnapshots, isMemoryPath, memoryForPrompt, snapshotMemory } from "../src/memory/files";
-import { applyTidy, workspaceInventory, workspacePath } from "../src/memory/workspace";
+import { applyTidy, canUndoWorkspace, undoWorkspace, workspaceInventory, workspacePath } from "../src/memory/workspace";
 
 let env: TestEnv;
 const DAY = 86_400_000;
@@ -609,6 +609,42 @@ describe("tidying the workspace", () => {
     expect(outcomes[5]!.line).toMatch(/named in the automation "Weekly"/);
     expect(readRepo(agent, "memory/tools.md")).toContain("workspace/scripts/asc.mjs");
     expect([ws(agent, "scripts/asc.mjs"), ws(agent, "tmp/tools/old.log"), ws(agent, "tools/other.sh")]).toEqual([true, true, true]);
+  });
+
+  test("mentions end at a full stop, only this agent's paths are rewritten, and nested moves can be undone", async () => {
+    const agent = await makeAgent({ name: "Careful Sorter" });
+    entry(agent, "a.pdf");
+    entry(agent, "notes.txt");
+    entry(agent, "reports", ["q3.pdf"]);
+    entry(agent, "project", [".gitignore", "main.ts"]);
+    const other = join(env.dataDir, "agents", "someone-else", "workspace", "a.pdf");
+    writeFileSync(
+      join(agent.repoPath, "memory", "paths.md"),
+      `- Mine: workspace/a.pdf.\n- Mine too: ${join(agent.repoPath, "workspace", "a.pdf")}\n- Theirs: ${other}\n- Notes are in workspace/notes.txt.\n`,
+    );
+
+    const outcomes = await applyTidy(agent, [
+      { action: "discard", path: "notes.txt" },
+      { action: "discard", path: "project" },
+      { action: "move", path: "a.pdf", to: "invoices/$&.pdf" },
+      { action: "move", path: "invoices", to: "archive/invoices" },
+    ]);
+    expect(outcomes[0]!.line).toMatch(/memory\/paths\.md still names it/);
+    expect(outcomes[1]!.line).toMatch(/files git doesn't keep/);
+    expect(outcomes.slice(2).map((o) => !!o.change)).toEqual([true, true]);
+    expect(readRepo(agent, "memory/paths.md")).toBe(
+      `- Mine: workspace/archive/invoices/$&.pdf.\n- Mine too: ${join(agent.repoPath, "workspace", "archive", "invoices", "$&.pdf")}\n- Theirs: ${other}\n- Notes are in workspace/notes.txt.\n`,
+    );
+    const changes = outcomes.flatMap((o) => (o.change ? [o.change] : []));
+    expect(ws(agent, "archive/invoices/$&.pdf")).toBe(true);
+    expect(canUndoWorkspace(agent.repoPath, changes)).toBe(true);
+    expect(undoWorkspace(agent.repoPath, changes)).toEqual([]);
+    expect([ws(agent, "a.pdf"), ws(agent, "archive"), ws(agent, "invoices")]).toEqual([true, false, false]);
+
+    // A dream that has ended moves nothing more.
+    const stopped = await applyTidy(agent, [{ action: "move", path: "a.pdf", to: "b.pdf" }], { active: () => false });
+    expect(stopped[0]!.line).toMatch(/the dream has ended/);
+    expect(ws(agent, "a.pdf")).toBe(true);
   });
 
   test("a dream that ends early puts back what it moved", async () => {

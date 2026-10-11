@@ -14,6 +14,7 @@ import { createApp } from "../src/server/app";
 import { getAccessToken } from "../src/server/auth";
 import { __setTempDirForTests, lastCleanup, runCleanup, scanCleanup } from "../src/services/cleanup";
 import { __resetMaintenanceForTests, runMaintenance, stopMaintenance } from "../src/services/maintenance";
+import { createConversation } from "../src/services/conversations";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import { removeCheckoutUnless, repoCacheDir } from "../src/tasks/git";
 import { setVmSupportForTests } from "../src/vm/tart";
@@ -340,7 +341,7 @@ suite("agent repositories", () => {
     const helper = join(tmp, "helpers");
     file(join(helper, "upload.mjs"), 1024, 8 * DAY);
     age(helper, 8 * DAY);
-    writeFileSync(join(agent.repoPath, "memory", "playbook.md"), "- Upload with workspace/tmp/helpers/upload.mjs\n");
+    writeFileSync(join(agent.repoPath, "memory", "playbook.md"), "- To upload, run workspace/tmp/helpers/upload.mjs.\n");
 
     const scratch = item(await scanCleanup(), "agent-scratch");
     expect(scratch.recommended).toBe(true);
@@ -362,6 +363,21 @@ suite("agent repositories", () => {
     expect([render, kept, helper].map(existsSync)).toEqual([true, true, true]);
     rmSync(join(agent.repoPath, "memory", "playbook.md"));
     expect(paths(item(await scanCleanup(), "agent-scratch"))).toEqual([helper]);
+
+    // A run that waits paused (for an answer) may still need its scratch.
+    const other = await createAgent({ name: "Waiter" });
+    const waiting = join(other.repoPath, "workspace", "tmp", "draft");
+    file(join(waiting, "a.txt"), 1024);
+    age(waiting, 9 * DAY);
+    const chat = createConversation({ agentId: other.id, title: "Waiting" }).id;
+    insert("runs", { id: "run_waiting00001", agent_id: other.id, conversation_id: chat, trigger: "chat", status: "paused", prompt: "x", created_at: new Date().toISOString() });
+    insert("paused_runs", { run_id: "run_waiting00001", conversation_id: chat, agent_id: other.id, message_id: "msg_1", reason: "question", created_at: new Date().toISOString() });
+    try {
+      expect(item(await scanCleanup(), "agent-scratch").entries.find((e) => e.path === waiting)?.kept).toMatch(/Waiter is working/);
+    } finally {
+      sql("DELETE FROM paused_runs WHERE run_id = 'run_waiting00001'");
+      sql("DELETE FROM runs WHERE id = 'run_waiting00001'");
+    }
   });
 
   test("run logs older than two weeks go, unless a run may still write to them", async () => {
@@ -397,27 +413,30 @@ suite("agent repositories", () => {
     }
   });
 
-  test("a history of loose objects is packed: every version stays, and isomorphic-git keeps working", async () => {
+  test("older versions are packed; the current files stay loose for isomorphic-git, and every version stays", async () => {
     const data = join(agent.repoPath, "workspace", "data.bin");
     const bytes = randomBytes(11 * 1024 * 1024);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       writeFileSync(data, Buffer.concat([bytes, Buffer.from([i])]));
       await commitAll(agent.repoPath, `version ${i}`);
     }
     const history = item(await scanCleanup(), "agent-history");
     expect(history.recommended).toBe(true);
     expect(paths(history)).toEqual([join(agent.repoPath, ".git")]);
-    expect(history.bytes).toBeGreaterThan(0);
+    expect(history.entries[0]?.name).toMatch(/3 older versions/);
 
     const result = await runCleanup(["agent-history"]);
     expect(result.results[0]).toMatchObject({ ok: true, removed: 1 });
     expect(result.freedBytes).toBeGreaterThan(15 * 1024 * 1024);
-    expect(await git(["count-objects", "-v"], agent.repoPath)).toMatch(/^count: 0$/m);
     expect(await git(["fsck", "--no-progress"], agent.repoPath)).toBe("");
+    // isomorphic-git reads a whole pack for one object: what it reads (current files, trees, commits) stays loose.
+    const current = await git(["rev-parse", "HEAD:workspace/data.bin"], agent.repoPath);
+    expect(existsSync(join(agent.repoPath, ".git", "objects", current.slice(0, 2), current.slice(2)))).toBe(true);
+    expect(await git(["cat-file", "-p", "HEAD~3:workspace/data.bin"], agent.repoPath).then((o) => o.length)).toBeGreaterThan(0);
 
     writeFileSync(join(agent.repoPath, "workspace", "after.md"), "after the pack\n");
     expect(await commitAll(agent.repoPath, "after the pack")).toBeTruthy();
-    expect((await gitLog(agent.repoPath, 4)).map((c) => c.message)).toEqual(["after the pack", "version 2", "version 1", "version 0"]);
+    expect((await gitLog(agent.repoPath, 5)).map((c) => c.message)).toEqual(["after the pack", "version 3", "version 2", "version 1", "version 0"]);
     expect(item(await scanCleanup(), "agent-history").count).toBe(0);
     rmSync(data);
     await commitAll(agent.repoPath, "drop the data");

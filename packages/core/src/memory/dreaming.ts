@@ -570,22 +570,31 @@ export function dreamTidies(runId: string): boolean {
   return !!get("SELECT id FROM dreams WHERE run_id = ? AND workspace IS NOT NULL AND status IN ('queued', 'running')", runId);
 }
 
-/** `workspace_tidy` from a dream run: carry out the moves and record them on the dream. */
-export async function tidyWorkspace(runId: string, operations: TidyOperation[]): Promise<string> {
+/** Tidy calls of a dream, one at a time (dream id → the call in progress): moves and their record stay in order. */
+const tidying = new Map<string, Promise<unknown>>();
+
+/** `workspace_tidy` from a dream run: carry out the moves and record each on the dream as it happens. */
+export function tidyWorkspace(runId: string, operations: TidyOperation[]): Promise<string> {
   const row = get<DreamRow>(`SELECT ${COLUMNS} FROM dreams WHERE run_id = ? AND status IN ('queued', 'running')`, runId);
-  if (!row || row.workspace === null) throw badRequest("Only a dream that tidies the workspace can move its files");
-  const agent = getAgent(row.agent_id);
-  const done = movesOf(row);
-  const room = MAX_TIDY_CHANGES - done.length;
+  if (!row || row.workspace === null) return Promise.reject(badRequest("Only a dream that tidies the workspace can move its files"));
+  const turn = (tidying.get(row.id) ?? Promise.resolve()).then(() => tidyInTurn(row.id, row.agent_id, operations));
+  const tail = turn.catch(() => {});
+  tidying.set(row.id, tail);
+  void tail.then(() => tidying.get(row.id) === tail && tidying.delete(row.id));
+  return turn;
+}
+
+async function tidyInTurn(dreamId: string, agentId: string, operations: TidyOperation[]): Promise<string> {
+  const moves = () => get<{ workspace: string | null; status: DreamStatus }>("SELECT workspace, status FROM dreams WHERE id = ?", dreamId);
+  const room = MAX_TIDY_CHANGES - movesOf(moves() ?? { workspace: null }).length;
   if (room <= 0) return `This dream already made ${MAX_TIDY_CHANGES} workspace changes — leave the rest for the next one.`;
-  const outcomes = await applyTidy(agent, operations.slice(0, room));
-  const changes = outcomes.flatMap((o) => (o.change ? [o.change] : []));
-  if (changes.length) {
-    // Read again: the dream may call the tool in parallel.
-    const current = movesOf(get<{ workspace: string | null }>("SELECT workspace FROM dreams WHERE id = ?", row.id) ?? { workspace: null });
-    exec("UPDATE dreams SET workspace = ? WHERE id = ?", JSON.stringify([...current, ...changes]), row.id);
-    emitDreams();
-  }
+  // Still running, and not being paused: the rollback of a dream that ended takes what is recorded by then.
+  const active = () => ACTIVE.includes(moves()?.status as DreamStatus) && !preempted.has(dreamId);
+  const record = (change: DreamWorkspaceChange) => {
+    exec("UPDATE dreams SET workspace = ? WHERE id = ?", JSON.stringify([...movesOf(moves() ?? { workspace: null }), change]), dreamId);
+  };
+  const outcomes = await applyTidy(getAgent(agentId), operations.slice(0, room), { active, record });
+  if (outcomes.some((o) => o.change)) emitDreams();
   const lines = outcomes.map((o) => `- ${o.line}`);
   if (operations.length > room) lines.push(`- ${operations.length - room} more left out: a dream makes at most ${MAX_TIDY_CHANGES} workspace changes.`);
   return lines.join("\n");

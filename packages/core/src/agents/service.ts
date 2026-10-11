@@ -455,7 +455,7 @@ async function syncGitignore(dir: string): Promise<void> {
   const separator = current.endsWith("\n") || current === "" ? "" : "\n";
   await writeFile(file, `${current}${separator}# Added by Godmode Bot\n${missing.join("\n")}\n`, "utf8");
   if (missing.includes("workspace/uploads/")) await repo.untrackInLock(dir, "workspace/uploads");
-  if (missing.includes("runs/")) await repo.untrackInLock(dir, "runs");
+  if (missing.includes("/runs/")) await repo.untrackInLock(dir, "runs");
 }
 
 function gitignoreComplete(dir: string): boolean {

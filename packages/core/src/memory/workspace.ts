@@ -29,7 +29,8 @@ export const MAX_TIDY_CHANGES = 300;
 export const RESCUE_MAX = 25_000_000;
 const SCRATCH_LIMIT = 60;
 /** Names of secrets and keys: tmp/ isn't versioned, the rest of the workspace is — they never come out of it. */
-const SECRET = /(^|\/)(\.?env(\.[^/]*)?|[^/]*\.(env|pem|key|p8|p12|pfx|jks|keystore|kdbx)|[^/]*(secret|credential|passw|token|apikey|api-key|private)[^/]*)$/i;
+const SECRET =
+  /(^|\/)(\.?env(\.[^/]*)?|[^/]*\.(env|pem|key|p8|p12|pfx|jks|keystore|kdbx|ppk)|\.?(netrc|npmrc|pypirc|pgpass)|id_(rsa|dsa|ecdsa|ed25519)[^/]*|service-account[^/]*|[^/]*(secret|credential|passw|token|apikey|api-key|private)[^/]*)$/i;
 const INVENTORY_LIMIT = 400;
 const PEEK = 5;
 const DAY = 86_400_000;
@@ -66,6 +67,16 @@ async function holdsSecret(path: string, rel: string): Promise<boolean> {
   if (!st?.isDirectory()) return false;
   for (const name of await readdir(path).catch(() => [] as string[])) {
     if (await holdsSecret(join(path, name), name)) return true;
+  }
+  return false;
+}
+
+/** The entry holds files git doesn't keep (a repository of its own, or files its own .gitignore leaves out). */
+async function holdsUnversioned(path: string): Promise<boolean> {
+  const st = await lstat(path).catch(() => null);
+  if (!st?.isDirectory()) return false;
+  for (const name of await readdir(path).catch(() => [] as string[])) {
+    if (name === ".git" || name === ".gitignore" || (await holdsUnversioned(join(path, name)))) return true;
   }
   return false;
 }
@@ -134,14 +145,14 @@ const NOT_BEFORE = "(?<![A-Za-z0-9._-])";
 /** `workspace/` as a path segment (also the end of an absolute path). */
 const RELATIVE = `${NOT_BEFORE}${escape(WORKSPACE_DIR)}/`;
 
-/** `workspace/<rel>` as a path of its own, or a path below it. */
+/** `workspace/<rel>` as a path of its own (a full stop after it ends the sentence), or a path below it. */
 function mentionPattern(rel: string, flags = "", prefix = RELATIVE): RegExp {
-  return new RegExp(`${prefix}${escape(rel)}(?![A-Za-z0-9._-])`, flags);
+  return new RegExp(`${prefix}${escape(rel)}(?![A-Za-z0-9_-]|\\.[A-Za-z0-9_-])`, flags);
 }
 
 /** `workspace/<rel>` itself (a folder named as a place), not a path below it. */
 function folderPattern(rel: string, prefix = RELATIVE): RegExp {
-  return new RegExp(`${prefix}${escape(rel)}/?(?![A-Za-z0-9._/-])`);
+  return new RegExp(`${prefix}${escape(rel)}/?(?![A-Za-z0-9_/-]|\\.[A-Za-z0-9_-])`);
 }
 
 /** The agent as far as references go. */
@@ -340,12 +351,17 @@ function pruneEmpty(root: string, rel: string) {
   }
 }
 
-/** Point the memory's mentions of `workspace/<from>` at `workspace/<to>`. Returns the files rewritten. */
+/**
+ * Point the memory's mentions of `workspace/<from>` at `workspace/<to>`: relative ones and this agent's absolute ones
+ * (another agent's workspace has paths of its own). Reads the files as they are now. Returns the files rewritten.
+ */
 function rewriteMemory(repoPath: string, refs: References, from: string, to: string): string[] {
   const pattern = mentionPattern(from, "g");
+  const own = (text: string, at: number) => at === 0 || text[at - 1] !== "/" || text.slice(0, at - 1).endsWith(repoPath);
+  refs.memory = snapshotMemory(repoPath).files;
   const changed: string[] = [];
   for (const [path, text] of Object.entries(refs.memory)) {
-    const next = text.replace(pattern, `${WORKSPACE_DIR}/${to}`);
+    const next = text.replace(pattern, (match: string, at: number) => (own(text, at) ? `${WORKSPACE_DIR}/${to}` : match));
     if (next === text || !canRestore(repoPath, path)) continue;
     writeFileSync(join(repoPath, path), next, "utf8");
     refs.memory[path] = next;
@@ -361,13 +377,24 @@ function discardTarget(root: string, rel: string, at: Date): string {
   return to;
 }
 
-/** Carry out a dream's tidy operations, in order. Each one is checked on its own; refusals don't stop the rest. */
-export async function applyTidy(agent: Owner, operations: TidyOperation[], at = new Date()): Promise<TidyOutcome[]> {
+export interface TidyHooks {
+  /** Asked right before each move: false once the dream has ended (or is being stopped), and nothing more moves. */
+  active?: () => boolean;
+  /** Called right after each move, before anything else can happen (the move is on disk now). */
+  record?: (change: DreamWorkspaceChange) => void;
+}
+
+/**
+ * Carry out a dream's tidy operations, in order. Each one is checked on its own; refusals don't stop the rest. Callers
+ * run one call at a time per dream (memory/dreaming.ts).
+ */
+export async function applyTidy(agent: Owner, operations: TidyOperation[], hooks: TidyHooks = {}, at = new Date()): Promise<TidyOutcome[]> {
   const root = workspaceRoot(agent.repoPath);
   if (!root) return operations.map((op) => ({ change: null, line: `${op.path}: there is no workspace folder.` }));
   const refs = references(agent);
   const outcomes: TidyOutcome[] = [];
   for (const op of operations) {
+    refs.memory = snapshotMemory(agent.repoPath).files;
     const from = workspacePath(agent.repoPath, op.path);
     const skip = (why: string) => outcomes.push({ change: null, line: `${op.path}: skipped — ${why}` });
     if (!from) {
@@ -418,6 +445,10 @@ export async function applyTidy(agent: Owner, operations: TidyOperation[], at = 
         skip(`${named.join(", ")} still name${named.length === 1 ? "s" : ""} it. Keep it, or remove those mentions first.`);
         continue;
       }
+      if (await holdsUnversioned(fromAbs)) {
+        skip("it holds files git doesn't keep (a repository of its own or ignored files), so they would be gone for good. Keep it, or move it.");
+        continue;
+      }
       to = discardTarget(root, from, at);
     } else {
       to = workspacePath(agent.repoPath, op.to ?? "");
@@ -443,7 +474,16 @@ export async function applyTidy(agent: Owner, operations: TidyOperation[], at = 
       }
     }
 
+    // From here to the record nothing awaits: a dream that ends meanwhile can't miss a move in its rollback.
+    if (hooks.active && !hooks.active()) {
+      outcomes.push({ change: null, line: `${op.path}: not moved — the dream has ended.` });
+      break;
+    }
     const toAbs = join(root, to);
+    if (exists(toAbs)) {
+      skip(`${to} already exists — pick a free name.`);
+      continue;
+    }
     try {
       mkdirSync(dirname(toAbs), { recursive: true });
       renameSync(fromAbs, toAbs);
@@ -451,8 +491,9 @@ export async function applyTidy(agent: Owner, operations: TidyOperation[], at = 
       skip(`it couldn't be moved (${err instanceof Error ? err.message : String(err)}).`);
       continue;
     }
-    pruneEmpty(root, from);
     const change: DreamWorkspaceChange = { action: op.action, from, to, bytes: stats.bytes };
+    hooks.record?.(change);
+    pruneEmpty(root, from);
     if (op.action === "discard") {
       outcomes.push({ change, line: `${from}: discarded (${formatBytes(stats.bytes)}) — in workspace/${to} for a week, then removed.` });
     } else {
@@ -471,14 +512,16 @@ export async function applyTidy(agent: Owner, operations: TidyOperation[], at = 
 export function canUndoWorkspace(repoPath: string, changes: DreamWorkspaceChange[]): boolean {
   const root = workspaceRoot(repoPath);
   if (!root) return !changes.length;
-  // Later moves of the same dream may have taken an entry on from where an earlier one put it.
-  const placed = new Set<string>();
+  // Later moves of the same dream may have taken an entry on from where an earlier one put it, or moved the folder it
+  // went into: what lies at or below a moved path moves with it.
+  const under = (p: string, dir: string) => p === dir || p.startsWith(`${dir}/`);
+  let placed = new Set<string>();
   const freed = new Set<string>();
   for (const c of changes) {
-    placed.delete(c.from);
-    freed.add(c.from);
+    placed = new Set([...placed].map((p) => (under(p, c.from) ? `${c.to}${p.slice(c.from.length)}` : p)));
     placed.add(c.to);
-    freed.delete(c.to);
+    for (const f of [...freed]) if (under(f, c.to)) freed.delete(f);
+    freed.add(c.from);
   }
   return [...placed].every((p) => exists(join(root, p)) && noSymlink(root, p)) && [...freed].every((p) => !exists(join(root, p)));
 }

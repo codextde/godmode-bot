@@ -70,7 +70,7 @@ const ENTRY_LIMIT = 50;
 export const SCRATCH_DAYS = 7;
 /** Raw run logs (runs/<day>/) are kept this long; the chats and their results stay in the database. */
 export const RUN_LOG_DAYS = 14;
-/** Loose git objects of an agent below this aren't worth packing. */
+/** Loose history of an agent below this isn't worth packing. */
 const PACK_WORTH = 32 * 1024 * 1024;
 /** About what packing saves (measured on agent repositories: zlib alone → delta-compressed pack). */
 const PACK_SAVES = 0.25;
@@ -481,6 +481,11 @@ function agentRepos(): AgentRepo[] {
 
 const working = (agent: AgentRepo) => `${agent.name} is working — this is cleaned once it is done.`;
 
+/** Agents with a run that works, or waits paused (for an answer, a limit): their scratch may still be needed. */
+function busyOrWaiting(scan: Scan): Set<string> {
+  return new Set([...scan.busyAgents, ...all<{ agent_id: string }>("SELECT agent_id FROM paused_runs").map((p) => p.agent_id)]);
+}
+
 /** A real folder of the repository, reached without a symlink on the way. */
 async function repoDir(agent: AgentRepo, ...parts: string[]): Promise<string | null> {
   let path = agent.dir;
@@ -493,6 +498,7 @@ async function repoDir(agent: AgentRepo, ...parts: string[]): Promise<string | n
 
 async function agentScratch(scan: Scan): Promise<Category> {
   const targets: Target[] = [];
+  const busy = busyOrWaiting(scan);
   for (const agent of agentRepos()) {
     const tmp = await repoDir(agent, "workspace", "tmp");
     if (!tmp) continue;
@@ -507,12 +513,14 @@ async function agentScratch(scan: Scan): Promise<Category> {
       const path = join(tmp, name);
       if (scan.at - (await scan.sizes.of(path)).modified < SCRATCH_DAYS * DAY) continue;
       const clean = async () => {
-        if (newScan().busyAgents.has(agent.id)) throw new Kept(working(agent));
+        if (busyOrWaiting(newScan()).has(agent.id)) throw new Kept(working(agent));
         const still = namedBy(owner)(`tmp/${name}`);
         if (still) throw new Kept(`Named in ${still}.`);
+        // Written to since the look (a dream's digest lands in tmp/dreams, for one): it stays.
+        if (Date.now() - (await new Sizes().of(path)).modified < SCRATCH_DAYS * DAY) throw new Kept("It was used again.");
         await remove(path);
       };
-      targets.push(await target(scan, path, `${agent.name} · ${name}`, { kept: scan.busyAgents.has(agent.id) ? working(agent) : why(name), clean }));
+      targets.push(await target(scan, path, `${agent.name} · ${name}`, { kept: busy.has(agent.id) ? working(agent) : why(name), clean }));
     }
   }
   return {
@@ -575,12 +583,31 @@ async function agentRunLogs(scan: Scan): Promise<Category> {
   };
 }
 
-/** Loose objects of a repository, from `git count-objects -v` (sizes in KiB). */
-async function looseObjects(dir: string): Promise<{ count: number; bytes: number } | null> {
-  const lines = await gitLines(["count-objects", "-v"], dir);
-  if (!lines) return null;
-  const field = (key: string) => Number(lines.find((l) => l.startsWith(`${key}:`))?.slice(key.length + 1).trim() ?? 0) || 0;
-  return { count: field("count"), bytes: (field("size") + field("size-garbage")) * 1024 };
+/**
+ * Loose blobs only the history holds: in no current file, but in an older commit. isomorphic-git (agents/repo.ts)
+ * reads a whole pack into memory to get one object out of it, so only what its commits, status and log never read may
+ * be packed: older versions of files and files that were deleted or stopped being versioned (run logs).
+ */
+async function historyOnly(dir: string): Promise<{ oids: string[]; bytes: number } | null> {
+  const [current, reachable, objects] = await Promise.all([
+    gitLines(["ls-tree", "-r", "--object-only", "HEAD"], dir),
+    gitLines(["rev-list", "--objects", "--all"], dir),
+    gitLines(["cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype) %(objectsize:disk)"], dir),
+  ]);
+  if (!current || !reachable || !objects) return null;
+  const now = new Set(current);
+  const kept = new Set(reachable.map((l) => l.slice(0, 40)));
+  const oids: string[] = [];
+  let bytes = 0;
+  for (const line of objects) {
+    const [oid, type, size] = line.split(" ");
+    if (!oid || type !== "blob" || now.has(oid) || !kept.has(oid)) continue;
+    // Loose only: what an earlier pass packed is done.
+    if (!existsSync(join(dir, ".git", "objects", oid.slice(0, 2), oid.slice(2)))) continue;
+    oids.push(oid);
+    bytes += Number(size) || 0;
+  }
+  return { oids, bytes };
 }
 
 async function agentHistory(scan: Scan): Promise<Category | null> {
@@ -589,30 +616,42 @@ async function agentHistory(scan: Scan): Promise<Category | null> {
   for (const agent of agentRepos()) {
     const gitDir = await repoDir(agent, ".git");
     if (!gitDir) continue;
-    const loose = await looseObjects(agent.dir);
-    if (!loose || loose.bytes < PACK_WORTH) continue;
+    const history = await historyOnly(agent.dir);
+    if (!history || history.bytes < PACK_WORTH) continue;
     const kept = scan.busyAgents.has(agent.id) ? working(agent) : null;
     const clean = () =>
       withRepoLock(agent.dir, async () => {
         if (newScan().busyAgents.has(agent.id)) throw new Kept(working(agent));
+        const fresh = await historyOnly(agent.dir);
+        if (!fresh) throw new Error("Git can't read this repository.");
+        if (!fresh.oids.length) return 0;
         const before = (await new Sizes().of(gitDir)).bytes;
-        // Bounded, so packing a large history doesn't take the whole computer. Objects no commit holds go after a day
-        // (git's own two weeks would leave them counted here every day); the agent isn't working, nothing is mid-commit.
-        const res = await runGit(["-c", "gc.auto=0", "-c", "pack.threads=2", "-c", "pack.windowMemory=256m", "gc", "--quiet", "--prune=1.day.ago"], {
-          cwd: agent.dir,
-          timeoutMs: 30 * 60_000,
-        });
-        if (!res.ok) throw new Error(res.timedOut ? "Packing took too long." : res.stderr.trim().split("\n").at(-1) || "git gc failed");
+        // Bounded packs (isomorphic-git can't read one over 2 GiB, should anyone ask it for an old version), and bounded
+        // work, so packing a large history doesn't take the whole computer.
+        const pack = await runGit(
+          ["pack-objects", "-q", "--max-pack-size=512m", "--window-memory=256m", "--threads=2", join(gitDir, "objects", "pack", "pack")],
+          { cwd: agent.dir, timeoutMs: 30 * 60_000, input: `${fresh.oids.join("\n")}\n` },
+        );
+        if (!pack.ok) throw new Error(pack.timedOut ? "Packing took too long." : pack.stderr.trim().split("\n").at(-1) || "git pack-objects failed");
+        const prune = await runGit(["prune-packed", "-q"], { cwd: agent.dir, timeoutMs: 10 * 60_000 });
+        if (!prune.ok) throw new Error(prune.stderr.trim().split("\n").at(-1) || "git prune-packed failed");
         return Math.max(0, before - (await new Sizes().of(gitDir)).bytes);
       });
     targets.push({
-      entry: { name: `${agent.name} · ${loose.count.toLocaleString("en-US")} loose objects`, path: gitDir, bytes: Math.round(loose.bytes * PACK_SAVES), modifiedAt: null, kept },
+      entry: {
+        name: `${agent.name} · ${history.oids.length.toLocaleString("en-US")} older versions`,
+        path: gitDir,
+        bytes: Math.round(history.bytes * PACK_SAVES),
+        modifiedAt: null,
+        kept,
+      },
       clean: kept ? null : clean,
     });
   }
   return {
     id: "agent-history",
-    detail: "Every agent repository keeps each version of its files. Packing stores them compressed against each other — no version is lost. What it frees is an estimate.",
+    detail:
+      "Agent repositories keep every earlier version of their files, each compressed on its own. Packing stores them against each other — no version is lost, the current files stay as they are. What it frees is an estimate.",
     targets,
   };
 }

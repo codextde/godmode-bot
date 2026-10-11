@@ -20,7 +20,7 @@ export interface ClaudeMdContext {
  * holds raw run logs (screenshots and all): versioned they would fill the history for good, so they only live on disk
  * until the cleanup removes old ones.
  */
-export const AGENT_GITIGNORE_RULES = ["workspace/tmp/", "workspace/uploads/", "runs/", "*.tmp", ".claude-mem/", ".DS_Store"] as const;
+export const AGENT_GITIGNORE_RULES = ["workspace/tmp/", "workspace/uploads/", "/runs/", "*.tmp", ".claude-mem/", ".DS_Store"] as const;
 
 export const AGENT_GITIGNORE = `# Managed by Godmode Bot\n${AGENT_GITIGNORE_RULES.join("\n")}\n`;
 
