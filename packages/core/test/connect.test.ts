@@ -11,6 +11,7 @@ import { runConnectCli, writeCoreFile } from "../src/connect/cli";
 import { connectorContext, connectorSetup, createConnector, getConnector, listConnectors, removeConnector } from "../src/connect/connectors";
 import { getAccessToken } from "../src/server/auth";
 import { listAudit } from "../src/services/audit";
+import { getSettings, updateSettings } from "../src/services/settings";
 import { listRoutines } from "../src/services/routines";
 import { deviceMayCall } from "../src/mobile/scope";
 import { cloudRefusal } from "../src/cloud/scope";
@@ -133,11 +134,24 @@ describe("tools", () => {
     expect((await call(manage, "followup_schedule", { inMinutes: 5, note: "x" })).isError).toBe(true);
   });
 
+  test("an app with full access changes Godmode's settings, but not the ones that stay with the human", async () => {
+    const before = getSettings().runner;
+    const res = await call(manage, "settings_update", { changes: { runner: { loopRepeats: before.loopRepeats + 1 } } });
+    expect(res.isError).toBeUndefined();
+    expect(getSettings().runner.loopRepeats).toBe(before.loopRepeats + 1);
+    expect(listAudit(5).find((a) => a.action === "settings.update")).toMatchObject({ actor: `connector:${manageId}` });
+    updateSettings({ runner: { loopRepeats: before.loopRepeats } });
+    expect((await call(manage, "settings_update", { changes: { runner: { bypassPermissions: !before.bypassPermissions } } })).isError).toBe(true);
+    expect(getSettings().runner.bypassPermissions).toBe(before.bypassPermissions);
+  });
+
   test("a read key looks and never changes", async () => {
     const names = await toolNames(read);
     expect(names).toContain("agents_list");
     expect(names).toContain("runs_list");
-    for (const n of ["agent_create", "agent_update", "agent_delete", "routine_create", "task_create", "vm_power"]) expect(names).not.toContain(n);
+    for (const n of ["agent_create", "agent_update", "agent_delete", "routine_create", "task_create", "vm_power", "settings_update"]) expect(names).not.toContain(n);
+    expect(names).toContain("settings_get");
+    expect((await call(read, "settings_update", { changes: { runner: { effort: "low" } } })).content[0]!.text).toContain("may only look");
     const before = listAgents().length;
     const res = await call(read, "agent_create", { name: "Sneaky" });
     expect(res.isError).toBe(true);

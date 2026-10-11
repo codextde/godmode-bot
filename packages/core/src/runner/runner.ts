@@ -2014,6 +2014,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         cards: !vm && job.trigger !== "check" && "browser" in mcp.mcpServers && hasCardsForAgent(agent),
         delegated: !!job.parentRunId,
         mods: config().role !== "runner",
+        settingsTools: config().role !== "runner",
         savesLogins: config().role !== "runner" && job.trigger !== "check",
         team: teamFor(agent),
       });
