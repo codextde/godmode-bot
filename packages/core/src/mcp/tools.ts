@@ -26,6 +26,8 @@ import type {
 } from "@godmode/shared";
 import {
   AGENT_COLORS,
+  AGENT_TEMPLATE_CATEGORIES,
+  AGENT_TEMPLATE_CATEGORY_LABELS,
   cardExpired,
   cardLabel,
   formatMoney,
@@ -84,6 +86,8 @@ import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/compos
 import { listTriggerTypes } from "../integrations/composioTriggers";
 import { createWorkspace, listWorkspaces, updateWorkspace } from "../services/workspaces";
 import { createAgent, deleteAgent, getAgent, listAgents, peersFor, teamOf, updateAgent } from "../agents/service";
+import { AGENT_TEMPLATES } from "../agents/templates";
+import { TEAM_TEMPLATES, installTeam, seatsOf } from "../agents/teams";
 import {
   addCredentialDomain,
   createCredential,
@@ -794,7 +798,9 @@ const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
   ["vms_list", "read"],
   ["android_devices_list", "read"],
   ["settings_get", "read"],
+  ["templates_list", "read"],
   ["agent_create", "manage"],
+  ["team_install", "manage"],
   ["agent_update", "manage"],
   ["agent_delete", "manage"],
   ["routine_create", "manage"],
@@ -1746,27 +1752,139 @@ const TOOLS: ToolDef[] = [
     name: "agent_create",
     description:
       "Create a new agent (bot) with its own git repo, instructions and optional recurring routine. Give it a role (its job title on the team), a clear description and concrete instructions, " +
-      "plus a fitting emoji, colour, character (its little face in the app) and personality — each agent should be recognisable at a glance. It reports to you unless you set reportsTo.",
+      "plus a fitting emoji, colour, character (its little face in the app) and personality — each agent should be recognisable at a glance. It reports to you unless you set reportsTo. " +
+      "For a common job, start from a ready-made role (templates_list) with template and change only what differs.",
     schema: z.object({
-      name: z.string().min(1).max(100),
+      name: z.string().min(1).max(100).optional().describe("Required unless a template gives one"),
+      template: z
+        .string()
+        .optional()
+        .describe(
+          "Id of a role template from templates_list: its name, role, look, personality, description and instructions fill in whatever you leave out. Its schedule comes back as templateSchedule; pass it as routine to set it up.",
+        ),
       ...agentFields,
       routine: z.object({ name: z.string().min(1), cron: routineFields.cron, prompt: z.string().min(1), timezone: z.string().optional() }).optional(),
     }),
     when: managesSetup,
-    run: async ({ routine, ...input }, { agent, ctx }) => {
+    run: async ({ routine, template: templateId, ...given }, { agent, ctx }) => {
+      const template = templateId ? AGENT_TEMPLATES.find((t) => t.id === templateId) : undefined;
+      if (templateId && !template) return fail(`There is no role template "${templateId}". templates_list shows them.`);
+      const set = Object.fromEntries(Object.entries(given).filter(([, v]) => v !== undefined)) as typeof given;
+      const input = template
+        ? {
+            name: template.name,
+            role: template.role,
+            avatar: template.avatar,
+            color: template.color,
+            personality: template.personality,
+            description: template.description,
+            instructions: template.instructions,
+            ...set,
+            character: { ...template.character, ...set.character },
+          }
+        : set;
+      if (!input.name) return fail("Give the agent a name, or start from a template.");
       assertAgentPatchAllowed(null, input);
       const leadRefusal = protectedLeadRefusal(agent, ctx, input.reportsTo);
       if (leadRefusal) return fail(leadRefusal);
       // Secret access, management rights and login allow-lists stay human-only (enforced by createAgent for agent actors).
       // Agents created from a VM work in that VM.
-      const created = await createAgent({ ...input, vmId: lockedVm(ctx) }, `agent:${agent.id}`);
-      audit(`agent:${agent.id}`, "agent.create", created.id, { name: created.name });
+      const created = await createAgent({ ...input, name: input.name, vmId: lockedVm(ctx) }, `agent:${agent.id}`);
+      audit(`agent:${agent.id}`, "agent.create", created.id, { name: created.name, ...(template ? { template: template.id } : {}) });
       let routineInfo: unknown = null;
       if (routine) {
         const r = createRoutine({ agentId: created.id, name: routine.name, cron: routine.cron, prompt: routine.prompt, timezone: routine.timezone ?? localTimezone() });
         routineInfo = { id: r.id, name: r.name, cron: r.cron, nextRunAt: r.nextRunAt };
       }
-      return json({ created: agentSummary(created, workspaceNames()), routine: routineInfo });
+      return json({
+        created: agentSummary(created, workspaceNames()),
+        routine: routineInfo,
+        ...(template?.routine && !routine ? { templateSchedule: template.routine } : {}),
+      });
+    },
+  }),
+
+  defineTool({
+    name: "templates_list",
+    description:
+      "Ready-made roles and org charts to build a team or a whole company from. Roles (kind roles): every job a company has, by department, plus one all-in-one agent per department that covers all of its jobs (allInOne lists them) — use one with agent_create({ template }). " +
+      "Structures (kind structures): teams (a lead and its reports) and companies (a CEO with its departments, or one all-in-one agent per department) with their seats — install one with team_install. " +
+      "Instructions stay short on purpose (goal, scope, limits); read a role's full text with query on its id.",
+    schema: z.object({
+      kind: z.enum(["roles", "structures"]).optional().describe("Omitted = both"),
+      department: z.enum(AGENT_TEMPLATE_CATEGORIES).optional().describe("Only roles of this department"),
+      query: z.string().max(100).optional().describe("Words that must appear in the name, role, description or covered jobs; a role's exact id also returns its instructions"),
+    }),
+    when: isManager,
+    run: ({ kind, department, query }) => {
+      const words = (query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+      const byId = new Map(AGENT_TEMPLATES.map((t) => [t.id, t]));
+      const exact = query ? byId.get(query.trim()) : undefined;
+      const roles = AGENT_TEMPLATES.filter((t) => (!department || t.category === department) && (exact ? t === exact : words.every((w) => [t.id, t.name, t.role, t.description, ...(t.covers ?? [])].join(" ").toLowerCase().includes(w)))).map((t) => ({
+        id: t.id,
+        name: t.name,
+        role: t.role,
+        department: AGENT_TEMPLATE_CATEGORY_LABELS[t.category],
+        description: t.description,
+        ...(t.leads ? { leads: true } : {}),
+        ...(t.covers ? { allInOne: t.covers } : {}),
+        ...(t.routine ? { schedule: t.routine } : {}),
+        ...(exact ? { instructions: t.instructions } : {}),
+      }));
+      const structures = TEAM_TEMPLATES.filter((team) => !department && words.every((w) => [team.id, team.name, team.description].join(" ").toLowerCase().includes(w))).map((team) => ({
+        id: team.id,
+        kind: team.kind,
+        name: team.name,
+        description: team.description,
+        // "0.2 CFO (cfo)": its path for skip, then who sits there.
+        seats: seatsOf(team.root).map((seat) => `${seat.path} ${byId.get(seat.node.template)?.name ?? seat.node.template} (${seat.node.template})`),
+      }));
+      return json({ ...(kind !== "structures" ? { roles } : {}), ...(kind !== "roles" ? { structures } : {}) });
+    },
+  }),
+
+  defineTool({
+    name: "team_install",
+    description:
+      "Hire a ready-made structure from templates_list in one go: a team or a whole company, with its reporting lines wired up and its leads allowed to hand work to their reports. " +
+      "Put it in a new workspace (newWorkspace) or an existing one (workspaceId; null = global). skip leaves seats out by their path; their reports move up to the next lead kept. " +
+      "automations also sets up the schedules the roles bring; a big chart brings many, so agree that with the human first.",
+    schema: z.object({
+      template: z.string().describe("Structure id from templates_list"),
+      workspaceId: z.string().nullable().optional().describe("Workspace id or name; null or omitted = global. Ignored with newWorkspace"),
+      newWorkspace: z
+        .object({ name: z.string().min(1).max(100), icon: z.string().max(16).optional(), color: z.string().max(32).optional() })
+        .optional()
+        .describe("Create a workspace for them first"),
+      skip: z.array(z.string().max(40)).max(200).optional().describe('Seat paths to leave out, e.g. "0.2" (the top\'s third report) or "0.4.1"'),
+      automations: z.boolean().optional().describe("Also set up the roles' schedules (default false)"),
+    }),
+    when: managesSetup,
+    run: async ({ template, workspaceId, newWorkspace, skip, automations }, { agent, ctx }) => {
+      if (lockedVm(ctx)) return fail("This task runs in a virtual machine and is kept off the human's computer, and a team installs agents that work on the computer — only the human can install one.");
+      if (!TEAM_TEMPLATES.some((t) => t.id === template)) return fail(`There is no structure "${template}". templates_list shows them.`);
+      let target: string | null = null;
+      if (newWorkspace) {
+        const taken = findWorkspace(newWorkspace.name);
+        if (taken) return fail(`There is already a workspace "${taken.name}" (${taken.id}). Install into it with workspaceId, or pick another name.`);
+      } else if (workspaceId) {
+        const workspace = findWorkspace(workspaceId);
+        if (!workspace) return fail(`There is no workspace "${workspaceId}". workspaces_list shows them.`);
+        target = workspace.id;
+      }
+      const res = await installTeam(
+        template,
+        { ...(newWorkspace ? { newWorkspace } : { workspaceId: target }), automations: automations ?? false, timezone: localTimezone(), skip },
+        `agent:${agent.id}`,
+      );
+      const names = workspaceNames();
+      const team = listAgents({ workspaceId: "all" });
+      return json({
+        lead: agentSummary(res.lead, names, team),
+        members: res.members.map((m) => ({ id: m.id, name: m.name, role: m.role, reportsTo: m.reportsTo })),
+        automations: res.automations,
+        workspace: res.workspace ? { id: res.workspace.id, name: res.workspace.name } : scopeName(target, names),
+      });
     },
   }),
 

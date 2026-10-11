@@ -3,7 +3,35 @@ import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
-import { Archive, ArrowRight, Briefcase, Building2, CalendarClock, Code, FlaskConical, Handshake, Megaphone, Rocket, ShoppingBag, UserRound, Users, type LucideIcon } from "lucide-react";
+import {
+  Archive,
+  ArrowRight,
+  Briefcase,
+  Building2,
+  CalendarClock,
+  ChartColumn,
+  Code,
+  Compass,
+  Cpu,
+  Factory,
+  FlaskConical,
+  Handshake,
+  HeartHandshake,
+  Landmark,
+  Layers,
+  LifeBuoy,
+  Megaphone,
+  Palette,
+  Rocket,
+  Scale,
+  Shield,
+  ShoppingBag,
+  ShoppingCart,
+  TrendingUp,
+  UserRound,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import type { AgentTemplate, OrgTemplateNode, TeamTemplate } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { localTimezone } from "@/components/agents/cron";
@@ -32,6 +60,19 @@ const ICONS: Record<string, LucideIcon> = {
   handshake: Handshake,
   code: Code,
   flask: FlaskConical,
+  layers: Layers,
+  landmark: Landmark,
+  cpu: Cpu,
+  compass: Compass,
+  scale: Scale,
+  "heart-handshake": HeartHandshake,
+  "trending-up": TrendingUp,
+  palette: Palette,
+  "life-buoy": LifeBuoy,
+  "shopping-cart": ShoppingCart,
+  shield: Shield,
+  "bar-chart": ChartColumn,
+  factory: Factory,
 };
 
 const face = (t: Pick<AgentTemplate, "id" | "avatar" | "color" | "character">) => ({ id: t.id, avatar: t.avatar, color: t.color, character: t.character });
@@ -150,21 +191,36 @@ function StructureCard({ team, root, index, onPick }: { team: TeamTemplate; root
   );
 }
 
+/** Reports drawn in the miniature before the rest collapse into a count. */
+const MINI_REPORTS = 6;
+
 /** The chart in miniature: the top, a line down, its reports in a row with the size of their own teams. */
 function MiniChart({ root }: { root: Seat }) {
+  const shown = root.reports.length > MINI_REPORTS ? root.reports.slice(0, MINI_REPORTS - 1) : root.reports;
+  const rest = root.reports.slice(shown.length);
+  const columns = shown.length + (rest.length ? 1 : 0);
   return (
     <span aria-hidden className="mt-5 mb-1 flex flex-col items-center">
       <AgentAvatar agent={face(root.template)} size="md" still className="rounded-xl ring-4 ring-card" />
       <span className="h-3 w-px bg-border" />
       <span className="relative flex justify-center gap-1.5">
-        {root.reports.length > 1 && <span className="absolute top-0 right-[1.125rem] left-[1.125rem] h-px bg-border" />}
-        {root.reports.map((r) => (
+        {columns > 1 && <span className="absolute top-0 right-[1.125rem] left-[1.125rem] h-px bg-border" />}
+        {shown.map((r) => (
           <span key={r.path} className="flex w-9 flex-col items-center">
             <span className="h-2.5 w-px bg-border" />
             <AgentAvatar agent={face(r.template)} size="sm" still className="size-7 rounded-lg ring-2 ring-card" />
             <span className={cn("mt-1 h-4 text-[10px] text-muted-foreground tabular-nums", !r.reports.length && "invisible")}>+{flat(r).length - 1}</span>
           </span>
         ))}
+        {rest.length > 0 && (
+          <span className="flex w-9 flex-col items-center">
+            <span className="h-2.5 w-px bg-border" />
+            <span className="grid size-7 place-items-center rounded-lg border bg-secondary text-[10px] font-medium text-muted-foreground tabular-nums ring-2 ring-card">
+              +{rest.reduce((n, r) => n + flat(r).length, 0)}
+            </span>
+            <span className="mt-1 h-4" />
+          </span>
+        )}
       </span>
     </span>
   );
@@ -172,6 +228,10 @@ function MiniChart({ root }: { root: Seat }) {
 
 const NEW = "__new";
 const GLOBAL = "__global";
+/** Above this many schedules the automations start unticked: a big chart shouldn't start dozens of runs unasked. */
+const MANY_SCHEDULES = 10;
+/** Charts this big get the bulk choices (everyone, leads only). */
+const BIG_CHART = 10;
 
 function InstallDialog({ team, root, onClose }: { team: TeamTemplate | null; root: Seat | null; onClose: () => void }) {
   return (
@@ -192,8 +252,8 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
   const [where, setWhere] = useState(team.kind === "company" ? NEW : (scoped?.id ?? GLOBAL));
   const [wsName, setWsName] = useState(team.name);
   const [skip, setSkip] = useState<Set<string>>(new Set());
-  const [automations, setAutomations] = useState(true);
   const seats = flat(root);
+  const [automations, setAutomations] = useState(() => seats.filter((s) => s.template.routine).length <= MANY_SCHEDULES);
   const kept = seats.filter((s) => !skip.has(s.path));
   const scheduled = kept.filter((s) => s.template.routine);
   const names = new Map(seats.map((s) => [s.path, s.template.name]));
@@ -238,6 +298,16 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
       else next.add(path);
       return next;
     });
+  // A lead's whole team at once: out when anyone of it is in, otherwise back in with its lead.
+  const toggleTeam = (seat: Seat) =>
+    setSkip((s) => {
+      const team = flat(seat).slice(1).map((m) => m.path);
+      const next = new Set(s);
+      if (team.some((p) => !s.has(p))) for (const p of team) next.add(p);
+      else for (const p of [seat.path, ...team]) next.delete(p);
+      return next;
+    });
+  const leads = seats.filter((s) => s.depth > 0 && s.reports.length > 0);
 
   const canInstall = kept.length > 1 && (where !== NEW || wsName.trim().length > 0) && !install.isPending;
   return (
@@ -250,9 +320,27 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
         <DialogDescription>{team.description}</DialogDescription>
       </DialogHeader>
 
-      <div className="-mx-1 max-h-[42vh] overflow-y-auto rounded-xl border bg-paper-2 p-2">
-        <ul aria-label="Org chart">
-          <SeatRow seat={root} skip={skip} onToggle={toggle} leadName={leadName} />
+      <div className="-mx-1 max-h-[42vh] overflow-y-auto rounded-xl border bg-paper-2">
+        {seats.length > BIG_CHART && (
+          <div className="sticky top-0 z-10 flex items-center gap-1 border-b bg-paper-2/95 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur">
+            <span className="mr-auto tabular-nums">
+              {kept.length} of {seats.length} agents
+            </span>
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSkip(new Set())} disabled={skip.size === 0}>
+              Everyone
+            </Button>
+            {leads.length > 1 && (
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSkip(new Set(seats.filter((s) => s.depth > 0 && !s.reports.length).map((s) => s.path)))}>
+                Leads only
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSkip(new Set(seats.slice(1).map((s) => s.path)))} disabled={kept.length === 1}>
+              Clear
+            </Button>
+          </div>
+        )}
+        <ul aria-label="Org chart" className="p-2">
+          <SeatRow seat={root} skip={skip} onToggle={toggle} onToggleTeam={toggleTeam} leadName={leadName} />
         </ul>
       </div>
 
@@ -308,10 +396,26 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
   );
 }
 
-function SeatRow({ seat, skip, onToggle, leadName, last }: { seat: Seat; skip: Set<string>; onToggle: (path: string) => void; leadName: (path: string) => string; last?: boolean }) {
+function SeatRow({
+  seat,
+  skip,
+  onToggle,
+  onToggleTeam,
+  leadName,
+  last,
+}: {
+  seat: Seat;
+  skip: Set<string>;
+  onToggle: (path: string) => void;
+  onToggleTeam: (seat: Seat) => void;
+  leadName: (path: string) => string;
+  last?: boolean;
+}) {
   const off = skip.has(seat.path);
   const top = seat.depth === 0;
   const id = `seat-${seat.path}`;
+  const team = seat.reports.length > 0 && !top ? flat(seat).slice(1) : [];
+  const teamOut = team.length > 0 && team.every((m) => skip.has(m.path));
   return (
     <li className="relative">
       {!top && (
@@ -320,7 +424,7 @@ function SeatRow({ seat, skip, onToggle, leadName, last }: { seat: Seat; skip: S
           {!last && <span aria-hidden className="absolute top-0 -bottom-0.5 -left-3 w-px bg-border" />}
         </>
       )}
-      <div className={cn("flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors", !top && "hover:bg-foreground/[0.035]")}>
+      <div className={cn("group/seat flex items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors", !top && "hover:bg-foreground/[0.035]")}>
         {top ? (
           <span className="size-4 shrink-0" />
         ) : (
@@ -332,12 +436,24 @@ function SeatRow({ seat, skip, onToggle, leadName, last }: { seat: Seat; skip: S
           {off && seat.reports.length > 0 && <span className="ml-1.5 inline-block text-xs">(its team reports to {leadName(seat.path)})</span>}
         </label>
         {top && <span className="shrink-0 rounded-[5px] border bg-card px-1.5 py-px text-[10px] font-medium text-muted-foreground">Reports to Godmode</span>}
+        {team.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onToggleTeam(seat)}
+            className={cn(
+              "shrink-0 rounded-[5px] border bg-card px-1.5 py-px text-[10px] font-medium text-muted-foreground transition hover:border-foreground/20 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+              !teamOut && "opacity-0 group-hover/seat:opacity-100",
+            )}
+          >
+            {teamOut ? `Add its team (${team.length})` : `Leave out its team (${team.length})`}
+          </button>
+        )}
         {seat.template.routine && !off && <CalendarClock className="size-3.5 shrink-0 text-muted-foreground" aria-label="Comes with a schedule" />}
       </div>
       {seat.reports.length > 0 && (
         <ul className="relative ml-[1.375rem] pl-3">
           {seat.reports.map((r, i) => (
-            <SeatRow key={r.path} seat={r} skip={skip} onToggle={onToggle} leadName={leadName} last={i === seat.reports.length - 1} />
+            <SeatRow key={r.path} seat={r} skip={skip} onToggle={onToggle} onToggleTeam={onToggleTeam} leadName={leadName} last={i === seat.reports.length - 1} />
           ))}
         </ul>
       )}

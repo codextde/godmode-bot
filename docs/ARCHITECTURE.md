@@ -538,7 +538,7 @@ the core, the desktop and the phone alike.
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |
 | `agents_list()`, `agent_get({id})` | Discover peer agents: role, who they report to (`relation` marks the caller's lead and reports), and for `agent_get` who reports to it (only agents the caller could reach) |
 | `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result). The chat stores the bare task (`source: "delegation"`); the run's prompt starts with `[Delegated by <name> (<role>), your lead. Your final answer goes back to <name>.]` |
-| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `run_continue`, `workspaces_list`, `workspace_create`, `workspace_update`, `project_create`, `project_update`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo`. `workspace_update` / `project_update` only add sources (`addSources`); removing sources, deleting, VM, browser profile and auto-merge stay human-only. A run kept in a VM sets up no workspaces or projects (their instructions reach agents on the computer), and changing a workspace's or project's context follows the `agent_update` rules for every agent in it (reveal mode, computer use) |
+| `agent_create`, `templates_list`, `team_install`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `run_continue`, `workspaces_list`, `workspace_create`, `workspace_update`, `project_create`, `project_update`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo`; `agent_create({ template })` starts from a role template (unset fields come from it, its schedule comes back as `templateSchedule`), `templates_list` shows the roles and structures (seats with their paths for `skip`), and `team_install` hires a structure as the calling agent (no secret access or management rights for the new agents; refused in a run kept in a VM). `workspace_update` / `project_update` only add sources (`addSources`); removing sources, deleting, VM, browser profile and auto-merge stay human-only. A run kept in a VM sets up no workspaces or projects (their instructions reach agents on the computer), and changing a workspace's or project's context follows the `agent_update` rules for every agent in it (reveal mode, computer use) |
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
 | `task_note({ text, taskId? })` | A progress note on the ticket the run works on (managers: any ticket); on its timeline, nobody is notified |
 | `ask_human({ question, context?, options? })`, `request_approval({ action, reason, affects })` | Ask the human a question or for an OK and stand still until the answer; the run continues with it (see Questions and approvals). Not in condition checks, dreams or delegated runs |
@@ -568,7 +568,7 @@ tasks, and read what was done. `packages/core/src/connect/`.
   `conversationId` `""`, and `connector: { id, name, access }`. The server introduces itself with
   `CONNECT_INSTRUCTIONS` instead of the agents' text.
 * **Tools.** `CONNECTOR_TOOLS` in `mcp/tools.ts` is the allowlist, each tool marked `read` or `manage`: `agents_list`,
-  `agent_get`, `agent_create`, `agent_update`, `agent_delete`, the `routine_*` and `automation_*` tools, `tasks_list`,
+  `agent_get`, `agent_create`, `agent_update`, `agent_delete`, `templates_list` (read), `team_install`, the `routine_*` and `automation_*` tools, `tasks_list`,
   `task_get`, `task_create`, `task_update`, `task_message`, `task_note`, `runs_list`, `spend_overview`, `workspaces_list`,
   `workspace_create`, `workspace_update`, `project_create`, `project_update`,
   `logins_overview` (names, never secrets), `missing_logins_list`, `vms_list`, `vm_create`, `vm_assign`, `vm_power`.
@@ -1192,12 +1192,22 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   for it cost (all of its tickets'). A goal stays in its workspace; deleting a workspace deletes its goals (migration 64 clears older leftovers). The board shows the goals above the columns (a click filters, `?goal=`), new
   tickets there serve the filtered goal; managers read them with `goals_list` and file tickets under one
   (`task_create { goalId }`). Deleting a goal leaves its tickets serving none.
+* **Role templates** (`agents/templates/`, one file per department, `GET /api/agent-templates`). Every job a company
+  has, grouped by `category` (leadership, finance, legal, people, marketing, sales, customer, ecommerce, product,
+  engineering, data, operations), in that order. Each department has one all-in-one agent whose `covers` lists every
+  job it does (`allInOneInstructions`), a lead (`leads`, `leadInstructions`) and its specialists. Instructions stay
+  short on purpose (goal, scope, limits) so the model decides the how. *New agent* shows them searchable (word starts),
+  grouped by department, with an *All-in-one* filter.
 * **Ready-made teams** (`agents/teams.ts`, `GET /api/team-templates`, `POST /api/team-templates/:id/install
-  { workspaceId?, automations? }`, Cloud: allowed; phone: closed). A team is a lead (its own template, with instructions
-  for leading: split tickets with `task_split`, hand chat work over, review, report) and reports taken from the agent
-  templates. Installing creates the lead (reporting to the built-in agent, delegation on), then each report under it,
-  and — when asked — the reports' scheduled automations from their templates. Offered on *New agent* and, while only the
-  built-in agent exists, on the Agents page; afterwards the org chart opens.
+  { workspaceId?, newWorkspace?, automations?, skip? }`, Cloud: allowed; phone: closed). A structure is a tree of seats
+  built from the role templates: a team (a lead and its reports) or a company (a CEO with its departments; the
+  *All-in-one company* is a CEO with one all-in-one agent per department, the *Full company* every role). Installing
+  creates the top (reporting to the built-in agent), then each seat under its lead — a left-out seat's reports move up
+  to the next lead kept — with delegation on for every seat that leads someone, and, when asked, the scheduled
+  automations from their templates. All or nothing. Offered on *New agent* (the dialog has *Everyone*, *Leads only*,
+  *Clear* and a per-lead toggle for its whole team; schedules start unticked above ten) and, while only the built-in
+  agent exists, on the Agents page; afterwards the org chart opens. Godmode does the same from a chat: `templates_list`,
+  `agent_create({ template })`, `team_install`.
 * **Waiting for other tickets** (migration 63, table `task_dependencies`; `Task.waitsFor`, `waitsForTickets()`). A
   ticket may wait for up to 10 others (`waitsFor` on create and patch, the sheet's *Waits for*, `task_create {
   waitsFor }`) of its workspace or global ones; itself and loops are refused — a loop counts parts too (a ticket waits

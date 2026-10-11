@@ -717,6 +717,60 @@ describe("management tools", () => {
     const list = ((await rpc(tokens[worker.id]!, "tools/list")).result.tools as { name: string }[]).map((x) => x.name);
     for (const n of ["workspace_create", "workspace_update", "project_create", "project_update"]) expect(list).not.toContain(n);
   });
+
+  test("templates_list, agent_create from a template and team_install", async () => {
+    const t = tokens[manager.id]!;
+    const listed = JSON.parse((await call(t, "templates_list", { kind: "roles", department: "operations" })).content[0]!.text) as {
+      roles: { id: string; allInOne?: string[] }[];
+      structures?: unknown;
+    };
+    expect(listed.structures).toBeUndefined();
+    expect(listed.roles.find((r) => r.id === "operations-department")!.allInOne).toContain("procurement and purchasing");
+    const one = JSON.parse((await call(t, "templates_list", { query: "payroll-accountant" })).content[0]!.text) as { roles: { instructions?: string }[] };
+    expect(one.roles).toHaveLength(1);
+    expect(one.roles[0]!.instructions).toContain("payroll");
+    const structures = JSON.parse((await call(t, "templates_list", { kind: "structures" })).content[0]!.text) as { structures: { id: string; seats: string[] }[] };
+    expect(structures.structures.find((s) => s.id === "back-office")!.seats).toEqual([
+      "0 Office Manager (office-manager)",
+      "0.0 Inbox Triage (inbox-triage)",
+      "0.1 Invoice Collector (invoice-collector)",
+      "0.2 Bookkeeping Helper (bookkeeping-helper)",
+    ]);
+
+    const hired = JSON.parse((await call(t, "agent_create", { template: "payroll-accountant", name: "Paula", color: "rose", character: { top: "bow" } })).content[0]!.text) as {
+      created: { id: string };
+      templateSchedule?: { cron: string };
+    };
+    const paula = getAgent(hired.created.id);
+    expect(paula).toMatchObject({ name: "Paula", role: "Payroll accountant", color: "rose", personality: "calm" });
+    expect(paula.character).toMatchObject({ body: "pebble", top: "bow" });
+    expect(hired.templateSchedule?.cron).toBe("0 9 18 * *");
+    expect(listRoutines().some((r) => r.agentId === paula.id)).toBe(false);
+    expect((await call(t, "agent_create", { template: "nope" })).isError).toBe(true);
+    expect((await call(t, "agent_create", {})).isError).toBe(true);
+
+    const installed = await call(t, "team_install", { template: "all-in-one-company", newWorkspace: { name: "Tiny Co" }, skip: ["0.1", "0.6"] });
+    expect(installed.isError).toBeUndefined();
+    const company = JSON.parse(installed.content[0]!.text) as { lead: { id: string }; members: { id: string; role: string; reportsTo: string }[]; automations: number; workspace: { id: string } };
+    expect(company.members).toHaveLength(9);
+    expect(company.automations).toBe(0);
+    expect(company.members.every((m) => m.reportsTo === company.lead.id)).toBe(true);
+    expect(company.members.map((m) => m.role)).not.toContain("Legal department");
+    const ceo = getAgent(company.lead.id);
+    expect(ceo).toMatchObject({ role: "Chief executive officer", workspaceId: company.workspace.id });
+    // Installed by an agent: the new agents get no secrets or management rights.
+    expect(ceo.permissions).toMatchObject({ secretAccess: "fill", canManageAgents: false, allowDelegation: true });
+    expect(listAudit(20).find((a) => a.action === "team.install")?.actor).toBe(`agent:${manager.id}`);
+
+    const team = JSON.parse((await call(t, "team_install", { template: "back-office", workspaceId: "Tiny Co" })).content[0]!.text) as { workspace: string; members: unknown[] };
+    expect(team.workspace).toBe("Tiny Co");
+    expect(team.members).toHaveLength(3);
+    expect((await call(t, "team_install", { template: "back-office", newWorkspace: { name: "tiny co" } })).isError).toBe(true);
+    expect((await call(t, "team_install", { template: "back-office", workspaceId: "Nowhere" })).isError).toBe(true);
+    expect((await call(t, "team_install", { template: "nope" })).isError).toBe(true);
+    const list = ((await rpc(tokens[worker.id]!, "tools/list")).result.tools as { name: string }[]).map((x) => x.name);
+    for (const n of ["templates_list", "team_install"]) expect(list).not.toContain(n);
+  });
 });
 
 describe("agent looks through MCP", () => {
