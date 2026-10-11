@@ -47,23 +47,27 @@ describe("foreign browser use", () => {
     expect(foreignBrowserUse(`ls ${config().browserDir}-use/x/files/downloads`)).toBeNull();
   });
 
-  test("a later command on the same line that only mentions the flag or the file passes", () => {
+  test("a later command that greps a log for the port file passes, reading the file stays refused", () => {
     const grepLog = [
       "f=$(ls runs/*.jsonl | head -1)",
       'grep -c DevToolsActivePort "$f"',
     ].join("; ");
     expect(foreignBrowserUse(grepLog)).toBeNull();
-    const listThenSearch = [
-      "ps aux | wc -l",
-      "grep -rn remote-debugging-port docs",
-    ].join(" && ");
-    expect(foreignBrowserUse(listThenSearch)).toBeNull();
-    const piped = [
-      "ps -axo pid,command",
-      "grep -i chrome",
-      "sed -E 's/--(remote-debugging-port)=([^ ]*)/\\1=\\2/'",
+    const redirected = [
+      "cat 2>&1",
+      "~/Library/Chrome/DevToolsActivePort",
+    ].join(" ");
+    expect(foreignBrowserUse(redirected)).toContain("DevTools ports");
+    const lookup = [
+      "ps aux 2>&1",
+      "grep -o 'remote-debugging-port=[0-9]*'",
     ].join(" | ");
-    expect(foreignBrowserUse(piped)).toContain("DevTools ports");
+    expect(foreignBrowserUse(lookup)).toContain("DevTools ports");
+    const oneLineScript = [
+      `node -e "const o = execSync('ps aux').toString()`,
+      `console.log(o.match(/remote-debugging-port=(\\d+)/))"`,
+    ].join("; ");
+    expect(foreignBrowserUse(oneLineScript)).toContain("DevTools ports");
   });
 
   test("ordinary work passes", () => {
