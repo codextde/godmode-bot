@@ -49,6 +49,8 @@ const ROUTES: [method: string, path: RegExp][] = [
 
   ["GET", /^\/api\/conversations$/],
   ["GET", new RegExp(`^/api/conversations/${ID}$`)],
+  ["GET", new RegExp(`^/api/conversations/${ID}/messages$`)],
+  ["GET", new RegExp(`^/api/conversations/${ID}/messages/${ID}/images/${ID}$`)],
   ["PATCH", new RegExp(`^/api/conversations/${ID}$`)],
   ["DELETE", new RegExp(`^/api/conversations/${ID}$`)],
   ["POST", new RegExp(`^/api/conversations/${ID}/messages$`)],
@@ -56,6 +58,10 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["DELETE", new RegExp(`^/api/conversations/${ID}/queue/${ID}$`)],
   ["POST", new RegExp(`^/api/conversations/${ID}/queue/send$`)],
   ["POST", new RegExp(`^/api/conversations/${ID}/(pause|continue|retry)$`)],
+  // A follow-up the agent set: moved, run now or cancelled.
+  ["PATCH", new RegExp(`^/api/conversations/${ID}/followup$`)],
+  ["DELETE", new RegExp(`^/api/conversations/${ID}/followup$`)],
+  ["POST", new RegExp(`^/api/conversations/${ID}/followup/run$`)],
   ["POST", /^\/api\/chat$/],
 
   ["GET", /^\/api\/tasks$/],
@@ -66,6 +72,7 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["POST", /^\/api\/tasks$/],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`)],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`)],
+  ["POST", new RegExp(`^/api/tasks/${ID}/approve$`)],
 
   ["GET", /^\/api\/runs$/],
   ["POST", new RegExp(`^/api/runs/${ID}/cancel$`)],
@@ -78,6 +85,10 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`)],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/input$`)],
   ["POST", /^\/api\/computer\/input$/],
+
+  // Android phones agents use: seen and watched, never controlled, connected or changed from a phone.
+  ["GET", /^\/api\/android\/devices$/],
+  ["GET", new RegExp(`^/api/android/devices/${ID}/screenshot$`)],
 
   ["GET", /^\/api\/vms$/],
   ["GET", new RegExp(`^/api/vms/${ID}/screenshot$`)],
@@ -137,6 +148,9 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["POST", /^\/api\/tasks$/, ["workspaceId", "projectId", "title", "description", "type", "status", "agentId"]],
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`), ["title", "description", "status", "agentId", "archived", "projectId"]],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`), ["content", "attachments"]],
+  ["POST", new RegExp(`^/api/tasks/${ID}/approve$`), []],
+  ["PATCH", new RegExp(`^/api/conversations/${ID}/followup$`), ["dueAt"]],
+  ["POST", new RegExp(`^/api/conversations/${ID}/followup/run$`), []],
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
   ["POST", new RegExp(`^/api/questions/${ID}/answer$`), ["optionId", "decision", "note", "text"]],
   ["PATCH", new RegExp(`^/api/human-tasks/${ID}$`), ["status", "beforeId"]],

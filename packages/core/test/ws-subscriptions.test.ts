@@ -111,3 +111,46 @@ describe("chat-scoped browser live views", () => {
     websocketHandler.close(ws);
   });
 });
+
+describe("stored messages", () => {
+  test("reach a phone only for the chats it has open, without the pictures", () => {
+    const got: Record<string, { conversationId: string; image?: string; imageUrl?: string }[]> = { desk: [], phone: [] };
+    const socket = (id: string, auth?: "device") =>
+      ({
+        data: { id, auth, subscriptions: new Set<string>() },
+        send: (raw: string) => {
+          const event = JSON.parse(raw) as { type: string; message?: { conversationId: string; blocks: { image?: string; imageUrl?: string }[] } };
+          if (event.type === "message.updated") got[id]!.push({ conversationId: event.message!.conversationId, ...event.message!.blocks[0] });
+          return 0;
+        },
+        close: () => {},
+      }) as unknown as ServerWebSocket<WsData>;
+    const desk = socket("desk");
+    const phone = socket("phone", "device");
+    websocketHandler.open(desk);
+    websocketHandler.open(phone);
+    msg(phone, { type: "conversation.subscribe", conversationId: "cnv_open" });
+
+    const message = (conversationId: string) => ({
+      id: "msg_1",
+      conversationId,
+      role: "assistant" as const,
+      content: "",
+      blocks: [{ type: "tool_use" as const, id: "toolu_1", name: "screenshot", input: {}, result: "ok", image: "AAAA" }],
+      runId: null,
+      attachments: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    bus.emit({ type: "message.updated", message: message("cnv_open") });
+    bus.emit({ type: "message.updated", message: message("cnv_other") });
+
+    expect(got.desk!.map((m) => m.conversationId)).toEqual(["cnv_open", "cnv_other"]);
+    expect(got.desk![0]!.image).toBe("AAAA");
+    expect(got.phone).toHaveLength(1);
+    expect(got.phone![0]).toMatchObject({ conversationId: "cnv_open", imageUrl: "/api/conversations/cnv_open/messages/msg_1/images/toolu_1" });
+    expect(got.phone![0]!.image).toBeUndefined();
+
+    websocketHandler.close(desk);
+    websocketHandler.close(phone);
+  });
+});

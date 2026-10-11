@@ -1,11 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack } from "expo-router";
+import { memo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import type { AgentQuestion } from "@godmode/shared";
 import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
 import { Glass } from "@/components/glass";
 import { HeaderActions } from "@/components/header-actions";
 import { openHumanTask } from "@/components/human-task-row";
 import { Icon } from "@/components/icon";
+import { answerQuestion } from "@/components/question-card";
 import { ConversationRow, RunCard } from "@/components/rows";
 import { ScreenTile } from "@/components/screen-tile";
 import { TaskRow } from "@/components/task-row";
@@ -13,8 +16,8 @@ import { Card, Hairline, LiveDot, Row, SectionTitle, SkeletonRows, T, tap } from
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { greeting } from "@/lib/format";
-import { useAgents, useOpenHumanTasks } from "@/lib/hooks";
-import { useLive } from "@/lib/live";
+import { chatListQuery, useAgents, useOpenHumanTasks } from "@/lib/hooks";
+import { useLive, useRunningChats } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { reconnectNow } from "@/lib/realtime";
 import { isLive, useLiveScreens } from "@/lib/screens";
@@ -35,23 +38,22 @@ export default function Home() {
   const openForYou = useOpenHumanTasks();
   // Scoped like the rest of Home: the workspace's tasks and the ones without a workspace.
   const mine = { data: openForYou.data?.filter((t) => !workspaceId || !t.workspaceId || t.workspaceId === workspaceId) };
-  const recent = useQuery({ queryKey: qk.conversationList("", workspaceId), queryFn: () => api.conversations.list({ limit: 100, workspaceId }) });
+  const recent = useQuery(chatListQuery(workspaceId));
   const tasks = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }) });
   const missing = useQuery({ queryKey: qk.missingLogins, queryFn: api.missingLogins.open });
   const questions = useQuery({ queryKey: qk.questions, queryFn: api.questions.open });
   const { screens } = useLiveScreens();
+  // The lists, not the open chats: those refresh on their own events.
   const pull = usePullRefresh(async () => {
     reconnectNow();
-    await queryClient.invalidateQueries();
+    await queryClient.invalidateQueries({ predicate: (q) => q.queryKey[1] !== "detail" });
   });
 
-  const working = useWorkspaceRuns();
   const liveScreens = screens.filter(isLive);
-  const runningConversations = new Set(working.map((w) => w.run.conversationId));
+  const runningConversations = useRunningChats();
   const chats = inProject(recent.data ?? [], projectId, agents)
     .filter((conv) => conv.origin !== "dream")
     .slice(0, 5);
-  const titleOf = (id: string) => recent.data?.find((conv) => conv.id === id)?.title;
   const openTasks = tasksInProject(tasks.data ?? [], projectId)
     .filter((t) => t.status === "in_review" || t.status === "blocked" || t.status === "in_progress" || t.status === "todo")
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
@@ -117,32 +119,7 @@ export default function Home() {
         </Card>
       )}
 
-      <Animated.View layout={LinearTransition} style={styles.section}>
-        <SectionTitle title="Working now" />
-        {working.length ? (
-          <View style={{ gap: space.md }}>
-            {working.map((w) => (
-              <Animated.View key={w.run.id} entering={FadeIn}>
-                <RunCard live={w} agent={agents.get(w.run.agentId)} title={titleOf(w.run.conversationId)} />
-              </Animated.View>
-            ))}
-          </View>
-        ) : (
-          <Card style={styles.idle}>
-            <View style={[styles.idleIcon, { backgroundColor: c.sunken }]}>
-              {status === "connecting" ? <ActivityIndicator size="small" color={c.textMuted} /> : <Icon name="check" size={15} color={c.textMuted} weight="bold" />}
-            </View>
-            <View style={{ flex: 1 }}>
-              <T variant="subhead" style={{ fontWeight: "600" }}>
-                {status === "connecting" ? "Checking in…" : "All quiet"}
-              </T>
-              <T variant="footnote" muted>
-                {status === "connecting" ? `Asking ${computer} what the team is doing.` : "No agent is working right now."}
-              </T>
-            </View>
-          </Card>
-        )}
-      </Animated.View>
+      <WorkingNow computer={computer} />
 
       {(vaultLocked || (missing.data?.length ?? 0) > 0 || (questions.data?.length ?? 0) > 0 || (mine.data?.length ?? 0) > 0) && (
         <View style={styles.section}>
@@ -164,13 +141,7 @@ export default function Home() {
               <NeedsRow icon="person" title={`${mine.data!.length - 4} more tasks for you`} body="Open My tasks" onPress={() => router.push("/my-tasks")} />
             )}
             {questions.data?.slice(0, 4).map((q) => (
-              <NeedsRow
-                key={q.id}
-                icon="warning"
-                title={q.kind === "approval" ? `Needs your OK: ${q.title}` : q.title}
-                body={q.taskNumber != null ? `Task #${q.taskNumber} — reply to answer` : "Open the chat and reply to answer"}
-                onPress={() => router.push(`/chat/${q.conversationId}`)}
-              />
+              <QuestionRow key={q.id} question={q} agentName={agents.get(q.agentId)?.name} />
             ))}
             {missing.data?.slice(0, 4).map((m) => (
               <NeedsRow key={m.id} icon="key" title={`${m.service}: ${m.kind === "missing_totp" ? "2FA code missing" : m.kind === "invalid_credential" ? "login doesn't work" : "login missing"}`} body={m.reason} />
@@ -227,6 +198,90 @@ export default function Home() {
         </Card>
       </View>
     </ScrollView>
+  );
+}
+
+/** Agents that work right now. On its own so their activity labels don't render the whole of Home again. */
+const WorkingNow = memo(function WorkingNow({ computer }: { computer: string }) {
+  const c = useColors();
+  const status = useLive((s) => s.status);
+  const { byId: agents } = useAgents();
+  const { id: workspaceId } = useWorkspace();
+  const recent = useQuery(chatListQuery(workspaceId));
+  const working = useWorkspaceRuns();
+  return (
+    <Animated.View layout={LinearTransition} style={styles.section}>
+      <SectionTitle title="Working now" />
+      {working.length ? (
+        <View style={{ gap: space.md }}>
+          {working.map((w) => (
+            <Animated.View key={w.run.id} entering={FadeIn}>
+              <RunCard live={w} agent={agents.get(w.run.agentId)} title={recent.data?.find((conv) => conv.id === w.run.conversationId)?.title} />
+            </Animated.View>
+          ))}
+        </View>
+      ) : (
+        <Card style={styles.idle}>
+          <View style={[styles.idleIcon, { backgroundColor: c.sunken }]}>
+            {status === "connecting" ? <ActivityIndicator size="small" color={c.textMuted} /> : <Icon name="check" size={15} color={c.textMuted} weight="bold" />}
+          </View>
+          <View style={{ flex: 1 }}>
+            <T variant="subhead" style={{ fontWeight: "600" }}>
+              {status === "connecting" ? "Checking in…" : "All quiet"}
+            </T>
+            <T variant="footnote" muted>
+              {status === "connecting" ? `Asking ${computer} what the team is doing.` : "No agent is working right now."}
+            </T>
+          </View>
+        </Card>
+      )}
+    </Animated.View>
+  );
+});
+
+/** A question an agent waits on: an approval is answered right here, anything else in its chat. */
+function QuestionRow({ question: q, agentName }: { question: AgentQuestion; agentName?: string }) {
+  const c = useColors();
+  const [sending, setSending] = useState<"approve" | "decline" | null>(null);
+  const approval = q.kind === "approval";
+  const decide = (decision: "approve" | "decline") => {
+    if (sending) return;
+    tap();
+    setSending(decision);
+    void answerQuestion(q.id, { decision }).finally(() => setSending(null));
+  };
+  return (
+    <View>
+      <NeedsRow
+        icon="warning"
+        title={approval ? `Needs your OK: ${q.title}` : q.title}
+        body={[agentName, q.taskNumber != null ? `Task #${q.taskNumber}` : null, approval ? (q.body ?? "") : "Open the chat to answer"].filter(Boolean).join(" · ")}
+        onPress={() => router.push(`/chat/${q.conversationId}`)}
+      />
+      {approval ? (
+        <Row style={styles.decide}>
+          {(["approve", "decline"] as const).map((decision) => (
+            <Pressable
+              key={decision}
+              accessibilityRole="button"
+              accessibilityLabel={decision === "approve" ? "Approve" : "Decline"}
+              accessibilityState={{ busy: sending === decision, disabled: !!sending }}
+              disabled={!!sending}
+              onPress={() => decide(decision)}
+              style={({ pressed }) => [
+                styles.decision,
+                { backgroundColor: decision === "approve" ? c.primary : c.surface, borderColor: decision === "approve" ? c.primary : c.borderStrong, opacity: pressed || (sending && sending !== decision) ? 0.6 : 1 },
+              ]}
+            >
+              {sending === decision ? <ActivityIndicator size="small" color={decision === "approve" ? c.onPrimary : c.text} /> : null}
+              <T variant="footnote" color={decision === "approve" ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
+                {decision === "approve" ? "Approve" : "Decline"}
+              </T>
+            </Pressable>
+          ))}
+        </Row>
+      ) : null}
+    </View>
   );
 }
 
@@ -301,6 +356,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+  },
+  decide: {
+    gap: space.sm,
+    paddingLeft: space.lg + 28 + space.md,
+    paddingBottom: space.md,
+    marginTop: -4,
+  },
+  decision: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 34,
+    minWidth: 92,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   needsIcon: {
     width: 28,

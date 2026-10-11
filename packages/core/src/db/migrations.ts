@@ -1395,4 +1395,12 @@ ALTER TABLE mods ADD COLUMN source TEXT;
 ALTER TABLE mods ADD COLUMN contents TEXT;
 `,
   },
+  {
+    id: 85,
+    // The latest runs of all agents (the phone's Activity) without reading and sorting the whole table.
+    name: "runs_created_index",
+    sql: /* sql */ `
+CREATE INDEX IF NOT EXISTS idx_runs_created ON runs(created_at);
+`,
+  },
 ];

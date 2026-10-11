@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { humanTaskRef, isHumanTaskActive, type HumanTask } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
@@ -20,12 +20,19 @@ import { radius, space, useColors } from "@/lib/theme";
 export default function HumanTaskSheet() {
   const c = useColors();
   const { id, fromChat } = useLocalSearchParams<{ id: string; fromChat?: string }>();
-  const list = useQuery({ queryKey: qk.humanTaskList("all"), queryFn: () => api.humanTasks.list({ status: "all" }) });
-  const task = list.data?.find((t) => t.id === id);
+  const [settled, setSettled] = useState<HumanTask>();
+  // Whichever list brought the human here already has the task: the sheet opens from that copy while every task loads.
+  const seed = useMemo(() => {
+    const hit = settled?.id === id ? settled : cachedHumanTask(id);
+    return hit ? [hit] : undefined;
+  }, [id, settled]);
+  const list = useQuery({ queryKey: qk.humanTaskList("all"), queryFn: () => api.humanTasks.list({ status: "all" }), placeholderData: seed });
+  const task = (list.data ?? seed)?.find((t) => t.id === id);
   const { byId } = useAgents();
   const [note, setNote] = useState("");
 
   const settle = (next: HumanTask) => {
+    setSettled(next);
     queryClient.setQueryData<HumanTask[]>(qk.humanTaskList("all"), (old) => old?.map((t) => (t.id === next.id ? next : t)));
     void queryClient.invalidateQueries({ queryKey: qk.humanTasks });
     void queryClient.invalidateQueries({ queryKey: qk.tasks });
@@ -182,6 +189,15 @@ export default function HumanTaskSheet() {
       )}
     </ScrollView>
   );
+}
+
+/** A human task from any list that is cached (the open ones, a chat's, all of them). */
+function cachedHumanTask(id: string): HumanTask | undefined {
+  for (const [, list] of queryClient.getQueriesData<HumanTask[]>({ queryKey: qk.humanTasks })) {
+    const hit = Array.isArray(list) ? list.find((t) => t.id === id) : undefined;
+    if (hit) return hit;
+  }
+  return undefined;
 }
 
 /** The sheet goes first, so the screen opens in front instead of under it. */

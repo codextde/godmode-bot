@@ -1,13 +1,14 @@
-import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import { FlashList, type FlashListRef, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   characterGreeting,
   type Agent,
+  type ConversationFollowup,
   type ConversationWithMessages,
   type HumanTask,
   type Message,
@@ -21,43 +22,72 @@ import {
 } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { Composer, ComposerDock, type ComposerHandle } from "@/components/composer";
-import { HeaderActions } from "@/components/header-actions";
+import { HeaderActions, MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { LiveStrip } from "@/components/live-strip";
 import { AssistantMessage, UserMessage } from "@/components/message";
 import { Icon } from "@/components/icon";
 import { ModelButton } from "@/components/model-button";
+import { ChatScope, type ChatScopeValue } from "@/components/question-card";
 import { QueueTray } from "@/components/queue-tray";
-import { ErrorState, Skeleton, T, tap } from "@/components/ui";
+import { Button, ErrorState, Skeleton, T, tap } from "@/components/ui";
 import { openHumanTask } from "@/components/human-task-row";
 import { ApiError, api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
+import { fetchConversation, loadEarlier } from "@/lib/chat-cache";
 import { setQueue } from "@/lib/composer";
+import { whenText } from "@/lib/format";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { useAgents } from "@/lib/hooks";
-import { useConversationRun, useLive } from "@/lib/live";
+import { useChatRun, useLive, useRunActivity } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { subscribeConversation, viewConversation } from "@/lib/realtime";
-import { screenHref, useChatScreens } from "@/lib/screens";
-import { radius, space, useColors } from "@/lib/theme";
+import { screenHref, useChatScreens, type LiveScreen } from "@/lib/screens";
+import { radius, space, type, useColors } from "@/lib/theme";
 
 type Item =
   | { key: string; role: "intro" }
+  | { key: string; role: "earlier" }
   | { key: string; role: "user"; message: Message }
-  | { key: string; role: "assistant"; blocks: MessageBlock[]; content: string; streaming: boolean };
+  | { key: string; role: "assistant"; blocks: MessageBlock[]; content: string; streaming: boolean }
+  | { key: string; role: "live" };
+
+const NO_BLOCKS: MessageBlock[] = [];
+/** What marks a place in the chat where it went on without the human writing. */
+const MARKERS = new Set<MessageBlock["type"]>(["human_task", "followup", "retry"]);
+
+/** A stored message's row, the same object for as long as the message is: rows that didn't change don't render again. */
+const settled = new WeakMap<Message, Item | null>();
+
+function itemOf(m: Message): Item | null {
+  let item = settled.get(m);
+  if (item !== undefined) return item;
+  if (m.role === "user") item = { key: m.id, role: "user", message: m };
+  else if (m.role === "assistant") item = { key: m.id, role: "assistant", blocks: m.blocks, content: m.content, streaming: false };
+  else {
+    const markers = m.blocks.filter((b) => MARKERS.has(b.type));
+    item = markers.length ? { key: m.id, role: "assistant", blocks: markers, content: "", streaming: false } : null;
+  }
+  settled.set(m, item);
+  return item;
+}
+
+const Gap = () => <View style={{ height: 22 }} />;
 
 export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
   const list = useRef<FlashListRef<Item>>(null);
-  const conversation = useQuery({ queryKey: qk.conversation(id), queryFn: () => api.conversations.get(id) });
+  const conversation = useQuery({ queryKey: qk.conversation(id), queryFn: () => fetchConversation(id) });
   const forYou = useQuery({ queryKey: qk.chatHumanTasks(id), queryFn: () => api.humanTasks.list({ status: "active", conversationId: id }) });
   const { byId } = useAgents();
   const agent = conversation.data ? byId.get(conversation.data.agentId) : undefined;
-  const run = useConversationRun(id);
-  const draft = useLive((s) => s.drafts[id]);
+  const run = useChatRun(id);
+  // Only which message streams: its text lives in the row that shows it, so the screen doesn't render with every word.
+  const liveMessageId = useLive((s) => (run && s.drafts[id]?.runId === run.id ? s.drafts[id]!.messageId : null));
   const screens = useChatScreens(conversation.data, agent);
   const composer = useRef<ComposerHandle>(null);
+  const [renaming, setRenaming] = useState(false);
 
   useEffect(() => subscribeConversation(id), [id]);
   // Read while it is the screen in front (not while another screen covers it).
@@ -68,43 +98,45 @@ export default function Chat() {
     }, [id]),
   );
 
+  const messages = conversation.data?.messages;
+  const hasMore = !!conversation.data?.hasMore;
+  const runId = run?.id;
+  const running = run?.status === "running";
   const items = useMemo<Item[]>(() => {
-    const messages = conversation.data?.messages ?? [];
-    const live = run && draft && draft.runId === run.run.id ? draft : null;
-    const out: Item[] = [{ key: "intro", role: "intro" }];
-    for (const m of messages) {
-      if (m.role === "user") out.push({ key: m.id, role: "user", message: m });
-      else if (m.role === "assistant" && m.id !== live?.messageId) {
-        out.push({ key: m.id, role: "assistant", blocks: m.blocks, content: m.content, streaming: !!run && m.runId === run.run.id });
-      }
-      else if (m.role === "system") {
-        // Where the human closed a task the agent gave them; the chat continued from there.
-        const marker = m.blocks.filter((b) => b.type === "human_task");
-        if (marker.length) out.push({ key: m.id, role: "assistant", blocks: marker, content: "", streaming: false });
-      }
+    const out: Item[] = [hasMore ? { key: "earlier", role: "earlier" } : { key: "intro", role: "intro" }];
+    let answered = false;
+    for (const m of messages ?? []) {
+      if (m.id === liveMessageId) continue;
+      const item = itemOf(m);
+      if (!item) continue;
+      if (runId && m.role === "assistant" && m.runId === runId) {
+        answered = true;
+        out.push({ ...item, streaming: true } as Item);
+      } else out.push(item);
     }
-    if (live) {
-      out.push({ key: live.messageId, role: "assistant", blocks: live.blocks, content: "", streaming: true });
-    } else if (run && run.run.status === "running" && !messages.some((m) => m.runId === run.run.id && m.role === "assistant")) {
-      out.push({ key: `pending-${run.run.id}`, role: "assistant", blocks: [], content: "", streaming: true });
-    }
+    if (liveMessageId || (running && !answered)) out.push({ key: liveMessageId ?? `pending-${runId}`, role: "live" });
     return out;
-  }, [conversation.data, draft, run]);
+  }, [messages, hasMore, liveMessageId, runId, running]);
 
   // The chat's run stands still (paused on the computer, or waiting for Claude's usage limit).
   const pause = conversation.data?.paused;
-  const paused = (pause && pause.runId !== run?.run.id && pause) || null;
+  const paused = (pause && pause.runId !== run?.id && pause) || null;
   const queue = conversation.data?.queue ?? [];
   // The run waits for the human's answer to a question: the next message is that answer.
   const waiting = paused?.reason === "question";
   // While the agent works, is paused or older messages still wait, a new message joins the queue.
   const queueing = !waiting && (!!run || !!paused || queue.length > 0);
+  const followup = !run && !paused ? (conversation.data?.followup ?? null) : null;
+
+  const scope = useMemo<ChatScopeValue>(
+    () => ({ conversationId: id, agentName: agent?.name ?? "The agent", openQuestionId: (pause?.reason === "question" && pause.question?.id) || null }),
+    [id, agent?.name, pause],
+  );
 
   const send = async (content: string, files: PendingFile[]) => {
     const key = qk.conversation(id);
     const queueId = newQueueId();
     const tempId = `pending-${queueId}`;
-    await queryClient.cancelQueries({ queryKey: key });
     const draft = {
       conversationId: id,
       content,
@@ -151,7 +183,6 @@ export default function Chat() {
         };
       });
       useLive.getState().runStarted(result.run);
-      void queryClient.invalidateQueries({ queryKey: key });
       requestAnimationFrame(() => list.current?.scrollToEnd({ animated: true }));
     } catch (err) {
       pendingQueued.delete(queueId);
@@ -166,7 +197,7 @@ export default function Chat() {
   const onLost = useCallback((text: string) => composer.current?.insert(text), []);
 
   const stop = () => {
-    if (run) void api.runs.cancel(run.run.id).catch((err) => Alert.alert("Couldn't stop", errorText(err)));
+    if (run) void api.runs.cancel(run.id).catch((err) => Alert.alert("Couldn't stop", errorText(err)));
   };
 
   const resume = () => {
@@ -200,13 +231,84 @@ export default function Chat() {
       .finally(() => setRetrying(false));
   };
 
+  const change = (patch: { title?: string; pinned?: boolean; archived?: boolean }) =>
+    api.conversations
+      .update(id, patch)
+      .then((next) => {
+        // Only what changed: a runner's chat answers with every message.
+        queryClient.setQueryData<ConversationWithMessages>(qk.conversation(id), (old) => (old ? { ...old, title: next.title, pinned: next.pinned, archived: next.archived } : old));
+        void queryClient.invalidateQueries({ queryKey: qk.conversations, predicate: (q) => q.queryKey[1] !== "detail" });
+        return true;
+      })
+      .catch((err) => {
+        Alert.alert("Couldn't change the chat", errorText(err));
+        return false;
+      });
+
+  const remove = () =>
+    Alert.alert("Delete this chat?", "It's removed on your computer too.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () =>
+          void api.conversations
+            .delete(id)
+            .then(() => {
+              void queryClient.invalidateQueries({ queryKey: qk.conversations, predicate: (q) => q.queryKey[1] !== "detail" });
+              router.back();
+            })
+            .catch((err) => Alert.alert("Couldn't delete the chat", errorText(err))),
+      },
+    ]);
+
+  const rename = () => {
+    if (process.env.EXPO_OS !== "ios") return setRenaming(true);
+    Alert.prompt("Rename chat", undefined, (text) => text.trim() && void change({ title: text.trim() }), "plain-text", conversation.data?.title ?? "");
+  };
+
   const title = conversation.data?.title || "Chat";
   const primary = screens[0];
+  const data = conversation.data;
+  const menu: HeaderMenuItem[] = data
+    ? [
+        ...(running && !paused
+          ? [{ icon: "pause" as const, title: "Pause", onPress: () => void api.conversations.pause(id).catch((err) => Alert.alert("Couldn't pause", errorText(err))) }]
+          : []),
+        { icon: "pencil", title: "Rename", onPress: rename },
+        { icon: "pin", title: data.pinned ? "Unpin" : "Pin", onPress: () => void change({ pinned: !data.pinned }) },
+        data.archived
+          ? { icon: "unarchive", title: "Unarchive", onPress: () => void change({ archived: false }) }
+          : { icon: "archive", title: "Archive", onPress: () => void change({ archived: true }).then((done) => done && router.back()) },
+        { icon: "trash", title: "Delete", destructive: true, onPress: remove },
+      ]
+    : [];
+
+  const renderItem: ListRenderItem<Item> = useCallback(
+    ({ item }) => {
+      switch (item.role) {
+        case "intro":
+          return agent ? <Intro agent={agent} conversationId={id} running={!!runId} /> : null;
+        case "earlier":
+          return <Earlier conversationId={id} />;
+        case "user":
+          return <UserMessage message={item.message} />;
+        case "live":
+          return <LiveMessage conversationId={id} runId={runId} />;
+        default:
+          return <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} />;
+      }
+    },
+    [agent, id, runId],
+  );
 
   return (
     <>
       <Stack.Title>{title}</Stack.Title>
-      {primary && <HeaderActions actions={[{ icon: "eye", label: "Watch the agent's screen", onPress: () => router.push(screenHref(primary)) }]} />}
+      <HeaderActions
+        actions={primary ? [{ icon: "eye", label: "Watch the agent's screen", onPress: () => router.push(screenHref(primary)) }] : []}
+        menu={menu}
+      />
       <KeyboardAvoidingView behavior="translate-with-padding" style={{ flex: 1 }}>
         {!conversation.data ? (
           <View style={{ flex: 1 }}>
@@ -217,29 +319,25 @@ export default function Chat() {
             )}
           </View>
         ) : (
-        <FlashList
-          ref={list}
-          data={items}
-          keyExtractor={(item) => item.key}
-          contentInsetAdjustmentBehavior="automatic"
-          keyboardDismissMode="interactive"
-          maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.25 }}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <View style={{ height: 22 }} />}
-          renderItem={({ item }) =>
-            item.role === "intro" ? (
-              agent ? <Intro agent={agent} conversationId={id} running={!!run} /> : null
-            ) : item.role === "user" ? (
-              <UserMessage message={item.message} />
-            ) : (
-              <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} />
-            )
-          }
-          getItemType={(item) => item.role}
-        />
+          <ChatScope.Provider value={scope}>
+            <FlashList
+              ref={list}
+              data={items}
+              keyExtractor={(item) => item.key}
+              contentInsetAdjustmentBehavior="automatic"
+              keyboardDismissMode="interactive"
+              maintainVisibleContentPosition={{ startRenderingFromBottom: true, autoscrollToBottomThreshold: 0.25 }}
+              onStartReached={() => void loadEarlier(id).catch(() => undefined)}
+              onStartReachedThreshold={0.6}
+              contentContainerStyle={styles.list}
+              ItemSeparatorComponent={Gap}
+              renderItem={renderItem}
+              getItemType={(item) => item.role}
+            />
+          </ChatScope.Provider>
         )}
         {forYou.data?.length ? <ForYouStrip tasks={forYou.data} /> : null}
-        {run && primary ? <LiveStrip screen={primary} activity={run.activity} /> : null}
+        {run && primary ? <ChatLiveStrip screen={primary} runId={run.id} /> : null}
         {paused?.reason === "question" ? (
           <AskingStrip agentName={agent?.name ?? "The agent"} approval={paused.question?.kind === "approval"} />
         ) : paused ? (
@@ -251,6 +349,8 @@ export default function Chat() {
           />
         ) : ended ? (
           <EndedStrip mode={ended.mode} onRetry={retry} busy={retrying} />
+        ) : followup ? (
+          <FollowupStrip conversationId={id} followup={followup} agentName={agent?.name ?? "The agent"} />
         ) : null}
         <QueueTray
           conversationId={id}
@@ -299,6 +399,144 @@ export default function Chat() {
         </ComposerDock>
         <View style={{ height: keyboardOpen ? space.sm : Math.max(insets.bottom, space.md) }} />
       </KeyboardAvoidingView>
+      <RenameDialog open={renaming} title={conversation.data?.title ?? ""} onClose={() => setRenaming(false)} onSave={(text) => void change({ title: text })} />
+    </>
+  );
+}
+
+/** The answer being written: it alone renders with every word that arrives. */
+const LiveMessage = memo(function LiveMessage({ conversationId, runId }: { conversationId: string; runId?: string }) {
+  const blocks = useLive((s) => {
+    const draft = s.drafts[conversationId];
+    return draft && draft.runId === runId ? draft.blocks : NO_BLOCKS;
+  });
+  return <AssistantMessage blocks={blocks} streaming />;
+});
+
+function ChatLiveStrip({ screen, runId }: { screen: LiveScreen; runId: string }) {
+  return <LiveStrip screen={screen} activity={useRunActivity(runId)} />;
+}
+
+/** At the top while older messages exist: they load when the list gets there, or with a tap when that failed. */
+function Earlier({ conversationId }: { conversationId: string }) {
+  const c = useColors();
+  const [failed, setFailed] = useState(false);
+  const load = () => {
+    setFailed(false);
+    loadEarlier(conversationId).catch(() => setFailed(true));
+  };
+  // The list only says once that its start was reached: this row asks for the page itself when it appears.
+  useEffect(() => {
+    loadEarlier(conversationId).catch(() => setFailed(true));
+  }, [conversationId]);
+  return (
+    <Pressable onPress={load} disabled={!failed} accessibilityRole="button" accessibilityLabel={failed ? "Load earlier messages" : "Loading earlier messages"} style={styles.earlier}>
+      {failed ? <Icon name="refresh" size={12} color={c.textMuted} /> : <ActivityIndicator size="small" color={c.textFaint} />}
+      <T variant="caption" muted>
+        {failed ? "Couldn't load earlier messages. Tap to try again" : "Earlier messages"}
+      </T>
+    </Pressable>
+  );
+}
+
+/** Android has no text prompt of its own. */
+function RenameDialog({ open, title, onClose, onSave }: { open: boolean; title: string; onClose: () => void; onSave: (title: string) => void }) {
+  const c = useColors();
+  const [text, setText] = useState(title);
+  useEffect(() => {
+    if (open) setText(title);
+  }, [open, title]);
+  const save = () => {
+    if (text.trim()) onSave(text.trim());
+    onClose();
+  };
+  return (
+    <Modal visible={open} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+      <Pressable accessibilityLabel="Close" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} />
+      <View style={styles.dialogWrap} pointerEvents="box-none">
+        <View style={[styles.dialog, { backgroundColor: c.surface }]} accessibilityViewIsModal>
+          <T variant="headline">Rename chat</T>
+          <TextInput
+            autoFocus
+            value={text}
+            onChangeText={setText}
+            onSubmitEditing={save}
+            returnKeyType="done"
+            maxLength={200}
+            selectTextOnFocus
+            accessibilityLabel="Chat title"
+            style={[type.body, styles.dialogInput, { color: c.text, backgroundColor: c.sunken }]}
+          />
+          <View style={{ flexDirection: "row", gap: space.sm }}>
+            <Button title="Cancel" variant="secondary" onPress={onClose} style={{ flex: 1 }} />
+            <Button title="Save" onPress={save} disabled={!text.trim()} style={{ flex: 1 }} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/** Above the composer while the agent plans to come back to the chat on its own. */
+function FollowupStrip({ conversationId, followup, agentName }: { conversationId: string; followup: ConversationFollowup; agentName: string }) {
+  const c = useColors();
+  const [open, setOpen] = useState(false);
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: qk.conversation(conversationId) });
+    void queryClient.invalidateQueries({ queryKey: qk.conversations, predicate: (q) => q.queryKey[1] !== "detail" });
+  };
+  const failed = (title: string) => (err: unknown) =>
+    Alert.alert(title, err instanceof ApiError && err.code === "device_forbidden" ? "Update Godmode on your computer to change follow-ups from the phone." : errorText(err));
+  const move = (dueAt: Date) => void api.conversations.followup.move(conversationId, dueAt.toISOString()).then(refresh).catch(failed("Couldn't move the follow-up"));
+  const inAnHour = new Date(Date.now() + 3600_000);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setHours(9, 0, 0, 0);
+  const items: HeaderMenuItem[] = [
+    {
+      icon: "play",
+      title: "Continue now",
+      onPress: () =>
+        void api.conversations.followup
+          .runNow(conversationId)
+          .then((started) => {
+            useLive.getState().runStarted(started);
+            refresh();
+          })
+          .catch(failed("Couldn't continue now")),
+    },
+    { icon: "clock", title: "In an hour", onPress: () => move(inAnHour) },
+    { icon: "clock", title: "Tomorrow at 09:00", onPress: () => move(tomorrow) },
+    {
+      icon: "close",
+      title: "Cancel the follow-up",
+      destructive: true,
+      onPress: () => void api.conversations.followup.cancel(conversationId).then(refresh).catch(failed("Couldn't cancel the follow-up")),
+    },
+  ];
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${agentName} continues ${whenText(followup.dueAt)}. Change`}
+        onPress={() => {
+          tap();
+          setOpen(true);
+        }}
+        style={({ pressed }) => [styles.paused, { backgroundColor: c.surface, borderColor: c.border, opacity: pressed ? 0.75 : 1 }]}
+      >
+        <Icon name="clock" size={15} color={c.textMuted} />
+        <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
+          <T variant="footnote" style={{ fontWeight: "600" }}>
+            Continues {whenText(followup.dueAt)}
+          </T>
+          {followup.note ? `  ${followup.note}` : ""}
+        </T>
+        <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
+          Change
+        </T>
+      </Pressable>
+      <MenuSheet items={items} open={open} onClose={() => setOpen(false)} />
     </>
   );
 }
@@ -483,6 +721,31 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     borderCurve: "continuous",
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  earlier: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingTop: space.xl,
+    paddingBottom: space.sm,
+  },
+  dialogWrap: {
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: space.xl,
+  },
+  dialog: {
+    gap: space.lg,
+    padding: space.xl,
+    borderRadius: radius.lg,
+    borderCurve: "continuous",
+  },
+  dialogInput: {
+    height: 46,
+    paddingHorizontal: space.md,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
   },
   intro: {
     alignItems: "center",

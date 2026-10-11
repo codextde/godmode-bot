@@ -1,4 +1,5 @@
 import * as Haptics from "expo-haptics";
+import { useIsFocused } from "expo-router";
 import { useEffect, type ReactNode } from "react";
 import {
   ActivityIndicator,
@@ -13,7 +14,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { Glass } from "./glass";
 import { Icon, type IconName } from "./icon";
 import { radius, space, type, useColors } from "@/lib/theme";
@@ -66,12 +67,20 @@ export function SectionTitle({ title, action, onAction }: { title: string; actio
   );
 }
 
+/** Pulses only while its screen is in front: tabs and screens under others stay mounted. */
 export function LiveDot({ live = true, color, size = 8 }: { live?: boolean; color?: ColorValue; size?: number }) {
   const c = useColors();
+  const focused = useIsFocused();
   const pulse = useSharedValue(0);
+  const moving = live && focused;
   useEffect(() => {
-    pulse.value = live ? withRepeat(withTiming(1, { duration: 1400, easing: Easing.out(Easing.quad) }), -1, false) : 0;
-  }, [live, pulse]);
+    if (!moving) return;
+    pulse.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.out(Easing.quad) }), -1, false);
+    return () => {
+      cancelAnimation(pulse);
+      pulse.value = 0;
+    };
+  }, [moving, pulse]);
   const ring = useAnimatedStyle(() => ({ opacity: 0.55 * (1 - pulse.value), transform: [{ scale: 1 + pulse.value * 1.6 }] }));
   const fill = color ?? (live ? c.brand : c.textFaint);
   return (
@@ -256,10 +265,13 @@ export function EmptyState({ icon, title, body, action }: { icon: IconName; titl
 /** A placeholder block that breathes while its content loads. */
 export function Skeleton({ width, height = 12, radius: r = 6, style }: { width?: ViewStyle["width"]; height?: number; radius?: number; style?: StyleProp<ViewStyle> }) {
   const c = useColors();
+  const focused = useIsFocused();
   const v = useSharedValue(0.55);
   useEffect(() => {
+    if (!focused) return;
     v.value = withRepeat(withTiming(1, { duration: 850, easing: Easing.inOut(Easing.quad) }), -1, true);
-  }, [v]);
+    return () => cancelAnimation(v);
+  }, [v, focused]);
   const pulse = useAnimatedStyle(() => ({ opacity: v.value }));
   return <Animated.View style={[{ width, height, borderRadius: r, borderCurve: "continuous", backgroundColor: c.sunken }, pulse, style]} />;
 }

@@ -6,6 +6,7 @@ import { EFFORT_LABELS, ULTRACODE_HINT, type ClaudeModel, type ConversationWithM
 import { Icon } from "@/components/icon";
 import { Card, Hairline, T, tap } from "@/components/ui";
 import { api, errorText, type ModelChoicePatch } from "@/lib/api";
+import { fetchConversation } from "@/lib/chat-cache";
 import { NO_CHOICE, useEffectiveModel, useNewChatChoice, type ModelChoice } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
@@ -26,8 +27,10 @@ export default function ModelSheet() {
   const { byId } = useAgents();
   const conversation = useQuery({
     queryKey: qk.conversation(conversationId ?? ""),
-    queryFn: () => api.conversations.get(conversationId!),
+    queryFn: () => fetchConversation(conversationId!),
     enabled: !!conversationId,
+    // The chat it was opened from has it: the sheet only reads the model from it.
+    staleTime: Infinity,
   });
   const newChoice = useNewChatChoice((s) => s.choice);
   const agent = byId.get(conversation.data?.agentId ?? agentId ?? "");
