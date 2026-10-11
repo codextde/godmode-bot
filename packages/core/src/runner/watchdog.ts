@@ -27,6 +27,19 @@ const KEEP_DAYS = 90;
 /** Steps that wait on purpose — for another agent, or for the human. */
 const WAITING_TOOLS: ReadonlySet<string> = new Set(["mcp__godmode__agent_delegate", "mcp__godmode__ask_human", "mcp__godmode__request_approval"]);
 
+/** Claude Code's own "wake me later": the process stays and is silent until the wakeup calls the model again. */
+const WAKEUP_TOOL = "ScheduleWakeup";
+
+/** How long the run sleeps on purpose after this step. */
+function wakeupMs(step: ToolBlock | undefined): number {
+  if (step?.name !== WAKEUP_TOOL || step.isError) return 0;
+  const input = step.input && typeof step.input === "object" ? (step.input as Record<string, unknown>) : {};
+  const seconds = Number(input.delaySeconds);
+  if (input.stop === true || !Number.isFinite(seconds)) return 0;
+  // Claude Code keeps the delay between a minute and an hour.
+  return Math.min(3600, Math.max(60, seconds)) * 1000;
+}
+
 export interface Verdict {
   kind: WatchdogKind;
   report: string;
@@ -92,11 +105,12 @@ export function assess(run: Pick<WatchedRun, "blocks" | "lastOutputAt" | "starte
   if (pending && WAITING_TOOLS.has(pending.name)) return null;
   const background = tools.find((b) => b.task?.status === "running") ?? null;
   const busy = pending ?? background;
-  const limit = busy ? Math.max(limits.stallMs * TOOL_FACTOR, Math.min(MIN_TOOL_STALL_MS, limits.stallMs * 10)) : limits.stallMs;
-  const idle = at - run.lastOutputAt;
-  if (idle < limit) return null;
   const done = tools.filter((b) => b.result !== undefined);
   const last = done[done.length - 1];
+  const base = busy ? Math.max(limits.stallMs * TOOL_FACTOR, Math.min(MIN_TOOL_STALL_MS, limits.stallMs * 10)) : limits.stallMs;
+  const limit = pending ? base : Math.max(base, limits.stallMs + wakeupMs(last));
+  const idle = at - run.lastOutputAt;
+  if (idle < limit) return null;
   const where = pending
     ? `while this step ran: ${stepLabel(pending)}`
     : background

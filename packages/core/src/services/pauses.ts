@@ -306,7 +306,11 @@ export function startPauses(): void {
   started = true;
   // A pause without its run, or a paused run without its pause (a restored backup): nothing could continue it.
   exec("DELETE FROM paused_runs WHERE run_id NOT IN (SELECT id FROM runs WHERE status = 'paused')");
-  const lost = all<{ id: string }>("SELECT id FROM runs WHERE status = 'paused' AND id NOT IN (SELECT run_id FROM paused_runs)");
+  // Not the copy of a run that stands still on a runner: its pause is kept there.
+  const lost = all<{ id: string }>(
+    `SELECT id FROM runs WHERE status = 'paused' AND id NOT IN (SELECT run_id FROM paused_runs)
+      AND conversation_id NOT IN (SELECT id FROM conversations WHERE runner_id IS NOT NULL)`,
+  );
   for (const { id } of lost) void cancelRun(id, "Paused, but what it needed to continue is gone").catch((err) => log.warn(`could not close run ${id}`, err));
   if (lost.length) log.warn(`closed ${lost.length} paused run(s) that couldn't be continued`);
   // An open question belongs to a run that stands still for it, and the other way round.

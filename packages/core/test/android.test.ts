@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { gzipSync } from "node:zlib";
 import type { Agent } from "@godmode/shared";
 import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import * as vault from "../src/vault/vault";
@@ -10,7 +11,7 @@ import { createConversation, getConversationSummary } from "../src/services/conv
 import { updateSettings } from "../src/services/settings";
 import { issueRunToken, revokeRunToken } from "../src/mcp/tokens";
 import { createCredential } from "../src/vault/credentials";
-import { connectionOf, parseDevices } from "../src/android/adb";
+import { AdbError, connectionOf, parseDevices } from "../src/android/adb";
 import { runAndroidDeviceIds } from "../src/android/assignments";
 import {
   androidStatus,
@@ -25,7 +26,7 @@ import {
   serialOf,
   updateDevice,
 } from "../src/android/service";
-import { frameToScreen, parseRawScreencap, parseScreenSize, parseState, parseUiXml, typeCommands, untypable } from "../src/android/screen";
+import { frameToScreen, parseRawScreencap, parseScreenSize, parseState, parseUiXml, typeCommands, unpackScreencap, untypable } from "../src/android/screen";
 import { FrameAssembler, avcC, codecString, splitNals, videoSize } from "../src/android/stream";
 import { forgetAndroidRun } from "../src/android/tools";
 import { buildSystemPrompt } from "../src/runner/prompt";
@@ -119,6 +120,18 @@ describe("parsing", () => {
     // BGRA becomes RGBA.
     expect([...parseRawScreencap(raw).data]).toEqual([30, 20, 10, 255, 3, 2, 1, 255]);
     expect(() => parseRawScreencap(raw.subarray(0, 18))).toThrow(/incomplete/);
+
+    const packed = gzipSync(raw);
+    expect(unpackScreencap(packed).equals(raw)).toBe(true);
+    // The phone went away while the picture came: an answer the app can show, not a crash of the request.
+    let cut: unknown;
+    try {
+      unpackScreencap(packed.subarray(0, packed.length - 6));
+    } catch (err) {
+      cut = err;
+    }
+    expect(cut).toBeInstanceOf(AdbError);
+    expect((cut as Error).message).toMatch(/incomplete picture/);
   });
 
   test("typing: quoting for the phone's shell, %s, Enter and Tab", () => {

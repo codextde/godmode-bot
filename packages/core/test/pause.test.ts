@@ -437,6 +437,21 @@ describe("Claude's usage limit", () => {
     expect(listNotifications().filter((n) => n.title === "Claude's session limit is reached")).toHaveLength(1);
   });
 
+  test("a run Claude Code ends without a word right after the limit ended another one waits for the reset too", async () => {
+    signal("limit", String(inAnHour()));
+    const first = await startChat({ agentId: agent.id, content: "LIMIT_HIT says so" });
+    await paused(first.run.id);
+    const silent = await startChat({ agentId: agent.id, content: "LIMIT_SILENT then answer" });
+    await paused(silent.run.id);
+    expect(pauseOf(silent.conversation.id)).toMatchObject({ reason: "limit", limit_name: "session limit", auto: 1, resume_at: pauseOf(first.conversation.id)!.resume_at });
+
+    rmSync(join(env.stateDir, "limit"));
+    for (const id of [first.run.id, silent.run.id]) due(id);
+    sweep();
+    expect(await waitForRun(first.run.id, 20_000)).toMatchObject({ status: "succeeded", result: "back after the limit" });
+    expect((await waitForRun(silent.run.id, 20_000)).status).toBe("succeeded");
+  });
+
   test("a chat archived while it waits for the reset still continues by itself", async () => {
     signal("limit", String(inAnHour()));
     const started = await startChat({ agentId: agent.id, content: "LIMIT_HIT then filed away" });
@@ -651,5 +666,21 @@ describe("restart", () => {
     startPauses();
     expect(getRun(lost.run.id).status).toBe("cancelled");
     expect(all<{ id: string }>("SELECT id FROM runs WHERE status = 'paused'")).toEqual([]);
+  });
+
+  test("the copy of a run that stands still on a runner is left alone", async () => {
+    const remote = await working("SLEEP on a runner");
+    await pauseConversation(remote.conversation.id);
+    await paused(remote.run.id);
+    // As the copy of a runner's chat looks here: the pause is kept on the runner.
+    sql("DELETE FROM paused_runs WHERE run_id = ?", remote.run.id);
+    sql("UPDATE conversations SET runner_id = 'rnr_asleep' WHERE id = ?", remote.conversation.id);
+    stopPauses();
+    startPauses();
+    expect(getRun(remote.run.id).status).toBe("paused");
+    sql("UPDATE conversations SET runner_id = NULL WHERE id = ?", remote.conversation.id);
+    stopPauses();
+    startPauses();
+    expect(getRun(remote.run.id).status).toBe("cancelled");
   });
 });
