@@ -179,9 +179,10 @@ describe("routines CRUD", () => {
 
   test("moving a routine to another agent forgets its conversation", async () => {
     const other = await createAgent({ name: "Other" });
-    const routine = createRoutine({ agentId: agent.id, name: "Movable", cron: "0 7 * * *", prompt: "x" });
+    const routine = createRoutine({ agentId: agent.id, name: "Movable", cron: "0 7 * * *", prompt: "x", fillOnly: true });
     const moved = updateRoutine(routine.id, { agentId: other.id });
     expect(moved.agentId).toBe(other.id);
+    expect(moved.fillOnly).toBe(true);
     expect(moved.conversationId).toBeNull();
     expect(listRoutines({ agentId: other.id }).map((r) => r.id)).toEqual([routine.id]);
     await repo.repoIdle(other.repoPath);

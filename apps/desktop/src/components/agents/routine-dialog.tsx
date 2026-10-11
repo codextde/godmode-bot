@@ -76,8 +76,6 @@ export interface RoutineDraft {
   enabled: boolean;
   reuseConversation: boolean;
   notify: RoutineNotify;
-  /** Runs without raw secrets; only offered for an automation an agent set up that way. */
-  fillOnly: boolean;
 }
 
 /** Like the core: events get a conversation each (named after the event); schedules and conditions keep one. */
@@ -108,7 +106,6 @@ function initialDraft(routine: Routine | null | undefined, agentId: string | und
     enabled: routine?.enabled ?? initial?.enabled ?? true,
     reuseConversation: routine?.reuseConversation ?? initial?.reuseConversation ?? defaultReuse(triggerType),
     notify: routine?.notify ?? "failures",
-    fillOnly: routine?.fillOnly ?? false,
   };
 }
 
@@ -137,6 +134,8 @@ export function RoutineDialog({
   const [base] = useState(() => initialDraft(routine, agentId, initial));
   const [draft, setDraft, kept] = useDraft(draftKey, base);
   const [touched, setTouched] = useState(false);
+  /** Not part of the draft: a switch left on must not outlive the prompt it was meant for. */
+  const [reveal, setReveal] = useState(false);
   /** Until the human sets "Keep one conversation" on a new automation, it follows the trigger type's default. */
   const reusePreset = editing || initial?.reuseConversation !== undefined;
   const [reuseChosen, setReuseChosen] = useState(reusePreset || draft.reuseConversation !== defaultReuse(draft.triggerType));
@@ -228,7 +227,7 @@ export function RoutineDialog({
         notify: draft.notify,
       };
       if (!routine) return api.routines.create(input);
-      if (!routine.fillOnly || draft.fillOnly !== false) return api.routines.update(routine.id, input);
+      if (!routine.fillOnly || !reveal) return api.routines.update(routine.id, input);
       return withGrant((grant) => api.routines.update(routine.id, { ...input, fillOnly: false }, grant), "Confirm to let this automation read secrets");
     },
     onSuccess: (r) => {
@@ -514,14 +513,14 @@ export function RoutineDialog({
                 checked={draft.enabled}
                 onChange={(v) => set("enabled", v)}
               />
-              {routine?.fillOnly && (
+              {routine?.fillOnly && agents.find((a) => a.id === routine.agentId)?.permissions.secretAccess === "reveal" && (
                 <div className="sm:col-span-2">
                   <SwitchCard
                     id="routine-reveal"
                     title="Reveal secrets to AI"
                     description="An agent set this automation up, so its runs fill logins into pages but can't read passwords or 2FA codes. Switch on only if you trust the prompt above: its runs then read them like the agent's own."
-                    checked={!draft.fillOnly}
-                    onChange={(v) => set("fillOnly", !v)}
+                    checked={reveal}
+                    onChange={setReveal}
                   />
                 </div>
               )}

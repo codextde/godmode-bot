@@ -637,6 +637,11 @@ export function updateRoutine(id: string, patch: Partial<RoutineInput>): Routine
   } else if (agentChanged) {
     patchTriggerState(id, { checkConversationId: null });
   }
+  if (patch.fillOnly !== undefined && patch.fillOnly !== current.fillOnly) {
+    // Nothing a run noted while it had (or lacked) raw secrets goes on to runs of the other kind.
+    run("UPDATE routines SET conversation_id = NULL WHERE id = ?", id);
+    patchTriggerState(id, { observation: null, observedAt: null, checkConversationId: null });
+  }
   if (!enabled && current.enabled) cancelPendingEvents(id, "The automation was paused");
 
   const routine = getRoutine(id);

@@ -934,6 +934,11 @@ describe("no privilege escalation through agent tools", () => {
     expect(system).not.toContain("You may read raw secrets");
     // The next run goes on in the same fill-only chat.
     expect(automationConversation(getRoutine(made.id))).toBe(run.conversationId);
+    // Marked whatever the agent reads today: it may be given raw secrets later.
+    const forWorker = await call(tokens[manager.id]!, "routine_create", { agentId: worker.id, name: "Worker mornings", cron: "0 9 * * *", prompt: "Daily report" });
+    const workerRoutine = JSON.parse(forWorker.content[0]!.text) as { id: string; note?: string };
+    expect(workerRoutine.note).toBeUndefined();
+    expect(getRoutine(workerRoutine.id).fillOnly).toBe(true);
     // Changing it again leaves it fill-only; the caller has no way to lift that.
     const again = await call(tokens[manager.id]!, "routine_update", { routineId: made.id, prompt: "Something else", fillOnly: false });
     expect(again.isError).toBeUndefined();
@@ -991,6 +996,11 @@ describe("no privilege escalation through agent tools", () => {
     const notPeer = await call(tokens[limited.id]!, "agent_delegate", { agentId: delegator.id, task: "x", wait: false });
     expect(notPeer.isError).toBe(true);
     expect(notPeer.content[0]!.text).toContain("not one of your peers");
+    // Nor does an automation reach a reveal-mode agent it may not hand work to.
+    const around = await call(tokens[limited.id]!, "routine_create", { agentId: revealer.id, name: "Around", cron: "0 9 * * *", prompt: "x" });
+    expect(around.isError).toBe(true);
+    expect(around.content[0]!.text).toContain("Target agent can reveal secrets");
+    expect(listRoutines({ agentId: revealer.id }).map((r) => r.name)).not.toContain("Around");
     // Another workspace's secrets stay out of reach: the task runs there, without raw secrets.
     const cross = await call(tokens[revealBoss.id]!, "agent_delegate", { agentId: wsRevealer.id, task: "x", wait: false });
     expect(cross.isError).toBeUndefined();
