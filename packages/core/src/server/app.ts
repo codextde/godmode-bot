@@ -36,7 +36,7 @@ import { registerMobileRoutes } from "./routes/mobile";
 import { registerConnectorRoutes } from "./routes/connectors";
 import { registerRunnerRoutes } from "./routes/runners";
 import { registerLinkRoutes } from "./routes/link";
-import { remoteRouting } from "../remote/routing";
+import { forwardedRoute, remoteRouting } from "../remote/routing";
 import { registerCloudRoutes } from "./routes/cloud";
 import { registerLicenseRoutes } from "./routes/license";
 
@@ -86,7 +86,7 @@ export function createApp() {
     await next();
     if (!isApiPath(c.req.path)) return;
     const ms = Math.round(performance.now() - started);
-    const details = { method: c.req.method, route: c.req.routePath, status: c.res.status, ms };
+    const details = { method: c.req.method, route: forwardedRoute(c) ?? c.req.routePath, status: c.res.status, ms };
     // `expected`: the route waits for something by design (see `expectSlow`), so it says nothing about the core.
     if (ms >= SLOW_REQUEST_MS) log.info("slow request", isExpectedSlow(c) ? { ...details, expected: true } : details);
     else if (!c.req.path.startsWith("/api/logs")) log.debug("request", details);
