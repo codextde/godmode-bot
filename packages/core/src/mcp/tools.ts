@@ -2538,10 +2538,11 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "settings_update",
     description:
-      'Change Godmode\'s own settings. `changes` is a partial object by section with only what should differ, e.g. { "runner": { "fallbackModel": "claude-opus-5" }, "memory": { "dreaming": { "model": "" } } }. It applies at once and to every agent, so change what the human asked for and name it in your answer. A model takes an id or alias; "" means none (fallback) or the agent\'s own (dreaming). What guards secrets, access from outside, what agents may do on this computer, the instructions for every agent and spending limits stays with the human (`humanOnly` in settings_get).',
+      'Change Godmode\'s own settings. `changes` is a partial object by section with only what should differ, e.g. { "runner": { "fallbackModel": "claude-opus-5" }, "memory": { "dreaming": { "model": "" } } }. It applies at once and to every agent, so change what the human asked for and name it in your answer. A model takes an id or alias; "" means none (fallback) or the agent\'s own (dreaming). What guards secrets, access from outside, what agents may do on this computer, what every agent is told and their limits stays with the human (`humanOnly` in settings_get).',
     schema: z.object({ changes: z.record(z.string(), z.unknown()).describe("Partial settings by section") }),
     when: managesSetup,
     run: ({ changes }, { agent, ctx }) => {
+      if (lockedVm(ctx)) return fail("This task runs in a virtual machine and is kept off the human's computer, and Godmode's settings apply to every agent on it — only the human changes them.");
       const refusal = agentSettingsRefusal(changes, getSettings().general.userName.trim() || "The human");
       if (refusal) return fail(refusal);
       const changed = applyAgentSettings(ctx.connector ? `connector:${ctx.connector.id}` : `agent:${agent.id}`, ctx.runId, changes);
