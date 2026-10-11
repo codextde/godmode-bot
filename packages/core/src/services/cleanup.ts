@@ -72,8 +72,8 @@ export const SCRATCH_DAYS = 7;
 export const RUN_LOG_DAYS = 14;
 /** Loose history of an agent below this isn't worth packing. */
 const PACK_WORTH = 32 * 1024 * 1024;
-/** About what packing saves (measured on agent repositories: zlib alone → delta-compressed pack). */
-const PACK_SAVES = 0.25;
+/** About what packing saves (measured on agent repositories, zlib alone → delta-compressed pack: 25 to 47 %). */
+const PACK_SAVES = 0.3;
 /** Less free room in the database isn't worth rewriting it. */
 const WORTH_IT = 1024 * 1024;
 const BUSY = "Agents are working — this is cleaned once they are done.";
@@ -629,10 +629,11 @@ async function agentHistory(scan: Scan): Promise<Category | null> {
         if (!fresh) throw new Error("Git can't read this repository.");
         if (!fresh.oids.length) return 0;
         const before = (await new Sizes().of(gitDir)).bytes;
-        // Bounded packs (isomorphic-git can't read one over 2 GiB, should anyone ask it for an old version), and bounded
-        // work, so packing a large history doesn't take the whole computer.
+        // Bounded work, so packing a large history doesn't take the whole computer. One pack per pass: a size limit
+        // would keep versions in different packs from being stored against each other (2.5 GB of run logs: 1.3 GB in
+        // one pack, 2.1 GB split at 512 MB).
         const pack = await runGit(
-          ["pack-objects", "-q", "--max-pack-size=512m", "--window-memory=256m", "--threads=2", join(gitDir, "objects", "pack", "pack")],
+          ["pack-objects", "-q", "--window-memory=256m", "--threads=2", join(gitDir, "objects", "pack", "pack")],
           { cwd: agent.dir, timeoutMs: 30 * 60_000, input: `${fresh.named.join("\n")}\n` },
         );
         if (!pack.ok) throw new Error(pack.timedOut ? "Packing took too long." : pack.stderr.trim().split("\n").at(-1) || "git pack-objects failed");

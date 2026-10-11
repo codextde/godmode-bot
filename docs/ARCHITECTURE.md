@@ -647,9 +647,9 @@ updates of Settings → System to the self check.
 | Browser caches (recommended) | `Cache`, `Code Cache`, `GPUCache`, Dawn and shader caches of every profile | Cookies, logins, site data; profiles whose Chromium runs (registered, a live `SingletonLock`, `lockfile` on Windows) |
 | Worktrees of finished tasks (recommended) | Worktrees of tasks done or cancelled a day ago, and of deleted tasks — removed and pruned; branches stay | Uncommitted changes (also files git is told not to list), commits on no branch, a rebase or merge under way, full clones with unpushed commits or stashes, folders that aren't checkouts, tasks whose chat works or is paused |
 | Clones no task uses (recommended) | Bare clones in `repos/.tasks` no task names | One a task folder still uses or with commits never pushed |
-| Agents' scratch files (recommended) | Top-level entries of each agent's `workspace/tmp` untouched for 7 days (`SCRATCH_DAYS`), including what dreams discarded | Entries the agent's memory, instructions, automations or follow-ups name (`namedBy` in `memory/workspace.ts`); everything of an agent that is working |
-| Old run logs (recommended) | `runs/<day>/` of agent repos older than 14 days (`RUN_LOG_DAYS`; the day or the newest write, whichever is later). Run logs aren't versioned (`runs/` is in the managed `.gitignore`) | Days holding the log of a running, queued or paused run |
-| Agent file history (recommended) | `git gc --prune=1.day.ago` (2 threads, 256 MB window) in agent repos with 32 MB+ of loose objects (isomorphic-git only writes loose ones), inside the repo lock; the size is an estimate | Every commit; repos of agents that are working |
+| Agents' scratch files (recommended) | Top-level entries of each agent's `workspace/tmp` untouched for 7 days (`SCRATCH_DAYS`), including what dreams discarded | Entries the agent's memory, instructions, automations or follow-ups name (`namedBy` in `memory/workspace.ts`); everything of an agent that is working or has a paused run; what was written to since the look |
+| Old run logs (recommended) | `runs/<day>/` of agent repos older than 14 days (`RUN_LOG_DAYS`; the day or the newest write, whichever is later). Run logs aren't versioned (`/runs/` is in the managed `.gitignore`) | Days holding the log of a running, queued or paused run |
+| Agent file history (recommended) | In agent repos with 32 MB+ of it: loose blobs no current file holds (older versions, deleted files, the run logs of before) go into one pack per pass (`git pack-objects` with their paths, then `prune-packed`), inside the repo lock; the size is an estimate | Every version. Commits, trees and the current files stay loose: isomorphic-git reads a whole pack to get one object, so what its commits, status and log read is never packed (agent repos also get `gc.auto=0`, so system git doesn't pack them either). Repos of agents that are working |
 | Database (recommended) | `VACUUM` + `wal_checkpoint(TRUNCATE)` once 1 MB+ of pages is free | Waits while agents work, a backup runs, or the disk can't hold two copies |
 | Old logs (recommended) | Replaced logs a week old, logs of deleted VMs | The current logs |
 | Unfinished VM downloads, Trash, macOS images | Only when picked: layers kept to resume a download, `agents/.trash`, `repos/.trash`, `browser/.trash`, image templates (`removeImage`) | Images and layers while a download runs |
@@ -1586,9 +1586,12 @@ have passed ("is going to Singapore in July" → "went to Singapore in July 2026
   links, existing targets, entries with a file changed in the last 3 days, and what the agent's instructions,
   automations or follow-ups (or another agent's, by absolute path) name, including folders they name as a place; a
   discard also waits until the memory no longer names the entry. Moving out of `tmp/` is allowed for named files up to
-  25 MB that don't look like secrets (the rest of the workspace is versioned). A move rewrites `workspace/<path>`
-  mentions in the memory files. Moves are recorded in `dreams.workspace` (at most 300 per dream), rolled back with a
-  failed, cancelled, paused or interrupted dream, and put back by an undo, which waits while anything moved is gone.
+  25 MB that don't look like secrets (the rest of the workspace is versioned); a discard is refused for folders holding
+  files git doesn't keep (a nested repository or `.gitignore`). A move rewrites `workspace/<path>` mentions in the
+  memory files (relative ones and the agent's own absolute ones). A dream's tidy calls run one at a time; each move
+  checks right before it happens that the dream still runs and is written to `dreams.workspace` right after (at most
+  300 per dream), so the rollback of a failed, cancelled, paused or interrupted dream never misses one. An undo puts
+  them back, and waits while anything moved is gone.
 * **When**: a 5-minute tick sweeps once per scheduled time; a schedule missed while the computer was off or asleep is
   caught up on the next tick. An agent is due with at least `minNewExchanges` (default 3) new exchanges — finished
   chat, automation, delegated and API runs; checks and dreams don't count — or, without them, when its last dream is
