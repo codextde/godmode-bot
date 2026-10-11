@@ -97,10 +97,11 @@ function mockConversations() {
     agentId: string;
     title?: string;
     origin?: Conversation["origin"];
+    fillOnly?: boolean;
   }) => {
     const ts = now();
     const id = newId("cnv");
-    insert("conversations", { id, agent_id: input.agentId, title: input.title ?? "New chat", origin: input.origin ?? "chat", created_at: ts, updated_at: ts });
+    insert("conversations", { id, agent_id: input.agentId, title: input.title ?? "New chat", origin: input.origin ?? "chat", secret_access: input.fillOnly ? "fill" : null, created_at: ts, updated_at: ts });
     return { id, agentId: input.agentId, title: input.title ?? "New chat", origin: input.origin ?? "chat" } as Conversation;
   }) as typeof conversations.createConversation);
   sendSpy = spyOn(conversations, "sendMessage").mockImplementation((async (
@@ -601,6 +602,52 @@ describe("condition checks", () => {
     // No check while the task runs.
     expect((await catchHttp(runConditionCheck(r.id))).message).toContain("running its task");
     finish(sent[2]!.run);
+  });
+
+  test("a fill-only automation checks and works in fill-only chats, and forgets what it noted when that changes", async () => {
+    const reader = await createAgent({ name: `Reader ${newId("t", 4)}`, permissions: { secretAccess: "reveal" } });
+    const r = createRoutine({
+      agentId: reader.id,
+      name: "Pricing with secrets",
+      trigger: { type: "condition", condition: "competitor pricing changes", checkModel: "haiku" },
+      cron: "0 * * * *",
+      prompt: "Compare it with ours and update the battlecard",
+      fillOnly: true,
+    });
+    const check = await runConditionCheck(r.id);
+    expect(conversations.chatFillOnly(check.conversationId)).toBe(true);
+    await callTool(checkCtx(check), "automation_check_result", { met: true, observation: "Pro: $59/mo", summary: "Up to $59." });
+    finish(check);
+    await waitFor(() => sent.length === 2, "task");
+    expect(conversations.chatFillOnly(sent[1]!.run.conversationId)).toBe(true);
+    finish(sent[1]!.run);
+    expect(readTriggerState(r.id).observation).toBe("Pro: $59/mo");
+
+    const lifted = updateRoutine(r.id, { fillOnly: false });
+    expect(lifted.conversationId).toBeNull();
+    expect(readTriggerState(r.id).observation).toBeUndefined();
+    const again = await runConditionCheck(r.id);
+    expect(again.conversationId).not.toBe(check.conversationId);
+    expect(conversations.chatFillOnly(again.conversationId)).toBe(false);
+    // Changed while the check runs: what it saw is not kept.
+    updateRoutine(r.id, { fillOnly: true });
+    const late = await callTool(checkCtx(again), "automation_check_result", { met: false, observation: "Pro: $79/mo", summary: "" });
+    expect(late.content[0]!.text).toContain("not recorded");
+    expect(readTriggerState(r.id).observation).toBeUndefined();
+    finish(again);
+    await repo.repoIdle(reader.repoPath);
+  });
+
+  test("an agent without raw secrets keeps its chat and baseline when its automation becomes fill-only", async () => {
+    const r = conditionRoutine();
+    const check = await runConditionCheck(r.id);
+    await callTool(checkCtx(check), "automation_check_result", { met: false, observation: "Pro: $49/mo", summary: "" });
+    finish(check);
+    updateRoutine(r.id, { fillOnly: true });
+    expect(readTriggerState(r.id).observation).toBe("Pro: $49/mo");
+    const again = await runConditionCheck(r.id);
+    expect(again.conversationId).toBe(check.conversationId);
+    finish(again);
   });
 
   test("the baseline only moves on once the task handled the change", async () => {

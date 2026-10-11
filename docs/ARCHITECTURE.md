@@ -193,10 +193,12 @@ ask within the same moment share a request.
   secrets itself (reveal mode, its own chat not fill-only) and the target is global or in its workspace, the task's
   chat is marked fill-only (`conversations.secret_access = 'fill'`): `vault_get_login` / `vault_get_totp` are off in it
   for good, and the agent counts as fill-only there for what it hands on or sets up — for itself too. An automation
-  follows the same rule: such a caller may create or change one for a reveal-mode agent, and it is then fill-only
-  (`routines.secret_access = 'fill'`) — its runs and condition checks get fill-only chats, and a chat that had raw
-  secrets is not continued. Pausing changes nothing; starting an automation that still runs with raw secrets is
-  refused. Only the human lifts it (the automation's "Reveal secrets to AI" switch, with the vault passphrase). What
+  follows the same rule: an automation such a caller creates or changes is fill-only
+  (`routines.secret_access = 'fill'`, whatever its agent reads today) — its runs and condition checks get fill-only
+  chats, a chat that had raw secrets is not continued, and what a check noted is dropped when the flag changes. For a
+  reveal-mode agent that is open to callers that may hand it work (itself, or a peer within `delegateTo`), not to
+  connected apps. Pausing changes nothing; starting an automation that still runs with raw secrets is refused. Only
+  the human lifts it (the automation's "Reveal secrets to AI" switch, with the vault passphrase). What
   else outlives the task (assigning board tasks, settings of a reveal-mode agent, giving that agent a VM) is still
   refused for such callers. Login allow-lists are not compared, and the task can still write to the agent's memory and
   files.

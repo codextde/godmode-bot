@@ -15,7 +15,7 @@ import { sendMessage } from "../services/conversations";
 import { notify } from "../services/notifications";
 import { redact } from "../vault/vault";
 import { INTERRUPTED } from "../runner/runner";
-import { automationConversation } from "./conversation";
+import { automationConversation, chatFitsAutomation } from "./conversation";
 import { pausedRun } from "../services/pauses";
 import { remindWaitingAutomation } from "../services/questions";
 import { onCheckRunFinished } from "./conditions";
@@ -296,8 +296,18 @@ function finishEvents(run: Pick<Run, "id" | "status" | "result" | "error">) {
   else setEventStatus(ids, "done", null);
   const met = rows.filter((r) => r.source === "condition").at(-1);
   const observation = met ? parseJson<{ observation?: unknown }>(met.payload, {}).observation : undefined;
-  if (met && typeof observation === "string") {
+  if (met && typeof observation === "string" && taskFits(met.routine_id, run.id)) {
     if (patchTriggerState(met.routine_id, { observation, observedAt: now(), taskFailures: null })) emitRoutine(met.routine_id);
+  }
+}
+
+/** The automation still has the secret access it had when this run's chat was picked (false when it is gone). */
+function taskFits(routineId: string, runId: string): boolean {
+  const chat = get<{ conversation_id: string }>("SELECT conversation_id FROM runs WHERE id = ?", runId)?.conversation_id;
+  try {
+    return !!chat && chatFitsAutomation(getRoutine(routineId), chat);
+  } catch {
+    return false;
   }
 }
 
