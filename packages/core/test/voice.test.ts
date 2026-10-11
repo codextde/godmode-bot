@@ -230,6 +230,7 @@ describe("transcribeRecording (voice messages)", () => {
   test("without any key it says what is missing and calls nobody", async () => {
     const err = await expectHttpError(() => transcribeRecording(audio, { filename: "voice-1.ogg", agent }), 400);
     expect(err.message).toBe(NO_TRANSCRIPTION_KEY);
+    expect(err.code).toBe("voice_no_key");
     expect(captured).toHaveLength(0);
   });
 
@@ -293,8 +294,14 @@ describe("transcribeRecording (voice messages)", () => {
 
   test("empty and oversized recordings are refused, provider errors stay readable", async () => {
     vault.setAppSecret("elevenlabs_api_key", "xi-test-key");
-    await expectHttpError(() => transcribeRecording(new Blob([])), 400);
+    expect((await expectHttpError(() => transcribeRecording(new Blob([])), 400)).code).toBe("voice_empty");
+    expect((await expectHttpError(() => transcribeRecording(new Blob([new Uint8Array(25 * 1024 * 1024 + 1)])), 413)).code).toBe("too_large");
+    expect(captured).toHaveLength(0);
     respond = () => new Response(JSON.stringify({ detail: { message: "Invalid API key" } }), { status: 401 });
-    expect((await expectHttpError(() => transcribeRecording(audio), 400)).message).toContain("ElevenLabs rejected the API key");
+    const rejected = await expectHttpError(() => transcribeRecording(audio), 400);
+    expect(rejected.message).toContain("ElevenLabs rejected the API key");
+    expect(rejected.code).toBe("voice_invalid_key");
+    respond = () => Response.json({ words: [] });
+    expect((await expectHttpError(() => transcribeRecording(audio), 502)).message).toContain("ElevenLabs returned an unexpected transcription response");
   });
 });

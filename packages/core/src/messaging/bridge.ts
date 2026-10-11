@@ -402,6 +402,19 @@ async function attachmentsOf(msg: InboundMessage): Promise<{ files: Attachment[]
   return { files, recordings, problems };
 }
 
+/** Why a voice message has no words, for the agent and the chat: what the provider answered stays in the log. */
+function unheardReason(err: unknown): string {
+  const code = err instanceof HttpError ? err.code : undefined;
+  if (code === "voice_no_key") return "no OpenAI or ElevenLabs key is set up in Godmode (Settings → Integrations)";
+  if (code === "voice_invalid_key") return "the speech-to-text key was rejected";
+  if (code === "voice_rate_limited") return "the speech-to-text limit is reached";
+  if (code === "voice_unreachable") return "the speech-to-text service didn't answer";
+  if (code === "voice_empty") return "it is empty";
+  if (code === "too_large") return "it is longer than speech-to-text takes (25 MB)";
+  if (code === "vault_locked") return "Godmode's vault is locked";
+  return "the transcription failed";
+}
+
 /** What was said in the voice messages, which of them were understood, and why the others weren't. */
 async function heardIn(recordings: Recording[], agent: Agent): Promise<{ said: string; heard: Set<Attachment>; unheard: string[] }> {
   const said: string[] = [];
@@ -420,7 +433,7 @@ async function heardIn(recordings: Recording[], agent: Agent): Promise<{ said: s
       heard.add(file);
     } catch (err) {
       log.warn(`could not transcribe ${file.name}`, err instanceof Error ? err.message : err);
-      unheard.push(err instanceof HttpError ? err.message : "the transcription failed");
+      unheard.push(unheardReason(err));
     }
   }
   return { said: said.join("\n\n"), heard, unheard: [...new Set(unheard)] };
@@ -460,6 +473,11 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
   // not prefixed with their name — and the files they sent).
   if (from.owner) await untilAsked(conversationId);
   if (from.owner && openQuestionOf(conversationId)) {
+    // An answer nobody could hear is no answer: the question stays open.
+    if (unheard.length) {
+      await say(adapter, msg, `I couldn't understand your voice message (${unheard.join("; ")}). Please type your answer.`);
+      return;
+    }
     let answered: ReturnType<typeof answerByMessage> = null;
     // A spoken answer counts like a typed one ("yes", "2"): its recording isn't sent along.
     const sent = files.filter((f) => !heard.has(f));
@@ -474,6 +492,7 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
     }
     if (answered) {
       patchChat(chatId, { last_message_at: now() });
+      if (said) await say(adapter, msg, `I heard: “${said}”`);
       const stopAnswered = await adapter.working(msg.target, msg.messageId).catch(() => async () => {});
       void deliver(conn, adapter, msg, answered.run.id, stopAnswered, true);
       return;

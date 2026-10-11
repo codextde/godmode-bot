@@ -20,6 +20,8 @@ export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 export const MAX_SPEAK_CHARS = 4000;
 
 const STT_TIMEOUT_MS = 120_000;
+/** Time allowed for a transcript to arrive once the provider started answering. */
+const STT_BODY_TIMEOUT_MS = 30_000;
 /** Time allowed until the TTS provider starts answering; the audio itself then streams without a deadline. */
 const TTS_TIMEOUT_MS = 60_000;
 
@@ -169,9 +171,21 @@ async function openaiTranscript(
     { method: "POST", headers: { authorization: `Bearer ${opts.key}`, accept: "application/json" }, body: form },
     STT_TIMEOUT_MS,
   );
-  const data = (await res.json().catch(() => null)) as { text?: unknown } | null;
-  if (!data || typeof data.text !== "string") throw new HttpError(502, "OpenAI returned an unexpected transcription response", "voice_upstream");
-  return data.text.trim();
+  return transcriptIn("OpenAI", res);
+}
+
+async function transcriptIn(provider: Provider, res: Response): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new HttpError(502, `${provider} did not finish its answer within ${STT_BODY_TIMEOUT_MS / 1000} seconds`, "voice_unreachable")), STT_BODY_TIMEOUT_MS);
+  });
+  try {
+    const data = (await Promise.race([res.json().catch(() => null), late])) as { text?: unknown } | null;
+    if (!data || typeof data.text !== "string") throw new HttpError(502, `${provider} returned an unexpected transcription response`, "voice_upstream");
+    return data.text.trim();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function elevenlabsTranscript(audio: Blob, opts: { key: string; filename?: string | null }): Promise<string> {
@@ -187,9 +201,7 @@ async function elevenlabsTranscript(audio: Blob, opts: { key: string; filename?:
     { method: "POST", headers: { "xi-api-key": opts.key, accept: "application/json" }, body: form },
     STT_TIMEOUT_MS,
   );
-  const data = (await res.json().catch(() => null)) as { text?: unknown } | null;
-  if (!data || typeof data.text !== "string") throw new HttpError(502, "ElevenLabs returned an unexpected transcription response", "voice_upstream");
-  return data.text.trim();
+  return transcriptIn("ElevenLabs", res);
 }
 
 type RecordingAgent = Pick<Agent, "id" | "workspaceId" | "inheritMcp">;
@@ -233,17 +245,17 @@ function transcriberFor(agent: RecordingAgent | null): Transcriber | null {
   return null;
 }
 
-export const NO_TRANSCRIPTION_KEY = "no OpenAI or ElevenLabs key is set up (Settings → Integrations)";
+export const NO_TRANSCRIPTION_KEY = "No OpenAI or ElevenLabs key is set up (Settings → Integrations)";
 
 /**
  * Text of a recording that reached Godmode from outside the app (a voice message in a messaging chat). The language
  * is detected. Throws an HttpError a human can read when it can't be transcribed.
  */
 export async function transcribeRecording(audio: Blob, opts: { filename?: string | null; agent?: RecordingAgent | null } = {}): Promise<string> {
-  if (!audio || audio.size === 0) throw badRequest("the recording is empty");
-  if (audio.size > MAX_AUDIO_BYTES) throw new HttpError(413, "recordings are limited to 25 MB", "too_large");
+  if (!audio || audio.size === 0) throw new HttpError(400, "The recording is empty", "voice_empty");
+  if (audio.size > MAX_AUDIO_BYTES) throw new HttpError(413, "Recordings are limited to 25 MB", "too_large");
   const source = transcriberFor(opts.agent ?? null);
-  if (!source) throw badRequest(NO_TRANSCRIPTION_KEY, { secret: OPENAI_API_KEY_SECRET });
+  if (!source) throw new HttpError(400, NO_TRANSCRIPTION_KEY, "voice_no_key");
   const voice = getSettings().voice;
   const text =
     source.provider === "elevenlabs"

@@ -1323,7 +1323,9 @@ an 👀 reaction) and the answer is converted (Telegram HTML, Slack mrkdwn, Team
 messages (`InboundFile.spoken`) are transcribed first (`transcribeRecording` in `voice/voice.ts`): their words become
 the message, also as the owner's answer to a question, and the recording stays attached. The key is the OpenAI or
 ElevenLabs voice key, else an OpenAI or ElevenLabs API tool the chat's agent may use (sent to that provider's own
-address only); without one the agent gets the recording and a note saying why there are no words. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
+address only); without one, or when the provider fails, the agent gets the recording and a note with a neutral reason
+(the provider's own words stay in the log). A spoken answer to a question is echoed ("I heard: …"); one that couldn't
+be understood leaves the question open and asks for a typed answer. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
 connections but restore them turned off, so two machines never answer for one bot.
 
 ## Phone app

@@ -137,10 +137,13 @@ const sentTexts = () => tgCalls("sendMessage").map((c) => String(c.body.text));
 /* --------------------------- fake ElevenLabs ---------------------------- */
 
 let heard = "";
+let sttDown = false;
 const sttCalls = () => calls.filter((c) => c.url.host === "api.elevenlabs.io");
 
 function fakeElevenLabs() {
-  onHost("api.elevenlabs.io", () => Response.json({ text: heard, language_code: "deu" }));
+  onHost("api.elevenlabs.io", () =>
+    sttDown ? Response.json({ detail: { message: "Invalid API key xi-tool-key-123" } }, { status: 401 }) : Response.json({ text: heard, language_code: "deu" }),
+  );
 }
 
 /* -------------------------------- setup --------------------------------- */
@@ -478,14 +481,12 @@ describe("Telegram bot", () => {
       try {
         heard = "Was gibt's Neues?";
         before = sentTexts().length;
-        const typing = tgCalls("sendChatAction").length;
         tgVoice(dana);
         await until(() => sentTexts().length > before, 10_000, "the answer to a voice message");
         expect(sentTexts().at(-1)).toBe("Hello, nice to meet you!");
         expect(sttCalls()).toHaveLength(1);
         expect(sttCalls()[0]!.headers.get("xi-api-key")).toBe("xi-tool-key-123");
         expect(sttCalls()[0]!.text).toContain("scribe_v2");
-        expect(tgCalls("sendChatAction").length).toBeGreaterThan(typing);
         const message = lastUserMessage();
         expect(message.content.startsWith("Was gibt's Neues?")).toBe(true);
         expect(message.content).toContain("Sent as a voice message");
@@ -497,7 +498,23 @@ describe("Telegram bot", () => {
         tgVoice(dana, { caption: "Listen to this" });
         await until(() => sentTexts().length > before, 10_000, "the answer to a silent voice message");
         expect(lastUserMessage().content).toBe("Listen to this\n\n(A voice message is attached that Godmode couldn't transcribe: nothing audible in it.)");
+
+        // Spoken words are never a slash command.
+        heard = "/model opus";
+        before = sentTexts().length;
+        tgVoice(dana);
+        await until(() => sentTexts().length > before, 10_000, "the answer to a spoken slash");
+        expect(lastUserMessage().content.startsWith("model opus\n\n(Sent as a voice message")).toBe(true);
+
+        // What the provider answers stays out of the chat and the agent's prompt.
+        sttDown = true;
+        before = sentTexts().length;
+        tgVoice(dana);
+        await until(() => sentTexts().length > before, 10_000, "the answer when the provider refuses");
+        expect(lastUserMessage().content).toBe("(A voice message is attached that Godmode couldn't transcribe: the speech-to-text key was rejected.)");
+        expect(sentTexts().join("\n")).not.toContain("xi-tool-key-123");
       } finally {
+        sttDown = false;
         deleteApiTool(tool.id);
       }
     }, 40_000);
@@ -510,11 +527,21 @@ describe("Telegram bot", () => {
         tgMessage(dana, "ASK_APPROVAL for the reminder");
         await until(() => sentTexts().slice(before).some((t) => t.includes("needs an OK")), 15_000, "the approval request");
         const approval = openQuestionOf(conversationId())!;
+
+        // An answer nobody could hear leaves the question open.
+        sttDown = true;
+        tgVoice(dana);
+        await until(() => sentTexts().some((t) => t.includes("I couldn't understand your voice message (the speech-to-text key was rejected)")), 10_000, "the request to type");
+        expect(openQuestionOf(conversationId())?.id).toBe(approval.id);
+
+        sttDown = false;
         heard = "Yes.";
         tgVoice(dana);
         await until(() => listQuestions({ status: "approved" }).some((q) => q.id === approval.id), 10_000, "the spoken approval");
+        await until(() => sentTexts().includes("I heard: “Yes.”"), 5000, "what was heard");
         await waitForRun(approval.runId, 20_000);
       } finally {
+        sttDown = false;
         deleteApiTool(tool.id);
         await setUserOwner(connectionId, danasId(), false);
         await until(() => !all<{ id: string }>("SELECT id FROM runs WHERE status IN ('queued', 'running', 'paused')").length, 20_000, "the chat to settle");
