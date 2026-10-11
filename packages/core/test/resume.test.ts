@@ -8,7 +8,7 @@ import { all, get, insert, run as sql, setMeta } from "../src/db";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { callTool } from "../src/mcp/tools";
 import { getRun, listRuns, waitForRun } from "../src/runner/runner";
-import { continueCutOffRun, interruptedWork, latestContinuation, leaveInterruptedWork, resumeInterruptedWork } from "../src/services/resume";
+import { brokeOffOffline, continueAfterOutage, continueCutOffRun, interruptedWork, latestContinuation, leaveInterruptedWork, resumeInterruptedWork } from "../src/services/resume";
 import { createRoutine } from "../src/services/routines";
 import { updateSettings } from "../src/services/settings";
 import { createTask } from "../src/tasks/service";
@@ -281,4 +281,53 @@ describe("continuing after a restart", () => {
     const again = await callTool(ctxOf(godmode), "run_continue", { runId: cut });
     expect(again.isError).toBe(true);
   }, 20_000);
+});
+
+describe("continuing once Claude can be reached again", () => {
+  const OFFLINE = "API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)";
+  const online = async () => true;
+  const offline = async () => false;
+
+  test("knows Claude Code's answer for a missing connection from other failures", () => {
+    expect(brokeOffOffline(OFFLINE)).toBe(true);
+    expect(brokeOffOffline("API Error: Connection error.")).toBe(true);
+    expect(brokeOffOffline("API Error: 400 invalid_request_error")).toBe(false);
+    expect(brokeOffOffline("The site answered ENOTFOUND, so I stopped")).toBe(false);
+    expect(brokeOffOffline(null)).toBe(false);
+  });
+
+  test("a turn that broke off offline waits for the connection, then continues in its session, once", async () => {
+    const conv = chat(agent);
+    const cut = cutOff(agent, conv, { status: "failed", error: OFFLINE });
+    expect(await continueAfterOutage(offline)).toBe(0);
+    expect(next(conv, cut)).toBeUndefined();
+
+    expect(await continueAfterOutage(online)).toBe(1);
+    const run = next(conv, cut)!;
+    expect(run).toMatchObject({ trigger: "chat", agentId: agent.id });
+    expect(run.prompt).toContain("Claude's API couldn't be reached");
+    expect(marker(run.id)).toMatchObject({ type: "retry", mode: "continue", runId: cut, auto: true });
+    expect(get<{ content: string }>("SELECT content FROM messages WHERE run_id = ? AND role = 'system'", run.id)?.content).toBe("Continued once Claude could be reached again");
+    await waitForRun(run.id, 10_000);
+    expect(await continueAfterOutage(online)).toBe(0);
+  }, 20_000);
+
+  test("leaves other failures, handed-over work, tickets, old turns and automations that came round again", async () => {
+    cutOff(agent, chat(agent), { status: "failed", error: "API Error: 400 invalid_request_error" });
+    cutOff(helper, chat(helper), { status: "failed", error: OFFLINE, trigger: "delegation" });
+    cutOff(agent, chat(agent), { status: "failed", error: OFFLINE, finishedAt: ago(13 * HOUR) });
+    const ticketChat = chat(agent, "task");
+    sql("UPDATE tasks SET conversation_id = ? WHERE id = ?", ticketChat, createTask({ title: "Fix it" }).id);
+    cutOff(agent, ticketChat, { status: "failed", error: OFFLINE });
+    const routine = createRoutine({ agentId: agent.id, name: "Post the news", cron: "0 * * * *", prompt: "Post the news" });
+    cutOff(agent, chat(agent, "routine"), { status: "failed", error: OFFLINE, trigger: "routine", routineId: routine.id });
+    insert("runs", { id: newId("run"), agent_id: agent.id, conversation_id: chat(agent, "routine"), trigger: "routine", routine_id: routine.id, status: "succeeded", prompt: "x", created_at: tick() });
+    updateSettings({ runner: { resumeAfterRestart: false } });
+    const off = chat(agent);
+    cutOff(agent, off, { status: "failed", error: OFFLINE });
+    expect(await continueAfterOutage(online)).toBe(0);
+    updateSettings({ runner: { resumeAfterRestart: true } });
+    sql("UPDATE runs SET status = 'succeeded' WHERE conversation_id = ?", off);
+    expect(await continueAfterOutage(online)).toBe(0);
+  });
 });

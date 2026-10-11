@@ -6,6 +6,7 @@ import {
   fixRunner,
   getRunner,
   listRunners,
+  moveChatHere,
   pairWithCode,
   removeRunner,
   runnerHealth,
@@ -76,6 +77,9 @@ export function registerRunnerRoutes(app: Hono): void {
     const { id } = await body(c, z.object({ id: z.string().min(1).max(64) }));
     return c.json(await fixRunner(c.req.param("id"), id));
   });
+
+  // A chat on a runner moves to this computer (remote/routing.ts lets this request through to here).
+  app.post("/api/conversations/:id/move-here", async (c) => c.json(await moveChatHere(c.req.param("id"))));
 
   app.post("/api/runners/:id/autofix", async (c) => {
     const input = await body(c, z.object({ checkId: z.string().max(64).optional(), note: z.string().max(4000).optional() }));

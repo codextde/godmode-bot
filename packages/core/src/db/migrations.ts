@@ -1324,6 +1324,15 @@ CREATE INDEX IF NOT EXISTS idx_card_purchases_status ON card_purchases(status);
   },
   {
     id: 80,
+    // After every run: did it notify the human, what did it say before a restart cut it off. Without it each of these
+    // read the whole table, blocks and all.
+    name: "messages_run_index",
+    sql: /* sql */ `
+CREATE INDEX IF NOT EXISTS idx_messages_run ON messages(run_id);
+`,
+  },
+  {
+    id: 81,
     name: "self_repair",
     sql: /* sql */ `
 -- 1: the ticket's pull request is merged into its base branch once delivered (fixes from the logs), like a workspace's auto_merge.

@@ -64,6 +64,8 @@ export interface MirrorHooks {
   runFinished?(runnerId: string, run: Run): void;
   /** The copy of a run's in-flight message missed a delta: ask the runner for its whole block list (`run.resync`). */
   resync?(runnerId: string, runId: string): void;
+  /** The chat moved to this computer and the runner hasn't dropped its copy yet: it is never adopted again. */
+  released?(runnerId: string, conversationId: string): boolean;
 }
 
 let hooks: MirrorHooks = {};
@@ -390,7 +392,7 @@ function writeConversation(runnerId: string, chat: Chat): boolean {
     update("conversations", chat.id, chat.columns);
     return true;
   }
-  if (!get<{ id: string }>("SELECT id FROM agents WHERE id = ?", chat.agentId)) return false;
+  if (!get<{ id: string }>("SELECT id FROM agents WHERE id = ?", chat.agentId) || hooks.released?.(runnerId, chat.id)) return false;
   insert("conversations", {
     id: chat.id,
     agent_id: chat.agentId,
@@ -937,6 +939,32 @@ function offline(err: unknown): boolean {
 }
 
 /**
+ * Chats whose messages broke the link while they came (older runners drop frames of an answer that large): the
+ * next catch-ups leave them out for a while, so one long chat can't keep its runner offline and out of reach of the
+ * update that fixes it. Its live events still arrive.
+ */
+const heavy = new Map<string, { drops: number; until: number }>();
+const HEAVY_AFTER_DROPS = 2;
+const HEAVY_SKIP_MS = 30 * 60_000;
+
+function skipHeavy(runnerId: string, chatId: string): boolean {
+  const entry = heavy.get(`${runnerId}:${chatId}`);
+  return !!entry && entry.drops >= HEAVY_AFTER_DROPS && Date.now() < entry.until;
+}
+
+function droppedWhileFetching(runnerId: string, chatId: string): void {
+  const key = `${runnerId}:${chatId}`;
+  const drops = (heavy.get(key)?.drops ?? 0) + 1;
+  heavy.set(key, { drops, until: Date.now() + HEAVY_SKIP_MS });
+  if (drops === HEAVY_AFTER_DROPS) log.warn(`the messages of conversation ${chatId} keep breaking the link to runner ${runnerId}; catch-ups leave them out for now`);
+}
+
+/** The runner runs another Godmode now: what broke the link before may not anymore. */
+export function forgetHeavyChats(runnerId: string): void {
+  for (const key of heavy.keys()) if (key.startsWith(`${runnerId}:`)) heavy.delete(key);
+}
+
+/**
  * After every connect: what happened on the runner while nobody listened. Its chats (active and archived) are adopted
  * or updated; those whose copy is behind get their messages and runs fetched; the registry of working runs is rebuilt
  * from the runner's answer. Chats the runner no longer has stay as they are.
@@ -952,17 +980,21 @@ export async function catchUp(runnerId: string, api: RunnerApi): Promise<{ conve
     const before = viewOf(chat.id);
     if (!writeConversation(runnerId, chat)) continue;
     conversations++;
-    if (stale) {
+    if (stale && !skipHeavy(runnerId, chat.id)) {
       try {
         const path = encodeURIComponent(chat.id);
         const detail = await api.json<unknown>("GET", `/api/conversations/${path}`);
         const runs = await api.json<unknown>("GET", `/api/runs?conversationId=${path}&limit=500`);
         if (record(detail)?.id !== chat.id) throw refused();
+        heavy.delete(`${runnerId}:${chat.id}`);
         reconcile(runnerId, detail, runs, before);
         refreshed++;
         continue;
       } catch (err) {
-        if (offline(err)) throw err;
+        if (offline(err)) {
+          droppedWhileFetching(runnerId, chat.id);
+          throw err;
+        }
         log.warn(`could not catch up on conversation ${chat.id} of runner ${runnerId}`, err);
       }
     }
@@ -979,6 +1011,12 @@ export async function catchUp(runnerId: string, api: RunnerApi): Promise<{ conve
   }
   log.info("caught up with a runner", { runnerId, conversations, refreshed, working: remoteRuns(runnerId).length });
   return { conversations, refreshed };
+}
+
+/** A chat of this runner moved to this computer: nothing of it works there for this computer anymore. */
+export function chatMovedHere(runnerId: string, conversationId: string): void {
+  for (const [runId, r] of live) if (r.conversationId === conversationId) forgetLive(runId);
+  for (const r of remoteRuns(runnerId)) if (r.conversationId === conversationId) clearRemoteRun(r.runId);
 }
 
 /** The link to a runner dropped: nothing is known to work there anymore. The copies keep what the runner said last. */

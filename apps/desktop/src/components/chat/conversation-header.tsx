@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, Conversation, ConversationWithMessages } from "@godmode/shared";
 import { EFFORT_LABELS } from "@godmode/shared";
-import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, HeartPulse, Moon, Pencil, Pin, PinOff, Share2, SquareKanban, Trash2, Plug, Workflow } from "lucide-react";
+import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, HeartPulse, Laptop, Moon, Pencil, Pin, PinOff, Share2, SquareKanban, Trash2, Plug, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,7 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { AgentAvatar } from "@/components/common";
 import type { AgentMood } from "@/components/chat/conversation-mood";
 import { PLATFORMS } from "@/components/messaging/platform";
+import { THIS_COMPUTER_INLINE } from "@/components/runners/runner-parts";
 import { DeleteChatDialog, useArchiveChat } from "@/components/chat/chat-actions";
 import { useEffectiveModel } from "@/components/chat/model-picker";
 import { useModelLabel } from "@/components/runs/run-status";
@@ -46,6 +47,7 @@ export function ConversationHeader({
   mood,
   onVoiceMode,
   browserToggle,
+  move,
 }: {
   conversation: Conversation;
   agent?: Agent;
@@ -53,6 +55,8 @@ export function ConversationHeader({
   mood?: AgentMood;
   onVoiceMode?: () => void;
   browserToggle?: ReactNode;
+  /** A runner's chat: move it to this computer, unless `blocked` says why not now. */
+  move?: { onSelect: () => void; blocked: string | null };
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -232,6 +236,11 @@ export function ConversationHeader({
             <DropdownMenuItem onClick={() => setArchived(conversation, !conversation.archived)}>
               {conversation.archived ? <ArchiveRestore /> : <Archive />} {conversation.archived ? "Unarchive" : "Archive"}
             </DropdownMenuItem>
+            {move && (
+              <DropdownMenuItem disabled={!!move.blocked} title={move.blocked ?? undefined} onClick={move.onSelect}>
+                <Laptop /> Move to {THIS_COMPUTER_INLINE}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 /> Delete

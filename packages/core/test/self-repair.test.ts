@@ -13,7 +13,7 @@ import { logger, setFileLogLevel, setLogDir } from "../src/log";
 import { getSettings, updateSettings } from "../src/services/settings";
 import { readTaskAttachment } from "../src/tasks/attachments";
 import { addsLineWith } from "../src/tasks/git";
-import { getTask, startTasks, stopTasks, updateTask } from "../src/tasks/service";
+import { getTask, listTasks, startTasks, stopTasks, updateTask } from "../src/tasks/service";
 
 let env: TestEnv;
 let gitServer: SmartGitServer;
@@ -34,6 +34,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // The filed tickets start right away: let them finish before the database closes.
+  await until(() => listTasks({ workspaceId: "all" }).every((t) => t.status !== "todo" && t.status !== "in_progress" && !t.activity), 30_000, "fix tickets settle");
   stopTasks();
   await env.close();
   gitServer.close();

@@ -35,6 +35,13 @@ app.post("/api/echo", async (c) => {
   for (const b of bytes) sum = (sum + b) % 65521;
   return c.json({ length: bytes.length, sum, type: c.req.header("content-type") ?? null });
 });
+/** More than the runner's socket buffers before Bun starts dropping what it is given. */
+const HUGE = 96 * 1024 * 1024;
+app.get("/api/huge", () => {
+  const bytes = new Uint8Array(HUGE);
+  for (let i = 0; i < HUGE; i++) bytes[i] = (i * 31) & 255;
+  return new Response(bytes, { headers: { "content-type": "application/octet-stream" } });
+});
 app.get("/api/slow", async (c) => {
   await sleep(3_000);
   return c.json({ ok: true });
@@ -146,6 +153,17 @@ describe("a session", () => {
     const res = await link.request("POST", "/api/echo", { body, headers: { "content-type": "application/octet-stream" } });
     expect(JSON.parse(Buffer.from(res.body).toString())).toEqual({ length: body.length, sum, type: "application/octet-stream" });
   });
+
+  test("an answer larger than the socket takes at once arrives whole, and the link stays up", async () => {
+    const res = await link.request("GET", "/api/huge");
+    expect(res.status).toBe(200);
+    expect(res.body.byteLength).toBe(HUGE);
+    let wrong = 0;
+    for (let i = 0; i < HUGE; i += 4093) if (res.body[i] !== ((i * 31) & 255)) wrong++;
+    expect(wrong).toBe(0);
+    expect(link.state.state).toBe("online");
+    expect((await link.request("GET", "/api/echo?q=after")).status).toBe(200);
+  }, 60_000);
 
   test("an error of the runner comes back as its own status, message and code", async () => {
     const err = await link.json("GET", "/api/missing").catch((e: unknown) => e);

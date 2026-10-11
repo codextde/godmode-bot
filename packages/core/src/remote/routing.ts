@@ -14,7 +14,7 @@ import { conversationExists, deleteConversation, emitConversationUpdated, getCon
 import { HttpError, badRequest } from "../util";
 import { requireLicense } from "../license/license";
 import { reconcileConversation } from "./mirror";
-import { getRunner, link, prepareRemoteMessage, runnerOfConversation } from "./runners";
+import { chatIsMoving, getRunner, link, prepareRemoteMessage, runnerOfConversation } from "./runners";
 
 const log = logger("routing");
 
@@ -27,6 +27,19 @@ const FORWARDED = /^\/(messages|queue\/send|queue\/[A-Za-z0-9_-]{1,100}|pause|co
 /** Chat sub-routes that start a new run on the runner (continuing a paused one isn't new work). */
 const STARTS_RUN = /^\/(messages|retry|followup\/run|queue\/send)$/;
 const MAX_BODY = 64 * 1024 * 1024;
+/** Reading a chat or run from a runner that answers this slowly falls back to the copy here. */
+const READ_TIMEOUT_MS = 30_000;
+
+/** What the slow-request log calls a request this middleware answered (Hono would only say `/api/*`). */
+const labels = new WeakMap<Request, string>();
+
+export function forwardedRoute(c: Context): string | undefined {
+  return labels.get(c.req.raw);
+}
+
+function label(c: Context, route: string) {
+  labels.set(c.req.raw, `runner ${route}`);
+}
 
 function runnerOfRun(runId: string): string | null {
   return get<{ runner_id: string | null }>("SELECT c.runner_id FROM runs r JOIN conversations c ON c.id = r.conversation_id WHERE r.id = ?", runId)?.runner_id ?? null;
@@ -51,14 +64,14 @@ async function jsonBody(c: Context): Promise<Record<string, unknown> | null> {
 }
 
 /** Forward the request as it is (method, path and query, content type, body) and answer with what the runner says. */
-async function forward(c: Context, runnerId: string, path: string, body?: Uint8Array | string): Promise<Response> {
+async function forward(c: Context, runnerId: string, path: string, body?: Uint8Array | string, timeoutMs = 180_000): Promise<Response> {
   const l = link(runnerId);
   const headers: Record<string, string> = {};
   const type = c.req.header("content-type");
   if (type) headers["content-type"] = type;
   const grant = c.req.header("x-godmode-grant");
   if (grant) headers["x-godmode-grant"] = grant;
-  const res = await l.request(c.req.method, path, { body: body ?? (await bodyBytes(c)), headers, timeoutMs: 180_000 });
+  const res = await l.request(c.req.method, path, { body: body ?? (await bodyBytes(c)), headers, timeoutMs });
   const out = new Headers();
   for (const [k, v] of Object.entries(res.headers)) out.set(k, v);
   return new Response(res.status === 204 || res.status === 304 ? null : (res.body as Uint8Array<ArrayBuffer>), { status: res.status, headers: out });
@@ -83,18 +96,55 @@ function isOffline(err: unknown): boolean {
   return err instanceof HttpError && err.code === "runner_offline";
 }
 
+function isUnanswered(err: unknown): boolean {
+  return isOffline(err) || (err instanceof HttpError && err.code === "runner_timeout");
+}
+
+async function fetchConversation(runnerId: string, id: string): Promise<ConversationWithMessages> {
+  const l = link(runnerId);
+  const path = encodeURIComponent(id);
+  const [remote, runs] = await Promise.all([
+    l.json<ConversationWithMessages>("GET", `/api/conversations/${path}`, undefined, { timeoutMs: READ_TIMEOUT_MS }),
+    l.json<Run[]>("GET", `/api/runs?conversationId=${path}&limit=50`, undefined, { timeoutMs: READ_TIMEOUT_MS }).catch(() => undefined),
+  ]);
+  return reconcileConversation(runnerId, remote, runs);
+}
+
+/**
+ * The UI asks for a chat again on every message event, and each answer carries the whole chat over the link. Who asks
+ * while a fetch runs shares the one that follows it (the running one may predate what the asker saw): at most two per
+ * chat at a time, however often it is asked.
+ */
+const fetches = new Map<string, { running: Promise<ConversationWithMessages>; next: Promise<ConversationWithMessages> | null }>();
+
+function freshConversation(runnerId: string, id: string): Promise<ConversationWithMessages> {
+  const key = `${runnerId}:${id}`;
+  const start = (): Promise<ConversationWithMessages> => {
+    const entry = { running: fetchConversation(runnerId, id), next: null as Promise<ConversationWithMessages> | null };
+    fetches.set(key, entry);
+    void entry.running
+      .catch(() => {})
+      .finally(() => {
+        if (fetches.get(key) === entry && !entry.next) fetches.delete(key);
+      });
+    return entry.running;
+  };
+  const current = fetches.get(key);
+  if (!current) return start();
+  current.next ??= current.running.catch(() => {}).then(start);
+  return current.next;
+}
+
 async function conversationRequest(c: Context, runnerId: string, id: string, rest: string): Promise<Response | null> {
   const method = c.req.method;
   if (!rest) {
     if (method === "GET") {
+      label(c, "GET /api/conversations/:id");
       try {
-        const l = link(runnerId);
-        const remote = await l.json<ConversationWithMessages>("GET", `/api/conversations/${encodeURIComponent(id)}`);
-        const runs = await l.json<Run[]>("GET", `/api/runs?conversationId=${encodeURIComponent(id)}&limit=50`).catch(() => undefined);
-        return c.json(reconcileConversation(runnerId, remote, runs));
+        return c.json(await freshConversation(runnerId, id));
       } catch (err) {
-        // Offline, or the runner no longer has it (deleted there, or set up again): the copy here is what there is.
-        if (!isOffline(err) && !(err instanceof HttpError && err.status === 404)) throw err;
+        // Offline, too slow, or the runner no longer has it (deleted there, or set up again): the copy here is what there is.
+        if (!isUnanswered(err) && !(err instanceof HttpError && err.status === 404)) throw err;
         return c.json(getConversation(id));
       }
     }
@@ -136,9 +186,13 @@ async function conversationRequest(c: Context, runnerId: string, id: string, res
     return null;
   }
   if (!FORWARDED.test(rest)) return null;
+  if (method === "POST" && (STARTS_RUN.test(rest) || rest === "/continue") && chatIsMoving(id)) {
+    throw new HttpError(409, "This chat is moving to this computer — send it again in a moment.", "runner_chat_moving");
+  }
   if (method === "POST" && STARTS_RUN.test(rest)) requireLicense();
   // Both start a run there: the runner gets what it needs for it first.
   if ((rest === "/messages" || rest === "/retry") && method === "POST") await prepareRemoteMessage(id);
+  label(c, `${method} /api/conversations/:id${rest.replace(/\/[A-Za-z0-9_-]{16,}$/, "/:id")}`);
   return forward(c, runnerId, pathAndQuery(c));
 }
 
@@ -152,6 +206,7 @@ export const remoteRouting: MiddlewareHandler = async (c, next) => {
     const proxy = PROXY.exec(path);
     if (proxy) {
       const [, runnerId, rest] = proxy;
+      label(c, `${c.req.method} /api/runners/:id/proxy`);
       const url = new URL(c.req.url);
       return await forward(c, runnerId!, `/api${rest}${url.search}`);
     }
@@ -170,11 +225,13 @@ export const remoteRouting: MiddlewareHandler = async (c, next) => {
     if (runMatch) {
       const runnerId = runnerOfRun(runMatch[1]!);
       if (!runnerId) return next();
+      const reading = c.req.method === "GET";
+      label(c, `${c.req.method} /api/runs/:id${runMatch[2] ?? ""}`);
       try {
-        return await forward(c, runnerId, pathAndQuery(c));
+        return await forward(c, runnerId, pathAndQuery(c), undefined, reading ? READ_TIMEOUT_MS : undefined);
       } catch (err) {
-        // Reading a run works from the copy while the runner is away; stopping it doesn't.
-        if (c.req.method === "GET" && isOffline(err)) return next();
+        // Reading a run works from the copy while the runner is away or slow; stopping it doesn't.
+        if (reading && isUnanswered(err)) return next();
         throw err;
       }
     }

@@ -21,6 +21,8 @@ const PING_EVERY_MS = 20_000;
 const PONG_TIMEOUT_MS = 45_000;
 const BACKOFF_MIN_MS = 1_000;
 const BACKOFF_MAX_MS = 30_000;
+/** A link that held this long was healthy: after it drops, the next try comes quickly again. */
+const STABLE_MS = 60_000;
 /** A runner on another link version is tried again this rarely (it needs an update, not a retry). */
 const MISMATCH_RETRY_MS = 5 * 60_000;
 const UNKNOWN_RETRY_MS = 60_000;
@@ -84,6 +86,8 @@ interface Opened {
   info: RunnerInfo;
   /** What the runner sent between `ready` and the owner taking over, in order. */
   early: Early[];
+  /** When the last message arrived: a runner busy sending a large answer is alive even before its pong gets through. */
+  heard: { at: number };
 }
 
 interface Dialed extends Opened {
@@ -99,6 +103,7 @@ function dialOne(address: string, port: number, start: (t: Transport) => SecureC
     let settled = false;
     let channel: SecureChannel<RunnerInfo> | null = null;
     const early: Early[] = [];
+    const heard = { at: Date.now() };
     const ws = new WebSocket(`ws://${urlHost(address)}:${port}/link`);
     ws.binaryType = "arraybuffer";
     const done = (err: Error | null, value?: Opened) => {
@@ -131,11 +136,14 @@ function dialOne(address: string, port: number, start: (t: Transport) => SecureC
       channel.onJson = (json) => early.push({ json });
       channel.onBinary = (streamId, bytes) => early.push({ streamId, bytes });
       channel.ready.then(
-        (info) => done(null, { ws, channel: channel!, info, early }),
+        (info) => done(null, { ws, channel: channel!, info, early, heard }),
         (err: LinkError) => done(err),
       );
     };
-    ws.onmessage = (ev) => channel?.receive(typeof ev.data === "string" ? ev.data : new Uint8Array(ev.data as ArrayBuffer));
+    ws.onmessage = (ev) => {
+      heard.at = Date.now();
+      channel?.receive(typeof ev.data === "string" ? ev.data : new Uint8Array(ev.data as ArrayBuffer));
+    };
     ws.onerror = () => {
       if (!channel) done(new Error("unreachable"));
     };
@@ -185,6 +193,7 @@ export class RemoteLink {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private lastPong = 0;
+  private connectedAt = 0;
   private backoff = BACKOFF_MIN_MS;
   private nextId = 1;
   private nextStream = 1;
@@ -276,7 +285,7 @@ export class RemoteLink {
 
   private attach(dialed: Dialed) {
     this.current = dialed;
-    this.backoff = BACKOFF_MIN_MS;
+    this.connectedAt = Date.now();
     const { channel, ws } = dialed;
     channel.onJson = (m) => this.onMessage(m);
     channel.onBinary = (streamId, bytes) => this.keepBody(streamId, bytes);
@@ -284,6 +293,8 @@ export class RemoteLink {
       if (this.current?.channel !== channel) return;
       this.drop(err);
       if (this.running) {
+        // One that breaks right after connecting (something it carries breaks it) must not be redialed every second.
+        if (Date.now() - this.connectedAt >= STABLE_MS) this.backoff = BACKOFF_MIN_MS;
         this.setState({ state: "offline", error: describe(err, this.opts.name), latencyMs: null });
         this.scheduleRetry();
       }
@@ -340,7 +351,7 @@ export class RemoteLink {
   private ping() {
     const current = this.current;
     if (!current) return;
-    if (Date.now() - this.lastPong > PONG_TIMEOUT_MS) {
+    if (Date.now() - Math.max(this.lastPong, current.heard.at) > PONG_TIMEOUT_MS) {
       log.info("runner stopped answering", { name: this.opts.name });
       current.channel.close();
       return;

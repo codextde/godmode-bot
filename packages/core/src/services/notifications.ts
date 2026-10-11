@@ -17,8 +17,18 @@ function toModel(r: NotificationRow): AppNotification {
   return { id: r.id, kind: r.kind, title: r.title, body: r.body, link: r.link, read: bool(r.read), createdAt: r.created_at };
 }
 
+/** Runs that called notify_user since the start, newest last (kept to the last few hundred). */
+const notifiedRuns = new Set<string>();
+
+export function markRunNotifiedUser(runId: string): void {
+  notifiedRuns.delete(runId);
+  notifiedRuns.add(runId);
+  if (notifiedRuns.size > 500) notifiedRuns.delete(notifiedRuns.values().next().value!);
+}
+
 /** The agent told the human itself during this run: a notify_user call, not the name in its text or a tool's output. */
 export function runNotifiedUser(runId: string): boolean {
+  if (notifiedRuns.has(runId)) return true;
   // Only a message that mentions the tool is read: a run's blocks hold megabytes of tool output and screenshots.
   return all<{ blocks: string }>("SELECT blocks FROM messages WHERE run_id = ? AND role = 'assistant' AND instr(blocks, 'notify_user') > 0", runId).some((m) =>
     parseJson<MessageBlock[]>(m.blocks, []).some((b) => b.type === "tool_use" && b.name.endsWith("notify_user")),
