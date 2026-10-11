@@ -1395,4 +1395,19 @@ ALTER TABLE mods ADD COLUMN source TEXT;
 ALTER TABLE mods ADD COLUMN contents TEXT;
 `,
   },
+  {
+    id: 85,
+    name: "message_images",
+    sql: /* sql */ `
+-- The screenshots of a message a run is still writing. The message is saved every few seconds while the run works:
+-- its megabytes of pictures, which never change, are written once here instead of with every save. When the run
+-- ends or stands still the message is saved whole and its rows here go.
+CREATE TABLE message_images (
+  message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  block_id TEXT NOT NULL,
+  image TEXT NOT NULL,
+  PRIMARY KEY (message_id, block_id)
+);
+`,
+  },
 ];

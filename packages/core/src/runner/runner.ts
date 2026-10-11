@@ -84,6 +84,7 @@ import {
   setConversationState,
   titleFromContent,
   updateMessage,
+  wholeBlocks,
 } from "../services/conversations";
 import { startQueued, takeQueued } from "../services/messageQueue";
 import {
@@ -950,9 +951,10 @@ export function recoverInterruptedRuns(): void {
       "SELECT id, content, blocks FROM messages WHERE run_id = ? AND role = 'assistant'",
       r.id,
     )) {
-      const blocks = withdrawOpenBlocks(parseJson<Message["blocks"]>(m.blocks, []), "Godmode restarted before this was asked.");
+      const blocks = withdrawOpenBlocks(wholeBlocks(m.id, parseJson<Message["blocks"]>(m.blocks, [])), "Godmode restarted before this was asked.");
       blocks.push({ type: "error", text: INTERRUPTED });
       sql("UPDATE messages SET blocks = ? WHERE id = ?", JSON.stringify(blocks), m.id);
+      sql("DELETE FROM message_images WHERE message_id = ?", m.id);
     }
   }
   for (const agentId of agentIds) safely("reset agent status", () => setAgentStatus(agentId, "idle"));
@@ -1397,10 +1399,12 @@ interface LiveView {
   sent: MessageBlock[];
   /** Deltas sent so far. */
   seq: number;
+  /** The screenshots saved apart from the in-flight message, by the id of their step; null before its first save. */
+  images: Map<string, string> | null;
 }
 
 function liveOf(job: Job): LiveView {
-  return (job.live ??= { stream: newId("str"), epoch: redactionEpoch(), blocks: new WeakMap(), sent: [], seq: 0 });
+  return (job.live ??= { stream: newId("str"), epoch: redactionEpoch(), blocks: new WeakMap(), sent: [], seq: 0, images: null });
 }
 
 function isPlain(v: unknown): v is Record<string, unknown> {
@@ -1453,9 +1457,34 @@ function liveBlocks(job: Job): LiveBlock[] {
   });
 }
 
-/** For the row that is saved while the run works: each block is serialized once (screenshots are megabytes). */
+/** For the row that is saved while the run works: each block is serialized once, without its screenshot (megabytes). */
 function storedJson(b: LiveBlock): string {
-  return (b.json ??= JSON.stringify(b.redacted));
+  return (b.json ??= JSON.stringify(b.redacted.type === "tool_use" && b.redacted.image ? { ...b.redacted, image: undefined } : b.redacted));
+}
+
+/**
+ * Save the in-flight message. Its screenshots never change and are most of its size: each is written once, apart from
+ * the blocks that are written again with every save (message_images). Whoever reads the message gets them back.
+ */
+function saveInFlight(job: Job, view: LiveBlock[]) {
+  const live = liveOf(job);
+  const shots = new Map<string, string>();
+  for (const { redacted: b } of view) if (b.type === "tool_use" && b.image) shots.set(b.id, b.image);
+  tx(() => {
+    // Someone else saved the message whole meanwhile (or this is the first save): start over.
+    const stored = get<{ n: number }>("SELECT COUNT(*) AS n FROM message_images WHERE message_id = ?", job.messageId)?.n ?? 0;
+    let known = live.images;
+    if (!known || known.size !== stored) {
+      if (stored) sql("DELETE FROM message_images WHERE message_id = ?", job.messageId);
+      known = new Map();
+    }
+    for (const id of known.keys()) if (!shots.has(id)) sql("DELETE FROM message_images WHERE message_id = ? AND block_id = ?", job.messageId, id);
+    for (const [id, image] of shots) {
+      if (known.get(id) !== image) sql("INSERT OR REPLACE INTO message_images (message_id, block_id, image) VALUES (?, ?, ?)", job.messageId, id, image);
+    }
+    sql("UPDATE messages SET blocks = ? WHERE id = ?", `[${view.map(storedJson).join(",")}]`, job.messageId);
+  });
+  live.images = shots;
 }
 
 /** The run's blocks as they are stored and shown, secrets masked. */
@@ -1494,7 +1523,7 @@ function emitDelta(job: Job) {
     if (Date.now() - job.lastPersistAt < (job.persistEveryMs ?? persistIntervalMs)) return;
     job.lastPersistAt = Date.now();
     const started = performance.now();
-    safely("persist in-flight message", () => sql("UPDATE messages SET blocks = ? WHERE id = ?", `[${view.map(storedJson).join(",")}]`, job.messageId));
+    safely("persist in-flight message", () => saveInFlight(job, view));
     const ms = performance.now() - started;
     job.slowestPersistMs = Math.max(job.slowestPersistMs ?? 0, ms);
     job.persistEveryMs = Math.max(persistIntervalMs, Math.round(ms * persistBackoff));

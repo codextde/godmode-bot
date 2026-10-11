@@ -194,8 +194,14 @@ describe("the in-flight message", () => {
       expect(shots(state())).toBe(3);
 
       const messageId = deltasOf(events, runId)[0]!.messageId;
-      const saved = JSON.parse(get<{ blocks: string }>("SELECT blocks FROM messages WHERE id = ?", messageId)!.blocks) as MessageBlock[];
+      const row = () => JSON.parse(get<{ blocks: string }>("SELECT blocks FROM messages WHERE id = ?", messageId)!.blocks) as MessageBlock[];
+      const apart = () => get<{ n: number }>("SELECT COUNT(*) AS n FROM message_images WHERE message_id = ?", messageId)!.n;
+      // The screenshots are written once, apart from the row that is saved again and again; a reader gets them back.
+      expect(shots(row())).toBe(0);
+      expect(apart()).toBe(3);
+      const saved = getMessage(messageId).blocks;
       expect(saved).toEqual(state());
+      expect(getConversation(started.conversation.id).messages.find((m) => m.id === messageId)!.blocks).toEqual(state());
       expect(saved.map((b) => (b.type === "tool_use" ? b.result : b.type === "text" ? b.text : null))).toEqual(["shot 0", "••••••••", "shot 2", "almost there"]);
 
       await Bun.write(`${env.stateDir}/inflight-done`, "");
@@ -204,6 +210,9 @@ describe("the in-flight message", () => {
       expect(run.status).toBe("succeeded");
       const message = getMessage(messageId);
       expect(shots(message.blocks)).toBe(3);
+      // Saved whole at the end: nothing is kept apart anymore.
+      expect(shots(row())).toBe(3);
+      expect(apart()).toBe(0);
       expect(JSON.stringify(message.blocks)).not.toContain("shot 1");
       expect(state()).toEqual(message.blocks);
 

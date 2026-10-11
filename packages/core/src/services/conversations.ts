@@ -562,16 +562,44 @@ export async function deleteConversation(id: string): Promise<void> {
 /* Messages                                                            */
 /* ------------------------------------------------------------------ */
 
+interface ImageRow {
+  message_id: string;
+  block_id: string;
+  image: string;
+}
+
+/** Put the screenshots a run saved apart from its in-flight message (message_images) back on their steps. */
+function withImages(blocks: MessageBlock[], images: ImageRow[]): MessageBlock[] {
+  if (!images.length) return blocks;
+  const byBlock = new Map(images.map((i) => [i.block_id, i.image]));
+  return blocks.map((b) => (b.type === "tool_use" && !b.image && byBlock.has(b.id) ? { ...b, image: byBlock.get(b.id) } : b));
+}
+
+/** The blocks of a message as stored, whole: with the screenshots that were saved apart while its run worked. */
+export function wholeBlocks(messageId: string, blocks: MessageBlock[]): MessageBlock[] {
+  return withImages(blocks, all<ImageRow>("SELECT * FROM message_images WHERE message_id = ?", messageId));
+}
+
 export function listMessages(conversationId: string): Message[] {
-  return all<MessageRow>("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC", conversationId).map(
+  const messages = all<MessageRow>("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC", conversationId).map(
     toMessage,
   );
+  const images = all<ImageRow>(
+    "SELECT i.* FROM message_images i JOIN messages m ON m.id = i.message_id WHERE m.conversation_id = ?",
+    conversationId,
+  );
+  if (!images.length) return messages;
+  return messages.map((m) => {
+    const own = images.filter((i) => i.message_id === m.id);
+    return own.length ? { ...m, blocks: withImages(m.blocks, own) } : m;
+  });
 }
 
 export function getMessage(id: string): Message {
   const row = get<MessageRow>("SELECT * FROM messages WHERE id = ?", id);
   if (!row) throw notFound("Message");
-  return toMessage(row);
+  const message = toMessage(row);
+  return { ...message, blocks: wholeBlocks(id, message.blocks) };
 }
 
 export function addMessage(
@@ -616,6 +644,8 @@ export function updateMessage(
     blocks: patch.blocks === undefined ? undefined : JSON.stringify(patch.blocks),
     run_id: patch.runId,
   });
+  // Saved whole: what its run kept apart while it worked is in the blocks now.
+  if (patch.blocks !== undefined) sql("DELETE FROM message_images WHERE message_id = ?", id);
   const message = getMessage(id);
   if (opts.emit !== false) bus.emit({ type: "message.updated", message });
   return message;
