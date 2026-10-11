@@ -11,10 +11,16 @@ import { allRunning } from "./state";
 
 export const RUN_CDP_ENV = "GODMODE_BROWSER_CDP_URL";
 
-/** A process lookup (ps, pgrep, lsof) or a file read (cat, head, tail) at command position, also inside a script's strings. */
+/**
+ * A process lookup (ps, pgrep, lsof) or a file read (cat, head, tail) at command position, also inside a script's strings.
+ * The lookup reaches to the end of its pipeline, the file read only over its own arguments: a later command on the same
+ * line that merely mentions the flag or the file (a grep through logs) is no lookup.
+ */
 const AT_COMMAND = String.raw`(?:^|[|;&(\x60'"]|\$\()\s*(?:sudo\s+)?`;
-const PORT_LOOKUP = new RegExp(`${AT_COMMAND}(?:ps|pgrep|lsof)\\b[^\\n]*remote-debugging`, "im");
-const PORT_FILE = new RegExp(`${AT_COMMAND}(?:cat|head|tail|less)\\b[^\\n]*DevToolsActivePort|readFile\\w*\\([^)]*DevToolsActivePort`, "im");
+const LOOKUP_COMMANDS = "ps|pgrep|lsof";
+const FILE_COMMANDS = "cat|head|tail|less";
+const PORT_LOOKUP = new RegExp(`${AT_COMMAND}(?:${LOOKUP_COMMANDS})\\b[^\\n;&]*remote-debugging`, "im");
+const PORT_FILE = new RegExp(`${AT_COMMAND}(?:${FILE_COMMANDS})\\b[^\\n;&|]*DevToolsActivePort|readFile\\w*\\([^)]*DevToolsActivePort`, "im");
 const LOOPBACK_PORT = /(?:\b127\.0\.0\.1|\blocalhost|\b0\.0\.0\.0|\[::1\]):(\d{2,5})\b/g;
 const INTERPRETER = /(?:^|[\s;&|(])(?:node|bun|deno|python3?|tsx|ts-node|sh|bash|zsh)\s+(?:(?:-\S+|run)\s+)*((?:~|\.{0,2}\/)?[\w@./~-]+\.(?:m?js|cjs|ts|mts|py|sh))(?=$|[\s'";|&)])/g;
 const DIRECT = /(?:^|[\s;&|(])(\.{1,2}\/[\w@./-]+\.(?:m?js|cjs|ts|mts|py|sh))(?=$|[\s'";|&)])/g;

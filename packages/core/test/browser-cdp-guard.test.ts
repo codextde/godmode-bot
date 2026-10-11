@@ -47,6 +47,25 @@ describe("foreign browser use", () => {
     expect(foreignBrowserUse(`ls ${config().browserDir}-use/x/files/downloads`)).toBeNull();
   });
 
+  test("a later command on the same line that only mentions the flag or the file passes", () => {
+    const grepLog = [
+      "f=$(ls runs/*.jsonl | head -1)",
+      'grep -c DevToolsActivePort "$f"',
+    ].join("; ");
+    expect(foreignBrowserUse(grepLog)).toBeNull();
+    const listThenSearch = [
+      "ps aux | wc -l",
+      "grep -rn remote-debugging-port docs",
+    ].join(" && ");
+    expect(foreignBrowserUse(listThenSearch)).toBeNull();
+    const piped = [
+      "ps -axo pid,command",
+      "grep -i chrome",
+      "sed -E 's/--(remote-debugging-port)=([^ ]*)/\\1=\\2/'",
+    ].join(" | ");
+    expect(foreignBrowserUse(piped)).toContain("DevTools ports");
+  });
+
   test("ordinary work passes", () => {
     expect(foreignBrowserUse("curl -s http://127.0.0.1:3000/healthz && pnpm test")).toBeNull();
     expect(foreignBrowserUse(`node shot.mjs # connects to process.env.${RUN_CDP_ENV}`)).toBeNull();
