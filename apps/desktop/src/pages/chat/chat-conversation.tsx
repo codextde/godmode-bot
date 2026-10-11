@@ -501,7 +501,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     <div className="mb-2 flex items-center gap-2.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-3 text-[13px] text-muted-foreground shadow-card">
                       <Archive className="size-3.5 shrink-0" />
                       <span className="min-w-0 flex-1 truncate">
-                        <span className="font-medium text-foreground">Archived.</span> Send a message to move it back to Recent.
+                        <span className="font-medium text-foreground">Archived.</span>{" "}
+                        {activeRunId || paused || conv.followup ? "The work here still goes on. " : ""}Send a message to move it back to Recent.
                       </span>
                       <Button size="xs" variant="ghost" onClick={() => setArchived(conv, false)}>
                         <ArchiveRestore /> Unarchive

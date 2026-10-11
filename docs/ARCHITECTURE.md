@@ -715,9 +715,9 @@ whole list, at most once a second per run.
     boundary between agents (Chromium's own DevTools port on loopback is unauthenticated).
   * Which tab a chat works in follows its agent (navigation, input and screenshots through the endpoint); live view,
     vault fills (`vault_fill_*` type into the calling chat's tab only) and missing-login detection use that tab.
-  * A chat keeps its tabs between messages. They close when the chat is deleted, archived or moved to another
-    profile, or after `keepAliveMinutes` without use (an hour when the browser is kept alive) unless a run of the chat
-    is going or someone watches its live view; the browser's last page is kept, blank, for the next chat (closing the
+  * A chat keeps its tabs between messages. They close when the chat is deleted, archived (unless it goes on later: a
+    paused run, a follow-up, held messages) or moved to another profile, or after `keepAliveMinutes` without use (an
+    hour when the browser is kept alive) unless a run of the chat is going or someone watches its live view; the browser's last page is kept, blank, for the next chat (closing the
     last window would quit Chromium on Windows and Linux). Chromium has one download folder per profile, so two agents
     downloading through one profile at the same moment may find the file in the folder of the one that set it last.
 * **On demand**: a run's endpoint only starts Chromium when browser-use first asks for `/json/version`, on its first

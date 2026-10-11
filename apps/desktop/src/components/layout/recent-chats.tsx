@@ -4,7 +4,7 @@ import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Conversation, Workspace } from "@godmode/shared";
 import { Fragment, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { AlarmClock, Archive, ChevronDown, CircleCheck, Hourglass, MessageCircleQuestion, MessagesSquare, Pause, Pin, Trash2, Zap } from "lucide-react";
+import { AlarmClock, Archive, ChevronDown, CircleCheck, MessagesSquare, Pin, Trash2, Zap } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -17,7 +17,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar, colorGradient } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
-import { followupWhen } from "@/components/chat/followup";
+import { chatStatus } from "@/components/chat/chat-status";
 import { api } from "@/lib/api";
 import { chatProject, useAllAgents, useScopeProject, useScopeWorkspace, useScopedConversations, useWorkspaces } from "@/lib/hooks";
 import { useProjectIndex } from "@/components/projects/project-utils";
@@ -52,6 +52,12 @@ export function RecentChats() {
   const { data: hasArchived = false } = useQuery({
     queryKey: [...qk.conversationsAll, "has-archived", scope],
     queryFn: async () => (await api.conversations.list({ archived: true, limit: 1, workspaceId: scope })).length > 0,
+  });
+  // Archived chats that still work, wait or come back on their own.
+  const { data: archivedOngoing = 0 } = useQuery({
+    queryKey: [...qk.conversationsAll, "archived-ongoing", scope],
+    queryFn: async () => (await api.conversations.list({ archived: true, ongoing: true, limit: 100, workspaceId: scope })).length,
+    enabled: hasArchived,
   });
   const { data: agents = [] } = useAllAgents();
   const { data: workspaces = [] } = useWorkspaces();
@@ -150,41 +156,7 @@ export function RecentChats() {
                         {workspace && <WorkspaceChip workspace={workspace} />}
                         {project && <WorkspaceChip workspace={project} kind="Project" />}
                         <span className="block min-w-0 flex-1 truncate">
-                          {running && !c.paused ? (
-                            <span className="text-shimmer font-medium">Working…</span>
-                          ) : queued && !c.paused ? (
-                            <span>Queued — waiting for a free slot</span>
-                          ) : c.paused?.reason === "question" ? (
-                            <span className="flex items-center gap-1 text-foreground" title={c.paused.question?.title}>
-                              <MessageCircleQuestion className="size-3 shrink-0 text-warning" aria-hidden />
-                              <span className="truncate">
-                                {c.paused.question?.kind === "approval" ? "Needs your OK" : "Needs your answer"}
-                                {c.paused.question?.title ? ` · ${c.paused.question.title}` : ""}
-                              </span>
-                            </span>
-                          ) : c.paused ? (
-                            <span className="flex items-center gap-1">
-                              {c.paused.reason === "limit" ? (
-                                <Hourglass className="size-3 shrink-0 text-warning" aria-hidden />
-                              ) : (
-                                <Pause className="size-3 shrink-0 fill-current" aria-hidden />
-                              )}
-                              <span className="truncate">
-                                {c.paused.reason === "user"
-                                  ? "Paused"
-                                  : c.paused.reason === "budget"
-                                    ? "Held — budget used up"
-                                    : c.paused.auto && c.paused.resumeAt
-                                      ? `Continues ${followupWhen(c.paused.resumeAt)}`
-                                      : "Waiting for the limit"}
-                              </span>
-                            </span>
-                          ) : c.followup ? (
-                            <span className="flex items-center gap-1" title={c.followup.note}>
-                              <AlarmClock className="size-3 shrink-0 text-brand-strong" aria-hidden />
-                              <span className="truncate">Continues {followupWhen(c.followup.dueAt)}</span>
-                            </span>
-                          ) : (
+                          {chatStatus(c, { running, queued }) ?? (
                             <>
                               {originLine(c, agents) ?? agent?.name ?? "Agent"} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false })}
                             </>
@@ -250,6 +222,19 @@ export function RecentChats() {
                 <Link to="/archived">
                   <Archive />
                   <span>Archived chats</span>
+                  {archivedOngoing > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="ml-auto flex h-4 items-center gap-1 rounded-full bg-foreground/6 px-1.5 text-[10px] leading-none tabular-nums">
+                          <AlarmClock className="size-2.5 text-brand-strong" aria-hidden />
+                          {archivedOngoing}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        {archivedOngoing === 1 ? "1 archived chat still has" : `${archivedOngoing} archived chats still have`} work ahead
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
