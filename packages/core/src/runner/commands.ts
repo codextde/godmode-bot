@@ -13,8 +13,6 @@ import { CLAUDE_NOT_FOUND, buildEnv } from "./runner";
 
 /** A list this old is looked up again — in the background: whoever asks meanwhile gets the one at hand. */
 const TTL_MS = 5 * 60_000;
-/** A list this old isn't handed out any more: the request waits for a new one (skills may have been added meanwhile). */
-const MAX_AGE_MS = 30 * 60_000;
 const TIMEOUT_MS = 30_000;
 const REQUEST_ID = "godmode-commands";
 /** Terminal-UI-only or internal commands that do nothing useful in a Godmode chat. */
@@ -33,8 +31,7 @@ function lookUp(agent: Agent): Promise<SlashCommand[]> {
 
 /**
  * Asking Claude Code takes a second or two (it starts the CLI), so only the first request for an agent waits for it:
- * later ones get the list at hand, and one that has grown old is looked up again behind them. One that is very old
- * is no answer any more: the request waits for the new one.
+ * later ones get the list at hand, and one that has grown old is looked up again behind them (the next request gets it).
  */
 export function listSlashCommands(agent: Agent): Promise<SlashCommand[]> {
   const hit = cache.get(agent.id);
@@ -52,7 +49,7 @@ export function listSlashCommands(agent: Agent): Promise<SlashCommand[]> {
       },
     );
   }
-  return age >= MAX_AGE_MS && hit.fresh ? hit.fresh : hit.commands;
+  return hit.commands;
 }
 
 export function __clearSlashCommandCache() {
