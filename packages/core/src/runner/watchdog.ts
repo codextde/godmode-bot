@@ -107,7 +107,8 @@ export function assess(run: Pick<WatchedRun, "blocks" | "lastOutputAt" | "starte
   const busy = pending ?? background;
   const done = tools.filter((b) => b.result !== undefined);
   const last = done[done.length - 1];
-  const limit = busy ? Math.max(limits.stallMs * TOOL_FACTOR, Math.min(MIN_TOOL_STALL_MS, limits.stallMs * 10)) : limits.stallMs + wakeupMs(last);
+  const base = busy ? Math.max(limits.stallMs * TOOL_FACTOR, Math.min(MIN_TOOL_STALL_MS, limits.stallMs * 10)) : limits.stallMs;
+  const limit = pending ? base : Math.max(base, limits.stallMs + wakeupMs(last));
   const idle = at - run.lastOutputAt;
   if (idle < limit) return null;
   const where = pending

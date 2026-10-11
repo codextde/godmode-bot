@@ -24,7 +24,7 @@ import type {
 import type { ComputerTarget, ConversationPatch, ConversationWithMessages, MessagePage, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
 import { computerTargetLabel, MAX_MESSAGE_ATTACHMENT_BYTES } from "@godmode/shared";
 import { liteMessage } from "./liteMessage";
-import { all, bool, get, insert, int, run as sql, update } from "../db";
+import { all, bool, get, insert, int, run as sql, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
@@ -444,15 +444,18 @@ export function listMessagePage(conversationId: string, opts: { limit: number; b
   } else {
     rows = all<MessageRow>("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?", conversationId, limit + 1);
   }
-  return { messages: rows.slice(0, limit).reverse().map(toMessage), hasMore: rows.length > limit };
+  return { messages: whole(rows.slice(0, limit).reverse().map(toMessage)), hasMore: rows.length > limit };
 }
 
 /** The picture a tool returned in a message, decoded, with its type. */
 export function messageImage(conversationId: string, messageId: string, toolUseId: string): { data: Uint8Array; mime: string } {
   const row = get<{ blocks: string }>("SELECT blocks FROM messages WHERE id = ? AND conversation_id = ?", messageId, conversationId);
   const block = parseJson<MessageBlock[]>(row?.blocks ?? "[]", []).find((b) => b.type === "tool_use" && b.id === toolUseId);
-  if (!block || block.type !== "tool_use" || !block.image) throw notFound("Picture");
-  const data = Buffer.from(block.image, "base64");
+  if (!block || block.type !== "tool_use") throw notFound("Picture");
+  // While its run works the picture is kept apart from the message.
+  const image = block.image ?? get<{ image: string }>("SELECT image FROM message_images WHERE message_id = ? AND block_id = ?", messageId, toolUseId)?.image;
+  if (!image) throw notFound("Picture");
+  const data = Buffer.from(image, "base64");
   return { data: new Uint8Array(data), mime: imageMime(data) };
 }
 
@@ -662,19 +665,15 @@ export function wholeBlocks(messageId: string, blocks: MessageBlock[]): MessageB
   return withImages(blocks, all<ImageRow>("SELECT * FROM message_images WHERE message_id = ?", messageId));
 }
 
+/** Messages as they are read: with the screenshots their runs keep apart while they work. */
+function whole(messages: Message[]): Message[] {
+  const apart = new Set(all<{ message_id: string }>("SELECT DISTINCT message_id FROM message_images").map((r) => r.message_id));
+  if (!apart.size) return messages;
+  return messages.map((m) => (apart.has(m.id) ? { ...m, blocks: wholeBlocks(m.id, m.blocks) } : m));
+}
+
 export function listMessages(conversationId: string): Message[] {
-  const messages = all<MessageRow>("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC", conversationId).map(
-    toMessage,
-  );
-  const images = all<ImageRow>(
-    "SELECT i.* FROM message_images i JOIN messages m ON m.id = i.message_id WHERE m.conversation_id = ?",
-    conversationId,
-  );
-  if (!images.length) return messages;
-  return messages.map((m) => {
-    const own = images.filter((i) => i.message_id === m.id);
-    return own.length ? { ...m, blocks: withImages(m.blocks, own) } : m;
-  });
+  return whole(all<MessageRow>("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC", conversationId).map(toMessage));
 }
 
 export function getMessage(id: string): Message {
@@ -721,13 +720,15 @@ export function updateMessage(
 ): Message | null {
   const exists = get<{ id: string }>("SELECT id FROM messages WHERE id = ?", id);
   if (!exists) return null;
-  update("messages", id, {
-    content: patch.content,
-    blocks: patch.blocks === undefined ? undefined : JSON.stringify(patch.blocks),
-    run_id: patch.runId,
+  tx(() => {
+    update("messages", id, {
+      content: patch.content,
+      blocks: patch.blocks === undefined ? undefined : JSON.stringify(patch.blocks),
+      run_id: patch.runId,
+    });
+    // Saved whole: what its run kept apart while it worked is in the blocks now.
+    if (patch.blocks !== undefined) sql("DELETE FROM message_images WHERE message_id = ?", id);
   });
-  // Saved whole: what its run kept apart while it worked is in the blocks now.
-  if (patch.blocks !== undefined) sql("DELETE FROM message_images WHERE message_id = ?", id);
   const message = getMessage(id);
   if (opts.emit !== false) bus.emit({ type: "message.updated", message });
   return message;

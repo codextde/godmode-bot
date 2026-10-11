@@ -8,7 +8,7 @@ import type { ServerWebSocket } from "bun";
 import { applyRunDelta, type Agent, type ClientEvent, type MessageBlock, type RunDelta, type RunDeltaState, type ServerEvent } from "@godmode/shared";
 import { captureEvents, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { get } from "../src/db";
-import { getConversation, getMessage, sendMessage, startChat } from "../src/services/conversations";
+import { getConversation, getMessage, listMessagePage, messageImage, sendMessage, startChat } from "../src/services/conversations";
 import { __setPersistForTests, findRunLog, waitForRun } from "../src/runner/runner";
 import { rememberSecret } from "../src/vault/vault";
 import { websocketHandler, type WsData } from "../src/server/ws";
@@ -202,6 +202,9 @@ describe("the in-flight message", () => {
       const saved = getMessage(messageId).blocks;
       expect(saved).toEqual(state());
       expect(getConversation(started.conversation.id).messages.find((m) => m.id === messageId)!.blocks).toEqual(state());
+      expect(listMessagePage(started.conversation.id, { limit: 5 }).messages.find((m) => m.id === messageId)!.blocks).toEqual(state());
+      const shot = state().find((b) => b.type === "tool_use" && b.image) as Extract<MessageBlock, { type: "tool_use" }>;
+      expect(Buffer.from(messageImage(started.conversation.id, messageId, shot.id).data).toString("base64")).toBe(shot.image!);
       expect(saved.map((b) => (b.type === "tool_use" ? b.result : b.type === "text" ? b.text : null))).toEqual(["shot 0", "••••••••", "shot 2", "almost there"]);
 
       await Bun.write(`${env.stateDir}/inflight-done`, "");

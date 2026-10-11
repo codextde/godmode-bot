@@ -248,6 +248,11 @@ describe("watchdog", () => {
     expect(assess({ blocks: asleep, lastOutputAt: t0, startedAt: t0, waiting: false }, t0 + 41 * 60_000, limits)?.kind).toBe("stalled");
     const ended = [tool("w", "ScheduleWakeup", { stop: true }, "Loop ended")];
     expect(assess({ blocks: ended, lastOutputAt: t0, startedAt: t0, waiting: false }, t0 + 21 * 60_000, limits)?.kind).toBe("stalled");
+    // A background task that is still running doesn't shorten the sleep, and a step that hangs isn't covered by it.
+    const hour = [tool("w", "ScheduleWakeup", { delaySeconds: 3600, reason: "nightly build", prompt: "check" }, "Next wakeup scheduled")];
+    const building = { ...tool("t", "Agent", { prompt: "build" }, "started"), task: { status: "running" } } as MessageBlock;
+    expect(assess({ blocks: [building, ...hour], lastOutputAt: t0, startedAt: t0, waiting: false }, t0 + 75 * 60_000, limits)).toBeNull();
+    expect(assess({ blocks: [...hour, tool("b", "Bash", { command: "sleep 9999" })], lastOutputAt: t0, startedAt: t0, waiting: false }, t0 + 61 * 60_000, limits)?.kind).toBe("stalled");
     const moved = [...asleep, tool("b", "Read", { file_path: "/y" }, "ok")];
     expect(assess({ blocks: moved, lastOutputAt: t0, startedAt: t0, waiting: false }, t0 + 21 * 60_000, limits)?.kind).toBe("stalled");
   });

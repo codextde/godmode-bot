@@ -954,8 +954,10 @@ export function recoverInterruptedRuns(): void {
     )) {
       const blocks = withdrawOpenBlocks(wholeBlocks(m.id, parseJson<Message["blocks"]>(m.blocks, [])), "Godmode restarted before this was asked.");
       blocks.push({ type: "error", text: INTERRUPTED });
-      sql("UPDATE messages SET blocks = ? WHERE id = ?", JSON.stringify(blocks), m.id);
-      sql("DELETE FROM message_images WHERE message_id = ?", m.id);
+      tx(() => {
+        sql("UPDATE messages SET blocks = ? WHERE id = ?", JSON.stringify(blocks), m.id);
+        sql("DELETE FROM message_images WHERE message_id = ?", m.id);
+      });
     }
   }
   for (const agentId of agentIds) safely("reset agent status", () => setAgentStatus(agentId, "idle"));
@@ -1471,7 +1473,9 @@ function saveInFlight(job: Job, view: LiveBlock[]) {
   const live = liveOf(job);
   const shots = new Map<string, string>();
   for (const { redacted: b } of view) if (b.type === "tool_use" && b.image) shots.set(b.id, b.image);
-  tx(() => {
+  const saved = tx(() => {
+    // The chat was deleted under the run: nothing to save, and no pictures without their message.
+    if (!sql("UPDATE messages SET blocks = ? WHERE id = ?", `[${view.map(storedJson).join(",")}]`, job.messageId).changes) return false;
     // Someone else saved the message whole meanwhile (or this is the first save): start over.
     const stored = get<{ n: number }>("SELECT COUNT(*) AS n FROM message_images WHERE message_id = ?", job.messageId)?.n ?? 0;
     let known = live.images;
@@ -1483,9 +1487,9 @@ function saveInFlight(job: Job, view: LiveBlock[]) {
     for (const [id, image] of shots) {
       if (known.get(id) !== image) sql("INSERT OR REPLACE INTO message_images (message_id, block_id, image) VALUES (?, ?, ?)", job.messageId, id, image);
     }
-    sql("UPDATE messages SET blocks = ? WHERE id = ?", `[${view.map(storedJson).join(",")}]`, job.messageId);
+    return true;
   });
-  live.images = shots;
+  if (saved) live.images = shots;
 }
 
 /** The run's blocks as they are stored and shown, secrets masked. */
