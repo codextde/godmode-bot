@@ -13,6 +13,8 @@ import { space } from "@/lib/theme";
 
 const DONE_SHOWN = 20;
 
+const Separator = () => <Hairline inset={72} />;
+
 /** What agents need the human to do: a passkey, a CAPTCHA, a signature. Closing one continues the agent's chat. */
 export default function MyTasks() {
   const list = useQuery({ queryKey: qk.humanTaskList("all"), queryFn: () => api.humanTasks.list({ status: "all" }) });
@@ -45,7 +47,7 @@ export default function MyTasks() {
             <SectionTitle title={section.title} />
           </View>
         )}
-        ItemSeparatorComponent={() => <Hairline inset={72} />}
+        ItemSeparatorComponent={Separator}
         renderItem={({ item }) => <HumanTaskRow task={item} agent={item.agentId ? byId.get(item.agentId) : undefined} />}
         ListEmptyComponent={
           list.isLoading ? (

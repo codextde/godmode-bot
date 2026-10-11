@@ -1,11 +1,13 @@
 import { QueryClientProvider } from "@tanstack/react-query";
+import { Image } from "expo-image";
 import { Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { AppLock } from "@/components/app-lock";
+import { forgetQueries, persistQueries, restoreQueries } from "@/lib/persist";
 import { queryClient } from "@/lib/query";
 import { startRealtime } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
@@ -24,19 +26,36 @@ export default function RootLayout() {
     void useSession.getState().load();
   }, []);
 
+  // What the last session saw is on screen before the computer answers.
+  const [restored, setRestored] = useState(false);
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync();
-  }, [ready]);
+    if (!ready || restored) return;
+    const connection = useSession.getState().connection;
+    if (!connection) return setRestored(true);
+    void restoreQueries(connection.deviceId).finally(() => setRestored(true));
+  }, [ready, restored]);
 
   useEffect(() => {
+    if (restored) void SplashScreen.hideAsync();
+  }, [restored]);
+
+  useEffect(() => {
+    if (!restored) return;
     if (!deviceId) {
       queryClient.clear();
+      forgetQueries();
+      void Image.clearDiskCache().catch(() => undefined);
       return;
     }
-    return startRealtime();
-  }, [deviceId]);
+    const stopRealtime = startRealtime();
+    const stopSaving = persistQueries(deviceId);
+    return () => {
+      stopRealtime();
+      stopSaving();
+    };
+  }, [deviceId, restored]);
 
-  if (!ready) return null;
+  if (!ready || !restored) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.background }}>
@@ -52,6 +71,10 @@ export default function RootLayout() {
                 <Stack.Screen name="compose" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="task/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="my-tasks" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "My tasks" }} />
+                <Stack.Screen name="archived" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Archived chats" }} />
+                <Stack.Screen name="archived-tasks" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Archived tasks" }} />
+                <Stack.Screen name="automations" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Automations" }} />
+                <Stack.Screen name="activity" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Activity" }} />
                 <Stack.Screen name="human-task/[id]" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="new-task" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="model" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />
