@@ -3,6 +3,7 @@ import type { Agent, MessageBlock, Task } from "@godmode/shared";
 import { taskEventText } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { callTool } from "../src/mcp/tools";
+import { updateAgent } from "../src/agents/service";
 import { getAccessToken } from "../src/server/auth";
 import { deleteConversation, getConversation, sendMessage, startChat } from "../src/services/conversations";
 import { listAttention } from "../src/services/attention";
@@ -263,6 +264,27 @@ describe("a decision an answer leaves open", () => {
     expect(listRuns({ conversationId })).toHaveLength(2);
   }, 30_000);
 
+  test("a message that couldn't be sent answers nothing", async () => {
+    const { conversationId, task } = await chatWithDecision();
+    updateAgent(agent.id, { enabled: false });
+    try {
+      const sent = await api("POST", `/api/conversations/${conversationId}/messages`, { content: "Yes, go ahead" });
+      expect(sent.status).toBe(409);
+      expect(getHumanTask(task.id).status).toBe("open");
+    } finally {
+      updateAgent(agent.id, { enabled: true });
+    }
+    await closeHumanTask(task.id, { outcome: "declined" });
+  }, 30_000);
+
+  test("the chat went on: an answer to the human that no longer asks takes it back", async () => {
+    const { conversationId, task } = await chatWithDecision();
+    // Not through the API (that message would answer it): the human's turn was already waiting in the queue.
+    const next = await sendMessage(conversationId, { content: "Hello" });
+    await waitForRun(next.run.id, 10_000);
+    expect(getHumanTask(task.id)).toMatchObject({ status: "withdrawn", closedReason: "The chat went on without it." });
+  }, 30_000);
+
   test("one per chat: the same decision keeps its ticket, another one takes its place", async () => {
     const { conversationId, task } = await chatWithDecision();
     const again = await sendMessage(conversationId, { content: "LEAVE_DECISION once more", trigger: "followup" });
@@ -336,6 +358,8 @@ describe("questions and approvals have a ticket", () => {
 
     const declined = await api("POST", `/api/human-tasks/${task.id}/close`, { outcome: "declined" });
     expect(declined.status).toBe(400);
+    // The run stands still for it: the ticket can't be dismissed or deleted from under it.
+    expect((await api("DELETE", `/api/human-tasks/${task.id}`)).status).toBe(400);
     const res = await api("POST", `/api/human-tasks/${task.id}/close`, { outcome: "done", optionId: "2" });
     expect(res.status).toBe(200);
     expect(res.json.continued).toBe(true);

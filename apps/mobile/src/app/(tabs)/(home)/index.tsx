@@ -133,7 +133,7 @@ export default function Home() {
                 key={t.id}
                 icon="person"
                 title={t.title}
-                body={`${t.priority === "high" ? "Urgent · " : ""}${t.agentName ? `${t.agentName} needs you to do this` : "Your task"}${t.status === "doing" ? " · you're on it" : ""}`}
+                body={`${t.priority === "high" ? "Urgent · " : ""}${t.agentName ? (t.kind === "decision" ? `${t.agentName} left you a decision` : `${t.agentName} needs you to do this`) : "Your task"}${t.status === "doing" ? " · you're on it" : ""}`}
                 onPress={() => openHumanTask(t.id)}
               />
             ))}

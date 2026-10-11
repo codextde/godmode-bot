@@ -26,9 +26,10 @@ export function useAgents() {
   return { ...query, byId };
 }
 
-const urgentFirst = (list: HumanTask[]) => [...list].sort((a, b) => Number(b.priority === "high") - Number(a.priority === "high") || (a.createdAt < b.createdAt ? 1 : -1));
+// A ticket that stands for a question shows as the question wherever this list is used.
+const urgentFirst = (list: HumanTask[]) => list.filter((t) => !t.questionId).sort((a, b) => Number(b.priority === "high") - Number(a.priority === "high") || (a.createdAt < b.createdAt ? 1 : -1));
 
-/** Tasks agents handed to the human that still wait (open or doing), most urgent first. */
+/** Tasks agents handed to the human and decisions they left open that still wait (open or doing), most urgent first. */
 export function useOpenHumanTasks() {
   return useQuery({ queryKey: qk.humanTaskList("active"), queryFn: () => api.humanTasks.list({ status: "active" }), select: urgentFirst });
 }

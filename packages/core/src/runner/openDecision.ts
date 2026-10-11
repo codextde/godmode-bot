@@ -5,8 +5,9 @@
  * work that looks finished doesn't quietly wait for an answer nobody was asked for.
  *
  * A heuristic over English and German, like the missing-login one (stream.ts): a section whose heading says it is for
- * the human to decide, else a closing question to them. Offers of extra work ("Want me to also …?") and pleasantries
- * ("Anything else?") are not decisions.
+ * the human to decide, else the answer's last sentence when it asks them. It errs on the side of silence: offers of
+ * extra work ("Want me to also …?"), pleasantries ("Anything else?"), questions the agent answers itself and questions
+ * to someone else ("Could you send us …?" in a draft) are not decisions.
  */
 
 export interface OpenDecision {
@@ -29,41 +30,42 @@ function youOf(human: string): string {
   return `(?:you|${["dich", "sie", "euch", ...names.map(escapeRe)].join("|")})`;
 }
 
+const WORD = "decision|call|answer|ok|okay|approval|go-ahead|sign-off|entscheidung|antwort|freigabe|rückmeldung";
+
 function headingPatterns(human: string): RegExp[] {
   const you = youOf(human);
   return [
     new RegExp(`\\b(?:decisions?|questions?|choices?|approvals?)\\b.{0,30}\\b(?:for|from)\\s+${you}\\b`, "i"),
-    /\b(?:your|ihre|deine|eure)\s+(?:decision|call|input|answer|ok|okay|approval|choice|go-ahead|entscheidung|antwort|freigabe|rückmeldung|wahl)\b/i,
-    new RegExp(`\\b(?:needs?|needed|required?)\\s+(?:from\\s+${you}|your\\b|a decision|an answer)`, "i"),
-    /\b(?:decisions?|answers?|approvals?|input|sign-off)\s+(?:needed|required|pending|wanted)\b/i,
-    /^(?:open|remaining|outstanding)\s+(?:questions?|decisions?)\b/i,
+    new RegExp(`\\b(?:your|ihre|deine|eure)\\s+(?:${WORD})\\b`, "i"),
+    new RegExp(`\\bneed(?:s|ed)?\\s+(?:from\\s+${you}\\b|a\\s+decision\\b)`, "i"),
+    /\b(?:decisions?|approvals?|sign-off)\s+(?:needed|required|pending|wanted)\b/i,
+    /^(?:open|remaining|outstanding)\s+decisions?\b/i,
     /\b(?:for you to decide|you (?:need to|have to|must|should) decide|please decide|up to you)\b/i,
     new RegExp(`\\b(?:waiting|blocked)\\s+(?:for|on)\\s+${you}\\b`, "i"),
     new RegExp(`\\b(?:entscheidung(?:en)?|fragen?|rückfragen?|freigaben?)\\b.{0,30}\\b(?:für|an|von)\\s+${you}\\b`, "i"),
-    /^(?:offene|ausstehende)\s+(?:fragen?|entscheidung(?:en)?|rückfragen?)\b/i,
-    /\b(?:brauche|benötige|brauchen|benötigen)\b.{0,30}\b(?:von dir|von ihnen|von euch|deine|ihre)\b/i,
-    /\b(?:von dir|von ihnen|von euch)\b.{0,30}\b(?:brauche|benötige|brauchen|benötigen)\b/i,
-    /\b(?:entscheidung|freigabe|rückmeldung|antwort)\s+(?:nötig|erforderlich|benötigt|gebraucht|offen|ausstehend)\b/i,
+    /^(?:offene|ausstehende)\s+entscheidung(?:en)?\b/i,
+    /\b(?:brauche|benötige)\b.{0,30}\b(?:von dir|von ihnen|von euch)\b/i,
+    /\b(?:von dir|von ihnen|von euch)\b.{0,30}\b(?:brauche|benötige)\b/i,
+    /\b(?:entscheidung|freigabe)\s+(?:nötig|erforderlich|benötigt|gebraucht|offen|ausstehend)\b/i,
     /\b(?:bitte entscheiden?|du entscheidest|musst du entscheiden|sie entscheiden|zu entscheiden)\b/i,
-    /\bwarte(?:t)?\s+auf\s+(?:dich|sie|deine|ihre)\b/i,
+    /\bwarte(?:t)?\s+auf\s+(?:dich|deine|ihre)\b/i,
   ];
 }
 
 /** A closing question that waits for the human. */
 const ASKS = [
-  /\b(?:should|shall|may|can|could)\s+(?:i|we)\b/i,
+  /\b(?:should|shall|may|can|could)\s+i\b/i,
   /\b(?:do|would|did|will|can|could)\s+you\b/i,
   /\bwant\s+me\s+to\b/i,
-  /\b(?:are|were)\s+you\b/i,
+  /\bare\s+you\b/i,
   /\b(?:is|was)\s+(?:it|that|this)\s+(?:ok|okay|fine|alright|all right|what you)\b/i,
   /\b(?:ok|okay)\s+(?:to|if i|with you)\b/i,
-  /\b(?:which|what|how|where|when|who)\b.{0,60}\b(?:you|i|we)\b/i,
+  /\b(?:which|what|how|where|when|who)\b.{0,60}\b(?:you|i)\b/i,
   /\byour\s+(?:call|decision|preference|pick|choice)\b/i,
-  /\b(?:go ahead|proceed)\b/i,
-  /\b(?:soll|sollen|sollte|sollten|darf|dürfen|kann|können)\s+(?:ich|wir)\b/i,
+  /\b(?:soll|sollte|darf|kann)\s+ich\b/i,
   /\b(?:möchtest|willst|kannst|könntest|würdest|bist|hast|magst)\s+du\b/i,
-  /\b(?:möchten|wollen|können|könnten|würden|sind|haben)\s+sie\b/i,
-  /\b(?:welche[rsnm]?|was|wie|wo|wann|wer)\b.{0,60}\b(?:du|dir|dich|sie|ich|wir)\b/i,
+  /\b(?:möchten|wollen|können|könnten|würden)\s+sie\b/i,
+  /\b(?:welche[rsnm]?|was|wie|wo|wann|wer)\b.{0,60}\b(?:du|dir|dich|ich)\b/i,
   /\b(?:passt|ist)\s+(?:das|dir|es)\b/i,
   /\beinverstanden\b/i,
 ];
@@ -72,8 +74,8 @@ const ASKS = [
 const WAITS = [
   /\bplease\s+(?:confirm|decide|choose|approve|pick)\b/i,
   /\bonce\s+you(?:'ve|\s+have)?\s+(?:confirm|approve|decide|choose|chose|pick|repl|answer|give)/i,
-  /\b(?:waiting|wait)\s+for\s+your\s+(?:ok|okay|answer|decision|reply|confirmation|approval|go|go-ahead|input)\b/i,
-  /\bi\s+need\s+your\s+(?:ok|okay|answer|decision|confirmation|approval|input|go-ahead)\b/i,
+  /\b(?:waiting|wait)\s+for\s+your\s+(?:ok|okay|answer|decision|reply|confirmation|approval|go|go-ahead)\b/i,
+  /\bi\s+need\s+your\s+(?:ok|okay|answer|decision|confirmation|approval|go-ahead)\b/i,
   /\bneeds?\s+you\s+to\s+(?:decide|confirm|approve|choose|pick)\b/i,
   /\b(?:let me know|tell me)\s+which\b/i,
   /\bbitte\s+(?:bestätige|bestätigen|entscheide|entscheiden|wähle|wählen)\b/i,
@@ -83,11 +85,21 @@ const WAITS = [
   /\bsag\s+mir,?\s+(?:welche|was|wie|ob)\b/i,
 ];
 
-/** Extra work on offer, or a polite closing line: nothing waits for it. */
-const NOT_A_DECISION = [
-  /\b(?:also|as well|anything else|something else|any (?:other )?questions?|make sense|does (?:that|this) help|need anything|further help|more details?)\b/i,
-  /\b(?:noch|auch|außerdem|zusätzlich|sonst|hilft (?:das|dir)|weitere fragen|noch fragen|alles klar)\b/i,
+/** A polite closing line, or a question to someone else (a draft the agent wrote asks for "us"): nothing waits for it. */
+const NOT_FOR_THE_HUMAN = [
+  /\b(?:anything else|something else|any (?:other )?questions?|make sense|does (?:that|this) help|need anything|further help|more details?|what do you think|sound good)\b/i,
+  /\b(?:sonst noch|hilft (?:das|dir)|weitere fragen|noch fragen|alles klar|was meinst du|was denkst du|was meinen sie)\b/i,
+  /\b(?:us|uns)\b/i,
 ];
+
+/** Work on offer: optional, unless the sentence names a choice ("… now or after the weekend?"). */
+const OFFERS = [
+  /\b(?:want|like)\s+me\s+to\b/i,
+  /\b(?:also|as well)\b|\btoo\?/i,
+  /\b(?:noch|auch|außerdem|zusätzlich)\b/i,
+  /\bsoll\s+ich\s+(?:dir|ihnen|euch)\b/i,
+];
+const CHOICE = /\b(?:or|oder)\b/i;
 
 /** The section says there is nothing to decide. */
 const NOTHING =
@@ -125,9 +137,12 @@ function plain(s: string): string {
     .trim();
 }
 
+/** Not after a number ("12. Oktober") or an abbreviation ("z. B.", "e.g."): those dots end no sentence. */
+const SENTENCE_END = /(?<=[!?])\s+|(?<=(?<!\d|\b(?:z|B|e|g|i|bzw|ca|vs|Nr|Dr|Mr|Mrs|u|d|h|o))\.)\s+|\n+/;
+
 function sentences(text: string): string[] {
   return text
-    .split(/(?<=[.!?])\s+|\n+/)
+    .split(SENTENCE_END)
     .map(plain)
     .filter(Boolean);
 }
@@ -187,9 +202,10 @@ export function detectOpenDecision(text: string, human = ""): OpenDecision | nul
     .filter((p) => /\p{L}/u.test(p));
   const last = paragraphs.at(-1);
   if (!last) return null;
-  const closing = sentences(last);
-  const asked = closing.findLast((s) => (isQuestion(s) ? ASKS.some((re) => re.test(s)) : WAITS.some((re) => re.test(s))) && !NOT_A_DECISION.some((re) => re.test(s)));
-  if (!asked) return null;
+  // Only what the answer ends on: a question further up is one the agent goes on to answer itself.
+  const asked = sentences(last).at(-1);
+  if (!asked || !(isQuestion(asked) ? ASKS : WAITS).some((re) => re.test(asked))) return null;
+  if (NOT_FOR_THE_HUMAN.some((re) => re.test(asked)) || (OFFERS.some((re) => re.test(asked)) && !CHOICE.test(asked))) return null;
   const title = shorten(asked, TITLE_MAX);
   return { title, body: bodyOf(last, title) };
 }

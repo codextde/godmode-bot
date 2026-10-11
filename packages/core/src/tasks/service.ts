@@ -64,7 +64,7 @@ import { INTERRUPTED, activeRunForConversation, cancelRun, getRun, listActiveRun
 import { stripNoteTags } from "../runner/prompt";
 import { checkGoal, goalBrief } from "./goals";
 import { answerByMessage, type Answerer } from "../services/questions";
-import { settleByReply } from "../services/humanTasks";
+import { replySettles } from "../services/humanTasks";
 import { pauseOf, PAUSE_QUESTION_JOIN, PAUSE_QUESTION_SQL, toPause, type PauseQuestionCols } from "../services/pauses";
 import { submitMessage } from "../services/messageQueue";
 import { conversationExists, createConversation, sendMessage } from "../services/conversations";
@@ -1013,10 +1013,11 @@ export async function sendTaskMessage(
     // The task's run waited for the human's answer: this message was it, and the run continues with it (the
     // timeline records the answer itself).
     if (answerByMessage(task.conversation_id, { content, attachments }, by)) return getTask(id);
-    settleByReply(task.conversation_id, content);
+    const settle = replySettles(task.conversation_id, content);
     // A task that stands still takes the message along: it continues with it, or once Claude's limit has reset.
     if (pauseOf(task.conversation_id)) await submitMessage(task.conversation_id, { content, attachments });
     else await sendMessage(task.conversation_id, { content, attachments, trigger: "task" });
+    settle();
   }
   record(id, "feedback", from, { body: content, data: { on: task.status, files: attachments.map((a) => a.name) } });
   return getTask(id);

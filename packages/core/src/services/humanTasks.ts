@@ -367,11 +367,17 @@ export function noteOpenDecision(run: FinishedRun, answer: string): HumanTask | 
   if (onRunner()) return null;
   // The run gave the human something itself: that is what it waits for.
   const handed = get<{ n: number }>(`SELECT COUNT(*) AS n FROM human_tasks WHERE run_id = ? AND from_answer = 0 AND status IN ${ACTIVE_SQL}`, run.runId)?.n ?? 0;
-  if (handed) return null;
-  const found = detectOpenDecision(answer, humanName());
+  const found = handed ? null : detectOpenDecision(answer, getSettings().general.userName);
   const title = found ? clean(found.title, 200) : "";
-  if (!found || !title) return null;
   const earlier = openFromAnswer(run.conversationId);
+  if (!found || !title) {
+    // The human wrote, the agent answered, and the answer no longer asks: the chat has moved past the earlier one.
+    if (run.attended && earlier.length) {
+      for (const e of earlier) withdraw(e, "The chat went on without it.");
+      changed();
+    }
+    return null;
+  }
   const same = earlier.find((e) => e.title === title);
   for (const e of earlier) if (e !== same) withdraw(e, "A later answer took its place.");
   if (same) {
@@ -404,21 +410,32 @@ export function noteOpenDecision(run: FinishedRun, answer: string): HumanTask | 
 }
 
 /**
- * The human wrote into the chat: that answers the decision its agent left open there. The message is the turn that
- * continues the work, so nothing else is started.
+ * The human writes into the chat: that answers the decision its agent left open there. The message is the turn that
+ * continues the work, so nothing else is started. Call this before the message is sent and the function it returns
+ * once it is on its way: a message that couldn't be sent answers nothing, and a decision the new turn leaves open is
+ * not the one this message answered.
  */
-export function settleByReply(conversationId: string, text: string | undefined): void {
-  if (parseSlashCommand(text ?? "") !== null) return;
-  const open = openFromAnswer(conversationId);
-  if (!open.length) return;
-  const ts = now();
-  const said = redact((text ?? "").trim()).slice(0, 20_000);
-  for (const r of open) {
-    sql("UPDATE human_tasks SET status = 'done', response = ?, closed_reason = ?, closed_at = ?, updated_at = ? WHERE id = ?", said, "Answered in the chat.", ts, ts, r.id);
-    if (r.notification_id) markRead([r.notification_id]);
-    audit("user", "human_task.close", r.id, { outcome: "done", via: "chat", conversationId });
-  }
-  changed();
+export function replySettles(conversationId: string, text: string | undefined): () => void {
+  const open = parseSlashCommand(text ?? "") !== null ? [] : openFromAnswer(conversationId);
+  return () => {
+    if (!open.length) return;
+    const ts = now();
+    const said = redact((text ?? "").trim()).slice(0, 20_000);
+    for (const r of open) {
+      const done = sql(
+        `UPDATE human_tasks SET status = 'done', response = ?, closed_reason = ?, closed_at = ?, updated_at = ? WHERE id = ? AND status IN ${ACTIVE_SQL}`,
+        said,
+        "Answered in the chat.",
+        ts,
+        ts,
+        r.id,
+      );
+      if (!done.changes) continue;
+      if (r.notification_id) markRead([r.notification_id]);
+      audit("user", "human_task.close", r.id, { outcome: "done", via: "chat", conversationId });
+    }
+    changed();
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -553,6 +570,7 @@ export function updateHumanTask(id: string, patch: HumanTaskPatch): HumanTask {
 
 export function deleteHumanTask(id: string): void {
   const r = requireRow(id);
+  if (r.question_id && (r.status === "open" || r.status === "doing")) throw badRequest("The agent stands still for this question. Answer it, or stop the agent in its chat.");
   sql("DELETE FROM human_tasks WHERE id = ?", id);
   if (r.notification_id) markRead([r.notification_id]);
   audit("user", "human_task.delete", id, { title: r.title });

@@ -25,12 +25,12 @@ describe("a decision left open in an answer", () => {
 
   test("headings in other words, by name and in German", () => {
     for (const heading of [
-      "### Open questions",
+      "### Open decisions",
       "**What I need from you:**",
       "## Needs your decision",
       "Questions for Dana:",
       "## Entscheidung für dich",
-      "**Offene Fragen**",
+      "**Offene Entscheidungen**",
       "### Was ich von dir brauche",
     ]) {
       const found = detectOpenDecision(`All done.\n\n${heading}\n\n- Which logo goes on the box, A or B?\n- The budget for it`, "Dana Miller");
@@ -48,7 +48,7 @@ describe("a decision left open in an answer", () => {
 
   test("a section that says there is nothing to decide", () => {
     expect(detectOpenDecision("Done.\n\n## Decisions for you\n\nNone.\n\n## Next\n\nShould I deploy it?")).toBeNull();
-    expect(detectOpenDecision("Fertig.\n\n**Offene Fragen:** keine")).toBeNull();
+    expect(detectOpenDecision("Fertig.\n\n**Offene Entscheidungen:** keine")).toBeNull();
   });
 
   test("a closing question to the human", () => {
@@ -60,6 +60,10 @@ describe("a decision left open in an answer", () => {
     expect(detectOpenDecision("Both variants are built.\n\nPlease confirm which one goes live and I'll ship it.")?.title).toBe("Please confirm which one goes live and I'll ship it.");
     const found = detectOpenDecision("Two ways to do this:\n\nA keeps the data, B is faster. Which one do you want?");
     expect(found).toEqual({ title: "Which one do you want?", body: "A keeps the data, B is faster. Which one do you want?" });
+    // A date or an abbreviation doesn't end the sentence, and a choice is no offer.
+    expect(detectOpenDecision("Soll ich den Termin am 12. Oktober bestätigen?")?.title).toBe("Soll ich den Termin am 12. Oktober bestätigen?");
+    expect(detectOpenDecision("Soll ich ihn jetzt live schalten oder noch warten?")?.title).toBe("Soll ich ihn jetzt live schalten oder noch warten?");
+    expect(detectOpenDecision("It is built. Want me to deploy it now or wait for Monday?")?.title).toBe("Want me to deploy it now or wait for Monday?");
   });
 
   test("offers, pleasantries and finished work are not decisions", () => {
@@ -69,6 +73,17 @@ describe("a decision left open in an answer", () => {
       "Here is the summary.\n\nAnything else I can help with?",
       "Erledigt.\n\nSoll ich auch noch die Doku anpassen?",
       "Why did it fail? The token had expired.\n\nI renewed it and the job passes again.",
+      "What does this mean for you? Nothing changes, the old links keep working.",
+      "Was habe ich geändert? Nur die Überschrift.",
+      "The PR is ready.\n\nWant me to open it?",
+      "Would you like me to add tests for it?",
+      "Soll ich dir die PDF hier anhängen?",
+      "Here is the plan. What do you think?",
+      "Draft for the customer:\n\nHi Sam, thanks for your order. Could you send us your order number?",
+      "Post for tomorrow:\n\nWe shipped dark mode. Which feature should we build next?",
+      "## Open questions\n\n- Is the market still growing?",
+      "**Input required:** a JSON body with the order id.",
+      "## Questions from the customer\n\nThey asked when it ships.",
       "Done.\n\n```\necho 'Should I run this?'\n```",
       "",
     ]) {

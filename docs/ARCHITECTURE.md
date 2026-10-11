@@ -435,15 +435,18 @@ Whatever waits for the human's hand or word is one ticket on their own board (`s
   I need from you:" or a closing question to the human, without having asked with a tool, looks finished while it
   waits. `detectOpenDecision` (`runner/openDecision.ts`, a heuristic over English and German like the missing-login
   one) reads the final answer of every succeeded run except checks and dreams, before `run.finished` goes out, and
-  `noteOpenDecision` puts what it finds on the board: the question as the title, its section as the body. Offers of
-  extra work ("Want me to also …?") and pleasantries are not decisions, a section that says "none" settles it, and a run
-  that handed the human a task itself is left alone. One per chat: the same question keeps its ticket, another one
-  takes its place. The human is notified unless they wrote the message the run answered (they read the answer in the
-  chat). *Answer* continues the chat with the answer in a `<godmode-human-task>` note; writing into the chat
-  (app, task, the owner on a chat platform) answers it too (`settleByReply`), and *Dismiss* closes it without waking
-  the agent. On a board ticket the work is delivered all the same, and the answer continues it like feedback. For a
-  delegated run the agent that handed the task over is told the decision is on the human's list already
-  (`delegationReport`), so it doesn't ask twice.
+  `noteOpenDecision` puts what it finds on the board: the question as the title, what stands around it as the body. It
+  looks for a section whose heading says it is the human's to decide, else at the answer's last sentence, and errs on
+  the side of silence: offers of extra work ("Want me to also …?"), pleasantries, questions the agent answers itself and
+  questions to someone else (a draft that asks for "us") are not decisions, a section that says "none" settles it, and a
+  run that handed the human a task itself is left alone. One per chat: the same question keeps its ticket, another one
+  takes its place, and an answer to the human's own message that no longer asks takes it back. The human is notified
+  unless they wrote the message the run answered (they read the answer in the chat). *Answer* continues the chat with
+  the answer in a `<godmode-human-task>` note; writing into the chat (app, task, the owner on a chat platform) answers
+  it too once the message is on its way (`replySettles`), and *Dismiss* closes it without waking the agent. On a board
+  ticket the work is delivered all the same, and the answer continues it like feedback. For a delegated run the agent
+  that handed the task over is told the decision is on the human's list already (`delegationReport`), so it doesn't
+  ask twice. Not on a runner: its chats keep to the questions they ask with a tool.
 
 Deleting the chat withdraws its open tickets. Cloud and phone: listing, moving and closing (`outcome`, `note`,
 `optionId`; no files from the phone).
