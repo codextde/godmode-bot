@@ -1,7 +1,7 @@
 /**
  * Ready-made structures (GET /api/team-templates), built from the agent templates and installed in one go with their
- * reporting lines: a team (a lead and its reports) or a whole company (a CEO, its executives and their teams) — the
- * way a company starts a department instead of hiring one person at a time.
+ * reporting lines: a team (a lead and its reports) or a whole company (a CEO, its executives and their teams, or one
+ * all-in-one agent per department) — the way a company starts a department instead of hiring one person at a time.
  */
 import type { Agent, AgentTemplate, OrgTemplateNode, TeamInstallInput, TeamInstallResult, TeamTemplate, Workspace } from "@godmode/shared";
 import { audit } from "../services/audit";
@@ -17,7 +17,101 @@ const log = logger("teams");
 
 const seat = (template: string, ...reports: OrgTemplateNode[]): OrgTemplateNode => (reports.length ? { template, reports } : { template });
 
+const seats = (...templates: string[]): OrgTemplateNode[] => templates.map((t) => seat(t));
+
+/* Every department fully staffed: a full company is all of them under a CEO, a department team is one of them. */
+const FINANCE = seat(
+  "cfo",
+  ...seats("bookkeeping-helper", "accounts-payable", "accounts-receivable", "payroll-accountant", "controller", "fpa-analyst", "treasury-manager", "tax-specialist", "investor-relations"),
+);
+const LEGAL = seat("general-counsel", ...seats("contract-manager", "data-protection-officer", "compliance-officer", "ip-manager"));
+const PEOPLE = seat("head-of-people", ...seats("recruiter", "hr-business-partner", "hr-administrator", "learning-development", "employer-branding"));
+const GROWTH = seat(
+  "head-of-growth",
+  seat("performance-marketing-lead", ...seats("paid-social-manager", "google-ads-manager")),
+  ...seats("creative-strategist", "cro-specialist", "email-marketing-manager", "marketing-automation", "marketing-analyst"),
+);
+const MARKETING = seat(
+  "cmo",
+  GROWTH,
+  ...seats(
+    "content-marketing-manager",
+    "content-writer",
+    "copywriter",
+    "seo-specialist",
+    "social-media-manager",
+    "community-manager",
+    "influencer-affiliate-manager",
+    "pr-manager",
+    "brand-manager",
+    "graphic-designer",
+    "video-editor",
+  ),
+);
+const SALES = seat(
+  "head-of-sales",
+  ...seats("lead-researcher", "sales-development-rep", "email-sales-agent", "account-executive", "key-account-manager", "partnership-manager", "sales-engineer", "revops", "sales-support"),
+);
+const CUSTOMER = seat("head-of-customer", ...seats("customer-support", "customer-success-manager", "knowledge-base-manager", "returns-manager"));
+const ECOMMERCE = seat("head-of-ecommerce", ...seats("shop-manager", "marketplace-manager", "product-data-manager", "pricing-manager", "price-monitor", "sourcing-agent"));
+const PRODUCT = seat("head-of-product", ...seats("product-manager", "product-owner", "ux-ui-designer", "ux-researcher", "technical-writer"));
+const ENGINEERING = seat(
+  "cto",
+  ...seats(
+    "software-engineer",
+    "mobile-developer",
+    "embedded-engineer",
+    "devops-engineer",
+    "web-qa-tester",
+    "code-reviewer",
+    "security-engineer",
+    "ml-engineer",
+    "data-engineer",
+    "automation-engineer",
+    "it-administrator",
+    "it-helpdesk",
+    "erp-crm-admin",
+  ),
+);
+const DATA = seat("head-of-data", ...seats("data-analyst", "bi-developer", "data-scientist", "business-analyst"));
+const OPERATIONS = seat(
+  "coo",
+  ...seats("operations-manager", "procurement-manager", "supply-chain-planner", "logistics-coordinator", "quality-manager", "project-manager", "process-manager", "office-manager"),
+);
+const CEO_OFFICE = seat("chief-of-staff", ...seats("executive-assistant", "strategy-bizdev"));
+
 export const TEAM_TEMPLATES: TeamTemplate[] = [
+  {
+    id: "all-in-one-company",
+    kind: "company",
+    name: "All-in-one company",
+    icon: "layers",
+    description: "A whole company with one agent per department: each covers every job in it, so twelve agents run everything.",
+    root: seat(
+      "ceo",
+      ...seats(
+        "finance-department",
+        "legal-department",
+        "people-department",
+        "marketing-department",
+        "sales-department",
+        "customer-department",
+        "ecommerce-department",
+        "product-department",
+        "engineering-department",
+        "data-department",
+        "operations-department",
+      ),
+    ),
+  },
+  {
+    id: "full-company",
+    kind: "company",
+    name: "Full company",
+    icon: "landmark",
+    description: "Every department led by its executive with all its specialists. Leave out the seats you don't need.",
+    root: seat("ceo", CEO_OFFICE, FINANCE, LEGAL, PEOPLE, MARKETING, SALES, CUSTOMER, ECOMMERCE, PRODUCT, ENGINEERING, DATA, OPERATIONS),
+  },
   {
     id: "startup",
     kind: "company",
@@ -26,35 +120,10 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     description: "A CEO with a CTO, a CMO and a head of sales, each with a small team: build it, tell people about it, sell it.",
     root: seat(
       "ceo",
-      seat("cto", seat("software-engineer"), seat("code-reviewer"), seat("web-qa-tester")),
-      seat("cmo", seat("content-writer"), seat("social-media-manager")),
-      seat("head-of-sales", seat("lead-researcher"), seat("sales-development-rep")),
-    ),
-  },
-  {
-    id: "agency",
-    kind: "company",
-    name: "Agency",
-    icon: "briefcase",
-    description: "New business, delivery and the back office: prospects found and approached, client work built and reviewed, invoices in order.",
-    root: seat(
-      "ceo",
-      seat("head-of-sales", seat("lead-researcher"), seat("sales-development-rep")),
-      seat("cto", seat("software-engineer"), seat("code-reviewer"), seat("web-qa-tester")),
-      seat("office-manager", seat("inbox-triage"), seat("invoice-collector")),
-    ),
-  },
-  {
-    id: "online-shop",
-    kind: "company",
-    name: "Online shop",
-    icon: "shopping-bag",
-    description: "Marketing that brings buyers, operations that answer them and watch competitors, finance that keeps the books.",
-    root: seat(
-      "ceo",
-      seat("cmo", seat("social-media-manager"), seat("seo-specialist"), seat("content-writer")),
-      seat("coo", seat("customer-support"), seat("price-monitor")),
-      seat("cfo", seat("invoice-collector"), seat("bookkeeping-helper")),
+      seat("cto", ...seats("software-engineer", "code-reviewer", "web-qa-tester")),
+      seat("cmo", ...seats("content-writer", "social-media-manager", "seo-specialist")),
+      seat("head-of-sales", ...seats("lead-researcher", "sales-development-rep")),
+      seat("finance-department"),
     ),
   },
   {
@@ -62,15 +131,65 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     kind: "company",
     name: "SaaS company",
     icon: "building",
-    description: "The full C-suite with every department staffed: product, engineering, marketing, sales, operations and finance.",
+    description: "Product, engineering, growth, sales, customer success and finance, each with its own team.",
     root: seat(
       "ceo",
-      seat("head-of-product", seat("research-analyst")),
-      seat("cto", seat("software-engineer"), seat("code-reviewer"), seat("uptime-watcher"), seat("web-qa-tester")),
-      seat("cmo", seat("content-writer"), seat("seo-specialist"), seat("social-media-manager")),
-      seat("head-of-sales", seat("lead-researcher"), seat("sales-development-rep")),
-      seat("coo", seat("customer-support"), seat("recruiter")),
-      seat("cfo", seat("bookkeeping-helper"), seat("invoice-collector")),
+      seat("head-of-product", ...seats("product-manager", "ux-ui-designer", "technical-writer")),
+      seat("cto", ...seats("software-engineer", "code-reviewer", "web-qa-tester", "devops-engineer", "security-engineer")),
+      seat("cmo", seat("head-of-growth", ...seats("cro-specialist", "email-marketing-manager", "marketing-analyst")), ...seats("content-writer", "seo-specialist", "social-media-manager")),
+      seat("head-of-sales", ...seats("lead-researcher", "sales-development-rep", "account-executive")),
+      seat("head-of-customer", ...seats("customer-support", "customer-success-manager", "knowledge-base-manager")),
+      seat("cfo", ...seats("bookkeeping-helper", "accounts-receivable", "fpa-analyst")),
+    ),
+  },
+  {
+    id: "online-shop",
+    kind: "company",
+    name: "Online shop",
+    icon: "shopping-bag",
+    description: "A D2C brand or dropshipping store: products sourced and listed, ads and creatives that sell, customers looked after.",
+    root: seat(
+      "ceo",
+      seat("head-of-ecommerce", ...seats("shop-manager", "sourcing-agent", "product-data-manager", "pricing-manager", "marketplace-manager")),
+      seat(
+        "cmo",
+        seat("performance-marketing-lead", ...seats("paid-social-manager", "google-ads-manager")),
+        ...seats("creative-strategist", "video-editor", "email-marketing-manager", "social-media-manager", "influencer-affiliate-manager"),
+      ),
+      seat("head-of-customer", ...seats("customer-support", "returns-manager")),
+      seat("coo", ...seats("supply-chain-planner", "logistics-coordinator")),
+      seat("cfo", ...seats("bookkeeping-helper", "invoice-collector")),
+    ),
+  },
+  {
+    id: "agency",
+    kind: "company",
+    name: "Agency",
+    icon: "briefcase",
+    description: "New business, client delivery and the back office: prospects won, projects built and shipped on time, invoices paid.",
+    root: seat(
+      "ceo",
+      seat("head-of-sales", ...seats("lead-researcher", "sales-development-rep", "email-sales-agent", "sales-engineer")),
+      seat("coo", ...seats("project-manager", "key-account-manager")),
+      seat("cto", ...seats("software-engineer", "code-reviewer", "web-qa-tester", "ux-ui-designer")),
+      seat("cmo", ...seats("content-writer", "social-media-manager", "seo-specialist")),
+      seat("office-manager", ...seats("inbox-triage", "invoice-collector", "accounts-receivable")),
+    ),
+  },
+  {
+    id: "hardware-company",
+    kind: "company",
+    name: "Hardware company",
+    icon: "cpu",
+    description: "Devices with firmware and an app: engineering, product, purchasing and supply chain, quality, support and finance.",
+    root: seat(
+      "ceo",
+      seat("cto", ...seats("embedded-engineer", "mobile-developer", "software-engineer", "web-qa-tester", "devops-engineer")),
+      seat("head-of-product", ...seats("product-manager", "ux-ui-designer", "technical-writer")),
+      seat("coo", ...seats("procurement-manager", "supply-chain-planner", "logistics-coordinator", "quality-manager")),
+      seat("head-of-customer", ...seats("customer-support", "returns-manager", "knowledge-base-manager")),
+      seat("cmo", ...seats("content-writer", "social-media-manager")),
+      seat("cfo", ...seats("bookkeeping-helper", "controller")),
     ),
   },
   {
@@ -79,7 +198,24 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     name: "Founder's office",
     icon: "user-round",
     description: "For one person running a business: an assistant who keeps your day, inbox, invoices and posts handled.",
-    root: seat("executive-assistant", seat("inbox-triage"), seat("daily-briefing"), seat("invoice-collector"), seat("social-media-manager"), seat("research-analyst")),
+    root: seat("executive-assistant", ...seats("inbox-triage", "daily-briefing", "invoice-collector", "social-media-manager", "research-analyst")),
+  },
+
+  {
+    id: "executive-office",
+    kind: "team",
+    name: "CEO office",
+    icon: "compass",
+    description: "A chief of staff who keeps goals and promises on track, with an assistant, strategy and research.",
+    root: seat("chief-of-staff", ...seats("executive-assistant", "strategy-bizdev", "daily-briefing", "research-analyst")),
+  },
+  {
+    id: "finance",
+    kind: "team",
+    name: "Finance & accounting",
+    icon: "landmark",
+    description: "Books, invoices in and out, payroll, controlling, cash and taxes, led by a CFO.",
+    root: FINANCE,
   },
   {
     id: "back-office",
@@ -87,39 +223,114 @@ export const TEAM_TEMPLATES: TeamTemplate[] = [
     name: "Back office",
     icon: "archive",
     description: "Inbox, invoices and bookkeeping handled every week, with an office manager who keeps it together.",
-    root: seat("office-manager", seat("inbox-triage"), seat("invoice-collector"), seat("bookkeeping-helper")),
+    root: seat("office-manager", ...seats("inbox-triage", "invoice-collector", "bookkeeping-helper")),
+  },
+  {
+    id: "legal",
+    kind: "team",
+    name: "Legal & compliance",
+    icon: "scale",
+    description: "Contracts, data protection, compliance and trademarks covered, led by a general counsel.",
+    root: LEGAL,
+  },
+  {
+    id: "people",
+    kind: "team",
+    name: "People & HR",
+    icon: "heart-handshake",
+    description: "Hiring, HR paperwork, reviews, training and employer brand, led by a head of people.",
+    root: PEOPLE,
   },
   {
     id: "marketing",
     kind: "team",
     name: "Marketing",
     icon: "megaphone",
-    description: "Content written, posts planned, search and the market watched — led by a CMO.",
-    root: seat("cmo", seat("content-writer"), seat("social-media-manager"), seat("seo-specialist"), seat("price-monitor")),
+    description: "Content, social, SEO, email, PR and brand, led by a CMO.",
+    root: seat(
+      "cmo",
+      ...seats("content-marketing-manager", "content-writer", "copywriter", "seo-specialist", "social-media-manager", "community-manager", "email-marketing-manager", "pr-manager", "brand-manager", "graphic-designer"),
+    ),
+  },
+  {
+    id: "growth",
+    kind: "team",
+    name: "Growth & performance",
+    icon: "trending-up",
+    description: "Paid ads on Meta, Google and TikTok, creatives, conversion and email, judged by what they earn.",
+    root: GROWTH,
+  },
+  {
+    id: "creative",
+    kind: "team",
+    name: "Creative studio",
+    icon: "palette",
+    description: "Angles and briefs, copy, graphics and videos for ads and social, kept on brand.",
+    root: seat("creative-strategist", ...seats("copywriter", "graphic-designer", "video-editor")),
   },
   {
     id: "sales",
     kind: "team",
     name: "Sales",
     icon: "handshake",
-    description: "Prospects found, qualified and approached, so the human only talks to the right people.",
-    root: seat("head-of-sales", seat("lead-researcher"), seat("sales-development-rep"), seat("research-analyst")),
+    description: "Prospects found and approached, inquiries answered, deals run to close and the CRM kept clean.",
+    root: seat("head-of-sales", ...seats("lead-researcher", "sales-development-rep", "email-sales-agent", "account-executive", "research-analyst")),
+  },
+  {
+    id: "customer",
+    kind: "team",
+    name: "Customer service",
+    icon: "life-buoy",
+    description: "Support answered fast, customers onboarded and kept, help articles and returns handled.",
+    root: CUSTOMER,
+  },
+  {
+    id: "ecommerce",
+    kind: "team",
+    name: "E-commerce",
+    icon: "shopping-cart",
+    description: "Shop, marketplaces, product data, prices and sourcing, led by an e-commerce manager.",
+    root: ECOMMERCE,
+  },
+  {
+    id: "product",
+    kind: "team",
+    name: "Product & design",
+    icon: "flask",
+    description: "What to build and why, designs, research, the backlog, docs and QA, led by a head of product.",
+    root: seat("head-of-product", ...seats("product-manager", "product-owner", "ux-ui-designer", "ux-researcher", "technical-writer", "web-qa-tester")),
   },
   {
     id: "engineering",
     kind: "team",
     name: "Engineering",
     icon: "code",
-    description: "Tickets implemented, every pull request reviewed and the sites watched — led by a CTO.",
-    root: seat("cto", seat("software-engineer"), seat("code-reviewer"), seat("uptime-watcher")),
+    description: "Tickets implemented, every pull request reviewed and tested, deployments and the sites watched, led by a CTO.",
+    root: seat("cto", ...seats("software-engineer", "mobile-developer", "code-reviewer", "web-qa-tester", "devops-engineer", "uptime-watcher")),
   },
   {
-    id: "product-qa",
+    id: "it-security",
     kind: "team",
-    name: "Product & QA",
-    icon: "flask",
-    description: "The website and app tested regularly, bugs written up clearly, questions about the product researched.",
-    root: seat("head-of-product", seat("web-qa-tester"), seat("research-analyst")),
+    name: "IT & security",
+    icon: "shield",
+    description: "Accounts, devices and tools run, the team helped, systems secured and repetitive work automated.",
+    root: seat("cto", ...seats("it-administrator", "it-helpdesk", "security-engineer", "erp-crm-admin", "automation-engineer")),
+  },
+  {
+    id: "data",
+    kind: "team",
+    name: "Data & analytics",
+    icon: "bar-chart",
+    description: "Pipelines, dashboards, analyses and forecasts the business can trust, led by a head of data.",
+    root: seat("head-of-data", ...seats("data-engineer", "data-analyst", "bi-developer", "data-scientist", "business-analyst")),
+  },
+  {
+    id: "operations",
+    kind: "team",
+    name: "Operations & procurement",
+    icon: "factory",
+    description: "Purchasing, stock, logistics, quality, projects and processes, led by a COO.",
+    root: OPERATIONS,
   },
 ];
 

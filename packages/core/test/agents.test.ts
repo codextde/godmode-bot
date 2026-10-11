@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
-import { MASCOT_CHARACTER, PERSONALITY_PRESETS, defaultCharacter, normalizeCharacter, personalityPreset } from "@godmode/shared";
+import { AGENT_TEMPLATE_CATEGORIES, MASCOT_CHARACTER, PERSONALITY_PRESETS, defaultCharacter, normalizeCharacter, personalityPreset } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, deleteMeta, get, getMeta, insert, openDb, run } from "../src/db";
 import { MIGRATIONS } from "../src/db/migrations";
@@ -544,6 +544,17 @@ describe("templates", () => {
       if (t.routine) expect(t.routine.cron.split(" ")).toHaveLength(5);
     }
     expect(AGENT_TEMPLATES.find((t) => t.id === "daily-briefing")!.routine!.cron).toBe("0 8 * * 1-5");
+  });
+
+  test("every department has an all-in-one agent that names the jobs it covers", () => {
+    for (const c of AGENT_TEMPLATE_CATEGORIES.filter((c) => c !== "leadership")) {
+      const allInOne = AGENT_TEMPLATES.filter((t) => t.category === c && (t.covers?.length ?? 0) >= 4);
+      expect(allInOne).toHaveLength(1);
+      for (const job of allInOne[0]!.covers!) expect(allInOne[0]!.instructions).toContain(job);
+    }
+    // Shown grouped by department, in the departments' order.
+    const order = AGENT_TEMPLATES.map((t) => AGENT_TEMPLATE_CATEGORIES.indexOf(t.category));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 });
 

@@ -103,17 +103,35 @@ export interface AgentInput {
   heartbeat?: AgentHeartbeatInput;
 }
 
-export const AGENT_TEMPLATE_CATEGORIES = ["leadership", "engineering", "product", "marketing", "sales", "operations", "finance"] as const;
+export const AGENT_TEMPLATE_CATEGORIES = [
+  "leadership",
+  "finance",
+  "legal",
+  "people",
+  "marketing",
+  "sales",
+  "customer",
+  "ecommerce",
+  "product",
+  "engineering",
+  "data",
+  "operations",
+] as const;
 export type AgentTemplateCategory = (typeof AGENT_TEMPLATE_CATEGORIES)[number];
 
 export const AGENT_TEMPLATE_CATEGORY_LABELS: Record<AgentTemplateCategory, string> = {
-  leadership: "Leadership",
-  engineering: "Engineering",
-  product: "Product & research",
+  leadership: "Leadership & strategy",
+  finance: "Finance & accounting",
+  legal: "Legal & compliance",
+  people: "People & HR",
   marketing: "Marketing",
   sales: "Sales",
-  operations: "Operations",
-  finance: "Finance",
+  customer: "Customer service",
+  ecommerce: "E-commerce",
+  product: "Product & design",
+  engineering: "Engineering & IT",
+  data: "Data & analytics",
+  operations: "Operations & procurement",
 };
 
 export interface AgentTemplate {
@@ -130,6 +148,8 @@ export interface AgentTemplate {
   category: AgentTemplateCategory;
   /** Made to lead others: hands out work and reviews it. */
   leads?: boolean;
+  /** One agent doing several jobs (a whole department): the jobs it covers. */
+  covers?: string[];
   routine?: { name: string; cron: string; prompt: string };
 }
 
