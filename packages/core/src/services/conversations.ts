@@ -21,8 +21,9 @@ import type {
   RunPause,
   RunTrigger,
 } from "@godmode/shared";
-import type { ComputerTarget, ConversationPatch, ConversationWithMessages, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
+import type { ComputerTarget, ConversationPatch, ConversationWithMessages, MessagePage, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
 import { computerTargetLabel, MAX_MESSAGE_ATTACHMENT_BYTES } from "@godmode/shared";
+import { liteMessage } from "./liteMessage";
 import { all, bool, get, insert, int, run as sql, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -375,10 +376,91 @@ export function chatFillOnly(conversationId: string): boolean {
   return !row || row.secret_access === "fill";
 }
 
-export function getConversation(id: string): ConversationWithMessages {
+/**
+ * Which messages a client wants: all of them (default), or the latest `limit`. `lite`: screenshots as their own requests
+ * and long tool output cut, for phones and other slow links (a long chat is megabytes of base64 pictures).
+ */
+export interface MessageWindow {
+  limit?: number;
+  lite?: boolean;
+}
+
+/** From a request's `?limit=` and `?lite=1`. */
+export function messageWindow(query: (name: string) => string | undefined): MessageWindow {
+  const limit = Number(query("limit"));
+  const lite = query("lite");
+  return { limit: Number.isFinite(limit) && limit > 0 ? limit : undefined, lite: lite === "1" || lite === "true" };
+}
+
+export function getConversation(id: string, window: MessageWindow = {}): ConversationWithMessages {
   const conversation = getConversationSummary(id);
   const activeRunId = conversation.runnerId ? remoteRunForConversation(id) : activeRunForConversation(id);
-  return { ...conversation, messages: listMessages(id), activeRunId, queue: listQueue(id) };
+  const page = window.limit ? listMessagePage(id, { limit: window.limit }) : null;
+  const messages = page?.messages ?? listMessages(id);
+  return {
+    ...conversation,
+    messages: window.lite ? messages.map(liteMessage) : messages,
+    activeRunId,
+    queue: listQueue(id),
+    ...(page ? { hasMore: page.hasMore } : {}),
+  };
+}
+
+/** A whole chat (a runner's, fetched over the link) cut to what the client asked for. */
+export function windowConversation(conversation: ConversationWithMessages, window: MessageWindow): ConversationWithMessages {
+  if (!window.limit && !window.lite) return conversation;
+  const limit = window.limit ? clampWindow(window.limit) : conversation.messages.length;
+  const messages = conversation.messages.slice(-limit);
+  return {
+    ...conversation,
+    messages: window.lite ? messages.map(liteMessage) : messages,
+    ...(window.limit ? { hasMore: conversation.messages.length > messages.length } : {}),
+  };
+}
+
+export const MAX_MESSAGE_PAGE = 500;
+
+const clampWindow = (limit: number) => Math.max(1, Math.min(MAX_MESSAGE_PAGE, Math.floor(limit)));
+
+/** The latest `limit` messages before `before` (or the newest), oldest first. */
+export function listMessagePage(conversationId: string, opts: { limit: number; before?: string }): MessagePage {
+  const limit = clampWindow(opts.limit);
+  let rows: MessageRow[];
+  if (opts.before) {
+    const anchor = get<{ created_at: string; rid: number }>(
+      "SELECT created_at, rowid AS rid FROM messages WHERE id = ? AND conversation_id = ?",
+      opts.before,
+      conversationId,
+    );
+    if (!anchor) throw notFound("Message");
+    rows = all<MessageRow>(
+      "SELECT * FROM messages WHERE conversation_id = ? AND (created_at < ? OR (created_at = ? AND rowid < ?)) ORDER BY created_at DESC, rowid DESC LIMIT ?",
+      conversationId,
+      anchor.created_at,
+      anchor.created_at,
+      anchor.rid,
+      limit + 1,
+    );
+  } else {
+    rows = all<MessageRow>("SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?", conversationId, limit + 1);
+  }
+  return { messages: rows.slice(0, limit).reverse().map(toMessage), hasMore: rows.length > limit };
+}
+
+/** The picture a tool returned in a message, decoded, with its type. */
+export function messageImage(conversationId: string, messageId: string, toolUseId: string): { data: Uint8Array; mime: string } {
+  const row = get<{ blocks: string }>("SELECT blocks FROM messages WHERE id = ? AND conversation_id = ?", messageId, conversationId);
+  const block = parseJson<MessageBlock[]>(row?.blocks ?? "[]", []).find((b) => b.type === "tool_use" && b.id === toolUseId);
+  if (!block || block.type !== "tool_use" || !block.image) throw notFound("Picture");
+  const data = Buffer.from(block.image, "base64");
+  return { data: new Uint8Array(data), mime: imageMime(data) };
+}
+
+function imageMime(data: Uint8Array): string {
+  if (data[0] === 0xff && data[1] === 0xd8) return "image/jpeg";
+  if (data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46) return "image/gif";
+  if (data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) return "image/webp";
+  return "image/png";
 }
 
 /**

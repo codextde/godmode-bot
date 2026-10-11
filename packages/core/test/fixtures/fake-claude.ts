@@ -52,7 +52,8 @@
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
  *               and answers "DREAM {json}". Digest keywords: DREAM_SLEEP hangs and DREAM_CRASH exits 3 (both after
- *               writing the memory), DREAM_NO_REPORT skips the report. With a workspace inventory in the prompt and a
+ *               writing the memory), DREAM_NO_REPORT skips the report, DREAM_BLOAT writes a MEMORY.md that is too long and
+ *               shortens it when the report is sent back (DREAM_BLOAT_STAYS: never). With a workspace inventory in the prompt and a
  *               `tidy-ops.json` in the state dir, it first calls workspace_tidy with those operations.
  *   ASK_HUMAN   call the gateway's ask_human (arguments from the state dir's `ask-args.json` when it exists) as a step,
  *              then call the PostToolBatch hook like Claude Code does: told to stop, write `stopped-by-hook` and end the
@@ -463,7 +464,9 @@ if (slash?.[1] === "clear") {
   const memoryPath = join(cwd, "MEMORY.md");
   const hadMemory = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8").length : 0;
   const facts = [...new Set([...digest.matchAll(/REMEMBER: ([^\n]+)/g)].map((m) => m[1]!.trim()))];
-  writeFileSync(memoryPath, `# Memory\n\n## Consolidated\n${facts.map((f) => `- ${f}`).join("\n")}\n`);
+  const compact = `# Memory\n\n## Consolidated\n${facts.map((f) => `- ${f}`).join("\n")}\n`;
+  const bloated = /DREAM_BLOAT/.test(digest);
+  writeFileSync(memoryPath, bloated ? `${compact}${"- a detail that belongs in a note of its own\n".repeat(300)}` : compact);
   if (facts.length) {
     mkdirSync(join(cwd, "memory"), { recursive: true });
     writeFileSync(join(cwd, "memory", "dream-notes.md"), `# Notes\n\n${facts.length} fact(s)\n`);
@@ -496,19 +499,27 @@ if (slash?.[1] === "clear") {
     textTurn("Dreaming");
     await pause(60_000);
   }
-  const report = digest.includes("DREAM_NO_REPORT")
-    ? null
-    : await rpc({
-        jsonrpc: "2.0",
-        id: 4,
-        method: "tools/call",
-        params: { name: "memory_dream_report", arguments: { summary: `Consolidated ${facts.length} fact(s).`, changes: facts.map((f) => ({ kind: "added", text: f })) } },
-      });
+  const sendReport = (id: number) =>
+    rpc({
+      jsonrpc: "2.0",
+      id,
+      method: "tools/call",
+      params: { name: "memory_dream_report", arguments: { summary: `Consolidated ${facts.length} fact(s).`, changes: facts.map((f) => ({ kind: "added", text: f })) } },
+    });
+  let report = digest.includes("DREAM_NO_REPORT") ? null : await sendReport(4);
+  const reports: string[] = report ? [report.result.content[0].text as string] : [];
+  // Sent back because MEMORY.md is too long: shorten it (unless told to stay bloated) and report again.
+  while (report && reports.at(-1)!.includes("isn't done") && reports.length < 6) {
+    if (!digest.includes("DREAM_BLOAT_STAYS")) writeFileSync(memoryPath, compact);
+    report = await sendReport(10 + reports.length);
+    reports.push(report.result.content[0].text as string);
+  }
   const summary = {
     servers: Object.keys(cfg.mcpServers),
     tools: (list.result.tools as { name: string }[]).map((t) => t.name),
     forbidden: { text: forbidden.result.content[0].text as string, isError: forbidden.result.isError === true },
     report: report ? (report.result.content[0].text as string) : null,
+    reports,
     digest: digest.length > 0,
     hadMemory,
     inventory,

@@ -1347,9 +1347,11 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   Pairing is audited (`mobile.pair`), notifies the human and emits `mobile.paired`.
 * **Scope.** Device tokens only authenticate on the phones' listener while phone access is on, and open a fixed
   allowlist of routes (`mobile/scope.ts`): bootstrap, workspaces, agents and their slash commands, the model catalog,
-  conversations, messages (with files) and the message queue (edit, remove, send now), questions (list, answer without
-  files), tasks and their attachments (upload and read), runs (cancel), routines (run, enable), browser profiles (launch,
-  input), computer input, VMs (list, screenshot, start/stop, input), notifications, missing logins and
+  conversations (pause, continue, their follow-up), messages (with files) and the message queue (edit, remove, send
+  now), questions (list, answer without files), tasks (approve, their timeline) and their attachments (upload and read),
+  runs (list, cancel), routines (run, enable), browser profiles (launch,
+  input), computer input, VMs (list, screenshot, start/stop, input), Android phones (the list, and a screenshot of the ones an agent or a chat uses),
+  notifications, missing logins and
   `GET/DELETE /api/mobile/me`; everything else answers 403 `device_forbidden`. Bodies are restricted too: a phone may
   pick a chat's model, effort and Ultracode but can't set its folder, VM, browser, shared screen or instructions, or
   change an automation beyond switching it on or off, and it only watches and controls screens that are shared in a chat
@@ -1361,9 +1363,23 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
   https anywhere, which is how the Godmode Cloud gateway is reached — `isPhoneUrlAllowed`), and first asks the address's `/api/health`, which on
   the phones' listener returns the instance id; an address that answers as another instance never gets the key.
   Writes are sent once (no retry on another address), so a slow network never duplicates a message or a run.
-* **Realtime.** Phone sockets get every event except `run.delta`, which only goes to conversations they subscribed to
-  (`conversation.subscribe`) — streaming replies are large. New sockets are sent the current `run.activity` of every
-  run. Browser and computer frames are opt-in as for the desktop; VM screens are polled (`/api/vms/:id/screenshot`).
+* **Realtime.** Phone sockets get every event except `run.delta` and `message.created` / `message.updated`, which
+  only go to conversations they subscribed to (`conversation.subscribe`) — streaming replies and stored turns are
+  large. The app asks for deltas as patches (`deltas.patch`) like the desktop. New sockets are sent the current
+  `run.activity` of every run. Browser and computer frames are opt-in as for the desktop; VM screens are polled
+  (`/api/vms/:id/screenshot`).
+* **Light answers.** Most of a long chat's bytes are screenshots tools returned, inline as base64. A client on a slow
+  link asks for less: `GET /api/conversations/:id?limit=40&lite=1` answers with the latest messages only (`hasMore`;
+  older pages from `GET /api/conversations/:id/messages?before=<message id>&limit=`), and `lite` replaces every
+  `tool_use.image` with an `imageUrl` (`GET /api/conversations/:id/messages/:messageId/images/:toolUseId`, cached
+  for good) and cuts tool output to its first 6,000 characters (`resultTruncated`). Message events to phones are light
+  too. `GET /api/tasks?fields=summary` leaves the descriptions out of a board. Without these parameters every route
+  answers as before. Answers on the phones' listener and through the cloud relay are gzipped (`hono/compress`); the
+  desktop on this computer gets them as they are.
+* **What the app keeps.** The lists it opens with (chats, tasks, agents, what needs you) are saved in the app's cache
+  folder between launches (`lib/persist.ts`) and shown at once on the next start; chats themselves and settings are
+  not. Events patch the cached lists instead of fetching them again, and coming back to the app only refetches what
+  predates the dropped socket.
 * **Removing a phone** (`DELETE /api/mobile/devices/:id`, or the phone itself via `DELETE /api/mobile/me`) deletes the
   row and closes its sockets with code 4003; the app then forgets its token. Backups carry neither the devices nor the
   `mobile` settings.
@@ -1607,7 +1623,10 @@ Default: file-based (`MEMORY.md` + `memory/` in the agent repo, committed to git
 [claude-mem](https://github.com/thedotmack/claude-mem) with `CLAUDE_MEM_DATA_DIR` pointing into the agent repo.
 
 * **Loaded into every chat** (`settings.memory.injectMemory`, default on): a new Claude session gets `MEMORY.md`
-  (up to 12,000 characters) in its system prompt, so the agent starts every task already knowing it. Each
+  in its system prompt, so the agent starts every task already knowing it. It loads up to one and a half times
+  `settings.memory.dreaming.maxMemoryChars` (default 8,000, so 12,000 characters; `memoryBudget` in
+  `shared/constants.ts`) and is cut at a line break beyond that. The prompt names the size to stay under, and says so
+  when the file has outgrown it, so the notes an agent adds after a task replace instead of pile up. Each
   conversation stores a digest of the `MEMORY.md` its session saw (`conversations.memory_digest`, refreshed after each
   of its runs); when another chat, a dream or the human changed it since, the next resumed turn says so.
 * **Reflection**: the runtime prompt asks the agent to update `MEMORY.md` at the end of every task
@@ -1620,6 +1639,14 @@ agent reviews what happened since its last dream and rewrites its memory — cap
 remember, merging duplicates, resolving contradictions (newer wins), making dates absolute and rewriting plans that
 have passed ("is going to Singapore in July" → "went to Singapore in July 2026"), and pruning what is stale, keeping
 `MEMORY.md` compact enough to load into every run. `memory/dreaming.ts` owns it:
+
+* **Keeping `MEMORY.md` small** (`dreaming.maxMemoryChars`, default 8,000 characters, 2,000 to 40,000): the dream's
+  prompt carries the measured size of the file and the size it has to end under, and when it is over, how to shorten
+  it: by moving the detail into `memory/<topic>.md` and keeping a line with the link, not by forgetting.
+  `memory_dream_report` measures the file: while it is over the limit the report is kept but answered with how much is
+  too many, and the dream shortens it and reports again (twice at most, then the next dream goes on). A dream stores
+  the characters before and after (`Dream.memoryChars`, from `dreams.files`); the agent's Memory tab shows a meter with
+  the current size (`DreamOverview.memory`).
 
 * **Tidying the workspace** (`dreaming.tidyWorkspace`, default on, `memory/workspace.ts`): the dream also gets an
   inventory of `workspace/` in `workspace/tmp/dreams/<id>-workspace.md` (top-level entries with size, files, last
@@ -1637,18 +1664,27 @@ have passed ("is going to Singapore in July" → "went to Singapore in July 2026
 * **When**: a 5-minute tick sweeps once per scheduled time; a schedule missed while the computer was off or asleep is
   caught up on the next tick. An agent is due with at least `minNewExchanges` (default 3) new exchanges — finished
   chat, automation, delegated and API runs; checks and dreams don't count — or, without them, when its last dream is
-  `refreshDays` (default 7) old and `MEMORY.md` mentions dates. Scheduled dreams only start on idle agents (no run in
-  the last 10 minutes; retried on later ticks). "Dream now" (`POST /api/agents/:id/dreams`) starts one right away.
+  `refreshDays` (default 7) old and `MEMORY.md` mentions dates. An agent is also due when `MEMORY.md` is over
+  `maxMemoryChars` and isn't what its last dream left under that limit (`dreams.memory_digest`, `memory_target`: a
+  dream that couldn't shorten it isn't repeated over the same text, an undo isn't redone, and a lowered limit counts as
+  news). Scheduled dreams only start on idle agents (no run in the last 10 minutes; retried on later ticks). "Dream
+  now" (`POST /api/agents/:id/dreams`) starts one right away.
+* **Early** (reason `size`): on the ticks between two scheduled times, an idle agent whose `MEMORY.md` outgrew what a
+  chat loads (its tasks start with the end of it missing) dreams at once. Only when its latest dream succeeded, is at
+  least 6 hours old and got the memory under what a chat loads: after a dream that failed, was paused, cancelled or
+  undone, or couldn't shorten it, the scheduled dream takes over. A run someone waits for pauses an early dream like a
+  scheduled one, but it isn't retried when the agent is idle. Not when chats don't load the memory (`injectMemory`).
 * **How**: a dream is a run with trigger `dream` in the agent's archived `origin = 'dream'` conversation (nobody else
   can post there), with a fresh session, cwd = the agent repo, the dreaming model (`dreaming.model`, default
-  `sonnet`), `--tools Read,Write,Edit,Glob,Grep`, and an MCP config with only the Godmode gateway, which lists just
+  Opus 5.5; empty = the agent's own), `--tools Read,Write,Edit,Glob,Grep`, and an MCP config with only the Godmode gateway, which lists just
   `memory_dream_report` and, when it tidies, `workspace_tidy` (other tools are refused). The exchanges since the cursor (`MAX(dreams.source_to)` of
   successful or undone dreams) are handed over as a digest of the already redacted run prompts and answers, grouped by
-  conversation, in `workspace/tmp/dreams/<id>.md` (git-ignored, removed afterwards; 120k characters per dream — older
-  activity first, the rest waits for the next dream). No transcript, no missing-login detection, no "last active".
+  conversation, in `workspace/tmp/dreams/<id>.md` (git-ignored, removed afterwards; 60k characters per dream — messages
+  are shortened first, then the newest exchanges win). No transcript, no missing-login detection, no "last active".
 * **Exclusive**: a dream owns the agent's memory — the runner starts no other run of the agent while it runs, and it
   waits for the agent's running runs (capped at 30 minutes). A run someone waits for (chat, delegation, API) pauses a
-  *scheduled* dream: it is cancelled, rolled back and retried once the agent is idle again.
+  dream the agent started by itself (scheduled or early): it is cancelled and rolled back, and a scheduled one is
+  retried once the agent is idle again.
 * **All or nothing, reviewable**: `MEMORY.md` and `memory/**` are snapshotted when the dream starts (`dreams.snapshot`).
   A successful dream stores the changed files before/after (`dreams.files`) with the agent's report (summary and one
   line per change: added, updated, merged, removed, corrected, dated) and commits `Dream: <summary>`; a failed or

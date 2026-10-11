@@ -3,6 +3,7 @@ import { BrainCircuit, CheckCircle2, Download, ExternalLink, FileText, GitCommit
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { DreamingSettings, Settings } from "@godmode/shared";
+import { MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, memoryBudget } from "@godmode/shared";
 import { cronToHuman, validateCron } from "@/components/agents/cron";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -125,7 +126,7 @@ function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; 
     <SettingsGroup
       title="Dreaming"
       icon={<MoonStar />}
-      description="While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned, merge duplicates, fix contradictions and update dates — like sleeping on it — and sort their workspace. Every dream can be reviewed and undone in the agent's Memory tab."
+      description="While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned, merge duplicates, fix contradictions and update dates — like sleeping on it — keep it short enough to load into every chat, and sort their workspace. Every dream can be reviewed and undone in the agent's Memory tab."
     >
       <SettingRow
         label="Dream while idle"
@@ -146,9 +147,33 @@ function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; 
         label="Model"
         htmlFor="dream-model"
         disabled={off}
-        description="Consolidating memory is careful reading, not heavy lifting — Sonnet does it well for a fraction of the cost."
+        description="What stays in memory, what moves into a note and what goes is a judgment every later chat lives with — Opus is the default. A smaller model dreams for less."
       >
         <ModelSelect id="dream-model" allowNone noneLabel="Same as the agent" disabled={off} value={d.model} onChange={(model) => onChange({ model })} />
+      </SettingRow>
+      <SettingRow
+        label="Memory size"
+        htmlFor="dream-memory-size"
+        disabled={off}
+        description={
+          <>
+            Dreams keep <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">MEMORY.md</code> under this and move the details into notes
+            in <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">memory/</code>. Every chat starts with it, so shorter means cheaper,
+            quicker chats. A chat loads up to {memoryBudget(d.maxMemoryChars).limit.toLocaleString()} characters — an agent whose memory outgrows that dreams as
+            soon as it is idle, without waiting for the schedule.
+          </>
+        }
+      >
+        <NumberField
+          id="dream-memory-size"
+          min={MIN_MEMORY_CHARS}
+          max={MAX_MEMORY_CHARS}
+          suffix="characters"
+          disabled={off}
+          value={d.maxMemoryChars}
+          onCommit={(v) => v !== null && onChange({ maxMemoryChars: v })}
+          className="w-40"
+        />
       </SettingRow>
       <SettingRow
         label="Tidy the workspace"

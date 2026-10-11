@@ -1,5 +1,5 @@
 import type { Effort } from "@godmode/shared";
-import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, isModelId, isValidBranch, parseGitUrl } from "@godmode/shared";
+import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isModelId, isValidBranch, parseGitUrl } from "@godmode/shared";
 import { isAbsolute } from "node:path";
 import { get } from "../db";
 import { badRequest } from "../util";
@@ -39,7 +39,7 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
     throw badRequest("Invalid dreaming settings");
   }
   const dreaming = memory?.dreaming as
-    | { cron?: unknown; minNewExchanges?: unknown; refreshDays?: unknown; model?: unknown; enabled?: unknown; tidyWorkspace?: unknown }
+    | { cron?: unknown; minNewExchanges?: unknown; refreshDays?: unknown; model?: unknown; enabled?: unknown; tidyWorkspace?: unknown; maxMemoryChars?: unknown }
     | undefined;
   if (dreaming) {
     if (dreaming.enabled !== undefined && typeof dreaming.enabled !== "boolean") throw badRequest("dreaming.enabled must be true or false");
@@ -50,6 +50,10 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
     const count = (v: unknown, max: number) => v === undefined || (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= max);
     if (!count(dreaming.minNewExchanges, 1000)) throw badRequest("Minimum new exchanges must be a whole number between 0 and 1000");
     if (!count(dreaming.refreshDays, 365)) throw badRequest("Refresh days must be a whole number between 0 and 365");
+    const size = dreaming.maxMemoryChars;
+    if (size !== undefined && !(typeof size === "number" && Number.isInteger(size) && size >= MIN_MEMORY_CHARS && size <= MAX_MEMORY_CHARS)) {
+      throw badRequest(`The memory size must be a whole number of characters between ${MIN_MEMORY_CHARS.toLocaleString("en-US")} and ${MAX_MEMORY_CHARS.toLocaleString("en-US")}`);
+    }
     if (dreaming.model !== undefined && (typeof dreaming.model !== "string" || (dreaming.model.trim() !== "" && !isModelId(dreaming.model.trim())))) {
       throw badRequest("Invalid model id for dreaming");
     }

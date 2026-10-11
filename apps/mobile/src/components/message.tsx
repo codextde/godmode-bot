@@ -1,6 +1,8 @@
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
-import { memo, useEffect, useState } from "react";
+import { useRecyclingState } from "@shopify/flash-list";
+import { format } from "date-fns";
+import { memo, useEffect, useMemo } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import type { Attachment, Message, MessageBlock } from "@godmode/shared";
@@ -8,8 +10,10 @@ import { toolActivity } from "@godmode/shared";
 import { FileChip } from "./attachments";
 import { Icon } from "./icon";
 import { Markdown } from "./markdown";
+import { QuestionCard } from "./question-card";
+import { RemoteImage } from "./remote-image";
 import { Row, T, tap } from "./ui";
-import { toolLabel } from "@/lib/format";
+import { shortTime, toolLabel } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { radius, space, useColors } from "@/lib/theme";
 
@@ -80,7 +84,7 @@ export const UserMessage = memo(function UserMessage({ message }: { message: Mes
 });
 
 export const AssistantMessage = memo(function AssistantMessage({ blocks, streaming, content }: { blocks: MessageBlock[]; streaming?: boolean; content?: string }) {
-  const parts = group(blocks);
+  const parts = useMemo(() => group(blocks), [blocks]);
   const last = parts[parts.length - 1];
   return (
     <Pressable onLongPress={content ? () => copy(content) : undefined} style={styles.assistant}>
@@ -91,7 +95,7 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
         ) : p.kind === "subagent" ? (
           <SubagentCard key={p.block.id} block={p.block} childBlocks={p.children} streaming={!!streaming} />
         ) : (
-          <Block key={i} block={p.block} />
+          <Block key={i} block={p.block} streaming={!!streaming} />
         ),
       )}
       {streaming ? <BackgroundAgents parts={parts} /> : null}
@@ -117,7 +121,7 @@ function copy(text: string) {
   tap();
 }
 
-function Block({ block }: { block: MessageBlock }) {
+const Block = memo(function Block({ block, streaming }: { block: MessageBlock; streaming: boolean }) {
   const c = useColors();
   switch (block.type) {
     case "text":
@@ -136,9 +140,31 @@ function Block({ block }: { block: MessageBlock }) {
         <View style={[styles.callout, { backgroundColor: block.level === "warning" ? c.warningSoft : c.sunken }]}>
           <Icon name={block.level === "warning" ? "warning" : "bolt"} size={14} color={block.level === "warning" ? c.warning : c.textMuted} />
           <T variant="footnote" muted style={{ flex: 1 }}>
+            {block.mod ? (
+              <T variant="footnote" style={{ fontWeight: "600" }}>
+                {block.mod}{" "}
+              </T>
+            ) : null}
             {block.text}
           </T>
         </View>
+      );
+    case "followup":
+      return (
+        <Marker
+          icon="clock"
+          text={block.reason === "now" ? "Continued now, ahead of its follow-up" : block.reason === "late" ? "Continued late, as it planned" : "Continued on its own, as it planned"}
+          detail={block.note}
+          at={block.dueAt}
+        />
+      );
+    case "retry":
+      return (
+        <Marker
+          icon="refresh"
+          text={block.auto ? "Picked up again after a restart" : block.mode === "continue" ? "Continued where it stopped" : "Tried again"}
+          at={block.at}
+        />
       );
     case "command":
       return (
@@ -166,55 +192,8 @@ function Block({ block }: { block: MessageBlock }) {
           </View>
         </View>
       );
-    case "question": {
-      // Answered by writing into the chat: a suggested answer by its number or its words.
-      const open = block.status === "open";
-      const approval = block.kind === "approval";
-      const status =
-        block.status === "open"
-          ? approval
-            ? "Reply “approve” or “decline” below — or what to do instead."
-            : block.options.length
-              ? "Reply below with a number or your own answer."
-              : "Reply below to answer."
-          : block.status === "approved"
-            ? `Approved${block.answer?.text ? ` — ${block.answer.text}` : ""}`
-            : block.status === "declined"
-              ? `Declined${block.answer?.text ? ` — ${block.answer.text}` : ""}`
-              : block.status === "answered"
-                ? `Answered: ${block.answer?.text ?? ""}`
-                : "Withdrawn — the run was stopped before this was answered.";
-      return (
-        <View style={[styles.question, { backgroundColor: open ? c.warningSoft : c.sunken, borderColor: open ? c.warning : c.border }]}>
-          <T variant="caption" color={open ? c.warning : c.textMuted} style={{ fontWeight: "600" }}>
-            {approval ? "NEEDS YOUR OK" : "QUESTION"}
-          </T>
-          <T variant="body" style={{ fontWeight: "600" }} selectable>
-            {block.title}
-          </T>
-          {block.body ? (
-            <T variant="footnote" muted selectable>
-              {approval ? `Why: ${block.body}` : block.body}
-            </T>
-          ) : null}
-          {approval && block.affects ? (
-            <T variant="footnote" muted selectable>
-              Affects: {block.affects}
-            </T>
-          ) : null}
-          {block.options.map((o, i) => (
-            <T key={o.id} variant="subhead" style={{ opacity: !open && block.answer?.optionId !== o.id ? 0.55 : 1 }}>
-              {i + 1}. {o.label}
-              {o.recommended ? " (recommended)" : ""}
-              {o.description ? ` — ${o.description}` : ""}
-            </T>
-          ))}
-          <T variant="footnote" muted>
-            {status}
-          </T>
-        </View>
-      );
-    }
+    case "question":
+      return <QuestionCard question={block} streaming={streaming} />;
     case "human_task": {
       const done = block.outcome === "done";
       return (
@@ -251,12 +230,36 @@ function Block({ block }: { block: MessageBlock }) {
     default:
       return null;
   }
+});
+
+/** Where the chat went on without the human: a follow-up the agent set, or a turn that was picked up again. */
+function Marker({ icon, text, detail, at }: { icon: "clock" | "refresh"; text: string; detail?: string; at: string }) {
+  const c = useColors();
+  return (
+    <View style={styles.marker}>
+      <View style={[styles.markerLine, { backgroundColor: c.border }]} />
+      <View style={{ alignItems: "center", gap: 2, maxWidth: "78%" }}>
+        <Row style={{ gap: 6 }}>
+          <Icon name={icon} size={11} color={c.textFaint} />
+          <T variant="caption" muted style={{ fontWeight: "600" }}>
+            {text} · {shortTime(at) === "now" ? "just now" : format(new Date(at), "MMM d, HH:mm")}
+          </T>
+        </Row>
+        {detail ? (
+          <T variant="caption" muted numberOfLines={2} style={{ textAlign: "center" }}>
+            {detail}
+          </T>
+        ) : null}
+      </View>
+      <View style={[styles.markerLine, { backgroundColor: c.border }]} />
+    </View>
+  );
 }
 
-function SubagentCard({ block, childBlocks, streaming }: { block: ToolUse; childBlocks: MessageBlock[]; streaming: boolean }) {
+const SubagentCard = memo(function SubagentCard({ block, childBlocks, streaming }: { block: ToolUse; childBlocks: MessageBlock[]; streaming: boolean }) {
   const c = useColors();
   const { task, background, status, running, failed, result } = subagentState(block, streaming);
-  const [open, setOpen] = useState<boolean | null>(null);
+  const [open, setOpen] = useRecyclingState<boolean | null>(null, [block.id]);
   const expanded = open ?? false;
   const input = (block.input && typeof block.input === "object" ? block.input : {}) as { description?: unknown; subagent_type?: unknown };
   const title = (typeof input.description === "string" && input.description) || task?.description || "Helper";
@@ -316,7 +319,7 @@ function SubagentCard({ block, childBlocks, streaming }: { block: ToolUse; child
       )}
     </View>
   );
-}
+});
 
 /** Helpers still at work in the background, at the foot of the turn: without this the chat would look idle. */
 function BackgroundAgents({ parts }: { parts: Part[] }) {
@@ -350,9 +353,9 @@ function duration(ms: number): string {
   return m < 60 ? `${m}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
-function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
+const Steps = memo(function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
   const c = useColors();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useRecyclingState(false, [steps.find((s) => s.type === "tool_use")?.id ?? (steps[0]?.type === "thinking" ? steps[0].text.slice(0, 40) : "")]);
   const tools = steps.filter((s): s is Extract<Step, { type: "tool_use" }> => s.type === "tool_use");
   const latest = tools[tools.length - 1];
   const label = latest ? toolLabel(latest) : null;
@@ -390,15 +393,18 @@ function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
       )}
     </View>
   );
-}
+});
 
-function ToolStep({ step }: { step: ToolUse }) {
+const ToolStep = memo(function ToolStep({ step }: { step: ToolUse }) {
   const c = useColors();
   const label = toolLabel(step);
-  const [more, setMore] = useState(false);
+  const [more, setMore] = useRecyclingState(false, [step.id]);
+  const todos = step.name === "TodoWrite" ? todoItems(step.input) : null;
+  const edit = more ? fileEdit(step) : null;
+  const expandable = !!step.result || step.name === "Edit" || step.name === "MultiEdit" || step.name === "Write";
   return (
     <View style={{ gap: 6 }}>
-      <Pressable onPress={() => step.result && setMore((m) => !m)}>
+      <Pressable onPress={() => expandable && setMore((m) => !m)} accessibilityRole={expandable ? "button" : undefined} accessibilityState={expandable ? { expanded: more } : undefined}>
         <Row style={{ gap: 8, alignItems: "flex-start" }}>
           <Icon name={label.icon} size={13} color={step.isError ? c.warning : c.textMuted} style={{ marginTop: 3 }} />
           <View style={{ flex: 1 }}>
@@ -413,14 +419,93 @@ function ToolStep({ step }: { step: ToolUse }) {
           </View>
         </Row>
       </Pressable>
-      {step.image ? <Image source={{ uri: `data:image/png;base64,${step.image}` }} style={[styles.shot, { backgroundColor: c.sunken }]} contentFit="contain" /> : null}
-      {more && step.result ? (
+      {todos?.length ? (
+        <View style={{ gap: 4, paddingLeft: 21 }}>
+          {todos.slice(0, 12).map((t, i) => (
+            <Row key={i} style={{ gap: 8, alignItems: "flex-start" }}>
+              <Icon
+                name={t.status === "completed" ? "check" : t.status === "in_progress" ? "play" : "minus"}
+                size={10}
+                color={t.status === "completed" ? c.brandStrong : t.status === "in_progress" ? c.text : c.textFaint}
+                weight="bold"
+                style={{ marginTop: 4 }}
+              />
+              <T
+                variant="footnote"
+                muted={t.status !== "in_progress"}
+                style={[{ flex: 1 }, t.status === "completed" && { textDecorationLine: "line-through" }, t.status === "in_progress" && { fontWeight: "600" }]}
+              >
+                {t.content}
+              </T>
+            </Row>
+          ))}
+        </View>
+      ) : null}
+      {step.imageUrl ? (
+        <RemoteImage path={step.imageUrl} alt="Screenshot" />
+      ) : step.image ? (
+        <Image source={{ uri: imageUri(step.image) }} style={[styles.shot, { backgroundColor: c.sunken }]} contentFit="contain" cachePolicy="none" />
+      ) : null}
+      {edit ? (
+        <View style={[styles.result, { backgroundColor: c.sunken, gap: 1 }]}>
+          {edit.lines.map((line, i) => (
+            <T key={i} variant="mono" numberOfLines={1} color={line.kind === "add" ? c.brandStrong : line.kind === "remove" ? c.danger : c.textFaint} style={{ fontSize: 12 }}>
+              {line.kind === "add" ? "+ " : line.kind === "remove" ? "- " : "  "}
+              {line.text}
+            </T>
+          ))}
+        </View>
+      ) : more && step.result ? (
         <T variant="mono" muted numberOfLines={16} style={[styles.result, { backgroundColor: c.sunken }]}>
           {step.result.slice(0, 2000)}
+          {step.resultTruncated || step.result.length > 2000 ? "…" : ""}
         </T>
       ) : null}
     </View>
   );
+});
+
+function imageUri(image: string): string {
+  if (image.startsWith("data:")) return image;
+  const mime = image.startsWith("/9j/") ? "image/jpeg" : image.startsWith("R0lG") ? "image/gif" : image.startsWith("UklG") ? "image/webp" : "image/png";
+  return `data:${mime};base64,${image}`;
+}
+
+/** Plan items of a TodoWrite call. */
+function todoItems(input: unknown): { content: string; status: string }[] | null {
+  const todos = input && typeof input === "object" ? (input as { todos?: unknown }).todos : null;
+  if (!Array.isArray(todos)) return null;
+  return todos
+    .filter((t): t is Record<string, unknown> => !!t && typeof t === "object")
+    .map((t) => ({ content: String(t.content ?? t.activeForm ?? t.subject ?? ""), status: typeof t.status === "string" ? t.status : "pending" }));
+}
+
+type DiffLine = { kind: "add" | "remove" | "fold"; text: string };
+
+const DIFF_LINES = 40;
+
+/** What a file edit took out and put in, as the first lines of each: enough to see the change on a phone. */
+function fileEdit(step: ToolUse): { lines: DiffLine[] } | null {
+  const input = (step.input && typeof step.input === "object" ? step.input : {}) as { old_string?: unknown; new_string?: unknown; content?: unknown; edits?: unknown };
+  const lines: DiffLine[] = [];
+  const push = (kind: "add" | "remove", text: unknown) => {
+    if (typeof text !== "string" || !text) return;
+    for (const line of text.split("\n")) lines.push({ kind, text: line });
+  };
+  if (step.name === "Edit") {
+    push("remove", input.old_string);
+    push("add", input.new_string);
+  } else if (step.name === "Write") push("add", input.content);
+  else if (step.name === "MultiEdit" && Array.isArray(input.edits)) {
+    for (const [i, e] of (input.edits as { old_string?: unknown; new_string?: unknown }[]).entries()) {
+      if (i > 0) lines.push({ kind: "fold", text: "⋯" });
+      push("remove", e?.old_string);
+      push("add", e?.new_string);
+    }
+  } else return null;
+  if (!lines.length) return null;
+  const more = lines.length - DIFF_LINES;
+  return { lines: more > 0 ? [...lines.slice(0, DIFF_LINES), { kind: "fold", text: `⋯ ${more} more lines` }] : lines };
 }
 
 function ThinkingStep({ text }: { text: string }) {
@@ -548,6 +633,17 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     borderWidth: StyleSheet.hairlineWidth,
     borderStyle: "dashed",
+  },
+  marker: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 2,
+  },
+  markerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
   },
   shot: {
     width: "100%",
