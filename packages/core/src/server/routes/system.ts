@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import { homedir } from "node:os";
 import type { Bootstrap, Effort } from "@godmode/shared";
-import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, isModelId, countAttention } from "@godmode/shared";
+import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, isModelId, isValidBranch, countAttention, parseGitUrl } from "@godmode/shared";
 import { config } from "../../config";
 import { get } from "../../db";
 import * as vault from "../../vault/vault";
@@ -137,6 +137,22 @@ export function registerSystemRoutes(app: Hono) {
       if (typeof maintenance !== "object" || maintenance === null || Array.isArray(maintenance)) throw badRequest("Invalid upkeep settings");
       for (const key of ["autoFix", "autoUpdate", "autoCleanup"] as const) {
         if (maintenance[key] !== undefined && typeof maintenance[key] !== "boolean") throw badRequest(`maintenance.${key} must be true or false`);
+      }
+    }
+    const repair = patch.selfRepair as Record<string, unknown> | undefined;
+    if (repair !== undefined) {
+      if (typeof repair !== "object" || repair === null || Array.isArray(repair)) throw badRequest("Invalid self-repair settings");
+      if (repair.autoMerge !== undefined && typeof repair.autoMerge !== "boolean") throw badRequest("selfRepair.autoMerge must be true or false");
+      if (repair.repoUrl !== undefined) {
+        if (typeof repair.repoUrl !== "string") throw badRequest("Enter the git URL of Godmode's source repository");
+        const parsed = repair.repoUrl.trim() ? parseGitUrl(repair.repoUrl) : { url: "" };
+        if ("error" in parsed) throw badRequest(parsed.error);
+        repair.repoUrl = parsed.url;
+      }
+      if (repair.baseBranch !== undefined && (typeof repair.baseBranch !== "string" || !isValidBranch(repair.baseBranch.trim()))) throw badRequest("Enter a valid branch name");
+      if (typeof repair.baseBranch === "string") repair.baseBranch = repair.baseBranch.trim();
+      if (repair.agentId !== undefined && repair.agentId !== null && (typeof repair.agentId !== "string" || !get("SELECT 1 FROM agents WHERE id = ? AND enabled = 1", repair.agentId))) {
+        throw badRequest("Pick an agent that exists and is turned on");
       }
     }
     const mobile = patch.mobile as Record<string, unknown> | undefined;

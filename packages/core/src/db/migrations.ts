@@ -1333,6 +1333,24 @@ CREATE INDEX IF NOT EXISTS idx_messages_run ON messages(run_id);
   },
   {
     id: 81,
+    name: "self_repair",
+    sql: /* sql */ `
+-- 1: the ticket's pull request is merged into its base branch once delivered (fixes from the logs), like a workspace's auto_merge.
+ALTER TABLE tasks ADD COLUMN auto_merge INTEGER NOT NULL DEFAULT 0;
+-- Problems from a log (this computer's: source 'local', a runner's: its id) that a fix ticket was filed for.
+CREATE TABLE IF NOT EXISTS self_repair_issues (
+  source TEXT NOT NULL,
+  key TEXT NOT NULL,
+  task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+  filed_at TEXT NOT NULL,
+  -- The Godmode build that showed it: a fix only helps once a newer build runs.
+  build TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (source, key)
+);
+`,
+  },
+  {
+    id: 82,
     // How a dream tidied the agent's workspace (JSON, DreamWorkspaceChange[]); NULL = the dream didn't tidy it.
     name: "dream_workspace",
     sql: /* sql */ `

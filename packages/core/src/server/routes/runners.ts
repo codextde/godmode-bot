@@ -15,6 +15,8 @@ import {
   updateRunner,
   updateRunnerNow,
 } from "../../remote/runners";
+import { fixFromLog } from "../../diagnostics/selfRepair";
+import { disableIdleTimeout } from "../../mcp/http";
 import { body, z } from "../validate";
 
 /** Runners: other computers that work for this Godmode (remote/runners.ts). Requests about their chats: remote/routing.ts. */
@@ -82,5 +84,14 @@ export function registerRunnerRoutes(app: Hono): void {
   app.post("/api/runners/:id/autofix", async (c) => {
     const input = await body(c, z.object({ checkId: z.string().max(64).optional(), note: z.string().max(4000).optional() }));
     return c.json(await startAutofix(c.req.param("id"), input), 201);
+  });
+
+  /** A ticket that fixes what the runner's log shows in Godmode's code. */
+  app.post("/api/runners/:id/fix-in-code", async (c) => {
+    const input = await body(c, z.object({ note: z.string().max(4000).optional(), autoMerge: z.boolean().optional() }));
+    getRunner(c.req.param("id"));
+    // Reading the runner's log over the link can take longer than an idle request may.
+    disableIdleTimeout(c);
+    return c.json(await fixFromLog({ kind: "runner", runnerId: c.req.param("id") }, { ...input, actor: "user" }), 201);
   });
 }

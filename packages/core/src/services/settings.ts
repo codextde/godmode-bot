@@ -111,6 +111,12 @@ export const DEFAULT_SETTINGS: Settings = {
     autoUpdate: true,
     autoCleanup: true,
   },
+  selfRepair: {
+    repoUrl: "",
+    baseBranch: "main",
+    agentId: null,
+    autoMerge: true,
+  },
   mobile: {
     enabled: false,
     port: MOBILE_DEFAULT_PORT,

@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import type { LogLevel } from "@godmode/shared";
 import { buildLogReport, clearLogs, listLogEntries, logOverview } from "../../diagnostics/logs";
+import { fixFromLog } from "../../diagnostics/selfRepair";
 import { logger } from "../../log";
 import { body, z } from "../validate";
 
@@ -59,6 +60,12 @@ export function registerLogRoutes(app: Hono) {
   app.get("/api/logs/report", (c) => {
     const text = buildLogReport(c.req.query("full") === "1" ? Infinity : undefined);
     return c.body(text, 200, { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-store" });
+  });
+
+  /** A ticket that fixes what this computer's log shows in Godmode's code. */
+  app.post("/api/logs/fix", async (c) => {
+    const input = await body(c, z.object({ note: z.string().max(4000).optional(), autoMerge: z.boolean().optional() }));
+    return c.json(await fixFromLog({ kind: "local" }, { ...input, actor: "user" }), 201);
   });
 
   app.delete("/api/logs", (c) => {

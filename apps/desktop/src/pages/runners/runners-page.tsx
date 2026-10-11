@@ -9,6 +9,7 @@ import { AddRunnerDialog } from "@/components/runners/add-runner-dialog";
 import { RunnerCard } from "@/components/runners/runner-card";
 import { RemoveRunnerDialog, RenameRunnerDialog, RunnerAddressesDialog } from "@/components/runners/runner-dialogs";
 import { RunnerScreenDialog } from "@/components/runners/runner-screen-dialog";
+import { FixInCodeDialog } from "@/components/tasks/fix-in-code-dialog";
 import { useRunnerActions } from "@/components/runners/use-runner-actions";
 import { errorMessage } from "@/lib/api";
 import { useRunners } from "@/lib/hooks";
@@ -24,6 +25,7 @@ export default function RunnersPage() {
   const [addressesId, setAddressesId] = useState<string | null>(null);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [screenId, setScreenId] = useState<string | null>(null);
+  const [fixId, setFixId] = useState<string | null>(null);
 
   const byId = (id: string | null) => (id ? (runners.find((r) => r.id === id) ?? null) : null);
 
@@ -96,6 +98,7 @@ export default function RunnersPage() {
                     onAddresses={() => setAddressesId(runner.id)}
                     onRemove={() => setRemoveId(runner.id)}
                     onScreen={() => setScreenId(runner.id)}
+                    onFixInCode={() => setFixId(runner.id)}
                   />
                 </motion.div>
               ))}
@@ -109,6 +112,7 @@ export default function RunnersPage() {
       <RunnerAddressesDialog runner={byId(addressesId)} onClose={() => setAddressesId(null)} actions={actions} />
       <RemoveRunnerDialog runner={byId(removeId)} onClose={() => setRemoveId(null)} actions={actions} />
       <RunnerScreenDialog runner={byId(screenId)} onClose={() => setScreenId(null)} />
+      <FixInCodeDialog source={fixId && byId(fixId) ? { kind: "runner", runner: byId(fixId)! } : null} onClose={() => setFixId(null)} />
     </div>
   );
 }
