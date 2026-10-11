@@ -1,6 +1,7 @@
 import type { AgentHeartbeat } from "./heartbeat";
 import type { AttentionCounts } from "./attention";
 import type { AgentCharacter } from "./character";
+import type { Task } from "./tasks";
 /**
  * Core domain models shared between the Godmode core daemon and the UI.
  *
@@ -1133,6 +1134,35 @@ export interface MaintenanceSettings {
   autoCleanup: boolean;
 }
 
+/** Fixing Godmode's own code from what its logs show (Settings → Logs, runners' "Fix in code", the self_repair tool). */
+export interface SelfRepairSettings {
+  /** Godmode's source repository the fixes go to (a fork works too). */
+  repoUrl: string;
+  /** The branch fixes start from and are merged into. */
+  baseBranch: string;
+  /** The agent that works on the fixes; null = the default agent. */
+  agentId: ID | null;
+  /** Merge a delivered fix into the base branch right away, without a review. */
+  autoMerge: boolean;
+}
+
+/** Ask for a fix in Godmode's code from a log (this computer's or a runner's). */
+export interface SelfRepairInput {
+  /** What the human noticed, for the agent. */
+  note?: string;
+  /** Default: the setting. */
+  autoMerge?: boolean;
+}
+
+export interface SelfRepairResult {
+  /** null = nothing new to fix (only when asked for new problems only). */
+  task: Task | null;
+  /** The problems the task is about. */
+  issues: LogIssue[];
+  /** Why no task was filed. */
+  skipped: string | null;
+}
+
 export interface GeneralSettings {
   theme: "dark" | "light" | "system";
   accent: string;
@@ -1330,6 +1360,7 @@ export interface Settings {
   memory: MemorySettings;
   diagnostics: DiagnosticsSettings;
   maintenance: MaintenanceSettings;
+  selfRepair: SelfRepairSettings;
   mobile: MobileSettings;
   /** Godmode Cloud (see cloud.ts). The link secret is never part of the settings. */
   cloud: CloudSettings;

@@ -61,7 +61,7 @@ import {
 } from "@godmode/shared";
 import type { RunContext } from "../types";
 import type { CardFillKind } from "../browser/fill";
-import { HttpError, domainMatches, hostnameOf, sleep } from "../util";
+import { HttpError, domainMatches, hostnameOf, parseJson, sleep } from "../util";
 import { logger } from "../log";
 import { hasAppSecret, isUnlocked, redact } from "../vault/vault";
 import { audit } from "../services/audit";
@@ -139,6 +139,7 @@ import { askQuestion, listQuestions } from "../services/questions";
 import { MAX_OPEN_PER_CHAT, createAgentHumanTask, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
 import { createMod, findMod, listMods, updateMod } from "../mods/service";
 import { noteConnectorCall } from "../connect/connectors";
+import { selfRepairCheck } from "../diagnostics/selfRepair";
 
 const log = logger("mcp");
 
@@ -2680,6 +2681,32 @@ const TOOLS: ToolDef[] = [
       const res = await runnerExec(runnerId, command, timeoutSec);
       const out = [`exit code: ${res.timedOut ? "timed out" : res.code}`, res.stdout ? `stdout:\n${redact(res.stdout)}` : "", res.stderr ? `stderr:\n${redact(res.stderr)}` : ""].filter(Boolean).join("\n\n");
       return { text: out, isError: res.code !== 0 };
+    },
+  }),
+
+  defineTool({
+    name: "self_repair",
+    description:
+      "Check Godmode's own diagnostic logs (this computer's and every online runner's) and file a coding ticket for each log with new problems: errors, and warnings that recur, seen in the last day and not already covered by an open ticket or one filed in the last 3 days. Each ticket works on Godmode's source repository (Settings → Logs → Self-repair), gets the log attached, is worked on by the self-repair agent and — with auto-merge on — is merged into the base branch once delivered. Returns what was filed and what had nothing new. Follow the tickets with tasks_list (label autofix) and task_get.",
+    schema: z.object({
+      sources: z.enum(["all", "local", "runners"]).optional().describe("Default all"),
+      note: z.string().max(4000).optional().describe("Something for the agents that fix it, e.g. what you noticed"),
+      onlyNew: z.boolean().optional().describe("Default true. false = file a ticket for this computer anyway, e.g. with a build error you found in note"),
+    }),
+    when: (a) => config().role !== "runner" && !!getSettings().selfRepair.repoUrl && (isManager(a) || getSettings().selfRepair.agentId === a.id),
+    run: async ({ sources, note, onlyNew }, { agent, ctx }) => {
+      // A fix ticket's own run doesn't file more fixes: one problem, one ticket.
+      const ticket = get<{ labels: string }>("SELECT labels FROM tasks WHERE conversation_id = ?", ctx.conversationId);
+      if (ticket && parseJson<string[]>(ticket.labels, []).includes("autofix")) return fail("You are working on a fix ticket: fix it here instead of filing another one.");
+      const results = await selfRepairCheck({ sources, note, onlyNew, actor: `agent:${agent.id}` });
+      return json(
+        results.map(({ source, result, error }) => ({
+          source,
+          ...(error ? { error } : {}),
+          ...(result?.task ? { filed: { id: result.task.id, number: result.task.number, title: result.task.title, problems: result.issues.length, autoMerge: result.task.autoMerge } } : {}),
+          ...(result?.skipped ? { skipped: result.skipped } : {}),
+        })),
+      );
     },
   }),
 ];

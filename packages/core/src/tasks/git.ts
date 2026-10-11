@@ -526,6 +526,12 @@ export async function pushBranch(opts: {
   });
 }
 
+/** Whether the branch's changes on top of `base` add a line containing `text`. */
+export async function addsLineWith(dir: string, base: string, text: string): Promise<boolean> {
+  const diff = await git(["diff", "--unified=0", `origin/${base}...HEAD`], dir).catch(() => "");
+  return diff.split("\n").some((line) => line.startsWith("+") && !line.startsWith("+++") && line.includes(text));
+}
+
 /** The page that opens a pull request for `branch` (github/gitlab), or null for other hosts. */
 export function compareUrl(url: string, base: string, branch: string): string | null {
   const repo = hostedRepo(url);

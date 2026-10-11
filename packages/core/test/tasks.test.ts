@@ -1188,6 +1188,24 @@ exit 1
     expect(updateWorkspace(ws.id, { autoMerge: false }).autoMerge).toBe(false);
    }, 60_000);
 
+  test("a ticket that merges automatically merges its pull request, also in a workspace that doesn't", async () => {
+    const { url } = makeRemote("ticket-auto-merge");
+    const task = createTask({ workspaceId, title: "TASK_EDIT fix from the log", type: "coding", repoUrl: url, agentId: wsAgent.id, autoMerge: true });
+    expect(task.autoMerge).toBe(true);
+    await settled(task.id, ["in_review"]);
+    sql("UPDATE tasks SET repo_url = ?, pr_url = ?, pr_number = 8, pr_state = 'open' WHERE id = ?", "https://github.com/acme/app.git", "https://github.com/acme/app/pull/8", task.id);
+    __setGhForTests(fakeGh());
+    try {
+      await sendTaskMessage(task.id, "TASK_EDIT once more");
+      await settled(task.id, ["done"]);
+    } finally {
+      __setGhForTests(null);
+    }
+    expect(getTask(task.id).pullRequest?.state).toBe("merged");
+    expect(listTaskEvents(task.id).find((e) => e.kind === "pr_merged")?.data).toMatchObject({ number: 8, auto: true });
+    expect(createTask({ workspaceId, title: "Reviewed as usual" }).autoMerge).toBe(false);
+  }, 60_000);
+
   test("the board pushes a task's branch and opens its pull request", async () => {
     const { url, bare } = makeRemote("board-push");
     const task = createTask({ title: "TASK_EDIT share from the board", repoUrl: url, agentId: agent.id });

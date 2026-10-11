@@ -176,6 +176,8 @@ import type {
   Project,
   ProjectInput,
   WorkspaceSource,
+  SelfRepairInput,
+  SelfRepairResult,
 } from "@godmode/shared";
 import { CloudErrorCode, LICENSE_REQUIRED } from "@godmode/shared";
 import { cloudContext, getCoreInfo, goToCloudLogin } from "./core";
@@ -350,6 +352,8 @@ export const api = {
     report: (full = false) => get<string>("/api/logs/report", { full: full ? 1 : undefined }),
     clear: () => del<{ ok: true }>("/api/logs"),
     client: (input: ClientLogInput) => post<{ ok: true }>("/api/logs/client", input),
+    /** A ticket that fixes what the log shows in Godmode's code (and merges it, per Settings → Logs). */
+    fix: (input: SelfRepairInput = {}) => post<SelfRepairResult>("/api/logs/fix", input),
   },
 
   models: {
@@ -719,6 +723,8 @@ export const api = {
     upgrade: (id: string, input: RunnerUpdateInput = {}) => post<RemoteRunner>(`/api/runners/${id}/update`, input),
     /** Starts a chat here whose agent diagnoses and repairs the runner. */
     autofix: (id: string, input: RunnerAutofixInput = {}) => post<StartChatResult>(`/api/runners/${id}/autofix`, input),
+    /** A ticket that fixes what the runner's log shows in Godmode's code. */
+    fixInCode: (id: string, input: SelfRepairInput = {}) => post<SelfRepairResult>(`/api/runners/${id}/fix-in-code`, input),
     /** Any API call answered by the runner instead of this computer: `path` is the route without `/api`, e.g. "/computer/sources". */
     proxy: <T>(id: string, method: string, path: string, body?: unknown) => request<T>(method, `/api/runners/${id}/proxy${path}`, body),
   },

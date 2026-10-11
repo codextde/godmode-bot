@@ -201,6 +201,8 @@ export interface Task {
   /** The task's own git worktree the agent works in, once created. */
   worktree: string | null;
   pullRequest: TaskPullRequest | null;
+  /** Its pull request is merged into the base branch as soon as it's delivered, without a review (also when its workspace doesn't do that). */
+  autoMerge: boolean;
   /** The agent's final answer (report, summary of the changes). */
   summary: string | null;
   /** Why the task is blocked. */
@@ -255,6 +257,8 @@ export interface TaskInput {
   /** One of the workspace's folders that is a git repository. */
   repoPath?: string;
   baseBranch?: string;
+  /** Merge its pull request into the base branch once delivered, without a review. */
+  autoMerge?: boolean;
   priority?: TaskPriority;
   dueDate?: string | null;
   labels?: string[];
@@ -283,6 +287,8 @@ export interface TaskPatch {
   repoUrl?: string;
   repoPath?: string;
   baseBranch?: string;
+  /** Merge its pull request into the base branch once delivered, without a review. */
+  autoMerge?: boolean;
   /** Take it off the board (a running agent is stopped and the task parked in the backlog), or bring it back. */
   archived?: boolean;
   priority?: TaskPriority;
