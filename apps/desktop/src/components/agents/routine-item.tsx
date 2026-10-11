@@ -177,6 +177,14 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
             </button>
             {agent && <span className="truncate text-xs text-muted-foreground">· {agent.name}</span>}
             {!routine.enabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">Paused</span>}
+            {routine.fillOnly && agent?.permissions.secretAccess === "reveal" && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">Fill-only secrets</span>
+                </TooltipTrigger>
+                <TooltipContent>Set up by an agent: its runs fill logins into pages but can't read them. Edit it to change that.</TooltipContent>
+              </Tooltip>
+            )}
             {routine.pendingEvents > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>

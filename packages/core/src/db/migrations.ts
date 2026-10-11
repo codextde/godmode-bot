@@ -1446,4 +1446,13 @@ ALTER TABLE human_tasks ADD COLUMN response_option TEXT;
 CREATE INDEX IF NOT EXISTS idx_human_tasks_question ON human_tasks(question_id);
 `,
   },
+  {
+    id: 89,
+    name: "routine_secret_access",
+    sql: /* sql */ `
+-- 'fill': the automation's runs get no raw secrets, whatever its agent may read — an agent that could not read them
+-- itself set it up or changed it. NULL = the agent's own secret access.
+ALTER TABLE routines ADD COLUMN secret_access TEXT;
+`,
+  },
 ];

@@ -276,6 +276,7 @@ describe("phone access", () => {
     expect((await phone("/api/conversations/cnv_missing/queue/qmsg_x", json("PATCH", { content: "reworded", attachments: [] }))).status).toBe(403);
     expect((await phone("/api/chat", json("POST", { content: "hi", computerTarget: { kind: "desktop" } }))).status).toBe(403);
     expect((await phone("/api/routines/rtn_missing", json("PATCH", { prompt: "rm -rf" }))).status).toBe(403);
+    expect((await phone("/api/routines/rtn_missing", json("PATCH", { enabled: true, fillOnly: false }))).status).toBe(403);
     expect((await phone("/api/tasks", json("POST", { title: "Fork it", repoUrl: "https://evil.example.com/x.git" }))).status).toBe(403);
     expect((await phone("/api/tasks/tsk_missing", json("PATCH", { repoPath: "/" }))).status).toBe(403);
     expect((await phone("/api/tasks/tsk_missing", json("PATCH", { status: "todo" }))).status).toBe(404);

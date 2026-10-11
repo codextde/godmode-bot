@@ -292,6 +292,11 @@ export interface Routine {
   reuseConversation: boolean;
   /** When it tells the human that a run ended: `failures` (default), `always`, or `never`. */
   notify: RoutineNotify;
+  /**
+   * Its runs get no raw secrets, whatever its agent may read: it was set up or changed by an agent that could not
+   * read them itself. Logins are still filled into pages. Only the human switches it off.
+   */
+  fillOnly: boolean;
   conversationId: ID | null;
   lastRunAt: ISODate | null;
   /** Next scheduled run (schedule) or check (condition). */

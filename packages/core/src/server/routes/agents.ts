@@ -173,6 +173,7 @@ export const routineSchema = z.object({
   enabled: z.boolean().optional(),
   reuseConversation: z.boolean().optional(),
   notify: z.enum(["always", "failures", "never"]).optional(),
+  fillOnly: z.boolean().optional(),
 });
 
 function scopeParam(value: string | undefined): string | null | "all" {
@@ -325,6 +326,8 @@ export function registerAgentRoutes(app: Hono): void {
   app.patch("/api/routines/:id", async (c) => {
     const routineId = c.req.param("id");
     const patch = await body(c, routineSchema.partial());
+    // An agent set it up without raw secrets: giving them to its runs is letting an agent's prompt read them.
+    if (patch.fillOnly === false && getRoutine(routineId).fillOnly) requireGrant(c);
     const trigger = patch.trigger
       ? await resolveAppTrigger(patch.trigger as RoutineTrigger, patch.agentId ?? getRoutine(routineId).agentId)
       : undefined;

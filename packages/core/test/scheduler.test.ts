@@ -108,7 +108,7 @@ describe("scheduling", () => {
 });
 
 describe("triggering", () => {
-  const createdConversations: { agentId: string; title?: string; origin?: string }[] = [];
+  const createdConversations: { agentId: string; title?: string; origin?: string; fillOnly?: boolean }[] = [];
   const sent: { conversationId: string; content: string; trigger?: string; routineId?: string | null }[] = [];
   let failNext: Error | null = null;
   let createSpy: ReturnType<typeof spyOn>;
@@ -229,7 +229,7 @@ describe("triggering", () => {
     const first = await runRoutineNow(routine.id);
     expect(first.routineId).toBe(routine.id);
     expect(first.trigger).toBe("routine");
-    expect(createdConversations).toEqual([{ agentId: agent.id, title: "Price check", origin: "routine" }]);
+    expect(createdConversations).toEqual([{ agentId: agent.id, title: "Price check", origin: "routine", fillOnly: false }]);
     expect(sent[0]).toMatchObject({ content: "Check prices", trigger: "routine", routineId: routine.id });
     let current = getRoutine(routine.id);
     expect(current.conversationId).toBe(first.conversationId);

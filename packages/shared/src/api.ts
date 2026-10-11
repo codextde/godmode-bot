@@ -232,6 +232,8 @@ export interface RoutineInput {
   enabled?: boolean;
   reuseConversation?: boolean;
   notify?: RoutineNotify;
+  /** Runs without raw secrets (see `Routine.fillOnly`). */
+  fillOnly?: boolean;
 }
 
 export interface WebhookRotateResult {

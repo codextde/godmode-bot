@@ -35,6 +35,7 @@ export interface RoutineRow {
   enabled: number;
   reuse_conversation: number;
   notify?: string | null;
+  secret_access?: string | null;
   conversation_id: string | null;
   last_run_at: string | null;
   next_run_at: string | null;
@@ -145,6 +146,7 @@ function toModel(r: RoutineRow, pending = 0): Routine {
     enabled: bool(r.enabled),
     reuseConversation: bool(r.reuse_conversation),
     notify: r.notify === "always" || r.notify === "never" ? r.notify : "failures",
+    fillOnly: r.secret_access === "fill",
     conversationId: r.conversation_id,
     lastRunAt: r.last_run_at,
     nextRunAt: r.next_run_at,
@@ -450,6 +452,7 @@ function syncRoutinesFile(agentId: string): void {
         enabled: r.enabled,
         reuseConversation: r.reuseConversation,
         notify: r.notify,
+        fillOnly: r.fillOnly,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       }));
@@ -555,6 +558,7 @@ export function createRoutine(input: RoutineInput): Routine {
     // Event runs get a conversation each by default: untrusted event data doesn't pile up in one long session.
     reuse_conversation: int(input.reuseConversation ?? usesCron(trigger))!,
     notify: input.notify ?? "failures",
+    secret_access: input.fillOnly ? "fill" : null,
     conversation_id: null,
     last_run_at: null,
     next_run_at: enabled && agent.enabled && next ? next.toISOString() : null,
@@ -605,6 +609,7 @@ export function updateRoutine(id: string, patch: Partial<RoutineInput>): Routine
     enabled: int(enabled),
     reuse_conversation: int(reuse),
     notify: patch.notify,
+    secret_access: patch.fillOnly === undefined ? undefined : patch.fillOnly ? "fill" : null,
     updated_at: now(),
     next_run_at: enabled && agent.enabled && next ? next.toISOString() : null,
     webhook_token_hash: webhook?.hash,
