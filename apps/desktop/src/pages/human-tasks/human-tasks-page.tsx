@@ -39,9 +39,9 @@ type Columns = Record<ColumnId, string[]>;
 
 const COLUMN_ID = "col:";
 const COLUMNS: { id: ColumnId; label: string; hint: string; icon: ReactNode }[] = [
-  { id: "open", label: "To do", hint: "What your agents need you to do shows up here.", icon: <CircleDashed className="size-3.5 text-muted-foreground" /> },
+  { id: "open", label: "To do", hint: "What your agents need from you shows up here: things to do, questions, decisions.", icon: <CircleDashed className="size-3.5 text-muted-foreground" /> },
   { id: "doing", label: "Doing", hint: "Drag a task here while you work on it.", icon: <Timer className="size-3.5 text-brand-strong" /> },
-  { id: "closed", label: "Done", hint: "Drop a task here to close it — its agent picks up from there.", icon: <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" /> },
+  { id: "closed", label: "Done", hint: "Drop a task here to close or answer it — its agent picks up from there.", icon: <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" /> },
 ];
 
 function columnOfTask(t: HumanTask): ColumnId {
@@ -113,8 +113,8 @@ export default function HumanTasksPage() {
         title="My tasks"
         description={
           waiting
-            ? `${waiting} waiting for you${agentsWaiting ? ` · ${agentsWaiting} agent${agentsWaiting === 1 ? "" : "s"} on hold until you're done` : ""}. Mark a task done and its agent picks up where it left off.`
-            : "What your agents can't do without you — a passkey, a CAPTCHA, a signature. Mark it done and the agent picks up where it left off."
+            ? `${waiting} waiting for you${agentsWaiting ? ` · ${agentsWaiting} agent${agentsWaiting === 1 ? "" : "s"} on hold until you're done` : ""}. Close or answer one and its agent picks up where it left off.`
+            : "What your agents can't settle without you — a passkey, a CAPTCHA, a question, a decision. Close or answer it and the agent picks up where it left off."
         }
         actions={
           <Button onClick={() => setAdding(true)} disabled={tasksQ.isError && !tasksQ.data}>
@@ -156,7 +156,7 @@ export default function HumanTasksPage() {
           <EmptyState
             art={<Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={72} follow />}
             title="Nothing waits for you"
-            description="When an agent can't go on without you — a passkey, a CAPTCHA, a login only you have — it puts the task here and tells you. Once you mark it done, the agent continues by itself."
+            description="When an agent can't go on without you — a passkey, a CAPTCHA, a question, a decision it left open — it lands here and you are told. Once you close or answer it, the agent continues by itself."
             action={
               <Button variant="outline" onClick={() => setAdding(true)}>
                 <Plus /> Add one of your own

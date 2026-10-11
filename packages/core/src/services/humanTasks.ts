@@ -3,9 +3,31 @@
  * `human_task_create` and ends its turn. The task waits on the human's board; closing it (done, or "can't do it")
  * continues the agent's chat with the human's note — straight away when the chat is idle, through the chat's queue
  * while the agent works there. A board ticket waits in Blocked meanwhile (tasks/service.ts `finished`).
+ *
+ * The board also holds what else waits for the human's word:
+ * - every open question and approval (`ask_human`, `request_approval`) as a ticket of its own. It stands for the
+ *   question (`question_id`): answering either one answers both, and the run that stands still continues.
+ * - a decision an agent left open in the answer it finished with (`from_answer`, runner/openDecision.ts). Answering it
+ *   continues the chat; writing into the chat answers it too.
  */
-import type { Agent, Attachment, HumanTask, HumanTaskCloseInput, HumanTaskCloseResult, HumanTaskInput, HumanTaskPatch, HumanTaskPriority, HumanTaskStatus, MessageBlock } from "@godmode/shared";
-import { humanTaskRef } from "@godmode/shared";
+import type {
+  Agent,
+  AgentQuestion,
+  AnswerQuestionInput,
+  Attachment,
+  HumanTask,
+  HumanTaskCloseInput,
+  HumanTaskCloseResult,
+  HumanTaskInput,
+  HumanTaskKind,
+  HumanTaskPatch,
+  HumanTaskPriority,
+  HumanTaskStatus,
+  MessageBlock,
+  QuestionOption,
+} from "@godmode/shared";
+import { humanTaskRef, parseSlashCommand } from "@godmode/shared";
+import { config } from "../config";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -14,11 +36,13 @@ import { redact } from "../vault/vault";
 import { getAgent } from "../agents/service";
 import { activeRunForConversation } from "../runner/runner";
 import { describeNow, stripNoteTags } from "../runner/prompt";
+import { detectOpenDecision } from "../runner/openDecision";
 import { audit } from "./audit";
 import { conversationExists, promptWithFiles, saveAttachments, sendMessage } from "./conversations";
 import { hasQueued, submitMessage } from "./messageQueue";
 import { markRead, notify } from "./notifications";
 import { pauseOf } from "./pauses";
+import { answerQuestion, getQuestion, listQuestions, type Answerer } from "./questions";
 import { getSettings } from "./settings";
 import { noteHumanTask } from "../tasks/service";
 
@@ -38,12 +62,17 @@ interface Row {
   url: string | null;
   priority: HumanTaskPriority;
   status: HumanTaskStatus;
+  kind: HumanTaskKind;
+  options: string;
+  question_id: string | null;
+  from_answer: number;
   agent_id: string | null;
   conversation_id: string | null;
   run_id: string | null;
   task_id: string | null;
   workspace_id: string | null;
   response: string | null;
+  response_option: string | null;
   response_attachments: string;
   closed_reason: string | null;
   notification_id: string | null;
@@ -75,12 +104,19 @@ function toHumanTask(r: Row): HumanTask {
     url: r.url,
     priority: r.priority,
     status: r.status,
+    kind: r.kind,
+    options: parseJson<QuestionOption[]>(r.options, []),
+    questionId: r.question_id,
+    fromAnswer: r.from_answer === 1,
     agentId: r.agent_id,
     conversationId: r.conversation_id,
     runId: r.run_id,
     taskId: r.task_id,
     workspaceId: r.workspace_id,
-    response: closed && r.closed_at ? { text: r.response ?? "", attachments: parseJson<Attachment[]>(r.response_attachments, []), at: r.closed_at } : null,
+    response:
+      closed && r.closed_at
+        ? { text: r.response ?? "", optionId: r.response_option, attachments: parseJson<Attachment[]>(r.response_attachments, []), at: r.closed_at }
+        : null,
     closedReason: r.closed_reason,
     position: r.position,
     agentName: r.agent_name ?? null,
@@ -208,34 +244,77 @@ export interface HumanTaskOrigin {
   workspaceId: string | null;
 }
 
-/** The gateway's `human_task_create`. */
-export function createAgentHumanTask(origin: HumanTaskOrigin, input: HumanTaskInput): HumanTask {
-  const agent = getAgent(origin.agentId);
-  const title = clean(input.title, 200);
-  if (!title) throw badRequest("Say what to do (title).");
-  const open = get<{ n: number }>(`SELECT COUNT(*) AS n FROM human_tasks WHERE conversation_id = ? AND status IN ${ACTIVE_SQL}`, origin.conversationId)?.n ?? 0;
-  if (open >= MAX_OPEN_PER_CHAT) {
-    throw conflict(`${humanName()} already has ${open} open tasks from this chat. Wait for them, or take one back with human_task_cancel.`);
-  }
-  const ticket = get<{ id: string; workspace_id: string | null }>("SELECT id, workspace_id FROM tasks WHERE conversation_id = ?", origin.conversationId);
+/** A new row on the board, on top of To do. Returns its id. */
+function add(fields: {
+  title: string;
+  body: string;
+  url?: string | null;
+  priority?: HumanTaskPriority;
+  kind?: HumanTaskKind;
+  options?: QuestionOption[];
+  questionId?: string | null;
+  fromAnswer?: boolean;
+  agentId?: string | null;
+  conversationId?: string | null;
+  runId?: string | null;
+  taskId?: string | null;
+  workspaceId?: string | null;
+  createdAt?: string;
+}): string {
   const id = newId("htk");
   const ts = now();
   insert("human_tasks", {
     id,
     number: nextNumber(),
+    title: fields.title,
+    body: fields.body,
+    url: fields.url ?? null,
+    priority: fields.priority === "high" ? "high" : "normal",
+    status: "open",
+    kind: fields.kind ?? "task",
+    options: JSON.stringify(fields.options ?? []),
+    question_id: fields.questionId ?? null,
+    from_answer: fields.fromAnswer ? 1 : 0,
+    agent_id: fields.agentId ?? null,
+    conversation_id: fields.conversationId ?? null,
+    run_id: fields.runId ?? null,
+    task_id: fields.taskId ?? null,
+    workspace_id: fields.workspaceId ?? null,
+    position: topPosition("open"),
+    created_at: fields.createdAt ?? ts,
+    updated_at: ts,
+  });
+  return id;
+}
+
+function ticketOf(conversationId: string): { id: string; workspace_id: string | null } | null {
+  return get<{ id: string; workspace_id: string | null }>("SELECT id, workspace_id FROM tasks WHERE conversation_id = ?", conversationId);
+}
+
+/** The gateway's `human_task_create`. */
+export function createAgentHumanTask(origin: HumanTaskOrigin, input: HumanTaskInput): HumanTask {
+  const agent = getAgent(origin.agentId);
+  const title = clean(input.title, 200);
+  if (!title) throw badRequest("Say what to do (title).");
+  const open =
+    get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM human_tasks WHERE conversation_id = ? AND question_id IS NULL AND from_answer = 0 AND status IN ${ACTIVE_SQL}`,
+      origin.conversationId,
+    )?.n ?? 0;
+  if (open >= MAX_OPEN_PER_CHAT) {
+    throw conflict(`${humanName()} already has ${open} open tasks from this chat. Wait for them, or take one back with human_task_cancel.`);
+  }
+  const ticket = ticketOf(origin.conversationId);
+  const id = add({
     title,
     body: clean(input.body, 6000),
     url: cleanUrl(input.url),
-    priority: input.priority === "high" ? "high" : "normal",
-    status: "open",
-    agent_id: agent.id,
-    conversation_id: origin.conversationId,
-    run_id: origin.runId,
-    task_id: ticket?.id ?? null,
-    workspace_id: ticket?.workspace_id ?? origin.workspaceId ?? agent.workspaceId ?? null,
-    position: topPosition("open"),
-    created_at: ts,
-    updated_at: ts,
+    priority: input.priority,
+    agentId: agent.id,
+    conversationId: origin.conversationId,
+    runId: origin.runId,
+    taskId: ticket?.id ?? null,
+    workspaceId: ticket?.workspace_id ?? origin.workspaceId ?? agent.workspaceId ?? null,
   });
   const task = getHumanTask(id);
   const n = notify("question", `${agent.name} has a task for you`, `${humanTaskRef(task)} ${title}`, `/my-tasks?task=${id}`);
@@ -251,23 +330,191 @@ export function createAgentHumanTask(origin: HumanTaskOrigin, input: HumanTaskIn
 export function createOwnHumanTask(input: HumanTaskInput): HumanTask {
   const title = redact(input.title ?? "").trim().slice(0, 200);
   if (!title) throw badRequest("Say what to do");
-  const id = newId("htk");
-  const ts = now();
-  insert("human_tasks", {
-    id,
-    number: nextNumber(),
-    title,
-    body: redact(input.body ?? "").slice(0, 6000),
-    url: cleanUrl(input.url),
-    priority: input.priority === "high" ? "high" : "normal",
-    status: "open",
-    workspace_id: input.workspaceId ?? null,
-    position: topPosition("open"),
-    created_at: ts,
-    updated_at: ts,
-  });
+  const id = add({ title, body: redact(input.body ?? "").slice(0, 6000), url: cleanUrl(input.url), priority: input.priority, workspaceId: input.workspaceId ?? null });
   changed();
   return getHumanTask(id);
+}
+
+/* ------------------------------------------------------------------ */
+/* Decisions an answer left open                                       */
+/* ------------------------------------------------------------------ */
+
+/** A run that finished with an answer. */
+export interface FinishedRun extends HumanTaskOrigin {
+  /** The human wrote the message it answered and reads the answer in the chat: the ticket needs no notification. */
+  attended: boolean;
+}
+
+/** The human's board is on the computer a runner works for: a runner keeps no tickets of its own for what it finds. */
+const onRunner = () => config().role === "runner";
+
+function withdraw(r: Pick<Row, "id" | "notification_id">, reason: string | null): void {
+  const ts = now();
+  sql("UPDATE human_tasks SET status = 'withdrawn', closed_reason = ?, closed_at = ?, updated_at = ? WHERE id = ?", reason, ts, ts, r.id);
+  if (r.notification_id) markRead([r.notification_id]);
+}
+
+function openFromAnswer(conversationId: string): Row[] {
+  return all<Row>(`SELECT * FROM human_tasks WHERE conversation_id = ? AND from_answer = 1 AND status IN ${ACTIVE_SQL} ORDER BY number`, conversationId);
+}
+
+/**
+ * A run finished with this answer. A decision it leaves for the human without having asked with a tool
+ * (runner/openDecision.ts) goes on their list, so the work doesn't look finished while it waits for a word nobody was
+ * asked for. One per chat: a later answer's decision takes the place of an earlier one.
+ */
+export function noteOpenDecision(run: FinishedRun, answer: string): HumanTask | null {
+  if (onRunner()) return null;
+  // The run gave the human something itself: that is what it waits for.
+  const handed = get<{ n: number }>(`SELECT COUNT(*) AS n FROM human_tasks WHERE run_id = ? AND from_answer = 0 AND status IN ${ACTIVE_SQL}`, run.runId)?.n ?? 0;
+  if (handed) return null;
+  const found = detectOpenDecision(answer, humanName());
+  const title = found ? clean(found.title, 200) : "";
+  if (!found || !title) return null;
+  const earlier = openFromAnswer(run.conversationId);
+  const same = earlier.find((e) => e.title === title);
+  for (const e of earlier) if (e !== same) withdraw(e, "A later answer took its place.");
+  if (same) {
+    if (earlier.length > 1) changed();
+    return getHumanTask(same.id);
+  }
+  const agent = getAgent(run.agentId);
+  const ticket = ticketOf(run.conversationId);
+  const id = add({
+    title,
+    body: clean(found.body, 6000),
+    kind: "decision",
+    fromAnswer: true,
+    agentId: agent.id,
+    conversationId: run.conversationId,
+    runId: run.runId,
+    taskId: ticket?.id ?? null,
+    workspaceId: ticket?.workspace_id ?? run.workspaceId ?? agent.workspaceId ?? null,
+  });
+  const task = getHumanTask(id);
+  if (!run.attended) {
+    const n = notify("question", `${agent.name} left you a decision`, `${humanTaskRef(task)} ${title}`, `/my-tasks?task=${id}`);
+    sql("UPDATE human_tasks SET notification_id = ? WHERE id = ?", n.id, id);
+  }
+  if (task.taskId) noteHumanTask(task.taskId, "asked", `agent:${agent.id}`, { body: title, questionId: id, runId: run.runId, kind: "question" });
+  audit(`agent:${agent.id}`, "human_task.found", id, { title, runId: run.runId, conversationId: run.conversationId, taskId: task.taskId });
+  changed();
+  log.info("an answer left a decision for the human", { id, agentId: agent.id, runId: run.runId });
+  return task;
+}
+
+/**
+ * The human wrote into the chat: that answers the decision its agent left open there. The message is the turn that
+ * continues the work, so nothing else is started.
+ */
+export function settleByReply(conversationId: string, text: string | undefined): void {
+  if (parseSlashCommand(text ?? "") !== null) return;
+  const open = openFromAnswer(conversationId);
+  if (!open.length) return;
+  const ts = now();
+  const said = redact((text ?? "").trim()).slice(0, 20_000);
+  for (const r of open) {
+    sql("UPDATE human_tasks SET status = 'done', response = ?, closed_reason = ?, closed_at = ?, updated_at = ? WHERE id = ?", said, "Answered in the chat.", ts, ts, r.id);
+    if (r.notification_id) markRead([r.notification_id]);
+    audit("user", "human_task.close", r.id, { outcome: "done", via: "chat", conversationId });
+  }
+  changed();
+}
+
+/* ------------------------------------------------------------------ */
+/* Questions and approvals                                             */
+/* ------------------------------------------------------------------ */
+
+function questionBody(q: AgentQuestion): string {
+  if (q.kind !== "approval") return q.body;
+  return [q.body, q.affects ? `**What it changes:** ${q.affects}` : ""].filter(Boolean).join("\n\n");
+}
+
+/** An agent asked (`ask_human`, `request_approval`): the question also waits on the board, as a ticket that stands for it. */
+function mirrorQuestion(q: AgentQuestion): void {
+  if (q.status !== "open" || get("SELECT 1 FROM human_tasks WHERE question_id = ?", q.id)) return;
+  add({
+    title: q.title,
+    body: questionBody(q),
+    kind: q.kind === "approval" ? "approval" : "decision",
+    options: q.options,
+    questionId: q.id,
+    agentId: q.agentId,
+    conversationId: q.conversationId,
+    runId: q.runId,
+    taskId: q.taskId,
+    workspaceId: q.workspaceId,
+    createdAt: q.createdAt,
+  });
+  changed();
+}
+
+/** The question was answered (anywhere) or withdrawn: so is its ticket. */
+function settleMirror(q: AgentQuestion): void {
+  if (q.status === "open") return;
+  const r = get<Row>(`SELECT * FROM human_tasks WHERE question_id = ? AND status IN ${ACTIVE_SQL}`, q.id);
+  if (!r) return;
+  if (q.status === "withdrawn" || !q.answer) withdraw(r, q.closedReason ?? "The run that asked was stopped.");
+  else {
+    sql(
+      "UPDATE human_tasks SET status = ?, response = ?, response_option = ?, response_attachments = ?, closed_at = ?, updated_at = ? WHERE id = ?",
+      q.status === "declined" ? "declined" : "done",
+      q.answer.text,
+      q.answer.optionId,
+      JSON.stringify(q.answer.attachments),
+      q.answer.at,
+      now(),
+      r.id,
+    );
+  }
+  changed();
+}
+
+/** After a start: every open question has its ticket, and no ticket waits for a question that is closed. */
+function syncQuestions(): void {
+  for (const q of listQuestions({ status: "open", limit: 500 })) {
+    safely(() => mirrorQuestion(q));
+  }
+  for (const r of all<Row>(`SELECT * FROM human_tasks WHERE question_id IS NOT NULL AND status IN ${ACTIVE_SQL}`)) {
+    safely(() => {
+      let q: AgentQuestion | null = null;
+      try {
+        q = getQuestion(r.question_id!);
+      } catch {
+        q = null;
+      }
+      if (q) settleMirror(q);
+      else {
+        withdraw(r, "The run that asked is gone.");
+        changed();
+      }
+    });
+  }
+}
+
+function safely(fn: () => void): void {
+  try {
+    fn();
+  } catch (err) {
+    log.warn("could not keep a question's ticket in step", err);
+  }
+}
+
+/** The human answers a question from its ticket: the run that stands still for it continues. */
+function answerFromTicket(r: Row, input: HumanTaskCloseInput, by: Answerer): HumanTaskCloseResult {
+  const note = (input.note ?? "").trim();
+  const files = input.attachments ?? [];
+  let answer: AnswerQuestionInput;
+  if (r.kind === "approval") answer = { decision: input.outcome === "done" ? "approve" : "decline", ...(note ? { note } : {}) };
+  else if (input.outcome === "declined") throw badRequest("The agent stands still until you answer. If the question no longer matters, stop it in its chat.");
+  else if (input.optionId && !note && !files.length) answer = { optionId: input.optionId };
+  else {
+    const picked = input.optionId ? parseJson<QuestionOption[]>(r.options, []).find((o) => o.id === input.optionId)?.label : "";
+    answer = { text: [picked, note].filter(Boolean).join("\n\n"), ...(files.length ? { attachments: files } : {}) };
+  }
+  const { question } = answerQuestion(r.question_id!, answer, by);
+  settleMirror(question);
+  return { task: getHumanTask(r.id), continued: true };
 }
 
 /* ------------------------------------------------------------------ */
@@ -316,12 +563,21 @@ export function deleteHumanTask(id: string): void {
 /* Closing: the agent continues                                        */
 /* ------------------------------------------------------------------ */
 
-/** The human closes a task. The agent that gave it continues its chat with the outcome and the note. */
-export async function closeHumanTask(id: string, input: HumanTaskCloseInput): Promise<HumanTaskCloseResult> {
+/**
+ * The human closes a task. The agent that gave it continues its chat with the outcome and the note. A ticket that
+ * stands for a question answers it (the run that asked continues); a decision found in an answer continues the chat
+ * with the answer, or is dismissed without waking anyone.
+ */
+export async function closeHumanTask(id: string, input: HumanTaskCloseInput, by: Answerer = { actor: "user", via: "app" }): Promise<HumanTaskCloseResult> {
   const r = requireRow(id);
   if (r.status !== "open" && r.status !== "doing") throw conflict(r.status === "withdrawn" ? "The agent took this task back already." : "This task is closed already.");
+  if (r.question_id) return answerFromTicket(r, input, by);
   const note = (input.note ?? "").trim().slice(0, 20_000);
   const files = input.attachments ?? [];
+  const decision = r.kind === "decision";
+  const option = decision && input.optionId ? (parseJson<QuestionOption[]>(r.options, []).find((o) => o.id === input.optionId) ?? null) : null;
+  if (decision && input.optionId && !option) throw badRequest("Unknown option");
+  if (decision && input.outcome === "done" && !note && !option && !files.length) throw badRequest("Write your answer first.");
 
   let agent: Agent | null = null;
   try {
@@ -334,9 +590,10 @@ export async function closeHumanTask(id: string, input: HumanTaskCloseInput): Pr
 
   const ts = now();
   const done = sql(
-    `UPDATE human_tasks SET status = ?, response = ?, response_attachments = ?, closed_at = ?, updated_at = ? WHERE id = ? AND status IN ${ACTIVE_SQL}`,
+    `UPDATE human_tasks SET status = ?, response = ?, response_option = ?, response_attachments = ?, closed_at = ?, updated_at = ? WHERE id = ? AND status IN ${ACTIVE_SQL}`,
     input.outcome,
     redact(note),
+    option?.id ?? null,
     JSON.stringify(attachments),
     ts,
     ts,
@@ -344,14 +601,19 @@ export async function closeHumanTask(id: string, input: HumanTaskCloseInput): Pr
   );
   if (!done.changes) throw conflict("This task is closed already.");
   if (r.notification_id) markRead([r.notification_id]);
-  if (r.task_id) noteHumanTask(r.task_id, "answered", "user", { body: redact(note), questionId: id, status: input.outcome });
-  audit("user", "human_task.close", id, { outcome: input.outcome, note: redact(note).slice(0, 200), agentId: r.agent_id, conversationId: r.conversation_id });
+  const said = [option?.label, note].filter(Boolean).join("\n\n");
+  if (r.task_id) {
+    noteHumanTask(r.task_id, "answered", "user", { body: redact(said), questionId: id, status: decision && input.outcome === "done" ? "answered" : input.outcome, ...(decision ? { kind: "question" as const } : {}) });
+  }
+  audit(by.actor, "human_task.close", id, { outcome: input.outcome, note: redact(said).slice(0, 200), agentId: r.agent_id, conversationId: r.conversation_id });
   changed();
+  // Dismissed: the agent didn't wait for it, so nobody is woken.
+  if (decision && input.outcome === "declined") return { task: getHumanTask(id), continued: false };
 
   let continued = false;
   let notContinued: string | undefined;
   try {
-    const why = await continueAgent(r, agent, input.outcome, note, attachments);
+    const why = await continueAgent(r, agent, input.outcome, said, attachments);
     if (why === null) continued = true;
     else notContinued = why || undefined;
   } catch (err) {
@@ -372,7 +634,8 @@ async function continueAgent(r: Row, agent: Agent | null, outcome: "done" | "dec
 
   const conversationId = r.conversation_id;
   const ref = `H-${r.number}`;
-  const head = outcome === "done" ? `Done: ${ref} ${r.title}` : `Can't do: ${ref} ${r.title}`;
+  const decision = r.kind === "decision";
+  const head = decision ? `Answer to ${ref} ${r.title}` : outcome === "done" ? `Done: ${ref} ${r.title}` : `Can't do: ${ref} ${r.title}`;
   const others = openHumanTasksOf(conversationId).filter((t) => t.id !== r.id);
 
   // The agent is at work in the chat (or its run stands still): the message waits in the queue and reaches it there.
@@ -384,16 +647,23 @@ async function continueAgent(r: Row, agent: Agent | null, outcome: "done" | "dec
 
   const human = humanName();
   const said = note ? `Their note:\n${stripNoteTags(note)}` : "They added no note.";
-  const prompt = `<godmode-human-task>
+  const stillOpen = others.length ? `\nStill open for ${human}: ${others.map((t) => `${humanTaskRef(t)} “${t.title}”`).join(", ")}.` : "";
+  const prompt = decision
+    ? `<godmode-human-task>
+Your answer of ${describeNow(new Date(r.created_at))} left this for ${human} to decide: “${r.title}”. Godmode put it on their task list as ${ref}, and ${human} answered:
+${stripNoteTags(note) || "(only the attached files)"}
+Act on the answer and pick the work up where you left off. It settles this question and nothing else.${stillOpen}
+</godmode-human-task>`
+    : `<godmode-human-task>
 You gave ${human} a task on ${describeNow(new Date(r.created_at))}: ${ref} “${r.title}”. ${outcome === "done" ? `${human} marked it done.` : `${human} says they can't do it.`}
 ${said}
 ${
   outcome === "done"
     ? "Check that it worked where you can, then pick the work up where you left off."
     : "Find another way if there is one; otherwise finish what you can and say plainly what stays undone without it."
-}${others.length ? `\nStill open for ${human}: ${others.map((t) => `${humanTaskRef(t)} “${t.title}”`).join(", ")}.` : ""}
+}${stillOpen}
 </godmode-human-task>`;
-  const block: MessageBlock = { type: "human_task", id: r.id, number: r.number, title: r.title, outcome, note: redact(note), at: now() };
+  const block: MessageBlock = { type: "human_task", id: r.id, number: r.number, title: r.title, outcome, note: redact(note), at: now(), ...(decision ? { kind: "decision" as const } : {}) };
   await sendMessage(conversationId, {
     content: note ? `${head}\n\n${note}` : head,
     prompt,
@@ -411,9 +681,9 @@ export function withdrawHumanTask(id: string, reason: string, by: { agentId: str
   const r = requireRow(id);
   if (r.agent_id !== by.agentId) throw badRequest(`${humanTaskRef(r)} isn't one you gave`);
   if (r.status !== "open" && r.status !== "doing") throw conflict(`${humanTaskRef(r)} is ${r.status} already`);
+  if (r.question_id) throw badRequest(`${humanTaskRef(r)} is your question to the human: it waits for their answer`);
   const why = clean(reason, 500) || null;
-  sql("UPDATE human_tasks SET status = 'withdrawn', closed_reason = ?, closed_at = ?, updated_at = ? WHERE id = ?", why, now(), now(), id);
-  if (r.notification_id) markRead([r.notification_id]);
+  withdraw(r, why);
   audit(`agent:${by.agentId}`, "human_task.withdraw", id, { reason: why });
   changed();
   return getHumanTask(id);
@@ -425,11 +695,7 @@ function withdrawOrphans(): void {
     `SELECT id, notification_id FROM human_tasks WHERE status IN ${ACTIVE_SQL} AND run_id IS NOT NULL AND conversation_id IS NULL`,
   );
   if (!gone.length) return;
-  const ts = now();
-  for (const g of gone) {
-    sql("UPDATE human_tasks SET status = 'withdrawn', closed_reason = ?, closed_at = ?, updated_at = ? WHERE id = ?", "The chat it was for was deleted.", ts, ts, g.id);
-    if (g.notification_id) markRead([g.notification_id]);
-  }
+  for (const g of gone) withdraw(g, "The chat it was for was deleted.");
   changed();
 }
 
@@ -438,8 +704,13 @@ let offBus: (() => void) | null = null;
 export function startHumanTasks(): void {
   if (offBus) return;
   withdrawOrphans();
+  const tickets = !onRunner();
+  if (tickets) syncQuestions();
   offBus = bus.on((e) => {
     if (e.type === "conversation.deleted" || e.type === "agent.deleted") withdrawOrphans();
+    else if (!tickets) return;
+    else if (e.type === "question.created") safely(() => mirrorQuestion(e.question));
+    else if (e.type === "question.updated") safely(() => settleMirror(e.question));
   });
 }
 

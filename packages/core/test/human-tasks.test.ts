@@ -9,6 +9,8 @@ import { listAttention } from "../src/services/attention";
 import { listNotifications } from "../src/services/notifications";
 import { updateSettings } from "../src/services/settings";
 import { closeHumanTask, getHumanTask, listHumanTasks, startHumanTasks, stopHumanTasks } from "../src/services/humanTasks";
+import { answerQuestion, getQuestion, openQuestionOf } from "../src/services/questions";
+import { stopPauses } from "../src/services/pauses";
 import { cancelRun, getRun, listRuns, waitForRun } from "../src/runner/runner";
 import { createTask, getTask, listTaskEvents, startTasks, stopTasks } from "../src/tasks/service";
 
@@ -27,6 +29,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   stopHumanTasks();
+  stopPauses();
   stopTasks();
   await env.close();
 });
@@ -194,4 +197,173 @@ describe("the human's own tasks", () => {
     const res = await api("PATCH", `/api/human-tasks/${task.id}`, { title: "Something else" });
     expect(res.status).toBe(400);
   }, 20_000);
+});
+
+describe("a decision an answer leaves open", () => {
+  /** A chat whose agent finished with a "Decision for you" in its answer. */
+  async function chatWithDecision(content = "LEAVE_DECISION set up the store") {
+    const { conversation, run } = await startChat({ agentId: agent.id, content });
+    const done = await waitForRun(run.id, 10_000);
+    const task = listHumanTasks({ status: "active", conversationId: conversation.id })[0]!;
+    return { conversationId: conversation.id, run: done, task };
+  }
+
+  test("it lands on the list, and the answer continues the chat", async () => {
+    const { conversationId, run, task } = await chatWithDecision();
+    expect(task).toMatchObject({
+      kind: "decision",
+      fromAnswer: true,
+      questionId: null,
+      title: "Should the store take real orders before a domain exists?",
+      body: "If yes, it needs a payment account with a card.",
+      status: "open",
+      agentId: agent.id,
+      conversationId,
+      runId: run.id,
+    });
+    // The human wrote the message and reads the answer in the chat: no notification on top.
+    expect(listNotifications().some((n) => n.link === `/my-tasks?task=${task.id}`)).toBe(false);
+    expect(listAttention().find((i) => i.id === `todo:${task.id}`)).toMatchObject({
+      kind: "todo",
+      title: "Ads Bot left you a decision: Should the store take real orders before a domain exists?",
+      action: "Answer",
+    });
+
+    // An answer needs words.
+    await expect(closeHumanTask(task.id, { outcome: "done" })).rejects.toThrow(/Write your answer/);
+    const out = await closeHumanTask(task.id, { outcome: "done", note: "Yes, take orders. Use the company card." });
+    expect(out.continued).toBe(true);
+    expect(out.task).toMatchObject({ status: "done", response: { text: "Yes, take orders. Use the company card." } });
+    let next: string | undefined;
+    await until(() => !!(next = listRuns({ conversationId }).find((r) => r.id !== run.id)?.id), 10_000, "the chat to continue");
+    await waitForRun(next!, 10_000);
+    expect(lastPrompt()).toContain("<godmode-human-task>");
+    expect(lastPrompt()).toContain("left this for Dana to decide: “Should the store take real orders before a domain exists?”");
+    expect(lastPrompt()).toContain(`as H-${task.number}, and Dana answered:\nYes, take orders. Use the company card.`);
+    const marker = getConversation(conversationId).messages.find((m) => m.role === "system" && m.blocks.some((b) => b.type === "human_task"));
+    expect(marker?.blocks[0]).toMatchObject({ type: "human_task", id: task.id, kind: "decision", outcome: "done" } as Partial<MessageBlock>);
+  }, 30_000);
+
+  test("dismissed: it leaves the list and nobody is woken", async () => {
+    const { conversationId, task } = await chatWithDecision();
+    const res = await api("POST", `/api/human-tasks/${task.id}/close`, { outcome: "declined" });
+    expect(res.json).toMatchObject({ continued: false });
+    expect(res.json.notContinued).toBeUndefined();
+    expect(getHumanTask(task.id).status).toBe("declined");
+    expect(listRuns({ conversationId })).toHaveLength(1);
+  }, 30_000);
+
+  test("writing into the chat answers it", async () => {
+    const { conversationId, task } = await chatWithDecision();
+    const sent = await api("POST", `/api/conversations/${conversationId}/messages`, { content: "Not yet, wait for the domain" });
+    expect(sent.status).toBe(201);
+    expect(getHumanTask(task.id)).toMatchObject({ status: "done", closedReason: "Answered in the chat.", response: { text: "Not yet, wait for the domain" } });
+    await until(() => listRuns({ conversationId }).every((r) => r.status === "succeeded"), 10_000, "the reply's run");
+    // The human's message is the turn: no second one from the ticket.
+    expect(listRuns({ conversationId })).toHaveLength(2);
+  }, 30_000);
+
+  test("one per chat: the same decision keeps its ticket, another one takes its place", async () => {
+    const { conversationId, task } = await chatWithDecision();
+    const again = await sendMessage(conversationId, { content: "LEAVE_DECISION once more", trigger: "followup" });
+    await waitForRun(again.run.id, 10_000);
+    expect(listHumanTasks({ status: "active", conversationId }).map((t) => t.id)).toEqual([task.id]);
+
+    const other = await sendMessage(conversationId, { content: "ASK_IN_PROSE", trigger: "followup" });
+    await waitForRun(other.run.id, 10_000);
+    const open = listHumanTasks({ status: "active", conversationId });
+    expect(open).toHaveLength(1);
+    expect(open[0]).toMatchObject({ title: "Should I send it to the whole list on Monday?", kind: "decision", fromAnswer: true });
+    expect(getHumanTask(task.id)).toMatchObject({ status: "withdrawn", closedReason: "A later answer took its place." });
+    // Nobody wrote that message: the human is told.
+    expect(listNotifications().some((n) => n.title === "Ads Bot left you a decision" && n.link === `/my-tasks?task=${open[0]!.id}`)).toBe(true);
+  }, 30_000);
+
+  test("an agent that got the task from another one: the decision is the human's, and the lead is told", async () => {
+    const { conversationId, run } = await chatWithTask("HUMAN_TASK lead");
+    const ctx = { runId: run.id, agentId: agent.id, conversationId, workspaceId: null, depth: 0 };
+    const out = await callTool(ctx, "agent_delegate", { agentId: other.id, task: "LEAVE_DECISION build the store" });
+    const text = out.content[0]!.text;
+    const mine = listHumanTasks({ status: "active", agentId: other.id }).find((t) => t.fromAnswer)!;
+    expect(mine).toMatchObject({ kind: "decision", title: "Should the store take real orders before a domain exists?" });
+    expect(text).toContain(`on Dana's task list as H-${mine.number}`);
+    expect(text).toContain("don't ask them the same thing again");
+    // The agent is told how to say it.
+    expect(invocations(env).at(-1)!.args.join(" ")).toContain("## Decision for Dana");
+    await closeHumanTask(mine.id, { outcome: "declined" });
+  }, 30_000);
+
+  test("on a board task the work is delivered all the same, and the answer continues it", async () => {
+    const t = createTask({ title: "LEAVE_DECISION open the store", agentId: agent.id });
+    const settled = (statuses: Task["status"][]) =>
+      until(() => statuses.includes(getTask(t.id).status) && !getTask(t.id).activity && !["running", "queued"].includes(getTask(t.id).runStatus ?? ""), 15_000, statuses.join("/"));
+    await settled(["in_review"]);
+    const human = listHumanTasks({ status: "active", conversationId: getTask(t.id).conversationId! })[0]!;
+    expect(human).toMatchObject({ kind: "decision", fromAnswer: true, taskId: t.id });
+    const asked = listTaskEvents(t.id).find((e) => e.kind === "asked")!;
+    expect(taskEventText(asked, { you: "You", youObject: "you" })).toBe("Ads Bot asked you");
+    const runs = listRuns({ conversationId: getTask(t.id).conversationId! }).length;
+    await closeHumanTask(human.id, { outcome: "done", note: "Go ahead" });
+    await until(() => listRuns({ conversationId: getTask(t.id).conversationId! }).length > runs, 10_000, "the ticket to continue");
+    await settled(["in_review"]);
+    expect(lastPrompt()).toContain("Dana answered:\nGo ahead");
+  }, 40_000);
+});
+
+describe("questions and approvals have a ticket", () => {
+  async function asking(content = "ASK_HUMAN which color") {
+    const started = await startChat({ agentId: agent.id, content });
+    await until(() => getRun(started.run.id).status === "paused", 15_000, "the run to stand still for its question");
+    const question = openQuestionOf(started.conversation.id)!;
+    const task = listHumanTasks({ status: "active", conversationId: started.conversation.id })[0]!;
+    return { ...started, question, task };
+  }
+
+  test("answering the ticket answers the question, and the run continues", async () => {
+    const { run, question, task } = await asking();
+    expect(task).toMatchObject({
+      kind: "decision",
+      questionId: question.id,
+      fromAnswer: false,
+      title: "Which color should the header be?",
+      body: "The brand guide allows two.",
+      options: [{ id: "1", label: "Yellow", recommended: true }, { id: "2", label: "Blue", description: "Matches the logo" }],
+    });
+    // Needs you once: as the question.
+    const attention = listAttention();
+    expect(attention.some((i) => i.id === `question:${question.id}`)).toBe(true);
+    expect(attention.some((i) => i.id === `todo:${task.id}`)).toBe(false);
+
+    const declined = await api("POST", `/api/human-tasks/${task.id}/close`, { outcome: "declined" });
+    expect(declined.status).toBe(400);
+    const res = await api("POST", `/api/human-tasks/${task.id}/close`, { outcome: "done", optionId: "2" });
+    expect(res.status).toBe(200);
+    expect(res.json.continued).toBe(true);
+    expect(getQuestion(question.id)).toMatchObject({ status: "answered", answer: { optionId: "2", text: "Blue" } });
+    expect(getHumanTask(task.id)).toMatchObject({ status: "done", response: { optionId: "2", text: "Blue" } });
+    expect((await waitForRun(run.id, 10_000)).result).toBe("CONTINUED");
+  }, 30_000);
+
+  test("answering the question closes its ticket", async () => {
+    const { run, question, task } = await asking();
+    answerQuestion(question.id, { text: "Green, like the logo" }, { actor: "user", via: "app" });
+    expect(getHumanTask(task.id)).toMatchObject({ status: "done", response: { text: "Green, like the logo", optionId: null } });
+    await waitForRun(run.id, 10_000);
+  }, 30_000);
+
+  test("an approval is approved or declined from its ticket", async () => {
+    const { run, question, task } = await asking("ASK_APPROVAL send it");
+    expect(task).toMatchObject({ kind: "approval", questionId: question.id, title: "Send the payment reminder to billing@acme.com" });
+    expect(task.body).toBe("The invoice is 30 days overdue.\n\n**What it changes:** ACME's billing team gets an email from you.");
+    const out = await closeHumanTask(task.id, { outcome: "declined", note: "Call them first" });
+    expect(out.task.status).toBe("declined");
+    expect(getQuestion(question.id)).toMatchObject({ status: "declined", answer: { text: "Call them first" } });
+    await waitForRun(run.id, 10_000);
+  }, 30_000);
+
+  test("stopping the run takes the ticket back", async () => {
+    const { run, task } = await asking();
+    await cancelRun(run.id);
+    await until(() => getHumanTask(task.id).status === "withdrawn", 5_000, "the ticket to be withdrawn");
+  }, 30_000);
 });

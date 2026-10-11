@@ -2,9 +2,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { humanTaskRef, isHumanTaskActive, type HumanTask } from "@godmode/shared";
+import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef, isHumanTaskActive, type HumanTask } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
-import { HUMAN_STATUS } from "@/components/human-task-row";
+import { humanStatus } from "@/components/human-task-row";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
 import { openChat } from "@/components/rows";
@@ -16,7 +16,10 @@ import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 
-/** One task an agent gave the human: the steps, the link, and Done / Can't do it with a note for the agent. */
+/**
+ * One task an agent gave the human: the steps, the link, and Done / Can't do it with a note for the agent. A decision is
+ * answered (one of its options, or in words), an approval approved or declined.
+ */
 export default function HumanTaskSheet() {
   const c = useColors();
   const { id, fromChat } = useLocalSearchParams<{ id: string; fromChat?: string }>();
@@ -24,6 +27,7 @@ export default function HumanTaskSheet() {
   const task = list.data?.find((t) => t.id === id);
   const { byId } = useAgents();
   const [note, setNote] = useState("");
+  const [picked, setPicked] = useState<string | null>(null);
 
   const settle = (next: HumanTask) => {
     queryClient.setQueryData<HumanTask[]>(qk.humanTaskList("all"), (old) => old?.map((t) => (t.id === next.id ? next : t)));
@@ -36,7 +40,7 @@ export default function HumanTaskSheet() {
     onError: (err) => Alert.alert("Couldn't move the task", errorText(err)),
   });
   const close = useMutation({
-    mutationFn: (outcome: "done" | "declined") => api.humanTasks.close(id, outcome, note.trim() || undefined),
+    mutationFn: (outcome: "done" | "declined") => api.humanTasks.close(id, outcome, note.trim() || undefined, outcome === "done" ? (picked ?? undefined) : undefined),
     onSuccess: (result) => {
       settle(result.task);
       if (result.notContinued) Alert.alert("Saved", result.notContinued);
@@ -61,8 +65,14 @@ export default function HumanTaskSheet() {
 
   const agent = task.agentId ? byId.get(task.agentId) : undefined;
   const active = isHumanTaskActive(task);
-  const status = HUMAN_STATUS[task.status];
+  const status = humanStatus(task);
   const busy = move.isPending || close.isPending;
+  const words = HUMAN_TASK_WORDS[task.kind];
+  const decision = task.kind === "decision";
+  const approval = task.kind === "approval";
+  const who = task.agentName ?? agent?.name ?? "the agent";
+  const ready = !decision || !!note.trim() || !!picked;
+  const answered = humanTaskAnswer(task);
   const link = task.url && /^https?:\/\//i.test(task.url) ? task.url : null;
 
   return (
@@ -129,37 +139,80 @@ export default function HumanTaskSheet() {
 
       {active ? (
         <View style={{ gap: space.md }}>
+          {decision && task.options.length ? (
+            <View style={{ gap: space.sm }} accessibilityRole="radiogroup">
+              {task.options.map((o) => {
+                const on = picked === o.id;
+                return (
+                  <Pressable
+                    key={o.id}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: on, disabled: busy }}
+                    disabled={busy}
+                    onPress={() => {
+                      tap();
+                      setPicked(on ? null : o.id);
+                    }}
+                    style={({ pressed }) => [styles.option, { backgroundColor: on ? c.sunken : c.surface, borderColor: on ? c.primary : c.border, opacity: pressed ? 0.75 : 1 }]}
+                  >
+                    <View style={[styles.optionMark, { borderColor: on ? c.primary : c.border, backgroundColor: on ? c.primary : "transparent" }]}>
+                      {on ? <Icon name="check" size={12} color={c.onPrimary} /> : null}
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <T variant="subhead" style={{ fontWeight: "600" }}>
+                        {o.label}
+                      </T>
+                      {o.description ? (
+                        <T variant="footnote" muted>
+                          {o.description}
+                        </T>
+                      ) : null}
+                    </View>
+                    {o.recommended ? <Badge label="Recommended" tone="neutral" /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
           <TextInput
             value={note}
             onChangeText={setNote}
-            placeholder={task.agentId ? `Note for ${task.agentName ?? "the agent"} (optional)` : "Note (optional)"}
+            placeholder={
+              !task.agentId ? "Note (optional)" : decision ? (task.options.length ? "Or answer in your own words" : `Your answer for ${who}`) : `Note for ${who} (optional)`
+            }
             placeholderTextColor={c.textFaint}
             multiline
             editable={!busy}
             style={[styles.note, { color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
           />
-          <Button title="Mark done" icon="check" size="lg" loading={close.isPending && close.variables === "done"} disabled={busy} onPress={() => close.mutate("done")} />
+          <Button title={words.done} icon="check" size="lg" loading={close.isPending && close.variables === "done"} disabled={busy || !ready} onPress={() => close.mutate("done")} />
           <Row style={{ gap: space.sm }}>
             <Button
-              title={task.status === "doing" ? "Back to To do" : "I'm on it"}
+              title={task.status === "doing" ? "Back to To do" : decision || approval ? "Thinking about it" : "I'm on it"}
               variant="secondary"
               loading={move.isPending}
               disabled={busy}
               onPress={() => move.mutate(task.status === "doing" ? "open" : "doing")}
               style={{ flex: 1 }}
             />
-            <Button
-              title="Can't do it"
-              variant="secondary"
-              loading={close.isPending && close.variables === "declined"}
-              disabled={busy}
-              onPress={() => close.mutate("declined")}
-              style={{ flex: 1 }}
-            />
+            {decision && task.questionId ? null : (
+              <Button
+                title={words.declined}
+                variant="secondary"
+                loading={close.isPending && close.variables === "declined"}
+                disabled={busy}
+                onPress={() => close.mutate("declined")}
+                style={{ flex: 1 }}
+              />
+            )}
           </Row>
           {task.agentId ? (
             <T variant="footnote" muted style={{ textAlign: "center" }}>
-              {task.agentName ?? "The agent"} continues by itself once you close it.
+              {task.questionId
+                ? `${task.agentName ?? "The agent"} stands still until you ${approval ? "decide" : "answer"}.`
+                : decision
+                  ? `${task.agentName ?? "The agent"} goes on with your answer. Dismiss it when there is nothing to decide.`
+                  : `${task.agentName ?? "The agent"} continues by itself once you close it.`}
             </T>
           ) : null}
         </View>
@@ -169,9 +222,9 @@ export default function HumanTaskSheet() {
             {status.label}
             {task.closedAt ? ` · ${shortTime(task.closedAt)}` : ""}
           </T>
-          {task.response?.text ? (
+          {answered ? (
             <T variant="subhead" muted selectable>
-              {task.response.text}
+              {answered}
             </T>
           ) : task.closedReason ? (
             <T variant="subhead" muted>
@@ -238,6 +291,23 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
     paddingHorizontal: 12,
     borderRadius: radius.pill,
+  },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  optionMark: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
   },
   note: {
     minHeight: 84,

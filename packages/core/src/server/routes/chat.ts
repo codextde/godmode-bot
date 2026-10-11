@@ -15,6 +15,7 @@ import {
 import { editQueued, removeQueued, sendQueuedNow, submitMessage } from "../../services/messageQueue";
 import { answerByMessage } from "../../services/questions";
 import { answererOf } from "./questions";
+import { settleByReply } from "../../services/humanTasks";
 import { continueConversation, pauseConversation, setAutoContinue } from "../../services/pauses";
 import { cancelRun, findRunLog, getRun, listRuns, untilAsked } from "../../runner/runner";
 import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } from "../../services/followups";
@@ -164,6 +165,7 @@ export function registerChatRoutes(app: Hono): void {
     await untilAsked(id);
     const answered = answerByMessage(id, input, answererOf(c));
     if (answered) return c.json(answered, 201);
+    settleByReply(id, input.content);
     if (!queue) return c.json(await sendMessage(id, { ...input, trigger: "chat" }), 201);
     const outcome = await submitMessage(id, { ...input, queueId });
     return c.json(outcome, "queued" in outcome ? 202 : 201);

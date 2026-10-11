@@ -1395,4 +1395,18 @@ ALTER TABLE mods ADD COLUMN source TEXT;
 ALTER TABLE mods ADD COLUMN contents TEXT;
 `,
   },
+  {
+    id: 85,
+    name: "human_task_kinds",
+    sql: /* sql */ `
+-- Whatever waits for the human's word is on their board: a question or approval an agent asked (question_id: the
+-- ticket stands for it), and a decision Godmode found in the answer an agent finished with (from_answer).
+ALTER TABLE human_tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'task';  -- task | decision | approval
+ALTER TABLE human_tasks ADD COLUMN options TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE human_tasks ADD COLUMN question_id TEXT;
+ALTER TABLE human_tasks ADD COLUMN from_answer INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE human_tasks ADD COLUMN response_option TEXT;
+CREATE INDEX IF NOT EXISTS idx_human_tasks_question ON human_tasks(question_id);
+`,
+  },
 ];

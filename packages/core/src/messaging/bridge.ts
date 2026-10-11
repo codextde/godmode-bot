@@ -10,6 +10,7 @@ import { logger } from "../log";
 import { cancelRun, listActiveRuns, untilAsked, waitForRun } from "../runner/runner";
 import { pauseOf } from "../services/pauses";
 import { answerByMessage, getQuestion, openQuestionOf } from "../services/questions";
+import { settleByReply } from "../services/humanTasks";
 import { conversationExists, createConversation, MAX_ATTACHMENT_BYTES, sendMessage } from "../services/conversations";
 import { notify } from "../services/notifications";
 import { getSettings } from "../services/settings";
@@ -448,6 +449,7 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
     await stopWorking().catch(() => undefined);
   };
   const cap = setTimeout(() => void stop(), WORKING_MAX_MS);
+  if (from.owner) settleByReply(conversationId, msg.text);
   let run: Run;
   try {
     ({ run } = await sendMessage(conversationId, { content, attachments: files.length ? files : undefined, trigger: "chat" }));

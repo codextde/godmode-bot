@@ -238,7 +238,7 @@ export default function Chat() {
           getItemType={(item) => item.role}
         />
         )}
-        {forYou.data?.length ? <ForYouStrip tasks={forYou.data} /> : null}
+        {forYou.data?.some((t) => !t.questionId) ? <ForYouStrip tasks={forYou.data.filter((t) => !t.questionId)} /> : null}
         {run && primary ? <LiveStrip screen={primary} activity={run.activity} /> : null}
         {paused?.reason === "question" ? (
           <AskingStrip agentName={agent?.name ?? "The agent"} approval={paused.question?.kind === "approval"} />
@@ -345,7 +345,7 @@ function ForYouStrip({ tasks }: { tasks: HumanTask[] }) {
       <Icon name="person" size={15} color={c.warning} />
       <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
         <T variant="footnote" style={{ fontWeight: "600" }}>
-          Waiting for you:{" "}
+          {first.kind === "decision" ? "Waiting for your answer: " : "Waiting for you: "}
         </T>
         {first.title}
         {tasks.length > 1 ? ` and ${tasks.length - 1} more` : ""}

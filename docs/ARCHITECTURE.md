@@ -378,7 +378,8 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
 * **Asking.** `ask_human({ question, context?, options? })` asks for a decision (2–4 suggested answers, at most one
   `recommended`; the human can always answer in their own words), `request_approval({ action, reason, affects })` asks
   for an OK before one specific step. Every run gets them except condition checks, dreams and delegated runs (their
-  system prompt tells them to name what needs deciding in their answer, so the agent that handed the task over can ask).
+  system prompt tells them to end their answer with a `## Decision for <human>` section; it lands on the human's task
+  list, see My tasks below).
   The system prompt's "Asking" section says when asking is right; Claude Code's own `AskUserQuestion` is disallowed.
   Text is redacted and loses Godmode's note tags. Refused: a second question in the same step, a question while a
   message from the human waits in the chat's queue (it may already answer it), more than 10 per run, and asking while
@@ -414,6 +415,38 @@ An agent that needs the human asks and waits, instead of ending its turn with a 
   `messaging_users.is_owner`, one per bot, audited) gets the question posted and can answer; everyone else is told the
   agent is checking with the owner. An answer given in Godmode is followed back into the platform chat. Agents have no
   tool that answers.
+
+### My tasks
+
+Whatever waits for the human's hand or word is one ticket on their own board (`services/humanTasks.ts`, table
+`human_tasks`, `HumanTask`, `H-<number>`; page *My tasks*, phone *My tasks*). Three kinds (`kind`):
+
+* **`task`** — something only the human can do (a passkey, a CAPTCHA, a signature). The agent hands it over with
+  `human_task_create` and ends its turn; *Mark done* or *Can't do it* (`POST /api/human-tasks/:id/close`, with a note
+  and files) continues its chat with a `<godmode-human-task>` note, straight away or through the chat's queue while the
+  agent works there. A board ticket waits in Blocked meanwhile. At most five open per chat; `human_task_cancel` takes one
+  back. The human can add tasks of their own (nobody continues).
+* **A question or an approval** (`decision` / `approval`, `questionId` set). Every open question gets a ticket that
+  stands for it (the bus events `question.created` / `question.updated`, and once at start): answering the ticket (an
+  option, words, Approve / Decline) calls `answerQuestion`, and a question answered or withdrawn anywhere else closes or
+  takes back its ticket. The run stands still for the question as before; such a ticket can't be dismissed. Needs you
+  lists it once, as the question.
+* **A decision an answer left open** (`decision`, `fromAnswer`). An agent that finishes with "Decision for you", "What
+  I need from you:" or a closing question to the human, without having asked with a tool, looks finished while it
+  waits. `detectOpenDecision` (`runner/openDecision.ts`, a heuristic over English and German like the missing-login
+  one) reads the final answer of every succeeded run except checks and dreams, before `run.finished` goes out, and
+  `noteOpenDecision` puts what it finds on the board: the question as the title, its section as the body. Offers of
+  extra work ("Want me to also …?") and pleasantries are not decisions, a section that says "none" settles it, and a run
+  that handed the human a task itself is left alone. One per chat: the same question keeps its ticket, another one
+  takes its place. The human is notified unless they wrote the message the run answered (they read the answer in the
+  chat). *Answer* continues the chat with the answer in a `<godmode-human-task>` note; writing into the chat
+  (app, task, the owner on a chat platform) answers it too (`settleByReply`), and *Dismiss* closes it without waking
+  the agent. On a board ticket the work is delivered all the same, and the answer continues it like feedback. For a
+  delegated run the agent that handed the task over is told the decision is on the human's list already
+  (`delegationReport`), so it doesn't ask twice.
+
+Deleting the chat withdraws its open tickets. Cloud and phone: listing, moving and closing (`outcome`, `note`,
+`optionId`; no files from the phone).
 
 ## Needs you
 

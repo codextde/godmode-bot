@@ -187,8 +187,9 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   if (runner) startKeepAwake();
   else startScheduler();
   startFollowups();
-  startHumanTasks();
   startPauses();
+  // After the pauses: a question whose run no longer waits is withdrawn there, and its ticket goes with it.
+  startHumanTasks();
   startBudgets();
   startWatchdog();
   if (!runner) {

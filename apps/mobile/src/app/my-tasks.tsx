@@ -13,7 +13,7 @@ import { space } from "@/lib/theme";
 
 const DONE_SHOWN = 20;
 
-/** What agents need the human to do: a passkey, a CAPTCHA, a signature. Closing one continues the agent's chat. */
+/** What agents need from the human: a passkey, a CAPTCHA, an answer, an OK. Closing one continues the agent's chat. */
 export default function MyTasks() {
   const list = useQuery({ queryKey: qk.humanTaskList("all"), queryFn: () => api.humanTasks.list({ status: "all" }) });
   const { byId } = useAgents();
@@ -58,7 +58,7 @@ export default function MyTasks() {
             <EmptyState
               icon="person"
               title="Nothing for you to do"
-              body="When an agent needs you for something only you can do, like a passkey, a CAPTCHA or a signature, it lands here."
+              body="When an agent needs you, for a passkey, a CAPTCHA, a question or a decision it left open, it lands here."
             />
           )
         }

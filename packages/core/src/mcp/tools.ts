@@ -1429,16 +1429,18 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "human_tasks_list",
-    description: "Tasks you gave the human (human_task_create) and whether they are still open, being worked on, done or declined, with their note.",
+    description:
+      "Tasks you gave the human (human_task_create) and whether they are still open, being worked on, done or declined, with their note. Also lists a decision (kind: decision) Godmode found open in one of your final answers and put on their list.",
     schema: z.object({ status: z.enum(["active", "closed", "all"]).optional().describe("active (default) = open or being worked on") }),
     when: (agent, ctx) => canAsk(agent, ctx) && followupsAllowed(ctx.conversationId),
     run: ({ status }, { agent }) => {
-      const tasks = listHumanTasks({ status: status ?? "active", agentId: isManager(agent) ? undefined : agent.id });
+      const tasks = listHumanTasks({ status: status ?? "active", agentId: isManager(agent) ? undefined : agent.id }).filter((t) => !t.questionId);
       if (!tasks.length) return status === "active" || !status ? "No open tasks for the human." : "None.";
       return json(tasks.map((t) => ({
         id: t.id,
         ref: humanTaskRef(t),
         title: t.title,
+        ...(t.kind !== "task" ? { kind: t.kind } : {}),
         status: t.status,
         priority: t.priority,
         ...(t.agentId !== agent.id ? { agent: t.agentName ?? null } : {}),
@@ -2994,7 +2996,15 @@ function delegatedBy(r: Run, agent: Agent, ctx: RunContext): boolean {
 
 function delegationReport(agentName: string, r: Run): ToolOutput {
   const ids = `(run ${r.id}, conversation ${r.conversationId})`;
-  if (r.status === "succeeded") return `${agentName} finished the task ${ids}:\n\n${r.result ?? "(no answer)"}`;
+  if (r.status === "succeeded") {
+    // What its answer left for the human is on their list already: the agent that delegated doesn't ask it a second time.
+    const open = listHumanTasks({ status: "active", conversationId: r.conversationId }).find((t) => t.fromAnswer && t.runId === r.id);
+    const human = getSettings().general.userName.trim() || "the human";
+    const noted = open
+      ? `\n\n(Godmode put the decision this answer leaves open on ${human}'s task list as ${humanTaskRef(open)}: “${open.title}”. ${human}'s answer continues ${agentName}'s chat — don't ask them the same thing again.)`
+      : "";
+    return `${agentName} finished the task ${ids}:\n\n${r.result ?? "(no answer)"}${noted}`;
+  }
   if (r.status === "failed") return fail(`${agentName} failed ${ids}: ${r.error ?? "unknown error"}${r.result ? `\n\n${r.result}` : ""}`);
   if (r.status === "cancelled") return fail(`The task for ${agentName} was cancelled ${ids}${r.error ? `: ${r.error}` : ""}.`);
   if (r.status === "paused") return `${agentName}'s work on the task is paused ${ids} — by the human, or until Claude's usage limit resets. It continues where it stopped; don't hand the task over again. Check later with delegation_status({ runId: "${r.id}" }).`;

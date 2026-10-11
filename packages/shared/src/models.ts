@@ -576,7 +576,7 @@ export type MessageBlock =
   /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
   | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason }
   /** Where the human closed a task the agent gave them (see HumanTask) and the chat continued with it. */
-  | { type: "human_task"; id: ID; number: number; title: string; outcome: "done" | "declined"; note: string; at: ISODate }
+  | { type: "human_task"; id: ID; number: number; title: string; outcome: "done" | "declined"; note: string; at: ISODate; kind?: "task" | "decision" | "approval" }
   /**
    * A turn that ended early was picked up: `continue` where it stopped, or `again` from its prompt. By the human, or
    * (`auto`) by Godmode after it restarted in the middle of the turn.
