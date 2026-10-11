@@ -4,7 +4,7 @@
  * loads one version keeps it while an update lays down the next. What a plugin brings — skills, commands, agents, hooks,
  * MCP servers — is read from its folder.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve, sep } from "node:path";
 import type { ModContents } from "@godmode/shared";
@@ -13,6 +13,7 @@ import { config } from "../config";
 import { claudeEnv, resolveClaudeCommand } from "../runner/claude";
 import { runCommand, stripAnsi } from "../services/doctor";
 import { gitFailure, runGit } from "../services/workspaceSources";
+import type { McpServerJson } from "../types";
 import { badRequest, HttpError } from "../util";
 
 const CLONE_TIMEOUT_MS = 10 * 60_000;
@@ -30,9 +31,21 @@ function isObj(v: unknown): v is Json {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+/**
+ * Is `path` really inside Godmode's checkouts? A repository can ship links that lead anywhere on this computer: what
+ * they point at is neither read nor listed.
+ */
+function contained(path: string): boolean {
+  try {
+    return realpathSync(path).startsWith(realpathSync(checkoutsRoot()) + sep);
+  } catch {
+    return false;
+  }
+}
+
 function readJson(file: string): unknown {
   try {
-    return JSON.parse(readFileSync(file, "utf8"));
+    return contained(file) ? JSON.parse(readFileSync(file, "utf8")) : undefined;
   } catch {
     return undefined;
   }
@@ -47,7 +60,7 @@ export interface GitTarget {
   path: string;
 }
 
-function cleanPath(path: string): string {
+export function cleanPath(path: string): string {
   const segments = path.split("/").filter(Boolean);
   if (segments.some((s) => s === "." || s === ".." || !PATH_SEGMENT.test(s))) throw badRequest(`"${path}" isn't a folder of the repository`);
   return segments.join("/");
@@ -61,12 +74,21 @@ export function gitTarget(input: string, ref?: string | null): GitTarget {
   if (repo) {
     // github.com/owner/repo/tree/<ref>/<folder>: a branch name with slashes can't be told from the folder, so the ref is one segment.
     const rest = /^https?:\/\/(?:www\.)?github\.com\/[^/]+\/[^/]+\/tree\/([^/?#]+)((?:\/[^?#]*)?)/.exec(raw);
+    let linked: { ref: string; path: string } | null = null;
+    if (rest) {
+      try {
+        linked = { ref: decodeURIComponent(rest[1]!), path: decodeURIComponent(rest[2] ?? "") };
+      } catch {
+        throw badRequest("That link isn't a valid GitHub address.");
+      }
+      if (!isValidBranch(linked.ref)) throw badRequest(`"${linked.ref}" isn't a branch or tag name`);
+    }
     return {
       url: `https://github.com/${repo}.git`,
       repo,
       web: `https://github.com/${repo}`,
-      ref: ref || (rest ? decodeURIComponent(rest[1]!) : null),
-      path: rest?.[2] ? cleanPath(decodeURIComponent(rest[2])) : "",
+      ref: ref || linked?.ref || null,
+      path: linked?.path ? cleanPath(linked.path) : "",
     };
   }
   const parsed = parseGitUrl(raw);
@@ -93,7 +115,8 @@ function gitError(res: Parameters<typeof gitFailure>[0], url: string, ref: strin
 
 /** The commit `ref` (default: the default branch) points at now. */
 export async function latestCommit(url: string, ref: string | null): Promise<string> {
-  const res = await runGit(["ls-remote", "--", url, ref ?? "HEAD"], { cwd: tmpdir(), timeoutMs: LS_REMOTE_TIMEOUT_MS });
+  // An annotated tag is an object of its own: "<tag>^{}" asks for the commit it names too.
+  const res = await runGit(["ls-remote", "--", url, ...(ref ? [ref, `${ref}^{}`] : ["HEAD"])], { cwd: tmpdir(), timeoutMs: LS_REMOTE_TIMEOUT_MS });
   if (!res.ok) throw gitError(res, url, ref);
   const lines = res.stdout
     .split("\n")
@@ -155,7 +178,8 @@ export async function cloneAt(url: string, commit: string, dest: string): Promis
 /** A path a manifest names, inside `dir`; null when it leads out. */
 function inside(dir: string, path: string): string | null {
   const full = resolve(dir, path);
-  return full === dir || full.startsWith(dir + sep) ? full : null;
+  if (full !== dir && !full.startsWith(dir + sep)) return null;
+  return !existsSync(full) || contained(full) ? full : null;
 }
 
 function isDir(path: string): boolean {
@@ -185,7 +209,12 @@ export interface ResolvedPlugin {
   path: string;
   name: string;
   description: string;
+  /** The manifest to lay into its folder when it ships none: Claude Code would name it after the folder otherwise. */
+  manifest: Json | null;
 }
+
+/** What a marketplace entry may say in place of the plugin's own manifest. */
+const LISTING_FIELDS = ["version", "description", "author", "homepage", "repository", "license", "keywords", "skills", "commands", "agents", "hooks", "mcpServers", "userConfig"];
 
 /**
  * Which plugin of the checkout to install: the one at `path` (a GitHub link can name a folder), else the root's own, else
@@ -193,41 +222,67 @@ export interface ResolvedPlugin {
  */
 export function resolvePlugin(checkout: string, path: string, plugin: string | undefined, fallbackName: string): ResolvedPlugin {
   const base = pluginDirIn(checkout, path);
-  if (!isDir(base)) throw badRequest(`The repository has no folder "${path}".`);
+  if (!isDir(base) || !contained(base)) throw badRequest(`The repository has no folder "${path}".`);
   const market = readJson(join(base, ...MARKETPLACE_PATH.split("/")));
   const listed = (isObj(market) && Array.isArray(market.plugins) ? market.plugins : []).filter(isObj).filter((p) => typeof p.name === "string");
-  const own = isFile(join(base, ...MOD_MANIFEST_PATH.split("/")));
+  const relative = (listing: Json) => (typeof listing.source === "string" ? inside(base, listing.source) : null);
+  const local = listed.filter((p) => relative(p));
+  const ownName = readName(base);
+  const pathOf = (dir: string) => (dir === checkout ? "" : dir.slice(checkout.length + 1).split(sep).join("/"));
 
   let chosen: { dir: string; path: string; listing: Json | null };
-  const relative = (listing: Json) => (typeof listing.source === "string" ? inside(base, listing.source) : null);
-  const ownListing = listed.find((p) => relative(p) === base) ?? null;
-  if (plugin && plugin !== (readName(base) ?? ownListing?.name)) {
-    const listing = listed.find((p) => p.name === plugin);
-    if (!listing) throw badRequest(`The repository has no plugin "${plugin}".`);
+  if (plugin && ownName === plugin) {
+    chosen = { dir: base, path, listing: listed.find((p) => p.name === plugin && relative(p) === base) ?? null };
+  } else if (plugin && listed.some((p) => p.name === plugin)) {
+    const listing = listed.find((p) => p.name === plugin)!;
     const dir = relative(listing);
     if (!dir) throw badRequest(`"${plugin}" lives in another repository: install it from there.`);
-    chosen = { dir, path: dir.slice(checkout.length + 1).split(sep).join("/"), listing };
-  } else if (own || (looksLikePlugin(base) && listed.length === 0)) {
-    chosen = { dir: base, path, listing: ownListing };
-  } else {
-    const local = listed.filter((p) => relative(p));
-    if (local.length === 0) throw badRequest("No Claude Code plugin in this repository: it has no .claude-plugin/plugin.json, skills, commands or agents.");
-    if (local.length > 1) {
-      throw new HttpError(409, `This repository has ${local.length} plugins. Pick the one to install.`, "pick_plugin", {
-        plugins: local.map((p) => ({ name: String(p.name), description: typeof p.description === "string" ? p.description : "" })),
-      });
-    }
+    chosen = { dir, path: pathOf(dir), listing };
+  } else if (plugin && (ownName !== null || listed.length > 0)) {
+    throw badRequest(`The repository has no plugin "${plugin}".`);
+  } else if (ownName !== null) {
+    chosen = { dir: base, path, listing: listed.find((p) => relative(p) === base && p.name === ownName) ?? null };
+  } else if (local.length === 1) {
     const dir = relative(local[0]!)!;
-    chosen = { dir, path: dir === checkout ? "" : dir.slice(checkout.length + 1).split(sep).join("/"), listing: local[0]! };
+    chosen = { dir, path: pathOf(dir), listing: local[0]! };
+  } else if (local.length > 1) {
+    throw new HttpError(409, `This repository has ${local.length} plugins. Pick the one to install.`, "pick_plugin", {
+      plugins: local.map((p) => ({ name: String(p.name), description: typeof p.description === "string" ? p.description : "" })),
+    });
+  } else if (listed.length > 0) {
+    throw badRequest("The plugins this repository lists live in other repositories: install them from there.");
+  } else if (looksLikePlugin(base)) {
+    chosen = { dir: base, path, listing: null };
+  } else {
+    throw badRequest("No Claude Code plugin in this repository: it has no .claude-plugin/plugin.json, skills, commands or agents.");
   }
-  if (!isDir(chosen.dir) || !looksLikePlugin(chosen.dir)) throw badRequest("No Claude Code plugin in that folder of the repository.");
+  if (!isDir(chosen.dir) || !contained(chosen.dir)) throw badRequest("No Claude Code plugin in that folder of the repository.");
 
   const manifest = readJson(join(chosen.dir, ...MOD_MANIFEST_PATH.split("/")));
   const declared = isObj(manifest) && typeof manifest.name === "string" ? manifest.name : null;
-  const name = declared ?? (typeof chosen.listing?.name === "string" ? chosen.listing.name : modNameFrom(fallbackName));
+  const name = declared ?? (typeof chosen.listing?.name === "string" ? chosen.listing.name : MOD_NAME_RE.test(fallbackName) ? fallbackName : modNameFrom(fallbackName));
   if (!MOD_NAME_RE.test(name)) throw badRequest(`The plugin calls itself "${name}", a name Claude Code can't load: lowercase letters, digits and dashes.`);
   const description = isObj(manifest) && typeof manifest.description === "string" ? manifest.description : typeof chosen.listing?.description === "string" ? chosen.listing.description : "";
-  return { path: chosen.path, name, description };
+  let written: Json | null = null;
+  if (declared === null) {
+    // A plugin its marketplace describes, or one that is only folders: the manifest says what the entry says.
+    written = { name };
+    for (const field of LISTING_FIELDS) if (chosen.listing && chosen.listing[field] !== undefined) written[field] = chosen.listing[field];
+    if (!looksLikePlugin(chosen.dir) && !["skills", "commands", "agents", "hooks", "mcpServers"].some((f) => written![f] !== undefined)) {
+      throw badRequest("No Claude Code plugin in that folder of the repository.");
+    }
+  }
+  return { path: chosen.path, name, description, manifest: written };
+}
+
+/** Lay the manifest of a plugin that ships none into its folder (see `ResolvedPlugin.manifest`). */
+export function writeManifest(dir: string, manifest: Json): void {
+  const file = join(dir, ...MOD_MANIFEST_PATH.split("/"));
+  mkdirSync(join(file, ".."), { recursive: true });
+  // Never through a link the repository laid there.
+  if (!contained(join(file, ".."))) throw badRequest("No Claude Code plugin in that folder of the repository.");
+  rmSync(file, { force: true });
+  writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 function readName(dir: string): string | null {
@@ -241,7 +296,9 @@ export function keyFiles(dir: string): Record<string, string> {
   for (const path of KEY_FILES) {
     const file = join(dir, ...path.split("/"));
     try {
-      if (isFile(file) && statSync(file).size <= KEY_FILE_MAX_BYTES) out[path] = readFileSync(file, "utf8");
+      // Not through a link: a repository could point one at any file of this computer, and the text is kept and shown.
+      const s = lstatSync(file);
+      if (s.isFile() && s.size <= KEY_FILE_MAX_BYTES && contained(file)) out[path] = readFileSync(file, "utf8");
     } catch {
       /* unreadable: left out */
     }
@@ -257,6 +314,7 @@ function manifestPaths(dir: string, value: unknown): string[] {
 
 function frontmatterName(file: string): string | null {
   try {
+    if (!contained(file)) return null;
     const head = readFileSync(file, "utf8").slice(0, 4000);
     const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(head)?.[1];
     const name = front ? /^name:\s*["']?([^"'\r\n]+?)["']?\s*$/m.exec(front)?.[1] : null;
@@ -268,7 +326,7 @@ function frontmatterName(file: string): string | null {
 
 function list(dir: string): string[] {
   try {
-    return readdirSync(dir).sort();
+    return contained(dir) ? readdirSync(dir).sort() : [];
   } catch {
     return [];
   }
@@ -352,7 +410,8 @@ export function inventory(dir: string): ModContents {
       const full = join(path, entry);
       let s;
       try {
-        s = statSync(full);
+        // Links aren't followed: one could lead out of the checkout, or back into it.
+        s = lstatSync(full);
       } catch {
         continue;
       }
@@ -419,4 +478,51 @@ export function contentsStartPrograms(dir: string, contents: ModContents): boole
 export function validateTarget(dir: string): string {
   const manifest = join(dir, ...MOD_MANIFEST_PATH.split("/"));
   return isFile(manifest) && isFile(join(dir, ...MARKETPLACE_PATH.split("/"))) ? manifest : dir;
+}
+
+function fill(value: string, vars: Record<string, string>): string {
+  return value.replace(/\$\{([A-Za-z_][\w.]*)\}/g, (whole, key: string) => (Object.hasOwn(vars, key) ? vars[key]! : whole));
+}
+
+function fillAll(record: unknown, vars: Record<string, string>): Record<string, string> | undefined {
+  if (!isObj(record)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(record)) if (typeof value === "string") out[key] = fill(value, vars);
+  return out;
+}
+
+/**
+ * The MCP servers the plugin in `dir` declares (`.mcp.json`, or what its manifest's `mcpServers` names), under the names
+ * Claude Code gives them ("plugin_<plugin>_<server>", so their tools are `mcp__plugin_<plugin>_<server>__…` as the
+ * plugin's own skills expect). Runs take their MCP servers from Godmode's config alone, so a plugin's go in there.
+ */
+export function pluginMcpServers(dir: string, plugin: string, dataDir: string, options: Record<string, unknown>): Record<string, McpServerJson> {
+  const manifest = readJson(join(dir, ...MOD_MANIFEST_PATH.split("/")));
+  const declared = isObj(manifest) ? manifest.mcpServers : undefined;
+  const sources: unknown[] = declared === undefined ? [readJson(join(dir, ".mcp.json"))] : [];
+  for (const entry of Array.isArray(declared) ? declared : declared === undefined ? [] : [declared]) {
+    if (typeof entry === "string") {
+      const file = inside(dir, entry);
+      if (file) sources.push(readJson(file));
+    } else sources.push(entry);
+  }
+  const vars: Record<string, string> = { CLAUDE_PLUGIN_ROOT: dir, CLAUDE_PLUGIN_DATA: dataDir };
+  for (const [key, value] of Object.entries(options)) vars[`user_config.${key}`] = Array.isArray(value) ? value.join(",") : String(value);
+  const out: Record<string, McpServerJson> = {};
+  for (const source of sources) {
+    if (!isObj(source)) continue;
+    const servers = isObj(source.mcpServers) ? source.mcpServers : source;
+    for (const [name, def] of Object.entries(servers)) {
+      if (!isObj(def) || !/^[A-Za-z0-9_-]{1,64}$/.test(name)) continue;
+      const id = `plugin_${plugin}_${name}`;
+      if (typeof def.command === "string") {
+        const args = Array.isArray(def.args) ? def.args.filter((a): a is string => typeof a === "string").map((a) => fill(a, vars)) : undefined;
+        out[id] = { command: fill(def.command, vars), ...(args ? { args } : {}), env: { ...fillAll(def.env, vars), CLAUDE_PLUGIN_ROOT: dir, CLAUDE_PLUGIN_DATA: dataDir } };
+      } else if (typeof def.url === "string" && (def.type === "http" || def.type === "sse")) {
+        const headers = fillAll(def.headers, vars);
+        out[id] = { type: def.type, url: fill(def.url, vars), ...(headers ? { headers } : {}) };
+      }
+    }
+  }
+  return out;
 }

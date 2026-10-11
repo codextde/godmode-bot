@@ -158,7 +158,7 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
                   />
                   <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
                     Kept sealed in the vault. Runs that load this plugin are handed the value, where an agent with full access to this computer could read
-                    it — use a key made for this mod.
+                    it — use a key made for this plugin.
                   </p>
                 </div>
               );

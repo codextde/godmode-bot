@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
 import { modUpdateAvailable } from "@godmode/shared";
@@ -11,6 +11,7 @@ import { waitForRun } from "../src/runner/runner";
 import { callTool } from "../src/mcp/tools";
 import { checkoutPath, checkoutsRoot, gitTarget } from "../src/mods/git";
 import { checkModUpdates, deleteMod, getMod, installMod, listModCatalog, listMods, updateGitMod, updateMod } from "../src/mods/service";
+import { run as sql } from "../src/db";
 import { HttpError } from "../src/util";
 import type { RunContext } from "../src/types";
 
@@ -29,7 +30,7 @@ const PLUGIN = {
   "agents/reviewer.md": "---\nname: reviewer\ndescription: Reviews\n---\nReview.\n",
   "commands/hello.md": "Say hello.\n",
   "hooks/hooks.json": JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "echo hi" }] }] } }),
-  ".mcp.json": JSON.stringify({ mcpServers: { demo: { command: "node", args: ["server.js"] } } }),
+  ".mcp.json": JSON.stringify({ mcpServers: { demo: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/server.js"] } } }),
 };
 
 function repo(files: Record<string, string>): GitServer {
@@ -126,6 +127,8 @@ describe("installing from a repository", () => {
     const dir = checkoutPath(mod.id, mod.source!.commit);
     expect(pluginDirs(invocation.args)).toContain(dir);
     expect(invocation.settings?.pluginConfigs).toEqual({ "demo-plugin": { options: { greeting: "hello there" } } });
+    // Its MCP server goes into the run's own MCP config, under the name Claude Code gives a plugin's server.
+    expect(invocation.pluginServers["plugin_demo-plugin_demo"]).toMatchObject({ command: "node", args: [join(dir, "server.js")], env: { CLAUDE_PLUGIN_ROOT: dir } });
     // The checkout outlives the run: it is the installed version, not a copy.
     expect(existsSync(dir)).toBe(true);
 
@@ -185,6 +188,61 @@ describe("installing from a repository", () => {
     deleteMod(mod.id);
   });
 
+  test("a plugin its marketplace describes gets a manifest with its name, and updates find it again", async () => {
+    // No plugin.json anywhere: every entry names the root and says which skills are its own.
+    const market = {
+      name: "skills",
+      plugins: [
+        { name: "docs", description: "Document skills", source: "./", strict: false, skills: ["./skills/pdf"] },
+        { name: "art", description: "Art skills", source: "./", strict: false, skills: ["./skills/draw"] },
+      ],
+    };
+    const server = repo({
+      ".claude-plugin/marketplace.json": JSON.stringify(market),
+      "skills/pdf/SKILL.md": "---\nname: pdf\n---\nRead PDFs.\n",
+      "skills/draw/SKILL.md": "---\nname: draw\n---\nDraw.\n",
+    });
+    expect(await status(installMod({ source: server.url }))).toBe(409);
+    const mod = await installMod({ source: server.url, plugin: "docs" });
+    expect(mod).toMatchObject({ name: "docs", description: "Document skills", source: { path: "" }, check: { ok: true } });
+    const manifest = JSON.parse(readFileSync(join(checkoutPath(mod.id, mod.source!.commit), ".claude-plugin", "plugin.json"), "utf8"));
+    expect(manifest).toEqual({ name: "docs", description: "Document skills", skills: ["./skills/pdf"] });
+    // The other one of the same repository installs beside it.
+    const art = await installMod({ source: server.url, plugin: "art" });
+    expect(art.name).toBe("art");
+
+    server.commitFiles({ "skills/pdf/SKILL.md": "---\nname: pdf\n---\nRead PDFs well.\n" });
+    const updated = await updateGitMod(mod.id);
+    expect(updated.source!.commit).not.toBe(mod.source!.commit);
+    expect(updated.name).toBe("docs");
+    deleteMod(mod.id);
+    deleteMod(art.id);
+  });
+
+  test("links in a repository aren't followed out of the checkout", async () => {
+    const secret = join(env.dataDir, "secret.json");
+    writeFileSync(secret, JSON.stringify({ mcpServers: { stolen: { command: "leak" } } }));
+    const server = repo({ ".claude-plugin/plugin.json": manifest("1.0.0"), "commands/hello.md": "Hi.\n" });
+    server.commitLink(".mcp.json", secret);
+    server.commitLink("skills", env.dataDir);
+    const mod = await installMod({ source: server.url, enabled: false });
+    expect(Object.keys(mod.files)).toEqual([".claude-plugin/plugin.json"]);
+    expect(mod.contents).toMatchObject({ mcpServers: [], skills: [], commands: ["hello"] });
+    expect(JSON.stringify(mod)).not.toContain("stolen");
+    deleteMod(mod.id);
+  });
+
+  test("a record whose folder leads out of its checkout isn't loaded", async () => {
+    const server = repo(PLUGIN);
+    const mod = await installMod({ source: server.url });
+    sql("UPDATE mods SET source = json_set(source, '$.path', '../../..') WHERE id = ?", mod.id);
+    expect(getMod(mod.id).source).toBeNull();
+    const { invocation, blocks } = await chat(agent.id);
+    expect(pluginDirs(invocation.args)).toEqual([]);
+    expect(blocks.some((b) => b.type === "notice" && b.text.includes("its record is damaged"))).toBe(true);
+    deleteMod(mod.id);
+  });
+
   test("a repository without a plugin is refused and leaves nothing behind", async () => {
     const server = repo({ "src/index.ts": "export {}\n" });
     expect(await status(installMod({ source: server.url }))).toBe(400);
@@ -216,6 +274,20 @@ describe("updates", () => {
 
     // Already up to date: nothing changes.
     expect((await updateGitMod(mod.id)).source!.commit).toBe(next);
+    deleteMod(mod.id);
+  });
+
+  test("following an annotated tag: no update while it names the installed commit", async () => {
+    const server = repo(PLUGIN);
+    server.tag("v1");
+    const mod = await installMod({ source: server.url, ref: "v1" });
+    // The branch moves on, the tag doesn't.
+    server.commitFiles({ "README.md": "# Later\n" });
+    const [checked] = await checkModUpdates([mod.id]);
+    expect(checked!.source).toMatchObject({ ref: "v1", commit: mod.source!.commit, latestCommit: mod.source!.commit });
+    expect(modUpdateAvailable(checked!)).toBe(false);
+    expect((await updateGitMod(mod.id)).source!.commit).toBe(mod.source!.commit);
+    expect(existsSync(join(checkoutPath(mod.id, mod.source!.commit), "skills", "summarize", "SKILL.md"))).toBe(true);
     deleteMod(mod.id);
   });
 

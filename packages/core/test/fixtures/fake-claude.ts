@@ -266,6 +266,14 @@ const plugins = args.flatMap((arg, i) => {
   return [{ dir, files: files.sort(), module: existsSync(module) ? readFileSync(module, "utf8") : null }];
 });
 
+/** The MCP servers of the run's config that come from its plugins ("plugin_<plugin>_<server>"). */
+function pluginServers(): Record<string, unknown> {
+  const file = argValue("--mcp-config");
+  if (!file || !existsSync(file)) return {};
+  const servers = (JSON.parse(readFileSync(file, "utf8")) as { mcpServers?: Record<string, unknown> }).mcpServers ?? {};
+  return Object.fromEntries(Object.entries(servers).filter(([name]) => name.startsWith("plugin_")));
+}
+
 appendFileSync(
   join(stateDir, "invocations.jsonl"),
   JSON.stringify({
@@ -274,6 +282,7 @@ appendFileSync(
     cwd: process.cwd(),
     settings: sessionSettings,
     plugins,
+    pluginServers: pluginServers(),
     env: {
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? null,
       GODMODE_TOKEN: process.env.GODMODE_TOKEN ?? null,

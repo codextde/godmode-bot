@@ -241,7 +241,7 @@ export function checkMod(name: string, files: Record<string, string>): Promise<C
 }
 
 /** A note about the plugin's own repository layout that nobody installing it can act on. */
-const AUTHOR_ONLY = /^CLAUDE\.md at the plugin root is not loaded/;
+const AUTHOR_ONLY = /CLAUDE\.md at the plugin root is not loaded/;
 
 /**
  * Run the validator over a plugin folder as it lies (one from a repository). `target` is the folder or, beside a

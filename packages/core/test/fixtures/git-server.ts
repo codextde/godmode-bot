@@ -1,5 +1,5 @@
 /** A git repository served over git's "dumb" HTTP protocol from a temp dir, for clone and update tests. */
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, normalize } from "node:path";
 
@@ -10,6 +10,10 @@ export interface GitServer {
   commit: (file: string, content: string) => string;
   /** Commit several files (paths with folders too) at once and publish them; returns the new full commit. */
   commitFiles: (files: Record<string, string>) => string;
+  /** Commit a symbolic link `file` → `target` and publish it. */
+  commitLink: (file: string, target: string) => string;
+  /** Put an annotated tag on the newest commit and publish it. */
+  tag: (name: string) => void;
   /** Delay every response by this many milliseconds (a slow network). */
   delayMs: number;
   close: () => void;
@@ -68,6 +72,21 @@ export function startGitServer(): GitServer {
       git(work, "push", "--quiet", "origin", "main");
       git(bare, "update-server-info");
       return git(work, "rev-parse", "HEAD");
+    },
+    commitLink(file, target) {
+      mkdirSync(dirname(join(work, file)), { recursive: true });
+      rmSync(join(work, file), { force: true });
+      symlinkSync(target, join(work, file));
+      git(work, "add", ".");
+      git(work, "commit", "--quiet", "-m", `Link ${file}`);
+      git(work, "push", "--quiet", "origin", "main");
+      git(bare, "update-server-info");
+      return git(work, "rev-parse", "HEAD");
+    },
+    tag(name) {
+      git(work, "tag", "-a", name, "-m", name);
+      git(work, "push", "--quiet", "origin", name);
+      git(bare, "update-server-info");
     },
     commit(file, content) {
       writeFileSync(join(work, file), content);

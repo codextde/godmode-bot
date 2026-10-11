@@ -169,8 +169,11 @@ export function modAuthor(mod: Pick<Mod, "createdBy">, agents: Agent[]): Agent |
   return id ? agents.find((a) => a.id === id) : undefined;
 }
 
-export function modOriginLabel(mod: Pick<Mod, "origin" | "createdBy">, agents: Agent[]): string {
-  if (mod.origin === "git") return mod.createdBy.startsWith("agent:") ? `Installed by ${modAuthor(mod, agents)?.name ?? "an agent"}` : "Installed from git";
+export function modOriginLabel(mod: Pick<Mod, "origin" | "createdBy" | "source">, agents: Agent[]): string {
+  if (mod.origin === "git") {
+    if (mod.createdBy.startsWith("agent:")) return `Installed by ${modAuthor(mod, agents)?.name ?? "an agent"}`;
+    return mod.source?.web?.startsWith("https://github.com/") ? "Installed from GitHub" : "Installed from its repository";
+  }
   if (mod.origin === "template") return "Made by Godmode";
   if (mod.origin === "import") return "Imported";
   if (mod.origin === "agent") return `Drafted by ${modAuthor(mod, agents)?.name ?? "an agent"}`;
@@ -360,7 +363,7 @@ export function contentsAbilities(contents: ModContents | null): ModAbility[] {
   if (contents.agents.length) out.push({ id: "agents", label: `Adds ${count(contents.agents.length, "subagent")}`, detail: "Specialists the agent can hand parts of its work to.", level: "normal" });
   if (contents.commands.length) out.push({ id: "commands", label: `Adds ${count(contents.commands.length, "slash command")}`, detail: "Prompts you or the agent start with a /name.", level: "normal" });
   if (contents.hooks.length) {
-    out.push({ id: "hooks", label: `Runs commands on ${count(contents.hooks.length, "event")}`, detail: `Shell commands on this computer when ${contents.hooks.slice(0, 4).join(", ")}${contents.hooks.length > 4 ? "…" : ""} happen.`, level: "sensitive" });
+    out.push({ id: "hooks", label: `Runs commands on ${count(contents.hooks.length, "event")}`, detail: `Shell commands on this computer on ${contents.hooks.slice(0, 4).join(", ")}${contents.hooks.length > 4 ? " and more" : ""}.`, level: "sensitive" });
   }
   if (contents.mcpServers.length) {
     out.push({ id: "mcp", label: `Starts ${count(contents.mcpServers.length, "MCP server")}`, detail: "Programs on this computer that give the agent tools of their own.", level: "sensitive" });
