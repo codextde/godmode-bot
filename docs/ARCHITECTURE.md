@@ -46,7 +46,9 @@ vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, ta
                       disks and gm-image-* templates), downloads/ (image layers while downloading),
                       shared/<vm-id>/ shared folders, logs/<vm-id>.log, ssh/ key
 tasks/<task-id>/      checkout of a coding task's repository (see "Tasks")
-mods/<run-id>/<name>/ a run's own copy of the mods it loads (see "Mods"); written from the database, removed with the run
+mods/<run-id>/<name>/ a run's own copy of the small plugins it loads (see "Plugins"); written from the database, removed with the run
+plugins/git/<mod-id>/<commit>/  checkout of a plugin installed from a git repository, one per installed commit
+plugins/data/<name>/  a plugin's own data between runs (`${CLAUDE_PLUGIN_DATA}` of its MCP servers)
 logs/godmode.jsonl    diagnostic log (see "Diagnostic log"); godmode.1.jsonl is the previous 2 MB, desktop.log the shell's
 link-key              0600 — this installation's X25519 key pair for the runner link (see "Remote runners")
 runner.json           a runner only (~/.godmode-runner, GODMODE_RUNNER_HOME): pid and ports while it serves
@@ -211,8 +213,9 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
        --settings <tmp json>                   (the message-queue hook, see below; `ultracode: true` with Ultracode;
-                                                `pluginConfigs` with the options of the run's mods)
-       [--plugin-dir <data>/mods/<run-id>/<name> for each mod that is on for the agent, see Mods]
+                                                `pluginConfigs` with the options of the run's plugins)
+       [--plugin-dir for each plugin that is on for the agent, see Plugins: <data>/mods/<run-id>/<name> for a small
+        one, <data>/plugins/git/<mod-id>/<commit>[/<folder>] for one from a repository]
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key or in a VM; Bash in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
        [--add-dir <folder or clone> for each usable workspace folder and repository]
@@ -542,7 +545,7 @@ the core, the desktop and the phone alike.
 | `task_report_blocked({ reason })` | Only in runs working on a board task: say what's missing (access, an account, information nobody can give now); the task moves to Blocked when the run ends (see Tasks). Decisions and OKs go through `ask_human` / `request_approval` |
 | `memory_dream_report({ summary, changes })` | Only in dream runs: report what a memory consolidation changed (see Dreaming) |
 | `workspace_tidy({ operations })` | Only in dream runs that tidy the workspace: move or discard entries of `workspace/` (see Dreaming) |
-| `mods_list({ mod? })`, `mod_save({ mod?, title, description?, files })` | Only for agents with `canManageAgents`: the installed mods (with `mod`: one with its files), and saving a mod the agent wrote as a draft — switched off, checked by Claude Code's validator, for the human to review (see Mods). `mod_save` only saves over an agent's own draft — never a mod the human made, added or has had on — and isn't offered on a runner |
+| `plugins_list({ plugin? })`, `plugin_save({ plugin?, title, description?, files })`, `plugin_install({ source, ref?, plugin? })` | Only for agents with `canManageAgents`: the installed plugins (with `plugin`: one with its files), saving a small plugin the agent wrote as a draft, and installing one from a git repository — each arrives switched off, checked by Claude Code's validator, for the human to review (see Plugins). `plugin_save` only saves over an agent's own draft — never a plugin the human made, added, installed or has had on; `plugin_save` and `plugin_install` aren't offered on a runner |
 | `settings_get({ section? })`, `settings_update({ changes })` | Only for agents with `canManageAgents`, not on a runner: Godmode's own settings (models, effort, run limits, browser and computer behaviour, VMs, memory and dreaming, voice, upkeep, logs). `changes` is a partial object by section, checked like a change in the app and written to the audit log. Agents change only what `AGENT_SETTINGS` in `services/agentSettings.ts` lists, down to the single setting (`dreaming.model`); a new setting is closed until it is added there. Security, the server, phone and cloud access, self-repair, the user's name and the instructions for every agent (both reach reveal-mode agents), program paths, endpoints and extra CLI flags, permission bypass, the browser and computer control switches, live views, notifications, the watchdog, the VM switch and VM isolation, automatic cleanup and spending limits stay with the human. Not in a run kept in a VM. Connected apps: `settings_get` with any key, `settings_update` with full access, so `godmode call settings_update '{"changes":{...}}'` works from a terminal |
 | `notify_user({ title, body })` | Push a notification to the human |
 | `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
@@ -929,15 +932,43 @@ Remote machines agents sign in to and control (`packages/core/src/ssh/`, `/api/s
   real machines; resumed turns restate them. Audit: `ssh.use` (first call per run and server), `ssh.sudo`,
   `ssh.assign` / `ssh.unassign`.
 
-## Mods
+## Plugins
 
-[Claude Code mods](https://claude.com/blog/claude-code-mods) are small plugins of TypeScript function hooks that run
-inside Claude Code: `register(on, options)` adds hooks `($, e, next)` on its events — a tool call, a prompt, a row the
+The **Plugins** page (`/plugins`; called mods in the code: `packages/core/src/mods/`, `/api/mods`, the `mods` table)
+holds the Claude Code plugins Godmode loads into its agents' runs. There are two kinds. Whole plugins come **from a
+git repository** (skills, subagents, slash commands, command hooks, MCP servers — the catalog features Claude Video and
+oh-my-claudecode); small ones are **mods** whose files Godmode keeps itself.
+
+* **From a repository** (`mods/git.ts`, `POST /api/mods/install`): `source` is "owner/repo", a GitHub link (also
+  `…/tree/<ref>/<folder>`) or a clone URL. Godmode clones the newest commit of the branch or tag it follows with its
+  hardened git (no prompts, no clone hooks; shallow where the server allows it) into
+  `<data>/plugins/git/<mod-id>/<commit>/`, finds the plugin (the root's own, else the one the repository's
+  `marketplace.json` lists — with several, the answer is a 409 `pick_plugin` naming them), validates it in place and
+  reads what it brings from its folder (`ModContents`: skills, commands, subagents, hook events, MCP servers, size,
+  and Claude Code's estimate of the tokens it adds to every session). The record keeps `source` (`ModSource`: URL, ref,
+  folder, the commit that runs, its version) and, in `files`, only the manifest, `hooks.json` and `.mcp.json` — for its
+  options and for reading. A human's install is on at once when the check passes; an agent's (`plugin_install`) is off
+  and marked for review. `digest` is `git:<commit>`, so switching it on is the OK for that commit.
+* **Updates**: a minute after start and every six hours `git ls-remote` looks up the newest commit of each such plugin
+  (`POST /api/mods/updates` does it on request); on GitHub the new version number is read from the raw manifest. An
+  update (`POST /api/mods/:id/update`) lays the new commit down beside the old one and replaces it only when Claude
+  Code accepts it — otherwise the plugin stays as it is (409). Runs under way keep the checkout they loaded; checkouts
+  nothing points at are removed when the last run holding them ends, on uninstall and at startup. A checkout that is
+  missing (a restored backup, a runner) is fetched again at its commit before the next run or check.
+* **In runs**: the checkout itself is passed with `--plugin-dir` (no copy per run). Runs take MCP servers from
+  Godmode's config alone (`--strict-mcp-config`), so the servers a loaded plugin declares are added to that file under
+  the names Claude Code gives them (`plugin_<plugin>_<server>`, `${CLAUDE_PLUGIN_ROOT}` filled in) — the plugin's own
+  skills find their tools as `mcp__plugin_<plugin>_<server>__…`.
+* **Catalog** (`mods/catalog.ts`, `GET /api/mods/catalog`): the plugins the page features, each installed from its
+  GitHub repository with one click.
+
+[Claude Code mods](https://claude.com/blog/claude-code-mods), the small kind, are plugins of TypeScript function hooks
+that run inside Claude Code: `register(on, options)` adds hooks `($, e, next)` on its events — a tool call, a prompt, a row the
 conversation keeps, a turn — and each hook lets the event happen (`next(e)`), changes it or answers for itself
-(`{ deny }`). Godmode installs them for its agents (`packages/core/src/mods/`, `/api/mods`, the **Mods** page):
+(`{ deny }`). Godmode installs them for its agents:
 
 * **Records** (`mods`, `Mod` in `shared/mods.ts`): `name` (the plugin's name — lowercase, fixed once created), title,
-  description, icon, where it came from (`template` | `custom` | `agent` | `import`), `files` (every file of the plugin
+  description, icon, where it came from (`template` | `custom` | `agent` | `import` | `git`), `files` (every file of the plugin
   as JSON, path → text: `.claude-plugin/plugin.json`, `hooks/hooks.json`, the hooks module, …), whether it is on, whose
   runs load it (`scope` `all` | `agents` + `agent_ids`; a deleted agent never widens it to everyone), option values and
   the last check. The database is the mod: paths are relative, stay inside the folder and never name
@@ -985,7 +1016,7 @@ conversation keeps, a turn — and each hook lets the event happen (`next(e)`), 
   host that a hook threw and was skipped, or that a module didn't load — notes at warning level. Panes and bands
   (`ui.render`) aren't drawn — Godmode is a headless host — and the mod's abilities say so.
 * **Who decides**: only the human switches a mod on, and the switch names the code they saw (`digest` on `PATCH`; 409
-  when the code is another by now). A manager agent can write one (`mod_save`; its prompt points it at Claude Code's
+  when the code is another by now). A manager agent can write one (`plugin_save`; its prompt points it at Claude Code's
   `plugin-authoring` skill): it arrives switched off with `needsReview`, the human gets a notification that leads to
   the code — one for every version — and switching it on is the OK. An agent saves over drafts only: a mod the human
   made, added from the gallery or has had on is theirs, switched on or not — otherwise an agent could rewrite a guard

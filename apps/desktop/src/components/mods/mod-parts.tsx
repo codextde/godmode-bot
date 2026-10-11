@@ -1,16 +1,20 @@
 import {
   Bell,
+  Bot,
   EyeOff,
   FileLock,
   Filter,
   Gauge,
   GitBranch,
+  Layers,
   Puzzle,
   ScrollText,
   Shield,
+  Sparkles,
   Terminal,
   Timer,
   TriangleAlert,
+  Video,
   WandSparkles,
   type LucideIcon,
 } from "lucide-react";
@@ -23,6 +27,7 @@ import {
   type Mod,
   type ModAbility,
   type ModCheck,
+  type ModContents,
   type ModHook,
   type ModIcon,
   type ModProblem,
@@ -32,7 +37,7 @@ import { LiveDot } from "@/components/aicss/Motion";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-export const MOD_TABS = ["overview", "options", "code"] as const;
+export const MOD_TABS = ["overview", "options", "code", "contents"] as const;
 export type ModTab = (typeof MOD_TABS)[number];
 
 export function isModTab(value: string | null): value is ModTab {
@@ -52,6 +57,10 @@ export const MOD_ICON: Record<ModIcon, LucideIcon> = {
   bell: Bell,
   filter: Filter,
   wand: WandSparkles,
+  video: Video,
+  layers: Layers,
+  sparkles: Sparkles,
+  bot: Bot,
 };
 
 export const MOD_ICON_LABEL: Record<ModIcon, string> = {
@@ -67,6 +76,10 @@ export const MOD_ICON_LABEL: Record<ModIcon, string> = {
   bell: "Bell",
   filter: "Filter",
   wand: "Wand",
+  video: "Video",
+  layers: "Layers",
+  sparkles: "Sparkles",
+  bot: "Robot",
 };
 
 export function ModGlyph({ icon, className }: { icon: ModIcon; className?: string }) {
@@ -156,8 +169,12 @@ export function modAuthor(mod: Pick<Mod, "createdBy">, agents: Agent[]): Agent |
   return id ? agents.find((a) => a.id === id) : undefined;
 }
 
-export function modOriginLabel(mod: Pick<Mod, "origin" | "createdBy">, agents: Agent[]): string {
-  if (mod.origin === "template") return "From the gallery";
+export function modOriginLabel(mod: Pick<Mod, "origin" | "createdBy" | "source">, agents: Agent[]): string {
+  if (mod.origin === "git") {
+    if (mod.createdBy.startsWith("agent:")) return `Installed by ${modAuthor(mod, agents)?.name ?? "an agent"}`;
+    return mod.source?.web?.startsWith("https://github.com/") ? "Installed from GitHub" : "Installed from its repository";
+  }
+  if (mod.origin === "template") return "Made by Godmode";
   if (mod.origin === "import") return "Imported";
   if (mod.origin === "agent") return `Drafted by ${modAuthor(mod, agents)?.name ?? "an agent"}`;
   return "Written by you";
@@ -296,4 +313,60 @@ export function ModProblems({
       })}
     </ul>
   );
+}
+
+/** GitHub's mark (lucide has no brand icons). */
+export function GitHubMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden className={className}>
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+    </svg>
+  );
+}
+
+export function shortCommit(commit: string): string {
+  return commit.slice(0, 7);
+}
+
+/** "~4.3k tokens", "~130 tokens". */
+export function formatTokens(tokens: number): string {
+  return tokens >= 1000 ? `~${(tokens / 1000).toFixed(tokens >= 10_000 ? 0 : 1)}k tokens` : `~${tokens} tokens`;
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} MB`;
+}
+
+function count(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** What a plugin from a repository brings, in words: "47 skills", "19 subagents", … */
+export function contentsSummary(contents: ModContents | null): string[] {
+  if (!contents) return [];
+  return [
+    contents.skills.length ? count(contents.skills.length, "skill") : null,
+    contents.agents.length ? count(contents.agents.length, "subagent") : null,
+    contents.commands.length ? count(contents.commands.length, "command") : null,
+    contents.hooks.length ? count(contents.hooks.length, "hook") : null,
+    contents.mcpServers.length ? count(contents.mcpServers.length, "MCP server") : null,
+  ].filter((x): x is string => !!x);
+}
+
+/** What a plugin from a repository can do, told from what it brings — like an app's permissions. */
+export function contentsAbilities(contents: ModContents | null): ModAbility[] {
+  if (!contents) return [];
+  const out: ModAbility[] = [];
+  if (contents.skills.length) out.push({ id: "skills", label: `Adds ${count(contents.skills.length, "skill")}`, detail: "Instructions the agent loads when a task needs them, or when you name them.", level: "normal" });
+  if (contents.agents.length) out.push({ id: "agents", label: `Adds ${count(contents.agents.length, "subagent")}`, detail: "Specialists the agent can hand parts of its work to.", level: "normal" });
+  if (contents.commands.length) out.push({ id: "commands", label: `Adds ${count(contents.commands.length, "slash command")}`, detail: "Prompts you or the agent start with a /name.", level: "normal" });
+  if (contents.hooks.length) {
+    out.push({ id: "hooks", label: `Runs commands on ${count(contents.hooks.length, "event")}`, detail: `Shell commands on this computer on ${contents.hooks.slice(0, 4).join(", ")}${contents.hooks.length > 4 ? " and more" : ""}.`, level: "sensitive" });
+  }
+  if (contents.mcpServers.length) {
+    out.push({ id: "mcp", label: `Starts ${count(contents.mcpServers.length, "MCP server")}`, detail: "Programs on this computer that give the agent tools of their own.", level: "sensitive" });
+  }
+  return out;
 }

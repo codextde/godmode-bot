@@ -25,7 +25,7 @@ const AgentsPage = lazy(() => import("@/pages/agents/agents-page"));
 const AgentNewPage = lazy(() => import("@/pages/agents/agent-new"));
 const AgentDetailPage = lazy(() => import("@/pages/agents/agent-detail"));
 const AutomationsPage = lazy(() => import("@/pages/automations/automations-page"));
-const ModsPage = lazy(() => import("@/pages/mods/mods-page"));
+const PluginsPage = lazy(() => import("@/pages/plugins/plugins-page"));
 const ActivityPage = lazy(() => import("@/pages/activity/activity-page"));
 const WorkspacesPage = lazy(() => import("@/pages/workspaces/workspaces-page"));
 const TasksPage = lazy(() => import("@/pages/tasks/tasks-page"));
@@ -204,7 +204,8 @@ export function App() {
           <Route path="/my-tasks" element={<HumanTasksPage />} />
           <Route path="/automations" element={<AutomationsPage />} />
           <Route path="/routines" element={<Navigate to="/automations" replace />} />
-          <Route path="/mods" element={<ModsPage />} />
+          <Route path="/plugins" element={<PluginsPage />} />
+          <Route path="/mods" element={<LegacyModsRedirect />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/workspaces" element={<WorkspacesPage />} />
           <Route path="/vault" element={<Navigate to="/vault/logins" replace />} />
@@ -260,4 +261,17 @@ function NotFoundRedirect() {
     navigate("/", { replace: true });
   }, [navigate]);
   return null;
+}
+
+/** Links from before Mods were Plugins (notifications, chat notes): /mods?mod=<id> → /plugins?plugin=<id>. */
+function LegacyModsRedirect() {
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  const id = params.get("mod");
+  if (id) {
+    params.delete("mod");
+    params.set("plugin", id);
+  }
+  const query = params.toString();
+  return <Navigate to={`/plugins${query ? `?${query}` : ""}`} replace />;
 }

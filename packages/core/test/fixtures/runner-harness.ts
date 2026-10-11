@@ -148,6 +148,8 @@ export interface Invocation {
   settings: { hooks?: unknown; ultracode?: boolean; pluginConfigs?: Record<string, { options: Record<string, unknown> }> } | null;
   /** The --plugin-dir folders as the run found them (a run's mods are gone once it has ended). */
   plugins: { dir: string; files: string[]; module: string | null }[];
+  /** The MCP servers its plugins brought into the run's `--mcp-config`. */
+  pluginServers: Record<string, { command?: string; args?: string[]; env?: Record<string, string> }>;
   env: {
     ANTHROPIC_API_KEY: string | null;
     GODMODE_TOKEN: string | null;

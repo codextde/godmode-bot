@@ -65,7 +65,7 @@ export function RunsForEditor({ mod, actions, className, listClassName }: { mod:
         ]}
       />
       {mod.scope === "all" ? (
-        <p className="px-1 pt-2.5 text-xs leading-relaxed text-muted-foreground">Every agent's runs load this mod, the agents you add later too.</p>
+        <p className="px-1 pt-2.5 text-xs leading-relaxed text-muted-foreground">Every agent's runs load this plugin, the agents you add later too.</p>
       ) : (
         <Command className={cn("mt-2 rounded-lg border bg-card", listClassName)}>
           {sorted.length > 6 && <CommandInput placeholder="Search agents…" />}
@@ -78,7 +78,7 @@ export function RunsForEditor({ mod, actions, className, listClassName }: { mod:
                   <CommandItem key={a.id} value={`agent ${a.name} ${a.id}`} onSelect={() => toggle(a.id)} className="gap-2.5 py-1.5">
                     <AgentAvatar agent={a} size="sm" still />
                     <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                    <span className="sr-only">{on ? "Runs this mod" : "Doesn't run this mod"}</span>
+                    <span className="sr-only">{on ? "Runs this plugin" : "Doesn't run this plugin"}</span>
                     {on && <Check className="size-4" aria-hidden />}
                   </CommandItem>
                 );

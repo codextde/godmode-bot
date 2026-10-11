@@ -33,7 +33,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
-import { isHumanTaskActive, modState } from "@godmode/shared";
+import { isHumanTaskActive, modState, modUpdateAvailable } from "@godmode/shared";
 import {
   Sidebar,
   SidebarContent,
@@ -123,8 +123,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const humanTasks = useHumanTasks();
   const myTasks = humanTasks.data && !humanTasks.isError ? humanTasks.data.filter(isHumanTaskActive).length : attention?.todo;
   const { data: mods = [] } = useMods();
-  // Mods that wait for the human: an agent's draft to review, or code the check refuses.
-  const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m))).length;
+  // Plugins that wait for the human: an agent's draft or install to review, code the check refuses, an update.
+  const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m)) || modUpdateAvailable(m)).length;
 
   // Notices when the human comes back after a while (Home then sums up what happened).
   useEffect(() => startPresence(), []);
@@ -180,7 +180,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
     { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/activity", label: "Activity", icon: <Activity /> },
-    { to: "/mods", label: "Mods", icon: <Puzzle />, badge: modsWaiting || undefined },
+    { to: "/plugins", label: "Plugins", icon: <Puzzle />, badge: modsWaiting || undefined },
   ];
   const accessNav: NavItem[] = [
     { to: "/vault/logins", label: "Logins", icon: <KeyRound /> },

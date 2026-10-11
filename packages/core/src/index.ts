@@ -29,7 +29,7 @@ import * as vault from "./vault/vault";
 import { ensureDefaultAgent } from "./agents/service";
 import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
 import { interruptedWork, resumeInterruptedWork, startOutageRecovery, stopOutageRecovery } from "./services/resume";
-import { clearRunMods } from "./mods/service";
+import { clearRunMods, startModUpdates, stopModUpdates } from "./mods/service";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
@@ -200,6 +200,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     startMessaging();
     startTasks();
     startHeartbeats();
+    startModUpdates();
   }
   // Adopt VMs that kept running while Godmode was closed.
   startVms().catch((err) => log.warn("could not check VMs", err));
@@ -338,6 +339,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       removeCoreFile(cfg.dataDir);
       await stopMessaging();
       stopTasks();
+      stopModUpdates();
       stopHeartbeats();
     }
     await shutdownRunner();

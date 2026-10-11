@@ -203,7 +203,7 @@ function unsafe(table: string, row: Record<string, unknown>): string | null {
   }
   if (table === "browser_profiles" && !SAFE_ID.test(String(row.id))) return `Skipped browser profile "${label}": its id isn't a safe folder name.`;
   if (table === "vms" && !VM_ID.test(String(row.id))) return `Skipped virtual machine "${label}": its id isn't a safe folder name.`;
-  if (table === "mods" && !MOD_NAME_RE.test(String(row.name))) return `Skipped mod "${label}": its name isn't a safe folder name.`;
+  if (table === "mods" && !MOD_NAME_RE.test(String(row.name))) return `Skipped plugin "${label}": its name isn't a safe folder name.`;
   return null;
 }
 

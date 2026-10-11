@@ -99,7 +99,7 @@ describe("gallery", () => {
     expect(guard.options.find((o) => o.key === "paths")).toMatchObject({ multiple: true, default: [".env", ".env.*", "*.pem", "id_rsa", "id_ed25519", "secrets"] });
     // A second copy gets a name of its own.
     expect((await createMod({ templateId: "protect-files" })).name).toBe("protect-files-2");
-    await expect(createMod({ templateId: "nope" })).rejects.toThrow(/no mod "nope" in the gallery/);
+    await expect(createMod({ templateId: "nope" })).rejects.toThrow(/no plugin "nope" in the gallery/);
     removeAll();
   });
 });
@@ -116,10 +116,10 @@ describe("mods", () => {
     expect(JSON.parse(renamed.files[MOD_MANIFEST_PATH]!).name).toBe("protect-env-files");
     expect(renamed.check?.calls).toEqual(["$.ui.log"]);
 
-    await expect(createMod({ title: "x", name: "protect-env-files" })).rejects.toThrow(/already is a mod named/);
+    await expect(createMod({ title: "x", name: "protect-env-files" })).rejects.toThrow(/already is a plugin named/);
     await expect(createMod({ title: "x", name: "Bad Name" })).rejects.toThrow(/lowercase letters/);
     await expect(createMod({ title: "x", name: "claude-mem" })).rejects.toThrow(/uses itself/);
-    await expect(createMod({ title: "  " })).rejects.toThrow(/Give the mod a name/);
+    await expect(createMod({ title: "  " })).rejects.toThrow(/Give the plugin a name/);
     expect(listAudit(20, "mod.create").some((a) => a.target === mod.id)).toBe(true);
     removeAll();
   });
@@ -183,7 +183,7 @@ describe("mods", () => {
   });
 
   test("a gallery mod is Godmode's code as it ships; with other code it is the human's own", async () => {
-    await expect(createMod({ templateId: "turn-recap", files: pluginFiles("turn-recap", LOGGER) })).rejects.toThrow(/Add the gallery mod first/);
+    await expect(createMod({ templateId: "turn-recap", files: pluginFiles("turn-recap", LOGGER) })).rejects.toThrow(/Add the gallery plugin first/);
     const mod = await createMod({ templateId: "turn-recap" });
     expect((await updateMod(mod.id, { values: { minSeconds: 5 } })).origin).toBe("template");
     const edited = await updateMod(mod.id, { files: { ...mod.files, [MOD_MODULE_PATH]: LOGGER } });
@@ -349,7 +349,7 @@ describe("runs", () => {
     expect(run.status).toBe("succeeded");
     expect(loaded(invocation.args)).toEqual([]);
     const warning = notes(blocks).find((n) => n.level === "warning")!;
-    expect(warning.text).toContain('The mod "Was fine" wasn\'t loaded');
+    expect(warning.text).toContain('The plugin "Was fine" wasn\'t loaded');
     expect(warning.text).toContain("is not an event");
     expect(warning.mod).toBeUndefined();
     expect(getMod(mod.id).check?.ok).toBe(false);
@@ -387,7 +387,7 @@ describe("runs", () => {
     const { blocks } = await chat(agent.id, "MOD_NOTES_FLOOD");
     const all = notes(blocks);
     expect(all.filter((n) => n.mod).length).toBe(MAX_MOD_NOTES);
-    expect(all.at(-1)).toMatchObject({ text: "More notes from mods aren't shown in this turn." });
+    expect(all.at(-1)).toMatchObject({ text: "More notes from plugins aren't shown in this turn." });
     removeAll();
   });
 
@@ -415,56 +415,57 @@ describe("agents", () => {
 
   test("only the manager sees the mod tools, and is told how to write a mod", () => {
     const names = (a: Agent) => listToolsFor(a, ctx(a)).map((t) => t.name);
-    expect(names(manager)).toEqual(expect.arrayContaining(["mods_list", "mod_save"]));
-    expect(names(agent)).not.toContain("mods_list");
-    expect(names(agent)).not.toContain("mod_save");
+    expect(names(manager)).toEqual(expect.arrayContaining(["plugins_list", "plugin_save", "plugin_install"]));
+    expect(names(agent)).not.toContain("plugins_list");
+    expect(names(agent)).not.toContain("plugin_save");
+    expect(names(agent)).not.toContain("plugin_install");
 
     const prompt = (a: Agent, mods: boolean) => buildSystemPrompt({ agent: a, settings: getSettings(), peers: [], browserAvailable: false, mods });
-    expect(prompt(manager, true)).toContain("### Mods");
+    expect(prompt(manager, true)).toContain("### Plugins");
     expect(prompt(manager, true)).toContain("plugin-authoring");
     // A runner's setup is its controller's: nothing is drafted there.
-    expect(prompt(manager, false)).not.toContain("### Mods");
-    expect(prompt(agent, true)).not.toContain("### Mods");
+    expect(prompt(manager, false)).not.toContain("### Plugins");
+    expect(prompt(agent, true)).not.toContain("### Plugins");
   });
 
   test("an agent's mod is a draft: switched off and marked for review until the human switches it on", async () => {
-    const saved = await tool(manager, "mod_save", { title: "Protect migrations", description: "Keeps migrations as they are.", files: pluginFiles("whatever", LOGGER) });
+    const saved = await tool(manager, "plugin_save", { title: "Protect migrations", description: "Keeps migrations as they are.", files: pluginFiles("whatever", LOGGER) });
     expect(saved.isError).toBe(false);
     const summary = JSON.parse(saved.text) as { id: string; name: string; state: string; check: { ok: boolean } };
     expect(summary).toMatchObject({ name: "protect-migrations", state: "review", check: { ok: true } });
     const draft = getMod(summary.id);
     expect(draft).toMatchObject({ enabled: false, needsReview: true, origin: "agent", createdBy: `agent:${manager.id}` });
-    expect(listNotifications(5)[0]).toMatchObject({ title: "Boss drafted a mod: Protect migrations", link: `/mods?mod=${draft.id}&tab=code` });
+    expect(listNotifications(5)[0]).toMatchObject({ title: "Boss drafted a plugin: Protect migrations", link: `/plugins?plugin=${draft.id}&tab=code` });
     expect(loaded((await chat(agent.id, "hello")).invocation.args)).toEqual([]);
 
     // A broken save comes back with what to fix; saving again over the draft repairs it.
-    const broken = JSON.parse((await tool(manager, "mod_save", { mod: draft.id, title: "Protect migrations", files: pluginFiles("x", BROKEN) })).text);
+    const broken = JSON.parse((await tool(manager, "plugin_save", { plugin: draft.id, title: "Protect migrations", files: pluginFiles("x", BROKEN) })).text);
     expect(broken).toMatchObject({ state: "broken", check: { ok: false } });
     expect(broken.next).toContain("Fix the errors");
-    await tool(manager, "mod_save", { mod: "protect-migrations", title: "Protect migrations", files: pluginFiles("x", LOGGER) });
+    await tool(manager, "plugin_save", { plugin: "protect-migrations", title: "Protect migrations", files: pluginFiles("x", LOGGER) });
 
     const on = await updateMod(draft.id, { enabled: true });
     expect(on).toMatchObject({ enabled: true, needsReview: false });
     expect(modState(on)).toBe("on");
 
     // A running mod is the human's: an agent can't change it, and so can't switch a guard off by rewriting it.
-    const refused = await tool(manager, "mod_save", { mod: draft.id, title: "Protect migrations", files: pluginFiles("x", "export const register = () => {}\n") });
+    const refused = await tool(manager, "plugin_save", { plugin: draft.id, title: "Protect migrations", files: pluginFiles("x", "export const register = () => {}\n") });
     expect(refused.isError).toBe(true);
     expect(refused.text).toContain("is switched on");
     expect(getMod(draft.id).files[MOD_MODULE_PATH]).toBe(LOGGER);
     expect(getMod(draft.id).enabled).toBe(true);
 
-    const list = JSON.parse((await tool(manager, "mods_list", {})).text) as { name: string; files?: unknown }[];
+    const list = JSON.parse((await tool(manager, "plugins_list", {})).text) as { name: string; files?: unknown }[];
     expect(list.map((m) => m.name)).toEqual(["protect-migrations"]);
     expect(list[0]!.files).toBeUndefined();
-    expect(JSON.parse((await tool(manager, "mods_list", { mod: "protect-migrations" })).text).files[MOD_MODULE_PATH]).toBe(LOGGER);
-    expect((await tool(manager, "mods_list", { mod: "nope" })).isError).toBe(true);
+    expect(JSON.parse((await tool(manager, "plugins_list", { plugin: "protect-migrations" })).text).files[MOD_MODULE_PATH]).toBe(LOGGER);
+    expect((await tool(manager, "plugins_list", { plugin: "nope" })).isError).toBe(true);
     removeAll();
   });
 
   test("an agent saves over its drafts only, and every version is told", async () => {
     const mine = await createMod({ title: "Mine", files: pluginFiles("mine", LOGGER) });
-    const refused = await tool(manager, "mod_save", { mod: mine.id, title: "Mine", files: pluginFiles("mine", "export const register = () => {}\n") });
+    const refused = await tool(manager, "plugin_save", { plugin: mine.id, title: "Mine", files: pluginFiles("mine", "export const register = () => {}\n") });
     expect(refused.isError).toBe(true);
     expect(refused.text).toContain("not a draft of yours");
     expect(getMod(mine.id).files[MOD_MODULE_PATH]).toBe(LOGGER);
@@ -472,12 +473,12 @@ describe("agents", () => {
     // Nor a gallery guard the human paused for a moment.
     const guard = await createMod({ templateId: "command-guard" });
     await updateMod(guard.id, { enabled: false });
-    expect((await tool(manager, "mod_save", { mod: "command-guard", title: "Command guard", files: pluginFiles("command-guard", LOGGER) })).isError).toBe(true);
+    expect((await tool(manager, "plugin_save", { plugin: "command-guard", title: "Command guard", files: pluginFiles("command-guard", LOGGER) })).isError).toBe(true);
     expect(getMod(guard.id)).toMatchObject({ origin: "template", needsReview: false });
 
-    const draft = JSON.parse((await tool(manager, "mod_save", { title: "Told twice", files: pluginFiles("x", LOGGER) })).text) as { id: string };
-    await tool(manager, "mod_save", { mod: draft.id, title: "Told twice", files: pluginFiles("x", `${LOGGER}// v2\n`) });
-    expect(listNotifications(2).map((n) => n.title)).toEqual(["Boss changed its draft of the mod Told twice", "Boss drafted a mod: Told twice"]);
+    const draft = JSON.parse((await tool(manager, "plugin_save", { title: "Told twice", files: pluginFiles("x", LOGGER) })).text) as { id: string };
+    await tool(manager, "plugin_save", { plugin: draft.id, title: "Told twice", files: pluginFiles("x", `${LOGGER}// v2\n`) });
+    expect(listNotifications(2).map((n) => n.title)).toEqual(["Boss changed its draft of the plugin Told twice", "Boss drafted a plugin: Told twice"]);
     removeAll();
   });
 

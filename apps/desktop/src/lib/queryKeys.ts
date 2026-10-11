@@ -115,6 +115,7 @@ export const qk = {
   mods: ["mods"] as unknown[],
   /** Not under ["mods"]: the gallery doesn't change when a mod does. */
   modTemplates: ["mod-templates"] as unknown[],
+  modCatalog: ["mod-catalog"] as unknown[],
   /** Phone access: Tailscale status and paired phones. */
   mobile: ["mobile"] as unknown[],
   connectors: ["connectors"] as unknown[],

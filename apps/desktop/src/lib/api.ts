@@ -111,10 +111,12 @@ import type {
   MobilePairingOffer,
   MobileStatus,
   Mod,
+  ModCatalogEntry,
   ModCheck,
   ModCheckInput,
   ModImportInput,
   ModInput,
+  ModInstallInput,
   ModPatch,
   ModTemplate,
   ModelCatalog,
@@ -708,6 +710,14 @@ export const api = {
     checkFiles: (input: ModCheckInput) => post<{ check: ModCheck | null }>("/api/mods/check", input),
     /** Add a Claude Code plugin folder from the computer running Godmode. */
     import: (input: ModImportInput) => post<Mod>("/api/mods/import", input),
+    /** Plugins Godmode recommends, installed from their repositories. */
+    catalog: () => get<ModCatalogEntry[]>("/api/mods/catalog"),
+    /** Install a plugin from a git repository; 409 with `details.plugins` when it holds several. */
+    install: (input: ModInstallInput) => post<Mod>("/api/mods/install", input),
+    /** Look up the newest commit of the plugins from repositories. */
+    checkUpdates: (ids?: string[]) => post<Mod[]>("/api/mods/updates", ids ? { ids } : {}),
+    /** Bring a plugin from a repository to its newest commit. */
+    upgrade: (id: string) => post<Mod>(`/api/mods/${id}/update`),
   },
 
   mobile: {

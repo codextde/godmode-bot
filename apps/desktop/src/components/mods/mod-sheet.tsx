@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { ExternalLink, X } from "lucide-react";
 import { MOD_ICONS, modState, type Mod } from "@godmode/shared";
 import { CopyButton } from "@/components/chat/copy-button";
 import {
@@ -23,7 +23,8 @@ import { cn } from "@/lib/utils";
 import { ModCode, useModDraft } from "./mod-code";
 import { ModOptions } from "./mod-options";
 import { ModOverview } from "./mod-overview";
-import { MOD_ICON_LABEL, ModGlyph, ModIconTile, ModStateBadge, hooksModulePath, modAuthor, type ModTab } from "./mod-parts";
+import { GitHubMark, MOD_ICON_LABEL, ModGlyph, ModIconTile, ModStateBadge, hooksModulePath, modAuthor, type ModTab } from "./mod-parts";
+import { PluginContents } from "./plugin-contents";
 import type { ModActions } from "./use-mod-actions";
 
 const MAX_TITLE = 80;
@@ -32,7 +33,7 @@ function isTextField(el: Element | null): boolean {
   return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
 }
 
-/** Everything about one mod: what it does and who runs it, its options, its code. */
+/** Everything about one plugin: what it does and who runs it, its options, its code (or, from a repository, its contents). */
 export function ModSheet({
   mod,
   tab,
@@ -140,6 +141,9 @@ function ModSheetBody({
   const [file, setFile] = useState<{ path: string | null; line: number | null }>(() => ({ path: hooksModulePath(mod.files), line: null }));
   const jump = useMemo(() => (file.line ? { line: file.line } : null), [file]);
   const state = modState(mod);
+  const source = mod.source;
+  // A plugin from a repository has Contents where a small one has Code; links to either land on the one it has.
+  const shownTab: ModTab = source ? (tab === "code" ? "contents" : tab) : tab === "contents" ? "code" : tab;
 
   const unsaved = draft.isDirty || optionsDirty;
   useEffect(() => {
@@ -153,9 +157,9 @@ function ModSheetBody({
   };
 
   return (
-    <Tabs value={tab} onValueChange={(value) => onTabChange(value as ModTab)} className="@container flex h-full min-h-0 flex-col gap-0">
+    <Tabs value={shownTab} onValueChange={(value) => onTabChange(value as ModTab)} className="@container flex h-full min-h-0 flex-col gap-0">
       <SheetTitle className="sr-only">{mod.title}</SheetTitle>
-      <SheetDescription className="sr-only">A mod: what it does and who it runs for, its options and its code.</SheetDescription>
+      <SheetDescription className="sr-only">A plugin: what it does and who it runs for, its options and its {source ? "contents" : "code"}.</SheetDescription>
 
       <header className="shrink-0 border-b bg-paper-2 px-5 pt-5">
         <div className="flex items-start gap-3.5">
@@ -164,12 +168,29 @@ function ModSheetBody({
             <TitleField mod={mod} actions={actions} />
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <span className="inline-flex h-6 max-w-full min-w-0 items-center rounded-md border bg-card pl-2 font-mono text-[11.5px] text-foreground/85">
-                <span className="truncate" title="The plugin's name. It stays as it is: the mod's own code refers to it.">
+                <span className="truncate" title="The plugin's name. It stays as it is: the plugin's own code refers to it.">
                   {mod.name}
                 </span>
                 <CopyButton text={mod.name} label="Copy the plugin name" className="size-[22px]" />
               </span>
               <ModStateBadge state={state} />
+              {source && (
+                <a
+                  href={source.web ?? undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={source.url}
+                  className={cn(
+                    "inline-flex h-6 max-w-full min-w-0 items-center gap-1.5 rounded-md border bg-card px-2 text-[11.5px] text-foreground/85 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                    source.web && "transition hover:border-foreground/25 hover:text-foreground",
+                  )}
+                >
+                  {source.web?.startsWith("https://github.com/") && <GitHubMark className="size-3 shrink-0" />}
+                  <span className="truncate font-mono">{source.repo}</span>
+                  {source.version && <span className="shrink-0 font-mono text-muted-foreground tabular-nums">{source.version}</span>}
+                  {source.web && <ExternalLink className="size-3 shrink-0 text-muted-foreground" aria-hidden />}
+                </a>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5 pt-1">
@@ -194,31 +215,44 @@ function ModSheetBody({
             {mod.options.length > 0 && <Count>{mod.options.length}</Count>}
             {optionsDirty && <UnsavedDot />}
           </TabsTrigger>
-          <TabsTrigger value="code" className="flex-none px-2.5">
-            Code
-            <Count>{Object.keys(draft.files).length}</Count>
-            {draft.isDirty && <UnsavedDot />}
-          </TabsTrigger>
+          {source ? (
+            <TabsTrigger value="contents" className="flex-none px-2.5">
+              Contents
+            </TabsTrigger>
+          ) : (
+            <TabsTrigger value="code" className="flex-none px-2.5">
+              Code
+              <Count>{Object.keys(draft.files).length}</Count>
+              {draft.isDirty && <UnsavedDot />}
+            </TabsTrigger>
+          )}
         </TabsList>
       </header>
 
       <TabsContent value="overview" forceMount className="min-h-0 overflow-y-auto data-[state=inactive]:hidden">
-        <ModOverview mod={mod} actions={actions} onOpenCode={() => onTabChange("code")} onOpenFile={openFile} onDelete={onDelete} />
+        <ModOverview mod={mod} actions={actions} onOpenCode={() => onTabChange(source ? "contents" : "code")} onOpenFile={openFile} onDelete={onDelete} />
       </TabsContent>
       <TabsContent value="options" forceMount className="min-h-0 flex-col data-[state=active]:flex data-[state=inactive]:hidden">
         <ModOptions mod={mod} actions={actions} onDirtyChange={setOptionsDirty} />
       </TabsContent>
-      <TabsContent value="code" forceMount className="min-h-0 flex-col data-[state=active]:flex data-[state=inactive]:hidden">
-        <ModCode
-          mod={mod}
-          draft={draft}
-          actions={actions}
-          author={modAuthor(mod, agents)?.name ?? "An agent"}
-          activePath={file.path}
-          jump={jump}
-          onOpenFile={openFile}
-        />
-      </TabsContent>
+      {source && (
+        <TabsContent value="contents" className="min-h-0 flex-col data-[state=active]:flex data-[state=inactive]:hidden">
+          <PluginContents mod={mod} />
+        </TabsContent>
+      )}
+      {!source && (
+        <TabsContent value="code" forceMount className="min-h-0 flex-col data-[state=active]:flex data-[state=inactive]:hidden">
+          <ModCode
+            mod={mod}
+            draft={draft}
+            actions={actions}
+            author={modAuthor(mod, agents)?.name ?? "An agent"}
+            activePath={file.path}
+            jump={jump}
+            onOpenFile={openFile}
+          />
+        </TabsContent>
+      )}
     </Tabs>
   );
 }
