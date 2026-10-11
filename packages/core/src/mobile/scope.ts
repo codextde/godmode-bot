@@ -86,6 +86,10 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/input$`)],
   ["POST", /^\/api\/computer\/input$/],
 
+  // Android phones agents use: seen and watched, never controlled, connected or changed from a phone.
+  ["GET", /^\/api\/android\/devices$/],
+  ["GET", new RegExp(`^/api/android/devices/${ID}/screenshot$`)],
+
   ["GET", /^\/api\/vms$/],
   ["GET", new RegExp(`^/api/vms/${ID}/screenshot$`)],
   ["POST", new RegExp(`^/api/vms/${ID}/(start|stop|input)$`)],

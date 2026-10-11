@@ -18,6 +18,7 @@ export default function Screens() {
   const groups: [string, LiveScreen[]][] = [
     ["Browsers", idle.filter((s) => s.kind === "browser")],
     ["Virtual machines", idle.filter((s) => s.kind === "vm")],
+    ["Android phones", idle.filter((s) => s.kind === "android")],
   ];
 
   return (
@@ -43,7 +44,7 @@ export default function Screens() {
         <EmptyState
           icon="screens"
           title="Nothing on screen right now"
-          body="When an agent browses, works in a VM or on a screen you shared, you can watch it here live."
+          body="When an agent browses, works in a VM, on an Android phone or on a screen you shared, you can watch it here live."
         />
       )}
 

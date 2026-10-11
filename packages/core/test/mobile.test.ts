@@ -135,6 +135,12 @@ describe("device scope", () => {
     expect(deviceMayCall("POST", "/api/browser/profiles/bp_1/launch")).toBe(true);
     expect(deviceMayCall("POST", "/api/browser/profiles/bp_1/stop")).toBe(false);
     expect(deviceMayCall("POST", "/api/vms/vm_1/exec")).toBe(false);
+    expect(deviceMayCall("GET", "/api/android/devices")).toBe(true);
+    expect(deviceMayCall("GET", "/api/android/devices/adr_1/screenshot")).toBe(true);
+    expect(deviceMayCall("POST", "/api/android/devices/adr_1/input")).toBe(false);
+    expect(deviceMayCall("POST", "/api/android/devices/adr_1/exec")).toBe(false);
+    expect(deviceMayCall("POST", "/api/android/connect")).toBe(false);
+    expect(deviceMayCall("PATCH", "/api/android/devices/adr_1")).toBe(false);
     expect(deviceMayCall("DELETE", "/api/vms/vm_1")).toBe(false);
     expect(deviceMayCall("GET", "/api/credentials")).toBe(false);
     expect(deviceMayCall("POST", "/api/credentials/c1/reveal")).toBe(false);

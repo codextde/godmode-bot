@@ -13,7 +13,7 @@ import { radius, space, useColors } from "@/lib/theme";
 /** While the agent works: what it's doing and a live thumbnail of where, above the composer. */
 export function LiveStrip({ screen, activity }: { screen: LiveScreen; activity: string | null }) {
   const c = useColors();
-  const stream = useStreamFrame(screen.kind === "vm" ? null : screen);
+  const stream = useStreamFrame(screen);
   const vm = useVmFrame(screen.kind === "vm" ? screen.vm : null, true, 4000);
   const frame = screen.kind === "vm" ? vm.data : stream;
   const uri = frameUri(frame);
@@ -30,9 +30,9 @@ export function LiveStrip({ screen, activity }: { screen: LiveScreen; activity: 
         <Glass interactive style={styles.strip} fallback={c.surface}>
           <View style={[styles.thumb, { backgroundColor: c.sunken }]}>
             {uri ? (
-              <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" transition={0} />
+              <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" transition={0} cachePolicy="none" />
             ) : (
-              <Icon name={screen.kind === "vm" ? "vm" : screen.kind === "share" ? "display" : "globe"} size={16} color={c.textFaint} />
+              <Icon name={screen.kind === "vm" ? "vm" : screen.kind === "share" ? "display" : screen.kind === "android" ? "phone" : "globe"} size={16} color={c.textFaint} />
             )}
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>

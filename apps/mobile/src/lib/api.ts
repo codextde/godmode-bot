@@ -6,6 +6,8 @@ import type {
   AnswerQuestionInput,
   AnswerQuestionResult,
   AgentQuestion,
+  AndroidDevice,
+  AndroidScreenshot,
   AppNotification,
   Bootstrap,
   BrowserProfile,
@@ -522,6 +524,12 @@ export const api = {
     start: (id: string) => post<Vm>(`/api/vms/${id}/start`),
     stop: (id: string) => post<Vm>(`/api/vms/${id}/stop`),
     input: (id: string, event: ComputerInputEvent, frame: { width: number; height: number }) => post<{ ok: true }>(`/api/vms/${id}/input`, { event, frame }),
+  },
+
+  android: {
+    /** Android phones connected to the computer for agents. An older Godmode refuses this (403). */
+    devices: () => get<AndroidDevice[]>("/api/android/devices"),
+    screenshot: (id: string, size = 720) => get<AndroidScreenshot>(`/api/android/devices/${id}/screenshot`, { size }),
   },
 
   notifications: {

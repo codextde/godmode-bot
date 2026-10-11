@@ -25,6 +25,7 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
   notifications: [qk.notifications, qk.bootstrap],
   runs: [qk.runs],
   vms: [qk.vms],
+  android: [qk.androidDevices],
   settings: [qk.bootstrap, qk.settings],
   workspaces: [qk.workspaces, qk.agents],
   tasks: [qk.tasks],

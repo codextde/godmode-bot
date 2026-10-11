@@ -38,6 +38,8 @@ export const qk = {
   browserProfiles: ["browser-profiles"],
   vms: ["vms"],
   vmScreen: (id: string) => ["vm-screen", id],
+  androidDevices: ["android-devices"],
+  androidScreen: (id: string) => ["android-screen", id],
   notifications: ["notifications"],
   missingLogins: ["missing-logins"],
   questions: ["questions"],

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import type { Agent } from "@godmode/shared";
+import type { Agent, HumanTask } from "@godmode/shared";
 import { api } from "./api";
 import { qk } from "./query";
 
@@ -26,11 +26,9 @@ export function useAgents() {
   return { ...query, byId };
 }
 
+const urgentFirst = (list: HumanTask[]) => [...list].sort((a, b) => Number(b.priority === "high") - Number(a.priority === "high") || (a.createdAt < b.createdAt ? 1 : -1));
+
 /** Tasks agents handed to the human that still wait (open or doing), most urgent first. */
 export function useOpenHumanTasks() {
-  return useQuery({
-    queryKey: qk.humanTaskList("active"),
-    queryFn: () => api.humanTasks.list({ status: "active" }),
-    select: (list) => [...list].sort((a, b) => Number(b.priority === "high") - Number(a.priority === "high") || (a.createdAt < b.createdAt ? 1 : -1)),
-  });
+  return useQuery({ queryKey: qk.humanTaskList("active"), queryFn: () => api.humanTasks.list({ status: "active" }), select: urgentFirst });
 }
