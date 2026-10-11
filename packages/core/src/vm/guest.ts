@@ -19,7 +19,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { connect } from "node:net";
 import { dirname, join } from "node:path";
 import type { Subprocess } from "bun";
-import { BROWSER_USE_SPEC, BROWSER_USE_VERSION, browserUseConfig } from "../browser/browserUse";
+import { BROWSER_USE_PYTHON, BROWSER_USE_SPEC, BROWSER_USE_VERSION, browserUseConfig } from "../browser/browserUse";
 import { CdpClient, pickActivePage, probeCdp } from "../browser/cdp";
 import { findFreePort } from "../browser/chrome";
 import { fillIntoActivePage, fillPrecheck, type FillOptions, type FillResult } from "../browser/fill";
@@ -98,10 +98,10 @@ const startChrome = () => `if ! ${CDP_UP}; then
 fi`;
 
 /** Warm a pinned package through uv and record `<its env's bin>/<name>` in `stamp`. */
-function fetchPackage(spec: string, python: string, stamp: string): string {
+function fetchPackage(spec: string, python: string, stamp: string, pythonVersion?: string): string {
   return [
     "set -e",
-    `p=$(${UV} tool run --from ${shq(spec)} python -c ${shq(python)})`,
+    `p=$(${UV} tool run --from ${shq(spec)}${pythonVersion ? ` --python ${shq(pythonVersion)}` : ""} python -c ${shq(python)})`,
     `[ -x "$p" ] || { echo "${spec} installed, but its program is missing ($p)" >&2; exit 1; }`,
     `mkdir -p ${KIT}/stamps`,
     `printf %s "$p" > ${stamp}`,
@@ -122,7 +122,7 @@ const INSTALL: Record<Exclude<Tool, "uv">, string> = {
     'ditto "$tmp/mnt/Google Chrome.app" "$HOME/Applications/.Google Chrome.partial"',
     `mv "$HOME/Applications/.Google Chrome.partial" ${CHROME_APP}`,
   ].join("\n"),
-  "browser-use": fetchPackage(BROWSER_USE_SPEC, 'import os, sys; sys.stdout.write(os.path.join(os.path.dirname(sys.executable), "browser-use"))', BROWSER_STAMP),
+  "browser-use": fetchPackage(BROWSER_USE_SPEC, 'import os, sys; sys.stdout.write(os.path.join(os.path.dirname(sys.executable), "browser-use"))', BROWSER_STAMP, BROWSER_USE_PYTHON),
   cua: fetchPackage(CUA_DRIVER_SPEC, "import cua_driver, sys; sys.stdout.write(str(cua_driver.get_binary_path()))", CUA_STAMP),
 };
 

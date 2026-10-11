@@ -14,7 +14,7 @@ import { hasAppSecret } from "../vault/vault";
 import { logger } from "../log";
 import { childEnv, which } from "../util";
 import { findChrome } from "../browser/chrome";
-import { BROWSER_USE_SPEC, BROWSER_USE_VERSION } from "../browser/browserUse";
+import { BROWSER_USE_FROM, BROWSER_USE_PYTHON, BROWSER_USE_SPEC, BROWSER_USE_VERSION } from "../browser/browserUse";
 import { CUA_DRIVER_SPEC, CUA_DRIVER_VERSION, cuaDownloadNote, cuaDriverInstalled, installCuaDriver } from "../computer/cua";
 
 const log = logger("doctor");
@@ -290,7 +290,7 @@ async function checkBrowserUse(uvx: string | null, refresh: boolean): Promise<Ch
   if (!uvx) return { ...base, ok: false, version: null, detail: "Requires uv (uvx)" };
   if (!refresh && browserUseCache && browserUseCache.uvx === uvx && Date.now() - browserUseCache.at < 30 * 60_000) return browserUseCache.check;
   // --offline: only report what is already downloaded; never install as a side effect of a check.
-  const res = await runCommand([uvx, "--offline", "--from", BROWSER_USE_SPEC, "browser-use", "--version"], {
+  const res = await runCommand([uvx, "--offline", ...BROWSER_USE_FROM, "browser-use", "--version"], {
     timeoutMs: BROWSER_USE_CHECK_TIMEOUT_MS,
     env: childEnv({ PATH: toolPath(), ANONYMIZED_TELEMETRY: "false", BROWSER_USE_VERSION_CHECK: "false" }),
   });
@@ -400,7 +400,7 @@ function installHint(id: DependencyId): string {
         ? 'Run: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"'
         : "Run: curl -LsSf https://astral.sh/uv/install.sh | sh";
     case "browser-use":
-      return `Install uv first, then run: uvx --from ${BROWSER_USE_SPEC} browser-use --version`;
+      return `Install uv first, then run: uvx --from ${BROWSER_USE_SPEC} --python "${BROWSER_USE_PYTHON}" browser-use --version`;
     case "chrome":
       return "Install Google Chrome, or install Playwright's Chromium: uvx playwright install chromium --no-shell";
     case "git":
@@ -503,7 +503,7 @@ function installCommand(id: DependencyId): string[] | { error: string } {
         : ["/bin/sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"];
     case "browser-use":
       if (!uvx) return { error: "uv is not installed yet. Install uv first." };
-      return [uvx, "--from", BROWSER_USE_SPEC, "browser-use", "--version"];
+      return [uvx, ...BROWSER_USE_FROM, "browser-use", "--version"];
     case "chrome":
       if (!uvx) return { error: "uv is not installed yet. Install uv first." };
       // Same as `browser-use install`, minus `--with-deps` on Linux (which needs sudo and would hang without a TTY).
