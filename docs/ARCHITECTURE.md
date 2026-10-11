@@ -46,7 +46,9 @@ vm/                   macOS VMs (see "macOS virtual machines"): bin/tart.app, ta
                       disks and gm-image-* templates), downloads/ (image layers while downloading),
                       shared/<vm-id>/ shared folders, logs/<vm-id>.log, ssh/ key
 tasks/<task-id>/      checkout of a coding task's repository (see "Tasks")
-mods/<run-id>/<name>/ a run's own copy of the mods it loads (see "Mods"); written from the database, removed with the run
+mods/<run-id>/<name>/ a run's own copy of the small plugins it loads (see "Plugins"); written from the database, removed with the run
+plugins/git/<mod-id>/<commit>/  checkout of a plugin installed from a git repository, one per installed commit
+plugins/data/<name>/  a plugin's own data between runs (`${CLAUDE_PLUGIN_DATA}` of its MCP servers)
 logs/godmode.jsonl    diagnostic log (see "Diagnostic log"); godmode.1.jsonl is the previous 2 MB, desktop.log the shell's
 link-key              0600 — this installation's X25519 key pair for the runner link (see "Remote runners")
 runner.json           a runner only (~/.godmode-runner, GODMODE_RUNNER_HOME): pid and ports while it serves
@@ -211,8 +213,9 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
        --settings <tmp json>                   (the message-queue hook, see below; `ultracode: true` with Ultracode;
-                                                `pluginConfigs` with the options of the run's mods)
-       [--plugin-dir <data>/mods/<run-id>/<name> for each mod that is on for the agent, see Mods]
+                                                `pluginConfigs` with the options of the run's plugins)
+       [--plugin-dir for each plugin that is on for the agent, see Plugins: <data>/mods/<run-id>/<name> for a small
+        one, <data>/plugins/git/<mod-id>/<commit>[/<folder>] for one from a repository]
        [--disallowedTools mcp__browser__browser_extract_content,… when no OpenAI key or in a VM; Bash in a VM]
        [--add-dir <VM shared folder> when the run works in a VM]
        [--add-dir <folder or clone> for each usable workspace folder and repository]
@@ -535,14 +538,14 @@ the core, the desktop and the phone alike.
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |
 | `agents_list()`, `agent_get({id})` | Discover peer agents: role, who they report to (`relation` marks the caller's lead and reports), and for `agent_get` who reports to it (only agents the caller could reach) |
 | `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result). The chat stores the bare task (`source: "delegation"`); the run's prompt starts with `[Delegated by <name> (<role>), your lead. Your final answer goes back to <name>.]` |
-| `agent_create`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `run_continue`, `workspaces_list`, `workspace_create`, `workspace_update`, `project_create`, `project_update`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo`. `workspace_update` / `project_update` only add sources (`addSources`); removing sources, deleting, VM, browser profile and auto-merge stay human-only. A run kept in a VM sets up no workspaces or projects (their instructions reach agents on the computer), and changing a workspace's or project's context follows the `agent_update` rules for every agent in it (reveal mode, computer use) |
+| `agent_create`, `templates_list`, `team_install`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `run_continue`, `workspaces_list`, `workspace_create`, `workspace_update`, `project_create`, `project_update`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo`; `agent_create({ template })` starts from a role template (unset fields come from it, its schedule comes back as `templateSchedule`), `templates_list` shows the roles and structures (seats with their paths for `skip`), and `team_install` hires a structure as the calling agent (no secret access or management rights for the new agents; refused in a run kept in a VM). `workspace_update` / `project_update` only add sources (`addSources`); removing sources, deleting, VM, browser profile and auto-merge stay human-only. A run kept in a VM sets up no workspaces or projects (their instructions reach agents on the computer), and changing a workspace's or project's context follows the `agent_update` rules for every agent in it (reveal mode, computer use) |
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
 | `task_note({ text, taskId? })` | A progress note on the ticket the run works on (managers: any ticket); on its timeline, nobody is notified |
 | `ask_human({ question, context?, options? })`, `request_approval({ action, reason, affects })` | Ask the human a question or for an OK and stand still until the answer; the run continues with it (see Questions and approvals). Not in condition checks, dreams or delegated runs |
 | `task_report_blocked({ reason })` | Only in runs working on a board task: say what's missing (access, an account, information nobody can give now); the task moves to Blocked when the run ends (see Tasks). Decisions and OKs go through `ask_human` / `request_approval` |
 | `memory_dream_report({ summary, changes })` | Only in dream runs: report what a memory consolidation changed (see Dreaming) |
 | `workspace_tidy({ operations })` | Only in dream runs that tidy the workspace: move or discard entries of `workspace/` (see Dreaming) |
-| `mods_list({ mod? })`, `mod_save({ mod?, title, description?, files })` | Only for agents with `canManageAgents`: the installed mods (with `mod`: one with its files), and saving a mod the agent wrote as a draft — switched off, checked by Claude Code's validator, for the human to review (see Mods). `mod_save` only saves over an agent's own draft — never a mod the human made, added or has had on — and isn't offered on a runner |
+| `plugins_list({ plugin? })`, `plugin_save({ plugin?, title, description?, files })`, `plugin_install({ source, ref?, plugin? })` | Only for agents with `canManageAgents`: the installed plugins (with `plugin`: one with its files), saving a small plugin the agent wrote as a draft, and installing one from a git repository — each arrives switched off, checked by Claude Code's validator, for the human to review (see Plugins). `plugin_save` only saves over an agent's own draft — never a plugin the human made, added, installed or has had on; `plugin_save` and `plugin_install` aren't offered on a runner |
 | `settings_get({ section? })`, `settings_update({ changes })` | Only for agents with `canManageAgents`, not on a runner: Godmode's own settings (models, effort, run limits, browser and computer behaviour, VMs, memory and dreaming, voice, upkeep, logs). `changes` is a partial object by section, checked like a change in the app and written to the audit log. Agents change only what `AGENT_SETTINGS` in `services/agentSettings.ts` lists, down to the single setting (`dreaming.model`); a new setting is closed until it is added there. Security, the server, phone and cloud access, self-repair, the user's name and the instructions for every agent (both reach reveal-mode agents), program paths, endpoints and extra CLI flags, permission bypass, the browser and computer control switches, live views, notifications, the watchdog, the VM switch and VM isolation, automatic cleanup and spending limits stay with the human. Not in a run kept in a VM. Connected apps: `settings_get` with any key, `settings_update` with full access, so `godmode call settings_update '{"changes":{...}}'` works from a terminal |
 | `notify_user({ title, body })` | Push a notification to the human |
 | `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
@@ -565,7 +568,7 @@ tasks, and read what was done. `packages/core/src/connect/`.
   `conversationId` `""`, and `connector: { id, name, access }`. The server introduces itself with
   `CONNECT_INSTRUCTIONS` instead of the agents' text.
 * **Tools.** `CONNECTOR_TOOLS` in `mcp/tools.ts` is the allowlist, each tool marked `read` or `manage`: `agents_list`,
-  `agent_get`, `agent_create`, `agent_update`, `agent_delete`, the `routine_*` and `automation_*` tools, `tasks_list`,
+  `agent_get`, `agent_create`, `agent_update`, `agent_delete`, `templates_list` (read), `team_install`, the `routine_*` and `automation_*` tools, `tasks_list`,
   `task_get`, `task_create`, `task_update`, `task_message`, `task_note`, `runs_list`, `spend_overview`, `workspaces_list`,
   `workspace_create`, `workspace_update`, `project_create`, `project_update`,
   `logins_overview` (names, never secrets), `missing_logins_list`, `vms_list`, `vm_create`, `vm_assign`, `vm_power`.
@@ -929,15 +932,43 @@ Remote machines agents sign in to and control (`packages/core/src/ssh/`, `/api/s
   real machines; resumed turns restate them. Audit: `ssh.use` (first call per run and server), `ssh.sudo`,
   `ssh.assign` / `ssh.unassign`.
 
-## Mods
+## Plugins
 
-[Claude Code mods](https://claude.com/blog/claude-code-mods) are small plugins of TypeScript function hooks that run
-inside Claude Code: `register(on, options)` adds hooks `($, e, next)` on its events — a tool call, a prompt, a row the
+The **Plugins** page (`/plugins`; called mods in the code: `packages/core/src/mods/`, `/api/mods`, the `mods` table)
+holds the Claude Code plugins Godmode loads into its agents' runs. There are two kinds. Whole plugins come **from a
+git repository** (skills, subagents, slash commands, command hooks, MCP servers — the catalog features Claude Video and
+oh-my-claudecode); small ones are **mods** whose files Godmode keeps itself.
+
+* **From a repository** (`mods/git.ts`, `POST /api/mods/install`): `source` is "owner/repo", a GitHub link (also
+  `…/tree/<ref>/<folder>`) or a clone URL. Godmode clones the newest commit of the branch or tag it follows with its
+  hardened git (no prompts, no clone hooks; shallow where the server allows it) into
+  `<data>/plugins/git/<mod-id>/<commit>/`, finds the plugin (the root's own, else the one the repository's
+  `marketplace.json` lists — with several, the answer is a 409 `pick_plugin` naming them), validates it in place and
+  reads what it brings from its folder (`ModContents`: skills, commands, subagents, hook events, MCP servers, size,
+  and Claude Code's estimate of the tokens it adds to every session). The record keeps `source` (`ModSource`: URL, ref,
+  folder, the commit that runs, its version) and, in `files`, only the manifest, `hooks.json` and `.mcp.json` — for its
+  options and for reading. A human's install is on at once when the check passes; an agent's (`plugin_install`) is off
+  and marked for review. `digest` is `git:<commit>`, so switching it on is the OK for that commit.
+* **Updates**: a minute after start and every six hours `git ls-remote` looks up the newest commit of each such plugin
+  (`POST /api/mods/updates` does it on request); on GitHub the new version number is read from the raw manifest. An
+  update (`POST /api/mods/:id/update`) lays the new commit down beside the old one and replaces it only when Claude
+  Code accepts it — otherwise the plugin stays as it is (409). Runs under way keep the checkout they loaded; checkouts
+  nothing points at are removed when the last run holding them ends, on uninstall and at startup. A checkout that is
+  missing (a restored backup, a runner) is fetched again at its commit before the next run or check.
+* **In runs**: the checkout itself is passed with `--plugin-dir` (no copy per run). Runs take MCP servers from
+  Godmode's config alone (`--strict-mcp-config`), so the servers a loaded plugin declares are added to that file under
+  the names Claude Code gives them (`plugin_<plugin>_<server>`, `${CLAUDE_PLUGIN_ROOT}` filled in) — the plugin's own
+  skills find their tools as `mcp__plugin_<plugin>_<server>__…`.
+* **Catalog** (`mods/catalog.ts`, `GET /api/mods/catalog`): the plugins the page features, each installed from its
+  GitHub repository with one click.
+
+[Claude Code mods](https://claude.com/blog/claude-code-mods), the small kind, are plugins of TypeScript function hooks
+that run inside Claude Code: `register(on, options)` adds hooks `($, e, next)` on its events — a tool call, a prompt, a row the
 conversation keeps, a turn — and each hook lets the event happen (`next(e)`), changes it or answers for itself
-(`{ deny }`). Godmode installs them for its agents (`packages/core/src/mods/`, `/api/mods`, the **Mods** page):
+(`{ deny }`). Godmode installs them for its agents:
 
 * **Records** (`mods`, `Mod` in `shared/mods.ts`): `name` (the plugin's name — lowercase, fixed once created), title,
-  description, icon, where it came from (`template` | `custom` | `agent` | `import`), `files` (every file of the plugin
+  description, icon, where it came from (`template` | `custom` | `agent` | `import` | `git`), `files` (every file of the plugin
   as JSON, path → text: `.claude-plugin/plugin.json`, `hooks/hooks.json`, the hooks module, …), whether it is on, whose
   runs load it (`scope` `all` | `agents` + `agent_ids`; a deleted agent never widens it to everyone), option values and
   the last check. The database is the mod: paths are relative, stay inside the folder and never name
@@ -985,7 +1016,7 @@ conversation keeps, a turn — and each hook lets the event happen (`next(e)`), 
   host that a hook threw and was skipped, or that a module didn't load — notes at warning level. Panes and bands
   (`ui.render`) aren't drawn — Godmode is a headless host — and the mod's abilities say so.
 * **Who decides**: only the human switches a mod on, and the switch names the code they saw (`digest` on `PATCH`; 409
-  when the code is another by now). A manager agent can write one (`mod_save`; its prompt points it at Claude Code's
+  when the code is another by now). A manager agent can write one (`plugin_save`; its prompt points it at Claude Code's
   `plugin-authoring` skill): it arrives switched off with `needsReview`, the human gets a notification that leads to
   the code — one for every version — and switching it on is the OK. An agent saves over drafts only: a mod the human
   made, added from the gallery or has had on is theirs, switched on or not — otherwise an agent could rewrite a guard
@@ -1161,12 +1192,22 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   for it cost (all of its tickets'). A goal stays in its workspace; deleting a workspace deletes its goals (migration 64 clears older leftovers). The board shows the goals above the columns (a click filters, `?goal=`), new
   tickets there serve the filtered goal; managers read them with `goals_list` and file tickets under one
   (`task_create { goalId }`). Deleting a goal leaves its tickets serving none.
+* **Role templates** (`agents/templates/`, one file per department, `GET /api/agent-templates`). Every job a company
+  has, grouped by `category` (leadership, finance, legal, people, marketing, sales, customer, ecommerce, product,
+  engineering, data, operations), in that order. Each department has one all-in-one agent whose `covers` lists every
+  job it does (`allInOneInstructions`), a lead (`leads`, `leadInstructions`) and its specialists. Instructions stay
+  short on purpose (goal, scope, limits) so the model decides the how. *New agent* shows them searchable (word starts),
+  grouped by department, with an *All-in-one* filter.
 * **Ready-made teams** (`agents/teams.ts`, `GET /api/team-templates`, `POST /api/team-templates/:id/install
-  { workspaceId?, automations? }`, Cloud: allowed; phone: closed). A team is a lead (its own template, with instructions
-  for leading: split tickets with `task_split`, hand chat work over, review, report) and reports taken from the agent
-  templates. Installing creates the lead (reporting to the built-in agent, delegation on), then each report under it,
-  and — when asked — the reports' scheduled automations from their templates. Offered on *New agent* and, while only the
-  built-in agent exists, on the Agents page; afterwards the org chart opens.
+  { workspaceId?, newWorkspace?, automations?, skip? }`, Cloud: allowed; phone: closed). A structure is a tree of seats
+  built from the role templates: a team (a lead and its reports) or a company (a CEO with its departments; the
+  *All-in-one company* is a CEO with one all-in-one agent per department, the *Full company* every role). Installing
+  creates the top (reporting to the built-in agent), then each seat under its lead — a left-out seat's reports move up
+  to the next lead kept — with delegation on for every seat that leads someone, and, when asked, the scheduled
+  automations from their templates. All or nothing. Offered on *New agent* (the dialog has *Everyone*, *Leads only*,
+  *Clear* and a per-lead toggle for its whole team; schedules start unticked above ten) and, while only the built-in
+  agent exists, on the Agents page; afterwards the org chart opens. Godmode does the same from a chat: `templates_list`,
+  `agent_create({ template })`, `team_install`.
 * **Waiting for other tickets** (migration 63, table `task_dependencies`; `Task.waitsFor`, `waitsForTickets()`). A
   ticket may wait for up to 10 others (`waitsFor` on create and patch, the sheet's *Waits for*, `task_create {
   waitsFor }`) of its workspace or global ones; itself and loops are refused — a loop counts parts too (a ticket waits

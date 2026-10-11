@@ -1,12 +1,27 @@
-import { Braces, Ellipsis, Pencil, ShieldCheck, SlidersHorizontal, Trash2, TriangleAlert } from "lucide-react";
-import { modState, type Mod } from "@godmode/shared";
+import { ArrowUp, Braces, Ellipsis, ExternalLink, FolderTree, Pencil, RefreshCw, ShieldCheck, SlidersHorizontal, Trash2, TriangleAlert } from "lucide-react";
+import { modState, modUpdateAvailable, type Mod } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAllAgents } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import { AbilityChip, HookChips, ModIconTile, ModStateBadge, modAuthor, modOriginLabel, sensitiveAbilities, type ModTab } from "./mod-parts";
+import {
+  AbilityChip,
+  CHIP,
+  contentsAbilities,
+  contentsSummary,
+  formatTokens,
+  GitHubMark,
+  HookChips,
+  ModIconTile,
+  ModStateBadge,
+  modAuthor,
+  modOriginLabel,
+  sensitiveAbilities,
+  type ModTab,
+} from "./mod-parts";
 import { RunsForRow } from "./runs-for";
 import type { ModActions } from "./use-mod-actions";
 
@@ -16,9 +31,13 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
   const { data: agents = [] } = useAllAgents();
   const state = modState(mod);
   const checking = actions.checking.has(mod.id);
-  const sensitive = sensitiveAbilities(mod.check);
+  const upgrading = actions.upgrading.has(mod.id);
+  const source = mod.source;
+  const sensitive = source ? contentsAbilities(mod.contents).filter((a) => a.level === "sensitive") : sensitiveAbilities(mod.check);
   const firstError = mod.check?.errors[0];
   const moreErrors = (mod.check?.errors.length ?? 0) - 1;
+  const update = modUpdateAvailable(mod);
+  const codeTab: ModTab = source ? "contents" : "code";
 
   return (
     <article aria-label={mod.title} className={cn("flex w-full min-w-0 flex-col rounded-xl border bg-card shadow-card transition hover:border-foreground/15", checking && "glow-border")}>
@@ -38,15 +57,32 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
             </h3>
             <ModStateBadge state={state} />
           </div>
-          <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="truncate font-mono text-foreground/80" title={mod.name}>
-              {mod.name}
-            </span>
-            <span aria-hidden className="opacity-50">
-              ·
-            </span>
-            <span className="shrink-0">{modOriginLabel(mod, agents)}</span>
-          </p>
+          {source ? (
+            <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              {source.web?.startsWith("https://github.com/") && <GitHubMark className="size-3 shrink-0" />}
+              <span className="truncate font-mono text-foreground/80" title={source.url}>
+                {source.repo}
+              </span>
+              {source.version && (
+                <>
+                  <span aria-hidden className="opacity-50">
+                    ·
+                  </span>
+                  <span className="shrink-0 font-mono tabular-nums">{source.version}</span>
+                </>
+              )}
+            </p>
+          ) : (
+            <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="truncate font-mono text-foreground/80" title={mod.name}>
+                {mod.name}
+              </span>
+              <span aria-hidden className="opacity-50">
+                ·
+              </span>
+              <span className="shrink-0">{modOriginLabel(mod, agents)}</span>
+            </p>
+          )}
         </div>
 
         <Switch
@@ -68,8 +104,8 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
             </p>
             {moreErrors > 0 && <p className="mt-0.5 whitespace-nowrap text-destructive/70">and {moreErrors} more</p>}
           </div>
-          <Button size="xs" variant="outline" onClick={() => onOpen("code")}>
-            <Braces /> Fix
+          <Button size="xs" variant="outline" onClick={() => onOpen(source ? "overview" : "code")}>
+            {source ? <ShieldCheck /> : <Braces />} {source ? "Details" : "Fix"}
           </Button>
         </div>
       )}
@@ -78,16 +114,59 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
         <div className="mx-4 mb-4 flex flex-wrap items-start gap-x-2.5 gap-y-2 rounded-lg border border-warning/30 bg-warning/[0.07] px-3 py-2.5 text-xs" role="status">
           <TriangleAlert className="mt-px size-3.5 shrink-0 text-warning" aria-hidden />
           <p className="min-w-0 flex-1 basis-48 leading-relaxed text-foreground/85">
-            Drafted by <span className="font-medium text-foreground">{modAuthor(mod, agents)?.name ?? "an agent"}</span>. Read the code before you switch it on.
+            {source ? "Installed" : "Drafted"} by <span className="font-medium text-foreground">{modAuthor(mod, agents)?.name ?? "an agent"}</span>.{" "}
+            {source ? "Look at what it brings before you switch it on." : "Read the code before you switch it on."}
           </p>
-          <Button size="xs" variant="outline" onClick={() => onOpen("code")}>
-            <Braces /> Review
+          <Button size="xs" variant="outline" onClick={() => onOpen(codeTab)}>
+            {source ? <FolderTree /> : <Braces />} Review
+          </Button>
+        </div>
+      )}
+
+      {update && source && state !== "review" && (
+        <div className="mx-4 mb-4 flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg border border-brand/25 bg-brand-soft/60 px-3 py-2 text-xs" role="status">
+          <ArrowUp className="size-3.5 shrink-0 text-brand-strong" aria-hidden />
+          <p className="min-w-0 flex-1 basis-40 leading-relaxed text-foreground/85">
+            <span className="font-medium text-foreground">Update ready</span>
+            {source.latestVersion && source.latestVersion !== source.version ? (
+              <span className="font-mono text-[11.5px] tabular-nums">
+                {" "}
+                {source.version ?? "?"} → {source.latestVersion}
+              </span>
+            ) : (
+              <span className="text-muted-foreground"> · newer code on {source.ref ?? "the default branch"}</span>
+            )}
+          </p>
+          <Button size="xs" disabled={upgrading} onClick={() => actions.upgrade.mutate(mod)}>
+            {upgrading ? <Spinner className="size-3" /> : <ArrowUp />} {upgrading ? "Updating…" : "Update"}
           </Button>
         </div>
       )}
 
       <div className="flex flex-wrap items-center gap-1.5 px-4 pb-4">
-        {mod.check ? (
+        {source ? (
+          <>
+            <span className="eyebrow mr-1 text-[10.5px]">Brings</span>
+            {contentsSummary(mod.contents).map((label) => (
+              <span key={label} className={cn(CHIP, "bg-paper-2 text-foreground/80 tabular-nums")}>
+                {label}
+              </span>
+            ))}
+            {mod.contents?.alwaysOnTokens != null && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={0} className={cn(CHIP, "bg-paper-2 text-muted-foreground tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50")}>
+                    {formatTokens(mod.contents.alwaysOnTokens)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-64">Added to the context of every run that loads it, Claude Code estimates.</TooltipContent>
+              </Tooltip>
+            )}
+            {sensitive.map((a) => (
+              <AbilityChip key={a.id} ability={a} />
+            ))}
+          </>
+        ) : mod.check ? (
           <>
             <span className="eyebrow mr-1 text-[10.5px]">Hooks into</span>
             {mod.check.hooks.length ? <HookChips hooks={mod.check.hooks} /> : <span className="text-xs text-muted-foreground">Nothing yet</span>}
@@ -120,25 +199,37 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
             <SlidersHorizontal /> Options
           </Button>
         )}
-        <Button variant="ghost" size="sm" className={FOOTER_BUTTON} onClick={() => onOpen("code")}>
-          <Braces /> Code
+        <Button variant="ghost" size="sm" className={FOOTER_BUTTON} onClick={() => onOpen(codeTab)}>
+          {source ? <FolderTree /> : <Braces />} {source ? "Contents" : "Code"}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-sm" className="ml-auto size-7 text-muted-foreground" aria-label={`More actions for ${mod.title}`}>
-              {checking ? <Spinner className="size-3.5" /> : <Ellipsis />}
+              {checking || upgrading ? <Spinner className="size-3.5" /> : <Ellipsis />}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem onClick={() => onOpen("overview")}>
-              <Pencil /> Edit…
+              <Pencil /> {source ? "Open…" : "Edit…"}
             </DropdownMenuItem>
+            {source && (
+              <DropdownMenuItem disabled={upgrading || actions.checkUpdates.isPending} onClick={() => actions.checkUpdates.mutate([mod])}>
+                <RefreshCw /> Check for updates
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem disabled={checking} onClick={() => actions.check.mutate({ mod })}>
-              <ShieldCheck /> Check again
+              <ShieldCheck /> Check with Claude Code
             </DropdownMenuItem>
+            {source?.web && (
+              <DropdownMenuItem asChild>
+                <a href={source.web} target="_blank" rel="noreferrer">
+                  <ExternalLink /> View repository
+                </a>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onDelete}>
-              <Trash2 /> Delete…
+              <Trash2 /> {source ? "Uninstall…" : "Delete…"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

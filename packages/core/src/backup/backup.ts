@@ -551,7 +551,7 @@ function sanitizeDump(dump: DbDump): string[] {
   const safeMods = mods.filter((row) => typeof row.name === "string" && MOD_NAME_RE.test(row.name));
   if (safeMods.length !== mods.length) {
     tables.mods = safeMods;
-    warnings.push(`Skipped ${mods.length - safeMods.length} mod(s) with an unsafe name.`);
+    warnings.push(`Skipped ${mods.length - safeMods.length} plugin(s) with an unsafe name.`);
   }
   const modsOff: string[] = [];
   for (const row of safeMods) {
@@ -559,7 +559,7 @@ function sanitizeDump(dump: DbDump): string[] {
     Object.assign(row, { enabled: 0, check_report: null, check_key: null });
   }
   if (modsOff.length) {
-    warnings.push(`Switched off ${modsOff.length} mod(s) from the backup (${modsOff.join(", ")}). Read their code under Mods before switching them back on.`);
+    warnings.push(`Switched off ${modsOff.length} plugin(s) from the backup (${modsOff.join(", ")}). Look at them under Plugins before switching them back on.`);
   }
 
   // A bot answers from one place: the machine the backup came from may still be running it.

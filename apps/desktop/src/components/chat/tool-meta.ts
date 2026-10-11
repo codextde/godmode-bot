@@ -392,6 +392,8 @@ const GODMODE_TOOLS = new Set([
   "agent_get",
   "agent_delegate",
   "agent_create",
+  "templates_list",
+  "team_install",
   "agent_update",
   "agent_delete",
   "routine_create",
@@ -507,7 +509,13 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
         detail: truncate(str(input.task), 120) || undefined,
       };
     case "agent_create":
-      return { kind: "agents", icon: UserCog, title: `Created agent ${str(input.name)}`.trim() };
+      return { kind: "agents", icon: UserCog, title: `Created agent ${str(input.name)}`.trim(), detail: str(input.template) ? `From the ${humanize(str(input.template))} template` : undefined };
+    case "templates_list":
+      return { kind: "agents", icon: Bot, title: "Looked at ready-made roles and teams" };
+    case "team_install": {
+      const workspace = str((input.newWorkspace as Input | undefined)?.name);
+      return { kind: "agents", icon: UserCog, title: `Hired ${humanize(str(input.template)) || "a team"}`, detail: workspace ? `In the new workspace ${workspace}` : undefined };
+    }
     case "agent_update":
       return { kind: "agents", icon: UserCog, title: agentName ? `Updated ${agentName}` : "Updated an agent" };
     case "agent_delete":

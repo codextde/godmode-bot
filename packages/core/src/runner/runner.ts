@@ -1937,6 +1937,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     ssh: ssh.length > 0,
     android: phones.length > 0,
   });
+  // The human's plugins (Plugins page). Dreams and condition checks are small jobs with a fixed shape: they load none.
+  const mods = dreaming || job.trigger === "check" ? null : await modsForRun(agent, job.runId, (text) => job.acc.addNotice("warning", text));
+  // A run takes its MCP servers from this file alone: the ones its plugins declare go in beside Godmode's.
+  for (const [name, server] of Object.entries(mods?.mcpServers ?? {})) mcp.mcpServers[name] ??= server;
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
   const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
@@ -1944,8 +1948,6 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // and condition checks are small jobs with a fixed shape: never.
   const wantsUltracode = (conv.ultracode === null ? null : conv.ultracode === 1) ?? agent.ultracode ?? settings.runner.ultracode;
   const ultracode = !dreaming && job.trigger !== "check" && ultracodeFor(model, wantsUltracode === true);
-  // The human's mods (Mods page). Dreams and condition checks are small jobs with a fixed shape: they load none.
-  const mods = dreaming || job.trigger === "check" ? null : await modsForRun(agent, job.runId, (text) => job.acc.addNotice("warning", text));
   // Between two steps Claude Code asks for the messages waiting in the chat's queue, and before shell commands and file
   // writes whether they reach for another browser profile. Dreams and condition checks run in chats nobody writes to.
   const hook = (path: string) => ({ type: "http", url: `${gatewayUrl()}/hooks/${path}`, timeout: 10, headers: { Authorization: `Bearer ${res.token}` } });

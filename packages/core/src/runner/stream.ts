@@ -359,7 +359,7 @@ export class StreamAccumulator {
     }
     if (!text || this.modNotes > MAX_MOD_NOTES) return false;
     this.modNotes++;
-    if (this.modNotes > MAX_MOD_NOTES) this.addNotice("info", "More notes from mods aren't shown in this turn.");
+    if (this.modNotes > MAX_MOD_NOTES) this.addNotice("info", "More notes from plugins aren't shown in this turn.");
     else {
       // The engine's own lines about a mod: its module didn't load, or one of its hooks threw and was skipped.
       const level = e.subtype === "ui_log" && MOD_FAILURE.test(text) ? "warning" : "info";

@@ -26,6 +26,8 @@ import type {
 } from "@godmode/shared";
 import {
   AGENT_COLORS,
+  AGENT_TEMPLATE_CATEGORIES,
+  AGENT_TEMPLATE_CATEGORY_LABELS,
   cardExpired,
   cardLabel,
   formatMoney,
@@ -41,6 +43,7 @@ import {
   isModelId,
   leadOf,
   modState,
+  modUpdateAvailable,
   MAX_AGENT_ROLE_LENGTH,
   MAX_HEARTBEAT_CHECKLIST_LENGTH,
   MAX_RUNS_PER_WINDOW,
@@ -83,6 +86,8 @@ import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/compos
 import { listTriggerTypes } from "../integrations/composioTriggers";
 import { createWorkspace, listWorkspaces, updateWorkspace } from "../services/workspaces";
 import { createAgent, deleteAgent, getAgent, listAgents, peersFor, teamOf, updateAgent } from "../agents/service";
+import { AGENT_TEMPLATES } from "../agents/templates";
+import { TEAM_TEMPLATES, installTeam, seatsOf } from "../agents/teams";
 import {
   addCredentialDomain,
   createCredential,
@@ -139,7 +144,7 @@ import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parse
 import { continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
 import { MAX_OPEN_PER_CHAT, createAgentHumanTask, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
-import { createMod, findMod, listMods, updateMod } from "../mods/service";
+import { createMod, findMod, installMod, listMods, updateMod } from "../mods/service";
 import { noteConnectorCall } from "../connect/connectors";
 import { selfRepairCheck } from "../diagnostics/selfRepair";
 
@@ -208,9 +213,18 @@ function modSummary(mod: Mod) {
     state: modState(mod),
     runsFor: mod.scope === "all" ? "every agent" : mod.agentIds,
     options: mod.options.map((o) => ({ key: o.key, title: o.title, value: o.sensitive ? undefined : (mod.values[o.key] ?? o.default) })),
+    ...(mod.source
+      ? {
+          repository: { repo: mod.source.repo, ref: mod.source.ref, path: mod.source.path || undefined, commit: mod.source.commit, version: mod.source.version },
+          updateAvailable: modUpdateAvailable(mod),
+          contents: mod.contents
+            ? { skills: mod.contents.skills, commands: mod.contents.commands, agents: mod.contents.agents, hooks: mod.contents.hooks, mcpServers: mod.contents.mcpServers }
+            : undefined,
+        }
+      : {}),
     check: mod.check
       ? { ok: mod.check.ok, errors: mod.check.errors, warnings: mod.check.warnings, hooks: mod.check.hooks, calls: mod.check.calls }
-      : "Claude Code isn't installed on this computer, so the mod wasn't checked.",
+      : "Claude Code isn't installed on this computer, so the plugin wasn't checked.",
   };
 }
 const fail = (text: string): ToolOutput => ({ text, isError: true });
@@ -784,7 +798,9 @@ const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
   ["vms_list", "read"],
   ["android_devices_list", "read"],
   ["settings_get", "read"],
+  ["templates_list", "read"],
   ["agent_create", "manage"],
+  ["team_install", "manage"],
   ["agent_update", "manage"],
   ["agent_delete", "manage"],
   ["routine_create", "manage"],
@@ -1736,27 +1752,139 @@ const TOOLS: ToolDef[] = [
     name: "agent_create",
     description:
       "Create a new agent (bot) with its own git repo, instructions and optional recurring routine. Give it a role (its job title on the team), a clear description and concrete instructions, " +
-      "plus a fitting emoji, colour, character (its little face in the app) and personality — each agent should be recognisable at a glance. It reports to you unless you set reportsTo.",
+      "plus a fitting emoji, colour, character (its little face in the app) and personality — each agent should be recognisable at a glance. It reports to you unless you set reportsTo. " +
+      "For a common job, start from a ready-made role (templates_list) with template and change only what differs.",
     schema: z.object({
-      name: z.string().min(1).max(100),
+      name: z.string().min(1).max(100).optional().describe("Required unless a template gives one"),
+      template: z
+        .string()
+        .optional()
+        .describe(
+          "Id of a role template from templates_list: its name, role, look, personality, description and instructions fill in whatever you leave out. Its schedule comes back as templateSchedule; pass it as routine to set it up.",
+        ),
       ...agentFields,
       routine: z.object({ name: z.string().min(1), cron: routineFields.cron, prompt: z.string().min(1), timezone: z.string().optional() }).optional(),
     }),
     when: managesSetup,
-    run: async ({ routine, ...input }, { agent, ctx }) => {
+    run: async ({ routine, template: templateId, ...given }, { agent, ctx }) => {
+      const template = templateId ? AGENT_TEMPLATES.find((t) => t.id === templateId) : undefined;
+      if (templateId && !template) return fail(`There is no role template "${templateId}". templates_list shows them.`);
+      const set = Object.fromEntries(Object.entries(given).filter(([, v]) => v !== undefined)) as typeof given;
+      const input = template
+        ? {
+            name: template.name,
+            role: template.role,
+            avatar: template.avatar,
+            color: template.color,
+            personality: template.personality,
+            description: template.description,
+            instructions: template.instructions,
+            ...set,
+            character: { ...template.character, ...set.character },
+          }
+        : set;
+      if (!input.name) return fail("Give the agent a name, or start from a template.");
       assertAgentPatchAllowed(null, input);
       const leadRefusal = protectedLeadRefusal(agent, ctx, input.reportsTo);
       if (leadRefusal) return fail(leadRefusal);
       // Secret access, management rights and login allow-lists stay human-only (enforced by createAgent for agent actors).
       // Agents created from a VM work in that VM.
-      const created = await createAgent({ ...input, vmId: lockedVm(ctx) }, `agent:${agent.id}`);
-      audit(`agent:${agent.id}`, "agent.create", created.id, { name: created.name });
+      const created = await createAgent({ ...input, name: input.name, vmId: lockedVm(ctx) }, `agent:${agent.id}`);
+      audit(`agent:${agent.id}`, "agent.create", created.id, { name: created.name, ...(template ? { template: template.id } : {}) });
       let routineInfo: unknown = null;
       if (routine) {
         const r = createRoutine({ agentId: created.id, name: routine.name, cron: routine.cron, prompt: routine.prompt, timezone: routine.timezone ?? localTimezone() });
         routineInfo = { id: r.id, name: r.name, cron: r.cron, nextRunAt: r.nextRunAt };
       }
-      return json({ created: agentSummary(created, workspaceNames()), routine: routineInfo });
+      return json({
+        created: agentSummary(created, workspaceNames()),
+        routine: routineInfo,
+        ...(template?.routine && !routine ? { templateSchedule: template.routine } : {}),
+      });
+    },
+  }),
+
+  defineTool({
+    name: "templates_list",
+    description:
+      "Ready-made roles and org charts to build a team or a whole company from. Roles (kind roles): every job a company has, by department, plus one all-in-one agent per department that covers all of its jobs (allInOne lists them) — use one with agent_create({ template }). " +
+      "Structures (kind structures): teams (a lead and its reports) and companies (a CEO with its departments, or one all-in-one agent per department) with their seats — install one with team_install. " +
+      "Instructions stay short on purpose (goal, scope, limits); read a role's full text with query on its id.",
+    schema: z.object({
+      kind: z.enum(["roles", "structures"]).optional().describe("Omitted = both"),
+      department: z.enum(AGENT_TEMPLATE_CATEGORIES).optional().describe("Only roles of this department"),
+      query: z.string().max(100).optional().describe("Words that must appear in the name, role, description or covered jobs; a role's exact id also returns its instructions"),
+    }),
+    when: isManager,
+    run: ({ kind, department, query }) => {
+      const words = (query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+      const byId = new Map(AGENT_TEMPLATES.map((t) => [t.id, t]));
+      const exact = query ? byId.get(query.trim()) : undefined;
+      const roles = AGENT_TEMPLATES.filter((t) => (!department || t.category === department) && (exact ? t === exact : words.every((w) => [t.id, t.name, t.role, t.description, ...(t.covers ?? [])].join(" ").toLowerCase().includes(w)))).map((t) => ({
+        id: t.id,
+        name: t.name,
+        role: t.role,
+        department: AGENT_TEMPLATE_CATEGORY_LABELS[t.category],
+        description: t.description,
+        ...(t.leads ? { leads: true } : {}),
+        ...(t.covers ? { allInOne: t.covers } : {}),
+        ...(t.routine ? { schedule: t.routine } : {}),
+        ...(exact ? { instructions: t.instructions } : {}),
+      }));
+      const structures = TEAM_TEMPLATES.filter((team) => !department && words.every((w) => [team.id, team.name, team.description].join(" ").toLowerCase().includes(w))).map((team) => ({
+        id: team.id,
+        kind: team.kind,
+        name: team.name,
+        description: team.description,
+        // "0.2 CFO (cfo)": its path for skip, then who sits there.
+        seats: seatsOf(team.root).map((seat) => `${seat.path} ${byId.get(seat.node.template)?.name ?? seat.node.template} (${seat.node.template})`),
+      }));
+      return json({ ...(kind !== "structures" ? { roles } : {}), ...(kind !== "roles" ? { structures } : {}) });
+    },
+  }),
+
+  defineTool({
+    name: "team_install",
+    description:
+      "Hire a ready-made structure from templates_list in one go: a team or a whole company, with its reporting lines wired up and its leads allowed to hand work to their reports. " +
+      "Put it in a new workspace (newWorkspace) or an existing one (workspaceId; null = global). skip leaves seats out by their path; their reports move up to the next lead kept. " +
+      "automations also sets up the schedules the roles bring; a big chart brings many, so agree that with the human first.",
+    schema: z.object({
+      template: z.string().describe("Structure id from templates_list"),
+      workspaceId: z.string().nullable().optional().describe("Workspace id or name; null or omitted = global. Ignored with newWorkspace"),
+      newWorkspace: z
+        .object({ name: z.string().min(1).max(100), icon: z.string().max(16).optional(), color: z.string().max(32).optional() })
+        .optional()
+        .describe("Create a workspace for them first"),
+      skip: z.array(z.string().max(40)).max(200).optional().describe('Seat paths to leave out, e.g. "0.2" (the top\'s third report) or "0.4.1"'),
+      automations: z.boolean().optional().describe("Also set up the roles' schedules (default false)"),
+    }),
+    when: managesSetup,
+    run: async ({ template, workspaceId, newWorkspace, skip, automations }, { agent, ctx }) => {
+      if (lockedVm(ctx)) return fail("This task runs in a virtual machine and is kept off the human's computer, and a team installs agents that work on the computer — only the human can install one.");
+      if (!TEAM_TEMPLATES.some((t) => t.id === template)) return fail(`There is no structure "${template}". templates_list shows them.`);
+      let target: string | null = null;
+      if (newWorkspace) {
+        const taken = findWorkspace(newWorkspace.name);
+        if (taken) return fail(`There is already a workspace "${taken.name}" (${taken.id}). Install into it with workspaceId, or pick another name.`);
+      } else if (workspaceId) {
+        const workspace = findWorkspace(workspaceId);
+        if (!workspace) return fail(`There is no workspace "${workspaceId}". workspaces_list shows them.`);
+        target = workspace.id;
+      }
+      const res = await installTeam(
+        template,
+        { ...(newWorkspace ? { newWorkspace } : { workspaceId: target }), automations: automations ?? false, timezone: localTimezone(), skip },
+        `agent:${agent.id}`,
+      );
+      const names = workspaceNames();
+      const team = listAgents({ workspaceId: "all" });
+      return json({
+        lead: agentSummary(res.lead, names, team),
+        members: res.members.map((m) => ({ id: m.id, name: m.name, role: m.role, reportsTo: m.reportsTo })),
+        automations: res.automations,
+        workspace: res.workspace ? { id: res.workspace.id, name: res.workspace.name } : scopeName(target, names),
+      });
     },
   }),
 
@@ -2491,42 +2619,69 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
-    name: "mods_list",
+    name: "plugins_list",
     description:
-      "List the Claude Code mods installed in Godmode: small plugins of TypeScript hooks that run inside every turn of the agents they are for (they block or rewrite tool calls, rewrite prompts, mask tool output, post notes). For each: whether it is switched on, whose runs load it, what it hooks, and what Claude Code's validator said. With `mod` (an id or name) the answer includes that mod's files.",
-    schema: z.object({ mod: z.string().max(100).optional().describe("A mod's id or name: return it with its files") }),
+      "List the Claude Code plugins installed in Godmode (the Plugins page): whole plugins installed from a git repository (skills, subagents, commands, hooks, MCP servers — with their repository, commit and whether an update waits) and small plugins of TypeScript hooks that run inside every turn (they block or rewrite tool calls, rewrite prompts, mask tool output, post notes). For each: whether it is switched on, whose runs load it, and what Claude Code's validator said. With `plugin` (an id or name) the answer includes its files (for one from a repository: its manifest and hooks).",
+    schema: z.object({ plugin: z.string().max(100).optional().describe("A plugin's id or name: return it with its files") }),
     when: isManager,
-    run: ({ mod }) => {
-      if (mod) {
-        const found = findMod(mod);
-        return found ? json({ ...modSummary(found), files: found.files }) : fail(`There is no mod "${mod}". Call mods_list without arguments to see them.`);
+    run: ({ plugin }) => {
+      if (plugin) {
+        const found = findMod(plugin);
+        return found ? json({ ...modSummary(found), files: found.files }) : fail(`There is no plugin "${plugin}". Call plugins_list without arguments to see them.`);
       }
       return json(listMods().map(modSummary));
     },
   }),
 
   defineTool({
-    name: "mod_save",
+    name: "plugin_install",
     description:
-      "Save a Claude Code mod you wrote as a draft for the human to review: it arrives switched off, the human reads the code under Mods and switches it on — you can't. `files` is the whole plugin by path: \".claude-plugin/plugin.json\" (name, version, description, and `userConfig` for options the human sets), \"hooks/hooks.json\" ({ \"modules\": [\"./register.ts\"] }) and the hooks module \"hooks/register.ts\" exporting `register(on, options)`. Godmode checks the files with Claude Code's validator and returns what it found: fix every error and save again with the same `mod` until `check.ok` is true. `mod` (an id or name) saves over a draft an agent wrote that still waits for review. Every other mod is the human's — one they made, added from the gallery or switched on: you can't change it, so save your version as a new mod and say what is different.",
+      "Install a Claude Code plugin from a git repository for the human to review: `source` is \"owner/repo\", a GitHub link (also `…/tree/<branch>/<folder>`) or a clone URL. Godmode clones it, checks it with Claude Code's validator and lists what it brings (skills, subagents, commands, hooks, MCP servers). It arrives switched off: the human switches it on under Plugins — you can't. When the repository's marketplace lists several plugins, the answer names them: install again with `plugin`.",
     schema: z.object({
-      mod: z.string().max(100).optional().describe("Id or name of an agent's draft to save over; omit for a new mod"),
+      source: z.string().min(1).max(500).describe('"owner/repo", a GitHub link or a clone URL'),
+      ref: z.string().max(200).optional().describe("Branch or tag to follow; default: the repository's default branch"),
+      plugin: z.string().max(100).optional().describe("The plugin's name when the repository holds several"),
+    }),
+    when: managesSetup,
+    run: async ({ source, ref, plugin }, { agent }) => {
+      let saved: Mod;
+      try {
+        saved = await installMod({ source, ref, plugin }, `agent:${agent.id}`);
+      } catch (err) {
+        if (err instanceof HttpError) {
+          const choices = (err.details as { plugins?: { name: string; description: string }[] } | undefined)?.plugins;
+          return fail(choices ? `${err.message} ${choices.map((p) => `${p.name}${p.description ? ` (${p.description})` : ""}`).join("; ")}` : err.message);
+        }
+        throw err;
+      }
+      notify("info", `${agent.name} installed the plugin ${saved.title}`, "It is switched off. Look at what it brings and switch it on under Plugins.", `/plugins?plugin=${saved.id}`);
+      return json({ ...modSummary(saved), next: "Installed switched off. Tell the human to review it under Plugins and switch it on." });
+    },
+  }),
+
+  defineTool({
+    name: "plugin_save",
+    description:
+      "Save a small Claude Code plugin you wrote (TypeScript hooks) as a draft for the human to review: it arrives switched off, the human reads the code under Plugins and switches it on — you can't. `files` is the whole plugin by path: \".claude-plugin/plugin.json\" (name, version, description, and `userConfig` for options the human sets), \"hooks/hooks.json\" ({ \"modules\": [\"./register.ts\"] }) and the hooks module \"hooks/register.ts\" exporting `register(on, options)`. Godmode checks the files with Claude Code's validator and returns what it found: fix every error and save again with the same `plugin` until `check.ok` is true. `plugin` (an id or name) saves over a draft an agent wrote that still waits for review. Every other plugin is the human's — one they made, added from the gallery, installed or switched on: you can't change it, so save your version as a new plugin and say what is different. A whole plugin from a git repository is installed with plugin_install instead.",
+    schema: z.object({
+      plugin: z.string().max(100).optional().describe("Id or name of an agent's draft to save over; omit for a new plugin"),
       title: z.string().min(1).max(80).describe("What the human sees, two or three words: \"Protect migrations\""),
-      description: z.string().max(500).optional().describe("One sentence: what the mod does"),
+      description: z.string().max(500).optional().describe("One sentence: what the plugin does"),
       files: z.record(z.string().max(200), z.string()).describe("Every file of the plugin, path → text"),
     }),
     when: managesSetup,
-    run: async ({ mod, title, description, files }, { agent }) => {
+    run: async ({ plugin, title, description, files }, { agent }) => {
       const actor = `agent:${agent.id}`;
-      const existing = mod ? findMod(mod) : null;
-      if (mod && !existing) return fail(`There is no mod "${mod}". Omit \`mod\` to save a new one.`);
+      const existing = plugin ? findMod(plugin) : null;
+      if (plugin && !existing) return fail(`There is no plugin "${plugin}". Omit \`plugin\` to save a new one.`);
       const human = getSettings().general.userName || "the human";
       if (existing?.enabled) {
-        return fail(`"${existing.title}" is switched on: only ${human} changes a mod that is running. Save your version as a new mod and say what you changed.`);
+        return fail(`"${existing.title}" is switched on: only ${human} changes a plugin that is running. Save your version as a new plugin and say what you changed.`);
       }
+      if (existing?.source) return fail(`"${existing.title}" comes from a git repository: it changes when it is updated, not by saving files over it.`);
       // A draft is an agent's until the human has had it on; anything else was made, added or approved by them.
       if (existing && !(existing.needsReview && existing.createdBy.startsWith("agent:"))) {
-        return fail(`"${existing.title}" is ${human}'s mod, not a draft of yours. Save your version as a new mod and say what you changed.`);
+        return fail(`"${existing.title}" is ${human}'s plugin, not a draft of yours. Save your version as a new plugin and say what you changed.`);
       }
       const saved = existing
         ? await updateMod(existing.id, { title, ...(description !== undefined ? { description } : {}), files }, actor)
@@ -2534,13 +2689,13 @@ const TOOLS: ToolDef[] = [
       // Every version is told: the human reads the code as it is now, not the one from an earlier notice.
       notify(
         "info",
-        existing ? `${agent.name} changed its draft of the mod ${saved.title}` : `${agent.name} drafted a mod: ${saved.title}`,
-        "It is switched off. Read the code and switch it on under Mods.",
-        `/mods?mod=${saved.id}&tab=code`,
+        existing ? `${agent.name} changed its draft of the plugin ${saved.title}` : `${agent.name} drafted a plugin: ${saved.title}`,
+        "It is switched off. Read the code and switch it on under Plugins.",
+        `/plugins?plugin=${saved.id}&tab=code`,
       );
       return json({
         ...modSummary(saved),
-        next: saved.check && !saved.check.ok ? "Fix the errors and save again with this mod's id." : "Saved as a draft. Tell the human to review it under Mods and switch it on.",
+        next: saved.check && !saved.check.ok ? "Fix the errors and save again with this plugin's id." : "Saved as a draft. Tell the human to review it under Plugins and switch it on.",
       });
     },
   }),

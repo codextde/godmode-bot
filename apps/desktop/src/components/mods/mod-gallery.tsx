@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { ArrowUpRight, CircleCheck, LayoutGrid, Plus } from "lucide-react";
+import { ArrowUpRight, CircleCheck, Plus, Puzzle } from "lucide-react";
 import { MOD_CATEGORIES, MOD_CATEGORY_LABELS, type Mod, type ModCategory, type ModOption, type ModTemplate } from "@godmode/shared";
 import { CodeBlock } from "@/components/aicss/CodeBlock";
 import { QueryError } from "@/components/integrations/query-error";
@@ -16,7 +16,7 @@ import type { ModActions } from "./use-mod-actions";
 
 const GRID = "grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3";
 
-/** Mods Godmode ships: browse by category, read one through, add it. */
+/** Small plugins Godmode ships: browse by category, read one through, add it. */
 export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; actions: ModActions; onOpen: (mod: Mod) => void; onAdded: (mod: Mod) => void }) {
   const templates = useModTemplates();
   const [category, setCategory] = useState<ModCategory | "">("");
@@ -50,9 +50,9 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
     <section aria-labelledby="mod-gallery-heading" className="space-y-4">
       <div>
         <h2 id="mod-gallery-heading" className="flex items-center gap-2 text-[17px] font-medium tracking-[-0.02em]">
-          <LayoutGrid className="size-4 text-muted-foreground" /> Gallery
+          <Puzzle className="size-4 text-muted-foreground" /> Made by Godmode
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">Mods made and kept up to date by Godmode. Read the code of any of them before you add it.</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">Small guardrail, privacy and workflow plugins that run inside every turn. Read the code of any of them before you add it.</p>
       </div>
 
       {categories.length > 1 && (
@@ -277,7 +277,7 @@ function TemplateDialog({
                         {o.description && <p>{o.description}</p>}
                         <p>
                           {o.sensitive ? (
-                            "A secret you enter after adding the mod."
+                            "A secret you enter after adding the plugin."
                           ) : fallback ? (
                             <>
                               Default <span className="font-mono text-[11.5px] break-all text-foreground/85">{fallback}</span>
@@ -322,14 +322,14 @@ function TemplateDialog({
         </div>
 
         <DialogFooter className="items-center border-t bg-paper-2 px-6 py-4 sm:justify-between">
-          <p className="text-xs text-muted-foreground">{installed ? "You already added this mod." : "You set its options and who it runs for after adding it."}</p>
+          <p className="text-xs text-muted-foreground">{installed ? "You already added this plugin." : "You set its options and who it runs for after adding it."}</p>
           {installed ? (
             <Button onClick={() => onOpen(installed)}>
               Open <ArrowUpRight />
             </Button>
           ) : (
             <Button onClick={() => onAdd(t)} disabled={adding}>
-              {adding ? <Spinner /> : <Plus />} Add mod
+              {adding ? <Spinner /> : <Plus />} Add plugin
             </Button>
           )}
         </DialogFooter>

@@ -3,9 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Bot, CalendarClock, Plus, Sparkles, Wand2, X } from "lucide-react";
-import type { Agent, AgentInput, AgentTemplate, AgentTemplateCategory } from "@godmode/shared";
-import { AGENT_TEMPLATE_CATEGORIES, AGENT_TEMPLATE_CATEGORY_LABELS } from "@godmode/shared";
+import { ArrowLeft, ArrowRight, Bot, Plus, Sparkles, Wand2, X } from "lucide-react";
+import type { Agent, AgentInput } from "@godmode/shared";
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { qk } from "@/lib/queryKeys";
@@ -25,6 +24,7 @@ import { AgentForm, agentToValues, type AgentFormValues } from "@/components/age
 import { cronToHuman, localTimezone } from "@/components/agents/cron";
 import { randomLook } from "@/components/agents/character-studio";
 import { TeamTemplates } from "@/components/agents/team-templates";
+import { RoleTemplates } from "@/components/agents/role-templates";
 
 const EXAMPLES = [
   "Download my invoices from all vendor portals on the 1st of every month",
@@ -78,8 +78,7 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
     onError: (err) => !isLicenseRequired(err) && toast.error("Couldn't reach Godmode", { description: errorMessage(err) }),
   });
   const canDescribe = description.trim().length > 3 && !describe.isPending;
-  const [category, setCategory] = useState<AgentTemplateCategory | "all">("all");
-  const roles = (templates.data ?? []).filter((t) => category === "all" || t.category === category);
+  const describeRef = useRef<HTMLTextAreaElement>(null);
   const structuresRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (focusStructures) structuresRef.current?.scrollIntoView({ block: "start" });
@@ -145,6 +144,7 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
               )}
             >
               <textarea
+                ref={describeRef}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 onFocus={() => setFocused(true)}
@@ -200,72 +200,17 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
           <TeamTemplates />
         </section>
 
-        <section aria-labelledby="roles-title">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-            <div>
-              <h2 id="roles-title" className="text-lg font-medium tracking-[-0.02em]">
-                Or hire one role
-              </h2>
-              <p className="text-sm text-muted-foreground">Each comes with a job description, instructions and, where it makes sense, a schedule.</p>
-            </div>
-            <div role="tablist" aria-label="Department" className="flex flex-wrap gap-1.5">
-              {(["all", ...AGENT_TEMPLATE_CATEGORIES] as const).map((c) => {
-                const count = c === "all" ? (templates.data?.length ?? 0) : (templates.data ?? []).filter((t) => t.category === c).length;
-                if (c !== "all" && !count) return null;
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    role="tab"
-                    aria-selected={category === c}
-                    onClick={() => setCategory(c)}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-                      category === c ? "border-foreground/80 bg-foreground text-background" : "bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
-                    )}
-                  >
-                    {c === "all" ? "All" : AGENT_TEMPLATE_CATEGORY_LABELS[c]}
-                    <span className={cn("tabular-nums", category === c ? "text-background/60" : "text-muted-foreground/70")}>{count}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
-            <motion.button
-              type="button"
-              onClick={() => onPick("scratch")}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="group flex min-h-44 flex-col items-start justify-between rounded-xl border border-dashed p-5 text-left transition hover:border-foreground/25 hover:bg-card focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-            >
-              <span className="grid size-10 place-items-center rounded-lg border bg-card text-foreground shadow-card">
-                <Plus className="size-5" />
-              </span>
-              <span>
-                <span className="block font-medium tracking-[-0.01em]">Start from scratch</span>
-                <span className="mt-1 block text-sm text-muted-foreground">Blank agent — you write the instructions.</span>
-              </span>
-            </motion.button>
-
-            {templates.isLoading &&
-              Array.from({ length: 5 }, (_, i) => (
-                <div key={i} className="min-h-44 rounded-xl border bg-card p-5 shadow-card">
-                  <Skeleton className="size-12 rounded-xl" />
-                  <Skeleton className="mt-4 h-4 w-40" />
-                  <Skeleton className="mt-2 h-3 w-full" />
-                  <Skeleton className="mt-1.5 h-3 w-2/3" />
-                </div>
-              ))}
-
-            {roles.map((t, i) => (
-              <TemplateCard key={t.id} template={t} index={i} onPick={() => onPick(t.id)} />
-            ))}
-          </div>
-          {templates.isError && (
-            <p className="mt-3 text-sm text-muted-foreground">Templates are unavailable right now ({errorMessage(templates.error)}).</p>
-          )}
-        </section>
+        <RoleTemplates
+          templates={templates.data ?? []}
+          loading={templates.isLoading}
+          onPick={onPick}
+          onDescribe={(text) => {
+            if (text) setDescription(text);
+            describeRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+            describeRef.current?.focus({ preventScroll: true });
+          }}
+        />
+        {templates.isError && <p className="text-sm text-muted-foreground">Templates are unavailable right now ({errorMessage(templates.error)}).</p>}
       </PageBody>
     </>
   );
@@ -318,35 +263,6 @@ function DraftCard({
         <TooltipContent>Discard draft</TooltipContent>
       </Tooltip>
     </motion.div>
-  );
-}
-
-function TemplateCard({ template, index, onPick }: { template: AgentTemplate; index: number; onPick: () => void }) {
-  return (
-    <motion.button
-      type="button"
-      onClick={onPick}
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(index + 1, 10) * 0.04 }}
-      className="group flex min-h-44 flex-col rounded-xl border bg-card p-5 text-left shadow-card transition hover:border-foreground/15 hover:shadow-float focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-    >
-      <AgentAvatar agent={{ id: template.id, avatar: template.avatar, color: template.color, character: template.character }} size="lg" />
-      <span className="mt-4 block font-medium tracking-[-0.01em]">{template.name}</span>
-      {template.role && (
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          {template.role}
-          {template.leads && <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium">Leads a team</span>}
-        </span>
-      )}
-      <span className="mt-1 line-clamp-3 block flex-1 text-sm text-muted-foreground">{template.description}</span>
-      {template.routine && (
-        <span className="mt-3 inline-flex max-w-full items-center gap-1.5 self-start rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-          <CalendarClock className="size-3 shrink-0" />
-          <span className="truncate">{cronToHuman(template.routine.cron)}</span>
-        </span>
-      )}
-    </motion.button>
   );
 }
 

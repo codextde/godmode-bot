@@ -77,7 +77,7 @@ needs to be useful:
 | 🖥️ **Computer use** | Share a single window, a display, the entire desktop (every monitor) or a browser tab with an agent — like sharing your screen with ChatGPT. A shared window is controlled **in the background** with [Cua Driver](https://github.com/trycua/cua): your mouse and keyboard stay yours. Watch live and take over anytime. |
 | 💻 **macOS VMs** | Give an agent its own Mac: spin up isolated macOS virtual machines (Apple's Virtualization framework, via [Tart](https://tart.run)) with one click and assign them to an agent, a chat or a workspace. The agent works *entirely inside the VM* — commands, files, apps (computer use with Cua Driver) and the web (Google Chrome with browser-use) — and no browser opens on your Mac. It gives the software it installs there the macOS permissions it needs (Accessibility, Screen Recording, Automation, …) itself, so no permission dialog stops it. Watch the VM's screen next to the chat and take control anytime. Allow it once and agents sign in inside the VM too: Godmode fills your saved logins and 2FA codes for them (best effort — the agent controls the VM, so it's closer to reveal than to fill-only). VMs live on your Mac, keep everything between tasks, suspend when you quit, and can be reset to a clean macOS or duplicated in seconds. |
 | 🔌 **SSH servers** | Let agents work on your servers: save a server with a password or an SSH key (paste it, pick one from `~/.ssh` or generate a new one) and give it to a chat or an agent. Godmode signs in and answers `sudo` — the AI never sees the password or the key. Agents run commands, edit config files and copy files back and forth; the host key is pinned on the first connection. |
-| 🧩 **Mods** | [Claude Code mods](https://claude.com/blog/claude-code-mods) for your agents: small pieces of code that run inside every turn — refuse risky shell commands, keep agents away from `.env` files, mask keys in tool output before the model reads them, cap runaway turns, expand `!shortcuts`. Add one from the gallery, set its options, pick the agents it runs for; write your own in the built-in editor or let Godmode draft it. Every mod is checked by Claude Code's own validator, and Godmode shows what it hooks into and what it can reach before you switch it on. |
+| 🧩 **Plugins** | Claude Code plugins for your agents. Install whole plugins from GitHub in one click — [Claude Video](https://github.com/bradautomates/claude-video) lets agents watch videos, [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) adds multi-agent workflows — or any other repository by its link, and switch them off, update or uninstall them just as easily. Small ones ([Claude Code mods](https://claude.com/blog/claude-code-mods)) run inside every turn: refuse risky shell commands, keep agents away from `.env` files, mask keys in tool output, cap runaway turns, expand `!shortcuts` — add one Godmode made, write your own in the built-in editor or let Godmode draft it. Every plugin is checked by Claude Code's own validator, and Godmode shows what it brings and what it can reach before you switch it on. |
 | 🍪 **Chrome session import** | Continue where Chrome left off — import cookies from your Chrome/Edge/Brave profile (profile-use technique), or sync via browser-use `profile-use`. |
 | 🔐 **Vault** | Logins with password generator, per-workspace or global, AES-256-GCM encrypted, fully audited. |
 | 📥 **Password import** | Bring logins over from Chrome (and Edge, Brave, Arc), 1Password (.1pux or CSV), Bitwarden, Apple Passwords, Firefox and more — with a preview that updates saved logins instead of duplicating them. |
@@ -183,16 +183,20 @@ needs to be useful:
     <td><img src="docs/screenshots/ssh-chat.png" alt="An agent reading a config and a log on a server over SSH and changing the config after backing it up" /><br /><sub><b>Work on servers</b> — pick servers for a chat; the agent runs commands and edits files there</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/mods.png" alt="The Mods page: installed mods with what they hook into and the agents they run for, and the gallery below" /><br /><sub><b>Mods</b> — what each one hooks into, what it can reach and whose runs load it</sub></td>
-    <td><img src="docs/screenshots/mod-code.png" alt="A mod an agent drafted: its code in the editor, marked for review, with Claude Code's check result underneath" /><br /><sub><b>Read and edit the code</b> — a mod Godmode drafted waits for your review; Claude Code's validator checks every change</sub></td>
+    <td><img src="docs/screenshots/plugins.png" alt="The Plugins page: Claude Video with an update ready, oh-my-claudecode with its skills, subagents and hooks, and two plugins made by Godmode" /><br /><sub><b>Plugins</b> — what each one brings, what it can reach, whose runs load it, and an update one click away</sub></td>
+    <td><img src="docs/screenshots/plugins-featured.png" alt="Featured plugins from GitHub, Claude Video and oh-my-claudecode, above the plugins made by Godmode" /><br /><sub><b>Featured</b> — Claude Video and oh-my-claudecode from GitHub in one click, guardrails made by Godmode below</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/mod-options.png" alt="The options of Protect files: the protected paths and the kind of protection" /><br /><sub><b>Options</b> — set what a mod protects or refuses without touching its code</sub></td>
-    <td><img src="docs/screenshots/mods-chat.png" alt="A chat where Secret scrubber masked a token, Command guard and Protect files refused two steps and Turn recap summed up the turn" /><br /><sub><b>In the chat</b> — mods refuse steps, mask secrets and post notes while the agent works</sub></td>
+    <td><img src="docs/screenshots/plugin-overview.png" alt="Claude Video's page: its version and commit, an update that is ready, who runs it and what it can do" /><br /><sub><b>Version and updates</b> — the commit that runs, what changed upstream, update or uninstall</sub></td>
+    <td><img src="docs/screenshots/plugin-contents.png" alt="What oh-my-claudecode brings: 47 skills, 19 subagents, commands, 11 hooks and an MCP server, with the tokens it adds to every session" /><br /><sub><b>Contents</b> — the skills, subagents, commands, hooks and servers a plugin brings</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/mods-gallery.png" alt="The mod gallery: Protect files, Command guard, Step limit, Secret scrubber, Turn recap and Prompt shortcuts" /><br /><sub><b>Gallery</b> — guardrails, privacy, insight and workflow mods that work as they are</sub></td>
-    <td><img src="docs/screenshots/mod-overview.png" alt="A mod's overview: what it can do, with talking to the internet marked as reaching outside the conversation, and the event it hooks" /><br /><sub><b>What it can do</b> — told from the code by Claude Code's validator, before you switch it on</sub></td>
+    <td><img src="docs/screenshots/plugin-install.png" alt="Install from GitHub: a repository, an optional branch or tag, and switching it on after installing" /><br /><sub><b>Install from GitHub</b> — any Claude Code plugin by owner/repo or link</sub></td>
+    <td><img src="docs/screenshots/mods-chat.png" alt="A chat where Secret scrubber masked a token, Command guard and Protect files refused two steps and Turn recap summed up the turn" /><br /><sub><b>In the chat</b> — plugins refuse steps, mask secrets and post notes while the agent works</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/mod-code.png" alt="A plugin an agent drafted: its code in the editor, marked for review, with Claude Code's check result underneath" /><br /><sub><b>Read and edit the code</b> — a small plugin Godmode drafted waits for your review; Claude Code's validator checks every change</sub></td>
+    <td><img src="docs/screenshots/mod-options.png" alt="The options of Protect files: the protected paths and the kind of protection" /><br /><sub><b>Options</b> — set what a plugin protects or refuses without touching its code</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/cleanup.png" alt="Settings → Cleanup: storage by area, a self check of tools, permissions, updates, database, disk and worktrees" /><br /><sub><b>Cleanup</b> — what the data folder holds, and a self check of everything Godmode relies on</sub></td>
@@ -385,9 +389,24 @@ trusts only that key from then on. Then pick the server for a **chat** (the *SSH
 | **Secrets** | The password, key and passphrase are sealed in the vault and never part of the prompt; transcripts and tool results mask them, also when a command prints them. The agent works in that account's shell, so give it an account with only the rights it needs — a narrow `NOPASSWD` sudo rule is safer than a saved sudo password. |
 | **Checking in** | Each server card shows whether it was reachable, its OS and pinned host key, which agents and chats use it, and a **Run command** box for a quick look yourself. |
 
-### Mods — change how your agents work
+### Plugins — give your agents new skills and guardrails
 
-Open **Mods** in the sidebar. The **gallery** has mods that are ready to use — add one and it is on for every agent:
+Open **Plugins** in the sidebar. **Featured** has whole Claude Code plugins that install from GitHub in one click:
+
+| | |
+|---|---|
+| **[Claude Video](https://github.com/bradautomates/claude-video)** | Agents watch videos: `/watch <link or file>` downloads it, pulls timestamped frames and the captions, and transcribes when there are none. Needs Python 3.10+, ffmpeg and yt-dlp on the computer. |
+| **[oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode)** | Multi-agent orchestration: 19 specialist subagents and workflows like autopilot, ralph and team, with its own tools and hooks. Needs Node.js 20+. |
+
+**Add plugin → Install from GitHub** takes any other plugin by `owner/repo`, a GitHub link (also to a folder or a
+branch) or a clone URL. Godmode downloads it at a fixed commit, checks it with Claude Code and shows what it brings:
+its skills, subagents, commands, hooks and MCP servers, and the tokens it adds to every session. Every plugin has a
+**switch**, and **Runs for** decides whose runs load it: every agent or the ones you pick. Godmode looks for newer
+commits every few hours; **Update** installs one (the old version stays if Claude Code refuses the new one), and
+**Uninstall** removes the plugin with its files. You can also ask Godmode in a chat to install a plugin: it arrives
+switched off for you to look at.
+
+**Made by Godmode** has small plugins that run inside every turn — add one and it is on for every agent:
 
 | | |
 |---|---|
@@ -398,16 +417,16 @@ Open **Mods** in the sidebar. The **gallery** has mods that are ready to use —
 | **Turn recap** | Posts a line after each long turn: duration, tools used, failed calls. |
 | **Prompt shortcuts** | `!brief`, `!plan` and shortcuts of your own, at the start of a line or as the last word, are expanded before the agent reads your message. |
 
-Each mod has **options** (the paths, the patterns, the limit), and **Runs for** decides whose runs load it: every agent
-or the ones you pick. For anything else, **New mod** opens an editor with a starting point, or **Ask Godmode to write
-one** and review its draft: a mod an agent wrote arrives switched off, and switching it on is your OK — for exactly
-the code you read.
+Each has **options** (the paths, the patterns, the limit). For anything else, **Write one from scratch** opens an
+editor with a starting point, or **Ask Godmode to write one** and review its draft: a plugin an agent wrote arrives
+switched off, and switching it on is your OK — for exactly the code you read.
 
-A mod is real code inside the agent's process, so Godmode shows what it is before it runs: Claude Code's validator
-checks every change, and the mod's page lists what it **hooks into** (Bash calls, prompts, …) and what it can **reach
-outside the conversation** (files, programs, the network). A mod that doesn't pass can't be switched on; one that stops
-passing after a Claude Code update is left out of runs and the chat says so. What a mod posts (`$.ui.log`, a toast, a
-status) shows in the chat as a note from that mod.
+A plugin is real code that works with the agent's access, so Godmode shows what it is before it runs: Claude Code's
+validator checks every change, and the plugin's page lists what it **hooks into** and what it can **reach outside the
+conversation** (files, programs, the network; for a plugin from GitHub the commands its hooks run and the servers it
+starts). A plugin that doesn't pass can't be switched on; one that stops passing after a Claude Code update is left
+out of runs and the chat says so. What a small plugin posts (`$.ui.log`, a toast, a status) shows in the chat as a
+note from it.
 
 ### Good to know
 
@@ -538,7 +557,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [x] Agents working in a dedicated macOS VM (Tart / Virtualization.framework): shell, files and screen, assigned per agent, chat or workspace
 - [x] API tools: any API with a key (Nano Banana, OpenAI, ElevenLabs…) for agents, global / workspace / agent
 - [x] SSH servers: agents run commands, edit files and copy files on remote machines — password or key, sudo, pinned host keys
-- [x] Mods: Claude Code mods for agents — a gallery of guardrails, options, an editor, drafts written by Godmode, checked before they run
+- [x] Plugins: Claude Code plugins for agents — one-click installs from GitHub (Claude Video, oh-my-claudecode), updates and uninstall, a gallery of guardrails, options, an editor, drafts written by Godmode, checked before they run
 - [ ] Windows / Linux VMs
 - [x] Phone app (iOS / Android): chats, runs, automations, live browser, screen and VM views, paired over Tailscale
 - [x] Runners: another Mac does the work of a chat while this one sleeps — one install command, encrypted link, setup copied, live view

@@ -312,6 +312,10 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   // other: a guard that is gone restricts nothing.
   ["GET", "/api/mods", A],
   ["GET", "/api/mods/templates", A],
+  ["GET", "/api/mods/catalog", A],
+  ["POST", "/api/mods/install", S],
+  ["POST", "/api/mods/updates", A],
+  ["POST", "/api/mods/:id/update", S],
   ["POST", "/api/mods", S],
   ["POST", "/api/mods/check", S],
   ["POST", "/api/mods/import", refused(COMPUTER_ONLY)],
