@@ -1,10 +1,21 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Mod, ModImportInput, ModInput, ModPatch } from "@godmode/shared";
+import { modUpdateAvailable, type Mod, type ModImportInput, type ModInput, type ModInstallInput, type ModPatch } from "@godmode/shared";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+
+/** A 409 from an install: the repository holds several plugins, here they are to pick from. */
+export function installChoices(e: unknown): { name: string; description: string }[] | null {
+  if (!(e instanceof ApiRequestError) || e.status !== 409 || e.code !== "pick_plugin") return null;
+  const plugins = (e.details as { plugins?: unknown } | undefined)?.plugins;
+  return Array.isArray(plugins) ? (plugins as { name: string; description: string }[]) : null;
+}
+
+function version(mod: Mod): string {
+  return mod.source?.version ? ` ${mod.source.version}` : "";
+}
 
 /** What a finished check means for the human, as a toast. */
 export function toastCheck(mod: Mod, verb = "checked") {
@@ -17,13 +28,14 @@ export function toastCheck(mod: Mod, verb = "checked") {
 }
 
 /**
- * Create, change, check and delete mods — with toasts, and the answer patched into the cached list right away
+ * Create, install, update, change, check and delete plugins — with toasts, and the answer patched into the cached list right away
  * (realtime `entity.changed` keeps it current afterwards). Switching on and off, and every other plain field, shows
  * at once and goes back when the core refuses it.
  */
 export function useModActions() {
   const qc = useQueryClient();
   const [checking, setChecking] = useState<ReadonlySet<string>>(new Set());
+  const [upgrading, setUpgrading] = useState<ReadonlySet<string>>(new Set());
 
   const put = (mod: Mod) => {
     qc.setQueryData<Mod[]>(qk.mods, (old) => (old ? (old.some((m) => m.id === mod.id) ? old.map((m) => (m.id === mod.id ? mod : m)) : [...old, mod]) : old));
@@ -41,7 +53,7 @@ export function useModActions() {
       add(mod);
       toast.success(`${mod.title} added`, { description: mod.enabled ? "It runs from the next message." : "It is switched off. Switch it on when you're ready." });
     },
-    onError: (e) => toastApiError(e, "Couldn't add the mod", qc),
+    onError: (e) => toastApiError(e, "Couldn't add the plugin", qc),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
   });
 
@@ -52,6 +64,59 @@ export function useModActions() {
       toast.success(`${mod.title} imported`, { description: mod.enabled ? "It runs from the next message." : "It is switched off. Read its code, then switch it on." });
     },
     onError: (e) => toastApiError(e, "Couldn't import the folder", qc),
+    onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
+  });
+
+  const install = useMutation({
+    mutationFn: ({ label: _label, ...input }: ModInstallInput & { label?: string }) => api.mods.install(input),
+    onMutate: (input) =>
+      toast.loading(`Installing ${input.label ?? input.source}`, { id: `install-${input.catalogId ?? input.source}`, description: "Downloading it and checking it with Claude Code. Large plugins take a minute." }),
+    onSuccess: (mod, input) => {
+      add(mod);
+      const id = `install-${input.catalogId ?? input.source}`;
+      if (mod.check && !mod.check.ok) toast.error(`${mod.title} installed, but Claude Code refuses it`, { id, description: mod.check.errors[0]?.message });
+      else if (mod.enabled) toast.success(`${mod.title}${version(mod)} installed`, { id, description: "It is on for every agent from the next message." });
+      else toast.success(`${mod.title}${version(mod)} installed`, { id, description: "It is switched off. Switch it on when you're ready." });
+    },
+    onError: (e, input) => {
+      const id = `install-${input.catalogId ?? input.source}`;
+      // The dialog lets the human pick one of several plugins: no toast for that.
+      if (installChoices(e)) toast.dismiss(id);
+      else toast.error(`Couldn't install ${input.label ?? input.source}`, { id, description: errorMessage(e) });
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
+  });
+
+  const upgrade = useMutation({
+    mutationFn: (mod: Mod) => api.mods.upgrade(mod.id),
+    onMutate: (mod) => setUpgrading((s) => new Set(s).add(mod.id)),
+    onSuccess: (next, mod) => {
+      put(next);
+      if (next.source?.commit === mod.source?.commit) toast(`${next.title} is up to date`, { description: next.source?.version ? `Version ${next.source.version}` : undefined });
+      else toast.success(`${next.title} updated${next.source?.version ? ` to ${next.source.version}` : ""}`, { description: "Runs load the new version from the next message." });
+    },
+    onError: (e, mod) => toastApiError(e, `Couldn't update ${mod.title}`, qc),
+    onSettled: (_next, _e, mod) => {
+      setUpgrading((s) => {
+        const next = new Set(s);
+        next.delete(mod.id);
+        return next;
+      });
+      void qc.invalidateQueries({ queryKey: qk.mods });
+    },
+  });
+
+  const checkUpdates = useMutation({
+    mutationFn: (mods?: Mod[]) => api.mods.checkUpdates(mods?.map((m) => m.id)),
+    onSuccess: (list) => {
+      for (const mod of list) put(mod);
+      const failed = list.filter((m) => m.source?.checkError);
+      const waiting = list.filter(modUpdateAvailable);
+      if (waiting.length) toast.success(waiting.length === 1 ? `An update for ${waiting[0]!.title} is ready` : `${waiting.length} updates are ready`, { description: "Update from the plugin's card or page." });
+      else if (failed.length) toast.warning(`Couldn't look for updates of ${failed[0]!.title}`, { description: failed[0]!.source?.checkError ?? undefined });
+      else toast.success(list.length === 1 ? `${list[0]!.title} is up to date` : "All plugins are up to date");
+    },
+    onError: (e) => toastApiError(e, "Couldn't look for updates", qc),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
   });
 
@@ -108,13 +173,13 @@ export function useModActions() {
     mutationFn: (mod: Mod) => api.mods.delete(mod.id),
     onSuccess: (_res, mod) => {
       qc.setQueryData<Mod[]>(qk.mods, (old) => old?.filter((m) => m.id !== mod.id));
-      toast.success(`${mod.title} deleted`, { description: "Runs stop loading it from the next message." });
+      toast.success(`${mod.title} ${mod.source ? "uninstalled" : "deleted"}`, { description: "Runs stop loading it from the next message." });
     },
-    onError: (e, mod) => toastApiError(e, `Couldn't delete “${mod.title}”`, qc),
+    onError: (e, mod) => toastApiError(e, `Couldn't ${mod.source ? "uninstall" : "delete"} “${mod.title}”`, qc),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
   });
 
-  return { create, importFolder, update, toggle, check, checking, remove, put };
+  return { create, importFolder, install, upgrade, upgrading, checkUpdates, update, toggle, check, checking, remove, put };
 }
 
 export type ModActions = ReturnType<typeof useModActions>;

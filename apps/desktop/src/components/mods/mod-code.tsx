@@ -119,7 +119,7 @@ export function ModCode({
       setResult(null);
       if (!next.check) toast.success("Code saved", { description: "It wasn't checked — Claude Code isn't installed on this computer." });
       else if (next.check.ok) toast.success("Code saved", { description: "The check passed. It applies from the next message." });
-      else toast.warning("Code saved, but the check failed", { description: "Runs don't load the mod until it passes." });
+      else toast.warning("Code saved, but the check failed", { description: "Runs don't load the plugin until it passes." });
     },
     onError: (e) => toastApiError(e, "Couldn't save the code", qc),
   });
@@ -127,7 +127,7 @@ export function ModCode({
   const busy = check.isPending || save.isPending;
   const guard = (): boolean => {
     const problem = tooLarge(draft.files);
-    if (problem) toast.error("Too large for a mod", { description: problem });
+    if (problem) toast.error("Too large for a plugin", { description: problem });
     return !problem;
   };
   const runCheck = () => {
@@ -162,7 +162,7 @@ export function ModCode({
         <div className="shrink-0 space-y-2 border-b p-3">
           {mod.needsReview && (
             <Callout tone="warning" title={`${author} wrote this code`}>
-              Read it through before anything else. Switching the mod on is your approval: from then on it runs in every turn of the agents it is for.
+              Read it through before anything else. Switching the plugin on is your approval: from then on it runs in every turn of the agents it is for.
             </Callout>
           )}
           {draft.stale && (
@@ -181,7 +181,7 @@ export function ModCode({
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {path === null ? (
-            <p className="p-5 text-sm text-muted-foreground">This mod has no files yet. Add one to start.</p>
+            <p className="p-5 text-sm text-muted-foreground">This plugin has no files yet. Add one to start.</p>
           ) : (
             <>
               <div className="flex h-9 shrink-0 items-center gap-2 border-b pr-1.5 pl-3 text-xs">
@@ -263,7 +263,7 @@ function FileList({
     const refused = modPathProblem(path);
     if (refused) return refused;
     if (path !== renamed && path in draft.files) return "A file with this path already exists.";
-    if (!renamed && paths.length >= MAX_MOD_FILES) return `A mod holds at most ${MAX_MOD_FILES} files.`;
+    if (!renamed && paths.length >= MAX_MOD_FILES) return `A plugin holds at most ${MAX_MOD_FILES} files here.`;
     return null;
   };
 
@@ -360,7 +360,7 @@ function FileList({
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}
         title={`Delete “${deleting ?? ""}”?`}
-        description="The file leaves the mod when you save."
+        description="The file leaves the plugin when you save."
         confirmLabel="Delete file"
         onConfirm={() => {
           if (deleting) draft.remove(deleting);

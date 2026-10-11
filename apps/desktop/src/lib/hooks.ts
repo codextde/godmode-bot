@@ -282,13 +282,17 @@ export function useAndroidStatus() {
   return useQuery({ queryKey: qk.androidStatus, queryFn: api.android.status });
 }
 
-/** Installed Claude Code mods (kept current by `entity.changed` "mods"). */
+/** Installed Claude Code plugins (kept current by `entity.changed` "mods"). */
 export function useMods() {
   return useQuery({ queryKey: qk.mods, queryFn: api.mods.list });
 }
 
 export function useModTemplates() {
   return useQuery({ queryKey: qk.modTemplates, queryFn: api.mods.templates, staleTime: 5 * 60_000 });
+}
+
+export function useModCatalog() {
+  return useQuery({ queryKey: qk.modCatalog, queryFn: api.mods.catalog, staleTime: 30 * 60_000 });
 }
 
 /** Runners: other computers that work for this one. Kept live by `runner.updated` events in realtime.ts. */

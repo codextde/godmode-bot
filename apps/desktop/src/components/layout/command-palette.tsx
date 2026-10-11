@@ -308,8 +308,8 @@ export function CommandPalette() {
           <CommandItem value="automations routines schedules triggers webhooks" onSelect={() => go("/automations")}>
             <Workflow /> Automations
           </CommandItem>
-          <CommandItem value="mods claude code plugins hooks guardrails" onSelect={() => go("/mods")}>
-            <Puzzle /> Mods
+          <CommandItem value="plugins claude code mods skills hooks guardrails github install" onSelect={() => go("/plugins")}>
+            <Puzzle /> Plugins
           </CommandItem>
           <CommandItem onSelect={() => go("/activity")}>
             <Activity /> Activity

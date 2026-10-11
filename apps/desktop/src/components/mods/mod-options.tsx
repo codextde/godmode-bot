@@ -70,9 +70,9 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
       return null;
     }
     if (!o.required) return null;
-    if (o.sensitive) return v !== "" || (hasSecret(o) && draft[o.key] !== null) ? null : "This mod needs a value here.";
+    if (o.sensitive) return v !== "" || (hasSecret(o) && draft[o.key] !== null) ? null : "This plugin needs a value here.";
     if (Array.isArray(v)) return v.some(Boolean) ? null : "Add at least one entry.";
-    return v === "" ? "This mod needs a value here." : null;
+    return v === "" ? "This plugin needs a value here." : null;
   };
 
   const dirty = mod.options.some(changed);
@@ -111,7 +111,7 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
   if (mod.options.length === 0) {
     return (
       <p className="p-5 text-sm text-muted-foreground">
-        This mod has no options. A mod declares them under <span className="font-mono text-[12.5px] text-foreground/80">userConfig</span> in{" "}
+        This plugin has no options. A plugin declares them under <span className="font-mono text-[12.5px] text-foreground/80">userConfig</span> in{" "}
         <span className="font-mono text-[12.5px] text-foreground/80">{MOD_MANIFEST_PATH}</span>.
       </p>
     );
@@ -157,7 +157,7 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
                     groupClassName="h-9 @xl:max-w-md"
                   />
                   <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
-                    Kept sealed in the vault. Runs that load this mod are handed the value, where an agent with full access to this computer could read
+                    Kept sealed in the vault. Runs that load this plugin are handed the value, where an agent with full access to this computer could read
                     it — use a key made for this mod.
                   </p>
                 </div>

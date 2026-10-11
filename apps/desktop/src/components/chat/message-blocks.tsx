@@ -289,7 +289,7 @@ function NoticeItem({ level, text }: { level: "info" | "warning" | "success"; te
   );
 }
 
-/** A note a Claude Code mod posted: who says it comes first, as a chip that leads to the mod. */
+/** A note a Claude Code plugin posted: who says it comes first, as a chip that leads to the plugin. */
 function ModNote({ level, text, name }: { level: "info" | "warning" | "success"; text: string; name: string }) {
   const { data: mods } = useMods();
   const mod = mods?.find((m) => m.name === name);
@@ -304,14 +304,14 @@ function ModNote({ level, text, name }: { level: "info" | "warning" | "success";
     <div className={cn("flex flex-wrap items-start gap-x-2 gap-y-1 rounded-lg border px-3 py-2 text-[13px]", NOTICE[level].cls)}>
       {mod ? (
         <Link
-          to={`/mods?mod=${mod.id}`}
-          title={`Note from the mod “${mod.title}”`}
+          to={`/plugins?plugin=${mod.id}`}
+          title={`Note from the plugin “${mod.title}”`}
           className={cn(chip, "transition outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50")}
         >
           {label}
         </Link>
       ) : (
-        <span className={chip} title={`Note from the mod “${name}”`}>
+        <span className={chip} title={`Note from the plugin “${name}”`}>
           {label}
         </span>
       )}
