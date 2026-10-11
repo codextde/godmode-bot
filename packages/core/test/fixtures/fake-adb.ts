@@ -26,7 +26,10 @@ if (args[0] === "-s") {
   serial = args[1]!;
   args = args.slice(2);
 }
-appendFileSync(join(dir, "calls.jsonl"), `${JSON.stringify({ serial, args })}\n`);
+// `adb shell` without a command reads its script from stdin (logged apart from the arguments).
+const stdin = args.length === 1 && args[0] === "shell" ? (await Bun.stdin.text()).trim() : undefined;
+appendFileSync(join(dir, "calls.jsonl"), `${JSON.stringify({ serial, args, ...(stdin !== undefined ? { stdin } : {}) })}\n`);
+if (stdin !== undefined) args = ["shell", stdin];
 const phone = serial ? state.phones[serial] : undefined;
 const out = (s: string) => process.stdout.write(s);
 
@@ -67,6 +70,8 @@ if (args[0] === "version") {
     out("  mWakefulness=Awake\n  status: 2\n  level: 81\n  USB powered: true\n");
   } else if (cmd.includes("uiautomator dump")) {
     out(phone!.ui ?? "<?xml version='1.0' ?><hierarchy rotation=\"0\"></hierarchy>");
+  } else if (cmd.startsWith("if [ -d ")) {
+    out(cmd.includes("/DCIM'") ? "dir\n" : cmd.includes("/missing") ? "none\n" : "file\n");
   } else if (cmd.startsWith("cmd package resolve-activity")) {
     out(cmd.endsWith("com.example.shop") ? "priority=0 preferredOrder=0 match=0x108000\ncom.example.shop/.MainActivity$Launcher\n" : "No activity found\n");
   } else if (cmd.startsWith("am start")) {
@@ -81,6 +86,8 @@ if (args[0] === "version") {
   } else if (cmd.startsWith("exit ")) {
     process.exit(Number(cmd.slice(5)));
   }
+} else if (args[0] === "pull") {
+  Bun.write(args[2]!, `pulled ${args[1]}`);
 } else if (args[0] === "connect") {
   out(`connected to ${args[1]}\n`);
 }

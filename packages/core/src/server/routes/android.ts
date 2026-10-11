@@ -16,7 +16,7 @@ import {
   updateDevice,
 } from "../../android/service";
 import { AdbError } from "../../android/adb";
-import { longPress, pressKey, screenSize, screenshot, swipe, tap, typeText, untypable } from "../../android/screen";
+import { frameToScreen, longPress, pressKey, screenSize, screenshot, swipe, tap, typeText, untypable } from "../../android/screen";
 import { requestKeyframe, setViewers } from "../../android/stream";
 import { disableIdleTimeout } from "../../mcp/http";
 import { setAndroidViewHandlers } from "../ws";
@@ -53,13 +53,7 @@ async function humanInput(id: string, event: AndroidInputEvent, frame?: { width:
       return await typeText(serial, event.text);
     }
     const screen = await screenSize(serial);
-    const sx = frame?.width ? screen.width / frame.width : 1;
-    const sy = frame?.height ? screen.height / frame.height : 1;
-    const at = (x: number, y: number) => {
-      const p = { x: x * sx, y: y * sy };
-      if (p.x < 0 || p.y < 0 || p.x > screen.width || p.y > screen.height) throw badRequest("That point is outside the screen.");
-      return p;
-    };
+    const at = (x: number, y: number) => frameToScreen(screen, frame?.width && frame.height ? frame : screen, x, y);
     if (event.type === "tap") {
       const p = at(event.x, event.y);
       return await tap(serial, p.x, p.y);

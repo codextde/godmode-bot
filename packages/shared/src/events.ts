@@ -133,7 +133,18 @@ export type ServerEvent =
       screen: { width: number; height: number };
     }
   | { type: "android.video"; deviceId: ID; kind: "chunk"; data: string; key: boolean; timestamp: number }
-  | { type: "android.video"; deviceId: ID; kind: "frame"; data: string; mime: "image/png" | "image/jpeg"; width: number; height: number; screen: { width: number; height: number } }
+  | {
+      type: "android.video";
+      deviceId: ID;
+      kind: "frame";
+      data: string;
+      mime: "image/png" | "image/jpeg";
+      width: number;
+      height: number;
+      screen: { width: number; height: number };
+      /** For video viewers too: this phone can't stream video. */
+      all?: boolean;
+    }
   | { type: "android.video"; deviceId: ID; kind: "error"; message: string }
   /** An agent touched a phone's screen (drawn as a ripple in the live view). x/y 0–1 of the screen. */
   | { type: "android.action"; deviceId: ID; runId: ID; action: string; x?: number; y?: number; toX?: number; toY?: number }

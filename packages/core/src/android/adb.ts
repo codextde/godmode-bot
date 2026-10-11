@@ -24,6 +24,7 @@ const DOWNLOADS: Partial<Record<NodeJS.Platform, { file: string; sha256: string 
   win32: { file: "platform-tools_r37.0.1-win.zip", sha256: "45f4d63113e895ebde0c90f194099a4676b6ac653bd28d54314a9e022bbc1a99" },
 };
 const DEFAULT_TIMEOUT_MS = 30_000;
+const MAX_STDERR = 1_000_000;
 const EXE = process.platform === "win32" ? "adb.exe" : "adb";
 
 export class AdbError extends Error {
@@ -146,12 +147,18 @@ export async function adb(args: string[], opts: AdbOptions = {}): Promise<AdbRes
       /* closed */
     }
   };
+  // A command can write without end to stderr too: keep its tail only.
   const readErr = async () => {
+    const decoder = new TextDecoder();
     try {
-      errText = await new Response(proc.stderr as ReadableStream<Uint8Array>).text();
+      for await (const chunk of proc.stderr as ReadableStream<Uint8Array>) {
+        errText += decoder.decode(chunk, { stream: true });
+        if (errText.length > 2 * MAX_STDERR) errText = errText.slice(-MAX_STDERR);
+      }
     } catch {
       /* closed */
     }
+    if (errText.length > MAX_STDERR) errText = errText.slice(-MAX_STDERR);
   };
   const outputs = Promise.all([readOut(), readErr()]);
   if (opts.stdin !== undefined) {

@@ -36,6 +36,28 @@ function SetupSteps() {
   );
 }
 
+function DeviceGrid({ devices, onEdit, onForget }: { devices: AndroidDevice[]; onEdit: (d: AndroidDevice) => void; onForget: (d: AndroidDevice) => void }) {
+  return (
+    <div className="grid grid-cols-1 items-start gap-4 @3xl:grid-cols-2 @6xl:grid-cols-3">
+      <AnimatePresence initial={false}>
+        {devices.map((device, i) => (
+          <motion.div
+            key={device.id}
+            layout="position"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ delay: Math.min(i, 8) * 0.03 }}
+            className="min-w-0"
+          >
+            <DeviceCard device={device} onEdit={() => onEdit(device)} onForget={() => onForget(device)} />
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 /** Android phones connected over adb: watch them, take control, give them to agents. */
 export default function AndroidPage() {
   const qc = useQueryClient();
@@ -178,23 +200,13 @@ export default function AndroidPage() {
                   {connected} of {devices.length} connected · adb {adb?.version ?? ""}
                   {adb?.managed ? " (Godmode's copy)" : ""}
                 </p>
-                <div className="grid grid-cols-1 items-start gap-4 @3xl:grid-cols-2 @6xl:grid-cols-3">
-                  <AnimatePresence initial={false}>
-                    {devices.map((device, i) => (
-                      <motion.div
-                        key={device.id}
-                        layout="position"
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.97 }}
-                        transition={{ delay: Math.min(i, 8) * 0.03 }}
-                        className="min-w-0"
-                      >
-                        <DeviceCard device={device} onEdit={() => setEditing(device)} onForget={() => setForgetting(device)} />
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </div>
+                <DeviceGrid devices={devices.filter((d) => d.state !== "disconnected")} onEdit={setEditing} onForget={setForgetting} />
+                {devices.some((d) => d.state === "disconnected") && (
+                  <section aria-label="Not connected" className="mt-4 grid gap-3">
+                    <h2 className="eyebrow text-[10.5px]">Not connected</h2>
+                    <DeviceGrid devices={devices.filter((d) => d.state === "disconnected")} onEdit={setEditing} onForget={setForgetting} />
+                  </section>
+                )}
               </>
             )}
           </div>

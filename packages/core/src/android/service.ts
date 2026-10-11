@@ -191,17 +191,23 @@ async function identify(d: AdbDevice): Promise<string> {
 
 const CONNECTION_RANK: Record<AndroidConnection, number> = { usb: 0, emulator: 1, wifi: 2 };
 
-let refreshing: Promise<void> | null = null;
+let refreshing: { done: Promise<void>; startServer: boolean } | null = null;
 let lastRefresh = 0;
 
 /** Look at what adb sees now. `startServer`: also when no adb server runs yet (adb starts one). */
 export function refreshDevices(opts: { startServer?: boolean } = {}): Promise<void> {
-  if (opts.startServer) lastInterest = Date.now();
-  refreshing ??= doRefresh(!!opts.startServer).finally(() => {
-    refreshing = null;
-    lastRefresh = Date.now();
-  });
-  return refreshing;
+  const startServer = !!opts.startServer;
+  if (startServer) lastInterest = Date.now();
+  // A look in progress that wouldn't start the server doesn't answer one that must.
+  if (refreshing && startServer && !refreshing.startServer) return refreshing.done.then(() => refreshDevices(opts));
+  if (!refreshing) {
+    const done = doRefresh(startServer).finally(() => {
+      refreshing = null;
+      lastRefresh = Date.now();
+    });
+    refreshing = { done, startServer };
+  }
+  return refreshing.done;
 }
 
 function snapshot(): string {
@@ -265,12 +271,31 @@ async function doRefresh(startServer: boolean): Promise<void> {
     live.clear();
     for (const [id, l] of seen) live.set(id, l);
     pending = nextPending;
+    pruneEmulators();
     await refreshPhoneStates();
   } catch (err) {
     lastError = err instanceof AdbError ? err.message : err instanceof Error ? err.message : String(err);
     log.debug("android refresh failed", err);
   } finally {
     if (snapshot() !== before) bus.changed("android");
+  }
+}
+
+let lastPrune = 0;
+
+/**
+ * Emulators come and go (a test run can start dozens): one nobody named, described or gave to an agent or chat is
+ * forgotten after a day out of sight. Real phones are always kept.
+ */
+function pruneEmulators(): void {
+  if (Date.now() - lastPrune < 3600_000) return;
+  lastPrune = Date.now();
+  const cutoff = new Date(Date.now() - 24 * 3600_000).toISOString();
+  const stale = all<DeviceRow>("SELECT * FROM android_devices WHERE kind = 'emulator' AND description = '' AND COALESCE(last_seen_at, created_at) < ?", cutoff);
+  for (const r of stale) {
+    if (live.has(r.id) || androidAssignments(r.id).length || r.updated_at !== r.created_at) continue;
+    run("DELETE FROM android_devices WHERE id = ?", r.id);
+    log.info("forgot an emulator not seen for a day", { device: r.id, name: r.name });
   }
 }
 
