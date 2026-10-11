@@ -128,6 +128,9 @@ import { CUA_HIDDEN_TOOLS, currentVmPage, prepareGuest, type GuestTools } from "
 import { resolveVmId } from "../vm/assignments";
 import { runSshServerIds } from "../ssh/assignments";
 import { attachSsh, detachSsh, promptServers } from "../ssh/service";
+import { runAndroidDeviceIds } from "../android/assignments";
+import { attachAndroid, detachAndroid, promptDevices } from "../android/service";
+import { forgetAndroidRun } from "../android/tools";
 import { parseComputerTarget } from "../computer/targets";
 import { timedSync } from "../diagnostics/slow";
 import { StreamAccumulator, addUsage, detectLoginFailure, displayToolName, redactBlock } from "./stream";
@@ -1918,6 +1921,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const folders = [cwd, agent.repoPath, vm?.hostSharedDir, ...sources.map((s) => s.path)].filter((f): f is string => !!f);
     attachSsh(job.runId, [...new Set(folders)]);
   }
+  // Android phones of the chat and the agent (only on this computer: phones are plugged into it).
+  const phones = dreaming || !settings.android.enabled ? [] : promptDevices(runAndroidDeviceIds(job.conversationId, agent.id));
+  if (phones.length) {
+    const folders = [cwd, agent.repoPath, vm?.hostSharedDir, ...sources.map((s) => s.path)].filter((f): f is string => !!f);
+    attachAndroid(job.runId, phones.map((p) => p.id), [...new Set(folders)]);
+  }
   const mcp = await buildMcpConfig(agent, res.token, {
     onNotice: (text) => job.acc.addNotice("warning", text),
     computer: !!computer,
@@ -1926,6 +1935,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     run: { runId: job.runId, conversationId: job.conversationId },
     browserProfileId: runProfileOf(job),
     ssh: ssh.length > 0,
+    android: phones.length > 0,
   });
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
@@ -1999,6 +2009,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         computer,
         vm: promptVm,
         ssh,
+        android: phones,
+        androidVaultFill: settings.android.vaultFill,
         voice: job.voice,
         workingDirectory: folder,
         taskWorktree: task ? { repo: task.repo_path || task.repo_url, branch: task.branch } : null,
@@ -2160,7 +2172,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const lateNote = late && !carried ? lateAnswerContext(settings.general.userName, late) : "";
     const prompt =
       resuming && !command
-        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, humanTasks, apiTools, ssh }) +
+        ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, humanTasks, apiTools, ssh, android: phones }) +
           lateNote +
           body
         : lateNote + body;
@@ -2268,6 +2280,8 @@ async function execute(job: Job): Promise<void> {
     await detachComputer(job.runId).catch(() => {});
     detachVm(job.runId);
     detachSsh(job.runId);
+    detachAndroid(job.runId);
+    forgetAndroidRun(job.runId);
   }
   if (job.pauseTimer) clearTimeout(job.pauseTimer);
   job.pauseTimer = null;

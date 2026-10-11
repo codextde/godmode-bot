@@ -107,6 +107,11 @@ export const qk = {
   vmScreen: (id: string, size: number) => ["vm-screen", id, size],
   sshServers: ["ssh-servers"] as unknown[],
   sshLocalKeys: ["ssh-local-keys"] as unknown[],
+  /** Android phones and adb (one entity: "android"). */
+  android: ["android"] as unknown[],
+  androidDevices: ["android", "devices"] as unknown[],
+  androidStatus: ["android", "status"] as unknown[],
+  androidScreen: (id: string, size: number) => ["android-screen", id, size],
   mods: ["mods"] as unknown[],
   /** Not under ["mods"]: the gallery doesn't change when a mod does. */
   modTemplates: ["mod-templates"] as unknown[],

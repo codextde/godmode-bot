@@ -27,6 +27,7 @@ import {
 import { EmptyState, PageBody, PageHeader } from "@/components/common";
 import { AboutSection } from "@/components/settings/about-section";
 import { AiSection } from "@/components/settings/ai-section";
+import { AndroidSection } from "@/components/settings/android-section";
 import { BackupSection } from "@/components/settings/backup-section";
 import { BillingSection } from "@/components/settings/billing-section";
 import { BrowserSection } from "@/components/settings/browser-section";
@@ -57,6 +58,7 @@ const SECTIONS = [
   { id: "browser", label: "Browser", icon: <Globe />, group: "Preferences" },
   { id: "computer", label: "Computer", icon: <MonitorUp />, group: "Preferences" },
   { id: "vms", label: "Virtual machines", icon: <Box />, group: "Preferences" },
+  { id: "android", label: "Android phones", icon: <Smartphone />, group: "Preferences" },
   { id: "voice", label: "Voice", icon: <AudioLines />, group: "Preferences" },
   { id: "memory", label: "Memory", icon: <BrainCircuit />, group: "Preferences" },
   { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
@@ -110,6 +112,7 @@ export default function SettingsPage() {
       browser: () => <BrowserSection settings={s} />,
       computer: () => <ComputerSection settings={s} />,
       vms: () => <VmSection settings={s} />,
+      android: () => <AndroidSection settings={s} />,
       voice: () => <VoiceSection settings={s} />,
       memory: () => <MemorySection settings={s} />,
       security: () => <SecuritySection settings={s} />,

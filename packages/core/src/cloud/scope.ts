@@ -294,6 +294,19 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/ssh/local-keys", S],
   ["POST", "/api/ssh/keys", S],
 
+  // Android phones: watched and controlled like a VM. Their settings (adb path, logins on phones) stay on the computer.
+  ["GET", "/api/android/status", A],
+  ["GET", "/api/android/devices", A],
+  ["POST", "/api/android/refresh", A],
+  ["POST", "/api/android/install", A],
+  ["POST", "/api/android/connect", A],
+  ["GET|PATCH|DELETE", "/api/android/devices/:id", A],
+  ["POST", "/api/android/devices/:id/disconnect", A],
+  ["GET", "/api/android/devices/:id/screenshot", A],
+  ["POST", "/api/android/devices/:id/input", A],
+  ["POST", "/api/android/devices/:id/exec", A],
+  ["POST", "/api/android/devices/:id/assign", A],
+
   // A mod is code that runs inside every turn and reaches whatever the run reaches. Deleting one is a change like any
   // other: a guard that is gone restricts nothing.
   ["GET", "/api/mods", A],
@@ -347,7 +360,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
 /** Writes a viewer may make: resolving a chat's files changes nothing. */
 const VIEWER_WRITES: [string, string][] = [["POST", "/api/conversations/:id/files"]];
 /** Reads a viewer may not make: pictures of the screen, codes and keys. */
-const VIEWER_HIDDEN_READS = ["/api/computer/thumbnail", "/api/computer/sources", "/api/vms/:id/screenshot", "/api/totp/codes", "/api/ssh/local-keys"];
+const VIEWER_HIDDEN_READS = ["/api/computer/thumbnail", "/api/computer/sources", "/api/vms/:id/screenshot", "/api/android/devices/:id/screenshot", "/api/totp/codes", "/api/ssh/local-keys"];
 
 function pattern(path: string): RegExp {
   const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/:\w+/g, "[^/]+");

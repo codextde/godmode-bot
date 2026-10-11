@@ -126,6 +126,7 @@ import { loginFillScope } from "../browser/fill";
 import { chatFillOnly, createConversation, maskSecretInChat, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
+import { androidStatus, assignDevice, freshDevices } from "../android/service";
 import { getSettings } from "../services/settings";
 import { agentSettingsRefusal, applyAgentSettings, humanOnlySettings, settingsSections } from "../services/agentSettings";
 import { spendReport } from "../services/spend";
@@ -781,6 +782,7 @@ const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
   ["logins_overview", "read"],
   ["missing_logins_list", "read"],
   ["vms_list", "read"],
+  ["android_devices_list", "read"],
   ["settings_get", "read"],
   ["agent_create", "manage"],
   ["agent_update", "manage"],
@@ -796,6 +798,7 @@ const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
   ["vm_create", "manage"],
   ["vm_assign", "manage"],
   ["vm_power", "manage"],
+  ["android_assign", "manage"],
   ["settings_update", "manage"],
 ]);
 
@@ -2661,6 +2664,54 @@ const TOOLS: ToolDef[] = [
       const kind = target === "this_chat" ? "conversation" : target;
       const vm = await assignVm(vmId, { kind, id: target === "this_chat" ? ctx.conversationId : id!, assigned: true }, `agent:${agent.id}`);
       return json({ ...vmSummary(vm), note: "Applies from the next run." });
+    },
+  }),
+
+  defineTool({
+    name: "android_devices_list",
+    description:
+      "Android phones connected to this computer over adb (and ones seen before): id, name, model, Android version, connected or not, battery, and which agents and chats control them. Also phones waiting for the human to allow USB debugging.",
+    schema: z.object({}),
+    when: isManager,
+    run: async () => {
+      const [status, devices] = await Promise.all([androidStatus(), freshDevices()]);
+      if (!status.adb.installed) return "adb isn't installed on this computer; the human can install it on the Android phones page.";
+      return json({
+        devices: devices.map((d) => ({
+          id: d.id,
+          name: d.name,
+          phone: `${d.kind === "emulator" ? "emulator" : [d.manufacturer, d.model].filter(Boolean).join(" ")}${d.androidVersion ? `, Android ${d.androidVersion}` : ""}`,
+          state: d.state,
+          connection: d.connection,
+          ...(d.battery ? { battery: `${d.battery.level}%${d.battery.charging ? " charging" : ""}` } : {}),
+          ...(d.description ? { description: d.description } : {}),
+          usedBy: d.assignments.map((a) => `${a.kind} ${a.name} (${a.id})`),
+        })),
+        ...(status.pending.length ? { waiting: status.pending.map((p) => `${p.adbSerial}: ${p.hint}`) } : {}),
+      });
+    },
+  }),
+
+  defineTool({
+    name: "android_assign",
+    description:
+      "Let an agent (every run) or this chat see and control an Android phone with the android tools, from its next run. The phone is real: give it only to agents whose job needs it. Only the human can take it away again.",
+    schema: z.object({
+      deviceId: z.string(),
+      target: z.enum(["agent", "this_chat"]),
+      id: z.string().optional().describe("Agent id (not needed for this_chat)"),
+    }),
+    when: managesSetup,
+    run: async ({ deviceId, target, id }, { agent, ctx }) => {
+      if (lockedVm(ctx)) return fail("This task runs in a virtual machine and is kept off the human's computer, where the phones are plugged in.");
+      if (target === "agent" && !id) return fail("Pass the agent's id.");
+      if (target === "this_chat" && !ctx.conversationId) return fail("There is no chat here: assign the phone to an agent.");
+      if (target === "agent") {
+        const refusal = revealTargetRefusal(agent, ctx, getAgent(id!), "give it a phone");
+        if (refusal) return fail(refusal);
+      }
+      const device = await assignDevice(deviceId, { kind: target === "agent" ? "agent" : "conversation", id: target === "agent" ? id! : ctx.conversationId, assigned: true }, `agent:${agent.id}`);
+      return json({ id: device.id, name: device.name, state: device.state, usedBy: device.assignments.map((a) => `${a.kind} ${a.name}`), note: "Applies from the next run." });
     },
   }),
 

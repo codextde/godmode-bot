@@ -23,6 +23,7 @@ import { UnknownToolError, callTool, listToolsFor, toolErrorMessage } from "./to
 import { COMPUTER_INSTRUCTIONS, UnknownComputerToolError, callComputerTool, listComputerTools } from "../computer/tools";
 import { UnknownVmToolError, VM_INSTRUCTIONS, callVmTool, listVmTools } from "../vm/tools";
 import { SSH_INSTRUCTIONS, UnknownSshToolError, callSshTool, listSshTools } from "../ssh/tools";
+import { ANDROID_INSTRUCTIONS, UnknownAndroidToolError, callAndroidTool, listAndroidTools } from "../android/tools";
 
 const log = logger("mcp");
 
@@ -65,8 +66,8 @@ const ok = (id: JsonRpcId, result: unknown): JsonRpcResponse => ({ jsonrpc: "2.0
 const rpcError = (id: JsonRpcId, code: number, message: string): JsonRpcResponse => ({ jsonrpc: "2.0", id, error: { code, message } });
 
 /**
- * One MCP server behind the gateway: `/mcp` (Godmode tools), `/mcp/computer` (computer use), `/mcp/vm` (macOS VM) or
- * `/mcp/ssh` (SSH servers).
+ * One MCP server behind the gateway: `/mcp` (Godmode tools), `/mcp/computer` (computer use), `/mcp/vm` (macOS VM),
+ * `/mcp/ssh` (SSH servers) or `/mcp/android` (Android phones).
  */
 export interface McpServerDef {
   name: string;
@@ -109,6 +110,14 @@ export const SSH_SERVER: McpServerDef = {
   list: listSshTools,
   call: callSshTool,
   isUnknownTool: (err) => err instanceof UnknownSshToolError,
+};
+
+export const ANDROID_SERVER: McpServerDef = {
+  name: "android",
+  instructions: ANDROID_INSTRUCTIONS,
+  list: listAndroidTools,
+  call: callAndroidTool,
+  isUnknownTool: (err) => err instanceof UnknownAndroidToolError,
 };
 
 /** Handle one JSON-RPC message. Returns null for notifications and client responses (nothing to send). */
@@ -290,6 +299,7 @@ export function registerMcpRoutes(app: Hono): void {
   app.post("/mcp/computer", (c) => serve(c, COMPUTER_SERVER));
   app.post("/mcp/vm", (c) => serve(c, VM_SERVER));
   app.post("/mcp/ssh", (c) => serve(c, SSH_SERVER));
+  app.post("/mcp/android", (c) => serve(c, ANDROID_SERVER));
 
   // Claude Code's PostToolBatch hook: between two steps of a run, stop it when it is being paused, else hand over the
   // messages waiting in the chat's queue.
@@ -323,7 +333,7 @@ export function registerMcpRoutes(app: Hono): void {
   });
 
   // Stateless servers: no server-initiated SSE stream and no sessions to terminate.
-  for (const path of ["/mcp", "/mcp/computer", "/mcp/vm", "/mcp/ssh"]) {
+  for (const path of ["/mcp", "/mcp/computer", "/mcp/vm", "/mcp/ssh", "/mcp/android"]) {
     app.get(path, (c) => c.body(null, 405, { Allow: "POST, DELETE" }));
     app.delete(path, (c) => c.body(null, 200));
   }

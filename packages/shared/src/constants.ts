@@ -101,6 +101,8 @@ export const VM_MCP_NAME = "vm";
 export const CUA_MCP_NAME = "cua";
 /** MCP server with the tools of a run that has SSH servers (shell, files and transfers on the remote machines). */
 export const SSH_MCP_NAME = "ssh";
+/** MCP server with the tools of a run that has Android phones (screen, touch, apps, shell and files on the phone). */
+export const ANDROID_MCP_NAME = "android";
 
 /** Longest global, workspace or chat instructions the API accepts. */
 export const MAX_INSTRUCTIONS_LENGTH = 20_000;

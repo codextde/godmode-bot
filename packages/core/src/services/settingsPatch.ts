@@ -1,5 +1,6 @@
 import type { Effort } from "@godmode/shared";
 import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, isModelId, isValidBranch, parseGitUrl } from "@godmode/shared";
+import { isAbsolute } from "node:path";
 import { get } from "../db";
 import { badRequest } from "../util";
 import { isValidDreamSchedule } from "../memory/dreaming";
@@ -71,6 +72,19 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
     }
     if (vm.tartPath !== undefined && (typeof vm.tartPath !== "string" || vm.tartPath.length > 4096 || (vm.tartPath.trim() !== "" && !vm.tartPath.trim().startsWith("/")))) {
       throw badRequest("The tart binary must be an absolute path (or empty)");
+    }
+  }
+  const android = patch.android as Record<string, unknown> | undefined;
+  if (android !== undefined) {
+    if (typeof android !== "object" || android === null || Array.isArray(android)) throw badRequest("Invalid Android settings");
+    for (const key of ["enabled", "vaultFill"] as const) {
+      if (android[key] !== undefined && typeof android[key] !== "boolean") throw badRequest(`android.${key} must be true or false`);
+    }
+    // Like in a VM, a fill on a phone can't be bound to the login's app or website.
+    if (android.vaultFill === true && !getSettings().android.vaultFill) needsGrant();
+    const path = android.adbPath;
+    if (path !== undefined && (typeof path !== "string" || path.length > 4096 || (path.trim() !== "" && !isAbsolute(path.trim())))) {
+      throw badRequest("The adb binary must be an absolute path (or empty)");
     }
   }
   const maintenance = patch.maintenance as Record<string, unknown> | undefined;

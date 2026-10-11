@@ -1357,4 +1357,32 @@ CREATE TABLE IF NOT EXISTS self_repair_issues (
 ALTER TABLE dreams ADD COLUMN workspace TEXT;
 `,
   },
+  {
+    id: 83,
+    name: "android_devices",
+    sql: /* sql */ `
+-- Android phones seen over adb. \`serial\` is the phone's own serial (emulators: their AVD name), so a phone keeps its
+-- record whether it comes over USB or Wi-Fi.
+CREATE TABLE IF NOT EXISTS android_devices (
+  id TEXT PRIMARY KEY,
+  serial TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'phone',
+  manufacturer TEXT,
+  model TEXT,
+  android_version TEXT,
+  sdk INTEGER,
+  width INTEGER,
+  height INTEGER,
+  last_adb_serial TEXT,
+  last_seen_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+-- Phones an agent controls in every run, and the ones a chat adds (JSON arrays of ids).
+ALTER TABLE agents ADD COLUMN android_device_ids TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE conversations ADD COLUMN android_device_ids TEXT NOT NULL DEFAULT '[]';
+`,
+  },
 ];

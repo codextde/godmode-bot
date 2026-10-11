@@ -71,6 +71,7 @@ const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[]
   { id: "browser", label: "Browser", icon: Globe, words: "chromium profiles cookies" },
   { id: "computer", label: "Computer", icon: MonitorUp, words: "screen share control mac" },
   { id: "vms", label: "Virtual machines", icon: Box, words: "vm tart macos linux" },
+  { id: "android", label: "Android phones", icon: Smartphone, words: "adb usb debugging emulator device" },
   { id: "voice", label: "Voice", icon: AudioLines, words: "speech dictation read aloud microphone" },
   { id: "memory", label: "Memory", icon: BrainCircuit, words: "dreaming remember learn" },
   { id: "security", label: "Security", icon: ShieldCheck, words: "vault passphrase auto-lock password" },

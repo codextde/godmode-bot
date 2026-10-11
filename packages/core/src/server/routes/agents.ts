@@ -139,6 +139,7 @@ export const agentSchema = z.object({
   workingDirectory: z.string().trim().max(4096).nullable().optional(),
   vmId: id.nullable().optional(),
   sshServerIds: z.array(id).max(50).optional(),
+  androidDeviceIds: z.array(id).max(50).optional(),
   heartbeat: heartbeatSchema.optional(),
 });
 

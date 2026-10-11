@@ -66,6 +66,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   // VM list + status (installs, image downloads, assignment changes).
   vms: [qk.vms],
   "ssh-servers": [qk.sshServers],
+  // Phones plugged in or out, renamed, assigned.
+  android: [qk.android],
   mods: [qk.mods],
   // Bot status, access requests and chats (the sidebar badge counts requests).
   messaging: [qk.messaging, qk.bootstrap],
@@ -123,6 +125,7 @@ async function connect(queryClient: QueryClient) {
     // Resubscribe live views
     for (const viewers of browserViewers.values()) ws.send(JSON.stringify(subscribeEvent(viewers)));
     for (const view of computerViewers.keys()) ws.send(JSON.stringify({ type: "computer.subscribe", view } satisfies ClientEvent));
+    for (const [deviceId, viewers] of androidViewers) ws.send(JSON.stringify(androidSubscribeEvent(deviceId, viewers)));
     if (pingTimer) clearInterval(pingTimer);
     pingTimer = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: "ping" })), 25_000);
     // Refresh everything after a reconnect — we may have missed events.
@@ -491,6 +494,37 @@ export function subscribeComputer(view: string): () => void {
       sendClientEvent({ type: "computer.unsubscribe", view });
       useLive.getState().dropComputerView(view);
     }
+  };
+}
+
+/** Viewers of each Android phone in this UI, by mode; the core hears the mode the phone is watched in. */
+const androidViewers = new Map<string, { video: number; frames: number }>();
+
+function androidSubscribeEvent(deviceId: string, v: { video: number; frames: number }): ClientEvent {
+  return { type: "android.subscribe", deviceId, mode: v.video > 0 ? "video" : "frames" };
+}
+
+/**
+ * Watch an Android phone's screen: `android.video` events arrive through onServerEvent. "video" is H.264 for WebCodecs,
+ * "frames" still pictures for a webview that can't decode it.
+ */
+export function subscribeAndroid(deviceId: string, mode: "video" | "frames"): () => void {
+  const viewers = androidViewers.get(deviceId) ?? { video: 0, frames: 0 };
+  const before = viewers.video + viewers.frames === 0 ? null : viewers.video > 0;
+  viewers[mode]++;
+  androidViewers.set(deviceId, viewers);
+  // Every new video viewer asks again: the core restarts the stream so it begins with a keyframe.
+  if (before === null || before !== viewers.video > 0 || mode === "video") sendClientEvent(androidSubscribeEvent(deviceId, viewers));
+  let active = true;
+  return () => {
+    if (!active) return;
+    active = false;
+    const wasVideo = viewers.video > 0;
+    viewers[mode]--;
+    if (viewers.video + viewers.frames === 0) {
+      androidViewers.delete(deviceId);
+      sendClientEvent({ type: "android.unsubscribe", deviceId });
+    } else if (wasVideo !== viewers.video > 0) sendClientEvent(androidSubscribeEvent(deviceId, viewers));
   };
 }
 

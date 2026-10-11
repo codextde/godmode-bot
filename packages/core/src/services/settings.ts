@@ -61,6 +61,11 @@ export const DEFAULT_SETTINGS: Settings = {
     idleStopMinutes: 0,
     tartPath: "",
   },
+  android: {
+    enabled: true,
+    vaultFill: false,
+    adbPath: "",
+  },
   voice: {
     enabled: true,
     sttProvider: "browser",

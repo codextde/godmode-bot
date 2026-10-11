@@ -97,6 +97,8 @@ export interface AgentInput {
   vmId?: ID | null;
   /** SSH servers the agent may use in every run. */
   sshServerIds?: ID[];
+  /** Android phones the agent may control in every run. */
+  androidDeviceIds?: ID[];
   /** Missing parts keep their current value. */
   heartbeat?: AgentHeartbeatInput;
 }
@@ -297,6 +299,8 @@ export interface StartChatInput {
   projectId?: ID | null;
   /** SSH servers the chat may use, in addition to the agent's. */
   sshServerIds?: ID[];
+  /** Android phones the chat may control, in addition to the agent's. */
+  androidDeviceIds?: ID[];
   instructions?: string;
   /** Work on this runner instead of this computer. */
   runnerId?: ID | null;
@@ -325,6 +329,8 @@ export interface ConversationPatch {
   browserProfileId?: ID | null;
   /** SSH servers of this chat (the whole list); the agent's servers apply anyway. */
   sshServerIds?: ID[];
+  /** Android phones of this chat (the whole list); the agent's phones apply anyway. */
+  androidDeviceIds?: ID[];
   /** "" = none. */
   instructions?: string;
   /** Project the chat works on; null = the agent's. */

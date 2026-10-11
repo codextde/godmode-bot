@@ -26,6 +26,7 @@ import {
   Puzzle,
   Search,
   Server,
+  Smartphone,
   Settings,
   ShieldCheck,
   SquareKanban,
@@ -193,6 +194,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/computer", label: "Computer", icon: <MonitorUp /> },
     { to: "/vms", label: "Virtual machines", icon: <Box /> },
     { to: "/ssh", label: "SSH servers", icon: <Server /> },
+    { to: "/android", label: "Android phones", icon: <Smartphone /> },
     { to: "/runners", label: "Runners", icon: <MonitorSmartphone /> },
   ];
 

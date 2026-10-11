@@ -10,6 +10,7 @@ import type { Agent, ComputerTarget, PauseReason, QuestionKind, Settings, RunEnd
 import { computerTargetLabel, withinReach } from "@godmode/shared";
 import type { RunSource } from "../services/workspaceSources";
 import type { PromptSshServer } from "../ssh/service";
+import type { PromptAndroidDevice } from "../android/service";
 import { vmSupport } from "../vm/tart";
 
 export interface PromptContext {
@@ -27,6 +28,10 @@ export interface PromptContext {
   vm?: PromptVm | null;
   /** SSH servers this run may use (ssh MCP tools). */
   ssh?: PromptSshServer[];
+  /** Android phones this run may control (android MCP tools). */
+  android?: PromptAndroidDevice[];
+  /** Godmode may type saved logins and 2FA codes into the phones. */
+  androidVaultFill?: boolean;
   /** The message was dictated — answer in speakable prose. */
   voice?: boolean;
   /** Folder attached to the chat (Claude's cwd). null = the agent's own repository. */
@@ -266,6 +271,7 @@ No browser tools are attached to this run. If a task needs a website, say so in 
   if (ctx.sources?.items.length) out.push(sourcesSection(ctx.sources, human, !!ctx.vm));
   if (ctx.vm) out.push(vmSection(ctx.vm, human, settings.browser.enabled && agent.browser.enabled));
   if (ctx.ssh?.length) out.push(sshSection(ctx.ssh, human));
+  if (ctx.android?.length) out.push(androidSection(ctx.android, human, !!ctx.androidVaultFill));
   const rawSecrets = perms.secretAccess === "reveal" && !ctx.fillOnly;
   if (ctx.computer) out.push(computerSection(ctx.computer, human, rawSecrets));
 
@@ -487,6 +493,22 @@ ${servers.map(sshServerLine).join("\n")}
 - Start long-running processes in the background (\`nohup … > /tmp/x.log 2>&1 &\`); \`shell\` returns when the command's output closes.`;
 }
 
+function androidLine(d: PromptAndroidDevice): string {
+  const about = [d.summary, d.description ? oneLine(d.description, 300) : "", d.connected ? "" : "not connected right now"].filter(Boolean).join(" — ");
+  return `- **${d.name}** (id \`${d.id}\`): ${about}`;
+}
+
+function androidSection(devices: PromptAndroidDevice[], human: string, vaultFill: boolean): string {
+  return `### Android phones
+${human} gave you ${devices.length === 1 ? "this Android phone" : "these Android phones"} to see and control, connected to ${human}'s computer over adb:
+${devices.map(androidLine).join("\n")}
+- Use the \`android\` MCP tools: \`screenshot\` to see the screen, \`ui_elements\` for the texts, buttons and fields on it with the [x, y] to tap, \`tap\` / \`long_press\` / \`swipe\` / \`scroll\`, \`type_text\` (plain ASCII only) and \`press_key\` (back, home, recents, enter, wake, …), \`open_app\` / \`list_apps\`, \`shell\` (adb shell, no root), \`install_apk\`, \`push_file\` / \`pull_file\`.${devices.length > 1 ? " Pass `device` (its name) on every call." : ""} Coordinates are pixels of your latest screenshot of that phone.
+- Look, act, look again: take a screenshot (or \`ui_elements\`) before you tap, and check the result after every step. Popups, permission dialogs and keyboards change the screen.
+- ${human} watches the phone live and may take over. If it is locked with a PIN, pattern or fingerprint, ask ${human} to unlock it — never try to guess or bypass a lock screen.
+- It is a real phone with ${human}'s accounts and data: don't buy, post, send messages, delete, factory-reset, or change accounts, security or developer settings unless ${human} asked for exactly that.
+- ${vaultFill ? "Signing in inside an app: find the login with `vault_list_logins`, tap the field, then call `fill_login({ credentialId, field })` or `fill_totp({ credentialId })` — Godmode types the value and you never see it; passwords only go into password fields. Only fill a login in its own app or site." : `Godmode doesn't type saved logins or 2FA codes into phones: ${human} hasn't allowed it. If a task needs a sign-in on the phone, ask ${human} to sign in, or to turn on "Logins and 2FA codes" in Settings → Android phones.`} Never type a password or 2FA code with \`type_text\`.`;
+}
+
 function computerSection(target: ComputerTarget, human: string, canReveal: boolean): string {
   const what = computerTargetLabel(target);
   const scope =
@@ -525,9 +547,10 @@ export function resumeContextPrefix(
     humanTasks?: { number: number; title: string; status: string }[];
     apiTools?: PromptApiTool[];
     ssh?: PromptSshServer[];
+    android?: PromptAndroidDevice[];
   } = {},
 ): string {
-  const { now = new Date(), instructions, memoryChanged, vm, sources, followup, humanTasks, apiTools, ssh } = opts;
+  const { now = new Date(), instructions, memoryChanged, vm, sources, followup, humanTasks, apiTools, ssh, android } = opts;
   const where = folder
     ? `Working directory: \`${folder}\` (the folder attached to this chat). Your own repository with CLAUDE.md and MEMORY.md: \`${repoPath}\`.`
     : `Working directory: your own repository \`${repoPath}\`.`;
@@ -554,13 +577,17 @@ export function resumeContextPrefix(
   const remote = ssh?.length
     ? `\nSSH servers you may use with the \`ssh\` MCP tools (Godmode signs in and answers sudo): ${ssh.map((s) => `${s.name} (\`${s.address}\`)`).join(", ")}.`
     : "";
+  // Phones too.
+  const phones = android?.length
+    ? `\nAndroid phones you may control with the \`android\` MCP tools: ${android.map((d) => `${d.name}${d.connected ? "" : " (not connected right now)"}`).join(", ")}.`
+    : "";
   const pending = followup
     ? `\n\nYou scheduled a follow-up in this chat for ${describeNow(new Date(followup.dueAt))}: "${oneLine(followup.note, 300)}". If this message settles or changes that, move it with followup_schedule or remove it with followup_cancel.`
     : "";
   const waiting = humanTasks?.length
     ? `\n\nStill open on the human's task list from this chat: ${humanTasks.map((t) => `H-${t.number} "${oneLine(t.title, 120)}"${t.status === "doing" ? " (they are on it)" : ""}`).join(", ")}. If this message settles one, take it back with human_task_cancel.`
     : "";
-  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${tools}${machine}${remote}${update}${memory}${pending}${waiting}</godmode-context>\n\n`;
+  return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${tools}${machine}${remote}${phones}${update}${memory}${pending}${waiting}</godmode-context>\n\n`;
 }
 
 /** The human's answer to what the run asked (ask_human, request_approval), as the run reads it when it continues. */

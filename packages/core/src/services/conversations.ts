@@ -29,6 +29,7 @@ import { logger } from "../log";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
+import { normalizeAndroidDeviceIds, parseDeviceIds } from "../android/assignments";
 import { redact, SECRET_MASK } from "../vault/vault";
 import { getAgent, getDefaultAgentId, setAgentFailedRun } from "../agents/service";
 import { activeRunForConversation, cancelRun, findRunLog, listActiveRuns, listRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
@@ -66,6 +67,7 @@ interface ConversationRow extends PauseQuestionCols {
   workspace_id: string | null;
   project_id: string | null;
   ssh_server_ids: string | null;
+  android_device_ids: string | null;
   instructions: string;
   runner_id: string | null;
   runner_state: string | null;
@@ -155,6 +157,7 @@ function toConversation(r: ConversationRow): Conversation {
     workspaceId: r.workspace_id ?? null,
     projectId: r.project_id ?? null,
     sshServerIds: parseServerIds(r.ssh_server_ids),
+    androidDeviceIds: parseDeviceIds(r.android_device_ids),
     instructions: r.instructions,
     runnerId: r.runner_id ?? null,
     runnerToolsId: r.runner_tools_id ?? null,
@@ -316,6 +319,7 @@ export function createConversation(
     workspaceId?: string | null;
     projectId?: string | null;
     sshServerIds?: string[];
+    androidDeviceIds?: string[];
     instructions?: string;
     /** No raw secrets in this chat, whatever its agent may read (see `chatFillOnly`). */
     fillOnly?: boolean;
@@ -326,6 +330,7 @@ export function createConversation(
   const vmId = normalizeVmId(input.vmId) ?? null;
   const browserProfileId = normalizeBrowserProfileId(input.browserProfileId) ?? null;
   const sshServerIds = normalizeSshServerIds(input.sshServerIds) ?? [];
+  const androidDeviceIds = normalizeAndroidDeviceIds(input.androidDeviceIds) ?? [];
   const project = normalizeProject(agent, input.projectId) ?? null;
   const ts = now();
   const id = newId("cnv");
@@ -345,6 +350,7 @@ export function createConversation(
     workspace_id: agent.workspaceId ? null : (project?.workspaceId ?? normalizeWorkspaceId(agent, input.workspaceId)),
     project_id: project?.id ?? null,
     ssh_server_ids: JSON.stringify(sshServerIds),
+    android_device_ids: JSON.stringify(androidDeviceIds),
     secret_access: input.fillOnly ? "fill" : null,
     instructions: input.instructions?.trim() ?? "",
     pinned: 0,
@@ -436,6 +442,7 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
     vm_id: normalizeVmId(patch.vmId),
     browser_profile_id: normalizeBrowserProfileId(patch.browserProfileId),
     ssh_server_ids: patch.sshServerIds === undefined ? undefined : JSON.stringify(normalizeSshServerIds(patch.sshServerIds)),
+    android_device_ids: patch.androidDeviceIds === undefined ? undefined : JSON.stringify(normalizeAndroidDeviceIds(patch.androidDeviceIds)),
     instructions: patch.instructions?.trim(),
     project_id: project === undefined ? undefined : (project?.id ?? null),
     // A global agent's chat moves along to the project's workspace.
@@ -450,6 +457,7 @@ export function updateConversation(id: string, patch: ConversationPatch): Conver
   // archived chat that goes on later finds its pages as it left them.
   if (patch.browserProfileId !== undefined || (patch.archived && !continuesLater(id))) void closeChatTabs(id);
   if (patch.sshServerIds !== undefined || (patch.archived !== undefined && conversation.sshServerIds.length)) bus.changed("ssh-servers");
+  if (patch.androidDeviceIds !== undefined || (patch.archived !== undefined && conversation.androidDeviceIds.length)) bus.changed("android");
   return conversation;
 }
 
@@ -547,6 +555,7 @@ export async function deleteConversation(id: string): Promise<void> {
   bus.emit({ type: "conversation.deleted", id });
   if (forgot) bus.changed("agents");
   if (parseServerIds(row.ssh_server_ids).length) bus.changed("ssh-servers");
+  if (parseDeviceIds(row.android_device_ids).length) bus.changed("android");
 }
 
 /* ------------------------------------------------------------------ */
@@ -787,6 +796,8 @@ export async function startChat(
     projectId?: string | null;
     /** SSH servers for this chat, in addition to the agent's. */
     sshServerIds?: string[];
+    /** Android phones for this chat, in addition to the agent's. */
+    androidDeviceIds?: string[];
     instructions?: string;
   } & ModelChoice,
 ): Promise<StartChatResult> {
@@ -808,6 +819,7 @@ export async function startChat(
     workspaceId: input.workspaceId,
     projectId: input.projectId,
     sshServerIds: input.sshServerIds,
+    androidDeviceIds: input.androidDeviceIds,
     instructions: input.instructions,
     model: input.model,
     effort: input.effort,

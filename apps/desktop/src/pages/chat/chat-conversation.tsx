@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, SshServer, Vm } from "@godmode/shared";
+import type { Agent, AndroidDevice, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, SshServer, Vm } from "@godmode/shared";
 import { characterGreeting, computerTargetLabel } from "@godmode/shared";
 import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Power, PowerOff, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,6 +28,8 @@ import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
 import { FolderChip, folderName } from "@/components/chat/folder-picker";
 import { InstructionsChip } from "@/components/instructions/instructions";
 import { SshChip } from "@/components/ssh/ssh-chip";
+import { AndroidChip } from "@/components/android/android-chip";
+import { PhonePanel, PhoneToggle, useChatPhones } from "@/components/android/phone-panel";
 import { RunnerOfflineBar, RunnerPill } from "@/components/runners/runner-chip";
 import { MoveChatDialog, moveBlocker } from "@/components/runners/move-chat";
 import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
@@ -121,9 +123,15 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const showVmPanel = !!chatVm && !!agent && wide && vmPanel;
   // Something shared takes the side panel; the browser stays one click away in the header.
   const showComputerPanel = !chatVm && !!computerTarget && !!agent && wide && computerPanel;
+  // Phones are plugged into this computer: a runner's chat has none.
+  const navigate = useNavigate();
+  const chatPhones = useChatPhones(onRunner ? undefined : conv?.androidDeviceIds, onRunner ? undefined : agent?.androidDeviceIds);
+  const phonePanel = useUi((s) => s.phonePanel);
+  const setPhonePanel = useUi((s) => s.setPhonePanel);
+  const showPhonePanel = !chatVm && !showComputerPanel && chatPhones.length > 0 && !!agent && wide && phonePanel;
   // On a runner this computer can't see the chat's tab before frames come: the panel shows while the agent works there.
   const browserActive = !!chatTab || (onRunner && !!live);
-  const showBrowserPanel = !chatVm && !!browser && !!agent && wide && !showComputerPanel && (browserOpened || (browserActive && browserPanel));
+  const showBrowserPanel = !chatVm && !!browser && !!agent && wide && !showComputerPanel && !showPhonePanel && (browserOpened || (browserActive && browserPanel));
   useEffect(() => setBrowserFocus(null), [browser?.id]);
   useEffect(() => {
     if (!computerTarget) setComputerFocus(null);
@@ -352,6 +360,32 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     },
   });
 
+  const setAndroidDevices = useMutation({
+    // One change at a time, in the order they were made.
+    scope: { id: `android-devices:${conversationId}` },
+    mutationFn: (androidDeviceIds: string[]) => api.conversations.update(conversationId, { androidDeviceIds }),
+    onMutate: (next) => {
+      const prev = qc.getQueryData<ConversationWithMessages>(key)?.androidDeviceIds ?? [];
+      qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, androidDeviceIds: next } : c));
+      return { prev };
+    },
+    onSuccess: (updated, next, ctx) => {
+      // The cache already holds the latest pick (toggles can overlap); take everything else from the answer.
+      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated, androidDeviceIds: old.androidDeviceIds } : old));
+      qc.invalidateQueries({ queryKey: qk.android });
+      const devices = qc.getQueryData<AndroidDevice[]>(qk.androidDevices) ?? [];
+      const nameOf = (id: string) => devices.find((d) => d.id === id)?.name ?? "the phone";
+      const added = next.find((id) => !ctx.prev.includes(id));
+      const removed = ctx.prev.find((id) => !next.includes(id));
+      if (added) toast.success(`Next message can use ${nameOf(added)}`, { description: "The agent sees its screen and can tap, type and open apps." });
+      else if (removed) toast.success(`Removed ${nameOf(removed)}`, { description: "Runs in this chat can't control it anymore." });
+    },
+    onError: (err) => {
+      void qc.invalidateQueries({ queryKey: key });
+      toast.error("Couldn't change the phones", { description: errorMessage(err) });
+    },
+  });
+
   const share = useMutation({
     mutationFn: (computerTarget: ComputerTarget | null) => api.conversations.update(conversationId, { computerTarget }),
     onSuccess: (updated, target) => {
@@ -444,6 +478,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             <>
               {computerTarget && !showComputerPanel && (
                 <ComputerToggle working={!!activeRunId} onClick={() => (wide ? setComputerPanel(true) : setComputerFocus("watch"))} />
+              )}
+              {chatPhones.length > 0 && !showPhonePanel && !showComputerPanel && (
+                <PhoneToggle working={!!activeRunId} onClick={() => (wide ? setPhonePanel(true) : navigate(`/android/${chatPhones[0]!.id}`))} />
               )}
               {!!browser && !showBrowserPanel && (
                 <BrowserToggle
@@ -626,6 +663,14 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                       busy={setSshServers.isPending}
                     />
                     {!onRunner && (
+                      <AndroidChip
+                        agent={agent}
+                        value={conv.androidDeviceIds ?? []}
+                        onChange={(ids) => setAndroidDevices.mutateAsync(ids).catch(() => undefined)}
+                        busy={setAndroidDevices.isPending}
+                      />
+                    )}
+                    {!onRunner && (
                       <VmChip
                         value={conv.vmId ?? null}
                         inherited={vmInherited}
@@ -715,6 +760,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             stopping={share.isPending && share.variables === null}
           />
         )}
+        {showPhonePanel && <PhonePanel key="phone" phones={chatPhones} activity={activeRunId ? liveActivityLabel(live) : null} onHide={() => setPhonePanel(false)} />}
         {showBrowserPanel && (
           <BrowserPanel
             key={browser.id}
