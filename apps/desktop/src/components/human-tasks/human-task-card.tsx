@@ -1,8 +1,8 @@
 import { forwardRef, type HTMLAttributes } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { ArrowUpRight, CircleCheck, CircleSlash, Flag, MessagesSquare, SquareKanban, Undo2, UserRound } from "lucide-react";
+import { ArrowUpRight, CircleCheck, CircleSlash, Flag, MessageCircleQuestion, MessagesSquare, ShieldCheck, SquareKanban, Undo2, UserRound } from "lucide-react";
 import type { Agent, HumanTask } from "@godmode/shared";
-import { humanTaskRef } from "@godmode/shared";
+import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { cn } from "@/lib/utils";
 
@@ -37,13 +37,34 @@ export function shortAge(iso: string): string {
 }
 
 const OUTCOME = {
-  done: { icon: CircleCheck, label: "Done", tone: "text-emerald-600 dark:text-emerald-400" },
-  declined: { icon: CircleSlash, label: "Couldn't do it", tone: "text-rose-600 dark:text-rose-400" },
-  withdrawn: { icon: Undo2, label: "Taken back", tone: "text-muted-foreground" },
+  done: { icon: CircleCheck, tone: "text-emerald-600 dark:text-emerald-400" },
+  declined: { icon: CircleSlash, tone: "text-rose-600 dark:text-rose-400" },
+  withdrawn: { icon: Undo2, tone: "text-muted-foreground" },
 } as const;
 
+/** How a closed task ended, in the words of its kind ("Answered", "Approved", "Couldn't do it"). */
 export function outcomeOf(task: HumanTask) {
-  return task.status === "done" || task.status === "declined" || task.status === "withdrawn" ? OUTCOME[task.status] : null;
+  if (task.status !== "done" && task.status !== "declined" && task.status !== "withdrawn") return null;
+  const words = HUMAN_TASK_WORDS[task.kind];
+  // A decision nobody answered is muted, not a failure.
+  const tone = task.status === "declined" && task.kind === "decision" ? "text-muted-foreground" : OUTCOME[task.status].tone;
+  return { icon: OUTCOME[task.status].icon, tone, label: task.status === "done" ? words.wasDone : task.status === "declined" ? words.wasDeclined : "Taken back" };
+}
+
+const KIND = {
+  decision: { icon: MessageCircleQuestion, label: "Decision" },
+  approval: { icon: ShieldCheck, label: "Needs your OK" },
+} as const;
+
+/** What an agent wants to hear from the human: a decision or an OK. Nothing for a plain task. */
+export function KindBadge({ task, className }: { task: HumanTask; className?: string }) {
+  if (task.kind === "task") return null;
+  const k = KIND[task.kind];
+  return (
+    <span className={cn("flex items-center gap-1 rounded-[4px] bg-warning/10 px-1 text-[11px] font-medium text-warning", className)}>
+      <k.icon className="size-3" aria-hidden /> {k.label}
+    </span>
+  );
 }
 
 /** Where the task came from: the ticket or chat it is for, or the human's own list. */
@@ -76,7 +97,7 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 export const HumanTaskCard = forwardRef<HTMLDivElement, CardProps>(function HumanTaskCard({ task, agent, overlay, ghost, className, ...rest }, ref) {
   const outcome = outcomeOf(task);
-  const preview = outcome ? task.response?.text || task.closedReason || "" : plainPreview(task.body);
+  const preview = outcome ? humanTaskAnswer(task) || task.closedReason || "" : plainPreview(task.body);
   const urgent = task.priority === "high" && !outcome;
   const own = !task.agentId && !task.runId;
   return (
@@ -99,6 +120,7 @@ export const HumanTaskCard = forwardRef<HTMLDivElement, CardProps>(function Huma
       <div className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
         {outcome ? <outcome.icon className={cn("size-3.5", outcome.tone)} aria-label={outcome.label} /> : null}
         <span className="font-mono tabular-nums">{humanTaskRef(task)}</span>
+        {!outcome && <KindBadge task={task} />}
         {urgent && (
           <span className="flex items-center gap-0.5 rounded-[4px] bg-rose-500/10 px-1 text-[11px] font-medium text-rose-600 dark:text-rose-400">
             <Flag className="size-2.5 fill-current" /> Urgent

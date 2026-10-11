@@ -550,7 +550,8 @@ export const api = {
     /** The human is on it (`doing`) or puts it back (`open`). */
     move: (id: string, status: "open" | "doing") => patch<HumanTask>(`/api/human-tasks/${id}`, { status }),
     /** Done or can't do it; the note goes to the agent and its chat continues. */
-    close: (id: string, outcome: "done" | "declined", note?: string) => post<HumanTaskCloseResult>(`/api/human-tasks/${id}/close`, note ? { outcome, note } : { outcome }),
+    close: (id: string, outcome: "done" | "declined", note?: string, optionId?: string) =>
+      post<HumanTaskCloseResult>(`/api/human-tasks/${id}/close`, { outcome, ...(note ? { note } : {}), ...(optionId ? { optionId } : {}) }),
   },
 
   questions: {

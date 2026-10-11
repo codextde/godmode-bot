@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { closeHumanTask, createOwnHumanTask, deleteHumanTask, getHumanTask, listHumanTasks, updateHumanTask, type HumanTaskFilter } from "../../services/humanTasks";
 import { badRequest } from "../../util";
 import { body, z } from "../validate";
+import { answererOf } from "./questions";
 
 const FILTERS: readonly HumanTaskFilter[] = ["active", "closed", "all"];
 
@@ -31,6 +32,7 @@ const patchSchema = z.object({
 const closeSchema = z.object({
   outcome: z.enum(["done", "declined"]),
   note: z.string().max(20_000).optional(),
+  optionId: z.string().min(1).max(20).optional(),
   attachments: z.array(attachmentSchema).max(10).optional(),
 });
 
@@ -47,7 +49,7 @@ export function registerHumanTaskRoutes(app: Hono): void {
 
   app.patch("/api/human-tasks/:id", async (c) => c.json(updateHumanTask(c.req.param("id"), await body(c, patchSchema))));
 
-  app.post("/api/human-tasks/:id/close", async (c) => c.json(await closeHumanTask(c.req.param("id"), await body(c, closeSchema))));
+  app.post("/api/human-tasks/:id/close", async (c) => c.json(await closeHumanTask(c.req.param("id"), await body(c, closeSchema), answererOf(c))));
 
   app.delete("/api/human-tasks/:id", (c) => {
     deleteHumanTask(c.req.param("id"));

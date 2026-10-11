@@ -3,9 +3,9 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
-import { ArrowUpRight, Check, CircleSlash, EllipsisVertical, Flag, MessagesSquare, Paperclip, Play, SquareKanban, Trash2, Undo2 } from "lucide-react";
+import { ArrowUpRight, Check, CircleSlash, EllipsisVertical, Flag, MessagesSquare, Paperclip, Play, SendHorizontal, SquareKanban, Trash2, Undo2, X } from "lucide-react";
 import type { Agent, HumanTask, HumanTaskCloseResult, HumanTaskPatch } from "@godmode/shared";
-import { humanTaskRef, isHumanTaskActive } from "@godmode/shared";
+import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef, isHumanTaskActive } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { Markdown } from "@/components/chat/markdown";
 import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } from "@/components/chat/attachments";
@@ -14,17 +14,19 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
 import { modKey, openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import { hostOf, outcomeOf } from "./human-task-card";
+import { KindBadge, hostOf, outcomeOf } from "./human-task-card";
 
 /** Tell the human what happened with the agent once they closed a task. */
 export function toastClosed(result: HumanTaskCloseResult, agentName: string | null) {
-  const done = result.task.status === "done";
-  const title = done ? `${humanTaskRef(result.task)} done` : `${humanTaskRef(result.task)} closed`;
+  const task = result.task;
+  const words = HUMAN_TASK_WORDS[task.kind];
+  const title = `${humanTaskRef(task)} ${(task.status === "done" ? words.wasDone : task.kind === "task" ? "closed" : words.wasDeclined).toLowerCase()}`;
   if (result.continued) toast.success(title, { description: `${agentName ?? "The agent"} picks it up from here.` });
   else if (result.notContinued) toast.warning(title, { description: result.notContinued });
   else toast.success(title);
@@ -47,9 +49,21 @@ export function useHumanTaskActions() {
     onError: (e) => toastApiError(e, "Couldn't update the task", qc),
   });
   const close = useMutation({
-    mutationFn: ({ id, outcome, note, files }: { id: string; outcome: "done" | "declined"; note: string; files: PendingAttachment[] }) =>
-      api.humanTasks.close(id, { outcome, note: note || undefined, attachments: files.length ? files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })) : undefined }),
-    onSuccess: (result) => toastClosed(result, result.task.agentName ?? null),
+    mutationFn: ({ id, outcome, note, files, optionId }: { id: string; outcome: "done" | "declined"; note: string; files: PendingAttachment[]; optionId?: string }) =>
+      api.humanTasks.close(id, {
+        outcome,
+        note: note || undefined,
+        optionId,
+        attachments: files.length ? files.map((f) => ({ name: f.name, mime: f.mime, data: f.data })) : undefined,
+      }),
+    onSuccess: (result) => {
+      toastClosed(result, result.task.agentName ?? null);
+      // A ticket that stood for a question: the card in its chat is answered too.
+      if (result.task.questionId) {
+        void qc.invalidateQueries({ queryKey: qk.questions });
+        if (result.task.conversationId) void qc.invalidateQueries({ queryKey: qk.conversation(result.task.conversationId) });
+      }
+    },
     onSettled: refresh,
     onError: (e) => toastApiError(e, "Couldn't close the task", qc),
   });
@@ -104,6 +118,7 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
         <span className="font-mono text-[13px] font-medium tabular-nums">{humanTaskRef(task)}</span>
         <StatusPill task={task} />
+        {active && <KindBadge task={task} className="rounded-full px-2 py-0.5 text-[11.5px]" />}
         {active && task.priority === "high" && (
           <span className="flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[11.5px] font-medium text-rose-600 dark:text-rose-400">
             <Flag className="size-3 fill-current" /> Urgent
@@ -213,10 +228,19 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
 
           {task.body ? (
             <section className="space-y-2">
-              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{own ? "Notes" : "What to do"}</h3>
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{own ? "Notes" : BODY_HEADING[task.kind]}</h3>
               <Markdown className="text-[14px]">{task.body}</Markdown>
             </section>
           ) : null}
+
+          {task.fromAnswer && task.conversationId && (
+            <p className="text-[13px] text-muted-foreground">
+              {name ?? "The agent"} left this open in the answer it finished with.{" "}
+              <Link to={`/chat/${task.conversationId}`} className="text-foreground underline-offset-2 hover:underline">
+                Read the whole answer
+              </Link>
+            </p>
+          )}
 
           {outcome && (
             <section className="space-y-2 rounded-xl border bg-foreground/[0.025] p-4">
@@ -225,7 +249,7 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
                 {task.status === "withdrawn" ? `${name ?? "The agent"} took it back` : outcome.label}
                 {task.closedAt && <span className="font-normal text-muted-foreground">· {formatDistanceToNowStrict(new Date(task.closedAt), { addSuffix: true })}</span>}
               </p>
-              {(task.response?.text || task.closedReason) && <p className="text-sm whitespace-pre-wrap text-foreground/80">{task.response?.text || task.closedReason}</p>}
+              {(humanTaskAnswer(task) || task.closedReason) && <p className="text-sm whitespace-pre-wrap text-foreground/80">{humanTaskAnswer(task) || task.closedReason}</p>}
               {!!task.response?.attachments.length && (
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Paperclip className="size-3" /> {task.response.attachments.map((a) => a.name).join(", ")}
@@ -236,21 +260,35 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
         </div>
       </div>
 
-      {active && <CloseBox task={task} agentName={own ? null : (name ?? "the agent")} focus={focusNote} pending={close.isPending} onStart={() => update.mutate({ id: task.id, patch: { status: "doing" } })} onBack={() => update.mutate({ id: task.id, patch: { status: "open" } })} onClose={(outcome, note, files) => close.mutate({ id: task.id, outcome, note, files }, { onSuccess: onClose })} />}
+      {active && <CloseBox task={task} agentName={own ? null : (name ?? "the agent")} focus={focusNote} pending={close.isPending} onStart={() => update.mutate({ id: task.id, patch: { status: "doing" } })} onBack={() => update.mutate({ id: task.id, patch: { status: "open" } })} onClose={(outcome, note, files, optionId) => close.mutate({ id: task.id, outcome, note, files, optionId }, { onSuccess: onClose })} />}
     </div>
   );
 }
 
+const BODY_HEADING: Record<HumanTask["kind"], string> = { task: "What to do", decision: "What it's about", approval: "Why" };
+
 function StatusPill({ task }: { task: HumanTask }) {
+  const words = HUMAN_TASK_WORDS[task.kind];
   const meta: Record<HumanTask["status"], { label: string; className: string }> = {
     open: { label: "To do", className: "bg-foreground/[0.06] text-foreground/80" },
     doing: { label: "Doing", className: "bg-brand-soft text-brand-strong" },
-    done: { label: "Done", className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
-    declined: { label: "Couldn't do it", className: "bg-rose-500/10 text-rose-700 dark:text-rose-300" },
+    done: { label: words.wasDone, className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+    declined: {
+      label: words.wasDeclined,
+      className: task.kind === "decision" ? "bg-foreground/[0.06] text-muted-foreground" : "bg-rose-500/10 text-rose-700 dark:text-rose-300",
+    },
     withdrawn: { label: "Taken back", className: "bg-foreground/[0.06] text-muted-foreground" },
   };
   const m = meta[task.status];
   return <span className={cn("rounded-full px-2 py-0.5 text-[11.5px] font-medium", m.className)}>{m.label}</span>;
+}
+
+/** What the agent does once the task is closed, in a line above the box. */
+function closeHint(task: HumanTask, agentName: string | null): string | null {
+  if (!agentName) return null;
+  if (task.questionId) return `${agentName} stands still until you ${task.kind === "approval" ? "decide" : "answer"}, and goes on right after.`;
+  if (task.kind === "decision") return `${agentName} goes on with your answer. Replying in its chat works too.`;
+  return `${agentName} continues by itself once you close this. Anything it should know goes in the note.`;
 }
 
 function CloseBox({
@@ -269,31 +307,74 @@ function CloseBox({
   pending: boolean;
   onStart: () => void;
   onBack: () => void;
-  onClose: (outcome: "done" | "declined", note: string, files: PendingAttachment[]) => void;
+  onClose: (outcome: "done" | "declined", note: string, files: PendingAttachment[], optionId?: string) => void;
 }) {
   const [note, setNote] = useState("");
+  const [picked, setPicked] = useState<string | null>(null);
   const [files, setFiles] = useState<PendingAttachment[]>([]);
   const input = useRef<HTMLInputElement>(null);
   const area = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (focus) setTimeout(() => area.current?.focus(), 120);
   }, [focus]);
-  const add = async (picked: File[]) => {
-    const read = await readAttachments(picked, totalBytes(files), toast.error);
+  const add = async (chosen: File[]) => {
+    const read = await readAttachments(chosen, totalBytes(files), toast.error);
     if (read.length) setFiles((list) => [...list, ...read]);
   };
   const drop = (f: PendingAttachment) => {
     if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
     setFiles((list) => list.filter((x) => x.id !== f.id));
   };
-  const finish = (outcome: "done" | "declined") => !pending && onClose(outcome, note.trim(), files);
+  const words = HUMAN_TASK_WORDS[task.kind];
+  const decision = task.kind === "decision";
+  const approval = task.kind === "approval";
+  // An answer needs words, a pick or a file.
+  const ready = !decision || !!note.trim() || !!picked || files.length > 0;
+  const finish = (outcome: "done" | "declined") => {
+    if (pending || (outcome === "done" && !ready)) return;
+    onClose(outcome, note.trim(), files, outcome === "done" && decision ? (picked ?? undefined) : undefined);
+  };
+  const hint = closeHint(task, agentName);
+  const placeholder = !agentName
+    ? "Note (optional)"
+    : decision
+      ? task.options.length
+        ? "Or answer in your own words"
+        : `Your answer for ${agentName}`
+      : `Note for ${agentName} (optional)`;
 
   return (
     <div className="shrink-0 border-t bg-paper-2 p-3">
-      {agentName && (
-        <p className="mb-2 px-1 text-xs text-muted-foreground">
-          {agentName} continues by itself once you close this. Anything it should know goes in the note.
-        </p>
+      {hint && <p className="mb-2 px-1 text-xs text-muted-foreground">{hint}</p>}
+      {decision && task.options.length > 0 && (
+        <div className="mb-2 grid gap-1.5" role="radiogroup" aria-label="Suggested answers">
+          {task.options.map((o, i) => {
+            const on = picked === o.id;
+            return (
+              <button
+                key={o.id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                disabled={pending}
+                onClick={() => setPicked(on ? null : o.id)}
+                className={cn(
+                  "flex min-h-9 w-full items-center gap-2.5 rounded-lg border bg-card px-3 py-2 text-left transition outline-none hover:border-foreground/25 focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  on && "border-primary/50 bg-primary/[0.06]",
+                )}
+              >
+                <span className={cn("grid size-5 shrink-0 place-items-center rounded-md border text-[11px] tabular-nums", on ? "border-primary bg-primary text-primary-foreground" : "border-foreground/20")} aria-hidden>
+                  {on ? <Check className="size-3" /> : i + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-medium">{o.label}</span>
+                  {o.description && <span className="block text-xs text-muted-foreground">{o.description}</span>}
+                </span>
+                {o.recommended && <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Recommended</span>}
+              </button>
+            );
+          })}
+        </div>
       )}
       <div className="rounded-xl border bg-card p-1.5 shadow-card focus-within:ring-[3px] focus-within:ring-ring/40">
         {files.length > 0 && (
@@ -307,7 +388,7 @@ function CloseBox({
           />
         )}
         <div className="flex items-end gap-1">
-          {agentName && (
+          {agentName && !approval && (
             <>
               <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground" aria-label="Attach files" onClick={() => input.current?.click()}>
                 <Paperclip className="size-4" />
@@ -330,7 +411,7 @@ function CloseBox({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             onPaste={(e) => {
-              if (!agentName) return;
+              if (!agentName || approval) return;
               const pasted = [...e.clipboardData.files];
               if (!pasted.length) return;
               e.preventDefault();
@@ -342,7 +423,8 @@ function CloseBox({
                 finish("done");
               } else if (e.key === "Escape") e.currentTarget.blur();
             }}
-            placeholder={agentName ? `Note for ${agentName} (optional)` : "Note (optional)"}
+            placeholder={placeholder}
+            aria-label={placeholder}
             className="max-h-40 min-h-9 resize-none border-0 px-2 py-2 text-sm shadow-none focus-visible:ring-0"
           />
         </div>
@@ -350,7 +432,7 @@ function CloseBox({
       <div className="mt-2.5 flex items-center gap-2">
         {task.status === "open" ? (
           <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={pending} onClick={onStart}>
-            <Play className="fill-current" /> I'm on it
+            <Play className="fill-current" /> {decision || approval ? "Thinking about it" : "I'm on it"}
           </Button>
         ) : (
           <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={pending} onClick={onBack}>
@@ -358,11 +440,24 @@ function CloseBox({
           </Button>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={pending} onClick={() => finish("declined")}>
-            <CircleSlash /> Can't do it
-          </Button>
-          <Button size="sm" disabled={pending} onClick={() => finish("done")}>
-            {pending ? <Spinner /> : <Check />} Mark done
+          {/* A question the agent stands still for can only be answered. */}
+          {!(decision && task.questionId) &&
+            (decision ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={pending} onClick={() => finish("declined")}>
+                    <X /> {words.declined}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Nothing to decide here. {agentName ?? "The agent"} isn't woken.</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button variant="outline" size="sm" disabled={pending} onClick={() => finish("declined")}>
+                {approval ? <X /> : <CircleSlash />} {words.declined}
+              </Button>
+            ))}
+          <Button size="sm" disabled={pending || !ready} onClick={() => finish("done")}>
+            {pending ? <Spinner /> : decision ? <SendHorizontal /> : <Check />} {words.done}
             <Hint>{modKey}↵</Hint>
           </Button>
         </div>

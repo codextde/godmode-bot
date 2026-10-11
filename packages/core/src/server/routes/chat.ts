@@ -19,6 +19,7 @@ import { editQueued, removeQueued, sendQueuedNow, submitMessage } from "../../se
 import { liteMessage } from "../../services/liteMessage";
 import { answerByMessage } from "../../services/questions";
 import { answererOf } from "./questions";
+import { replySettles } from "../../services/humanTasks";
 import { continueConversation, pauseConversation, setAutoContinue } from "../../services/pauses";
 import { cancelRun, findRunLog, getRun, listRuns, untilAsked } from "../../runner/runner";
 import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } from "../../services/followups";
@@ -187,8 +188,14 @@ export function registerChatRoutes(app: Hono): void {
     await untilAsked(id);
     const answered = answerByMessage(id, input, answererOf(c));
     if (answered) return c.json(answered, 201);
-    if (!queue) return c.json(await sendMessage(id, { ...input, trigger: "chat" }), 201);
+    const settle = replySettles(id, input.content);
+    if (!queue) {
+      const sent = await sendMessage(id, { ...input, trigger: "chat" });
+      settle();
+      return c.json(sent, 201);
+    }
     const outcome = await submitMessage(id, { ...input, queueId });
+    settle();
     return c.json(outcome, "queued" in outcome ? 202 : 201);
   });
 

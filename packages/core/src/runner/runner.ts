@@ -71,7 +71,7 @@ import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { projectOfChat } from "../services/projects";
 import { getSettings } from "../services/settings";
 import { reportMissingLogin } from "../services/missingLogins";
-import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, currentPage, getProfile, onLaunchProblem, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
+import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, chatWorkspaceId, currentPage, getProfile, onLaunchProblem, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
 import { chatLeaseUrl } from "../browser/proxy";
 import { RUN_CDP_ENV } from "../browser/cdpGuard";
 import {
@@ -100,6 +100,7 @@ import {
   type PendingQuestion,
   type ResumedAnswer,
 } from "../services/questions";
+import { noteOpenDecision } from "../services/humanTasks";
 import { bookSpend } from "../services/spend";
 import { audit } from "../services/audit";
 import { exhaustedBudget, exemptNotice, nextMonthStart, type BudgetStop } from "../services/budgets";
@@ -2218,7 +2219,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const memoryChanged = resuming && !dreaming && conv.memory_digest != null && conv.memory_digest !== memoryNow;
     const followup = get<{ dueAt: string; note: string }>("SELECT due_at AS dueAt, note FROM followups WHERE conversation_id = ?", job.conversationId);
     const humanTasks = all<{ number: number; title: string; status: string }>(
-      "SELECT number, title, status FROM human_tasks WHERE conversation_id = ? AND status IN ('open', 'doing') ORDER BY number",
+      "SELECT number, title, status FROM human_tasks WHERE conversation_id = ? AND status IN ('open', 'doing') AND question_id IS NULL ORDER BY number",
       job.conversationId,
     );
     // The human answered a question, but the run that took the answer broke off before Claude read it.
@@ -2599,6 +2600,12 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
       assistant = updateMessage(job.messageId, { content: text, blocks });
     });
     safely("update conversation", () => saveConversation(job, agent, outcome.status === "succeeded", ts));
+    // Before run.finished goes out: whoever handles the end of the run (the task board) sees what waits for the human.
+    if (wasRunning && agent && outcome.status === "succeeded" && job.trigger !== "check" && job.trigger !== "dream") {
+      safely("note an open decision", () =>
+        noteOpenDecision({ agentId: job.agentId, conversationId: job.conversationId, runId: job.runId, workspaceId: chatWorkspaceId(job.conversationId) ?? agent.workspaceId, attended: attendedBy(job) }, text),
+      );
+    }
   }
 
   if (wasRunning) {
@@ -2755,6 +2762,17 @@ function commandOverrides(cmd: StreamAccumulator["localCommand"]): { model?: str
       return { title: redact(arg).slice(0, 200) };
     default:
       return {};
+  }
+}
+
+/** The human wrote the message this run answers (in the app or on a chat platform), so they read the answer there. */
+function attendedBy(job: Job): boolean {
+  if (job.trigger !== "chat" || !job.userMessageId) return false;
+  try {
+    const m = getMessage(job.userMessageId);
+    return m.role === "user" && !m.source;
+  } catch {
+    return false;
   }
 }
 
