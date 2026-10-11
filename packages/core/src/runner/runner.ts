@@ -1615,7 +1615,8 @@ function withoutImageData(v: unknown): unknown {
  * line: the log of a long run is far too big to hold and mask in one piece without stalling the core.
  */
 async function maskLog(path: string) {
-  const masking = `${path}.masking`;
+  // `.tmp`: ignored in the agent repo, so a commit meanwhile never takes the half-written copy.
+  const masking = `${path}.tmp`;
   try {
     const out = Bun.file(masking).writer({ highWaterMark: 1024 * 1024 });
     let changed = false;

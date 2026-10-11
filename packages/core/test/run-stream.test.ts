@@ -120,6 +120,23 @@ describe("the in-flight message", () => {
     expect(logged.match(/characters left out/g)).toHaveLength(6);
   });
 
+  test("a long run keeps its newest screenshots: the clients and the saved message lose the oldest together", async () => {
+    const { events, stop } = captureEvents();
+    // Five of almost the largest size kept: one more than a message holds.
+    const started = await startChat({ agentId: agent.id, content: "SHOTS:5 SHOT_SIZE:1999000" });
+    const run = await waitForRun(started.run.id, 30_000);
+    stop();
+    expect(run.status).toBe("succeeded");
+
+    let have: RunDeltaState | null = null;
+    for (const d of deltasOf(events, run.id)) have = applyRunDelta(have, d);
+    const stored = getMessage(deltasOf(events, run.id)[0]!.messageId);
+    expect(have!.blocks).toEqual(stored.blocks);
+    const tools = stored.blocks.filter((b) => b.type === "tool_use");
+    expect(tools.map((b) => b.type === "tool_use" && b.result)).toEqual(["shot 0", "shot 1", "shot 2", "shot 3", "shot 4"]);
+    expect(tools.map((b) => b.type === "tool_use" && !!b.image)).toEqual([false, true, true, true, true]);
+  });
+
   test("a delta that was missed can't be applied: the client asks for the whole list", () => {
     const text = (t: string): MessageBlock => ({ type: "text", text: t });
     const delta = (seq: number, patch: [number, MessageBlock][], length: number): RunDelta => ({ type: "run.delta", runId: "run_x", conversationId: "cnv_x", messageId: "msg_x", seq, patch, length });
@@ -197,7 +214,7 @@ describe("the in-flight message", () => {
       expect(logged).not.toContain("shot 1");
       expect(logged.endsWith("\n")).toBe(true);
       expect(logged.split("\n").every((line) => !line || JSON.parse(line))).toBe(true);
-      expect(existsSync(`${logPath}.masking`)).toBe(false);
+      expect(existsSync(`${logPath}.tmp`)).toBe(false);
     } finally {
       __setPersistForTests(2000, 50);
     }
