@@ -1319,7 +1319,11 @@ unverified). Messages of a chat are accepted in order; each starts a normal chat
 an 👀 reaction) and the answer is converted (Telegram HTML, Slack mrkdwn, Teams Markdown) and split. Chat commands:
 `/help`, `/agents`, `/agent <name>` (switch; in a Slack thread the channel follows), `/new`, `/stop`; Slack uses
 `/godmode <command>`. Claude Code's own slash commands are not available from chats. Attachments (any number;
-≤ 25 MB each, Telegram ≤ 20 MB, 250 MB per message) are downloaded into the agent's uploads. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
+≤ 25 MB each, Telegram ≤ 20 MB, 250 MB per message) are downloaded into the agent's uploads. Telegram voice and video
+messages (`InboundFile.spoken`) are transcribed first (`transcribeRecording` in `voice/voice.ts`): their words become
+the message, also as the owner's answer to a question, and the recording stays attached. The key is the OpenAI or
+ElevenLabs voice key, else an OpenAI or ElevenLabs API tool the chat's agent may use (sent to that provider's own
+address only); without one the agent gets the recording and a note saying why there are no words. Limits: 20 messages per chat and 120 per bot per minute. Backups carry
 connections but restore them turned off, so two machines never answer for one bot.
 
 ## Phone app

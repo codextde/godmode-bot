@@ -6,6 +6,7 @@ import { all, get } from "../src/db";
 import { getRun, waitForRun } from "../src/runner/runner";
 import { openQuestionOf, listQuestions } from "../src/services/questions";
 import * as vault from "../src/vault/vault";
+import { createApiTool, deleteApiTool } from "../src/integrations/apiTools";
 import { issueGrant } from "../src/server/grants";
 import { createApp } from "../src/server/app";
 import { splitMessage, toPlainText, toSlackMrkdwn, toTelegramHtml, fromSlackText } from "../src/messaging/format";
@@ -33,6 +34,7 @@ interface Call {
   method: string;
   url: URL;
   body: Record<string, unknown>;
+  text: string;
   headers: Headers;
 }
 
@@ -61,7 +63,7 @@ function installFetchMock() {
         body = Object.fromEntries(new URLSearchParams(text));
       }
     }
-    const call = { method: req.method, url, body, headers: req.headers };
+    const call = { method: req.method, url, body, text, headers: req.headers };
     calls.push(call);
     return handler(call);
   }) as typeof fetch;
@@ -83,7 +85,10 @@ function fakeTelegram() {
   onHost("api.telegram.org", async (call) => {
     const method = tgMethod(call);
     const ok = (result: unknown) => Response.json({ ok: true, result });
+    if (call.url.pathname.startsWith("/file/")) return new Response(new Uint8Array([79, 103, 103, 83]));
     switch (method) {
+      case "getFile":
+        return ok({ file_path: "voice/file_7.oga", file_size: 4 });
       case "getMe":
         return ok({ id: 4242, is_bot: true, first_name: "Godmode", username: "godmode_test_bot" });
       case "getWebhookInfo":
@@ -114,7 +119,29 @@ function tgMessage(from: { id: number; first_name: string; username?: string }, 
   });
 }
 
+function tgVoice(from: { id: number; first_name: string; username?: string }, extra: Record<string, unknown> = {}) {
+  updates.push({
+    update_id: updateId++,
+    message: {
+      message_id: messageId++,
+      from: { is_bot: false, ...from },
+      chat: { id: from.id, type: "private", first_name: from.first_name },
+      voice: { file_id: "voice-file", file_size: 4, mime_type: "audio/ogg", duration: 3 },
+      ...extra,
+    },
+  });
+}
+
 const sentTexts = () => tgCalls("sendMessage").map((c) => String(c.body.text));
+
+/* --------------------------- fake ElevenLabs ---------------------------- */
+
+let heard = "";
+const sttCalls = () => calls.filter((c) => c.url.host === "api.elevenlabs.io");
+
+function fakeElevenLabs() {
+  onHost("api.elevenlabs.io", () => Response.json({ text: heard, language_code: "deu" }));
+}
 
 /* -------------------------------- setup --------------------------------- */
 
@@ -130,6 +157,7 @@ beforeAll(async () => {
   researcher = await makeAgent({ name: "Researcher", avatar: "🔎", description: "Digs into things" });
   installFetchMock();
   fakeTelegram();
+  fakeElevenLabs();
   startMessaging();
 });
 
@@ -419,6 +447,79 @@ describe("Telegram bot", () => {
     expect(sends).toHaveLength(2);
     expect(sends[1]!.body.parse_mode).toBeUndefined();
     expect(sends[1]!.body.text).toBe("BROKEN answer");
+  });
+
+  describe("voice messages", () => {
+    const dana = { id: 7004, first_name: "Dana" };
+    const elevenLabs = () =>
+      createApiTool({ name: "ElevenLabs", baseUrl: "https://api.elevenlabs.io", apiKey: "xi-tool-key-123", auth: { in: "header", name: "xi-api-key", prefix: "" } });
+    const danasId = () => listUsers(connectionId).find((u) => u.name === "Dana")!.id;
+    const conversationId = () => listChats(connectionId).find((c) => c.title === "Dana")!.conversationId!;
+    const lastUserMessage = () =>
+      get<{ content: string; attachments: string }>(
+        "SELECT content, attachments FROM messages WHERE conversation_id = ? AND role = 'user' ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        conversationId(),
+      )!;
+
+    test("they reach the agent as text, with the recording attached", async () => {
+      tgMessage(dana, "hi");
+      await until(() => listUsers(connectionId).some((u) => u.name === "Dana"), 5000, "dana recorded");
+      await setUserStatus(connectionId, danasId(), "approved");
+
+      // No key to transcribe with: the agent still gets the recording and learns why there are no words.
+      let before = sentTexts().length;
+      tgVoice(dana);
+      await until(() => sentTexts().slice(before).includes("Hello, nice to meet you!"), 10_000, "the answer to an untranscribed voice message");
+      expect(sttCalls()).toHaveLength(0);
+      expect(lastUserMessage().content).toContain("couldn't transcribe: no OpenAI or ElevenLabs key is set up");
+      expect(lastUserMessage().attachments).toContain(".ogg");
+
+      const tool = elevenLabs();
+      try {
+        heard = "Was gibt's Neues?";
+        before = sentTexts().length;
+        const typing = tgCalls("sendChatAction").length;
+        tgVoice(dana);
+        await until(() => sentTexts().length > before, 10_000, "the answer to a voice message");
+        expect(sentTexts().at(-1)).toBe("Hello, nice to meet you!");
+        expect(sttCalls()).toHaveLength(1);
+        expect(sttCalls()[0]!.headers.get("xi-api-key")).toBe("xi-tool-key-123");
+        expect(sttCalls()[0]!.text).toContain("scribe_v2");
+        expect(tgCalls("sendChatAction").length).toBeGreaterThan(typing);
+        const message = lastUserMessage();
+        expect(message.content.startsWith("Was gibt's Neues?")).toBe(true);
+        expect(message.content).toContain("Sent as a voice message");
+        expect(message.attachments).toContain(".ogg");
+
+        // A caption and the spoken words belong together; silence is named as such.
+        heard = "";
+        before = sentTexts().length;
+        tgVoice(dana, { caption: "Listen to this" });
+        await until(() => sentTexts().length > before, 10_000, "the answer to a silent voice message");
+        expect(lastUserMessage().content).toBe("Listen to this\n\n(A voice message is attached that Godmode couldn't transcribe: nothing audible in it.)");
+      } finally {
+        deleteApiTool(tool.id);
+      }
+    }, 40_000);
+
+    test("the owner can answer an agent's question by voice", async () => {
+      await setUserOwner(connectionId, danasId(), true);
+      const tool = elevenLabs();
+      try {
+        const before = sentTexts().length;
+        tgMessage(dana, "ASK_APPROVAL for the reminder");
+        await until(() => sentTexts().slice(before).some((t) => t.includes("needs an OK")), 15_000, "the approval request");
+        const approval = openQuestionOf(conversationId())!;
+        heard = "Yes.";
+        tgVoice(dana);
+        await until(() => listQuestions({ status: "approved" }).some((q) => q.id === approval.id), 10_000, "the spoken approval");
+        await waitForRun(approval.runId, 20_000);
+      } finally {
+        deleteApiTool(tool.id);
+        await setUserOwner(connectionId, danasId(), false);
+        await until(() => !all<{ id: string }>("SELECT id FROM runs WHERE status IN ('queued', 'running', 'paused')").length, 20_000, "the chat to settle");
+      }
+    }, 60_000);
   });
 
   test("turning a bot off stops polling; deleting removes people and chats", async () => {

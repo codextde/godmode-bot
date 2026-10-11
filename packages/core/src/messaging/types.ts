@@ -5,6 +5,8 @@ export interface InboundFile {
   mime: string;
   /** Bytes, when the platform says. */
   size: number | null;
+  /** Something the sender said instead of typing it (a voice message): its words become part of the message. */
+  spoken?: boolean;
   download: () => Promise<Uint8Array>;
 }
 
