@@ -142,7 +142,7 @@ suite("browser-use MCP drives the managed Chromium", () => {
   test("initialize → tools/list → browser_navigate lands in OUR browser, in the chat's own tab", async () => {
     const a = agent("agt_e2e");
     const { server, proc, mcp, init } = await start(a, { runId: "run_e2e", conversationId: "cnv_e2e" });
-    expect(server.args).toEqual(["--from", "browser-use==0.13.10", "browser-use", "--mcp"]);
+    expect(server.args).toEqual(["--from", "browser-use==0.13.10", "--python", ">=3.11,<3.15", "browser-use", "--mcp"]);
     const env = server.env!;
     expect(env.ANONYMIZED_TELEMETRY).toBe("false");
     const profile = manager.resolveProfileForAgent(a);

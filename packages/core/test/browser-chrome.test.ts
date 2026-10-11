@@ -138,7 +138,7 @@ describe("browser-use MCP wiring", () => {
   test("default command is the pinned uvx invocation; custom commands override it", () => {
     expect(browserUseCommand("", "/home/me/.local/bin/uvx")).toEqual({
       command: "/home/me/.local/bin/uvx",
-      args: ["--from", BROWSER_USE_SPEC, "browser-use", "--mcp"],
+      args: ["--from", BROWSER_USE_SPEC, "--python", ">=3.11,<3.15", "browser-use", "--mcp"],
     });
     expect(browserUseCommand("", null)).toBeNull();
     expect(browserUseCommand("uvx --from browser-use==0.14.0 browser-use --cli-mcp", "/opt/uvx")).toEqual({

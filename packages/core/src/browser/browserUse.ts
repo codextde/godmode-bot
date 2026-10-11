@@ -15,6 +15,10 @@ import { which } from "../util";
 
 export const BROWSER_USE_VERSION = "0.13.10";
 export const BROWSER_USE_SPEC = `browser-use==${BROWSER_USE_VERSION}`;
+// uv takes the newest Python it can get; browser-use's dependencies ship no wheels for 3.15 yet and would need a compiler.
+export const BROWSER_USE_PYTHON = ">=3.11,<3.15";
+/** uvx options for the pinned browser-use: `uvx ...BROWSER_USE_FROM browser-use --mcp`. */
+export const BROWSER_USE_FROM = ["--from", BROWSER_USE_SPEC, "--python", BROWSER_USE_PYTHON];
 
 /** Split a command line into argv (supports single/double quotes and backslash escapes outside single quotes). */
 export function splitCommand(input: string): string[] {
@@ -62,7 +66,7 @@ export function browserUseCommand(custom: string, uvx: string | null): { command
     return { command, args: parts.slice(1) };
   }
   if (!uvx) return null;
-  return { command: uvx, args: ["--from", BROWSER_USE_SPEC, "browser-use", "--mcp"] };
+  return { command: uvx, args: [...BROWSER_USE_FROM, "browser-use", "--mcp"] };
 }
 
 export interface BrowserUseConfigInput {
