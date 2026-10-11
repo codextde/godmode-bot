@@ -13,7 +13,7 @@ import { Card, Hairline, LiveDot, Row, SectionTitle, SkeletonRows, T, tap } from
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { greeting } from "@/lib/format";
-import { useAgents, useOpenHumanTasks } from "@/lib/hooks";
+import { chatListQuery, useAgents, useOpenHumanTasks } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { reconnectNow } from "@/lib/realtime";
@@ -35,7 +35,7 @@ export default function Home() {
   const openForYou = useOpenHumanTasks();
   // Scoped like the rest of Home: the workspace's tasks and the ones without a workspace.
   const mine = { data: openForYou.data?.filter((t) => !workspaceId || !t.workspaceId || t.workspaceId === workspaceId) };
-  const recent = useQuery({ queryKey: qk.conversationList("", workspaceId), queryFn: () => api.conversations.list({ limit: 100, workspaceId }) });
+  const recent = useQuery(chatListQuery(workspaceId));
   const tasks = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }) });
   const missing = useQuery({ queryKey: qk.missingLogins, queryFn: api.missingLogins.open });
   const questions = useQuery({ queryKey: qk.questions, queryFn: api.questions.open });

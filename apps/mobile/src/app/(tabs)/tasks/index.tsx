@@ -1,7 +1,8 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { FlashList, type ListRenderItem } from "@shopify/flash-list";
+import { useQuery } from "@tanstack/react-query";
 import { Link, router, Stack } from "expo-router";
-import { useMemo } from "react";
-import { Alert, RefreshControl, SectionList, View } from "react-native";
+import { memo, useCallback, useMemo } from "react";
+import { Alert, RefreshControl, View } from "react-native";
 import type { Agent, Task, TaskStatus } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
 import { HumanTaskRow } from "@/components/human-task-row";
@@ -14,6 +15,8 @@ import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { tasksInProject, useProjectIndex, useWorkspace } from "@/lib/workspace";
 import { space } from "@/lib/theme";
+
+type Item = { kind: "header"; key: string; title: string } | { kind: "task"; key: string; task: Task };
 
 const GROUPS: { title: string; statuses: TaskStatus[] }[] = [
   { title: "Needs you", statuses: ["in_review", "blocked"] },
@@ -33,11 +36,35 @@ export default function Tasks() {
   const pull = usePullRefresh(() => Promise.all([tasks.refetch(), mine.refetch()]));
   const newTask = () => router.push("/new-task");
 
-  const sections = useMemo(() => {
+  const items = useMemo(() => {
     const list = [...tasksInProject(tasks.data ?? [], projectId)].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
-    return GROUPS.map((g) => ({ title: g.title, data: list.filter((t) => g.statuses.includes(t.status)) })).filter((s) => s.data.length);
+    const out: Item[] = [];
+    for (const g of GROUPS) {
+      const group = list.filter((t) => g.statuses.includes(t.status));
+      if (!group.length) continue;
+      out.push({ kind: "header", key: `h-${g.title}`, title: g.title });
+      for (const task of group) out.push({ kind: "task", key: task.id, task });
+    }
+    return out;
   }, [tasks.data, projectId]);
   const forYou = mine.data ?? [];
+
+  const renderItem: ListRenderItem<Item> = useCallback(
+    ({ item, index }) => {
+      if (item.kind === "header") return <GroupTitle title={item.title} />;
+      const t = item.task;
+      return (
+        <TaskItem
+          task={t}
+          agent={t.agentId ? agents.get(t.agentId) : undefined}
+          workspaceName={workspaceId ? undefined : names.get(t.workspaceId ?? "")}
+          projectName={projectId || !t.projectId ? undefined : projects.get(t.projectId)?.project.name}
+          divided={items[index - 1]?.kind === "task"}
+        />
+      );
+    },
+    [agents, workspaceId, names, projectId, projects, items],
+  );
 
   return (
     <>
@@ -48,13 +75,14 @@ export default function Tasks() {
           { icon: "plus", label: "New task", onPress: newTask },
         ]}
       />
-      <SectionList<Task>
-        sections={sections}
-        keyExtractor={(t) => t.id}
+      <FlashList
+        data={items}
+        keyExtractor={(item) => item.key}
+        getItemType={(item) => item.kind}
+        renderItem={renderItem}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: 140 }}
         refreshControl={<RefreshControl {...pull} />}
-        stickySectionHeadersEnabled={false}
         ListHeaderComponent={
           <View style={{ paddingHorizontal: space.sm, paddingTop: space.sm, gap: space.lg }}>
             <WorkspaceChip />
@@ -73,20 +101,6 @@ export default function Tasks() {
             )}
           </View>
         }
-        renderSectionHeader={({ section }) => (
-          <View style={{ paddingHorizontal: space.sm, paddingTop: space.lg }}>
-            <SectionTitle title={section.title} />
-          </View>
-        )}
-        ItemSeparatorComponent={() => <Hairline inset={72} />}
-        renderItem={({ item }) => (
-          <TaskItem
-            task={item}
-            agent={item.agentId ? agents.get(item.agentId) : undefined}
-            workspaceName={workspaceId ? undefined : names.get(item.workspaceId ?? "")}
-            projectName={projectId || !item.projectId ? undefined : projects.get(item.projectId)?.project.name}
-          />
-        )}
         ListEmptyComponent={
           tasks.isLoading ? (
             <View style={{ paddingTop: space.md }}>
@@ -108,22 +122,49 @@ export default function Tasks() {
   );
 }
 
+function GroupTitle({ title }: { title: string }) {
+  return (
+    <View style={{ paddingHorizontal: space.sm, paddingTop: space.lg }}>
+      <SectionTitle title={title} />
+    </View>
+  );
+}
+
+function archiveTask(id: string) {
+  api.tasks
+    .update(id, { archived: true })
+    .catch((err) => Alert.alert("Couldn't archive the task", errorText(err)))
+    .finally(() => void queryClient.invalidateQueries({ queryKey: qk.tasks }));
+}
+
 /** Long press on iOS: archive the task (off the board, restorable on the computer). */
-function TaskItem({ task, agent, workspaceName, projectName }: { task: Task; agent?: Agent; workspaceName?: string; projectName?: string }) {
-  const archive = useMutation({
-    mutationFn: () => api.tasks.update(task.id, { archived: true }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: qk.tasks }),
-    onError: (err) => Alert.alert("Couldn't archive the task", errorText(err)),
-  });
+const TaskItem = memo(function TaskItem({
+  task,
+  agent,
+  workspaceName,
+  projectName,
+  divided,
+}: {
+  task: Task;
+  agent?: Agent;
+  workspaceName?: string;
+  projectName?: string;
+  divided: boolean;
+}) {
   const confirmArchive = () => {
-    if (task.status !== "in_progress") return archive.mutate();
+    if (task.status !== "in_progress") return archiveTask(task.id);
     Alert.alert("Stop the agent?", `${agent?.name ?? "The agent"} is still working on it. Archiving it stops the run.`, [
       { text: "Keep working", style: "cancel" },
-      { text: "Stop and archive", style: "destructive", onPress: () => archive.mutate() },
+      { text: "Stop and archive", style: "destructive", onPress: () => archiveTask(task.id) },
     ]);
   };
 
-  const row = <TaskRow task={task} agent={agent} workspaceName={workspaceName} projectName={projectName} />;
+  const row = (
+    <>
+      {divided && <Hairline inset={72} />}
+      <TaskRow task={task} agent={agent} workspaceName={workspaceName} projectName={projectName} />
+    </>
+  );
   if (process.env.EXPO_OS !== "ios") return row;
   return (
     <Link href={{ pathname: "/task/[id]", params: { id: task.id } }} asChild>
@@ -136,4 +177,4 @@ function TaskItem({ task, agent, workspaceName, projectName }: { task: Task; age
       </Link.Menu>
     </Link>
   );
-}
+});

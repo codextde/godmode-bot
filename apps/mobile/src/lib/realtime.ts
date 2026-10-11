@@ -33,6 +33,17 @@ function sendEvent(event: ClientEvent) {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event));
 }
 
+const resyncAsked = new Map<string, number>();
+
+/** A delta didn't fit what the phone has of the run (it missed one): ask for the whole list, once a second at most. */
+function resync(runId: string) {
+  const now = Date.now();
+  if (now - (resyncAsked.get(runId) ?? 0) < 1000) return;
+  if (resyncAsked.size > 100) resyncAsked.clear();
+  resyncAsked.set(runId, now);
+  sendEvent({ type: "run.resync", runId });
+}
+
 /** Ref-counted subscription (browser/computer live views, open chats), replayed after every reconnect. */
 function subscription(key: string, on: ClientEvent, off: ClientEvent): () => void {
   const n = (counts.get(key) ?? 0) + 1;
@@ -135,8 +146,7 @@ function handle(event: ServerEvent) {
       live.runActivity(event.runId, event.label);
       break;
     case "run.delta":
-      // The whole list: this app doesn't ask for patches.
-      if (event.blocks) live.delta(event.conversationId, { runId: event.runId, messageId: event.messageId, blocks: event.blocks });
+      if (!live.delta(event)) resync(event.runId);
       break;
     case "run.paused":
       // It stands still: nothing works in the chat until it continues.
@@ -283,6 +293,8 @@ async function connect() {
     attempt = 0;
     useSession.getState().setActiveUrl(base);
     useLive.getState().setStatus("online");
+    // Streaming replies as what changed, not the whole block list five times a second (megabytes in a long run).
+    sendEvent({ type: "deltas.patch" });
     replaySubscriptions();
     if (viewing) sendView();
     void catchUp();

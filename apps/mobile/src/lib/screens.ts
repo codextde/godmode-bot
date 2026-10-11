@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import { browserView, computerTargetLabel, computerView, type Agent, type BrowserProfile, type Conversation, type Vm } from "@godmode/shared";
 import { api } from "./api";
 import { useLive, type Frame } from "./live";
+import { chatListQuery } from "./hooks";
 import { qk } from "./query";
 import { subscribeBrowser, subscribeComputer } from "./realtime";
 
@@ -26,7 +27,7 @@ export function screenHref(screen: LiveScreen) {
 export function useLiveScreens() {
   const profiles = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
   const vms = useQuery({ queryKey: qk.vms, queryFn: api.vms.list, retry: false });
-  const conversations = useQuery({ queryKey: qk.conversationList(""), queryFn: () => api.conversations.list({ limit: 100 }) });
+  const conversations = useQuery(chatListQuery(null));
 
   const screens = useMemo(() => {
     const out: LiveScreen[] = [];

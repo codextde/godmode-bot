@@ -1,5 +1,6 @@
+import { useMemo } from "react";
 import { create } from "zustand";
-import type { MessageBlock, Run } from "@godmode/shared";
+import { applyRunDelta, type MessageBlock, type Run, type RunDelta } from "@godmode/shared";
 
 export type LinkStatus = "connecting" | "online" | "offline";
 
@@ -13,6 +14,8 @@ export interface Draft {
   runId: string;
   messageId: string;
   blocks: MessageBlock[];
+  seq: number;
+  stream?: string;
 }
 
 export interface Frame {
@@ -42,12 +45,13 @@ interface LiveState {
   runStarted: (run: Run) => void;
   runActivity: (runId: string, label: string) => void;
   runFinished: (run: Run) => void;
-  delta: (conversationId: string, draft: Draft) => void;
+  /** False when the delta doesn't fit what the phone has of the run (it missed one): ask for the whole list then. */
+  delta: (event: RunDelta) => boolean;
   frame: (key: string, frame: Frame) => void;
   dropFrame: (key: string) => void;
 }
 
-export const useLive = create<LiveState>((set) => ({
+export const useLive = create<LiveState>((set, get) => ({
   status: "connecting",
   offlineReason: null,
   runs: {},
@@ -79,7 +83,13 @@ export const useLive = create<LiveState>((set) => ({
       if (drafts[run.conversationId]?.runId === run.id) delete drafts[run.conversationId];
       return { runs, labels, drafts, ended: [...s.ended.slice(-49), run.id] };
     }),
-  delta: (conversationId, draft) => set((s) => ({ drafts: { ...s.drafts, [conversationId]: draft } })),
+  delta: (event) => {
+    const have = get().drafts[event.conversationId];
+    const next = applyRunDelta(have?.runId === event.runId ? have : null, event);
+    if (!next) return false;
+    set((s) => ({ drafts: { ...s.drafts, [event.conversationId]: { runId: event.runId, messageId: event.messageId, ...next } } }));
+    return true;
+  },
   frame: (key, frame) => set((s) => ({ frames: { ...s.frames, [key]: frame } })),
   dropFrame: (key) =>
     set((s) => {
@@ -95,4 +105,39 @@ export function useConversationRun(conversationId: string | undefined): LiveRun 
     const runs = Object.values(s.runs).filter((r) => r.run.conversationId === conversationId);
     return runs.find((r) => r.run.status === "running") ?? runs[0];
   });
+}
+
+export interface RunCount {
+  running: number;
+  queued: number;
+}
+
+/**
+ * Running and queued runs per agent. Selected as a string so a screen re-renders when a number changes, not on every
+ * activity label of every run.
+ */
+export function useRunCounts(): Map<string, RunCount> {
+  const key = useLive((s) =>
+    Object.values(s.runs)
+      .map(({ run }) => `${run.agentId} ${run.status}`)
+      .sort()
+      .join("\n"),
+  );
+  return useMemo(() => {
+    const counts = new Map<string, RunCount>();
+    for (const line of key ? key.split("\n") : []) {
+      const [agentId, status] = line.split(" ");
+      const n = counts.get(agentId!) ?? { running: 0, queued: 0 };
+      if (status === "running") n.running++;
+      else if (status === "queued") n.queued++;
+      counts.set(agentId!, n);
+    }
+    return counts;
+  }, [key]);
+}
+
+/** Chats with a run in them, re-rendering only when that set changes. */
+export function useRunningChats(): Set<string> {
+  const key = useLive((s) => [...new Set(Object.values(s.runs).map(({ run }) => run.conversationId))].sort().join("\n"));
+  return useMemo(() => new Set(key ? key.split("\n") : []), [key]);
 }

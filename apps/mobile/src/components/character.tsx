@@ -1,3 +1,4 @@
+import { useIsFocused } from "expo-router";
 import { memo, useEffect } from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
@@ -76,7 +77,13 @@ export function agentMood(agent: Pick<Agent, "enabled" | "status">, running?: bo
   return agent.status === "error" ? "error" : "idle";
 }
 
-/** A character, alive: it breathes, blinks, bobs while working and hops when happy. Under Reduce Motion it holds still. */
+/** Idle breathing and blinking only from this size up: a list of small avatars that all breathe keeps the phone busy. */
+const LIVELY_SIZE = 60;
+
+/**
+ * A character, alive: it breathes, blinks, bobs while working and hops when happy. Small ones only move while they work,
+ * and every one holds still while its screen is behind another (tabs stay mounted) or under Reduce Motion.
+ */
 export const Character = memo(function Character({
   character,
   color,
@@ -94,10 +101,13 @@ export const Character = memo(function Character({
   style?: StyleProp<ViewStyle>;
 }) {
   const reduceMotion = useReducedMotion();
+  const focused = useIsFocused();
+  const still = reduceMotion || !focused;
+  const lively = size >= LIVELY_SIZE;
   const outline = useIsDark() ? OUTLINE.dark : OUTLINE.light;
   const faceScale = size <= 28 ? 1.25 : 1;
   const open = drawing(character, color, mood, faceScale);
-  const blinks = !reduceMotion && canBlink(character, mood);
+  const blinks = lively && !still && canBlink(character, mood);
   const closed = blinks ? drawing({ ...character, eyes: "lines" }, color, mood, faceScale) : null;
   const phase = characterPhase(seed) * 1000;
 
@@ -106,12 +116,14 @@ export const Character = memo(function Character({
   const blink = useSharedValue(0);
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (still) return;
     const slow = mood === "sleeping";
-    breath.value = withDelay(
-      phase % 1600,
-      withRepeat(withTiming(1, { duration: slow ? 2600 : 1900, easing: Easing.inOut(Easing.sin) }), -1, true),
-    );
+    if (lively) {
+      breath.value = withDelay(
+        phase % 1600,
+        withRepeat(withTiming(1, { duration: slow ? 2600 : 1900, easing: Easing.inOut(Easing.sin) }), -1, true),
+      );
+    }
     if (mood === "working") {
       move.value = withRepeat(withTiming(1, { duration: 420, easing: Easing.inOut(Easing.quad) }), -1, true);
     } else if (mood === "happy") {
@@ -129,7 +141,7 @@ export const Character = memo(function Character({
       breath.value = 0;
       move.value = 0;
     };
-  }, [mood, reduceMotion, phase, breath, move]);
+  }, [mood, still, lively, phase, breath, move]);
 
   useEffect(() => {
     if (!blinks) return;

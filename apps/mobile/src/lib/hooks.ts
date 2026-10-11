@@ -13,6 +13,13 @@ export function useNow(intervalMs = 1000): number {
   return now;
 }
 
+/** One page of chats for every list that shows them (Home, Chats, live runs, screens), so they share one request. */
+export const CHAT_LIST_LIMIT = 200;
+
+export function chatListQuery(workspaceId: string | null) {
+  return { queryKey: qk.conversationList("", workspaceId), queryFn: () => api.conversations.list({ limit: CHAT_LIST_LIMIT, workspaceId }) };
+}
+
 export function useAgents() {
   const query = useQuery({ queryKey: qk.agents, queryFn: api.agents.list });
   const byId = useMemo(() => new Map<string, Agent>((query.data ?? []).map((a) => [a.id, a])), [query.data]);
