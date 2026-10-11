@@ -1047,6 +1047,7 @@ describe("settings tools", () => {
         "memory.dreaming.enabled",
         "memory.dreaming.cron",
         "memory.dreaming.model",
+        "memory.dreaming.maxMemoryChars",
         "memory.dreaming.minNewExchanges",
         "memory.dreaming.refreshDays",
         "memory.dreaming.tidyWorkspace",

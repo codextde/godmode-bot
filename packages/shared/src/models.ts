@@ -733,7 +733,8 @@ export interface Run {
 /* Dreams: background memory consolidation                              */
 /* ------------------------------------------------------------------ */
 
-export type DreamReason = "schedule" | "manual";
+/** `size`: MEMORY.md outgrew what a chat loads, so the agent dreamt before its schedule. */
+export type DreamReason = "schedule" | "manual" | "size";
 /**
  * `paused`: a scheduled dream gave way to a run someone waits for (rolled back, retried when the agent is idle) ·
  * `reverted`: the human undid the dream's changes. Failed, cancelled and paused dreams changed nothing (rolled back).
@@ -783,6 +784,8 @@ export interface Dream {
   changes: DreamChange[];
   /** Paths of the memory files the dream changed (contents via the dream's detail). */
   files: string[];
+  /** Characters of MEMORY.md before and after (null = the dream left it as it was). */
+  memoryChars: { before: number; after: number } | null;
   /** How the dream tidied the workspace, in order. */
   workspace: DreamWorkspaceChange[];
   /** The changes can still be undone (no later edit touched the same files, everything moved is still where it went). */
@@ -798,6 +801,12 @@ export interface DreamDetail extends Dream {
   fileChanges: DreamFileChange[];
 }
 
+export interface MemorySize {
+  chars: number;
+  target: number;
+  limit: number;
+}
+
 /** Dreaming status of one agent. */
 export interface DreamOverview {
   /** Dreaming is switched on in Settings → Memory. */
@@ -806,6 +815,8 @@ export interface DreamOverview {
   nextDreamAt: ISODate | null;
   /** Activity since the last successful dream, waiting to be consolidated. */
   pending: { exchanges: number; conversations: number; since: ISODate | null };
+  /** MEMORY.md now: its characters, what dreams keep it under (`target`) and what a chat loads at most (`limit`). */
+  memory: MemorySize;
   /** The dream currently queued or running, if any. */
   active: Dream | null;
   /** Latest dreams, newest first. */
@@ -1322,6 +1333,11 @@ export interface DreamingSettings {
   cron: string;
   /** Model for dreams (alias or id). "" = the agent's own model. */
   model: string;
+  /**
+   * Dreams keep MEMORY.md under this many characters (details move into memory/). A chat loads up to one and a half
+   * times as much; an agent whose memory outgrows that dreams as soon as it is idle.
+   */
+  maxMemoryChars: number;
   /** A scheduled dream needs at least this many new exchanges (finished runs) since the agent's last dream. */
   minNewExchanges: number;
   /**

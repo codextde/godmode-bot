@@ -5,6 +5,17 @@ export const APP_SLUG = "godmode";
 export const DEFAULT_PORT = 7777;
 export const DEFAULT_MODEL = "claude-opus-5-5";
 export const DEFAULT_AGENT_SLUG = "godmode";
+/** MEMORY.md: what dreams keep it under by default, and the range the setting takes (characters). */
+export const DEFAULT_MEMORY_CHARS = 8_000;
+export const MIN_MEMORY_CHARS = 2_000;
+export const MAX_MEMORY_CHARS = 40_000;
+
+/** What dreams keep MEMORY.md under (`target`) and what a chat loads of it at most (`limit`). */
+export function memoryBudget(maxMemoryChars: number | undefined): { target: number; limit: number } {
+  const n = Number.isFinite(maxMemoryChars) ? Math.round(maxMemoryChars as number) : DEFAULT_MEMORY_CHARS;
+  const target = Math.min(MAX_MEMORY_CHARS, Math.max(MIN_MEMORY_CHARS, n));
+  return { target, limit: Math.round(target * 1.5) };
+}
 /** Godmode's website: licences are bought, checked and managed there (`GODMODE_LICENSE_URL` overrides it in the core). */
 export const LICENSE_SITE = "https://usegodmode.com";
 

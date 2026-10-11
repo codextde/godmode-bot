@@ -1,7 +1,9 @@
 import { Stack } from "expo-router";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import { findModel } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { Group, PickerRow, StepperRow, SwitchRow } from "@/components/form";
+import { useModelCatalog } from "@/lib/composer";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
 
@@ -18,6 +20,13 @@ export default function Memory() {
   const m = s?.memory;
   const d = m?.dreaming;
   const cron = d?.cron.trim().replace(/\s+/g, " ") ?? "";
+  const models = useModelCatalog().data?.models ?? [];
+  const dreamModel = findModel(models, d?.model)?.id ?? d?.model ?? "";
+  const modelOptions = [
+    { value: "agent", label: "Same as the agent" },
+    ...(dreamModel && !models.some((m) => m.id === dreamModel) ? [{ value: dreamModel, label: dreamModel }] : []),
+    ...models.map((m) => ({ value: m.id, label: m.label, detail: m.description })),
+  ];
   const schedules = SCHEDULES.some((o) => o.value === cron) ? SCHEDULES : [{ value: cron, label: `Custom (${cron})` }, ...SCHEDULES];
 
   return (
@@ -36,7 +45,7 @@ export default function Memory() {
             <SwitchRow icon="branch" title="Save changes with git" value={m.autoCommit} onChange={(autoCommit) => void patchSettings({ memory: { autoCommit } })} />
           </Group>
 
-          <Group title="Dreaming" footer="While idle, agents review recent chats and tidy up their memory and workspace: merge duplicates, fix contradictions, date what has passed, sort files.">
+          <Group title="Dreaming" footer="While idle, agents review recent chats and tidy up their memory and workspace: merge duplicates, fix contradictions, date what has passed, sort files — and keep the memory short enough to load into every chat.">
             <SwitchRow icon="moon" title="Dreaming" value={d.enabled} onChange={(enabled) => void patchSettings({ memory: { dreaming: { enabled } } })} />
             <PickerRow icon="clock" title="When" value={cron} options={schedules} onChange={(next) => void patchSettings({ memory: { dreaming: { cron: next } } })} />
             <SwitchRow
@@ -45,6 +54,17 @@ export default function Memory() {
               detail="Sorts files into folders and clears out leftovers."
               value={d.tidyWorkspace}
               onChange={(tidyWorkspace) => void patchSettings({ memory: { dreaming: { tidyWorkspace } } })}
+            />
+            <PickerRow icon="sparkles" title="Model" value={dreamModel || "agent"} options={modelOptions} onChange={(v) => void patchSettings({ memory: { dreaming: { model: v === "agent" ? "" : v } } })} />
+            <StepperRow
+              icon="brain"
+              title="Memory size"
+              value={d.maxMemoryChars ?? 8000}
+              min={2000}
+              max={40000}
+              steps={[2000, 4000, 6000, 8000, 10000, 12000, 16000, 24000, 40000]}
+              format={(n) => `${n.toLocaleString()} chars`}
+              onChange={(maxMemoryChars) => void patchSettings({ memory: { dreaming: { maxMemoryChars } } })}
             />
             <StepperRow
               icon="chats"

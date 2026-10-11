@@ -24,7 +24,7 @@ import {
   Undo2,
   type LucideIcon,
 } from "lucide-react";
-import type { Agent, Dream, DreamOverview, DreamStatus, DreamWorkspaceChange } from "@godmode/shared";
+import type { Agent, Dream, DreamOverview, DreamStatus, DreamWorkspaceChange, MemorySize } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -48,6 +48,7 @@ import {
   dreamWhen,
   plural,
   reviewedLabel,
+  shortChars,
   upcomingWhen,
 } from "./dream-parts";
 
@@ -186,6 +187,8 @@ export function DreamsPanel({ agent }: { agent: Agent }) {
         </div>
         {active && <DreamScan />}
       </div>
+
+      {o && o.memory.chars > 0 && <MemoryMeter memory={o.memory} agentName={agent.name} dreamsByItself={o.enabled && agent.enabled} dreaming={!!active} />}
 
       {o && (
         <Journal
@@ -326,6 +329,65 @@ function StatusLines({
   );
 }
 
+/**
+ * How much of its size limit MEMORY.md uses. The track ends where a chat stops loading it; the tick marks what dreams
+ * keep it under.
+ */
+function MemoryMeter({
+  memory: { chars, target, limit },
+  agentName,
+  dreamsByItself,
+  dreaming,
+}: {
+  memory: MemorySize;
+  agentName: string;
+  dreamsByItself: boolean;
+  dreaming: boolean;
+}) {
+  const cut = chars > limit;
+  const over = chars > target;
+  const next = dreaming ? "This dream is shortening it." : dreamsByItself ? null : "Dream now to shorten it.";
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t px-4 py-3 @xl:px-5">
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-[11.5px] text-muted-foreground">MEMORY.md</span>
+        <span className="text-xs tabular-nums">
+          <span className={cn("font-medium", cut ? "text-destructive" : over ? "text-warning" : "text-foreground")}>{chars.toLocaleString()}</span>
+          <span className="text-muted-foreground"> of {target.toLocaleString()} characters</span>
+        </span>
+      </div>
+      <div
+        role="meter"
+        aria-label="Size of MEMORY.md"
+        aria-valuemin={0}
+        aria-valuemax={limit}
+        aria-valuenow={Math.min(chars, limit)}
+        aria-valuetext={`${chars.toLocaleString()} of ${target.toLocaleString()} characters`}
+        className="relative h-1.5 min-w-32 flex-1 basis-40 rounded-full bg-secondary"
+      >
+        <div
+          className={cn("h-full rounded-full transition-[width] duration-500", cut ? "bg-destructive" : over ? "bg-warning" : "bg-dream/70")}
+          style={{ width: `${Math.min(100, (chars / limit) * 100)}%` }}
+        />
+        <span aria-hidden className="absolute -top-1 -bottom-1 w-px bg-foreground/35" style={{ left: `${(target / limit) * 100}%` }} />
+      </div>
+      <p className="basis-full text-xs text-muted-foreground @3xl:basis-auto @3xl:max-w-[26rem] @3xl:text-right">
+        {cut ? (
+          <>
+            Chats load only the first {limit.toLocaleString()} — the end is missing. {next ?? `${agentName} dreams as soon as it is idle.`}
+          </>
+        ) : over ? (
+          <>
+            {(chars - target).toLocaleString()} over its limit. {next ?? "The next dream shortens it."}
+          </>
+        ) : (
+          "Loaded in full into every chat."
+        )}
+      </p>
+    </div>
+  );
+}
+
 function Journal({
   dreams,
   agentName,
@@ -454,7 +516,24 @@ function JournalEntry({
           </span>
         )}
       </div>
-      <p className="mt-0.5 text-xs text-muted-foreground">{reviewedLabel(d)}</p>
+      <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+        <span>{reviewedLabel(d)}</span>
+        {!rolledBack && d.memoryChars && shortChars(d.memoryChars.before) !== shortChars(d.memoryChars.after) && (
+          <>
+            <span aria-hidden className="text-muted-foreground/50">
+              ·
+            </span>
+            <span
+              className="tabular-nums"
+              title={`MEMORY.md: ${d.memoryChars.before.toLocaleString()} → ${d.memoryChars.after.toLocaleString()} characters`}
+            >
+              MEMORY.md {shortChars(d.memoryChars.before)} <span aria-hidden>→</span>
+              <span className="sr-only">to</span>{" "}
+              <span className={cn("font-medium", d.memoryChars.after < d.memoryChars.before && "text-success")}>{shortChars(d.memoryChars.after)}</span>
+            </span>
+          </>
+        )}
+      </p>
 
       {d.summary ? (
         <p className={cn("mt-2 max-w-3xl text-sm leading-relaxed text-pretty", rolledBack && "text-muted-foreground")}>{d.summary}</p>

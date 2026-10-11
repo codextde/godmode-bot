@@ -2384,7 +2384,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "memory_dream_report",
     description:
-      "Report the result of this dream (call exactly once, at the end). summary: one or two sentences for the human on what you consolidated. changes: what you did to your memory, one line per entry (kind: added, updated, merged, removed, corrected or dated) — empty when nothing needed to change.",
+      "Report the result of this dream (call it at the end; when the answer says MEMORY.md is still too long, shorten it and call again). summary: one or two sentences for the human on what you consolidated. changes: what you did to your memory, one line per entry (kind: added, updated, merged, removed, corrected or dated) — empty when nothing needed to change.",
     schema: z.object({
       summary: z.string().max(2000),
       changes: z

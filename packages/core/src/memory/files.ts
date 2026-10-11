@@ -9,11 +9,10 @@ import { createHash } from "node:crypto";
 import { lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import type { DreamFileChange } from "@godmode/shared";
+import { memoryBudget } from "@godmode/shared";
 
 export const MEMORY_FILE = "MEMORY.md";
 export const MEMORY_DIR = "memory";
-/** Characters of MEMORY.md loaded into a run's system prompt. Dreams keep the file well below this. */
-export const MEMORY_PROMPT_LIMIT = 12_000;
 const MAX_SNAPSHOT_FILE = 256 * 1024;
 const MAX_SNAPSHOT_TOTAL = 2 * 1024 * 1024;
 const MAX_SNAPSHOT_FILES = 500;
@@ -62,13 +61,42 @@ export function memoryDigest(repoPath: string): string {
   return text === null ? "" : createHash("sha256").update(text).digest("hex").slice(0, 16);
 }
 
+/** Characters of MEMORY.md (0 when the agent has none). */
+export function memoryChars(repoPath: string): number {
+  return readMemory(repoPath)?.length ?? 0;
+}
+
+/**
+ * MEMORY.md is longer than `chars` and was written after `since` (null = ever). Looks at the file's size first, so
+ * asking often costs next to nothing.
+ */
+export function memoryOutgrew(repoPath: string, chars: number, since: string | null): boolean {
+  let info;
+  try {
+    info = lstatSync(join(repoPath, MEMORY_FILE));
+  } catch {
+    return false;
+  }
+  // A character takes at least a byte.
+  if (!info.isFile() || info.size <= chars) return false;
+  if (since && info.mtimeMs <= new Date(since).getTime()) return false;
+  return memoryChars(repoPath) > chars;
+}
+
+/** MEMORY.md as a run's system prompt gets it. `chars`: the length of the whole file. */
+export interface PromptMemory {
+  text: string;
+  truncated: boolean;
+  chars: number;
+}
+
 /** MEMORY.md for the system prompt: trimmed, and cut at a line break when it is longer than `limit`. */
-export function memoryForPrompt(repoPath: string, limit = MEMORY_PROMPT_LIMIT): { text: string; truncated: boolean } | null {
+export function memoryForPrompt(repoPath: string, limit = memoryBudget(undefined).limit): PromptMemory | null {
   const text = readMemory(repoPath)?.trim();
   if (!text) return null;
-  if (text.length <= limit) return { text, truncated: false };
+  if (text.length <= limit) return { text, truncated: false, chars: text.length };
   const cut = text.lastIndexOf("\n", limit);
-  return { text: text.slice(0, cut > limit / 2 ? cut : limit).trimEnd(), truncated: true };
+  return { text: text.slice(0, cut > limit / 2 ? cut : limit).trimEnd(), truncated: true, chars: text.length };
 }
 
 /** MEMORY.md and the files under memory/ (recursively; hidden entries are ignored, symlinks never followed). */
