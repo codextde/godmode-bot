@@ -28,6 +28,7 @@ const AGENT_SETTINGS: Record<string, readonly string[]> = {
     "dreaming.enabled",
     "dreaming.cron",
     "dreaming.model",
+    "dreaming.maxMemoryChars",
     "dreaming.minNewExchanges",
     "dreaming.refreshDays",
     "dreaming.tidyWorkspace",

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { addDays, format, isThisYear, isToday, isTomorrow, isYesterday, startOfDay } from "date-fns";
-import { CalendarClock, CheckCheck, Combine, Hand, Minus, PencilLine, Plus, Undo2, type LucideIcon } from "lucide-react";
+import { CalendarClock, CheckCheck, Combine, Gauge, Hand, Minus, PencilLine, Plus, Undo2, type LucideIcon } from "lucide-react";
 import type { Dream, DreamChangeKind, DreamReason, DreamStatus } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -32,6 +32,13 @@ export function useLastDefined<T>(value: T | null): T | null {
 
 export function plural(n: number, word: string) {
   return `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+}
+
+/** "940" · "7.8k" · "21k" */
+export function shortChars(n: number) {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return `${k < 10 ? k.toFixed(1).replace(/\.0$/, "") : Math.round(k)}k`;
 }
 
 /** "MEMORY.md", "MEMORY.md and memory/people.md", "3 memory files" */
@@ -102,6 +109,7 @@ export function DreamStatusBadge({ status, className }: { status: DreamStatus; c
 const REASON_META: Record<DreamReason, { label: string; icon: LucideIcon }> = {
   schedule: { label: "Scheduled", icon: CalendarClock },
   manual: { label: "Manual", icon: Hand },
+  size: { label: "Memory full", icon: Gauge },
 };
 
 export function DreamReasonBadge({ reason }: { reason: DreamReason }) {

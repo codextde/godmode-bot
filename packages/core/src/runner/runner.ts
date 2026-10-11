@@ -53,6 +53,7 @@ import {
   TASK_PRIORITY_RANK,
   WORKFLOW_TOOL,
   isModelId,
+  memoryBudget,
   parseSlashCommand,
   type ActivityNames,
 } from "@godmode/shared";
@@ -2020,7 +2021,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         apiTools,
         standingInstructions: standing,
         // Condition checks run every few minutes and only look at the world: no memory needed.
-        memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath) : null,
+        memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath, memoryBudget(settings.memory.dreaming.maxMemoryChars).limit) : null,
         followups: job.trigger !== "check" && job.trigger !== "delegation",
         fillOnly: conv.secret_access === "fill",
         // Delegated work reports to the run that handed it over; checks only observe.

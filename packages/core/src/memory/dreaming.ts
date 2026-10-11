@@ -4,10 +4,16 @@
  * On a schedule (settings.memory.dreaming, nightly by default) every agent with enough new activity reviews what
  * happened since its last dream — the exchanges of its chats, automations and delegated tasks — and rewrites its
  * long-term memory: it captures context nobody explicitly asked it to remember, merges duplicates, resolves
- * contradictions (newer wins), makes dates absolute and rewrites plans that have passed, and prunes what is stale,
- * keeping MEMORY.md compact enough to be loaded into every run (runner/prompt.ts). With settings.memory.dreaming.
- * tidyWorkspace it also sorts the agent's workspace — loose files into topic folders, disposable leftovers out — through
- * `workspace_tidy` (memory/workspace.ts).
+ * contradictions (newer wins), makes dates absolute and rewrites plans that have passed, and prunes what is stale.
+ * With settings.memory.dreaming.tidyWorkspace it also sorts the agent's workspace — loose files into topic folders,
+ * disposable leftovers out — through `workspace_tidy` (memory/workspace.ts).
+ *
+ * MEMORY.md is loaded into every run (runner/prompt.ts), so a dream also has to keep it small: under settings.memory.
+ * dreaming.maxMemoryChars, with the details moved into memory/. The dream is told the measured size, and its report is
+ * answered with what is still too much until it fits. A memory over that size is reason enough for the nightly dream,
+ * and one that outgrew what a chat loads (one and a half times as much) dreams as soon as the agent is idle. Each
+ * finished dream notes the memory it left (dreams.memory_digest, memory_chars, memory_target): the same text under
+ * the same limit is not dreamt about twice for its size.
  *
  * A dream is a short run of its own (trigger "dream") in the agent's archived "Dreams" conversation: a fresh Claude
  * session with file tools only — no browser, computer or integrations — that owns the agent's memory while it runs
@@ -25,6 +31,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Cron } from "croner";
+import { memoryBudget } from "@godmode/shared";
 import type {
   Agent,
   Dream,
@@ -50,7 +57,19 @@ import { getSettings } from "../services/settings";
 import { onSettingsApplied } from "../services/runtime";
 import { audit } from "../services/audit";
 import { describeNow } from "../runner/prompt";
-import { MEMORY_PROMPT_LIMIT, canRestore, currentMemoryFile, diffSnapshots, parseSnapshot, readMemory, restoreFiles, snapshotMemory } from "./files";
+import {
+  MEMORY_FILE,
+  canRestore,
+  currentMemoryFile,
+  diffSnapshots,
+  memoryChars,
+  memoryDigest,
+  memoryOutgrew,
+  parseSnapshot,
+  readMemory,
+  restoreFiles,
+  snapshotMemory,
+} from "./files";
 import { exhaustedBudget } from "../services/budgets";
 import { licenseBlocks } from "../license/license";
 import { MAX_TIDY_CHANGES, RECENT_DAYS, applyTidy, canUndoWorkspace, undoWorkspace, workspaceInventory, type TidyOperation } from "./workspace";
@@ -69,8 +88,10 @@ const SWEEP_KEY = "dreaming.lastSweepAt";
 const DIGEST_BUDGET = 60_000;
 /** Per-message limits: [prompt, automation prompt, answer], normal and compact. */
 const LIMITS = { full: [2_000, 600, 4_000], compact: [500, 200, 1_200] } as const;
-/** What a dream aims to keep MEMORY.md below (the prompt loads up to MEMORY_PROMPT_LIMIT). */
-export const MEMORY_TARGET_CHARS = 8_000;
+/** How often a dream's report is answered with "MEMORY.md is still too long" before it is let go. */
+const SIZE_REMINDERS = 2;
+/** An agent dreams early (its memory outgrew what a chat loads) at most once in this time. */
+const EARLY_DREAM_EVERY_MS = 6 * 3_600_000;
 const KEEP_DREAM_MESSAGES = 20;
 const LIST_LIMIT = 30;
 /** Dreams kept per agent (older ones are deleted; their changes stay in git). */
@@ -133,6 +154,7 @@ function revertible(row: DreamRow, changes: DreamFileChange[], moves: DreamWorks
 function toDream(row: DreamRow, repoPath: string | null): Dream {
   const files = fileChangesOf(row);
   const workspace = movesOf(row);
+  const memory = files.find((f) => f.path === MEMORY_FILE);
   return {
     id: row.id,
     agentId: row.agent_id,
@@ -146,6 +168,7 @@ function toDream(row: DreamRow, repoPath: string | null): Dream {
     summary: row.summary,
     changes: parseJson<DreamChange[]>(row.changes, []),
     files: files.map((f) => f.path),
+    memoryChars: memory ? { before: memory.before?.length ?? 0, after: memory.after?.length ?? 0 } : null,
     workspace,
     canRevert: revertible(row, files, workspace, repoPath),
     error: row.error,
@@ -207,6 +230,31 @@ function lastDreamAt(agentId: string): string | null {
   return (
     get<{ t: string | null }>("SELECT MAX(COALESCE(finished_at, created_at)) AS t FROM dreams WHERE agent_id = ? AND status IN ('succeeded', 'reverted')", agentId)
       ?.t ?? null
+  );
+}
+
+/**
+ * MEMORY.md is longer than `chars` and not what the agent's last dream left under this size limit: a dream that
+ * couldn't shorten it isn't repeated over the same text, and a lowered limit counts as news.
+ */
+function memoryToShorten(agent: Agent, chars: number, target: number): boolean {
+  if (!memoryOutgrew(agent.repoPath, chars)) return false;
+  const left = get<{ memory_digest: string | null; memory_target: number | null }>(
+    `SELECT memory_digest, memory_target FROM dreams WHERE agent_id = ? AND status IN ('succeeded', 'reverted')
+     ORDER BY COALESCE(finished_at, created_at) DESC, rowid DESC LIMIT 1`,
+    agent.id,
+  );
+  return !left || left.memory_target !== target || left.memory_digest !== memoryDigest(agent.repoPath);
+}
+
+/** Note the memory a finished (or undone) dream left. */
+function noteMemoryLeft(dreamId: string, repoPath: string) {
+  exec(
+    "UPDATE dreams SET memory_digest = ?, memory_chars = ?, memory_target = ? WHERE id = ?",
+    memoryDigest(repoPath),
+    memoryChars(repoPath),
+    memoryBudget(getSettings().memory.dreaming.maxMemoryChars).target,
+    dreamId,
   );
 }
 
@@ -356,7 +404,13 @@ export interface DreamPromptInput {
   lastDream: string | null;
   /** Repo-relative path of the workspace inventory (null = the dream doesn't tidy the workspace). */
   inventoryPath?: string | null;
+  /** Characters of MEMORY.md as the dream finds it. */
+  memoryChars?: number;
   now?: Date;
+}
+
+function fmtChars(n: number): string {
+  return n.toLocaleString("en-US");
 }
 
 /** The dream's task (its user message). */
@@ -378,6 +432,14 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
       ].join("\n")
     : null;
   const steps = tidy ? 7 : 6;
+  const { target, limit } = memoryBudget(input.settings.memory.dreaming.maxMemoryChars);
+  const chars = input.memoryChars ?? 0;
+  const size =
+    chars > limit
+      ? `MEMORY.md is ${fmtChars(chars)} characters, more than a task loads (${fmtChars(limit)}): every task now starts with the end of it missing. Getting it under ${fmtChars(target)} is the first job of this dream.`
+      : chars > target
+        ? `MEMORY.md is ${fmtChars(chars)} characters, over its limit of ${fmtChars(target)}. Getting it under that is part of this dream.`
+        : `MEMORY.md is ${fmtChars(chars)} characters; it has to stay under ${fmtChars(target)}.`;
   return [
     "Dream: consolidate your long-term memory.",
     "",
@@ -386,6 +448,7 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
     `- Current date/time: ${describeNow(input.now)}`,
     `- ${input.lastDream ? `Your last dream: ${fmtTime(input.lastDream)}.` : "This is your first dream."}`,
     `- ${activity}`,
+    `- ${size}`,
     "",
     "1. Read MEMORY.md and look through memory/ (read the notes that relate to the activity).",
     input.digestPath
@@ -407,14 +470,19 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
     "   - Make time explicit: turn relative dates (\"tomorrow\", \"next week\") into absolute ones; rewrite plans whose date has passed as past events (\"is going to Singapore in July\" → \"went to Singapore in July 2026\") or drop them when they no longer matter; remove follow-ups that are done or expired.",
     `   - Keep lasting facts apart from temporary situations. Note a temporary situation (traveling, a busy week, a project crunch) with its dates or the date it was true (\"in Singapore for work, 2026-07-08 to 07-15\"), keep the baseline it overrides (home city, usual hours), and once it is over, drop it or turn it into history — so ${human} gets answers for where they are now.`,
     "   - Remove what is stale, wrong or no longer useful.",
-    `   - Keep it compact — short, specific bullets under clear headings, the most important first, under ${MEMORY_TARGET_CHARS.toLocaleString("en-US")} characters: MEMORY.md is loaded into the start of every task (up to ${MEMORY_PROMPT_LIMIT.toLocaleString("en-US")} characters). Move long details (playbooks, lists, reference notes) into memory/<topic>.md and link them from MEMORY.md.`,
+    `   - Keep it compact — short, specific bullets under clear headings, the most important first, under ${fmtChars(target)} characters: MEMORY.md is loaded into the start of every task (up to ${fmtChars(limit)} characters, the rest is cut off). Move long details (playbooks, lists, reference notes) into memory/<topic>.md and link them from MEMORY.md.`,
+    ...(chars > target
+      ? [
+          `   - It is too long now. Shorten it by moving, not by forgetting: the state of each project, histories, step-by-step procedures, ids and lists go into memory/<topic>.md (reuse the notes that exist), and MEMORY.md keeps one line with the gist and the link. Cut what is finished down to the fact that still matters. What stays in MEMORY.md itself: who ${human} is and how they want you to work, standing rules and limits, what is open right now, and the index of your notes.`,
+        ]
+      : []),
     `   - Keep what ${human} wrote or explicitly asked you to remember, and every instruction on what to bring up or leave alone, unless newer activity clearly replaces it. Keep the language the memory is written in.`,
     ...(tidy ? [tidy] : []),
     `${steps - 2}. Never write passwords, 2FA codes, API keys, tokens or other secrets anywhere, even if the activity contains them.`,
     tidy
       ? `${steps - 1}. Only edit MEMORY.md and files in memory/ yourself; the workspace changes only through \`workspace_tidy\`. Don't change anything else, don't browse, don't contact anyone.`
       : `${steps - 1}. Only edit MEMORY.md and files in memory/. Don't change anything else, don't browse, don't contact anyone.`,
-    `${steps}. Finish by calling \`memory_dream_report\` once: a one- or two-sentence summary for ${human} and the changes you made to your memory, one line each (kind: added, updated, merged, removed, corrected or dated)${tidy ? " — Godmode records the workspace moves itself, so only say in the summary how you tidied it" : ""}. If nothing needed to change, report that with an empty list.`,
+    `${steps}. Finish by calling \`memory_dream_report\`: a one- or two-sentence summary for ${human} and the changes you made to your memory, one line each (kind: added, updated, merged, removed, corrected or dated)${tidy ? " — Godmode records the workspace moves itself, so only say in the summary how you tidied it" : ""}. If nothing needed to change, report that with an empty list. Godmode measures MEMORY.md when you report, so don't estimate its size: when it is still over ${fmtChars(target)} characters the answer says by how much — shorten it further and report again.`,
   ].join("\n");
 }
 
@@ -522,6 +590,7 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
     const prompt = buildDreamPrompt({
       agent,
       settings,
+      memoryChars: memoryChars(agent.repoPath),
       digestPath,
       exchanges: activity.exchanges,
       conversations: activity.conversations,
@@ -551,7 +620,13 @@ export interface DreamReport {
   changes: DreamChange[];
 }
 
-/** `memory_dream_report` from a dream run. Returns the tool's answer for the agent. */
+/** Dreams told that MEMORY.md is still too long (dream id → how often). */
+const sizeReminders = new Map<string, number>();
+
+/**
+ * `memory_dream_report` from a dream run. Returns the tool's answer for the agent: while MEMORY.md is over its size
+ * limit, the report is kept but the dream is sent back to shorten it (SIZE_REMINDERS times at most).
+ */
 export function reportDream(runId: string, report: DreamReport): string {
   const row = get<DreamRow>("SELECT * FROM dreams WHERE run_id = ?", runId);
   if (!row) throw badRequest("Only a dream can report a dream result");
@@ -562,7 +637,16 @@ export function reportDream(runId: string, report: DreamReport): string {
     .filter((c) => c.text);
   exec("UPDATE dreams SET summary = ?, changes = ? WHERE id = ?", summary, JSON.stringify(changes), row.id);
   emitDreams();
-  return "Recorded. End the dream now.";
+  const repoPath = repoPathOf(row.agent_id);
+  const { target } = memoryBudget(getSettings().memory.dreaming.maxMemoryChars);
+  const chars = repoPath ? memoryChars(repoPath) : 0;
+  if (chars <= target) return `Recorded. MEMORY.md is ${fmtChars(chars)} characters. End the dream now.`;
+  const reminded = sizeReminders.get(row.id) ?? 0;
+  if (reminded >= SIZE_REMINDERS || !ACTIVE.includes(row.status)) {
+    return `Recorded. MEMORY.md is still ${fmtChars(chars)} characters (limit ${fmtChars(target)}); the next dream goes on with it. End the dream now.`;
+  }
+  sizeReminders.set(row.id, reminded + 1);
+  return `Recorded, but the dream isn't done: MEMORY.md is ${fmtChars(chars)} characters and has to be under ${fmtChars(target)} — ${fmtChars(chars - target)} too many. Move more of its detail into memory/<topic>.md (one line with the gist and the link stays), drop what is finished or stale, then call memory_dream_report again with all changes of this dream.`;
 }
 
 /** The run is a dream that tidies its agent's workspace (`workspace_tidy` is offered to it). */
@@ -632,6 +716,7 @@ export function onDreamRunFinished(run: Run): void {
   const row = get<DreamRow>(`SELECT ${COLUMNS} FROM dreams WHERE run_id = ?`, run.id);
   if (!row || !ACTIVE.includes(row.status)) return;
   const paused = preempted.delete(row.id);
+  sizeReminders.delete(row.id);
   const status: DreamStatus = run.status === "succeeded" ? "succeeded" : paused ? "paused" : run.status === "cancelled" ? "cancelled" : "failed";
   const repoPath = repoPathOf(row.agent_id);
   let kept: DreamFileChange[] = [];
@@ -651,13 +736,14 @@ export function onDreamRunFinished(run: Run): void {
       const movedBack = moves.length - stuck.length;
       moves = moves.filter((m) => stuck.includes(m.from));
       const why = paused
-        ? "Paused because the agent was needed — it dreams again once it is idle"
+        ? `Paused because the agent was needed — ${row.reason === "size" ? "its next scheduled dream takes over" : "it dreams again once it is idle"}`
         : truncate(run.error ?? (status === "cancelled" ? "Cancelled" : "The dream failed"), 400);
       const undone = [restored.length && "memory", movedBack && "workspace"].filter(Boolean).join(" and ");
       error = undone ? `${why}. Its ${undone} changes were rolled back.` : why;
       if (kept.length) error += ` ${kept.map((c) => c.path).join(", ")} could not be restored — see the dream's changes.`;
       if (moves.length) error += ` ${moves.map((m) => `workspace/${m.to}`).join(", ")} could not be moved back.`;
-      if (paused) deferred.set(row.agent_id, Date.now());
+      // An early dream isn't chased through a busy day: the scheduled dream takes over.
+      if (paused && row.reason !== "size") deferred.set(row.agent_id, Date.now());
     }
   } catch (err) {
     log.error(`could not settle dream ${row.id}`, err);
@@ -674,6 +760,7 @@ export function onDreamRunFinished(run: Run): void {
     run.finishedAt ?? now(),
     row.id,
   );
+  if (status === "succeeded" && repoPath) noteMemoryLeft(row.id, repoPath);
   pruneDreams(row.agent_id);
   removeDigest(repoPath, row.id);
   if (status === "succeeded" && (kept.length || moves.length)) {
@@ -695,11 +782,11 @@ function pruneDreams(agentId: string) {
   );
 }
 
-/** A run someone waits for was queued: pause the agent's scheduled dream (a manual dream keeps going). */
+/** A run someone waits for was queued: pause the dream the agent started by itself (a manual dream keeps going). */
 function maybePreempt(run: Run) {
   if (!PREEMPTING.includes(run.trigger)) return;
   const row = activeDreamRow(run.agentId);
-  if (!row || row.reason !== "schedule" || !row.run_id || preempted.has(row.id)) return;
+  if (!row || row.reason === "manual" || !row.run_id || preempted.has(row.id)) return;
   preempted.set(row.id, row.agent_id);
   log.info(`pausing dream ${row.id}: run ${run.id} needs the agent`);
   cancelRun(row.run_id, "Paused: the agent is needed for another task").catch((err) => {
@@ -730,6 +817,8 @@ export async function revertDream(id: string, actor = "user"): Promise<Dream> {
   restoreFiles(agent.repoPath, changes);
   const stuck = undoWorkspace(agent.repoPath, moves);
   exec("UPDATE dreams SET status = 'reverted' WHERE id = ?", id);
+  // What the undo put back is the human's choice: it isn't dreamt about again for its size until it changes.
+  noteMemoryLeft(id, agent.repoPath);
   audit(actor, "dream.revert", id, { agentId: agent.id, files: changes.map((c) => c.path), moved: moves.length - stuck.length });
   if (stuck.length) log.warn(`undoing dream ${id}: ${stuck.length} workspace entries could not be moved back`);
   await commitAgentRepo(agent.id, `Undo dream of ${fmtTime(row.created_at)}`);
@@ -787,12 +876,36 @@ export function dreamDue(agent: Agent, settings: Settings = getSettings(), at = 
   if (!agent.enabled || activeDreamRow(agent.id) || starting.has(agent.id)) return false;
   const pending = pendingActivity(agent.id);
   if (pending.exchanges >= Math.max(1, Math.floor(s.minNewExchanges))) return true;
+  const { target } = memoryBudget(s.maxMemoryChars);
+  if (memoryToShorten(agent, target, target)) return true;
   if (s.refreshDays <= 0) return false;
   const last = lastDreamAt(agent.id) ?? agent.createdAt;
   if (at.getTime() - new Date(last).getTime() < s.refreshDays * 86_400_000) return false;
   // Old memory without dates can't go stale by time alone; new activity below the threshold rides along.
   return mentionsTime(readMemory(agent.repoPath) ?? "");
 }
+
+/**
+ * MEMORY.md outgrew what a chat loads (tasks start with the end of it missing), so the agent should dream before its
+ * schedule. Only after a dream that went well, and hours after it: when the last one failed, was paused, cancelled or
+ * undone, or couldn't get the memory under what a chat loads, the scheduled dream takes over.
+ */
+export function memoryOverflowing(agent: Agent, settings: Settings = getSettings(), at = new Date()): boolean {
+  if (!settings.memory.injectMemory || !agent.enabled || activeDreamRow(agent.id) || starting.has(agent.id)) return false;
+  const { target, limit } = memoryBudget(settings.memory.dreaming.maxMemoryChars);
+  const latest = get<{ status: DreamStatus; created_at: string; memory_chars: number | null }>(
+    "SELECT status, created_at, memory_chars FROM dreams WHERE agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
+    agent.id,
+  );
+  if (latest) {
+    if (latest.status !== "succeeded" || (latest.memory_chars ?? 0) > limit) return false;
+    if (at.getTime() - new Date(latest.created_at).getTime() < EARLY_DREAM_EVERY_MS) return false;
+  }
+  return memoryToShorten(agent, limit, target);
+}
+
+/** Early dreams that couldn't be started (agent id → when, ms): not tried again on every tick. */
+const earlyFailed = new Map<string, number>();
 
 /** The agent runs nothing and its last run ended at least IDLE_MS ago. */
 export function agentIdle(agentId: string, at = new Date()): boolean {
@@ -855,6 +968,25 @@ async function retryDeferred(at: Date): Promise<string[]> {
   return started;
 }
 
+/** Between two scheduled times: agents whose memory outgrew what a chat loads dream now, when they are idle. */
+async function sweepOverflowing(at: Date): Promise<string[]> {
+  const settings = getSettings();
+  const started: string[] = [];
+  for (const agent of listAgents({ workspaceId: "all" })) {
+    try {
+      if (deferred.has(agent.id) || at.getTime() - (earlyFailed.get(agent.id) ?? -Infinity) < EARLY_DREAM_EVERY_MS) continue;
+      if (!memoryOverflowing(agent, settings, at) || !agentIdle(agent.id, at)) continue;
+      if (exhaustedBudget(agent) || licenseBlocks()) continue;
+      await startDream(agent.id, "size");
+      started.push(agent.id);
+    } catch (err) {
+      earlyFailed.set(agent.id, at.getTime());
+      log.warn(`could not start an early dream for ${agent.slug}`, err);
+    }
+  }
+  return started;
+}
+
 /** Agents whose scheduled dream waits for them to be idle (diagnostics, tests). */
 export function deferredDreams(): string[] {
   return [...deferred.keys()];
@@ -876,7 +1008,7 @@ export async function dreamTick(at = new Date()): Promise<string[]> {
     return [];
   }
   const previous = cronOf(s.cron)?.previousRuns(1, at)[0];
-  if (!previous || previous.getTime() <= new Date(last).getTime()) return retryDeferred(at);
+  if (!previous || previous.getTime() <= new Date(last).getTime()) return [...(await retryDeferred(at)), ...(await sweepOverflowing(at))];
   setMeta(SWEEP_KEY, at.toISOString());
   return sweep(at);
 }
@@ -981,13 +1113,14 @@ export function stopDreaming(): void {
 
 /** Dreaming status of one agent (Memory tab). */
 export function dreamOverview(agentId: string): DreamOverview {
-  getAgent(agentId); // 404
+  const agent = getAgent(agentId);
   const settings = getSettings();
   const active = activeDreamRow(agentId);
   return {
     enabled: settings.memory.dreaming.enabled,
     nextDreamAt: nextDreamAt(settings),
     pending: pendingActivity(agentId),
+    memory: { chars: memoryChars(agent.repoPath), ...memoryBudget(settings.memory.dreaming.maxMemoryChars) },
     active: active ? toDream(active, repoPathOf(agentId)) : null,
     dreams: listDreams(agentId),
   };
@@ -1001,5 +1134,7 @@ export function __resetDreamingForTests() {
   starting.clear();
   deferred.clear();
   preempted.clear();
+  sizeReminders.clear();
+  earlyFailed.clear();
 }
 

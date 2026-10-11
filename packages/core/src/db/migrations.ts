@@ -1403,4 +1403,18 @@ ALTER TABLE mods ADD COLUMN contents TEXT;
 CREATE INDEX IF NOT EXISTS idx_runs_created ON runs(created_at);
 `,
   },
+  {
+    id: 86,
+    name: "dream_memory_size",
+    sql: /* sql */ `
+-- MEMORY.md as a finished dream left it: its fingerprint and characters, and the size limit the dream worked to. A
+-- memory that is too long is dreamt about again only once one of them changed.
+ALTER TABLE dreams ADD COLUMN memory_digest TEXT;
+ALTER TABLE dreams ADD COLUMN memory_chars INTEGER;
+ALTER TABLE dreams ADD COLUMN memory_target INTEGER;
+-- Dreams run on Opus by default now: saved settings that still carry the old default follow.
+UPDATE settings SET value = json_set(value, '$.dreaming.model', 'claude-opus-5-5')
+WHERE key = 'memory' AND json_valid(value) AND json_extract(value, '$.dreaming.model') = 'sonnet';
+`,
+  },
 ];

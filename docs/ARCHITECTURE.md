@@ -1623,7 +1623,10 @@ Default: file-based (`MEMORY.md` + `memory/` in the agent repo, committed to git
 [claude-mem](https://github.com/thedotmack/claude-mem) with `CLAUDE_MEM_DATA_DIR` pointing into the agent repo.
 
 * **Loaded into every chat** (`settings.memory.injectMemory`, default on): a new Claude session gets `MEMORY.md`
-  (up to 12,000 characters) in its system prompt, so the agent starts every task already knowing it. Each
+  in its system prompt, so the agent starts every task already knowing it. It loads up to one and a half times
+  `settings.memory.dreaming.maxMemoryChars` (default 8,000, so 12,000 characters; `memoryBudget` in
+  `shared/constants.ts`) and is cut at a line break beyond that. The prompt names the size to stay under, and says so
+  when the file has outgrown it, so the notes an agent adds after a task replace instead of pile up. Each
   conversation stores a digest of the `MEMORY.md` its session saw (`conversations.memory_digest`, refreshed after each
   of its runs); when another chat, a dream or the human changed it since, the next resumed turn says so.
 * **Reflection**: the runtime prompt asks the agent to update `MEMORY.md` at the end of every task
@@ -1636,6 +1639,14 @@ agent reviews what happened since its last dream and rewrites its memory — cap
 remember, merging duplicates, resolving contradictions (newer wins), making dates absolute and rewriting plans that
 have passed ("is going to Singapore in July" → "went to Singapore in July 2026"), and pruning what is stale, keeping
 `MEMORY.md` compact enough to load into every run. `memory/dreaming.ts` owns it:
+
+* **Keeping `MEMORY.md` small** (`dreaming.maxMemoryChars`, default 8,000 characters, 2,000 to 40,000): the dream's
+  prompt carries the measured size of the file and the size it has to end under, and when it is over, how to shorten
+  it: by moving the detail into `memory/<topic>.md` and keeping a line with the link, not by forgetting.
+  `memory_dream_report` measures the file: while it is over the limit the report is kept but answered with how much is
+  too many, and the dream shortens it and reports again (twice at most, then the next dream goes on). A dream stores
+  the characters before and after (`Dream.memoryChars`, from `dreams.files`); the agent's Memory tab shows a meter with
+  the current size (`DreamOverview.memory`).
 
 * **Tidying the workspace** (`dreaming.tidyWorkspace`, default on, `memory/workspace.ts`): the dream also gets an
   inventory of `workspace/` in `workspace/tmp/dreams/<id>-workspace.md` (top-level entries with size, files, last
@@ -1653,18 +1664,27 @@ have passed ("is going to Singapore in July" → "went to Singapore in July 2026
 * **When**: a 5-minute tick sweeps once per scheduled time; a schedule missed while the computer was off or asleep is
   caught up on the next tick. An agent is due with at least `minNewExchanges` (default 3) new exchanges — finished
   chat, automation, delegated and API runs; checks and dreams don't count — or, without them, when its last dream is
-  `refreshDays` (default 7) old and `MEMORY.md` mentions dates. Scheduled dreams only start on idle agents (no run in
-  the last 10 minutes; retried on later ticks). "Dream now" (`POST /api/agents/:id/dreams`) starts one right away.
+  `refreshDays` (default 7) old and `MEMORY.md` mentions dates. An agent is also due when `MEMORY.md` is over
+  `maxMemoryChars` and isn't what its last dream left under that limit (`dreams.memory_digest`, `memory_target`: a
+  dream that couldn't shorten it isn't repeated over the same text, an undo isn't redone, and a lowered limit counts as
+  news). Scheduled dreams only start on idle agents (no run in the last 10 minutes; retried on later ticks). "Dream
+  now" (`POST /api/agents/:id/dreams`) starts one right away.
+* **Early** (reason `size`): on the ticks between two scheduled times, an idle agent whose `MEMORY.md` outgrew what a
+  chat loads (its tasks start with the end of it missing) dreams at once. Only when its latest dream succeeded, is at
+  least 6 hours old and got the memory under what a chat loads: after a dream that failed, was paused, cancelled or
+  undone, or couldn't shorten it, the scheduled dream takes over. A run someone waits for pauses an early dream like a
+  scheduled one, but it isn't retried when the agent is idle. Not when chats don't load the memory (`injectMemory`).
 * **How**: a dream is a run with trigger `dream` in the agent's archived `origin = 'dream'` conversation (nobody else
   can post there), with a fresh session, cwd = the agent repo, the dreaming model (`dreaming.model`, default
-  `sonnet`), `--tools Read,Write,Edit,Glob,Grep`, and an MCP config with only the Godmode gateway, which lists just
+  Opus 5.5; empty = the agent's own), `--tools Read,Write,Edit,Glob,Grep`, and an MCP config with only the Godmode gateway, which lists just
   `memory_dream_report` and, when it tidies, `workspace_tidy` (other tools are refused). The exchanges since the cursor (`MAX(dreams.source_to)` of
   successful or undone dreams) are handed over as a digest of the already redacted run prompts and answers, grouped by
-  conversation, in `workspace/tmp/dreams/<id>.md` (git-ignored, removed afterwards; 120k characters per dream — older
-  activity first, the rest waits for the next dream). No transcript, no missing-login detection, no "last active".
+  conversation, in `workspace/tmp/dreams/<id>.md` (git-ignored, removed afterwards; 60k characters per dream — messages
+  are shortened first, then the newest exchanges win). No transcript, no missing-login detection, no "last active".
 * **Exclusive**: a dream owns the agent's memory — the runner starts no other run of the agent while it runs, and it
   waits for the agent's running runs (capped at 30 minutes). A run someone waits for (chat, delegation, API) pauses a
-  *scheduled* dream: it is cancelled, rolled back and retried once the agent is idle again.
+  dream the agent started by itself (scheduled or early): it is cancelled and rolled back, and a scheduled one is
+  retried once the agent is idle again.
 * **All or nothing, reviewable**: `MEMORY.md` and `memory/**` are snapshotted when the dream starts (`dreams.snapshot`).
   A successful dream stores the changed files before/after (`dreams.files`) with the agent's report (summary and one
   line per change: added, updated, merged, removed, corrected, dated) and commits `Dream: <summary>`; a failed or
