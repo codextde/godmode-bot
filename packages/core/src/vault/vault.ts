@@ -9,6 +9,7 @@ import { logger, setSecretMasker } from "../log";
 import { badRequest, locked, now } from "../util";
 import { decrypt, deriveKey, encrypt, newKdfParams, randomKey, sha256, type KdfParams } from "./crypto";
 import { addCardMask, clearCardMasks } from "./cardMask";
+import { SecretSet } from "./secretSet";
 
 const log = logger("vault");
 
@@ -20,14 +21,14 @@ let autoLockTimer: ReturnType<typeof setInterval> | null = null;
 let autoLockMinutes = 0;
 
 /** Values we know are secrets — used to redact them from transcripts and logs. */
-const knownSecrets = new Set<string>();
+const knownSecrets = new SecretSet();
 /** Bumped when the known secrets are forgotten (the vault locked): see `redactionEpoch`. */
 let secretsForgotten = 0;
 /**
  * The ones kept out of what Godmode pushes: stored as a secret (not a note, not a server's plain settings) and not a
  * plain word or number that code has anyway. Always in `knownSecrets` too.
  */
-const pushSecrets = new Set<string>();
+const pushSecrets = new SecretSet();
 /** What a secret taken out of a file is replaced with: plain letters, so it fits wherever the secret stood. */
 export const SECRET_PLACEHOLDER = "GODMODE_REMOVED_SECRET";
 /** Sealed values that aren't one secret: free-text notes, and the JSON of a map whose values are remembered one by one. */
@@ -482,12 +483,11 @@ function loadKnownSecrets() {
 }
 
 /**
- * `text` with every secret that must not be pushed replaced by the placeholder (the longest first: one may contain
- * another) — regardless of the redaction setting.
+ * `text` with every secret that must not be pushed replaced by the placeholder (one inside another goes with it) —
+ * regardless of the redaction setting.
  */
 export function withoutSecrets(text: string): string {
-  const found = [...pushSecrets].filter((secret) => text.includes(secret)).sort((a, b) => b.length - a.length);
-  return found.reduce((out, secret) => out.split(secret).join(SECRET_PLACEHOLDER), text);
+  return pushSecrets.replace(text, SECRET_PLACEHOLDER);
 }
 
 /** Replace every known secret value in `text` with a mask. */
@@ -506,12 +506,7 @@ export const SECRET_MASK = "••••••••";
 
 /** `redact` regardless of the setting: the diagnostic log is meant to be shared. */
 function maskKnownSecrets(text: string): string {
-  if (!text || knownSecrets.size === 0) return text;
-  let out = text;
-  for (const secret of knownSecrets) {
-    if (out.includes(secret)) out = out.split(secret).join(SECRET_MASK);
-  }
-  return out;
+  return knownSecrets.replace(text, SECRET_MASK);
 }
 
 setSecretMasker(maskKnownSecrets);
