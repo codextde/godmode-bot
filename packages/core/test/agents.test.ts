@@ -412,6 +412,8 @@ describe("gitignore", () => {
   test("new repositories keep user uploads out of git", async () => {
     const agent = await createAgent({ name: "Uploads" });
     expect(readFileSync(join(agent.repoPath, ".gitignore"), "utf8")).toContain("workspace/uploads/");
+    // System git never packs the repository on its own: isomorphic-git would have to load the whole pack.
+    expect(readFileSync(join(agent.repoPath, ".git", "config"), "utf8")).toMatch(/\[gc\]\s+auto = 0/);
     mkdirSync(join(agent.repoPath, "workspace", "uploads"), { recursive: true });
     writeFileSync(join(agent.repoPath, "workspace", "uploads", "contract.pdf"), "private");
     writeFileSync(join(agent.repoPath, "workspace", "report.md"), "# Report");
@@ -421,26 +423,36 @@ describe("gitignore", () => {
     expect(files).not.toContain("workspace/uploads/contract.pdf");
   });
 
-  test("older repositories get the rule and stop tracking committed uploads", async () => {
+  test("older repositories get the rules and stop tracking committed uploads and run logs", async () => {
     const agent = await createAgent({ name: "Legacy" });
     writeFileSync(join(agent.repoPath, ".gitignore"), "# Managed by Godmode Bot\nworkspace/tmp/\n*.tmp\n.claude-mem/\nnode_modules/");
     mkdirSync(join(agent.repoPath, "workspace", "uploads"), { recursive: true });
     writeFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "private");
+    mkdirSync(join(agent.repoPath, "runs", "2026-09-01"), { recursive: true });
+    writeFileSync(join(agent.repoPath, "runs", "2026-09-01", "run_legacy.jsonl"), "{}\n");
     await repo.commitAll(agent.repoPath, "Legacy state");
     expect(await headFiles(agent.repoPath)).toContain("workspace/uploads/old.pdf");
+    expect(await headFiles(agent.repoPath)).toContain("runs/2026-09-01/run_legacy.jsonl");
 
     await ensureAgentRepo(agent);
     const gitignore = readFileSync(join(agent.repoPath, ".gitignore"), "utf8");
-    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\n.DS_Store\n");
+    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.DS_Store\n");
     const files = await headFiles(agent.repoPath);
     expect(files).not.toContain("workspace/uploads/old.pdf");
+    expect(files.filter((f) => f.startsWith("runs/"))).toEqual([]);
     expect(files).toContain(".gitignore");
     expect(readFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "utf8")).toBe("private");
+    expect(readFileSync(join(agent.repoPath, "runs", "2026-09-01", "run_legacy.jsonl"), "utf8")).toBe("{}\n");
     expect((await listAgentCommits(agent.id))[0]!.message).toBe("Update generated files");
 
     // Complete now: the fast path does nothing and later commits stay clean.
     await ensureAgentRepo(agent);
     expect(await repo.commitAll(agent.repoPath, "noop")).toBeNull();
+    // Only the run logs at the top: a folder of the same name in the workspace stays versioned.
+    mkdirSync(join(agent.repoPath, "workspace", "study", "runs"), { recursive: true });
+    writeFileSync(join(agent.repoPath, "workspace", "study", "runs", "a.csv"), "1,2\n");
+    await repo.commitAll(agent.repoPath, "Study");
+    expect(await headFiles(agent.repoPath)).toContain("workspace/study/runs/a.csv");
   });
 });
 

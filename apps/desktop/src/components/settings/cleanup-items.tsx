@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  Archive,
   BroomSparkles,
   ChevronDown,
   CircleCheck,
@@ -11,10 +12,12 @@ import {
   Database,
   Disc3,
   FileClock,
+  FolderClock,
   GitBranch,
   GitFork,
   Globe,
   Lock,
+  Logs,
   ScrollText,
   Trash2,
 } from "lucide-react";
@@ -51,6 +54,9 @@ const ICONS: Record<CleanupId, ComponentType<{ className?: string }>> = {
   "vm-downloads": CloudDownload,
   trash: Trash2,
   "vm-images": Disc3,
+  "agent-scratch": FolderClock,
+  "agent-run-logs": Logs,
+  "agent-history": Archive,
 };
 
 const cleanable = (i: CleanupItem) => i.count > 0 && !i.blocked;

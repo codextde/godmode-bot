@@ -69,6 +69,17 @@ async function ensureGit(dir: string) {
   }
 }
 
+/**
+ * Keep system git from packing the repository on its own (an agent may run `git commit` here): isomorphic-git reads a
+ * whole pack into memory to get one object out of it, so one big pack would slow down every commit, or break it.
+ * Call within withRepoLock(dir, …).
+ */
+export async function keepLooseInLock(dir: string): Promise<void> {
+  if (!fs.existsSync(join(dir, ".git"))) return;
+  await git.setConfig({ fs, dir, path: "gc.auto", value: "0" });
+  await git.setConfig({ fs, dir, path: "maintenance.auto", value: "false" });
+}
+
 /** Create the directory and initialize a git repository on branch `main` (idempotent). */
 export function initRepo(dir: string): Promise<void> {
   return withRepoLock(dir, () => ensureGit(dir));

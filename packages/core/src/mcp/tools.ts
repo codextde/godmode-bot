@@ -78,7 +78,7 @@ import {
 } from "../services/routines";
 import { listEvents } from "../automations/events";
 import { reportCheckResult } from "../automations/conditions";
-import { reportDream } from "../memory/dreaming";
+import { dreamTidies, reportDream, tidyWorkspace } from "../memory/dreaming";
 import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/composio";
 import { listTriggerTypes } from "../integrations/composioTriggers";
 import { createWorkspace, listWorkspaces, updateWorkspace } from "../services/workspaces";
@@ -756,7 +756,7 @@ function isDreamRun(ctx: RunContext): boolean {
   }
 }
 
-const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report"]);
+const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report", "workspace_tidy"]);
 
 /**
  * What an app outside Godmode may call, and the access its key needs. Nothing that needs a run, a chat or a browser,
@@ -2267,6 +2267,26 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
+    name: "workspace_tidy",
+    description:
+      "Sort your workspace while dreaming. operations (carried out in order, each checked on its own): `move` puts an entry (file or folder) at `to`; `discard` takes out what is no longer needed (it waits in workspace/tmp for a week, then it is removed). Paths are relative to workspace/. A move updates the path in your memory files. Refused: tmp/ and uploads/, entries changed in the last few days or named by your instructions, automations or follow-ups, an existing `to`, and discarding what your memory still names. Returns one line per operation.",
+    schema: z.object({
+      operations: z
+        .array(
+          z.object({
+            action: z.enum(["move", "discard"]),
+            path: z.string().min(1).max(500).describe("Entry to move or discard, relative to workspace/"),
+            to: z.string().max(500).optional().describe("move: the new path, relative to workspace/ (must not exist yet)"),
+          }),
+        )
+        .min(1)
+        .max(100),
+    }),
+    when: (_agent, ctx) => isDreamRun(ctx) && dreamTidies(ctx.runId),
+    run: ({ operations }, { ctx }) => tidyWorkspace(ctx.runId, operations),
+  }),
+
+  defineTool({
     name: "spend_overview",
     description:
       "What the team cost: runs, cost in USD and working time for today, this week, this month or all time — in total, per agent and per kind of work (chat, automation, task, delegation, followup, memory) — plus the monthly budgets with what is spent and how many runs are held. Use it when the human asks what the agents cost or why work is waiting. Budgets are set by the human only.",
@@ -2768,7 +2788,7 @@ export function connectorTools(): ConnectorTool[] {
 /** Tools listed for this agent in this run (permission-filtered). */
 export function listToolsFor(agent: Agent, ctx: RunContext): { name: string; description: string; inputSchema: Record<string, unknown> }[] {
   const dream = isDreamRun(ctx);
-  return TOOLS.filter((t) => (dream ? DREAM_TOOLS.has(t.name) : !t.when || t.when(agent, ctx)) && !connectorRefusal(ctx, t.name)).map((t) => {
+  return TOOLS.filter((t) => (!dream || DREAM_TOOLS.has(t.name)) && (!t.when || t.when(agent, ctx)) && !connectorRefusal(ctx, t.name)).map((t) => {
     let schema = schemaCache.get(t.name);
     if (!schema) {
       schema = inputSchema(t.schema);
