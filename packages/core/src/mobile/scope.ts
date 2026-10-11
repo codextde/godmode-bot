@@ -154,7 +154,7 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
   ["POST", new RegExp(`^/api/questions/${ID}/answer$`), ["optionId", "decision", "note", "text"]],
   ["PATCH", new RegExp(`^/api/human-tasks/${ID}$`), ["status", "beforeId"]],
-  ["POST", new RegExp(`^/api/human-tasks/${ID}/close$`), ["outcome", "note"]],
+  ["POST", new RegExp(`^/api/human-tasks/${ID}/close$`), ["outcome", "note", "optionId"]],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],
   ["POST", /^\/api\/computer\/input$/, ["view", "event", "frame"]],
   ["POST", new RegExp(`^/api/vms/${ID}/input$`), ["event", "frame"]],

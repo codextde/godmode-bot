@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
-import { humanTaskRef, type Agent, type HumanTask } from "@godmode/shared";
+import { HUMAN_TASK_WORDS, humanTaskRef, type Agent, type HumanTask } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { Badge, Row, T, tap } from "./ui";
@@ -13,18 +13,27 @@ export function openHumanTask(id: string, fromChat?: string | null) {
   router.push({ pathname: "/human-task/[id]", params: fromChat ? { id, fromChat } : { id } });
 }
 
-export const HUMAN_STATUS: Record<HumanTask["status"], { label: string; tone: "neutral" | "brand" | "warning" | "danger" }> = {
-  open: { label: "To do", tone: "warning" },
-  doing: { label: "Doing", tone: "brand" },
-  done: { label: "Done", tone: "neutral" },
-  declined: { label: "Couldn't do it", tone: "neutral" },
-  withdrawn: { label: "Taken back", tone: "neutral" },
-};
+/** Where a task stands, in the words of its kind: a decision is "Answered", an approval "Approved". */
+export function humanStatus(task: Pick<HumanTask, "status" | "kind">): { label: string; tone: "neutral" | "brand" | "warning" | "danger" } {
+  const words = HUMAN_TASK_WORDS[task.kind];
+  switch (task.status) {
+    case "open":
+      return { label: task.kind === "decision" ? "Decision" : task.kind === "approval" ? "Needs your OK" : "To do", tone: "warning" };
+    case "doing":
+      return { label: "Doing", tone: "brand" };
+    case "done":
+      return { label: words.wasDone, tone: "neutral" };
+    case "declined":
+      return { label: words.wasDeclined, tone: "neutral" };
+    default:
+      return { label: "Taken back", tone: "neutral" };
+  }
+}
 
-/** Something an agent needs the human to do: what, who asked and for which ticket. */
+/** Something an agent needs from the human — a thing to do, an answer, an OK: what, who asked and for which ticket. */
 export function HumanTaskRow({ task, agent }: { task: HumanTask; agent?: Agent }) {
   const c = useColors();
-  const status = HUMAN_STATUS[task.status];
+  const status = humanStatus(task);
   const from = task.agentName ?? agent?.name ?? (task.agentId ? "An agent" : "You");
   const meta = [humanTaskRef(task), from, task.taskNumber != null ? `ticket #${task.taskNumber}` : null].filter(Boolean).join(" · ");
   return (

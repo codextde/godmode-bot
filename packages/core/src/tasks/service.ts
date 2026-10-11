@@ -64,6 +64,7 @@ import { INTERRUPTED, activeRunForConversation, cancelRun, getRun, listActiveRun
 import { stripNoteTags } from "../runner/prompt";
 import { checkGoal, goalBrief } from "./goals";
 import { answerByMessage, type Answerer } from "../services/questions";
+import { replySettles } from "../services/humanTasks";
 import { pauseOf, PAUSE_QUESTION_JOIN, PAUSE_QUESTION_SQL, toPause, type PauseQuestionCols } from "../services/pauses";
 import { submitMessage } from "../services/messageQueue";
 import { conversationExists, createConversation, sendMessage } from "../services/conversations";
@@ -496,16 +497,20 @@ export function noteHumanTask(
   taskId: string,
   kind: "asked" | "answered",
   actor: TaskActor,
-  opts: { body: string; questionId: string; runId?: string | null; status?: string },
+  opts: { body: string; questionId: string; runId?: string | null; status?: string; kind?: "task" | "question" },
 ): void {
-  if (kind === "asked") record(taskId, "asked", actor, { body: opts.body, runId: opts.runId ?? null, data: { questionId: opts.questionId, kind: "task" } });
-  else record(taskId, "answered", actor, { body: opts.body, data: { questionId: opts.questionId, status: opts.status ?? "done", kind: "task" } });
+  const what = opts.kind ?? "task";
+  if (kind === "asked") record(taskId, "asked", actor, { body: opts.body, runId: opts.runId ?? null, data: { questionId: opts.questionId, kind: what } });
+  else record(taskId, "answered", actor, { body: opts.body, data: { questionId: opts.questionId, status: opts.status ?? "done", ...(what === "task" ? { kind: what } : {}) } });
 }
 
-/** Tasks the agent gave the human in the ticket's chat that are still open. */
+/**
+ * Tasks the agent gave the human in the ticket's chat that are still open. Not a decision Godmode found in its answer:
+ * the work is delivered all the same, and the answer continues it like feedback does.
+ */
 function waitingHumanTasks(conversationId: string): { number: number; title: string }[] {
   return all<{ number: number; title: string }>(
-    "SELECT number, title FROM human_tasks WHERE conversation_id = ? AND status IN ('open', 'doing') ORDER BY number",
+    "SELECT number, title FROM human_tasks WHERE conversation_id = ? AND status IN ('open', 'doing') AND question_id IS NULL AND from_answer = 0 ORDER BY number",
     conversationId,
   );
 }
@@ -1008,9 +1013,11 @@ export async function sendTaskMessage(
     // The task's run waited for the human's answer: this message was it, and the run continues with it (the
     // timeline records the answer itself).
     if (answerByMessage(task.conversation_id, { content, attachments }, by)) return getTask(id);
+    const settle = replySettles(task.conversation_id, content);
     // A task that stands still takes the message along: it continues with it, or once Claude's limit has reset.
     if (pauseOf(task.conversation_id)) await submitMessage(task.conversation_id, { content, attachments });
     else await sendMessage(task.conversation_id, { content, attachments, trigger: "task" });
+    settle();
   }
   record(id, "feedback", from, { body: content, data: { on: task.status, files: attachments.map((a) => a.name) } });
   return getTask(id);

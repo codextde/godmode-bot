@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { argValue, browserRuns, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
-import { insert, run as sql } from "../src/db";
+import { all, get, insert, run as sql } from "../src/db";
 import { getSettings, updateSettings } from "../src/services/settings";
 import { config } from "../src/config";
 import { listMissingLogins } from "../src/services/missingLogins";
@@ -544,5 +544,23 @@ describe("recoverInterruptedRuns", () => {
     expect(r.error).toBe(INTERRUPTED);
     const msg = getConversation(conv.id).messages.find((m) => m.id === "msg_stale_test_000001")!;
     expect(msg.blocks).toEqual([{ type: "error", text: INTERRUPTED }]);
+  });
+
+  test("the screenshots a cut-off run had saved apart from its message are back in it", () => {
+    const conv = createConversation({ agentId: agent.id });
+    const runId = "run_stale_test_000002";
+    const messageId = "msg_stale_test_000002";
+    insert("runs", { id: runId, agent_id: agent.id, conversation_id: conv.id, trigger: "chat", status: "running", prompt: "x", created_at: now() });
+    const step = { type: "tool_use", id: "toolu_shot", name: "mcp__browser__browser_screenshot", input: {}, result: "Took a screenshot" };
+    insert("messages", { id: messageId, conversation_id: conv.id, role: "assistant", content: "", blocks: JSON.stringify([step]), run_id: runId, attachments: "[]", created_at: now() });
+    insert("message_images", { message_id: messageId, block_id: "toolu_shot", image: "iVBORw0KGgoAAAA" });
+    recoverInterruptedRuns();
+    const stored = get<{ blocks: string }>("SELECT blocks FROM messages WHERE id = ?", messageId)!.blocks;
+    expect(JSON.parse(stored)).toEqual([{ ...step, image: "iVBORw0KGgoAAAA" }, { type: "error", text: INTERRUPTED }]);
+    expect(all("SELECT 1 FROM message_images WHERE message_id = ?", messageId)).toEqual([]);
+    // A message that goes takes what was kept apart with it.
+    insert("message_images", { message_id: messageId, block_id: "toolu_shot", image: "iVBORw0KGgoAAAA" });
+    sql("DELETE FROM messages WHERE id = ?", messageId);
+    expect(all("SELECT 1 FROM message_images WHERE message_id = ?", messageId)).toEqual([]);
   });
 });

@@ -1417,4 +1417,33 @@ UPDATE settings SET value = json_set(value, '$.dreaming.model', 'claude-opus-5-5
 WHERE key = 'memory' AND json_valid(value) AND json_extract(value, '$.dreaming.model') = 'sonnet';
 `,
   },
+  {
+    id: 87,
+    name: "message_images",
+    sql: /* sql */ `
+-- The screenshots of a message a run is still writing. The message is saved every few seconds while the run works:
+-- its megabytes of pictures, which never change, are written once here instead of with every save. When the run
+-- ends or stands still the message is saved whole and its rows here go.
+CREATE TABLE message_images (
+  message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  block_id TEXT NOT NULL,
+  image TEXT NOT NULL,
+  PRIMARY KEY (message_id, block_id)
+);
+`,
+  },
+  {
+    id: 88,
+    name: "human_task_kinds",
+    sql: /* sql */ `
+-- Whatever waits for the human's word is on their board: a question or approval an agent asked (question_id: the
+-- ticket stands for it), and a decision Godmode found in the answer an agent finished with (from_answer).
+ALTER TABLE human_tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'task';  -- task | decision | approval
+ALTER TABLE human_tasks ADD COLUMN options TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE human_tasks ADD COLUMN question_id TEXT;
+ALTER TABLE human_tasks ADD COLUMN from_answer INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE human_tasks ADD COLUMN response_option TEXT;
+CREATE INDEX IF NOT EXISTS idx_human_tasks_question ON human_tasks(question_id);
+`,
+  },
 ];

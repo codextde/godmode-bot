@@ -46,6 +46,8 @@
  *              answer, else answer "step finished"
  *   LIMIT_HIT   while the state dir has a `limit` file (its content: the reset time in unix seconds, may be empty) end
  *              like Claude Code does when a usage limit is reached; afterwards answer "back after the limit"
+ *   LIMIT_SILENT  while the state dir has a `limit` file exit with code 1 and without a word, like Claude Code
+ *              sometimes does at a usage limit; afterwards whatever the rest of the prompt asks for
  *   OVERAGE_CRASH  report a reached limit like Claude Code does while requests still go through, then crash like CRASH
  *   Dream: …    a dream (memory consolidation): rewrites MEMORY.md from the `REMEMBER: <fact>` lines of the activity
  *               digest (+ memory/dream-notes.md), calls the gateway (tools/list, a forbidden tool, memory_dream_report)
@@ -53,6 +55,8 @@
  *               writing the memory), DREAM_NO_REPORT skips the report, DREAM_BLOAT writes a MEMORY.md that is too long and
  *               shortens it when the report is sent back (DREAM_BLOAT_STAYS: never). With a workspace inventory in the prompt and a
  *               `tidy-ops.json` in the state dir, it first calls workspace_tidy with those operations.
+ *   LEAVE_DECISION  finish with an answer that has a "Decision for you" section
+ *   ASK_IN_PROSE    finish with an answer that closes with a question to the human
  *   ASK_HUMAN   call the gateway's ask_human (arguments from the state dir's `ask-args.json` when it exists) as a step,
  *              then call the PostToolBatch hook like Claude Code does: told to stop, write `stopped-by-hook` and end the
  *              turn without an answer, else answer "no stop". The tool's result goes to `ask-result.json`.
@@ -793,6 +797,9 @@ if (slash?.[1] === "clear") {
     textTurn("step finished");
     result("step finished");
   }
+} else if (prompt.includes("LIMIT_SILENT") && existsSync(join(stateDir, "limit"))) {
+  out(init);
+  process.exit(1);
 } else if (prompt.includes("LIMIT_HIT")) {
   out(init);
   const limitFile = join(stateDir, "limit");
@@ -816,6 +823,17 @@ if (slash?.[1] === "clear") {
   textTurn("Working on it");
   await pause(60_000);
   result("woke up");
+} else if (prompt.includes("LEAVE_DECISION")) {
+  out(init);
+  const text =
+    "The preview store is live.\n\n## Decision for you\n\nShould the store take real orders before a domain exists? If yes, it needs a payment account with a card.\n\n## Files\n\nEverything is in `shop/README.md`.";
+  textTurn(text);
+  result(text);
+} else if (prompt.includes("ASK_IN_PROSE")) {
+  out(init);
+  const text = "I drafted the newsletter and scheduled nothing yet.\n\nShould I send it to the whole list on Monday?";
+  textTurn(text);
+  result(text);
 } else if (prompt.includes("LOGIN_FAIL")) {
   out(init);
   const text = "I opened the dashboard. I couldn't log in to example.com because there are no saved credentials for it.";

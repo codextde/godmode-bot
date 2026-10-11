@@ -163,6 +163,10 @@ needs to be useful:
     <td><img src="docs/screenshots/followup.png" alt="The agent picked the chat up again at the time it set and finished the task" /><br /><sub><b>Back on it</b> — at that time the agent picks the chat up again, with all the context</sub></td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/my-tasks.png" alt="My tasks: a decision, an approval and a question from three agents in To do, a passkey task in Doing" /><br /><sub><b>My tasks</b> — everything your agents need from you on one board: things to do, questions, approvals, open decisions</sub></td>
+    <td><img src="docs/screenshots/my-tasks-decision.png" alt="A decision an agent left open in its answer, with a box to answer it" /><br /><sub><b>Open decisions</b> — an agent that finishes with a question for you gets a ticket; your answer continues its chat</sub></td>
+  </tr>
+  <tr>
     <td><img src="docs/screenshots/heartbeat.png" alt="An agent's Heartbeat tab: on, beating every hour in working hours, with its board" /><br /><sub><b>Heartbeat</b> — the agent wakes on its own rhythm to move its tickets forward and run its checklist</sub></td>
     <td><img src="docs/screenshots/heartbeat-beats.png" alt="Recent beats and the watchdog's interventions with their reports" /><br /><sub><b>Beats & watchdog</b> — every beat leaves a trail; stalled or looping runs are stopped with a precise report</sub></td>
   </tr>

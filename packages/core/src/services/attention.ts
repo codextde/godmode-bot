@@ -40,16 +40,18 @@ export function listAttention(): AttentionItem[] {
   // What agents gave the human to do. A ticket that waits for one shows as the task, not also as blocked.
   const waitingTickets = new Set<string>();
   for (const h of listHumanTasks({ status: "active" })) {
-    if (h.taskId) waitingTickets.add(h.taskId);
+    // A ticket that stands for a question shows as the question.
+    if (h.questionId) continue;
+    if (h.taskId && !h.fromAnswer) waitingTickets.add(h.taskId);
     items.push({
       id: `todo:${h.id}`,
       kind: "todo",
       agentId: h.agentId,
-      title: h.agentId ? `${nameOf(h.agentId)} needs you to: ${shorten(h.title, 100)}` : shorten(h.title),
+      title: !h.agentId ? shorten(h.title) : h.kind === "decision" ? `${nameOf(h.agentId)} left you a decision: ${shorten(h.title, 100)}` : `${nameOf(h.agentId)} needs you to: ${shorten(h.title, 100)}`,
       detail: h.status === "doing" ? "You're on it" : h.taskNumber != null ? `For task #${h.taskNumber}` : (h.conversationTitle ?? ""),
       since: h.createdAt,
       link: `/my-tasks?task=${h.id}`,
-      action: "Open",
+      action: h.kind === "decision" ? "Answer" : "Open",
       humanTask: h,
       conversationId: h.conversationId,
     });
