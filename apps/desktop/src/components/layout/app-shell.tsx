@@ -119,8 +119,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const waiting = attention?.total ?? (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0);
   const inboxCount = waiting || (boot?.counts.unreadNotifications ?? 0);
   // Counted from the list the board shows, so the two can't disagree (and the board is loaded before it is opened).
-  const { data: humanTasks } = useHumanTasks();
-  const myTasks = humanTasks ? humanTasks.filter(isHumanTaskActive).length : attention?.todo;
+  const humanTasks = useHumanTasks();
+  const myTasks = humanTasks.data && !humanTasks.isError ? humanTasks.data.filter(isHumanTaskActive).length : attention?.todo;
   const { data: mods = [] } = useMods();
   // Mods that wait for the human: an agent's draft to review, or code the check refuses.
   const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m))).length;

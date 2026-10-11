@@ -128,6 +128,14 @@ export default function HumanTasksPage() {
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks" className="h-8 pl-8 text-[13px]" aria-label="Search tasks" />
         </div>
+        {tasksQ.isError && tasksQ.data && (
+          <p className="text-xs text-muted-foreground" role="status">
+            Couldn't refresh the list ·{" "}
+            <button type="button" className="text-foreground underline-offset-2 hover:underline" onClick={() => tasksQ.refetch()}>
+              Try again
+            </button>
+          </p>
+        )}
       </div>
 
       {tasksQ.isError && !tasksQ.data ? (
