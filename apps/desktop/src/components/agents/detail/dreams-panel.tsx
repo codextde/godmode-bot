@@ -11,17 +11,21 @@ import {
   CircleStop,
   Eye,
   FileText,
+  FolderInput,
+  FolderTree,
   Hourglass,
   Info,
   Moon,
   MoonStar,
   RotateCcw,
   Sparkles,
+  Trash2,
   TriangleAlert,
   Undo2,
   type LucideIcon,
 } from "lucide-react";
-import type { Agent, Dream, DreamOverview, DreamStatus } from "@godmode/shared";
+import type { Agent, Dream, DreamOverview, DreamStatus, DreamWorkspaceChange } from "@godmode/shared";
+import { formatBytes } from "@godmode/shared";
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useSettings } from "@/lib/hooks";
@@ -50,6 +54,7 @@ import {
 const JOURNAL_PREVIEW = 3;
 const CHANGES_PREVIEW = 6;
 const FILES_PREVIEW = 3;
+const MOVES_PREVIEW = 5;
 
 /**
  * Dreaming status of an agent. Realtime ("dreams" entity) keeps it fresh; polling covers a dream in flight, and a
@@ -500,6 +505,8 @@ function JournalEntry({
           </div>
         ))}
 
+      {d.workspace.length > 0 && <WorkspaceMoves moves={d.workspace} stuck={rolledBack} />}
+
       {d.status !== "succeeded" && d.error && (
         <p
           className={cn(
@@ -521,7 +528,7 @@ function JournalEntry({
         <p className="mt-2 text-xs text-muted-foreground">Memory was already in good shape — nothing to rewrite.</p>
       )}
 
-      {(d.changes.length > 0 || d.files.length > 0) && (
+      {(d.changes.length > 0 || d.files.length > 0 || d.workspace.length > 0) && (
         <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-2">
           {d.changes.length > 0 && (
             <button
@@ -575,7 +582,7 @@ function JournalEntry({
               <Button variant="ghost" size="xs" onClick={() => onUndo(d)} aria-label={`Undo the dream of ${dreamWhen(d.createdAt)}`}>
                 <Undo2 /> Undo
               </Button>
-            ) : d.files.length > 0 && !active && d.status !== "reverted" ? (
+            ) : (d.files.length > 0 || d.workspace.length > 0) && !active && d.status !== "reverted" ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span
@@ -586,7 +593,9 @@ function JournalEntry({
                   </span>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-60 text-center">
-                  These files changed after the dream, so it can't be undone automatically. Edit them below instead.
+                  {d.files.length > 0
+                    ? "Its memory files or what it sorted changed after the dream, so it can't be undone automatically. Edit the files below instead."
+                    : "What it sorted was moved or removed since (discarded files wait a week), so it can't be undone automatically."}
                 </TooltipContent>
               </Tooltip>
             ) : null}
@@ -594,6 +603,73 @@ function JournalEntry({
         </div>
       )}
     </motion.li>
+  );
+}
+
+const MOVE_META = {
+  move: { label: "sorted", icon: FolderInput, className: "text-sky-700 dark:text-sky-300" },
+  discard: { label: "discarded", icon: Trash2, className: "text-rose-700 dark:text-rose-300" },
+} as const;
+
+/** How the dream tidied the workspace; after a rollback, what couldn't be moved back. */
+function WorkspaceMoves({ moves, stuck }: { moves: DreamWorkspaceChange[]; stuck: boolean }) {
+  const [all, setAll] = useState(false);
+  const counts = (["move", "discard"] as const).map((action) => ({ action, n: moves.filter((m) => m.action === action).length })).filter((c) => c.n > 0);
+  const out = moves.filter((m) => m.action === "discard").reduce((n, m) => n + m.bytes, 0);
+  const shown = all ? moves : moves.slice(0, MOVES_PREVIEW);
+  return (
+    <div className="mt-2.5 max-w-3xl overflow-hidden rounded-lg border bg-paper-2/60">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-3 py-2 text-xs">
+        <FolderTree className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="font-medium">{stuck ? "Couldn't be moved back" : "Workspace"}</span>
+        {counts.map(({ action, n }) => {
+          const meta = MOVE_META[action];
+          return (
+            <span key={action} className={cn("inline-flex items-center gap-1 tabular-nums", meta.className)}>
+              <meta.icon className="size-3" aria-hidden />
+              {n} {meta.label}
+            </span>
+          );
+        })}
+        {out > 0 && !stuck && <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">{formatBytes(out)} out of the way</span>}
+      </div>
+      <ul className="divide-y border-t">
+        {shown.map((m, i) => {
+          const meta = MOVE_META[m.action];
+          return (
+            <li key={`${m.from}-${i}`} className="flex min-w-0 items-center gap-2 px-3 py-1.5 text-[11.5px]">
+              <meta.icon className={cn("size-3 shrink-0", meta.className)} aria-label={meta.label} />
+              <span className="min-w-0 truncate font-mono text-foreground" title={`workspace/${m.from}`}>
+                {m.from}
+              </span>
+              {m.action === "move" ? (
+                <>
+                  <span aria-hidden className="shrink-0 text-muted-foreground/60">
+                    →
+                  </span>
+                  <span className="min-w-0 truncate font-mono text-muted-foreground" title={`workspace/${m.to}`}>
+                    {m.to}
+                  </span>
+                </>
+              ) : (
+                <span className="shrink-0 text-muted-foreground">removed after a week</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {moves.length > MOVES_PREVIEW && (
+        <button
+          type="button"
+          aria-expanded={all}
+          onClick={() => setAll((v) => !v)}
+          className="flex w-full items-center gap-1.5 border-t px-3 py-1.5 text-left text-xs font-medium text-muted-foreground transition hover:bg-accent/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+        >
+          <ChevronDown className={cn("size-3.5 transition-transform", all && "rotate-180")} aria-hidden />
+          {all ? "Show fewer" : `Show ${moves.length - MOVES_PREVIEW} more`}
+        </button>
+      )}
+    </div>
   );
 }
 

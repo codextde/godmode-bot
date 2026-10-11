@@ -1331,4 +1331,12 @@ CREATE INDEX IF NOT EXISTS idx_card_purchases_status ON card_purchases(status);
 CREATE INDEX IF NOT EXISTS idx_messages_run ON messages(run_id);
 `,
   },
+  {
+    id: 81,
+    // How a dream tidied the agent's workspace (JSON, DreamWorkspaceChange[]); NULL = the dream didn't tidy it.
+    name: "dream_workspace",
+    sql: /* sql */ `
+ALTER TABLE dreams ADD COLUMN workspace TEXT;
+`,
+  },
 ];

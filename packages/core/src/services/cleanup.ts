@@ -1,7 +1,8 @@
 /**
  * Cleanup (Settings → Cleanup): a self check of Godmode's data folder and what piles up in it over time — leftovers of
- * interrupted runs, browser caches, worktrees of finished tasks, clones nothing uses, free database pages, old logs,
- * unfinished VM downloads and the trash.
+ * interrupted runs, browser caches, worktrees of finished tasks, clones nothing uses, what agents leave in their
+ * repositories (scratch files, old run logs, unpacked git history), free database pages, old logs, unfinished VM
+ * downloads and the trash.
  *
  * Only Godmode's own files are removed. Whatever may hold work stays: checkouts with uncommitted changes or commits no
  * branch holds, clones with commits that were never pushed, and anything an agent or a browser uses right now. What is
@@ -13,6 +14,7 @@ import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { CleanupEntry, CleanupId, CleanupItem, CleanupReport, CleanupResult, CleanupRun, HealthCheck, StorageArea, StorageUsage } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
+import { withRepoLock } from "../agents/repo";
 import { backupInProgress } from "../backup/backup";
 import { getRegistered } from "../browser/state";
 import { config } from "../config";
@@ -33,6 +35,9 @@ const NAMES = {
   "browser-cache": "Browser caches",
   "task-worktrees": "Worktrees of finished tasks",
   "task-clones": "Clones no task uses",
+  "agent-scratch": "Agents' scratch files",
+  "agent-run-logs": "Old run logs",
+  "agent-history": "Agent file history",
   database: "Database",
   "old-logs": "Old logs",
   "vm-downloads": "Unfinished VM downloads",
@@ -43,13 +48,31 @@ const NAMES = {
 export const CLEANUP_IDS = Object.keys(NAMES) as [CleanupId, ...CleanupId[]];
 
 /** Safe without a look: what "Free …" preselects, and what the automatic cleanup and `godmode cleanup --fix` take. */
-export const RECOMMENDED: CleanupId[] = ["temp-files", "browser-cache", "task-worktrees", "task-clones", "database", "old-logs"];
+export const RECOMMENDED: CleanupId[] = [
+  "temp-files",
+  "browser-cache",
+  "task-worktrees",
+  "task-clones",
+  "agent-scratch",
+  "agent-run-logs",
+  "agent-history",
+  "database",
+  "old-logs",
+];
 
 const HOUR = 60 * 60_000;
 const DAY = 24 * HOUR;
 /** A finished task keeps its worktree this long: time for a last look or a follow-up (longer when nobody asked). */
 const GRACE = { asked: DAY, automatic: 7 * DAY };
 const ENTRY_LIMIT = 50;
+/** What agents put in workspace/tmp is removed once nobody touched it for this long. */
+export const SCRATCH_DAYS = 7;
+/** Raw run logs (runs/<day>/) are kept this long; the chats and their results stay in the database. */
+export const RUN_LOG_DAYS = 14;
+/** Loose git objects of an agent below this aren't worth packing. */
+const PACK_WORTH = 32 * 1024 * 1024;
+/** About what packing saves (measured on agent repositories: zlib alone → delta-compressed pack). */
+const PACK_SAVES = 0.25;
 /** Less free room in the database isn't worth rewriting it. */
 const WORTH_IT = 1024 * 1024;
 const BUSY = "Agents are working — this is cleaned once they are done.";
@@ -440,6 +463,149 @@ async function taskClones(scan: Scan): Promise<Category | null> {
   return { id: "task-clones", detail: "Godmode's copies of repositories whose tasks are all gone. One that holds commits never pushed stays.", targets };
 }
 
+interface AgentRepo {
+  id: string;
+  name: string;
+  dir: string;
+}
+
+/** Agent repositories in Godmode's agents folder (a repository anywhere else is never touched). */
+function agentRepos(): AgentRepo[] {
+  const root = config().agentsDir;
+  return all<{ id: string; name: string; repo_path: string }>("SELECT id, name, repo_path FROM agents ORDER BY name")
+    .filter((a) => inside(root, a.repo_path))
+    .map((a) => ({ id: a.id, name: a.name, dir: a.repo_path }));
+}
+
+const working = (agent: AgentRepo) => `${agent.name} is working — this is cleaned once it is done.`;
+
+/** A real folder of the repository, reached without a symlink on the way. */
+async function repoDir(agent: AgentRepo, ...parts: string[]): Promise<string | null> {
+  let path = agent.dir;
+  for (const part of parts) {
+    path = join(path, part);
+    if (!(await isDir(path))) return null;
+  }
+  return path;
+}
+
+async function agentScratch(scan: Scan): Promise<Category> {
+  const targets: Target[] = [];
+  for (const agent of agentRepos()) {
+    const tmp = await repoDir(agent, "workspace", "tmp");
+    if (!tmp) continue;
+    for (const name of await names(tmp)) {
+      const path = join(tmp, name);
+      if (scan.at - (await scan.sizes.of(path)).modified < SCRATCH_DAYS * DAY) continue;
+      const clean = async () => {
+        if (newScan().busyAgents.has(agent.id)) throw new Kept(working(agent));
+        await remove(path);
+      };
+      targets.push(await target(scan, path, `${agent.name} · ${name}`, { kept: scan.busyAgents.has(agent.id) ? working(agent) : null, clean }));
+    }
+  }
+  return {
+    id: "agent-scratch",
+    detail: `What agents left in workspace/tmp and nobody touched for ${SCRATCH_DAYS} days: test builds, downloads, screenshots and what their dreams sorted out.`,
+    targets,
+  };
+}
+
+const DAY_DIR = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Runs that may still write to their log: working, queued or paused (a paused run continues its own log). */
+function liveRuns(): Set<string> {
+  return new Set([...newScan().activeRuns, ...all<{ run_id: string }>("SELECT run_id FROM paused_runs").map((r) => r.run_id)]);
+}
+
+async function holdsLiveRun(dir: string, live: Set<string>): Promise<boolean> {
+  return (await names(dir)).some((name) => live.has(name.replace(/\.jsonl$/, "")));
+}
+
+async function agentRunLogs(scan: Scan): Promise<Category> {
+  const targets: Target[] = [];
+  const live = liveRuns();
+  for (const agent of agentRepos()) {
+    const root = await repoDir(agent, "runs");
+    if (!root) continue;
+    const days: { path: string; size: Size }[] = [];
+    for (const name of (await names(root)).filter((n) => DAY_DIR.test(n)).sort()) {
+      const path = join(root, name);
+      const size = await scan.sizes.of(path);
+      const dayEnd = Date.parse(`${name}T00:00:00Z`) + DAY;
+      if (!(await isDir(path)) || Number.isNaN(dayEnd) || scan.at - Math.max(dayEnd, size.modified) < RUN_LOG_DAYS * DAY) continue;
+      if (await holdsLiveRun(path, live)) continue;
+      days.push({ path, size });
+    }
+    if (!days.length) continue;
+    const size = sum(days.map((d) => d.size));
+    const span = days.length === 1 ? basename(days[0]!.path) : `${basename(days[0]!.path)} to ${basename(days.at(-1)!.path)}`;
+    const kept = scan.busyAgents.has(agent.id) ? working(agent) : null;
+    targets.push({
+      entry: { name: `${agent.name} · ${span}`, path: root, bytes: size.bytes, modifiedAt: iso(size.modified), kept },
+      clean: kept
+        ? null
+        : async () => {
+            let freed = 0;
+            for (const day of days) {
+              if (await holdsLiveRun(day.path, liveRuns())) continue;
+              await remove(day.path);
+              freed += day.size.bytes;
+            }
+            if (!freed) throw new Kept("Its runs are working again.");
+            return freed;
+          },
+    });
+  }
+  return {
+    id: "agent-run-logs",
+    detail: `Raw logs of runs older than ${RUN_LOG_DAYS} days, kept for troubleshooting. The chats, their results and the agents' files stay.`,
+    targets,
+  };
+}
+
+/** Loose objects of a repository, from `git count-objects -v` (sizes in KiB). */
+async function looseObjects(dir: string): Promise<{ count: number; bytes: number } | null> {
+  const lines = await gitLines(["count-objects", "-v"], dir);
+  if (!lines) return null;
+  const field = (key: string) => Number(lines.find((l) => l.startsWith(`${key}:`))?.slice(key.length + 1).trim() ?? 0) || 0;
+  return { count: field("count"), bytes: (field("size") + field("size-garbage")) * 1024 };
+}
+
+async function agentHistory(scan: Scan): Promise<Category | null> {
+  if (!resolveGit()) return null;
+  const targets: Target[] = [];
+  for (const agent of agentRepos()) {
+    const gitDir = await repoDir(agent, ".git");
+    if (!gitDir) continue;
+    const loose = await looseObjects(agent.dir);
+    if (!loose || loose.bytes < PACK_WORTH) continue;
+    const kept = scan.busyAgents.has(agent.id) ? working(agent) : null;
+    const clean = () =>
+      withRepoLock(agent.dir, async () => {
+        if (newScan().busyAgents.has(agent.id)) throw new Kept(working(agent));
+        const before = (await new Sizes().of(gitDir)).bytes;
+        // Bounded, so packing a large history doesn't take the whole computer. Objects no commit holds go after a day
+        // (git's own two weeks would leave them counted here every day); the agent isn't working, nothing is mid-commit.
+        const res = await runGit(["-c", "gc.auto=0", "-c", "pack.threads=2", "-c", "pack.windowMemory=256m", "gc", "--quiet", "--prune=1.day.ago"], {
+          cwd: agent.dir,
+          timeoutMs: 30 * 60_000,
+        });
+        if (!res.ok) throw new Error(res.timedOut ? "Packing took too long." : res.stderr.trim().split("\n").at(-1) || "git gc failed");
+        return Math.max(0, before - (await new Sizes().of(gitDir)).bytes);
+      });
+    targets.push({
+      entry: { name: `${agent.name} · ${loose.count.toLocaleString("en-US")} loose objects`, path: gitDir, bytes: Math.round(loose.bytes * PACK_SAVES), modifiedAt: null, kept },
+      clean: kept ? null : clean,
+    });
+  }
+  return {
+    id: "agent-history",
+    detail: "Every agent repository keeps each version of its files. Packing stores them compressed against each other — no version is lost. What it frees is an estimate.",
+    targets,
+  };
+}
+
 function pragma(name: string): number {
   const row = getDb().query(`PRAGMA ${name}`).get() as Record<string, number> | null;
   return Number(row?.[name] ?? 0);
@@ -569,6 +735,9 @@ const SCANNERS: Record<CleanupId, (scan: Scan) => Promise<Category | null> | Cat
   "browser-cache": browserCaches,
   "task-worktrees": taskWorktrees,
   "task-clones": taskClones,
+  "agent-scratch": agentScratch,
+  "agent-run-logs": agentRunLogs,
+  "agent-history": agentHistory,
   database,
   "old-logs": oldLogs,
   "vm-downloads": vmDownloads,

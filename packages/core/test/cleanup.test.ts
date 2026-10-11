@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, CleanupItem, CleanupReport, CleanupRun } from "@godmode/shared";
+import { commitAll, log as gitLog } from "../src/agents/repo";
 import { createAgent } from "../src/agents/service";
 import { ensureDefaultProfile } from "../src/browser/manager";
 import { config, loadConfig } from "../src/config";
@@ -315,6 +317,102 @@ suite("task worktrees and clones", () => {
     expect(existsSync(unused)).toBe(false);
     expect(existsSync(unpushed)).toBe(true);
     expect(existsSync(used)).toBe(true);
+  });
+});
+
+suite("agent repositories", () => {
+  const working = (id: string, agentId = agent.id) =>
+    insert("runs", { id, agent_id: agentId, conversation_id: "cnv_agentwork", trigger: "chat", status: "running", prompt: "x", created_at: new Date().toISOString() });
+
+  test("scratch files nobody touched for a week go, unless the agent is working", async () => {
+    const tmp = join(agent.repoPath, "workspace", "tmp");
+    const build = join(tmp, "whizzper");
+    file(join(build, "out", "app.apk"), 256 * 1024);
+    age(build, 8 * DAY);
+    const shot = file(join(tmp, "shot.png"), 1024, 8 * DAY);
+    // One fresh file keeps its folder.
+    const render = join(tmp, "render");
+    file(join(render, "a.png"), 1024);
+    age(render, 8 * DAY);
+    file(join(render, "b.png"), 1024);
+    const kept = file(join(agent.repoPath, "workspace", "report.pdf"), 1024, 30 * DAY);
+
+    const scratch = item(await scanCleanup(), "agent-scratch");
+    expect(scratch.recommended).toBe(true);
+    expect(paths(scratch).sort()).toEqual([build, shot].sort());
+    expect(scratch.entries.find((e) => e.path === build)?.name).toBe("Cleaner · whizzper");
+
+    working("run_agentwork001");
+    try {
+      expect(item(await scanCleanup(), "agent-scratch").entries.every((e) => /Cleaner is working/.test(e.kept ?? ""))).toBe(true);
+      expect((await runCleanup(["agent-scratch"])).results[0]).toMatchObject({ removed: 0, kept: 2 });
+      expect(existsSync(build)).toBe(true);
+    } finally {
+      sql("DELETE FROM runs WHERE id = 'run_agentwork001'");
+    }
+
+    expect((await runCleanup(["agent-scratch"])).results[0]).toMatchObject({ ok: true, removed: 2 });
+    expect([build, shot].map(existsSync)).toEqual([false, false]);
+    expect([render, kept].map(existsSync)).toEqual([true, true]);
+  });
+
+  test("run logs older than two weeks go, unless a run may still write to them", async () => {
+    const runs = join(agent.repoPath, "runs");
+    const old = join(runs, "2026-01-02");
+    file(join(old, "run_old00000001.jsonl"), 8192);
+    age(old, 40 * DAY);
+    const older = join(runs, "2026-01-01");
+    file(join(older, "run_old00000002.jsonl"), 8192);
+    age(older, 41 * DAY);
+    // A run elsewhere that is still going appends to its log in an old folder.
+    const live = join(runs, "2026-01-03");
+    file(join(live, "run_livelog0001.jsonl"), 8192);
+    age(live, 39 * DAY);
+    working("run_livelog0001", (await createAgent({ name: "Elsewhere" })).id);
+    // Written to lately: a run that continued after a pause.
+    const resumed = join(runs, "2026-01-04");
+    file(join(resumed, "run_resumed0001.jsonl"), 8192);
+    const today = join(runs, new Date().toISOString().slice(0, 10));
+    file(join(today, "run_today000001.jsonl"), 8192);
+    try {
+      const logs = item(await scanCleanup(), "agent-run-logs");
+      expect(logs.recommended).toBe(true);
+      expect(logs.entries).toHaveLength(1);
+      expect(logs.entries[0]).toMatchObject({ name: "Cleaner · 2026-01-01 to 2026-01-02", path: runs, kept: null });
+      expect(logs.bytes).toBeGreaterThanOrEqual(16 * 1024);
+
+      expect((await runCleanup(["agent-run-logs"])).results[0]).toMatchObject({ ok: true, removed: 1 });
+      expect([old, older].map(existsSync)).toEqual([false, false]);
+      expect([live, resumed, today].map(existsSync)).toEqual([true, true, true]);
+    } finally {
+      sql("DELETE FROM runs WHERE id = 'run_livelog0001'");
+    }
+  });
+
+  test("a history of loose objects is packed: every version stays, and isomorphic-git keeps working", async () => {
+    const data = join(agent.repoPath, "workspace", "data.bin");
+    const bytes = randomBytes(11 * 1024 * 1024);
+    for (let i = 0; i < 3; i++) {
+      writeFileSync(data, Buffer.concat([bytes, Buffer.from([i])]));
+      await commitAll(agent.repoPath, `version ${i}`);
+    }
+    const history = item(await scanCleanup(), "agent-history");
+    expect(history.recommended).toBe(true);
+    expect(paths(history)).toEqual([join(agent.repoPath, ".git")]);
+    expect(history.bytes).toBeGreaterThan(0);
+
+    const result = await runCleanup(["agent-history"]);
+    expect(result.results[0]).toMatchObject({ ok: true, removed: 1 });
+    expect(result.freedBytes).toBeGreaterThan(15 * 1024 * 1024);
+    expect(await git(["count-objects", "-v"], agent.repoPath)).toMatch(/^count: 0$/m);
+    expect(await git(["fsck", "--no-progress"], agent.repoPath)).toBe("");
+
+    writeFileSync(join(agent.repoPath, "workspace", "after.md"), "after the pack\n");
+    expect(await commitAll(agent.repoPath, "after the pack")).toBeTruthy();
+    expect((await gitLog(agent.repoPath, 4)).map((c) => c.message)).toEqual(["after the pack", "version 2", "version 1", "version 0"]);
+    expect(item(await scanCleanup(), "agent-history").count).toBe(0);
+    rmSync(data);
+    await commitAll(agent.repoPath, "drop the data");
   });
 });
 

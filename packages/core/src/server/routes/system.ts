@@ -96,9 +96,12 @@ export function registerSystemRoutes(app: Hono) {
     if (memory?.dreaming !== undefined && (typeof memory.dreaming !== "object" || memory.dreaming === null || Array.isArray(memory.dreaming))) {
       throw badRequest("Invalid dreaming settings");
     }
-    const dreaming = memory?.dreaming as { cron?: unknown; minNewExchanges?: unknown; refreshDays?: unknown; model?: unknown; enabled?: unknown } | undefined;
+    const dreaming = memory?.dreaming as
+      | { cron?: unknown; minNewExchanges?: unknown; refreshDays?: unknown; model?: unknown; enabled?: unknown; tidyWorkspace?: unknown }
+      | undefined;
     if (dreaming) {
       if (dreaming.enabled !== undefined && typeof dreaming.enabled !== "boolean") throw badRequest("dreaming.enabled must be true or false");
+      if (dreaming.tidyWorkspace !== undefined && typeof dreaming.tidyWorkspace !== "boolean") throw badRequest("dreaming.tidyWorkspace must be true or false");
       if (dreaming.cron !== undefined && (typeof dreaming.cron !== "string" || !isValidDreamSchedule(dreaming.cron))) {
         throw badRequest("The dreaming schedule must be a cron expression with 5 fields (minute hour day month weekday)");
       }

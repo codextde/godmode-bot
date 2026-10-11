@@ -5,7 +5,9 @@
  * happened since its last dream — the exchanges of its chats, automations and delegated tasks — and rewrites its
  * long-term memory: it captures context nobody explicitly asked it to remember, merges duplicates, resolves
  * contradictions (newer wins), makes dates absolute and rewrites plans that have passed, and prunes what is stale,
- * keeping MEMORY.md compact enough to be loaded into every run (runner/prompt.ts).
+ * keeping MEMORY.md compact enough to be loaded into every run (runner/prompt.ts). With settings.memory.dreaming.
+ * tidyWorkspace it also sorts the agent's workspace — loose files into topic folders, disposable leftovers out — through
+ * `workspace_tidy` (memory/workspace.ts).
  *
  * A dream is a short run of its own (trigger "dream") in the agent's archived "Dreams" conversation: a fresh Claude
  * session with file tools only — no browser, computer or integrations — that owns the agent's memory while it runs
@@ -13,6 +15,7 @@
  * (already redacted) exchanges in workspace/tmp. The memory files are snapshotted when the dream starts; a dream is
  * all or nothing: when it succeeds the changed files are stored before/after with the agent's report
  * (`memory_dream_report`), so the human can review and undo it; when it fails or is cancelled they are rolled back.
+ * What it moved in the workspace is recorded the same way, rolled back with it and put back by an undo.
  *
  * Dreams yield to the human: scheduled dreams only start on idle agents (retried on later ticks otherwise), and a
  * chat message for a dreaming agent pauses a scheduled dream — rolled back and retried once the agent is idle again.
@@ -22,7 +25,20 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Cron } from "croner";
-import type { Agent, Dream, DreamChange, DreamDetail, DreamFileChange, DreamOverview, DreamReason, DreamStatus, Run, RunTrigger, Settings } from "@godmode/shared";
+import type {
+  Agent,
+  Dream,
+  DreamChange,
+  DreamDetail,
+  DreamFileChange,
+  DreamOverview,
+  DreamReason,
+  DreamStatus,
+  DreamWorkspaceChange,
+  Run,
+  RunTrigger,
+  Settings,
+} from "@godmode/shared";
 import { all, get, getMeta, insert, run as exec, setMeta } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -37,6 +53,7 @@ import { describeNow } from "../runner/prompt";
 import { MEMORY_PROMPT_LIMIT, canRestore, currentMemoryFile, diffSnapshots, parseSnapshot, readMemory, restoreFiles, snapshotMemory } from "./files";
 import { exhaustedBudget } from "../services/budgets";
 import { licenseBlocks } from "../license/license";
+import { MAX_TIDY_CHANGES, RECENT_DAYS, applyTidy, canUndoWorkspace, undoWorkspace, workspaceInventory, type TidyOperation } from "./workspace";
 
 
 const log = logger("dreaming");
@@ -77,7 +94,7 @@ const DEFER_MS = 20 * 3_600_000;
 
 /** Every column but the (large) snapshot. */
 const COLUMNS =
-  "id, agent_id, run_id, reason, status, source_from, source_to, exchanges, conversations, summary, changes, files, error, created_at, started_at, finished_at";
+  "id, agent_id, run_id, reason, status, source_from, source_to, exchanges, conversations, summary, changes, files, workspace, error, created_at, started_at, finished_at";
 
 interface DreamRow {
   id: string;
@@ -92,6 +109,8 @@ interface DreamRow {
   summary: string;
   changes: string;
   files: string;
+  /** NULL = the dream doesn't tidy the workspace. */
+  workspace: string | null;
   error: string | null;
   created_at: string;
   started_at: string | null;
@@ -102,13 +121,18 @@ function fileChangesOf(row: DreamRow): DreamFileChange[] {
   return parseJson<DreamFileChange[]>(row.files, []);
 }
 
-function revertible(row: DreamRow, changes: DreamFileChange[], repoPath: string | null): boolean {
-  if (!changes.length || !repoPath || ACTIVE.includes(row.status) || row.status === "reverted") return false;
-  return changes.every((c) => currentMemoryFile(repoPath, c.path) === c.after);
+function movesOf(row: Pick<DreamRow, "workspace">): DreamWorkspaceChange[] {
+  return parseJson<DreamWorkspaceChange[]>(row.workspace, []);
+}
+
+function revertible(row: DreamRow, changes: DreamFileChange[], moves: DreamWorkspaceChange[], repoPath: string | null): boolean {
+  if ((!changes.length && !moves.length) || !repoPath || ACTIVE.includes(row.status) || row.status === "reverted") return false;
+  return changes.every((c) => currentMemoryFile(repoPath, c.path) === c.after) && canUndoWorkspace(repoPath, moves);
 }
 
 function toDream(row: DreamRow, repoPath: string | null): Dream {
   const files = fileChangesOf(row);
+  const workspace = movesOf(row);
   return {
     id: row.id,
     agentId: row.agent_id,
@@ -122,7 +146,8 @@ function toDream(row: DreamRow, repoPath: string | null): Dream {
     summary: row.summary,
     changes: parseJson<DreamChange[]>(row.changes, []),
     files: files.map((f) => f.path),
-    canRevert: revertible(row, files, repoPath),
+    workspace,
+    canRevert: revertible(row, files, workspace, repoPath),
     error: row.error,
     createdAt: row.created_at,
     startedAt: row.started_at,
@@ -329,6 +354,8 @@ export interface DreamPromptInput {
   conversations: number;
   since: string | null;
   lastDream: string | null;
+  /** Repo-relative path of the workspace inventory (null = the dream doesn't tidy the workspace). */
+  inventoryPath?: string | null;
   now?: Date;
 }
 
@@ -338,6 +365,18 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
   const activity = input.digestPath
     ? `Activity to review: ${input.exchanges} exchange(s) in ${input.conversations} conversation(s) ${input.since ? `since ${fmtTime(input.since)}` : "so far"}, in \`${input.digestPath}\`. Read all of it.`
     : "There is no new activity since your last dream: check your memory against today's date and tidy it up.";
+  const tidy = input.inventoryPath
+    ? [
+        `4. Tidy your workspace (\`workspace/\`), so you and ${human} find things and nothing piles up. What lies there is listed in \`${input.inventoryPath}\`; look inside folders when a name doesn't tell you enough.`,
+        "   - Sort loose files and one-off folders into a few topic folders: by project, client or kind of work (reuse folders that exist; short lowercase-with-dashes names; at most two levels deep).",
+        "   - Move finished work that is worth keeping (sent offers, invoices, reports, final assets, scripts you may run again) into its topic folder, or into `archive/<topic>/` when it is done for good.",
+        "   - Discard what is clearly disposable: test screenshots, intermediate renders and exports, downloads you can fetch again, duplicates, leftovers of finished tasks. When unsure, keep it.",
+        "   - Never discard deliverables, contracts, invoices, anything the human sent or will need again, or what your memory still relies on.",
+        `   - Do every move and discard with \`workspace_tidy\` (in batches). It updates the paths in your memory files for you; mention a move elsewhere in your notes only when the path appears without \`workspace/\`. It refuses what is in use: entries changed in the last ${RECENT_DAYS} days, or named by your instructions, automations or follow-ups.`,
+        "   - If the workspace is already tidy, leave it. Don't rename things for the sake of it.",
+      ].join("\n")
+    : null;
+  const steps = tidy ? 7 : 6;
   return [
     "Dream: consolidate your long-term memory.",
     "",
@@ -369,9 +408,12 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
     "   - Remove what is stale, wrong or no longer useful.",
     `   - Keep it compact — short, specific bullets under clear headings, the most important first, under ${MEMORY_TARGET_CHARS.toLocaleString("en-US")} characters: MEMORY.md is loaded into the start of every task (up to ${MEMORY_PROMPT_LIMIT.toLocaleString("en-US")} characters). Move long details (playbooks, lists, reference notes) into memory/<topic>.md and link them from MEMORY.md.`,
     `   - Keep what ${human} wrote or explicitly asked you to remember, and every instruction on what to bring up or leave alone, unless newer activity clearly replaces it. Keep the language the memory is written in.`,
-    "4. Never write passwords, 2FA codes, API keys, tokens or other secrets anywhere, even if the activity contains them.",
-    "5. Only edit MEMORY.md and files in memory/. Don't change anything else, don't browse, don't contact anyone.",
-    `6. Finish by calling \`memory_dream_report\` once: a one- or two-sentence summary for ${human} and the changes you made, one line each (kind: added, updated, merged, removed, corrected or dated). If nothing needed to change, report that with an empty list.`,
+    ...(tidy ? [tidy] : []),
+    `${steps - 2}. Never write passwords, 2FA codes, API keys, tokens or other secrets anywhere, even if the activity contains them.`,
+    tidy
+      ? `${steps - 1}. Only edit MEMORY.md and files in memory/ yourself; the workspace changes only through \`workspace_tidy\`. Don't change anything else, don't browse, don't contact anyone.`
+      : `${steps - 1}. Only edit MEMORY.md and files in memory/. Don't change anything else, don't browse, don't contact anyone.`,
+    `${steps}. Finish by calling \`memory_dream_report\` once: a one- or two-sentence summary for ${human} and the changes you made to your memory, one line each (kind: added, updated, merged, removed, corrected or dated)${tidy ? " — Godmode records the workspace moves itself, so only say in the summary how you tidied it" : ""}. If nothing needed to change, report that with an empty list.`,
   ].join("\n");
 }
 
@@ -405,10 +447,15 @@ function digestRelPath(dreamId: string): string {
   return `workspace/tmp/dreams/${dreamId}.md`;
 }
 
+function inventoryRelPath(dreamId: string): string {
+  return `workspace/tmp/dreams/${dreamId}-workspace.md`;
+}
+
 function removeDigest(repoPath: string | null, dreamId: string) {
   if (!repoPath) return;
   try {
     rmSync(join(repoPath, digestRelPath(dreamId)), { force: true });
+    rmSync(join(repoPath, inventoryRelPath(dreamId)), { force: true });
   } catch (err) {
     log.warn(`could not remove the activity digest of dream ${dreamId}`, err);
   }
@@ -434,11 +481,16 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
     const since = dreamCursor(agentId);
     const activity = collectActivity(agent, since, settings.general.userName.trim() || "Human");
     const digestPath = activity.exchanges ? digestRelPath(dreamId) : null;
-    if (digestPath) {
-      const abs = join(agent.repoPath, digestPath);
+    const write = (rel: string, text: string) => {
+      const abs = join(agent.repoPath, rel);
       mkdirSync(dirname(abs), { recursive: true });
-      writeFileSync(abs, activity.digest, "utf8");
-    }
+      writeFileSync(abs, text, "utf8");
+    };
+    if (digestPath) write(digestPath, activity.digest);
+    const tidying = settings.memory.dreaming.tidyWorkspace;
+    const inventory = tidying ? await workspaceInventory(agent) : null;
+    const inventoryPath = inventory?.entries ? inventoryRelPath(dreamId) : null;
+    if (inventoryPath) write(inventoryPath, inventory!.text);
     insert("dreams", {
       id: dreamId,
       agent_id: agentId,
@@ -453,6 +505,7 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
       summary: "",
       changes: "[]",
       files: "[]",
+      workspace: inventoryPath ? "[]" : null,
       // Refreshed when the run actually starts (another run of the agent may change the memory while it waits).
       snapshot: JSON.stringify(snapshotMemory(agent.repoPath)),
       error: null,
@@ -473,6 +526,7 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
       conversations: activity.conversations,
       since,
       lastDream: lastDreamAt(agentId),
+      inventoryPath,
     });
     const { run } = await sendMessage(conversationId, { content: prompt, trigger: "dream", runId });
     log.info(`${agent.slug} is dreaming (${reason}, ${activity.exchanges} exchange(s), run ${run.id})`);
@@ -510,6 +564,32 @@ export function reportDream(runId: string, report: DreamReport): string {
   return "Recorded. End the dream now.";
 }
 
+/** The run is a dream that tidies its agent's workspace (`workspace_tidy` is offered to it). */
+export function dreamTidies(runId: string): boolean {
+  return !!get("SELECT id FROM dreams WHERE run_id = ? AND workspace IS NOT NULL AND status IN ('queued', 'running')", runId);
+}
+
+/** `workspace_tidy` from a dream run: carry out the moves and record them on the dream. */
+export async function tidyWorkspace(runId: string, operations: TidyOperation[]): Promise<string> {
+  const row = get<DreamRow>(`SELECT ${COLUMNS} FROM dreams WHERE run_id = ? AND status IN ('queued', 'running')`, runId);
+  if (!row || row.workspace === null) throw badRequest("Only a dream that tidies the workspace can move its files");
+  const agent = getAgent(row.agent_id);
+  const done = movesOf(row);
+  const room = MAX_TIDY_CHANGES - done.length;
+  if (room <= 0) return `This dream already made ${MAX_TIDY_CHANGES} workspace changes — leave the rest for the next one.`;
+  const outcomes = await applyTidy(agent, operations.slice(0, room));
+  const changes = outcomes.flatMap((o) => (o.change ? [o.change] : []));
+  if (changes.length) {
+    // Read again: the dream may call the tool in parallel.
+    const current = movesOf(get<{ workspace: string | null }>("SELECT workspace FROM dreams WHERE id = ?", row.id) ?? { workspace: null });
+    exec("UPDATE dreams SET workspace = ? WHERE id = ?", JSON.stringify([...current, ...changes]), row.id);
+    emitDreams();
+  }
+  const lines = outcomes.map((o) => `- ${o.line}`);
+  if (operations.length > room) lines.push(`- ${operations.length - room} more left out: a dream makes at most ${MAX_TIDY_CHANGES} workspace changes.`);
+  return lines.join("\n");
+}
+
 /** The dream run started running: snapshot the memory as it is now (the queued snapshot may be stale). */
 function onDreamRunStarted(run: Run) {
   const row = get<{ id: string; agent_id: string }>("SELECT id, agent_id FROM dreams WHERE run_id = ? AND status IN ('queued', 'running')", run.id);
@@ -545,22 +625,28 @@ export function onDreamRunFinished(run: Run): void {
   const status: DreamStatus = run.status === "succeeded" ? "succeeded" : paused ? "paused" : run.status === "cancelled" ? "cancelled" : "failed";
   const repoPath = repoPathOf(row.agent_id);
   let kept: DreamFileChange[] = [];
+  let moves = movesOf(row);
   let changed = 0;
   let error: string | null = null;
   try {
     const before = snapshotOf(row.id);
     // A run that never started changed nothing (other runs may have changed the memory since the snapshot).
     const changes = repoPath && before && run.startedAt ? diffSnapshots(before, snapshotMemory(repoPath)) : [];
-    changed = changes.length;
+    changed = changes.length + moves.length;
     kept = changes;
     if (status !== "succeeded") {
       const restored = repoPath && changes.length ? restoreFiles(repoPath, changes) : [];
       kept = changes.filter((c) => !restored.includes(c.path));
+      const stuck = repoPath && moves.length ? undoWorkspace(repoPath, moves) : [];
+      const movedBack = moves.length - stuck.length;
+      moves = moves.filter((m) => stuck.includes(m.from));
       const why = paused
         ? "Paused because the agent was needed — it dreams again once it is idle"
         : truncate(run.error ?? (status === "cancelled" ? "Cancelled" : "The dream failed"), 400);
-      error = restored.length ? `${why}. Its memory changes were rolled back.` : why;
+      const undone = [restored.length && "memory", movedBack && "workspace"].filter(Boolean).join(" and ");
+      error = undone ? `${why}. Its ${undone} changes were rolled back.` : why;
       if (kept.length) error += ` ${kept.map((c) => c.path).join(", ")} could not be restored — see the dream's changes.`;
+      if (moves.length) error += ` ${moves.map((m) => `workspace/${m.to}`).join(", ")} could not be moved back.`;
       if (paused) deferred.set(row.agent_id, Date.now());
     }
   } catch (err) {
@@ -569,21 +655,22 @@ export function onDreamRunFinished(run: Run): void {
   }
   const summary = row.summary || (status === "succeeded" ? firstLine(run.result ?? "", SUMMARY_MAX) : "");
   exec(
-    "UPDATE dreams SET status = ?, summary = ?, files = ?, snapshot = NULL, error = ?, finished_at = ? WHERE id = ?",
+    "UPDATE dreams SET status = ?, summary = ?, files = ?, workspace = ?, snapshot = NULL, error = ?, finished_at = ? WHERE id = ?",
     status,
     summary,
     JSON.stringify(kept),
+    row.workspace === null ? null : JSON.stringify(moves),
     error,
     run.finishedAt ?? now(),
     row.id,
   );
   pruneDreams(row.agent_id);
   removeDigest(repoPath, row.id);
-  if (status === "succeeded" && kept.length) {
-    const title = summary ? firstLine(summary, 120) : `${kept.length} memory file(s) consolidated`;
+  if (status === "succeeded" && (kept.length || moves.length)) {
+    const title = summary ? firstLine(summary, 120) : kept.length ? `${kept.length} memory file(s) consolidated` : `${moves.length} workspace entries sorted`;
     commitAgentRepo(row.agent_id, `Dream: ${title}`).catch((err) => log.warn(`could not commit the dream of agent ${row.agent_id}`, err));
   }
-  log.info(`dream ${row.id} ${status}${paused ? " (paused)" : ""}: ${changed} file(s) changed${status === "succeeded" ? "" : ", rolled back"}`);
+  log.info(`dream ${row.id} ${status}${paused ? " (paused)" : ""}: ${changed} change(s)${status === "succeeded" ? "" : ", rolled back"}`);
   emitDreams();
 }
 
@@ -618,7 +705,8 @@ export async function revertDream(id: string, actor = "user"): Promise<Dream> {
   if (row.status === "reverted") throw conflict("This dream was already undone");
   const agent = getAgent(row.agent_id);
   const changes = fileChangesOf(row);
-  if (!changes.length) throw badRequest("This dream didn't change any memory files");
+  const moves = movesOf(row);
+  if (!changes.length && !moves.length) throw badRequest("This dream didn't change any memory files");
   if (activeDreamRow(agent.id)) throw conflict(`${agent.name} is dreaming right now — try again when the dream has ended`);
   const edited = changes.filter((c) => currentMemoryFile(agent.repoPath, c.path) !== c.after).map((c) => c.path);
   if (edited.length) {
@@ -626,9 +714,14 @@ export async function revertDream(id: string, actor = "user"): Promise<Dream> {
   }
   const blocked = changes.filter((c) => !canRestore(agent.repoPath, c.path)).map((c) => c.path);
   if (blocked.length) throw conflict(`${blocked.join(", ")} can't be restored (not a plain memory file) — edit it by hand instead.`);
+  if (!canUndoWorkspace(agent.repoPath, moves)) {
+    throw conflict("Some of what this dream sorted was moved or removed since (discarded files are only kept for a week), so it can't be undone automatically anymore.");
+  }
   restoreFiles(agent.repoPath, changes);
+  const stuck = undoWorkspace(agent.repoPath, moves);
   exec("UPDATE dreams SET status = 'reverted' WHERE id = ?", id);
-  audit(actor, "dream.revert", id, { agentId: agent.id, files: changes.map((c) => c.path) });
+  audit(actor, "dream.revert", id, { agentId: agent.id, files: changes.map((c) => c.path), moved: moves.length - stuck.length });
+  if (stuck.length) log.warn(`undoing dream ${id}: ${stuck.length} workspace entries could not be moved back`);
   await commitAgentRepo(agent.id, `Undo dream of ${fmtTime(row.created_at)}`);
   emitDreams();
   return toDream(dreamRow(id), agent.repoPath);
@@ -816,18 +909,25 @@ export function recoverDreams(): void {
     if (row.run_status === "queued" || row.run_status === "running") continue;
     const repoPath = repoPathOf(row.agent_id);
     let note = "Interrupted (Godmode restarted)";
+    let moves = movesOf(row);
     try {
       const before = snapshotOf(row.id);
       if (repoPath && before && row.run_started_at) {
         const changes = diffSnapshots(before, snapshotMemory(repoPath));
         if (restoreFiles(repoPath, changes).length) note += ". Its memory changes were rolled back.";
       }
+      if (repoPath && moves.length) {
+        const stuck = undoWorkspace(repoPath, moves);
+        moves = moves.filter((m) => stuck.includes(m.from));
+        note += moves.length ? ` ${moves.length} workspace entries could not be moved back.` : " Its workspace changes were rolled back.";
+      }
     } catch (err) {
       log.error(`could not roll back interrupted dream ${row.id}`, err);
       note += ". Its memory changes could not be rolled back — check MEMORY.md.";
     }
     exec(
-      "UPDATE dreams SET status = 'failed', snapshot = NULL, error = COALESCE(error, ?), finished_at = COALESCE(finished_at, ?) WHERE id = ?",
+      "UPDATE dreams SET status = 'failed', snapshot = NULL, workspace = ?, error = COALESCE(error, ?), finished_at = COALESCE(finished_at, ?) WHERE id = ?",
+      row.workspace === null ? null : JSON.stringify(moves),
       note,
       now(),
       row.id,

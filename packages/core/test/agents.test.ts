@@ -421,21 +421,26 @@ describe("gitignore", () => {
     expect(files).not.toContain("workspace/uploads/contract.pdf");
   });
 
-  test("older repositories get the rule and stop tracking committed uploads", async () => {
+  test("older repositories get the rules and stop tracking committed uploads and run logs", async () => {
     const agent = await createAgent({ name: "Legacy" });
     writeFileSync(join(agent.repoPath, ".gitignore"), "# Managed by Godmode Bot\nworkspace/tmp/\n*.tmp\n.claude-mem/\nnode_modules/");
     mkdirSync(join(agent.repoPath, "workspace", "uploads"), { recursive: true });
     writeFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "private");
+    mkdirSync(join(agent.repoPath, "runs", "2026-09-01"), { recursive: true });
+    writeFileSync(join(agent.repoPath, "runs", "2026-09-01", "run_legacy.jsonl"), "{}\n");
     await repo.commitAll(agent.repoPath, "Legacy state");
     expect(await headFiles(agent.repoPath)).toContain("workspace/uploads/old.pdf");
+    expect(await headFiles(agent.repoPath)).toContain("runs/2026-09-01/run_legacy.jsonl");
 
     await ensureAgentRepo(agent);
     const gitignore = readFileSync(join(agent.repoPath, ".gitignore"), "utf8");
-    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\n.DS_Store\n");
+    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\nruns/\n.DS_Store\n");
     const files = await headFiles(agent.repoPath);
     expect(files).not.toContain("workspace/uploads/old.pdf");
+    expect(files.filter((f) => f.startsWith("runs/"))).toEqual([]);
     expect(files).toContain(".gitignore");
     expect(readFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "utf8")).toBe("private");
+    expect(readFileSync(join(agent.repoPath, "runs", "2026-09-01", "run_legacy.jsonl"), "utf8")).toBe("{}\n");
     expect((await listAgentCommits(agent.id))[0]!.message).toBe("Update generated files");
 
     // Complete now: the fast path does nothing and later commits stay clean.

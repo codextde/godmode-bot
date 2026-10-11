@@ -442,7 +442,7 @@ async function syncRepoFiles(agent: Agent, regenerate: boolean): Promise<void> {
   });
 }
 
-/** Create .gitignore, or append managed rules an older repository lacks (untracking newly ignored uploads). */
+/** Create .gitignore, or append managed rules an older repository lacks (untracking newly ignored uploads and run logs). */
 async function syncGitignore(dir: string): Promise<void> {
   const file = join(dir, ".gitignore");
   if (!existsSync(file)) {
@@ -455,6 +455,7 @@ async function syncGitignore(dir: string): Promise<void> {
   const separator = current.endsWith("\n") || current === "" ? "" : "\n";
   await writeFile(file, `${current}${separator}# Added by Godmode Bot\n${missing.join("\n")}\n`, "utf8");
   if (missing.includes("workspace/uploads/")) await repo.untrackInLock(dir, "workspace/uploads");
+  if (missing.includes("runs/")) await repo.untrackInLock(dir, "runs");
 }
 
 function gitignoreComplete(dir: string): boolean {

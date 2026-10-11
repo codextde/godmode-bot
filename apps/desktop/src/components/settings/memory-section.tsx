@@ -151,6 +151,20 @@ function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; 
         <ModelSelect id="dream-model" allowNone noneLabel="Same as the agent" disabled={off} value={d.model} onChange={(model) => onChange({ model })} />
       </SettingRow>
       <SettingRow
+        label="Tidy the workspace"
+        htmlFor="dream-tidy"
+        disabled={off}
+        description={
+          <>
+            Dreams also sort <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">workspace/</code>: loose files into topic folders, leftovers
+            of finished work out. Recent files and anything an automation uses stay put; what goes waits a week in{" "}
+            <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">workspace/tmp</code>, and undoing the dream puts it all back.
+          </>
+        }
+      >
+        <Switch id="dream-tidy" disabled={off} checked={d.tidyWorkspace} onCheckedChange={(tidyWorkspace) => onChange({ tidyWorkspace })} />
+      </SettingRow>
+      <SettingRow
         label="Minimum new exchanges"
         htmlFor="dream-min-exchanges"
         disabled={off}

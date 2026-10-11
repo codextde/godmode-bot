@@ -750,6 +750,17 @@ export interface DreamFileChange {
   after: string | null;
 }
 
+/**
+ * What a dream did in the agent's workspace (paths relative to `workspace/`): `move` sorted an entry into another
+ * place, `discard` moved it to `to` under `tmp/`, where the cleanup removes it after a week.
+ */
+export interface DreamWorkspaceChange {
+  action: "move" | "discard";
+  from: string;
+  to: string;
+  bytes: number;
+}
+
 export interface Dream {
   id: ID;
   agentId: ID;
@@ -767,7 +778,9 @@ export interface Dream {
   changes: DreamChange[];
   /** Paths of the memory files the dream changed (contents via the dream's detail). */
   files: string[];
-  /** The changes can still be undone (no later edit touched the same files). */
+  /** How the dream tidied the workspace, in order. */
+  workspace: DreamWorkspaceChange[];
+  /** The changes can still be undone (no later edit touched the same files, everything moved is still where it went). */
   canRevert: boolean;
   error: string | null;
   createdAt: ISODate;
@@ -1282,6 +1295,8 @@ export interface DreamingSettings {
    * dates — so plans that have passed are rewritten as past events. 0 = never.
    */
   refreshDays: number;
+  /** Dreams also sort the agent's workspace: loose files into topic folders, disposable leftovers out. */
+  tidyWorkspace: boolean;
 }
 
 export interface VmSettings {
@@ -1518,7 +1533,10 @@ export type CleanupId =
   | "old-logs"
   | "vm-downloads"
   | "trash"
-  | "vm-images";
+  | "vm-images"
+  | "agent-scratch"
+  | "agent-run-logs"
+  | "agent-history";
 
 export interface CleanupEntry {
   name: string;

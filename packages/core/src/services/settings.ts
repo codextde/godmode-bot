@@ -100,6 +100,7 @@ export const DEFAULT_SETTINGS: Settings = {
       model: "sonnet",
       minNewExchanges: 3,
       refreshDays: 7,
+      tidyWorkspace: true,
     },
   },
   diagnostics: {
