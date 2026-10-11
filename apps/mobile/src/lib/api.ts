@@ -3,6 +3,7 @@ import Constants from "expo-constants";
 import { File } from "expo-file-system";
 import type {
   Agent,
+  AnswerQuestionInput,
   AnswerQuestionResult,
   AgentQuestion,
   AppNotification,
@@ -15,6 +16,7 @@ import type {
   HumanTask,
   HumanTaskCloseResult,
   ConversationWithMessages,
+  MessagePage,
   MissingLogin,
   MobilePairResult,
   MobilePairingPayload,
@@ -32,6 +34,7 @@ import type {
   StartChatResult,
   Task,
   TaskAttachment,
+  TaskEvent,
   TaskStatus,
   TaskType,
   Vm,
@@ -126,25 +129,43 @@ function timeoutFor(bytes: number): number {
 }
 
 const verified = new Set<string>();
+/** Probes on their way, shared by the requests that wait for the same address. */
+const probing = new Map<string, Promise<true | ApiError | null>>();
+/** Addresses that didn't answer lately: skipped for a while instead of waiting out the probe's timeout on every request. */
+const unreachable = new Map<string, number>();
+const UNREACHABLE_FOR_MS = 20_000;
 
 /**
  * Does this address answer as the paired computer? Asked (without the key) before the key goes to an address, so an
  * address that isn't the computer can't collect it. True when it does; else the cloud gateway's own sentence on why the
  * computer is out of reach there (offline, plan limit), when it gave one.
  */
-async function isInstance(base: string, instanceId: string): Promise<true | ApiError | null> {
+async function isInstance(base: string, instanceId: string, skipIfDown = false): Promise<true | ApiError | null> {
   const key = `${instanceId} ${base}`;
   if (verified.has(key)) return true;
   if (!isPhoneUrlAllowed(base)) return null;
+  if (skipIfDown && (unreachable.get(key) ?? 0) > Date.now()) return null;
+  let probe = probing.get(key);
+  if (!probe) {
+    probe = probeInstance(base, instanceId).then((found) => {
+      if (found === true) verified.add(key);
+      else unreachable.set(key, Date.now() + UNREACHABLE_FOR_MS);
+      return found;
+    });
+    probing.set(key, probe);
+    void probe.finally(() => probing.delete(key));
+  }
+  return probe;
+}
+
+async function probeInstance(base: string, instanceId: string): Promise<true | ApiError | null> {
   try {
     const res = await send(`${base}/api/health`, { method: "GET" }, PROBE_TIMEOUT_MS);
     if (!res.ok) {
       const { error, code } = await failure(res);
       return error && isUnreachable(res.status, code) ? new ApiError(res.status, error, code) : null;
     }
-    if (((await res.json()) as { instance?: string }).instance !== instanceId) return null;
-    verified.add(key);
-    return true;
+    return ((await res.json()) as { instance?: string }).instance === instanceId ? true : null;
   } catch {
     return null;
   }
@@ -156,17 +177,27 @@ async function isInstance(base: string, instanceId: string): Promise<true | ApiE
  */
 export async function reachableBase(connection: Connection): Promise<string | ApiError | null> {
   let refused: ApiError | null = null;
-  for (const base of addressOrder(connection)) {
-    const found = await isInstance(base, connection.instance.id);
+  const bases = addressOrder(connection);
+  for (const [i, base] of bases.entries()) {
+    const found = await isInstance(base, connection.instance.id, i < bases.length - 1);
     if (found === true) return base;
     refused ??= found;
   }
   return refused;
 }
 
-/** Asks this address for the computer again before its next use. */
-export function forget(base: string) {
-  for (const key of verified) if (key.endsWith(` ${base}`)) verified.delete(key);
+/** Asks this address for the computer again before its next use; `down`: it just didn't answer, so try the others first. */
+export function forget(base: string, down = false) {
+  for (const key of verified) {
+    if (!key.endsWith(` ${base}`)) continue;
+    verified.delete(key);
+    if (down) unreachable.set(key, Date.now() + UNREACHABLE_FOR_MS);
+  }
+}
+
+/** Every address gets a fresh chance (the app came back, the network changed, the human pulled to refresh). */
+export function retryAddresses() {
+  unreachable.clear();
 }
 
 /**
@@ -182,8 +213,9 @@ export async function request<T>(method: string, path: string, body?: unknown, m
   const payload = body === undefined ? undefined : form ? body : JSON.stringify(body);
   const timeout = Math.max(minTimeoutMs, typeof payload === "string" ? timeoutFor(payload.length) : form ? timeoutFor(MAX_UPLOAD_BYTES) : TIMEOUT_MS);
   let refused: ApiError | null = null;
-  for (const base of addressOrder(connection)) {
-    const found = await isInstance(base, connection.instance.id);
+  const bases = addressOrder(connection);
+  for (const [i, base] of bases.entries()) {
+    const found = await isInstance(base, connection.instance.id, i < bases.length - 1);
     if (found !== true) {
       refused ??= found;
       continue;
@@ -192,7 +224,7 @@ export async function request<T>(method: string, path: string, body?: unknown, m
     try {
       res = await send(base + path, { method, headers, body: payload }, timeout);
     } catch {
-      forget(base);
+      forget(base, true);
       if (method === "GET") continue;
       throw new ApiError(0, NO_ANSWER_MESSAGE, "timeout");
     }
@@ -377,13 +409,20 @@ export const api = {
   models: (refresh = false) => get<ModelCatalog>("/api/models", refresh ? { refresh: 1 } : {}),
 
   conversations: {
-    /** With `workspaceId`: the workspace's chats. */
-    list: (q: { search?: string; limit?: number; agentId?: string; workspaceId?: string | null } = {}) => get<Conversation[]>("/api/conversations", q),
-    /** With the queued messages this phone is still sending, so a refetch never drops them. */
-    get: async (id: string) => {
-      const conversation = await get<ConversationWithMessages>(`/api/conversations/${id}`);
+    /** With `workspaceId`: the workspace's chats. `archived`: the archive; with `ongoing` only its chats that still go on. */
+    list: (q: { search?: string; limit?: number; agentId?: string; workspaceId?: string | null; archived?: boolean; ongoing?: boolean } = {}) =>
+      get<Conversation[]>("/api/conversations", q),
+    /**
+     * The chat with its latest `limit` messages, light: screenshots come as their own requests (`imageUrl`). With the
+     * queued messages this phone is still sending, so a refetch never drops them. An older Godmode answers with every
+     * message (and no `hasMore`).
+     */
+    get: async (id: string, limit: number) => {
+      const conversation = await get<ConversationWithMessages>(`/api/conversations/${id}`, { limit, lite: 1 });
       return { ...conversation, queue: withPending(id, conversation.queue) };
     },
+    /** The page of messages before `before`. */
+    messages: (id: string, before: string, limit: number) => get<MessagePage>(`/api/conversations/${id}/messages`, { before, limit, lite: 1 }),
     /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
     send: (id: string, input: { content: string; attachments: UploadFile[]; queueId: string }) =>
       post<SendMessageOutcome | AnswerQuestionResult>(`/api/conversations/${id}/messages`, {
@@ -402,6 +441,14 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     /** Continue the chat's paused run where it stopped. */
     continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
+    /** Make the chat's run stand still; it continues where it stopped. */
+    pause: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/pause`, {}, 30_000),
+    /** The follow-up the agent set: moved, run now or cancelled. */
+    followup: {
+      move: (id: string, dueAt: string) => patch<unknown>(`/api/conversations/${id}/followup`, { dueAt }),
+      runNow: (id: string) => post<Run>(`/api/conversations/${id}/followup/run`),
+      cancel: (id: string) => del<{ ok: true }>(`/api/conversations/${id}/followup`),
+    },
     /** Pick up the chat's latest turn that ended early: continue where it stopped, or send it again. */
     retry: (id: string, runId: string) => post<SendMessageResult & { mode: RetryMode }>(`/api/conversations/${id}/retry`, { runId }),
   },
@@ -413,9 +460,11 @@ export const api = {
   },
 
   tasks: {
-    /** `workspaceId`: a workspace's board, or all of them when omitted. */
-    list: (q: { workspaceId?: string | null } = {}) => get<Task[]>("/api/tasks", q),
+    /** `workspaceId`: a workspace's board, or all of them when omitted. `archived`: the tasks taken off the board. */
+    list: (q: { workspaceId?: string | null; archived?: boolean } = {}) => get<Task[]>("/api/tasks", { ...q, fields: "summary" }),
     get: (id: string) => get<Task>(`/api/tasks/${id}`),
+    /** What happened on the ticket, oldest first. */
+    events: (id: string) => get<TaskEvent[]>(`/api/tasks/${id}/events`, { limit: 200 }),
     /** With an agent (and no status) the task goes to To do and the agent starts right away. */
     create: (input: {
       workspaceId: string | null;
@@ -495,6 +544,8 @@ export const api = {
   questions: {
     /** What agents asked and wait for; answered by writing into the chat (or with optionId / decision). */
     open: () => get<AgentQuestion[]>("/api/questions", { status: "open" }),
+    /** One of optionId, decision (with an optional note) or text; the run that asked continues with it. */
+    answer: (id: string, input: AnswerQuestionInput) => post<AnswerQuestionResult>(`/api/questions/${id}/answer`, input),
   },
 };
 

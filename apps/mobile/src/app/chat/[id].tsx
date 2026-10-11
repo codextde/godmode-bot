@@ -31,6 +31,7 @@ import { ErrorState, Skeleton, T, tap } from "@/components/ui";
 import { openHumanTask } from "@/components/human-task-row";
 import { ApiError, api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
+import { fetchConversation } from "@/lib/chat-cache";
 import { setQueue } from "@/lib/composer";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { useAgents } from "@/lib/hooks";
@@ -50,7 +51,7 @@ export default function Chat() {
   const insets = useSafeAreaInsets();
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
   const list = useRef<FlashListRef<Item>>(null);
-  const conversation = useQuery({ queryKey: qk.conversation(id), queryFn: () => api.conversations.get(id) });
+  const conversation = useQuery({ queryKey: qk.conversation(id), queryFn: () => fetchConversation(id) });
   const forYou = useQuery({ queryKey: qk.chatHumanTasks(id), queryFn: () => api.humanTasks.list({ status: "active", conversationId: id }) });
   const { byId } = useAgents();
   const agent = conversation.data ? byId.get(conversation.data.agentId) : undefined;

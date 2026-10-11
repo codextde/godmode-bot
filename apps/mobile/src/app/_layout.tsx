@@ -52,6 +52,10 @@ export default function RootLayout() {
                 <Stack.Screen name="compose" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="task/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="my-tasks" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "My tasks" }} />
+                <Stack.Screen name="archived" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Archived chats" }} />
+                <Stack.Screen name="archived-tasks" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Archived tasks" }} />
+                <Stack.Screen name="automations" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Automations" }} />
+                <Stack.Screen name="activity" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Activity" }} />
                 <Stack.Screen name="human-task/[id]" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="new-task" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="model" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />
