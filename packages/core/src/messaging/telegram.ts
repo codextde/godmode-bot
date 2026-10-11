@@ -85,6 +85,7 @@ interface TgMessage {
   voice?: TgFileRef;
   audio?: TgFileRef;
   video?: TgFileRef;
+  video_note?: TgFileRef;
 }
 
 interface TgUpdate {
@@ -260,16 +261,23 @@ export class TelegramAdapter implements MessagingAdapter {
 
   private files(m: TgMessage): InboundFile[] {
     const out: InboundFile[] = [];
-    const add = (ref: TgFileRef | undefined, name: string, mime: string) => {
+    const add = (ref: TgFileRef | undefined, name: string, mime: string, spoken = false) => {
       if (!ref) return;
-      out.push({ name: ref.file_name || name, mime: ref.mime_type || mime, size: ref.file_size ?? null, download: () => this.download(ref.file_id) });
+      out.push({
+        name: ref.file_name || name,
+        mime: ref.mime_type || mime,
+        size: ref.file_size ?? null,
+        ...(spoken ? { spoken } : {}),
+        download: () => this.download(ref.file_id),
+      });
     };
     const photo = m.photo?.[m.photo.length - 1];
     add(photo, `photo-${m.message_id}.jpg`, "image/jpeg");
     add(m.document, `file-${m.message_id}`, "application/octet-stream");
-    add(m.voice, `voice-${m.message_id}.ogg`, "audio/ogg");
+    add(m.voice, `voice-${m.message_id}.ogg`, "audio/ogg", true);
     add(m.audio, `audio-${m.message_id}.mp3`, "audio/mpeg");
     add(m.video, `video-${m.message_id}.mp4`, "video/mp4");
+    add(m.video_note, `video-message-${m.message_id}.mp4`, "video/mp4", true);
     return out;
   }
 

@@ -16,6 +16,7 @@ import { notify } from "../services/notifications";
 import { getSettings } from "../services/settings";
 import { bus } from "../events/bus";
 import { HttpError, newId, now, parseJson } from "../util";
+import { transcribeRecording } from "../voice/voice";
 import {
   agentIdsOf,
   chatRow,
@@ -362,8 +363,13 @@ function conversationFor(conn: ConnectionRow, msg: InboundMessage, chat: ChatRow
   return conversation.id;
 }
 
-async function attachmentsOf(msg: InboundMessage): Promise<{ files: { name: string; mime: string; data: string }[]; problems: string[] }> {
-  const files: { name: string; mime: string; data: string }[] = [];
+type Attachment = { name: string; mime: string; data: string };
+/** A voice message: the attachment it arrived as, and its bytes. */
+type Recording = { file: Attachment; bytes: Uint8Array };
+
+async function attachmentsOf(msg: InboundMessage): Promise<{ files: Attachment[]; recordings: Recording[]; problems: string[] }> {
+  const files: Attachment[] = [];
+  const recordings: Recording[] = [];
   const problems: string[] = [];
   let total = 0;
   let over = 0;
@@ -386,13 +392,52 @@ async function attachmentsOf(msg: InboundMessage): Promise<{ files: { name: stri
         continue;
       }
       total += bytes.byteLength;
-      files.push({ name: f.name, mime: f.mime, data: Buffer.from(bytes).toString("base64") });
+      const file = { name: f.name, mime: f.mime, data: Buffer.from(bytes).toString("base64") };
+      files.push(file);
+      if (f.spoken) recordings.push({ file, bytes });
     } catch (err) {
       problems.push(`${f.name}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   if (over) problems.push(`${over} more didn't fit, a message carries up to ${MAX_MESSAGE_ATTACHMENT_BYTES / 1024 / 1024} MB of files`);
-  return { files, problems };
+  return { files, recordings, problems };
+}
+
+/** Why a voice message has no words, for the agent and the chat: what the provider answered stays in the log. */
+function unheardReason(err: unknown): string {
+  const code = err instanceof HttpError ? err.code : undefined;
+  if (code === "voice_no_key") return "no OpenAI or ElevenLabs key is set up in Godmode (Settings → Integrations)";
+  if (code === "voice_invalid_key") return "the speech-to-text key was rejected";
+  if (code === "voice_rate_limited") return "the speech-to-text limit is reached";
+  if (code === "voice_unreachable") return "the speech-to-text service didn't answer";
+  if (code === "voice_empty") return "it is empty";
+  if (code === "too_large") return "it is longer than speech-to-text takes (25 MB)";
+  if (code === "vault_locked") return "Godmode's vault is locked";
+  return "the transcription failed";
+}
+
+/** What was said in the voice messages, which of them were understood, and why the others weren't. */
+async function heardIn(recordings: Recording[], agent: Agent): Promise<{ said: string; heard: Set<Attachment>; unheard: string[] }> {
+  const said: string[] = [];
+  const heard = new Set<Attachment>();
+  const unheard: string[] = [];
+  for (const { file, bytes } of recordings) {
+    try {
+      const transcript = await transcribeRecording(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: file.mime }), { filename: file.name, agent });
+      // Spoken words never count as a slash command.
+      const text = transcript.replace(/^[\s/]+/, "");
+      if (!text) {
+        unheard.push("nothing audible in it");
+        continue;
+      }
+      said.push(text);
+      heard.add(file);
+    } catch (err) {
+      log.warn(`could not transcribe ${file.name}`, err instanceof Error ? err.message : err);
+      unheard.push(unheardReason(err));
+    }
+  }
+  return { said: said.join("\n\n"), heard, unheard: [...new Set(unheard)] };
 }
 
 async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: InboundMessage, chatId: string, from: { userId: string; owner: boolean }) {
@@ -407,12 +452,18 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
     await say(adapter, msg, `${agentLabel(agent)} is turned off right now.`);
     return;
   }
-  const { files, problems } = await attachmentsOf(msg);
+  const { files, recordings, problems } = await attachmentsOf(msg);
   if (!msg.text.trim() && !files.length) {
     await say(adapter, msg, `I couldn't open that file (${problems.join("; ")}).`);
     return;
   }
-  let content = msg.kind === "group" ? `${msg.user.name}: ${msg.text}` : msg.text;
+  // Listening takes a moment: the chat already shows that something is happening.
+  const stopListening = recordings.length ? await adapter.working(msg.target, msg.messageId).catch(() => async () => {}) : async () => {};
+  const { said, heard, unheard } = await heardIn(recordings, agent).finally(() => stopListening().catch(() => undefined));
+  const words = [msg.text.trim(), said].filter(Boolean).join("\n\n");
+  let content = msg.kind === "group" ? `${msg.user.name}: ${words}` : words;
+  if (said) content += "\n\n(Sent as a voice message and transcribed by Godmode; the recording is attached.)";
+  if (unheard.length) content += `\n\n(A voice message is attached that Godmode couldn't transcribe: ${unheard.join("; ")}.)`;
   if (problems.length) content += `\n\n(Some attachments couldn't be downloaded: ${problems.join("; ")}.)`;
 
   chat = chatById(chatId);
@@ -423,9 +474,16 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
   // not prefixed with their name — and the files they sent).
   if (from.owner) await untilAsked(conversationId);
   if (from.owner && openQuestionOf(conversationId)) {
+    // An answer nobody could hear is no answer: the question stays open.
+    if (unheard.length) {
+      await say(adapter, msg, `I couldn't understand your voice message (${unheard.join("; ")}). Please type your answer.`);
+      return;
+    }
     let answered: ReturnType<typeof answerByMessage> = null;
+    // A spoken answer counts like a typed one ("yes", "2"): its recording isn't sent along.
+    const sent = files.filter((f) => !heard.has(f));
     try {
-      answered = answerByMessage(conversationId, { content: msg.text, attachments: files.length ? files : undefined }, {
+      answered = answerByMessage(conversationId, { content: words, attachments: sent.length ? sent : undefined }, {
         actor: `messaging:${from.userId}`,
         via: conn.provider,
       });
@@ -435,6 +493,7 @@ async function startTurn(conn: ConnectionRow, adapter: MessagingAdapter, msg: In
     }
     if (answered) {
       patchChat(chatId, { last_message_at: now() });
+      if (said) await say(adapter, msg, `I heard: “${said}”`);
       const stopAnswered = await adapter.working(msg.target, msg.messageId).catch(() => async () => {});
       void deliver(conn, adapter, msg, answered.run.id, stopAnswered, true);
       return;

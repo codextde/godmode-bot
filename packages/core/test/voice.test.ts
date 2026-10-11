@@ -8,7 +8,8 @@ import { closeDb, openDb } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import * as vault from "../src/vault/vault";
-import { audioFilename, isoLanguage, speak, transcribe } from "../src/voice/voice";
+import { audioFilename, isoLanguage, NO_TRANSCRIPTION_KEY, speak, transcribe, transcribeRecording } from "../src/voice/voice";
+import { createApiTool, deleteApiTool } from "../src/integrations/apiTools";
 import { registerVoiceRoutes } from "../src/server/routes/voice";
 import { HttpError } from "../src/util";
 
@@ -213,5 +214,94 @@ describe("routes", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("audio/mpeg");
     expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([9, 9]);
+  });
+});
+
+describe("transcribeRecording (voice messages)", () => {
+  const audio = new Blob([new Uint8Array([1, 2, 3, 4])], { type: "audio/ogg" });
+  const agent = { id: "agt_listener", workspaceId: null, inheritMcp: true };
+
+  beforeEach(() => {
+    vault.setAppSecret("openai_api_key", null);
+    vault.setAppSecret("elevenlabs_api_key", null);
+    updateSettings({ voice: { sttProvider: "browser", sttModel: "", language: "de-DE", openaiBaseUrl: "" } });
+  });
+
+  test("without any key it says what is missing and calls nobody", async () => {
+    const err = await expectHttpError(() => transcribeRecording(audio, { filename: "voice-1.ogg", agent }), 400);
+    expect(err.message).toBe(NO_TRANSCRIPTION_KEY);
+    expect(err.code).toBe("voice_no_key");
+    expect(captured).toHaveLength(0);
+  });
+
+  test("the OpenAI voice key is used first, and the language is detected", async () => {
+    vault.setAppSecret("openai_api_key", "sk-openai-test");
+    vault.setAppSecret("elevenlabs_api_key", "xi-test-key");
+    respond = () => Response.json({ text: " Was gibt's Neues? " });
+    expect(await transcribeRecording(audio, { filename: "voice-1.ogg" })).toBe("Was gibt's Neues?");
+    const c = captured[0]!;
+    expect(c.url).toBe("https://api.openai.com/v1/audio/transcriptions");
+    expect(c.headers.get("authorization")).toBe("Bearer sk-openai-test");
+    expect(c.form!.get("model")).toBe("gpt-4o-mini-transcribe");
+    expect(c.form!.has("language")).toBe(false);
+    expect((c.form!.get("file") as File).name).toBe("voice-1.ogg");
+  });
+
+  test("ElevenLabs transcribes when it is the only voice key", async () => {
+    vault.setAppSecret("elevenlabs_api_key", "xi-test-key");
+    respond = () => Response.json({ text: "Hello there", language_code: "eng" });
+    expect(await transcribeRecording(audio, { filename: "voice-2.ogg" })).toBe("Hello there");
+    const c = captured[0]!;
+    expect(c.url).toBe("https://api.elevenlabs.io/v1/speech-to-text");
+    expect(c.headers.get("xi-api-key")).toBe("xi-test-key");
+    expect(c.form!.get("model_id")).toBe("scribe_v2");
+    expect(c.form!.get("tag_audio_events")).toBe("false");
+    expect((c.form!.get("file") as File).name).toBe("voice-2.ogg");
+  });
+
+  test("an API tool the agent may use lends its key, only to the provider's own address", async () => {
+    const elsewhere = createApiTool({ name: "Proxy", baseUrl: "https://api.openai.com.example.net", apiKey: "sk-proxy-123456" });
+    const insecure = createApiTool({ name: "Plain", baseUrl: "http://api.openai.com", apiKey: "sk-plain-123456" });
+    try {
+      await expectHttpError(() => transcribeRecording(audio, { agent }), 400);
+      expect(captured).toHaveLength(0);
+
+      const tool = createApiTool({ name: "ElevenLabs", baseUrl: "https://api.elevenlabs.io", apiKey: "xi-tool-key-123", auth: { in: "header", name: "xi-api-key", prefix: "" } });
+      respond = () => Response.json({ text: "From the tool" });
+      expect(await transcribeRecording(audio, { filename: "voice-3.ogg", agent })).toBe("From the tool");
+      expect(captured[0]!.url).toBe("https://api.elevenlabs.io/v1/speech-to-text");
+      expect(captured[0]!.headers.get("xi-api-key")).toBe("xi-tool-key-123");
+
+      // Nobody to borrow from: no agent, or an agent that doesn't get shared tools.
+      await expectHttpError(() => transcribeRecording(audio), 400);
+      await expectHttpError(() => transcribeRecording(audio, { agent: { ...agent, inheritMcp: false } }), 400);
+      expect(captured).toHaveLength(1);
+      deleteApiTool(tool.id);
+
+      updateSettings({ voice: { sttModel: "local-whisper", openaiBaseUrl: "https://proxy.example/v1" } });
+      const openai = createApiTool({ name: "OpenAI", baseUrl: "https://api.openai.com", apiKey: "sk-tool-key-123" });
+      respond = () => Response.json({ text: "From OpenAI" });
+      expect(await transcribeRecording(audio, { agent })).toBe("From OpenAI");
+      expect(captured[1]!.url).toBe("https://api.openai.com/v1/audio/transcriptions");
+      expect(captured[1]!.headers.get("authorization")).toBe("Bearer sk-tool-key-123");
+      expect(captured[1]!.form!.get("model")).toBe("gpt-4o-mini-transcribe");
+      deleteApiTool(openai.id);
+    } finally {
+      deleteApiTool(elsewhere.id);
+      deleteApiTool(insecure.id);
+    }
+  });
+
+  test("empty and oversized recordings are refused, provider errors stay readable", async () => {
+    vault.setAppSecret("elevenlabs_api_key", "xi-test-key");
+    expect((await expectHttpError(() => transcribeRecording(new Blob([])), 400)).code).toBe("voice_empty");
+    expect((await expectHttpError(() => transcribeRecording(new Blob([new Uint8Array(25 * 1024 * 1024 + 1)])), 413)).code).toBe("too_large");
+    expect(captured).toHaveLength(0);
+    respond = () => new Response(JSON.stringify({ detail: { message: "Invalid API key" } }), { status: 401 });
+    const rejected = await expectHttpError(() => transcribeRecording(audio), 400);
+    expect(rejected.message).toContain("ElevenLabs rejected the API key");
+    expect(rejected.code).toBe("voice_invalid_key");
+    respond = () => Response.json({ words: [] });
+    expect((await expectHttpError(() => transcribeRecording(audio), 502)).message).toContain("ElevenLabs returned an unexpected transcription response");
   });
 });

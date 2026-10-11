@@ -3,7 +3,8 @@
  * The "browser" providers run entirely in the UI (Web Speech API) and never reach these functions.
  * API keys are vault app secrets: `openai_api_key`, `elevenlabs_api_key`.
  */
-import type { Settings } from "@godmode/shared";
+import type { Agent, Settings } from "@godmode/shared";
+import { apiToolKey, apiToolsForAgent, markApiToolUsed } from "../integrations/apiTools";
 import { getSettings } from "../services/settings";
 import * as vault from "../vault/vault";
 import { badRequest, HttpError } from "../util";
@@ -12,11 +13,15 @@ export const OPENAI_API_KEY_SECRET = "openai_api_key";
 export const ELEVENLABS_API_KEY_SECRET = "elevenlabs_api_key";
 export const ELEVENLABS_BASE_URL = "https://api.elevenlabs.io";
 export const ELEVENLABS_MODEL = "eleven_flash_v2_5";
+export const ELEVENLABS_STT_MODEL = "scribe_v2";
+const OPENAI_STT_MODEL = "gpt-4o-mini-transcribe";
 /** OpenAI's upload limit for transcriptions. */
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 export const MAX_SPEAK_CHARS = 4000;
 
 const STT_TIMEOUT_MS = 120_000;
+/** Time allowed for a transcript to arrive once the provider started answering. */
+const STT_BODY_TIMEOUT_MS = 30_000;
 /** Time allowed until the TTS provider starts answering; the audio itself then streams without a deadline. */
 const TTS_TIMEOUT_MS = 60_000;
 
@@ -139,23 +144,131 @@ export async function transcribe(audio: Blob, opts: { language?: string | null; 
   if (!audio || audio.size === 0) throw badRequest("The recording is empty");
   if (audio.size > MAX_AUDIO_BYTES) throw new HttpError(413, "Recordings are limited to 25 MB", "too_large");
 
-  const key = apiKey(OPENAI_API_KEY_SECRET, "OpenAI");
+  return {
+    text: await openaiTranscript(audio, {
+      key: apiKey(OPENAI_API_KEY_SECRET, "OpenAI"),
+      baseUrl: openaiBaseUrl(voice),
+      model: voice.sttModel || OPENAI_STT_MODEL,
+      language: isoLanguage(opts.language || voice.language),
+      filename: opts.filename,
+    }),
+  };
+}
+
+async function openaiTranscript(
+  audio: Blob,
+  opts: { key: string; baseUrl: string; model: string; language?: string; filename?: string | null },
+): Promise<string> {
   const form = new FormData();
   form.set("file", audio, audioFilename(audio.type, opts.filename));
-  form.set("model", voice.sttModel || "gpt-4o-mini-transcribe");
+  form.set("model", opts.model);
   form.set("response_format", "json");
-  const language = isoLanguage(opts.language || voice.language);
-  if (language) form.set("language", language);
+  if (opts.language) form.set("language", opts.language);
 
   const res = await providerFetch(
     "OpenAI",
-    `${openaiBaseUrl(voice)}/audio/transcriptions`,
-    { method: "POST", headers: { authorization: `Bearer ${key}`, accept: "application/json" }, body: form },
+    `${opts.baseUrl}/audio/transcriptions`,
+    { method: "POST", headers: { authorization: `Bearer ${opts.key}`, accept: "application/json" }, body: form },
     STT_TIMEOUT_MS,
   );
-  const data = (await res.json().catch(() => null)) as { text?: unknown } | null;
-  if (!data || typeof data.text !== "string") throw new HttpError(502, "OpenAI returned an unexpected transcription response", "voice_upstream");
-  return { text: data.text.trim() };
+  return transcriptIn("OpenAI", res);
+}
+
+async function transcriptIn(provider: Provider, res: Response): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new HttpError(502, `${provider} did not finish its answer within ${STT_BODY_TIMEOUT_MS / 1000} seconds`, "voice_unreachable")), STT_BODY_TIMEOUT_MS);
+  });
+  try {
+    const data = (await Promise.race([res.json().catch(() => null), late])) as { text?: unknown } | null;
+    if (!data || typeof data.text !== "string") throw new HttpError(502, `${provider} returned an unexpected transcription response`, "voice_upstream");
+    return data.text.trim();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function elevenlabsTranscript(audio: Blob, opts: { key: string; filename?: string | null }): Promise<string> {
+  const form = new FormData();
+  form.set("file", audio, audioFilename(audio.type, opts.filename));
+  form.set("model_id", ELEVENLABS_STT_MODEL);
+  form.set("tag_audio_events", "false");
+  form.set("timestamps_granularity", "none");
+
+  const res = await providerFetch(
+    "ElevenLabs",
+    `${ELEVENLABS_BASE_URL}/v1/speech-to-text`,
+    { method: "POST", headers: { "xi-api-key": opts.key, accept: "application/json" }, body: form },
+    STT_TIMEOUT_MS,
+  );
+  return transcriptIn("ElevenLabs", res);
+}
+
+type RecordingAgent = Pick<Agent, "id" | "workspaceId" | "inheritMcp">;
+
+interface Transcriber {
+  provider: "openai" | "elevenlabs";
+  key: string;
+  /** The API tool the key belongs to, when it isn't one of the Voice keys. */
+  toolId?: string;
+}
+
+const TOOL_HOSTS: Record<string, Transcriber["provider"]> = { "api.openai.com": "openai", "api.elevenlabs.io": "elevenlabs" };
+
+function toolProvider(baseUrl: string): Transcriber["provider"] | null {
+  try {
+    const u = new URL(baseUrl);
+    return u.protocol === "https:" ? (TOOL_HOSTS[u.host] ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The key a recording someone sent is transcribed with: the Voice keys first, then an OpenAI or ElevenLabs API tool
+ * `agent` may use (the one closest to the agent). Null when there is none.
+ */
+function transcriberFor(agent: RecordingAgent | null): Transcriber | null {
+  for (const [secret, provider] of [
+    [OPENAI_API_KEY_SECRET, "openai"],
+    [ELEVENLABS_API_KEY_SECRET, "elevenlabs"],
+  ] as const) {
+    const key = vault.getAppSecret(secret);
+    if (key) return { provider, key };
+  }
+  if (!agent) return null;
+  for (const tool of apiToolsForAgent(agent).reverse()) {
+    const provider = tool.hasKey ? toolProvider(tool.baseUrl) : null;
+    const key = provider ? apiToolKey(tool.id) : null;
+    if (provider && key) return { provider, key, toolId: tool.id };
+  }
+  return null;
+}
+
+export const NO_TRANSCRIPTION_KEY = "No OpenAI or ElevenLabs key is set up (Settings → Integrations)";
+
+/**
+ * Text of a recording that reached Godmode from outside the app (a voice message in a messaging chat). The language
+ * is detected. Throws an HttpError a human can read when it can't be transcribed.
+ */
+export async function transcribeRecording(audio: Blob, opts: { filename?: string | null; agent?: RecordingAgent | null } = {}): Promise<string> {
+  if (!audio || audio.size === 0) throw new HttpError(400, "The recording is empty", "voice_empty");
+  if (audio.size > MAX_AUDIO_BYTES) throw new HttpError(413, "Recordings are limited to 25 MB", "too_large");
+  const source = transcriberFor(opts.agent ?? null);
+  if (!source) throw new HttpError(400, NO_TRANSCRIPTION_KEY, "voice_no_key");
+  const voice = getSettings().voice;
+  const text =
+    source.provider === "elevenlabs"
+      ? await elevenlabsTranscript(audio, { key: source.key, filename: opts.filename })
+      : await openaiTranscript(audio, {
+          key: source.key,
+          // A tool's key only ever goes to the tool's own address.
+          baseUrl: source.toolId ? "https://api.openai.com/v1" : openaiBaseUrl(voice),
+          model: (!source.toolId && voice.sttModel) || OPENAI_STT_MODEL,
+          filename: opts.filename,
+        });
+  if (source.toolId) markApiToolUsed(source.toolId);
+  return text;
 }
 
 export interface SpeechAudio {
