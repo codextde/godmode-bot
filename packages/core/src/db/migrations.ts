@@ -1397,6 +1397,14 @@ ALTER TABLE mods ADD COLUMN contents TEXT;
   },
   {
     id: 85,
+    // The latest runs of all agents (the phone's Activity) without reading and sorting the whole table.
+    name: "runs_created_index",
+    sql: /* sql */ `
+CREATE INDEX IF NOT EXISTS idx_runs_created ON runs(created_at);
+`,
+  },
+  {
+    id: 86,
     name: "human_task_kinds",
     sql: /* sql */ `
 -- Whatever waits for the human's word is on their board: a question or approval an agent asked (question_id: the

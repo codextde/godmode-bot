@@ -1,6 +1,6 @@
 import { isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets, type TaskBlockedKind } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { Task, TaskStatus } from "@godmode/shared";
@@ -11,7 +11,8 @@ import { Markdown } from "@/components/markdown";
 import { openChat } from "@/components/rows";
 import { ProjectPicker } from "@/components/project-picker";
 import { STATUS_META, TaskStatusBadge, TYPE_META } from "@/components/task-row";
-import { Avatar, Badge, Button, Card, ErrorState, LoadingState, Row, SectionTitle, T, tap } from "@/components/ui";
+import { TaskTimeline } from "@/components/task-timeline";
+import { Avatar, Badge, Button, Card, ErrorState, Row, SectionTitle, Skeleton, T, tap } from "@/components/ui";
 import { ApiError, api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { activityText } from "@/lib/format";
@@ -24,9 +25,11 @@ import { radius, space, useColors } from "@/lib/theme";
 export default function TaskScreen() {
   const c = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const task = useQuery({ queryKey: qk.task(id), queryFn: () => api.tasks.get(id) });
+  // The board already has the ticket, without its long texts: the screen opens from that copy while the whole one loads.
+  const seed = useMemo(() => boardTicket(id), [id]);
+  const task = useQuery({ queryKey: qk.task(id), queryFn: () => api.tasks.get(id), placeholderData: seed });
   const { data: agents, byId } = useAgents();
-  const { workspaces } = useWorkspace();
+  const { workspaces, id: pickedWorkspace } = useWorkspace();
   const [picking, setPicking] = useState(false);
 
   const onDone = (next: Task) => {
@@ -61,19 +64,23 @@ export default function TaskScreen() {
     },
   });
 
-  const t = task.data;
+  const gone = task.error instanceof ApiError && task.error.status === 404;
+  const t = task.data ?? (gone ? undefined : seed);
   if (!t) {
+    if (!task.isError) return <TaskSkeleton />;
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
-        <Stack.Title>{task.isError ? "Task not found" : "Task"}</Stack.Title>
-        {task.isError ? (
-          <ErrorState title="Couldn't open this task" error={errorText(task.error)} onRetry={() => void task.refetch()} />
-        ) : (
-          <LoadingState label="Loading the task…" />
-        )}
+        <Stack.Title>Task not found</Stack.Title>
+        <ErrorState title="Couldn't open this task" error={errorText(task.error)} onRetry={() => void task.refetch()} />
       </View>
     );
   }
+
+  // A board's copy has no description and a clipped result; one a live event put there is whole.
+  const slim = (!task.data || task.isPlaceholderData) && !t.description;
+  const unrefreshed = (!task.data || task.isPlaceholderData) && task.isError && !task.isFetching;
+  const whole = !slim;
+  const loadingTexts = slim && !unrefreshed;
 
   const agent = t.agentId ? byId.get(t.agentId) : undefined;
   const workspace = workspaces.find((w) => w.id === t.workspaceId);
@@ -82,7 +89,8 @@ export default function TaskScreen() {
   const pickProject = () => {
     tap();
     setPicking((v) => !v);
-  };  // In progress isn't working: the ticket may wait for its follow-up, for an answer, or stand still.
+  };
+  // In progress isn't working: the ticket may wait for its follow-up, for an answer, or stand still.
   const working = t.status === "in_progress" && (t.runStatus === "running" || t.runStatus === "queued" || !!t.activity);
   const waiting = t.status === "in_progress" && (isWaiting(t) || waitsForAnswer(t) || !!t.pause);
   const canFollowUp =
@@ -155,6 +163,34 @@ export default function TaskScreen() {
           />
         )}
       </View>
+
+      {unrefreshed ? (
+        <View style={[styles.stale, { backgroundColor: c.sunken }]}>
+          <Icon name="wifi" size={15} color={c.textMuted} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <T variant="subhead" style={{ fontWeight: "600" }}>
+              {"Couldn't refresh"}
+            </T>
+            <T variant="footnote" muted numberOfLines={2}>
+              {slim ? "This is the board's copy, without its texts." : errorText(task.error)}
+            </T>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Try refreshing the task again"
+            hitSlop={10}
+            onPress={() => {
+              tap();
+              void task.refetch();
+            }}
+            style={({ pressed }) => [styles.retry, { backgroundColor: c.surface, opacity: pressed ? 0.6 : 1 }]}
+          >
+            <T variant="footnote" style={{ fontWeight: "600" }}>
+              Try again
+            </T>
+          </Pressable>
+        </View>
+      ) : null}
 
       <Card style={styles.agent} onPress={agent ? () => router.push({ pathname: "/agent/[id]", params: { id: agent.id } }) : undefined}>
         {agent ? <CharacterAvatar agent={agent} size={40} running={working} /> : <Avatar emoji="📋" size={40} running={working} />}
@@ -246,7 +282,7 @@ export default function TaskScreen() {
         </View>
       )}
 
-      <Parts task={t} />
+      <Parts task={t} workspaceId={pickedWorkspace === null || pickedWorkspace === t.workspaceId ? pickedWorkspace : t.workspaceId} />
 
       {t.pullRequest && (
         <Card
@@ -270,23 +306,8 @@ export default function TaskScreen() {
         </Card>
       )}
 
-      {t.summary ? (
-        <View>
-          <SectionTitle title="Result" />
-          <Card style={styles.text}>
-            <Markdown text={t.summary} />
-          </Card>
-        </View>
-      ) : null}
-
-      {t.description ? (
-        <View>
-          <SectionTitle title="Details" />
-          <Card style={styles.text}>
-            <Markdown text={t.description} />
-          </Card>
-        </View>
-      ) : null}
+      {t.summary && (whole || loadingTexts) ? <TextSection title="Result" text={whole ? t.summary : undefined} /> : null}
+      {(whole && t.description) || loadingTexts ? <TextSection title="Details" text={whole ? t.description : undefined} /> : null}
 
       {canFollowUp && (
         <View>
@@ -294,7 +315,83 @@ export default function TaskScreen() {
           <Composer draftKey={`task:${id}`} onSend={followUp} attachments placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
         </View>
       )}
+
+      <View>
+        <SectionTitle title="Activity" />
+        <TaskTimeline task={t} agents={agents} />
+      </View>
     </ScrollView>
+  );
+}
+
+/** The board's copy of a ticket: there at once, but without its description and with a clipped result. */
+function boardTicket(id: string): Task | undefined {
+  for (const [, list] of queryClient.getQueriesData<Task[]>({ queryKey: [...qk.tasks, "list"] })) {
+    const hit = Array.isArray(list) ? list.find((t) => t.id === id) : undefined;
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
+/** The screen's shape while a ticket nothing is known about yet loads. */
+function TaskSkeleton() {
+  return (
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} scrollEnabled={false}>
+      <Stack.Title>Task</Stack.Title>
+      <View style={{ gap: space.lg }} accessibilityRole="progressbar" accessibilityLabel="Loading the task">
+        <View style={{ gap: space.sm }}>
+          <Skeleton width="86%" height={22} radius={8} />
+          <Skeleton width="52%" height={22} radius={8} />
+          <Row style={{ gap: 6, marginTop: 2 }}>
+            <Skeleton width={86} height={21} radius={radius.pill} />
+            <Skeleton width={58} height={21} radius={radius.pill} />
+            <Skeleton width={104} height={21} radius={radius.pill} />
+          </Row>
+        </View>
+        <Card style={styles.agent}>
+          <Skeleton width={40} height={40} radius={13} />
+          <View style={{ flex: 1, gap: 8 }}>
+            <Skeleton width="44%" height={14} />
+            <Skeleton width="68%" height={11} />
+          </View>
+        </Card>
+        <View style={{ gap: space.sm }}>
+          <Skeleton height={46} radius={radius.pill} />
+          <Skeleton height={46} radius={radius.pill} />
+        </View>
+        <Card style={styles.text}>
+          <TextSkeleton />
+        </Card>
+      </View>
+    </ScrollView>
+  );
+}
+
+function TextSkeleton() {
+  return (
+    <View style={{ gap: 10 }}>
+      <Skeleton width="94%" height={13} />
+      <Skeleton width="80%" height={13} />
+      <Skeleton width="58%" height={13} />
+    </View>
+  );
+}
+
+/** A titled card of Markdown; without `text` it is still loading. */
+function TextSection({ title, text }: { title: string; text?: string }) {
+  return (
+    <View>
+      <SectionTitle title={title} />
+      <Card style={styles.text}>
+        {text ? (
+          <Markdown text={text} />
+        ) : (
+          <View accessibilityRole="progressbar" accessibilityLabel={`Loading the ${title.toLowerCase()}`}>
+            <TextSkeleton />
+          </View>
+        )}
+      </Card>
+    </View>
   );
 }
 
@@ -391,12 +488,13 @@ function ActionButtons({
 }
 
 /** What the ticket is part of, and its own parts (a lead's ticket waits until they're finished). */
-function Parts({ task }: { task: Task }) {
+function Parts({ task, workspaceId }: { task: Task; workspaceId: string | null }) {
   const c = useColors();
   const { byId } = useAgents();
-  const board = useQuery({ queryKey: qk.taskList(null), queryFn: () => api.tasks.list(), enabled: !!task.subtasks || !!task.parentId });
-  const parts = (board.data ?? []).filter((p) => p.parentId === task.id).sort((a, b) => a.number - b.number);
-  const parent = task.parentId ? board.data?.find((p) => p.id === task.parentId) : undefined;
+  // The board the Tasks tab keeps (and live events patch), so this is the same request, not one more.
+  const board = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }), enabled: !!task.subtasks || !!task.parentId });
+  const parts = useMemo(() => (board.data ?? []).filter((p) => p.parentId === task.id).sort((a, b) => a.number - b.number), [board.data, task.id]);
+  const parentTitle = useMemo(() => (task.parentId ? board.data?.find((p) => p.id === task.parentId)?.title : undefined), [board.data, task.parentId]);
   if (!task.parentId && !task.subtasks) return null;
   const open = (id: string) => {
     tap();
@@ -412,7 +510,7 @@ function Parts({ task }: { task: Task }) {
               Part of
             </T>
             <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
-              #{task.parentNumber} {parent?.title ?? ""}
+              #{task.parentNumber} {parentTitle ?? ""}
             </T>
           </View>
           <Icon name="chevron" size={13} color={c.textFaint} />
@@ -422,8 +520,21 @@ function Parts({ task }: { task: Task }) {
         <View>
           <SectionTitle title={`Parts · ${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} finished`} />
           <Card style={{ paddingVertical: 4 }}>
+            {!parts.length && board.isPending ? (
+              <View style={styles.partsLoading} accessibilityRole="progressbar" accessibilityLabel="Loading the parts">
+                {Array.from({ length: Math.min(task.subtasks.total, 4) }, (_, i) => (
+                  <Skeleton key={i} width={`${78 - ((i * 19) % 30)}%`} height={13} />
+                ))}
+              </View>
+            ) : null}
             {parts.map((p) => (
-              <Pressable key={p.id} onPress={() => open(p.id)} accessibilityRole="button" style={({ pressed }) => [styles.part, { opacity: pressed ? 0.6 : 1 }]}>
+              <Pressable
+                key={p.id}
+                onPress={() => open(p.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Part #${p.number}, ${p.title}, ${STATUS_META[p.status].label}`}
+                style={({ pressed }) => [styles.part, { opacity: pressed ? 0.6 : 1 }]}
+              >
                 <T variant="footnote" muted style={{ fontVariant: ["tabular-nums"] }}>
                   #{p.number}
                 </T>
@@ -445,6 +556,21 @@ function Parts({ task }: { task: Task }) {
 
 const styles = StyleSheet.create({
   part: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
+  partsLoading: { gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg },
+  stale: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.md,
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+  },
+  retry: {
+    height: 32,
+    paddingHorizontal: space.md,
+    borderRadius: radius.pill,
+    justifyContent: "center",
+  },
   content: {
     paddingHorizontal: space.lg,
     paddingTop: space.md,

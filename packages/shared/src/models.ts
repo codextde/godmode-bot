@@ -564,6 +564,10 @@ export type MessageBlock =
       isError?: boolean;
       /** Optional base64 image result (e.g. browser screenshot). */
       image?: string;
+      /** In a light answer (`lite`): where to fetch `image` instead, with the same credentials. */
+      imageUrl?: string;
+      /** In a light answer: `result` is only its beginning. */
+      resultTruncated?: boolean;
       /** Work the tool started in the background (a Claude Code workflow), kept up to date while it runs. */
       task?: ToolTask;
       parentToolUseId?: string | null;

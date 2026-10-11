@@ -1,6 +1,8 @@
 import { AppState, type AppStateStatus } from "react-native";
-import { browserView, type ClientEvent, type ConversationWithMessages, type EntityName, type Message, type ServerEvent, type Vm } from "@godmode/shared";
-import { api, forget, reachableBase } from "./api";
+import type { InvalidateQueryFilters } from "@tanstack/react-query";
+import { browserView, type Agent, type AgentQuestion, type ClientEvent, type EntityName, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
+import { api, forget, reachableBase, retryAddresses } from "./api";
+import { noteQueue, upsertMessage } from "./chat-cache";
 import { setQueue } from "./composer";
 import { withPending } from "./pending-queue";
 import { useLive } from "./live";
@@ -23,6 +25,7 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
   notifications: [qk.notifications, qk.bootstrap],
   runs: [qk.runs],
   vms: [qk.vms],
+  android: [qk.androidDevices],
   settings: [qk.bootstrap, qk.settings],
   workspaces: [qk.workspaces, qk.agents],
   tasks: [qk.tasks],
@@ -31,6 +34,17 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
 
 function sendEvent(event: ClientEvent) {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(event));
+}
+
+const resyncAsked = new Map<string, number>();
+
+/** A delta didn't fit what the phone has of the run (it missed one): ask for the whole list, once a second at most. */
+function resync(runId: string) {
+  const now = Date.now();
+  if (now - (resyncAsked.get(runId) ?? 0) < 1000) return;
+  if (resyncAsked.size > 100) resyncAsked.clear();
+  resyncAsked.set(runId, now);
+  sendEvent({ type: "run.resync", runId });
 }
 
 /** Ref-counted subscription (browser/computer live views, open chats), replayed after every reconnect. */
@@ -105,21 +119,47 @@ async function catchUp() {
  */
 const conversationLists = { queryKey: qk.conversations, predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[1] !== "detail" };
 
-/** A stored message into the cached chat right away; the optimistic copy of a message the human just sent goes. */
-function upsertMessage(message: Message) {
-  queryClient.setQueryData<ConversationWithMessages>(qk.conversation(message.conversationId), (old) => {
-    if (!old) return old;
-    if (old.messages.some((m) => m.id === message.id)) return { ...old, messages: old.messages.map((m) => (m.id === message.id ? message : m)) };
-    let rest = old.messages;
-    if (message.role === "user") {
-      const optimistic = rest.findIndex((m) => m.id.startsWith("pending-") && m.content.trim() === message.content.trim());
-      if (optimistic >= 0) rest = rest.filter((_, i) => i !== optimistic);
-    }
-    const stored = rest.filter((m) => !m.id.startsWith("pending-"));
-    const at = stored.findIndex((m) => m.createdAt > message.createdAt);
-    const sorted = at < 0 ? [...stored, message] : [...stored.slice(0, at), message, ...stored.slice(at)];
-    return { ...old, messages: [...sorted, ...rest.filter((m) => m.id.startsWith("pending-"))] };
-  });
+const soon = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Refetch once a burst of events is over: a run's start, its messages and its end each touch the same lists. */
+function refreshSoon(filters: InvalidateQueryFilters & { queryKey: readonly unknown[] }) {
+  const id = JSON.stringify(filters.queryKey) + (filters.predicate ? ":lists" : "");
+  if (soon.has(id)) return;
+  soon.set(
+    id,
+    setTimeout(() => {
+      soon.delete(id);
+      // A fetch on its way started before the event: let it land (restarting it with every event could keep a slow
+      // one from ever finishing), then ask again.
+      if (queryClient.isFetching(filters) > 0) return refreshSoon(filters);
+      void queryClient.invalidateQueries(filters);
+    }, 350),
+  );
+}
+
+/**
+ * Patch cached lists from an event. A fetch of one that is on its way started before the event and would land without
+ * it: that one is cancelled and fetched again afterwards.
+ */
+async function patchLists(filters: { queryKey: readonly unknown[] }, patch: () => void) {
+  const fetching = queryClient.isFetching(filters) > 0;
+  if (fetching) await queryClient.cancelQueries(filters);
+  patch();
+  if (fetching) void queryClient.invalidateQueries(filters);
+}
+
+/** A ticket from its event into every cached board it belongs on, without fetching the boards again. */
+function upsertTask(task: Task) {
+  queryClient.setQueryData(qk.task(task.id), task);
+  for (const [key, list] of queryClient.getQueriesData<Task[]>({ queryKey: [...qk.tasks, "list"] })) {
+    if (!Array.isArray(list)) continue;
+    const scope = key[2];
+    const belongs = (key[3] === "archived") === !!task.archivedAt && (scope === "all" || task.workspaceId === scope);
+    const at = list.findIndex((t) => t.id === task.id);
+    if (!belongs) {
+      if (at >= 0) queryClient.setQueryData(key, list.filter((t) => t.id !== task.id));
+    } else queryClient.setQueryData(key, at >= 0 ? list.map((t) => (t.id === task.id ? task : t)) : [task, ...list]);
+  }
 }
 
 function handle(event: ServerEvent) {
@@ -128,64 +168,66 @@ function handle(event: ServerEvent) {
     case "run.started":
       live.runStarted(event.run);
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
-      void queryClient.invalidateQueries(conversationLists);
-      void queryClient.invalidateQueries({ queryKey: qk.runs });
+      refreshSoon(conversationLists);
+      refreshSoon({ queryKey: qk.runs });
       break;
     case "run.activity":
       live.runActivity(event.runId, event.label);
       break;
     case "run.delta":
-      // The whole list: this app doesn't ask for patches.
-      if (event.blocks) live.delta(event.conversationId, { runId: event.runId, messageId: event.messageId, blocks: event.blocks });
+      if (!live.delta(event)) resync(event.runId);
       break;
     case "run.paused":
-      // It stands still: nothing works in the chat until it continues.
-      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) }).then(() => live.runFinished(event.run));
-      void queryClient.invalidateQueries(conversationLists);
-      void queryClient.invalidateQueries({ queryKey: qk.runs });
-      void queryClient.invalidateQueries({ queryKey: qk.agents });
-      break;
     case "run.finished":
+      // The chat shows the stored answer before the streaming copy goes (a paused run stands still until it continues).
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) }).then(() => live.runFinished(event.run));
-      void queryClient.invalidateQueries(conversationLists);
-      void queryClient.invalidateQueries({ queryKey: qk.runs });
-      void queryClient.invalidateQueries({ queryKey: qk.agents });
-      void queryClient.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon(conversationLists);
+      refreshSoon({ queryKey: qk.runs });
+      refreshSoon({ queryKey: qk.agents });
+      refreshSoon({ queryKey: qk.bootstrap });
       break;
     case "message.created":
     case "message.updated":
+      // Into the cached chat as it is; a fetch on its way gets it too (see chat-cache), so nothing is fetched again.
       upsertMessage(event.message);
-      // A fetch that started before this message must not take it away again.
-      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.message.conversationId) });
       break;
     case "queue.updated":
       setQueue(event.conversationId, () => withPending(event.conversationId, event.queue));
-      // A fetch that started before this change must not bring the old queue back.
-      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.conversationId) });
+      noteQueue(event.conversationId, event.queue);
       break;
     case "conversation.updated":
       void queryClient.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
-      void queryClient.invalidateQueries(conversationLists);
+      refreshSoon(conversationLists);
       break;
     case "conversation.deleted":
-      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.id) });
-      void queryClient.invalidateQueries(conversationLists);
+      queryClient.removeQueries({ queryKey: qk.conversation(event.id) });
+      refreshSoon(conversationLists);
       break;
     case "agent.updated":
+      queryClient.setQueryData<Agent[]>(qk.agents, (old) => (old?.some((a) => a.id === event.agent.id) ? old.map((a) => (a.id === event.agent.id ? event.agent : a)) : old));
+      refreshSoon({ queryKey: qk.agents });
+      break;
     case "agent.deleted":
-      void queryClient.invalidateQueries({ queryKey: qk.agents });
+      queryClient.setQueryData<Agent[]>(qk.agents, (old) => old?.filter((a) => a.id !== event.id));
       break;
     case "task.updated":
-      queryClient.setQueryData(qk.task(event.task.id), event.task);
-      void queryClient.invalidateQueries({ queryKey: [...qk.tasks, "list"] });
+      void patchLists({ queryKey: [...qk.tasks, "list"] }, () => upsertTask(event.task));
+      refreshSoon({ queryKey: qk.bootstrap });
       break;
+    case "task.event": {
+      const e = event.event;
+      queryClient.setQueryData<TaskEvent[]>(qk.taskEvents(e.taskId), (list) =>
+        !Array.isArray(list) || list.some((x) => x.id === e.id) ? list : [...list, e].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+      );
+      break;
+    }
     case "task.deleted":
       queryClient.removeQueries({ queryKey: qk.task(event.id) });
-      void queryClient.invalidateQueries({ queryKey: qk.tasks });
+      queryClient.setQueriesData<Task[]>({ queryKey: [...qk.tasks, "list"] }, (list) => list?.filter((t) => t.id !== event.id));
       break;
     case "routine.updated":
     case "routine.deleted":
-      void queryClient.invalidateQueries({ queryKey: qk.routines });
+      refreshSoon({ queryKey: qk.routines });
       break;
     case "vm.updated":
       queryClient.setQueryData<Vm[]>(qk.vms, (old) => old?.map((v) => (v.id === event.vm.id ? event.vm : v)));
@@ -194,7 +236,7 @@ function handle(event: ServerEvent) {
       queryClient.setQueryData<Vm[]>(qk.vms, (old) => old?.filter((v) => v.id !== event.id));
       break;
     case "browser.updated":
-      void queryClient.invalidateQueries({ queryKey: qk.browserProfiles });
+      refreshSoon({ queryKey: qk.browserProfiles });
       break;
     case "browser.frame":
       live.frame(`browser:${browserView(event.profileId, event.conversationId)}`, {
@@ -219,26 +261,33 @@ function handle(event: ServerEvent) {
       });
       break;
     case "notification":
-      void queryClient.invalidateQueries({ queryKey: qk.notifications });
+      refreshSoon({ queryKey: qk.notifications });
       break;
     case "question.created":
-    case "question.updated":
-      void queryClient.invalidateQueries({ queryKey: qk.questions });
-      void queryClient.invalidateQueries({ queryKey: qk.bootstrap });
-      void queryClient.invalidateQueries({ queryKey: qk.agents });
-      void queryClient.invalidateQueries({ queryKey: qk.conversation(event.question.conversationId) });
-      void queryClient.invalidateQueries(conversationLists);
+    case "question.updated": {
+      const q = event.question;
+      // The lists are of open questions: a settled one leaves at once.
+      queryClient.setQueriesData<AgentQuestion[]>({ queryKey: qk.questions }, (list) => {
+        if (!Array.isArray(list) || !list.some((x) => x.id === q.id)) return list;
+        return q.status === "open" ? list.map((x) => (x.id === q.id ? q : x)) : list.filter((x) => x.id !== q.id);
+      });
+      refreshSoon({ queryKey: qk.questions });
+      refreshSoon({ queryKey: qk.bootstrap });
+      refreshSoon({ queryKey: qk.agents });
+      void queryClient.invalidateQueries({ queryKey: qk.conversation(q.conversationId) });
+      refreshSoon(conversationLists);
       break;
+    }
     case "missing-login.created":
     case "missing-login.updated":
-      void queryClient.invalidateQueries({ queryKey: qk.missingLogins });
-      void queryClient.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon({ queryKey: qk.missingLogins });
+      refreshSoon({ queryKey: qk.bootstrap });
       break;
     case "vault.status":
-      void queryClient.invalidateQueries({ queryKey: qk.bootstrap });
+      refreshSoon({ queryKey: qk.bootstrap });
       break;
     case "entity.changed":
-      for (const key of ENTITY_KEYS[event.entity] ?? []) void queryClient.invalidateQueries({ queryKey: key });
+      for (const key of ENTITY_KEYS[event.entity] ?? []) refreshSoon({ queryKey: key });
       break;
   }
 }
@@ -251,6 +300,8 @@ function clearTimers() {
 }
 
 let connecting = false;
+/** The socket was open before in this pairing: the next open is a reconnect. */
+let wasOpen = false;
 
 function scheduleReconnect() {
   if (!running) return;
@@ -283,10 +334,15 @@ async function connect() {
     attempt = 0;
     useSession.getState().setActiveUrl(base);
     useLive.getState().setStatus("online");
+    // Streaming replies as what changed, not the whole block list five times a second (megabytes in a long run).
+    sendEvent({ type: "deltas.patch" });
     replaySubscriptions();
     if (viewing) sendView();
     void catchUp();
-    void queryClient.invalidateQueries();
+    // Events were missed while the link was down, so everything is asked again (lists are small and chats come as a
+    // window). Not on the first connect: every screen has just fetched its own.
+    if (wasOpen) void queryClient.invalidateQueries();
+    wasOpen = true;
     pingTimer = setInterval(() => sendEvent({ type: "ping" }), 25_000);
   };
   ws.onmessage = (msg) => {
@@ -317,6 +373,7 @@ function onAppState(state: AppStateStatus) {
   if (viewing) sendView();
   if (state === "active") {
     if (running && !socket) {
+      retryAddresses();
       clearTimers();
       attempt = 0;
       void connect();
@@ -334,6 +391,7 @@ function onAppState(state: AppStateStatus) {
 export function startRealtime(): () => void {
   running = true;
   attempt = 0;
+  wasOpen = false;
   void connect();
   const sub = AppState.addEventListener("change", onAppState);
   return () => {
@@ -349,6 +407,7 @@ export function startRealtime(): () => void {
 /** Try right away instead of waiting for the backoff (pull to refresh, "Retry"). */
 export function reconnectNow() {
   if (!running || socket) return;
+  retryAddresses();
   clearTimers();
   attempt = 0;
   void connect();

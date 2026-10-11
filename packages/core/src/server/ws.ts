@@ -5,6 +5,7 @@ import { VERSION } from "../config";
 import { logger } from "../log";
 import { setDeviceSocketHooks } from "../mobile/devices";
 import { deviceMayUseView } from "../mobile/scope";
+import { liteMessage } from "../services/liteMessage";
 
 const log = logger("ws");
 
@@ -278,6 +279,7 @@ bus.on((event) => {
   }
   if (event.type === "android.video" || event.type === "android.action") return sendAndroid(event);
   if (event.type === "run.delta") return sendDelta(event);
+  if (event.type === "message.created" || event.type === "message.updated") return sendMessage(event);
   if (event.type === "run.finished" || event.type === "run.paused") forgetWhole(event.run.id);
   const payload = timedSync(`send ${event.type}`, () => JSON.stringify(event));
   for (const ws of clients) {
@@ -355,6 +357,27 @@ function sendDelta(event: RunDelta) {
     }
   }
   if (others) sendWhole(event.runId);
+}
+
+/**
+ * A stored message to every client, but to phones only for the chats they have open and light (screenshots as their own
+ * requests): a finished turn can be megabytes of pictures.
+ */
+function sendMessage(event: Extract<ServerEvent, { type: "message.created" | "message.updated" }>) {
+  let full: string | null = null;
+  let lite: string | null = null;
+  for (const ws of clients) {
+    const device = ws.data.auth === "device";
+    if (device && !ws.data.conversations?.has(event.message.conversationId)) continue;
+    const payload = device
+      ? (lite ??= JSON.stringify({ ...event, message: liteMessage(event.message) }))
+      : (full ??= timedSync(`send ${event.type}`, () => JSON.stringify(event)));
+    try {
+      ws.send(payload);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 const MAX_CONVERSATIONS_PER_SOCKET = 20;

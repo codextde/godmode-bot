@@ -7,12 +7,16 @@ import {
   getConversation,
   getConversationSummary,
   listConversations,
+  listMessagePage,
+  messageImage,
+  messageWindow,
   markConversationsRead,
   sendMessage,
   startChat,
   updateConversation,
 } from "../../services/conversations";
 import { editQueued, removeQueued, sendQueuedNow, submitMessage } from "../../services/messageQueue";
+import { liteMessage } from "../../services/liteMessage";
 import { answerByMessage } from "../../services/questions";
 import { answererOf } from "./questions";
 import { settleByReply } from "../../services/humanTasks";
@@ -109,7 +113,26 @@ export function registerChatRoutes(app: Hono): void {
     return c.json(createConversation({ ...input, origin: "chat" }), 201);
   });
 
-  app.get("/api/conversations/:id", (c) => c.json(getConversation(c.req.param("id"))));
+  app.get("/api/conversations/:id", (c) => c.json(getConversation(c.req.param("id"), messageWindow((name) => c.req.query(name)))));
+
+  // Older messages of a chat, a page at a time (the chat itself answers with the latest ones when asked for `limit`).
+  app.get("/api/conversations/:id/messages", (c) => {
+    const id = c.req.param("id");
+    getConversationSummary(id);
+    const { limit, lite } = messageWindow((name) => c.req.query(name));
+    const page = listMessagePage(id, { limit: limit ?? 50, before: c.req.query("before") || undefined });
+    return c.json(lite ? { ...page, messages: page.messages.map(liteMessage) } : page);
+  });
+
+  // A picture a tool returned (a screenshot), for light answers that leave it out of the message.
+  app.get("/api/conversations/:id/messages/:messageId/images/:toolUseId", (c) => {
+    const { data, mime } = messageImage(c.req.param("id"), c.req.param("messageId"), c.req.param("toolUseId"));
+    return c.body(new Uint8Array(data), 200, {
+      "Content-Type": mime,
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, max-age=31536000, immutable",
+    });
+  });
 
   // The human has seen these chats ("Mark all read", or a client without a live socket).
   app.post("/api/conversations/read", async (c) => {

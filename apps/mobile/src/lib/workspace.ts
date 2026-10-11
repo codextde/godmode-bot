@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import type { Agent, Conversation, Project, Task, Workspace } from "@godmode/shared";
 import { api } from "./api";
-import { useAgents } from "./hooks";
+import { chatListQuery, useAgents } from "./hooks";
 import { type LiveRun, useLive } from "./live";
 import { qk } from "./query";
 
@@ -118,11 +118,7 @@ export function useWorkspaceRuns(): LiveRun[] {
   const { id, projectId } = useWorkspace();
   const runs = useLive((s) => s.runs);
   const { byId } = useAgents();
-  const chats = useQuery({
-    queryKey: qk.conversationList("", id),
-    queryFn: () => api.conversations.list({ limit: 100, workspaceId: id }),
-    enabled: !!id,
-  });
+  const chats = useQuery({ ...chatListQuery(id), enabled: !!id });
   return useMemo(() => {
     const ids = new Set(inProject(chats.data ?? [], projectId, byId).map((c) => c.id));
     return Object.values(runs)

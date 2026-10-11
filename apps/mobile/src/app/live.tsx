@@ -10,14 +10,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { browserView, type ComputerInputEvent } from "@godmode/shared";
 import { Glass, GlassGroup } from "@/components/glass";
 import { Icon } from "@/components/icon";
-import { frameUri, vmState } from "@/components/screen-tile";
+import { frameUri, phoneState, vmState } from "@/components/screen-tile";
 import { Button, GlassIconButton, SMOKE, LiveDot, T, tap } from "@/components/ui";
 import { api, errorText, type BrowserInput } from "@/lib/api";
 import { hostOf } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import { useLive, type Frame } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
-import { useStreamFrame, useVmFrame, type LiveScreen } from "@/lib/screens";
+import { useAndroidFrame, useStreamFrame, useVmFrame, type LiveScreen } from "@/lib/screens";
 
 const WHITE = "#FFFFFF";
 const DIM = "rgba(255,255,255,0.7)";
@@ -61,10 +61,14 @@ export default function Live() {
       : params.kind === "share"
         ? { kind: "share", key: `computer:${params.id}`, view: params.id, title: params.title ?? "Shared screen", conversationId: "" }
         : null;
+  const phones = useQuery({ queryKey: qk.androidDevices, queryFn: api.android.devices, enabled: params.kind === "android", retry: false });
+  const phone = params.kind === "android" ? (phones.data?.find((d) => d.id === params.id) ?? null) : null;
   const stream = useStreamFrame(screen);
   const shot = useVmFrame(vm, true, 1500);
+  const phoneShot = useAndroidFrame(phone, true, 1500);
   // A browser that stopped leaves its last frame behind; don't show it as live.
-  const frame: Frame | undefined = params.kind === "vm" ? shot.data : profile?.running === false ? undefined : stream;
+  const frame: Frame | undefined =
+    params.kind === "vm" ? shot.data : params.kind === "android" ? phoneShot.data : profile?.running === false ? undefined : stream;
   const uri = frameUri(frame);
   const online = useLive((s) => s.status === "online");
   const fresh = !!frame && (params.kind === "browser" ? online : now - frame.at < 8000);
@@ -73,7 +77,8 @@ export default function Live() {
   const keyboard = useKeyboardState((k) => (k.isVisible ? k.height : 0));
   const [text, setText] = useState("");
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number; secondary: boolean } | null>(null);
-  const canControl = params.kind !== "vm" || vm?.state === "running";
+  // An Android phone is watched from here; taking it over stays on the computer.
+  const canControl = params.kind === "android" ? false : params.kind !== "vm" || vm?.state === "running";
   // Shared screens and VMs are whole Macs: they take right clicks and shortcuts; a browser tab doesn't.
   const mac = params.kind !== "browser";
 
@@ -149,6 +154,10 @@ export default function Live() {
       ? vm
         ? vmState(vm.state)
         : "Virtual machine"
+      : params.kind === "android"
+        ? phone
+          ? phoneState(phone)
+          : "Android phone"
       : frame?.error
         ? frame.error
         : params.kind === "browser"
@@ -179,7 +188,7 @@ export default function Live() {
             accessibilityHint={mac ? "In control: tap to click, hold to right-click" : "In control: tap to click"}
             style={shown}
           >
-            <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} />
+            <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} cachePolicy="none" />
             {ripple && (
               <Animated.View
                 key={ripple.id}
@@ -203,6 +212,16 @@ export default function Live() {
                   <ActivityIndicator color={WHITE} />
                 )}
               </>
+            ) : phone && phone.state !== "connected" ? (
+              <>
+                <Icon name="phone" size={34} color={DIM} />
+                <T variant="headline" color={WHITE}>
+                  {`${phone.name} isn't connected`}
+                </T>
+                <T variant="subhead" color={DIM} style={{ textAlign: "center" }}>
+                  Plug it in or connect it over Wi-Fi in Godmode on your computer.
+                </T>
+              </>
             ) : profile && !profile.running ? (
               <>
                 <Icon name="globe" size={34} color={DIM} />
@@ -220,9 +239,9 @@ export default function Live() {
                 <T variant="subhead" color={DIM} style={{ textAlign: "center" }}>
                   {params.kind === "browser" && chat ? "Waiting for the browser. It shows up here as soon as an agent uses it." : "Waiting for the picture…"}
                 </T>
-                {params.kind === "vm" && shot.error ? (
+                {(params.kind === "vm" && shot.error) || (params.kind === "android" && phoneShot.error) ? (
                   <T variant="caption" color={DIM} style={{ textAlign: "center" }}>
-                    {errorText(shot.error)}
+                    {errorText(shot.error ?? phoneShot.error)}
                   </T>
                 ) : null}
               </>
@@ -237,7 +256,7 @@ export default function Live() {
           {fresh ? <LiveDot size={7} /> : <View style={[styles.idleDot]} />}
           <View style={{ flexShrink: 1 }}>
             <T variant="footnote" color={WHITE} numberOfLines={1} style={{ fontWeight: "600" }}>
-              {params.title ?? vm?.name ?? "Screen"}
+              {params.title ?? vm?.name ?? phone?.name ?? "Screen"}
             </T>
             <T variant="caption" color={DIM} numberOfLines={1}>
               {subtitle}

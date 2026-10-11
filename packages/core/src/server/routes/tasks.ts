@@ -87,6 +87,8 @@ const goalSchema = z.object({
   status: z.enum(["active", "achieved", "dropped"]).optional(),
 });
 
+const SUMMARY_CHARS = 280;
+
 export function registerTaskRoutes(app: Hono): void {
   // Goals: what the work is for.
   app.get("/api/goals", (c) => c.json(listGoals({ workspaceId: c.req.query("workspaceId") || "all" })));
@@ -97,9 +99,12 @@ export function registerTaskRoutes(app: Hono): void {
     return c.json({ ok: true });
   });
 
-  app.get("/api/tasks", (c) =>
-    c.json(listTasks({ workspaceId: c.req.query("workspaceId") || "all", archived: ["1", "true"].includes(c.req.query("archived") ?? "") })),
-  );
+  app.get("/api/tasks", (c) => {
+    const tasks = listTasks({ workspaceId: c.req.query("workspaceId") || "all", archived: ["1", "true"].includes(c.req.query("archived") ?? "") });
+    // `fields=summary`: for boards on a slow link; the ticket itself (GET /api/tasks/:id) has the whole text.
+    if (c.req.query("fields") !== "summary") return c.json(tasks);
+    return c.json(tasks.map((t) => ({ ...t, description: "", summary: t.summary && t.summary.length > SUMMARY_CHARS ? `${t.summary.slice(0, SUMMARY_CHARS)}…` : t.summary })));
+  });
 
   app.post("/api/tasks/archive", async (c) => {
     const { ids, archived } = await body(c, archiveSchema);
