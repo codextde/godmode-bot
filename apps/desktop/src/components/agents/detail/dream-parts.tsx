@@ -40,6 +40,11 @@ export function fileList(files: string[]) {
   return `${files.length} memory files`;
 }
 
+/** "1 workspace entry", "12 workspace entries" */
+export function entryCount(n: number) {
+  return `${n.toLocaleString()} workspace ${n === 1 ? "entry" : "entries"}`;
+}
+
 /** What the dream read: "Reviewed 14 exchanges in 5 chats". */
 export function reviewedLabel(dream: Pick<Dream, "exchanges" | "conversations" | "status">) {
   const active = ACTIVE_DREAM.includes(dream.status);
@@ -168,9 +173,11 @@ export function useRevertDream() {
       qc.invalidateQueries({ queryKey: [...qk.agentFilesAll, dream.agentId] });
       qc.invalidateQueries({ queryKey: [...qk.agentFileAll, dream.agentId] });
       qc.invalidateQueries({ queryKey: qk.agentCommits(dream.agentId) });
-      toast.success("Dream undone", {
-        description: `${fileList(dream.files)} ${dream.files.length === 1 ? "is" : "are"} back the way ${dream.files.length === 1 ? "it was" : "they were"} before.`,
-      });
+      const back = [
+        dream.files.length > 0 && `${fileList(dream.files)} ${dream.files.length === 1 ? "is" : "are"} back the way ${dream.files.length === 1 ? "it was" : "they were"} before`,
+        dream.workspace.length > 0 && `${entryCount(dream.workspace.length)} ${dream.workspace.length === 1 ? "is" : "are"} back where ${dream.workspace.length === 1 ? "it was" : "they were"}`,
+      ].filter(Boolean);
+      toast.success("Dream undone", { description: `${back.join(", and ")}.` });
     },
     onError: (err) => {
       toast.error("Couldn't undo the dream", { description: errorMessage(err) });
@@ -183,6 +190,7 @@ export function UndoDreamDialog({ dream, agentName, onOpenChange }: { dream: Dre
   const revert = useRevertDream();
   const shown = useLastDefined(dream);
   const files = shown?.files ?? [];
+  const moved = shown?.workspace.length ?? 0;
   const one = files.length === 1;
   return (
     <AlertDialog open={!!dream} onOpenChange={(open) => !revert.isPending && onOpenChange(open)}>
@@ -190,8 +198,18 @@ export function UndoDreamDialog({ dream, agentName, onOpenChange }: { dream: Dre
         <AlertDialogHeader>
           <AlertDialogTitle>Undo this dream?</AlertDialogTitle>
           <AlertDialogDescription>
-            Put {files.length ? <span className="font-medium text-foreground">{fileList(files)}</span> : "the memory"} back the way {one ? "it was" : "they were"}{" "}
-            before this dream? Whatever {agentName} consolidated in it is forgotten — the dream stays in the journal, marked as undone.
+            {files.length || !moved ? (
+              <>
+                Put {files.length ? <span className="font-medium text-foreground">{fileList(files)}</span> : "the memory"} back the way {one ? "it was" : "they were"}{" "}
+                before this dream{moved ? <>, and move <span className="font-medium text-foreground">{entryCount(moved)}</span> back where {moved === 1 ? "it was" : "they were"}</> : ""}?
+                Whatever {agentName} consolidated in it is forgotten — the dream stays in the journal, marked as undone.
+              </>
+            ) : (
+              <>
+                Move <span className="font-medium text-foreground">{entryCount(moved)}</span> back where {moved === 1 ? "it was" : "they were"} before this dream? The dream
+                stays in the journal, marked as undone.
+              </>
+            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

@@ -1349,4 +1349,12 @@ CREATE TABLE IF NOT EXISTS self_repair_issues (
 );
 `,
   },
+  {
+    id: 82,
+    // How a dream tidied the agent's workspace (JSON, DreamWorkspaceChange[]); NULL = the dream didn't tidy it.
+    name: "dream_workspace",
+    sql: /* sql */ `
+ALTER TABLE dreams ADD COLUMN workspace TEXT;
+`,
+  },
 ];

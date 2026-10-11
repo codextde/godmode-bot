@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, truncateSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, Dream, DreamDetail, DreamOverview, Settings } from "@godmode/shared";
@@ -32,6 +32,7 @@ import {
   startDream,
 } from "../src/memory/dreaming";
 import { diffSnapshots, isMemoryPath, memoryForPrompt, snapshotMemory } from "../src/memory/files";
+import { applyTidy, canUndoWorkspace, undoWorkspace, workspaceInventory, workspacePath } from "../src/memory/workspace";
 
 let env: TestEnv;
 const DAY = 86_400_000;
@@ -91,6 +92,8 @@ function dreamReport(dream: DreamDetail) {
     report: string | null;
     digest: boolean;
     hadMemory: number;
+    inventory: string | null;
+    tidy: { text: string; isError: boolean } | null;
   };
 }
 
@@ -459,6 +462,237 @@ describe("dreams end to end (fake claude)", () => {
   });
 });
 
+describe("tidying the workspace", () => {
+  const OLD = 10 * DAY;
+
+  /** A workspace entry (file, or folder with files) nobody touched for `ms`. */
+  function entry(agent: Agent, rel: string, files: string[] = [], ms = OLD): string {
+    const abs = join(agent.repoPath, "workspace", rel);
+    if (files.length) for (const f of files) (mkdirSync(abs, { recursive: true }), writeFileSync(join(abs, f), `${rel}/${f}\n`));
+    else (mkdirSync(join(abs, ".."), { recursive: true }), writeFileSync(abs, `${rel}\n`));
+    const when = new Date(Date.now() - ms);
+    const touch = (p: string) => {
+      try {
+        for (const n of readdirSync(p)) touch(join(p, n));
+      } catch {
+        /* a file */
+      }
+      utimesSync(p, when, when);
+    };
+    touch(abs);
+    return abs;
+  }
+
+  const ws = (agent: Agent, rel: string) => existsSync(join(agent.repoPath, "workspace", rel));
+
+  async function tidyDream(agent: Agent, ops: unknown[], result = "REMEMBER: tidy"): Promise<DreamDetail> {
+    writeFileSync(join(env.stateDir, "tidy-ops.json"), JSON.stringify(ops));
+    try {
+      addExchange(agent, conversationFor(agent), { prompt: "x", result });
+      return await dreamToEnd(await startDream(agent.id));
+    } finally {
+      rmSync(join(env.stateDir, "tidy-ops.json"), { force: true });
+    }
+  }
+
+  test("paths stay inside the workspace", () => {
+    const repo = "/data/agents/bot";
+    expect(workspacePath(repo, "workspace/a/b.pdf")).toBe("a/b.pdf");
+    expect(workspacePath(repo, "./a/")).toBe("a");
+    expect(workspacePath(repo, "/data/agents/bot/workspace/a.pdf")).toBe("a.pdf");
+    for (const bad of ["", "../MEMORY.md", "a/../../x", "/etc/passwd", ".git/config", "a/.hidden", "workspace"]) expect(workspacePath(repo, bad)).toBe("");
+  });
+
+  test("a dream sorts and discards what it may, points its memory at the new places, and an undo puts it all back", async () => {
+    const agent = await makeAgent({ name: "Sorter" });
+    entry(agent, "badge.png");
+    entry(agent, "task-27", ["shot-1.png", "shot-2.png"]);
+    entry(agent, "offer.pdf");
+    entry(agent, "keep.txt");
+    entry(agent, "install.sh");
+    entry(agent, "fresh.md", [], 0);
+    entry(agent, "uploads/contract.pdf");
+    writeFileSync(join(agent.repoPath, "memory", "places.md"), "# Places\n- Offer: `workspace/offer.pdf`\n- Kept: workspace/keep.txt\n- Not it: workspace/offer.pdf.bak\n");
+    const ts = new Date().toISOString();
+    insert("routines", { id: newId("rtn"), agent_id: agent.id, name: "Install", cron: "0 9 * * *", prompt: "Run workspace/install.sh", created_at: ts, updated_at: ts });
+
+    const dream = await tidyDream(agent, [
+      { action: "move", path: "badge.png", to: "brand/badge.png" },
+      { action: "discard", path: "workspace/task-27" },
+      { action: "move", path: "offer.pdf", to: "codext/offers/offer.pdf" },
+      { action: "discard", path: "keep.txt" },
+      { action: "move", path: "install.sh", to: "scripts/install.sh" },
+      { action: "move", path: "fresh.md", to: "notes/fresh.md" },
+      { action: "move", path: "uploads/contract.pdf", to: "contracts/contract.pdf" },
+      { action: "move", path: "../MEMORY.md", to: "memory.md" },
+      { action: "move", path: "brand", to: "brand/inner" },
+    ]);
+    expect(dream.status).toBe("succeeded");
+    const report = dreamReport(dream);
+    expect(report.tools).toEqual(["memory_dream_report", "workspace_tidy"]);
+    expect(report.inventory).toContain("`task-27/` — folder, 2 files");
+    expect(report.inventory).toContain("e.g. shot-1.png, shot-2.png");
+    expect(report.inventory).toContain('named in the automation "Install" — stays');
+    expect(report.inventory).toContain("`fresh.md` — file");
+    expect(report.inventory).toContain("changed in the last 3 days — stays");
+    expect(report.inventory).not.toContain("contract.pdf");
+    expect(getRun(dream.runId!).prompt).toContain("Tidy your workspace");
+    expect(report.tidy?.isError).toBe(false);
+    const lines = report.tidy!.text.split("\n");
+    expect(lines).toHaveLength(9);
+    expect(lines[2]).toContain("updated the path in memory/places.md");
+    expect(lines[3]).toMatch(/keep\.txt: skipped — memory\/places\.md still names it/);
+    expect(lines[4]).toMatch(/named in the automation "Install"/);
+    expect(lines[5]).toMatch(/changed in the last 3 days/);
+    expect(lines[6]).toMatch(/tmp\/ and uploads\/ are not sorted/);
+    expect(lines[7]).toMatch(/not a path inside workspace/);
+    expect(lines[8]).toMatch(/into itself/);
+
+    expect(dream.workspace.map((c) => [c.action, c.from, c.to.replace(/discarded-\d{4}-\d{2}-\d{2}/, "discarded-DAY")])).toEqual([
+      ["move", "badge.png", "brand/badge.png"],
+      ["discard", "task-27", "tmp/discarded-DAY/task-27"],
+      ["move", "offer.pdf", "codext/offers/offer.pdf"],
+    ]);
+    expect([ws(agent, "brand/badge.png"), ws(agent, "codext/offers/offer.pdf"), ws(agent, dream.workspace[1]!.to)]).toEqual([true, true, true]);
+    expect([ws(agent, "badge.png"), ws(agent, "task-27"), ws(agent, "offer.pdf")]).toEqual([false, false, false]);
+    expect([ws(agent, "keep.txt"), ws(agent, "install.sh"), ws(agent, "fresh.md"), ws(agent, "uploads/contract.pdf")]).toEqual([true, true, true, true]);
+    expect(readRepo(agent, "memory/places.md")).toBe("# Places\n- Offer: `workspace/codext/offers/offer.pdf`\n- Kept: workspace/keep.txt\n- Not it: workspace/offer.pdf.bak\n");
+    expect(dream.files).toContain("memory/places.md");
+    expect(existsSync(join(agent.repoPath, "workspace", "tmp", "dreams", `${dream.id}-workspace.md`))).toBe(false);
+    expect(dream.canRevert).toBe(true);
+
+    await revertDream(dream.id);
+    expect([ws(agent, "badge.png"), ws(agent, "task-27/shot-2.png"), ws(agent, "offer.pdf")]).toEqual([true, true, true]);
+    expect([ws(agent, "brand"), ws(agent, "codext"), ws(agent, dream.workspace[1]!.to.split("/").slice(0, 2).join("/"))]).toEqual([false, false, false]);
+    expect(ws(agent, "tmp")).toBe(true);
+    expect(readRepo(agent, "memory/places.md")).toContain("`workspace/offer.pdf`");
+  });
+
+  test("what the notes name in tmp/ can come out of it; a folder an automation names keeps what lies in it", async () => {
+    const agent = await makeAgent({ name: "Rescuer" });
+    entry(agent, "tmp/tools", ["asc.mjs", "old.log"]);
+    const build = entry(agent, "tmp/build", ["app.apk"]);
+    truncateSync(join(build, "app.apk"), 30 * 1024 * 1024);
+    utimesSync(join(build, "app.apk"), new Date(Date.now() - OLD), new Date(Date.now() - OLD));
+    entry(agent, "tmp/unnamed.txt");
+    entry(agent, "tmp/review/secrets.env");
+    entry(agent, "reports", ["q3.pdf"]);
+    entry(agent, "scripts", ["run.sh", "other.sh"]);
+    writeFileSync(join(agent.repoPath, "memory", "tools.md"), "- App Store helper: workspace/tmp/tools/asc.mjs\n- Build: workspace/tmp/build/app.apk\n- Scratch lives in workspace/tmp/\n- Review env: workspace/tmp/review/secrets.env\n");
+    const ts = new Date().toISOString();
+    insert("routines", { id: newId("rtn"), agent_id: agent.id, name: "Weekly", cron: "0 9 * * 1", prompt: "Put the report in workspace/reports/ and run workspace/scripts/run.sh", created_at: ts, updated_at: ts });
+
+    const inventory = (await workspaceInventory(agent)).text;
+    expect(inventory).toContain("## Named in your notes, but lying in tmp/");
+    expect(inventory).toContain("- `tmp/tools/asc.mjs` — file");
+    expect(inventory).toMatch(/`tmp\/build\/app\.apk` — file, 31.5 MB.*too large to move out \(over 25 MB\)/);
+    expect(inventory).not.toContain("unnamed.txt");
+    expect(inventory).toMatch(/`tmp\/review\/secrets\.env` .*looks like a secret/);
+
+    const outcomes = await applyTidy(agent, [
+      { action: "move", path: "tmp/tools/asc.mjs", to: "scripts/asc.mjs" },
+      { action: "discard", path: "tmp/tools" },
+      { action: "move", path: "tmp/build", to: "builds/app" },
+      { action: "move", path: "reports/q3.pdf", to: "archive/q3.pdf" },
+      { action: "move", path: "scripts/other.sh", to: "tools/other.sh" },
+      { action: "move", path: "scripts/run.sh", to: "tools/run.sh" },
+      { action: "move", path: "tmp/review/secrets.env", to: "review/secrets.env" },
+      { action: "move", path: "tmp/review", to: "review" },
+    ]);
+    expect(outcomes.map((o) => !!o.change)).toEqual([true, false, false, false, true, false, false, false]);
+    expect(outcomes[6]!.line).toMatch(/looks like a secret/);
+    expect(outcomes[7]!.line).toMatch(/looks like a secret/);
+    expect(outcomes[0]!.line).toContain("updated the path in memory/tools.md");
+    expect(outcomes[1]!.line).toMatch(/goes by itself/);
+    expect(outcomes[2]!.line).toMatch(/only what you need/);
+    expect(outcomes[3]!.line).toMatch(/named in the automation "Weekly"/);
+    expect(outcomes[5]!.line).toMatch(/named in the automation "Weekly"/);
+    expect(readRepo(agent, "memory/tools.md")).toContain("workspace/scripts/asc.mjs");
+    expect([ws(agent, "scripts/asc.mjs"), ws(agent, "tmp/tools/old.log"), ws(agent, "tools/other.sh")]).toEqual([true, true, true]);
+  });
+
+  test("mentions end at a full stop, only this agent's paths are rewritten, and nested moves can be undone", async () => {
+    const agent = await makeAgent({ name: "Careful Sorter" });
+    entry(agent, "a.pdf");
+    entry(agent, "notes.txt");
+    entry(agent, "reports", ["q3.pdf"]);
+    entry(agent, "project", [".gitignore", "main.ts"]);
+    const other = join(env.dataDir, "agents", "someone-else", "workspace", "a.pdf");
+    writeFileSync(
+      join(agent.repoPath, "memory", "paths.md"),
+      `- Mine: workspace/a.pdf.\n- Mine too: ${join(agent.repoPath, "workspace", "a.pdf")}\n- Theirs: ${other}\n- Notes are in workspace/notes.txt.\n`,
+    );
+
+    const outcomes = await applyTidy(agent, [
+      { action: "discard", path: "notes.txt" },
+      { action: "discard", path: "project" },
+      { action: "move", path: "a.pdf", to: "invoices/$&.pdf" },
+      { action: "move", path: "invoices", to: "archive/invoices" },
+    ]);
+    expect(outcomes[0]!.line).toMatch(/memory\/paths\.md still names it/);
+    expect(outcomes[1]!.line).toMatch(/files git doesn't keep/);
+    expect(outcomes.slice(2).map((o) => !!o.change)).toEqual([true, true]);
+    expect(readRepo(agent, "memory/paths.md")).toBe(
+      `- Mine: workspace/archive/invoices/$&.pdf.\n- Mine too: ${join(agent.repoPath, "workspace", "archive", "invoices", "$&.pdf")}\n- Theirs: ${other}\n- Notes are in workspace/notes.txt.\n`,
+    );
+    const changes = outcomes.flatMap((o) => (o.change ? [o.change] : []));
+    expect(ws(agent, "archive/invoices/$&.pdf")).toBe(true);
+    expect(canUndoWorkspace(agent.repoPath, changes)).toBe(true);
+    expect(undoWorkspace(agent.repoPath, changes)).toEqual([]);
+    expect([ws(agent, "a.pdf"), ws(agent, "archive"), ws(agent, "invoices")]).toEqual([true, false, false]);
+
+    // A dream that has ended moves nothing more.
+    const stopped = await applyTidy(agent, [{ action: "move", path: "a.pdf", to: "b.pdf" }], { active: () => false });
+    expect(stopped[0]!.line).toMatch(/the dream has ended/);
+    expect(ws(agent, "a.pdf")).toBe(true);
+  });
+
+  test("a dream that ends early puts back what it moved", async () => {
+    const agent = await makeAgent({ name: "Restless Sorter" });
+    entry(agent, "report.pdf");
+    const ops = [{ action: "move", path: "report.pdf", to: "reports/report.pdf" }];
+    writeFileSync(join(env.stateDir, "tidy-ops.json"), JSON.stringify(ops));
+    try {
+      addExchange(agent, conversationFor(agent), { prompt: "x", result: "DREAM_SLEEP_AFTER_TIDY" });
+      const started = await startDream(agent.id);
+      await until(() => getDream(started.id).workspace.length === 1, 10_000, "the move");
+      expect(ws(agent, "reports/report.pdf")).toBe(true);
+      await cancelRun(getDream(started.id).runId!);
+      const dream = await dreamToEnd(started);
+      expect(dream.status).toBe("cancelled");
+      expect(dream.error).toContain("workspace changes were rolled back");
+      expect(dream.workspace).toEqual([]);
+      expect([ws(agent, "report.pdf"), ws(agent, "reports")]).toEqual([true, false]);
+    } finally {
+      rmSync(join(env.stateDir, "tidy-ops.json"), { force: true });
+    }
+  });
+
+  test("once what it discarded is gone, a dream can't be undone; with tidying off the workspace isn't offered", async () => {
+    const agent = await makeAgent({ name: "Forgetful Sorter" });
+    entry(agent, "old-render.png");
+    const dream = await tidyDream(agent, [{ action: "discard", path: "old-render.png" }]);
+    expect(dream.canRevert).toBe(true);
+    rmSync(join(agent.repoPath, "workspace", dream.workspace[0]!.to));
+    expect(getDream(dream.id).canRevert).toBe(false);
+    await expect(revertDream(dream.id)).rejects.toThrow(/moved or removed since/);
+
+    updateSettings({ memory: { dreaming: { tidyWorkspace: false } } });
+    try {
+      entry(agent, "another.png");
+      const plain = await tidyDream(agent, [{ action: "discard", path: "another.png" }], "REMEMBER: plain");
+      const report = dreamReport(plain);
+      expect(report.tools).toEqual(["memory_dream_report"]);
+      expect(report.inventory).toBeNull();
+      expect(getRun(plain.runId!).prompt).not.toContain("Tidy your workspace");
+      expect(plain.workspace).toEqual([]);
+      expect(ws(agent, "another.png")).toBe(true);
+    } finally {
+      updateSettings({ memory: { dreaming: { tidyWorkspace: true } } });
+    }
+  });
+});
+
 describe("memory in chats", () => {
   test("MEMORY.md is loaded into new sessions, and changes made elsewhere are pointed out on resume", async () => {
     const agent = await makeAgent({ name: "Remembering Bot" });
@@ -510,8 +744,10 @@ describe("memory in chats", () => {
     await waitForRun(run.id, 20_000);
     const ctx = { runId: run.id, agentId: agent.id, conversationId: run.conversationId, workspaceId: null, depth: 0 };
     expect(listToolsFor(agent, ctx).map((t) => t.name)).not.toContain("memory_dream_report");
+    expect(listToolsFor(agent, ctx).map((t) => t.name)).not.toContain("workspace_tidy");
     const res = await callTool(ctx, "memory_dream_report", { summary: "x", changes: [] });
     expect(res.isError).toBe(true);
+    expect((await callTool(ctx, "workspace_tidy", { operations: [{ action: "discard", path: "x" }] })).isError).toBe(true);
   });
 });
 

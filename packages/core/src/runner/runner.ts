@@ -180,8 +180,8 @@ const DREAM_TOOLS = "Read,Write,Edit,Glob,Grep";
  * Edit rules cover every built-in tool that writes files.
  */
 const DREAM_ALLOWED = ["Edit(./MEMORY.md)", "Edit(./memory/**)", "mcp__godmode"];
-/** A dream holds the agent's memory while it runs: never for longer than this. */
-const DREAM_TIMEOUT_MINUTES = 20;
+/** A dream holds the agent's memory while it runs: never for longer than this (tidying the workspace takes a while). */
+const DREAM_TIMEOUT_MINUTES = 30;
 
 export { __setClaudeBinaryForTests } from "./claude";
 

@@ -376,7 +376,7 @@ class GitError extends Error {
 
 async function exec(
   args: string[],
-  opts: { cwd?: string; timeoutMs: number; env: Record<string, string | undefined>; signal?: AbortSignal },
+  opts: { cwd?: string; timeoutMs: number; env: Record<string, string | undefined>; signal?: AbortSignal; input?: string },
 ): Promise<GitResult> {
   const bin = which("git");
   if (!bin) throw new Error(NO_GIT);
@@ -384,7 +384,8 @@ async function exec(
   const started = performance.now();
   // Settings in a clone's .git/config that would run programs on this computer (hooks, fsmonitor) are ignored.
   const safe = ["-c", "protocol.ext.allow=never", "-c", "protocol.file.allow=never", "-c", "core.fsmonitor=false", "-c", `core.hooksPath=${devNull}`];
-  const proc = Bun.spawn([bin, ...safe, ...args], { cwd: opts.cwd, env: opts.env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+  const stdin = opts.input === undefined ? "ignore" : new Blob([opts.input]);
+  const proc = Bun.spawn([bin, ...safe, ...args], { cwd: opts.cwd, env: opts.env, stdin, stdout: "pipe", stderr: "pipe" });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
@@ -405,7 +406,7 @@ async function exec(
   }
 }
 
-async function git(args: string[], opts: { cwd?: string; timeoutMs: number; signal?: AbortSignal }): Promise<GitResult> {
+async function git(args: string[], opts: { cwd?: string; timeoutMs: number; signal?: AbortSignal; input?: string }): Promise<GitResult> {
   return exec(args, { ...opts, env: await gitEnv() });
 }
 

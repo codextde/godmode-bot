@@ -125,7 +125,7 @@ function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; 
     <SettingsGroup
       title="Dreaming"
       icon={<MoonStar />}
-      description="While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned, merge duplicates, fix contradictions and update dates — like sleeping on it. Every dream can be reviewed and undone in the agent's Memory tab."
+      description="While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned, merge duplicates, fix contradictions and update dates — like sleeping on it — and sort their workspace. Every dream can be reviewed and undone in the agent's Memory tab."
     >
       <SettingRow
         label="Dream while idle"
@@ -149,6 +149,20 @@ function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; 
         description="Consolidating memory is careful reading, not heavy lifting — Sonnet does it well for a fraction of the cost."
       >
         <ModelSelect id="dream-model" allowNone noneLabel="Same as the agent" disabled={off} value={d.model} onChange={(model) => onChange({ model })} />
+      </SettingRow>
+      <SettingRow
+        label="Tidy the workspace"
+        htmlFor="dream-tidy"
+        disabled={off}
+        description={
+          <>
+            Dreams also sort <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">workspace/</code>: loose files into topic folders, leftovers
+            of finished work out. Recent files and anything an automation uses stay put; what goes waits a week in{" "}
+            <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">workspace/tmp</code>, and undoing the dream puts it all back.
+          </>
+        }
+      >
+        <Switch id="dream-tidy" disabled={off} checked={d.tidyWorkspace} onCheckedChange={(tidyWorkspace) => onChange({ tidyWorkspace })} />
       </SettingRow>
       <SettingRow
         label="Minimum new exchanges"
