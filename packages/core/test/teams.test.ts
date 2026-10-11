@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { AgentMoveResult, TeamInstallResult, TeamTemplate, Workspace } from "@godmode/shared";
-import { reportsOf } from "@godmode/shared";
+import { AGENT_TEMPLATE_CATEGORIES, reportsOf } from "@godmode/shared";
 import { setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import { listAgents } from "../src/agents/service";
 import { getAccessToken } from "../src/server/auth";
@@ -32,11 +32,24 @@ describe("ready-made teams", () => {
         expect(t).toBeDefined();
         if (s.node.reports?.length) expect(t!.leads).toBe(true);
       }
-      // A company is at least two levels of leads deep.
-      if (team.kind === "company") expect(seats.some((s) => s.path.split(".").length === 3) || team.id === "solo-founder").toBe(true);
+      // A company is at least two levels of leads deep, unless one agent covers each department.
+      if (team.kind === "company") expect(seats.some((s) => s.path.split(".").length === 3) || ["solo-founder", "all-in-one-company"].includes(team.id)).toBe(true);
     }
     expect(TEAM_TEMPLATES.filter((t) => t.kind === "company").length).toBeGreaterThanOrEqual(4);
     for (const exec of ["ceo", "cto", "cmo", "cfo", "coo"]) expect(AGENT_TEMPLATES.find((t) => t.id === exec)?.category).toBe("leadership");
+    // Every template has a place in some structure.
+    const seated = new Set(TEAM_TEMPLATES.flatMap((t) => seatsOf(t.root).map((s) => s.node.template)));
+    expect(AGENT_TEMPLATES.filter((t) => !seated.has(t.id)).map((t) => t.id)).toEqual([]);
+  });
+
+  test("the all-in-one company runs every department with one agent each, the full company with every specialist", () => {
+    const allInOne = seatsOf(TEAM_TEMPLATES.find((t) => t.id === "all-in-one-company")!.root);
+    const departments = allInOne.slice(1).map((s) => AGENT_TEMPLATES.find((t) => t.id === s.node.template)!);
+    expect(departments.every((t) => (t.covers?.length ?? 0) >= 4)).toBe(true);
+    expect(new Set(departments.map((t) => t.category))).toEqual(new Set(AGENT_TEMPLATE_CATEGORIES.filter((c) => c !== "leadership")));
+    const full = new Set(seatsOf(TEAM_TEMPLATES.find((t) => t.id === "full-company")!.root).map((s) => s.node.template));
+    for (const c of AGENT_TEMPLATE_CATEGORIES) expect(AGENT_TEMPLATES.some((t) => t.category === c && full.has(t.id))).toBe(true);
+    expect(full.size).toBeGreaterThan(80);
   });
 
   test("installing a team creates its lead and reports, wired up, with their automations when asked", async () => {
@@ -91,6 +104,22 @@ describe("ready-made teams", () => {
 
     expect((await call("/api/team-templates/back-office/install", { method: "POST", body: JSON.stringify({ skip: ["0.0", "0.1", "0.2"] }) })).status).toBe(400);
   });
+
+  test("the full company installs every seat with its reporting line, four levels deep", async () => {
+    const started = Date.now();
+    const res = await call("/api/team-templates/full-company/install", { method: "POST", body: JSON.stringify({ newWorkspace: { name: "Everything Inc" } }) });
+    expect(res.status).toBe(201);
+    const company = (await res.json()) as TeamInstallResult;
+    const total = seatsOf(TEAM_TEMPLATES.find((t) => t.id === "full-company")!.root).length;
+    expect(1 + company.members.length).toBe(total);
+    expect(company.automations).toBe(0);
+    const mine = listAgents({ workspaceId: "all" }).filter((a) => a.workspaceId === company.workspace!.id);
+    const byRole = (role: string) => mine.find((a) => a.role === role)!;
+    const chain = ["Paid social manager", "Performance marketing lead", "Head of growth", "Chief marketing officer", "Chief executive officer"].map(byRole);
+    for (let i = 0; i < chain.length - 1; i++) expect(chain[i]!.reportsTo).toBe(chain[i + 1]!.id);
+    expect(byRole("Head of growth").permissions.allowDelegation).toBe(true);
+    expect(Date.now() - started).toBeLessThan(60_000);
+  }, 90_000);
 
   test("moving an agent to another workspace takes its team along, and the previous placements put it back", async () => {
     const ws = (await (await call("/api/workspaces", { method: "POST", body: JSON.stringify({ name: "Elsewhere" }) })).json()) as Workspace;
