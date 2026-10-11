@@ -4,7 +4,7 @@ import { argValue, invocations, makeAgent, setupEnv, until, type TestEnv } from 
 import { get, insert, run as sql } from "../src/db";
 import { callTool } from "../src/mcp/tools";
 import { updateAgent } from "../src/agents/service";
-import { createConversation, deleteConversation, getConversation, getConversationSummary, startChat, sendMessage } from "../src/services/conversations";
+import { createConversation, deleteConversation, getConversation, getConversationSummary, startChat, sendMessage, updateConversation } from "../src/services/conversations";
 import {
   MAX_UNATTENDED,
   cancelFollowup,
@@ -214,6 +214,18 @@ describe("continuing", () => {
     const n = listNotifications().find((x) => x.link === `/chat/${conversationId}` && x.kind === "run")!;
     expect(n.title).toBe(`Waiter got back to “${getConversationSummary(conversationId).title}”`);
     expect(n.body).toBe("Hello, nice to meet you!");
+  });
+
+  test("an archived chat still gets its follow-up, and stays archived", async () => {
+    const conversationId = await chatWithSession();
+    scheduleFollowup({ conversationId, agentId: agent.id, dueAt: inHours(2), note: "Check the tracking number" });
+    expect(updateConversation(conversationId, { archived: true })).toMatchObject({ archived: true, followup: { note: "Check the tracking number" } });
+    makeDue(conversationId);
+    startFollowups();
+    const run = await followupRun(conversationId);
+    expect(run.status).toBe("succeeded");
+    expect(getConversationSummary(conversationId)).toMatchObject({ archived: true, followup: null });
+    await until(() => listNotifications().some((n) => n.link === `/chat/${conversationId}` && n.kind === "run"), 5000, "notification");
   });
 
   test("a follow-up that comes due while its chat is busy waits for that turn", async () => {

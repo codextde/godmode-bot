@@ -7,7 +7,7 @@ import { all, get, run as sql } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { deviceMayCall } from "../src/mobile/scope";
 import { getAgent, stopAgentRuns } from "../src/agents/service";
-import { deleteConversation, getConversation, sendMessage, startChat, transcriptPath } from "../src/services/conversations";
+import { deleteConversation, getConversation, sendMessage, startChat, transcriptPath, updateConversation } from "../src/services/conversations";
 import { listQueue, sendQueuedNow, submitMessage } from "../src/services/messageQueue";
 import { listNotifications } from "../src/services/notifications";
 import { updateSettings } from "../src/services/settings";
@@ -435,6 +435,22 @@ describe("Claude's usage limit", () => {
     expect(assistantOf(conversationId).blocks.map((b) => b.type)).toEqual(["pause", "user_message", "text"]);
     // The same limit again is not announced twice.
     expect(listNotifications().filter((n) => n.title === "Claude's session limit is reached")).toHaveLength(1);
+  });
+
+  test("a chat archived while it waits for the reset still continues by itself", async () => {
+    signal("limit", String(inAnHour()));
+    const started = await startChat({ agentId: agent.id, content: "LIMIT_HIT then filed away" });
+    const { id: conversationId } = started.conversation;
+    await paused(started.run.id);
+    expect(updateConversation(conversationId, { archived: true })).toMatchObject({ archived: true, paused: { reason: "limit", auto: true } });
+
+    rmSync(join(env.stateDir, "limit"));
+    due(started.run.id);
+    sweep();
+    const finished = await waitForRun(started.run.id, 20_000);
+    expect(finished).toMatchObject({ status: "succeeded", result: "back after the limit" });
+    // It stays where the human filed it.
+    expect(getConversation(conversationId)).toMatchObject({ archived: true, paused: null });
   });
 
   test("continuing by itself can be turned off for one run or for all", async () => {

@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import type { Agent, Conversation, ConversationWithMessages, Run, StartChatResult } from "@godmode/shared";
-import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
+import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { run as sql } from "../src/db";
 import {
   DEFAULT_CONVERSATION_TITLE,
   addMessage,
@@ -14,7 +15,8 @@ import {
   titleFromContent,
   updateConversation,
 } from "../src/services/conversations";
-import { waitForRun } from "../src/runner/runner";
+import { cancelFollowup, scheduleFollowup } from "../src/services/followups";
+import { cancelRun, getRun, waitForRun } from "../src/runner/runner";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { createWorkspace } from "../src/services/workspaces";
 import { getAccessToken } from "../src/server/auth";
@@ -106,6 +108,44 @@ describe("conversation list", () => {
     updateConversation(recent.id, { archived: true });
     const ids = listConversations({ agentId: agent.id, archived: true }).map((x) => x.id);
     expect(ids.indexOf(recent.id)).toBeLessThan(ids.indexOf(pinned.id));
+  });
+
+  test("the archive tells which chats still have work ahead", async () => {
+    const inAnHour = new Date(Date.now() + 3_600_000);
+    const waiting = createConversation({ agentId: agent.id, title: "Waits for a reply" });
+    const working = createConversation({ agentId: agent.id, title: "Still working" });
+    const done = createConversation({ agentId: agent.id, title: "Done" });
+    const ticket = createConversation({ agentId: agent.id, title: "#7 A ticket", origin: "task" });
+    scheduleFollowup({ conversationId: waiting.id, agentId: agent.id, dueAt: inAnHour, note: "Check the reply" });
+    scheduleFollowup({ conversationId: ticket.id, agentId: agent.id, dueAt: inAnHour, note: "Check the build" });
+    const { run } = await sendMessage(working.id, { content: "SLEEP on it" });
+    await until(() => getRun(run.id).status === "running", 10_000, "run to start");
+    for (const c of [waiting, working, done, ticket]) updateConversation(c.id, { archived: true });
+    // A chat on a runner has its state there: this computer knows it from what the runner last said.
+    const onRunner = (title: string, state: object) => {
+      const c = createConversation({ agentId: agent.id, title });
+      sql("UPDATE conversations SET archived = 1, runner_id = 'rnr_archive', runner_state = ? WHERE id = ?", JSON.stringify(state), c.id);
+      return c;
+    };
+    const remote = onRunner("Waits on the runner", { running: false, paused: null, followup: { note: "Check the build", dueAt: inAnHour.toISOString(), createdAt: inAnHour.toISOString() } });
+    onRunner("Done on the runner", { running: false, paused: null, followup: null });
+
+    const ongoing = listConversations({ agentId: agent.id, archived: true, ongoing: true });
+    expect(ongoing.map((c) => c.id).sort()).toEqual([waiting.id, working.id, remote.id].sort());
+    expect(ongoing.find((c) => c.id === waiting.id)).toMatchObject({ archived: true, followup: { note: "Check the reply" } });
+    expect(ongoing.find((c) => c.id === working.id)).toMatchObject({ archived: true, running: true });
+    // A chat in Recent with work ahead isn't in the archive.
+    expect(listConversations({ agentId: agent.id, ongoing: true }).map((c) => c.id)).not.toContain(waiting.id);
+
+    const res = await fetch(`${env.baseUrl}/api/conversations?archived=1&ongoing=1&agentId=${agent.id}`, { headers: { Authorization: `Bearer ${getAccessToken()}` } });
+    expect(((await res.json()) as Conversation[]).map((c) => c.id).sort()).toEqual([waiting.id, working.id, remote.id].sort());
+
+    await cancelRun(run.id);
+    await waitForRun(run.id, 10_000);
+    cancelFollowup(waiting.id);
+    cancelFollowup(ticket.id);
+    sql("DELETE FROM conversations WHERE id = ?", remote.id);
+    expect(listConversations({ agentId: agent.id, archived: true, ongoing: true })).toEqual([]);
   });
 
   test("routine runs keep an archived chat archived", async () => {
