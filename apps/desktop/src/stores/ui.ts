@@ -26,6 +26,8 @@ interface UiState {
   computerPanel: boolean;
   /** Show the VM's screen next to chats that work in a VM. */
   vmPanel: boolean;
+  /** Show the phone's screen next to chats that control an Android phone. */
+  phonePanel: boolean;
   /** Claude Code version whose update prompt was dismissed; a newer release shows it again. */
   skippedClaudeVersion: string | null;
   /** Task board columns folded to a narrow strip. */
@@ -54,6 +56,7 @@ interface UiState {
   setBrowserPanel: (v: boolean) => void;
   setComputerPanel: (v: boolean) => void;
   setVmPanel: (v: boolean) => void;
+  setPhonePanel: (v: boolean) => void;
   skipClaudeVersion: (version: string | null) => void;
   toggleColumn: (status: string) => void;
   setAgentsView: (v: AgentsView) => void;
@@ -77,6 +80,7 @@ export const useUi = create<UiState>()(
       browserPanel: true,
       computerPanel: true,
       vmPanel: true,
+      phonePanel: true,
       skippedClaudeVersion: null,
       collapsedColumns: ["cancelled"],
       agentsView: "grid",
@@ -100,6 +104,7 @@ export const useUi = create<UiState>()(
       setBrowserPanel: (browserPanel) => set({ browserPanel }),
       setComputerPanel: (computerPanel) => set({ computerPanel }),
       setVmPanel: (vmPanel) => set({ vmPanel }),
+      setPhonePanel: (phonePanel) => set({ phonePanel }),
       skipClaudeVersion: (skippedClaudeVersion) => set({ skippedClaudeVersion }),
       toggleColumn: (status) =>
         set((s) => ({
@@ -128,6 +133,7 @@ export const useUi = create<UiState>()(
         browserPanel: s.browserPanel,
         computerPanel: s.computerPanel,
         vmPanel: s.vmPanel,
+        phonePanel: s.phonePanel,
         skippedClaudeVersion: s.skippedClaudeVersion,
         collapsedColumns: s.collapsedColumns,
         agentsView: s.agentsView,

@@ -20,6 +20,7 @@ import { InstructionsChip } from "@/components/instructions/instructions";
 import { VmChip } from "@/components/vms/vm-picker";
 import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { SshChip } from "@/components/ssh/ssh-chip";
+import { AndroidChip } from "@/components/android/android-chip";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { RunnerChip, RunnerNote } from "@/components/runners/runner-chip";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
@@ -72,6 +73,7 @@ function greeting(date: Date): string {
 const NO_MODEL_CHOICE: ModelChoice = { model: null, effort: null, ultracode: null };
 const SETUP_DRAFT = "chat:home-setup:";
 const NO_SSH_SERVERS: string[] = [];
+const NO_ANDROID_DEVICES: string[] = [];
 
 const fade = (delay: number) => ({
   initial: { opacity: 0, y: 10 },
@@ -99,6 +101,8 @@ export default function ChatHome() {
   const [vmId, setVmId, vmDraft] = useDraft<string | null>(`${SETUP_DRAFT}vm`, null);
   /** SSH servers for the new chat, on top of the agent's. */
   const [sshServerIds, setSshServerIds, sshDraft] = useDraft<string[]>(`${SETUP_DRAFT}ssh`, NO_SSH_SERVERS);
+  /** Android phones for the new chat, on top of the agent's. */
+  const [androidDeviceIds, setAndroidDeviceIds, androidDraft] = useDraft<string[]>(`${SETUP_DRAFT}android`, NO_ANDROID_DEVICES);
   /** The runner the new chat works on; null = this computer. */
   const [runnerId, setRunnerId, runnerDraft] = useDraft<string | null>(`${SETUP_DRAFT}runner`, null);
   const { data: workspaces = [] } = useWorkspaces();
@@ -121,7 +125,7 @@ export default function ChatHome() {
     null,
   );
   const resetSetup = () => {
-    [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft, runnerDraft].forEach((d) => d.discard());
+    [agentDraft, choiceDraft, folderDraft, sharedDraft, instructionsDraft, vmDraft, browserDraft, sshDraft, androidDraft, runnerDraft].forEach((d) => d.discard());
     setProjectPick(undefined);
   };
   const sidebarProject = scopeProject && selected && (!selected.workspaceId || selected.workspaceId === scopeProject.workspaceId) ? scopeProject.id : null;
@@ -138,9 +142,16 @@ export default function ChatHome() {
     if (runnerGone) setRunnerId(null);
   }, [runnerGone, setRunnerId]);
   const onRunner = !!runnerId && !runnerGone;
-  // A folder, a shared screen and a VM belong to this computer: a chat on a runner starts without them.
-  const place = (): Pick<StartChatInput, "runnerId" | "workingDirectory" | "computerTarget" | "vmId"> =>
-    onRunner ? { runnerId } : { workingDirectory: folder ?? undefined, computerTarget: shared ?? undefined, vmId: vmId ?? undefined };
+  // A folder, a shared screen, a VM and the phones belong to this computer: a chat on a runner starts without them.
+  const place = (): Pick<StartChatInput, "runnerId" | "workingDirectory" | "computerTarget" | "vmId" | "androidDeviceIds"> =>
+    onRunner
+      ? { runnerId }
+      : {
+          workingDirectory: folder ?? undefined,
+          computerTarget: shared ?? undefined,
+          vmId: vmId ?? undefined,
+          androidDeviceIds: androidDeviceIds.length ? androidDeviceIds : undefined,
+        };
 
   // Deep links: /?prompt=…&agent=…
   useEffect(() => {
@@ -232,6 +243,7 @@ export default function ChatHome() {
                   <BrowserProfileChip agent={selected} value={browserProfileId} workspaceId={scopeWorkspaceId} projectId={projectId} onChange={setBrowserProfileId} />
                   {!onRunner && <ComputerShareChip target={shared} agentName={selected?.name} onShare={setShared} />}
                   <SshChip agent={selected} value={sshServerIds} onChange={setSshServerIds} />
+                  {!onRunner && <AndroidChip agent={selected} value={androidDeviceIds} onChange={setAndroidDeviceIds} />}
                   {!onRunner && (
                     <VmChip
                       value={vmId}

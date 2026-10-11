@@ -105,7 +105,7 @@ const PROTECTED_DIRS = new Set([".git", ".claude"]);
  * A path on this computer inside the run's folders (relative ones are relative to the first, the run's working
  * directory). Symlinks can't lead out of them; files are never written into a .git or .claude folder.
  */
-function localPath(input: string, folders: string[], mode: "read" | "write"): string {
+export function localPath(input: string, folders: string[], mode: "read" | "write"): string {
   if (!folders.length) throw new RemoteFileError("This run has no folders on this computer to copy files from or to.");
   const real = realPath(resolve(folders[0]!, input.replace(/^~(?=$|[\\/])/, homedir())));
   const folder = folders.map(realPath).find((f) => inside(real, f));

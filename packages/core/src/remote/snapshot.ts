@@ -55,7 +55,8 @@ const TABLES: TableSpec[] = [
   {
     table: "agents",
     // failed_run_id: the agent's last failed run on this computer ("error" in the list) — the runner's are its own.
-    own: ["repo_path", "status", "last_run_at", "failed_run_id"],
+    // android_device_ids: phones plugged into this computer.
+    own: ["repo_path", "status", "last_run_at", "failed_run_id", "android_device_ids"],
     onInsert: (row) => ({ repo_path: join(config().agentsDir, String(row.slug)) }),
     entity: "agents",
   },
@@ -87,7 +88,8 @@ const TABLES: TableSpec[] = [
 /** Settings that describe the computer they are on (how it is reached, what it logs, whether it was set up). */
 // maintenance: how this computer keeps its own tools fixed and up to date — a runner, alone most of the time, keeps its own.
 // selfRepair: fixes are filed and merged from this computer, never from a runner.
-const LOCAL_SETTINGS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "selfRepair", "onboardingComplete"]);
+// android: the phones plugged into this computer and the adb that reaches them.
+const LOCAL_SETTINGS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "selfRepair", "android", "onboardingComplete"]);
 /** A runner's vault is opened by a sync, not by a human with the passphrase: it must not lock itself in between. */
 const RUNNER_SETTINGS: Record<string, string[]> = { security: ["autoLockMinutes"] };
 /** VM ids become Tart VM names and folder names. */

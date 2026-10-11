@@ -26,6 +26,10 @@ export interface WsData {
   patches?: boolean;
   /** The chat this client shows right now in a visible, focused window (`conversation.view`). */
   viewing?: string | null;
+  /** Android phones this client watches, and how (H.264 or still pictures). */
+  android?: Map<string, "video" | "frames">;
+  /** Phones whose video frames this client missed: it waits for the next keyframe. */
+  androidNeedsKey?: Set<string>;
 }
 
 /** Chats someone has open right now: they read what happens there, so it isn't unread and doesn't notify. */
@@ -124,6 +128,73 @@ let onBrowserSubscribe: ((view: BrowserViewRef, subscribed: boolean) => void) | 
 /** Hooks invoked when the first/last UI subscribes to a computer live view. */
 let onComputerSubscribe: ((view: string, subscribed: boolean) => void) | null = null;
 
+/** Hook invoked when the viewers of an Android phone change (see android/stream.ts). */
+let onAndroidViewers: ((deviceId: string, video: number, frames: number, joined: boolean) => void) | null = null;
+let onAndroidKeyframe: ((deviceId: string) => void) | null = null;
+
+export function setAndroidViewHandlers(handlers: { viewers: typeof onAndroidViewers; keyframe: typeof onAndroidKeyframe }) {
+  onAndroidViewers = handlers.viewers;
+  onAndroidKeyframe = handlers.keyframe;
+}
+
+function androidViewers(deviceId: string): { video: number; frames: number } {
+  let video = 0;
+  let frames = 0;
+  for (const ws of clients) {
+    const mode = ws.data.android?.get(deviceId);
+    if (mode === "video") video++;
+    else if (mode === "frames") frames++;
+  }
+  return { video, frames };
+}
+
+function changeAndroidSubscription(ws: HubSocket, deviceId: string, mode: "video" | "frames" | null) {
+  const current = ws.data.android?.get(deviceId) ?? null;
+  // Another viewer in the same app: it starts decoding at the next keyframe.
+  if (current === mode) {
+    if (mode === "video") {
+      (ws.data.androidNeedsKey ??= new Set()).add(deviceId);
+      onAndroidKeyframe?.(deviceId);
+    }
+    return;
+  }
+  if (mode) (ws.data.android ??= new Map()).set(deviceId, mode);
+  else ws.data.android?.delete(deviceId);
+  if (mode === "video") (ws.data.androidNeedsKey ??= new Set()).add(deviceId);
+  else ws.data.androidNeedsKey?.delete(deviceId);
+  const { video, frames } = androidViewers(deviceId);
+  onAndroidViewers?.(deviceId, video, frames, mode === "video");
+}
+
+/** Video frames depend on the ones before: a client that missed one waits for a keyframe. */
+function sendAndroid(event: Extract<ServerEvent, { type: "android.video" | "android.action" }>) {
+  const payload = JSON.stringify(event);
+  for (const ws of clients) {
+    const mode = ws.data.android?.get(event.deviceId);
+    if (!mode) continue;
+    if (event.type === "android.video") {
+      if (event.kind === "chunk" || event.kind === "config") {
+        if (mode !== "video") continue;
+        if (event.kind === "config") ws.data.androidNeedsKey?.delete(event.deviceId);
+        else if (ws.data.androidNeedsKey?.has(event.deviceId)) {
+          if (!event.key) continue;
+          ws.data.androidNeedsKey.delete(event.deviceId);
+        }
+        if (event.kind === "chunk" && congested(ws)) {
+          (ws.data.androidNeedsKey ??= new Set()).add(event.deviceId);
+          onAndroidKeyframe?.(event.deviceId);
+          continue;
+        }
+      } else if (event.kind === "frame" && congested(ws)) continue;
+    }
+    try {
+      ws.send(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export function setComputerSubscriptionHandler(fn: (view: string, subscribed: boolean) => void) {
   onComputerSubscribe = fn;
 }
@@ -205,6 +276,7 @@ bus.on((event) => {
     }
     return;
   }
+  if (event.type === "android.video" || event.type === "android.action") return sendAndroid(event);
   if (event.type === "run.delta") return sendDelta(event);
   if (event.type === "run.finished" || event.type === "run.paused") forgetWhole(event.run.id);
   const payload = timedSync(`send ${event.type}`, () => JSON.stringify(event));
@@ -331,6 +403,10 @@ function changeSubscription(ws: HubSocket, ref: BrowserViewRef, subscribe: boole
 }
 
 /** Views are "display:<id>", "window:<pid>:<id>" or "tab:<profile>:<target>", a runner's prefixed with "runner:<id>:" — keep keys bounded. */
+function validDeviceId(id: unknown): id is string {
+  return typeof id === "string" && /^adr_[A-Za-z0-9]{1,64}$/.test(id);
+}
+
 function validView(view: unknown): view is string {
   return typeof view === "string" && view.length > 0 && view.length <= 300 && /^(runner:[A-Za-z0-9_-]{1,100}:)?(display|window|tab):/.test(view);
 }
@@ -392,6 +468,13 @@ export const websocketHandler = {
       case "computer.unsubscribe":
         if (validView(msg.view)) changeComputerSubscription(ws, msg.view, false);
         break;
+      case "android.subscribe":
+        // Phones paired with the app don't control Android devices.
+        if (validDeviceId(msg.deviceId) && ws.data.auth !== "device") changeAndroidSubscription(ws, msg.deviceId, msg.mode === "frames" ? "frames" : "video");
+        break;
+      case "android.unsubscribe":
+        if (validDeviceId(msg.deviceId)) changeAndroidSubscription(ws, msg.deviceId, null);
+        break;
       case "conversation.subscribe":
         if (typeof msg.conversationId !== "string" || msg.conversationId.length > 100) break;
         ws.data.conversations ??= new Set();
@@ -428,6 +511,7 @@ export const websocketHandler = {
       if (view) changeSubscription(ws, view, false);
       else if (key.startsWith("computer:")) changeComputerSubscription(ws, key.slice(9), false);
     }
+    for (const deviceId of [...(ws.data.android?.keys() ?? [])]) changeAndroidSubscription(ws, deviceId, null);
     clients.delete(ws);
     if (ws.data.deviceId && !deviceOnline(ws.data.deviceId)) bus.changed("mobile");
   },

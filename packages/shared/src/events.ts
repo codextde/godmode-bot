@@ -114,6 +114,29 @@ export type ServerEvent =
       x?: number;
       y?: number;
     }
+  /**
+   * Live video of an Android phone, to the sockets that subscribed to it: `config` starts a stream (H.264, AVCC
+   * description), `chunk` is one encoded frame, `frame` a still picture (phones that can't stream), `error` why there is
+   * no picture.
+   */
+  | {
+      type: "android.video";
+      deviceId: ID;
+      kind: "config";
+      /** e.g. "avc1.42c029" */
+      codec: string;
+      /** base64 avcC record */
+      description: string;
+      width: number;
+      height: number;
+      /** The phone's screen as it is turned now, in its own pixels (input coordinates map to it). */
+      screen: { width: number; height: number };
+    }
+  | { type: "android.video"; deviceId: ID; kind: "chunk"; data: string; key: boolean; timestamp: number }
+  | { type: "android.video"; deviceId: ID; kind: "frame"; data: string; mime: "image/png" | "image/jpeg"; width: number; height: number; screen: { width: number; height: number } }
+  | { type: "android.video"; deviceId: ID; kind: "error"; message: string }
+  /** An agent touched a phone's screen (drawn as a ripple in the live view). x/y 0–1 of the screen. */
+  | { type: "android.action"; deviceId: ID; runId: ID; action: string; x?: number; y?: number; toX?: number; toY?: number }
   | { type: "vm.updated"; vm: Vm }
   | { type: "vm.deleted"; id: ID }
   | { type: "task.updated"; task: Task }
@@ -151,6 +174,8 @@ export type EntityName =
   | "computer"
   | "vms"
   | "ssh-servers"
+  /** Android phones: plugged in, unplugged, renamed, assigned. */
+  | "android"
   | "mods"
   | "messaging"
   | "tasks"
@@ -183,6 +208,10 @@ export type ClientEvent =
   /** Computer live view frames (see computerView). */
   | { type: "computer.subscribe"; view: ComputerView }
   | { type: "computer.unsubscribe"; view: ComputerView }
+  /** Watch an Android phone's screen (`android.video` events). */
+  /** `mode` "frames": still pictures for clients that can't decode H.264 (default "video"). */
+  | { type: "android.subscribe"; deviceId: ID; mode?: "video" | "frames" }
+  | { type: "android.unsubscribe"; deviceId: ID }
   /**
    * Phones only get `run.delta` (the streaming reply) for conversations they have open; other clients get all of them.
    */

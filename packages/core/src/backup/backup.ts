@@ -110,6 +110,7 @@ const ALL_ENTITIES: EntityName[] = [
   "runs",
   "vms",
   "ssh-servers",
+  "android",
   "mods",
   "messaging",
   "followups",
@@ -127,6 +128,7 @@ export const EXECUTABLE_SETTINGS: Record<string, string[]> = {
   browser: ["chromePath", "browserUseCommand"],
   computer: ["cuaDriverCommand"],
   vm: ["tartPath"],
+  android: ["adbPath"],
   voice: ["openaiBaseUrl"],
 };
 

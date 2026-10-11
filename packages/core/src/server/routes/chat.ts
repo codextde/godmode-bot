@@ -58,6 +58,7 @@ const workspaceId = z.string().trim().max(100).nullable().optional();
 const projectId = z.string().trim().max(100).nullable().optional();
 /** SSH servers of the chat (the whole list); the agent's apply anyway. */
 const sshServerIds = z.array(z.string().trim().min(1).max(100)).max(50).optional();
+const androidDeviceIds = z.array(z.string().trim().min(1).max(100)).max(50).optional();
 
 const sendSchema = z.object({
   content: z.string().max(200_000).default(""),
@@ -99,7 +100,7 @@ export function registerChatRoutes(app: Hono): void {
   app.post("/api/conversations", async (c) => {
     const input = await body(
       c,
-      z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, workspaceId, projectId, sshServerIds, instructions, ...modelChoice }),
+      z.object({ agentId: z.string().min(1), title: z.string().max(200).optional(), workingDirectory: folder, vmId, browserProfileId, workspaceId, projectId, sshServerIds, androidDeviceIds, instructions, ...modelChoice }),
     );
     // A switched-off agent answers nothing: don't leave an empty chat behind.
     const agent = getAgent(input.agentId);
@@ -141,6 +142,7 @@ export function registerChatRoutes(app: Hono): void {
         browserProfileId,
         projectId,
         sshServerIds,
+        androidDeviceIds,
         instructions,
       }),
     );
@@ -223,6 +225,7 @@ export function registerChatRoutes(app: Hono): void {
         workspaceId,
         projectId,
         sshServerIds,
+        androidDeviceIds,
         instructions,
         /** Work on this runner (another computer) instead of this one. */
         runnerId: z.string().trim().min(1).max(100).nullable().optional(),

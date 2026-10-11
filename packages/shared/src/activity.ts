@@ -111,6 +111,8 @@ export const GATEWAY_ACTIVITY: Record<string, (input: Input, names: ActivityName
   vms_list: () => "Looking at the virtual machines",
   vm_create: (i) => (short(i.name) ? `Creating the VM ${short(i.name)}` : "Creating a VM"),
   vm_assign: () => "Assigning a VM",
+  android_devices_list: () => "Looking at the Android phones",
+  android_assign: () => "Assigning a phone",
   vm_power: (i) => (str(i.action) === "stop" ? "Stopping a VM" : str(i.action) === "suspend" ? "Suspending a VM" : "Starting a VM"),
   spend_overview: () => "Checking what the team costs",
 };
@@ -154,6 +156,47 @@ function remoteActivity(tool: string, input: Input, where: string): string | nul
   if (/upload/.test(tool)) return `Uploading ${where.replace(/^(in|on) /, "to ")}`;
   if (/download/.test(tool)) return `Downloading ${where.replace(/^(in|on) /, "from ")}`;
   return null;
+}
+
+/** What an agent does on an Android phone. */
+function androidActivity(tool: string, input: Input): string {
+  const on = str(input.device) && !/^adr_/.test(str(input.device)) ? `on ${short(input.device, 28)}` : "on the phone";
+  switch (tool) {
+    case "screenshot":
+      return `Looking at the screen ${on}`;
+    case "ui_elements":
+      return `Reading the screen ${on}`;
+    case "tap":
+      return `Tapping ${on}`;
+    case "long_press":
+      return `Pressing and holding ${on}`;
+    case "swipe":
+      return `Swiping ${on}`;
+    case "scroll":
+      return `Scrolling ${on}`;
+    case "type_text":
+      return `Typing ${on}`;
+    case "press_key":
+      return short(input.key, 20) ? `Pressing ${short(input.key, 20)} ${on}` : `Pressing a key ${on}`;
+    case "open_app":
+      return short(input.package, 40) ? `Opening ${short(input.package, 40)}` : hostOf(input.url) ? `Opening ${hostOf(input.url)} ${on}` : `Opening an app ${on}`;
+    case "list_apps":
+      return `Checking the apps ${on}`;
+    case "install_apk":
+      return `Installing an app ${on}`;
+    case "push_file":
+      return `Copying a file to the phone`;
+    case "pull_file":
+      return `Copying a file from the phone`;
+    case "fill_login":
+      return input.field === "password" ? `Entering the password ${on}` : `Entering the username ${on}`;
+    case "fill_totp":
+      return `Entering the 2FA code ${on}`;
+    case "list_devices":
+      return "Checking the phones";
+    default:
+      return remoteActivity(tool, input, on) ?? `Working ${on}`;
+  }
 }
 
 function builtinActivity(name: string, input: Input): string {
@@ -213,7 +256,8 @@ export function toolActivity(name: string, input: unknown, names: ActivityNames 
     const named = str(i.server);
     const where = `on ${named && !/^ssh_/.test(named) ? short(named, 32) : "the server"}`;
     phrase = tool === "list_servers" ? "Checking SSH servers" : (remoteActivity(tool, i, where) ?? `Working ${where}`);
-  } else if (server === "godmode" || (!server && GATEWAY_ACTIVITY[tool])) phrase = GATEWAY_ACTIVITY[tool]?.(i, names) ?? humanize(tool);
+  } else if (server === "android") phrase = androidActivity(tool, i);
+  else if (server === "godmode" || (!server && GATEWAY_ACTIVITY[tool])) phrase = GATEWAY_ACTIVITY[tool]?.(i, names) ?? humanize(tool);
   else if (server) phrase = `Using ${humanize(server)}`;
   else phrase = builtinActivity(name, i);
   const label = phrase.length > 79 ? `${phrase.slice(0, 78)}…` : phrase;
@@ -283,6 +327,8 @@ export const GATEWAY_DONE: Record<string, string> = {
   vms_list: "Looked at the virtual machines",
   vm_create: "Created a VM",
   vm_assign: "Assigned a VM",
+  android_devices_list: "Looked at the Android phones",
+  android_assign: "Assigned a phone",
   vm_power: "Switched a VM on or off",
   spend_overview: "Checked what the team costs",
   runner_health: "Checked a runner",

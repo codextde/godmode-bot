@@ -25,6 +25,7 @@ import { isExpectedSlow, registerMcpRoutes } from "../mcp/http";
 import { registerComputerRoutes } from "./routes/computer";
 import { registerVmRoutes } from "./routes/vms";
 import { registerSshRoutes } from "./routes/ssh";
+import { registerAndroidRoutes } from "./routes/android";
 import { registerModRoutes } from "./routes/mods";
 import { registerLogRoutes } from "./routes/logs";
 import { registerTaskRoutes } from "./routes/tasks";
@@ -166,6 +167,7 @@ export function createApp() {
   registerVmRoutes(app);
   registerTaskRoutes(app);
   registerSshRoutes(app);
+  registerAndroidRoutes(app);
   registerModRoutes(app);
   registerBackupRoutes(app);
   registerVoiceRoutes(app);

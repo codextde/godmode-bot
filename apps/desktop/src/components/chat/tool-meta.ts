@@ -38,15 +38,18 @@ import {
   Move,
   NotebookPen,
   OctagonAlert,
+  PackagePlus,
   PanelsTopLeft,
   Play,
   Plug,
+  Pointer,
   ScanText,
   ScrollText,
   Search,
   Server,
   ShieldAlert,
   ShieldCheck,
+  Smartphone,
   SquareKanban,
   Terminal,
   Trash2,
@@ -277,6 +280,84 @@ function sshMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "tool"> 
       return { kind: "other", icon: Server, title: "Checked SSH servers" };
     default:
       return { kind: "other", icon: Server, title: humanize(tool), detail: on === "the server" ? undefined : on };
+  }
+}
+
+/** "the phone" unless the input names it (a name, not an `adr_…` id). */
+function phoneTarget(input: Input): string {
+  const device = input.device;
+  return typeof device === "string" && device.trim() && !device.startsWith("adr_") ? device.trim() : "the phone";
+}
+
+/** "[540, 1200]" for an `[x, y]` coordinate, "" for anything else. */
+function point(v: unknown): string {
+  return Array.isArray(v) && v.length === 2 ? `[${v.map((n) => Math.round(Number(n))).join(", ")}]` : "";
+}
+
+/** The `android` server: screen, touch, apps, shell and files on the user's Android phones. */
+function androidMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMeta, "server" | "tool"> {
+  const on = phoneTarget(input);
+  const named = on === "the phone" ? undefined : on;
+  const local = str(input.local_path);
+  const remote = str(input.remote_path);
+  switch (tool) {
+    case "list_devices":
+      return { kind: "other", icon: Smartphone, title: "Checked the phones" };
+    case "screenshot":
+      return { kind: "other", icon: Smartphone, title: "Looked at the screen", detail: named };
+    case "ui_elements":
+      return { kind: "other", icon: ListTree, title: input.filter ? `Looked for “${truncate(str(input.filter), 40)}” on the screen` : "Read the screen", detail: named };
+    case "tap":
+      return { kind: "other", icon: Pointer, title: `Tapped ${point(input.coordinate)}`.trim(), detail: named };
+    case "long_press":
+      return { kind: "other", icon: Pointer, title: `Pressed and held ${point(input.coordinate)}`.trim(), detail: named };
+    case "swipe": {
+      const path = point(input.start_coordinate) && point(input.coordinate) ? `${point(input.start_coordinate)} → ${point(input.coordinate)}` : "";
+      return { kind: "other", icon: Move, title: "Swiped", detail: [path, named].filter(Boolean).join(" · ") || undefined };
+    }
+    case "scroll":
+      return { kind: "other", icon: ScrollText, title: `Scrolled ${str(input.direction) || "down"}`, detail: named };
+    case "type_text":
+      return { kind: "other", icon: Type, title: "Typed text", detail: truncate(str(input.text), 80) || undefined };
+    case "press_key": {
+      const key = str(input.key).replace(/^KEYCODE_/i, "").replace(/_/g, " ").toLowerCase();
+      return { kind: "other", icon: Keyboard, title: `${input.long === true ? "Held" : "Pressed"} ${truncate(key, 40) || "a key"}`, detail: named };
+    }
+    case "open_app": {
+      const pkg = str(input.package);
+      const url = str(input.url);
+      // An app link ("myapp://screen") has no website to name.
+      const appLink = /^[a-z][a-z0-9+.-]*:/i.test(url) && !/^https?:/i.test(url);
+      const host = appLink ? "" : hostOf(url);
+      return { kind: "other", icon: AppWindow, title: pkg ? `Opened ${pkg}` : url ? `Opened ${host || "a link"}` : "Opened an app", detail: url || named };
+    }
+    case "list_apps":
+      return { kind: "other", icon: AppWindow, title: "Listed apps", detail: named };
+    case "shell":
+      return { kind: "shell", icon: Terminal, title: `Ran a command on ${on}`, detail: truncate(str(input.command), 120) || undefined };
+    case "install_apk":
+      return { kind: "other", icon: PackagePlus, title: local ? `Installed ${basename(local)} on ${on}` : `Installed an app on ${on}` };
+    case "push_file": {
+      const name = basename(local || remote);
+      return { kind: "file", icon: FileUp, title: name ? `Copied ${name} to ${on}` : `Copied a file to ${on}`, detail: remote || undefined };
+    }
+    case "pull_file": {
+      const name = basename(remote || local);
+      return { kind: "file", icon: FileDown, title: name ? `Copied ${name} from ${on}` : `Copied a file from ${on}`, detail: local || undefined };
+    }
+    case "fill_login": {
+      const credId = str(input.credentialId);
+      const label = credId ? (ctx.credentialLabel?.(credId) ?? "") : "";
+      const field = str(input.field) === "username" ? "username" : "password";
+      return { kind: "vault", icon: KeyRound, title: `Entered ${field}${label ? ` for ${label}` : ""}`, detail: "from vault · never shown to the AI" };
+    }
+    case "fill_totp": {
+      const credId = str(input.credentialId);
+      const label = credId ? (ctx.credentialLabel?.(credId) ?? "") : "";
+      return { kind: "vault", icon: ShieldCheck, title: label ? `Entered 2FA code for ${label}` : "Entered 2FA code", detail: "from vault" };
+    }
+    default:
+      return { kind: "other", icon: Smartphone, title: humanize(tool), detail: named };
   }
 }
 
@@ -559,6 +640,7 @@ export function describeTool(name: string, rawInput: unknown, ctx: ToolContext =
   }
   if (server === "vm") return { ...vmMeta(tool, input), server, tool };
   if (server === "ssh") return { ...sshMeta(tool, input), server, tool };
+  if (server === "android") return { ...androidMeta(tool, input, ctx), server, tool };
   if (server === "cua") return { ...cuaMeta(tool, input), kind: "computer", server, tool };
   if (server === "godmode" || (server === null && GODMODE_TOOLS.has(tool)) || GODMODE_TOOLS.has(tool)) {
     const m = godmodeMeta(tool, input, ctx);

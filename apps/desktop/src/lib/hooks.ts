@@ -273,6 +273,15 @@ export function useSshServers() {
   return useQuery({ queryKey: qk.sshServers, queryFn: api.ssh.list });
 }
 
+/** Android phones adb sees (kept current by `entity.changed` "android"; polled a little so battery stays fresh). */
+export function useAndroidDevices() {
+  return useQuery({ queryKey: qk.androidDevices, queryFn: api.android.list, refetchInterval: 30_000 });
+}
+
+export function useAndroidStatus() {
+  return useQuery({ queryKey: qk.androidStatus, queryFn: api.android.status });
+}
+
 /** Installed Claude Code mods (kept current by `entity.changed` "mods"). */
 export function useMods() {
   return useQuery({ queryKey: qk.mods, queryFn: api.mods.list });

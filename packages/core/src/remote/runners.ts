@@ -267,7 +267,7 @@ export async function removeRunner(id: string): Promise<void> {
     id,
   );
   // What servers and VMs a released chat may use is the runner's word: this computer's copy starts without any.
-  sql("UPDATE conversations SET runner_id = NULL, runner_state = NULL, ssh_server_ids = '[]', vm_id = NULL WHERE runner_id = ?", id);
+  sql("UPDATE conversations SET runner_id = NULL, runner_state = NULL, ssh_server_ids = '[]', android_device_ids = '[]', vm_id = NULL WHERE runner_id = ?", id);
   sql("UPDATE conversations SET runner_tools_id = NULL WHERE runner_tools_id = ?", id);
   sql("DELETE FROM runners WHERE id = ?", id);
   for (const key of all<{ key: string }>("SELECT key FROM meta WHERE key LIKE ?", `link.cookies.${id}.%`)) sql("DELETE FROM meta WHERE key = ?", key.key);
@@ -902,7 +902,7 @@ export async function moveChatHere(conversationId: string): Promise<Conversation
       ).changes;
       // What servers and VMs a chat may use was the runner's word: here it starts without any, as after removing a runner.
       sql(
-        `UPDATE conversations SET runner_id = NULL, runner_state = NULL, ssh_server_ids = '[]', vm_id = NULL,
+        `UPDATE conversations SET runner_id = NULL, runner_state = NULL, ssh_server_ids = '[]', android_device_ids = '[]', vm_id = NULL,
            claude_session_id = COALESCE(?, claude_session_id), updated_at = ? WHERE id = ?`,
         session ? handover!.sessionId : null,
         ts,

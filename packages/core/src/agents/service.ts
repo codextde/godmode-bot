@@ -56,6 +56,7 @@ import { requestAppTriggerSync } from "../integrations/composioTriggers";
 import { badRequest, newId, notFound, now, parseJson, slugify } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
+import { normalizeAndroidDeviceIds, parseDeviceIds } from "../android/assignments";
 import {
   AGENT_GITIGNORE,
   AGENT_REPO_DIRS,
@@ -99,6 +100,7 @@ interface AgentRow {
   working_directory: string | null;
   vm_id: string | null;
   ssh_server_ids: string;
+  android_device_ids: string;
   heartbeat: string | null;
   repo_path: string;
   last_run_at: string | null;
@@ -199,6 +201,7 @@ function toModel(r: AgentRow): Agent {
     workingDirectory: r.working_directory,
     vmId: r.vm_id ?? null,
     sshServerIds: parseServerIds(r.ssh_server_ids),
+    androidDeviceIds: parseDeviceIds(r.android_device_ids),
     heartbeat: normalizeHeartbeat(parseJson<Partial<AgentHeartbeat>>(r.heartbeat, {})),
     // Derived from the slug so the data dir can move (backup restore, GODMODE_HOME change).
     repoPath: repoPathFor(r.slug),
@@ -242,6 +245,7 @@ function toRow(a: Agent): Record<string, string | number | null> {
     working_directory: a.workingDirectory,
     vm_id: a.vmId,
     ssh_server_ids: json(a.sshServerIds)!,
+    android_device_ids: json(a.androidDeviceIds)!,
     heartbeat: json(a.heartbeat)!,
     repo_path: a.repoPath,
     last_run_at: a.lastRunAt,
@@ -620,6 +624,8 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
     vmId: normalizeVmId(input.vmId) ?? null,
     // Human-only: signing in to remote machines.
     sshServerIds: isAgentActor(actor) ? [] : (normalizeSshServerIds(input.sshServerIds) ?? []),
+    // Human-only too: controlling a real phone.
+    androidDeviceIds: isAgentActor(actor) ? [] : (normalizeAndroidDeviceIds(input.androidDeviceIds) ?? []),
     heartbeat: heartbeatFrom(DEFAULT_HEARTBEAT, input.heartbeat),
     repoPath: repoPathFor(slug),
     lastRunAt: null,
@@ -642,6 +648,7 @@ async function createAgentRecord(input: AgentInput, isDefault: boolean, actor: s
   bus.emit({ type: "agent.updated", agent });
   if (agent.vmId) assignmentsChanged();
   if (agent.sshServerIds.length) bus.changed("ssh-servers");
+  if (agent.androidDeviceIds.length) bus.changed("android");
   return agent;
 }
 
@@ -708,6 +715,7 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   // Moving an agent into a VM only narrows what it reaches on this computer; taking it out is human-only.
   if (patch.vmId !== undefined && (patch.vmId || !isAgentActor(actor))) next.vmId = normalizeVmId(patch.vmId) ?? null;
   if (patch.sshServerIds !== undefined && !isAgentActor(actor)) next.sshServerIds = normalizeSshServerIds(patch.sshServerIds) ?? [];
+  if (patch.androidDeviceIds !== undefined && !isAgentActor(actor)) next.androidDeviceIds = normalizeAndroidDeviceIds(patch.androidDeviceIds) ?? [];
   if (patch.heartbeat !== undefined) next.heartbeat = heartbeatFrom(current.heartbeat, patch.heartbeat);
 
   next.updatedAt = now();
@@ -737,6 +745,7 @@ export async function updateAgent(id: string, patch: Partial<AgentInput>, actor 
   if (detached) bus.changed("agents");
   if (current.vmId !== agent.vmId) assignmentsChanged();
   if (JSON.stringify(current.sshServerIds) !== JSON.stringify(agent.sshServerIds)) bus.changed("ssh-servers");
+  if (JSON.stringify(current.androidDeviceIds) !== JSON.stringify(agent.androidDeviceIds)) bus.changed("android");
   if (JSON.stringify(current.heartbeat) !== JSON.stringify(agent.heartbeat)) bus.changed("heartbeats");
   if (current.enabled !== agent.enabled || current.workspaceId !== agent.workspaceId) {
     reloadSchedules();
@@ -1010,6 +1019,7 @@ export async function duplicateAgent(id: string, actor = "user"): Promise<Agent>
       workingDirectory: source.workingDirectory,
       vmId: source.vmId,
       sshServerIds: source.sshServerIds,
+      androidDeviceIds: source.androidDeviceIds,
     },
     false,
     actor,

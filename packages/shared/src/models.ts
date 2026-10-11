@@ -194,6 +194,8 @@ export interface Agent {
   vmId: ID | null;
   /** SSH servers the agent may sign in to and control in every run. */
   sshServerIds: ID[];
+  /** Android phones the agent may see and control in every run. */
+  androidDeviceIds: ID[];
   /** Wakes up on its own rhythm to move its tickets forward and run its checklist (see heartbeat.ts). */
   heartbeat: AgentHeartbeat;
   /** Absolute path of the agent's git repository. */
@@ -384,6 +386,8 @@ export interface Conversation {
   projectId: ID | null;
   /** SSH servers runs in this chat may use, in addition to the agent's. */
   sshServerIds: ID[];
+  /** Android phones runs in this chat may control, in addition to the agent's. */
+  androidDeviceIds: ID[];
   /** Standing instructions for this chat only; they take precedence over the agent's, workspace and global ones. */
   instructions: string;
   /** The runner (another computer) this chat works on; set when the chat is created, cleared when it moves here. null = this computer. */
@@ -1355,6 +1359,19 @@ export interface VmSettings {
   tartPath: string;
 }
 
+export interface AndroidSettings {
+  /** Godmode looks for Android phones connected over adb, and agents may control the phones assigned to them. */
+  enabled: boolean;
+  /**
+   * Agents may type saved logins and 2FA codes into a phone (android tools `fill_login` / `fill_totp`). Godmode types
+   * the values, so the model never sees them, and passwords only go into password fields — but the fill can't be bound
+   * to the login's app or website. Turning it on needs a vault grant.
+   */
+  vaultFill: boolean;
+  /** Custom adb binary; empty = one from the Android SDK, PATH or Homebrew, else Godmode's own copy (installed on demand). */
+  adbPath: string;
+}
+
 /** The phone app: phones reach Godmode over Tailscale (see mobile.ts). */
 export interface MobileSettings {
   /** Paired phones may connect. */
@@ -1369,6 +1386,7 @@ export interface Settings {
   browser: BrowserSettings;
   computer: ComputerSettings;
   vm: VmSettings;
+  android: AndroidSettings;
   voice: VoiceSettings;
   security: SecuritySettings;
   server: ServerSettings;

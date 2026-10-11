@@ -16,6 +16,7 @@ import {
   Plus,
   Server,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   Trash2,
   TriangleAlert,
@@ -72,6 +73,7 @@ import { ApiToolDialog, type ApiToolDialogState } from "@/components/integration
 import { toolIcon } from "@/components/integrations/api-tool-presets";
 import { ScopeChip } from "@/components/integrations/scope-picker";
 import { SSH_STATUS_LABEL, SshStatusDot, sshAddress, sshStatus } from "@/components/ssh/ssh-parts";
+import { AndroidField } from "@/components/android/android-chip";
 
 export interface AgentFormValues {
   name: string;
@@ -114,6 +116,7 @@ export interface AgentFormValues {
   /** macOS VM the agent works in; null = its workspace's (if any). */
   vmId: string | null;
   sshServerIds: string[];
+  androidDeviceIds: string[];
 }
 
 /** Seed values for the form from an existing agent, a template, or nothing. */
@@ -153,6 +156,7 @@ export function agentToValues(
     workingDirectory: source?.workingDirectory ?? null,
     vmId: source?.vmId ?? null,
     sshServerIds: source?.sshServerIds ?? [],
+    androidDeviceIds: source?.androidDeviceIds ?? [],
   };
 }
 
@@ -192,6 +196,7 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
     workingDirectory: v.workingDirectory,
     vmId: v.vmId,
     sshServerIds: v.sshServerIds,
+    androidDeviceIds: v.androidDeviceIds,
   };
 }
 
@@ -237,6 +242,7 @@ const SECTIONS = [
   { id: "computer", label: "Computer" },
   { id: "vm", label: "Virtual machine" },
   { id: "ssh", label: "SSH servers" },
+  { id: "android", label: "Android phones" },
   { id: "tools", label: "Tools" },
   { id: "subagents", label: "Subagents" },
 ];
@@ -337,14 +343,15 @@ export function AgentForm({
   const human = boot?.settings.general.userName;
   const inherited = useInheritedInstructions(values.workspaceId, undefined, values.projectId);
   const vmChoices = useVmChoices();
-  const sections = vmChoices.available ? SECTIONS : SECTIONS.filter((s) => s.id !== "vm");
+  const androidOn = !!boot?.settings.android.enabled;
+  const sections = SECTIONS.filter((s) => (s.id !== "vm" || vmChoices.available) && (s.id !== "android" || androidOn));
 
   const { hash } = useLocation();
-  // Again once the VM section shows up: it waits for the VM status (links from the VMs page go to #vm).
+  // Again once the VM or Android section shows up: they wait for the VM status and the settings (links from the VMs page go to #vm).
   useEffect(() => {
     const id = hash.slice(1);
     if (SECTIONS.some((s) => s.id === id)) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: "start" }));
-  }, [hash, vmChoices.available]);
+  }, [hash, vmChoices.available, androidOn]);
 
   return (
     <form
@@ -772,6 +779,16 @@ export function AgentForm({
             <SshField value={values.sshServerIds} onChange={(v) => set("sshServerIds", v)} />
           </FormSection>
 
+          {androidOn && (
+            <FormSection
+              id="android"
+              title="Android phones"
+              description="Phones this agent can see and control in every run. They are real phones with real accounts — only give it the ones its job needs."
+            >
+              <AndroidField value={values.androidDeviceIds} onChange={(v) => set("androidDeviceIds", v)} />
+            </FormSection>
+          )}
+
           <FormSection id="tools" title="Tools & integrations" description="APIs, MCP servers and connected apps this agent can use.">
             <div className="space-y-5">
               <ToggleRow
@@ -839,6 +856,12 @@ export function AgentForm({
                   <span className="flex items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
                     <Server className="size-3 shrink-0" />
                     {values.sshServerIds.length === 1 ? "1 server" : `${values.sshServerIds.length} servers`}
+                  </span>
+                )}
+                {androidOn && values.androidDeviceIds.length > 0 && (
+                  <span className="flex items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
+                    <Smartphone className="size-3 shrink-0" />
+                    {values.androidDeviceIds.length === 1 ? "1 phone" : `${values.androidDeviceIds.length} phones`}
                   </span>
                 )}
                 {values.workingDirectory && (

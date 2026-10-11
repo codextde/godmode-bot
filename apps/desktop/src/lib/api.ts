@@ -1,4 +1,14 @@
 import type {
+  AndroidAssignInput,
+  AndroidConnectInput,
+  AndroidConnectResult,
+  AndroidDevice,
+  AndroidDevicePatch,
+  AndroidExecInput,
+  AndroidExecResult,
+  AndroidInputRequest,
+  AndroidScreenshot,
+  AndroidStatus,
   CardPurchase,
   CardPurchasePatch,
   PaymentCard,
@@ -666,6 +676,22 @@ export const api = {
     /** Private keys in ~/.ssh on the computer running Godmode. */
     localKeys: () => get<SshLocalKey[]>("/api/ssh/local-keys"),
     generateKey: (comment?: string) => post<SshGeneratedKey>("/api/ssh/keys", comment ? { comment } : {}),
+  },
+
+  android: {
+    status: () => get<AndroidStatus>("/api/android/status"),
+    list: () => get<AndroidDevice[]>("/api/android/devices"),
+    refresh: () => post<AndroidStatus>("/api/android/refresh"),
+    /** Download Google's platform-tools (adb) into Godmode's data directory. */
+    install: () => post<{ ok: boolean; output: string }>("/api/android/install"),
+    connect: (input: AndroidConnectInput) => post<AndroidConnectResult>("/api/android/connect", input),
+    update: (id: string, input: AndroidDevicePatch) => patch<AndroidDevice>(`/api/android/devices/${id}`, input),
+    forget: (id: string) => del<{ ok: true }>(`/api/android/devices/${id}`),
+    disconnect: (id: string) => post<AndroidDevice>(`/api/android/devices/${id}/disconnect`),
+    screenshot: (id: string, size = 480) => get<AndroidScreenshot>(`/api/android/devices/${id}/screenshot?size=${size}`),
+    input: (id: string, input: AndroidInputRequest) => post<{ ok: true }>(`/api/android/devices/${id}/input`, input),
+    exec: (id: string, input: AndroidExecInput) => post<AndroidExecResult>(`/api/android/devices/${id}/exec`, input),
+    assign: (id: string, input: AndroidAssignInput) => post<AndroidDevice>(`/api/android/devices/${id}/assign`, input),
   },
 
   mods: {

@@ -43,6 +43,8 @@ import { startMessaging, stopMessaging } from "./messaging/service";
 import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
 import { shutdownComputer } from "./computer/service";
 import { shutdownVms, startVms } from "./vm/service";
+import { startAndroid, stopAndroid } from "./android/service";
+import { stopAllStreams } from "./android/stream";
 import { closeAllConnections } from "./ssh/client";
 import { closeGuestTunnels } from "./vm/guest";
 import { startTasks, stopTasks } from "./tasks/service";
@@ -201,6 +203,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   }
   // Adopt VMs that kept running while Godmode was closed.
   startVms().catch((err) => log.warn("could not check VMs", err));
+  startAndroid();
 
   const app = createApp();
   getAccessToken(); // creates the access token on first start
@@ -341,6 +344,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     await shutdownBrowsers();
     await shutdownComputer();
     await shutdownVms().catch((err) => log.warn("could not stop VMs", err));
+    stopAndroid();
+    await stopAllStreams().catch(() => undefined);
     closeGuestTunnels();
     closeAllConnections();
     server.stop(true);

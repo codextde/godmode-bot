@@ -150,6 +150,7 @@ describe("triggering", () => {
         workspaceId: null,
         projectId: null,
         sshServerIds: [],
+        androidDeviceIds: [],
         instructions: "",
         runnerId: null,
         runnerToolsId: null,

@@ -9,7 +9,7 @@ import { rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
-import { BROWSER_MCP_NAME, COMPUTER_MCP_NAME, CUA_MCP_NAME, GODMODE_MCP_NAME, SSH_MCP_NAME, VM_MCP_NAME } from "@godmode/shared";
+import { ANDROID_MCP_NAME, BROWSER_MCP_NAME, COMPUTER_MCP_NAME, CUA_MCP_NAME, GODMODE_MCP_NAME, SSH_MCP_NAME, VM_MCP_NAME } from "@godmode/shared";
 import { config, isLoopbackHost } from "../config";
 import { browserMcpServer } from "../browser/manager";
 import { mcpServersForAgent } from "../integrations/mcpServers";
@@ -53,6 +53,8 @@ export async function buildMcpConfig(
     run?: { runId: string; conversationId: string };
     /** The run may use SSH servers. */
     ssh?: boolean;
+    /** The run may control Android phones. */
+    android?: boolean;
   } = {},
 ): Promise<McpConfigFile> {
   const servers: Record<string, McpServerJson> = {};
@@ -66,7 +68,7 @@ export async function buildMcpConfig(
     const external = await mcpServersForAgent(agent);
     for (const [name, server] of Object.entries(external)) {
       // "cua" is only taken in a VM run (the human may have their own Cua Driver server for runs on this computer).
-      if ([GODMODE_MCP_NAME, BROWSER_MCP_NAME, COMPUTER_MCP_NAME, VM_MCP_NAME, SSH_MCP_NAME].includes(name) || (opts.vm && name === CUA_MCP_NAME)) {
+      if ([GODMODE_MCP_NAME, BROWSER_MCP_NAME, COMPUTER_MCP_NAME, VM_MCP_NAME, SSH_MCP_NAME, ANDROID_MCP_NAME].includes(name) || (opts.vm && name === CUA_MCP_NAME)) {
         log.warn(`MCP server name "${name}" is reserved; skipping it for agent ${agent.id}`);
         opts.onNotice?.(`The MCP server "${name}" was skipped because its name is reserved by Godmode.`);
         continue;
@@ -122,6 +124,15 @@ export async function buildMcpConfig(
     servers[SSH_MCP_NAME] = {
       type: "http",
       url: `${gatewayUrl()}/ssh`,
+      headers: { Authorization: `Bearer ${runToken}` },
+    };
+  }
+
+  // Android phones: screen, touch, apps, shell and files on the chat's and the agent's phones (scoped by the run token).
+  if (opts.android) {
+    servers[ANDROID_MCP_NAME] = {
+      type: "http",
+      url: `${gatewayUrl()}/android`,
       headers: { Authorization: `Bearer ${runToken}` },
     };
   }
